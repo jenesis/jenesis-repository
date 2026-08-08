@@ -45,11 +45,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <h2>The allowlist</h2>
  * A {@code Map<source-relative-path, justification>} of genuine <em>non</em>-name-disclosure enumerations - a walk
  * internal that delivers every key to a consumer which itself screens, retention/GC scans that must see withheld
- * artifacts, etc. On the current free scanned set exactly one entry is needed:
+ * artifacts, etc. On the current free scanned set the entries are the store-traversal machinery and nothing else:
  * {@code walk/store/.../StoreArtifactWalk.java}, the reference layout-neutral store DFS - it pages every key of every
  * namespace ({@code blobs/}, {@code walks/}, {@code publish/}, ...) and hands them to walk consumers; the consumer
  * ({@code RebuildPass}) is where the screen lives ({@code names.state(path) == WITHHELD} skips), so the walker itself
- * discloses no served name and must not screen. Each entry carries a one-line justification, and
+ * discloses no served name and must not screen - plus the two shared primitives it is built from
+ * ({@code walk/spi/.../Trees.java}, {@code walk/spi/.../BoundedChildren.java}), which page to a
+ * <em>caller-supplied</em> consumer for exactly the same reason. Each entry carries a one-line justification, and
  * {@link #the_allowlist_stays_live_and_would_be_an_offender()} fails if an entry's file is gone or has since started
  * screening (so a grant cannot rot into a dead mask).
  *
@@ -110,10 +112,18 @@ class EnumerationScreenPrincipleTest {
         allow.put("walk/store/build/jenesis/repository/walk/store/StoreArtifactWalk.java",
                 "layout-neutral store DFS: pages every key of every namespace to walk consumers; the consumer "
                         + "(RebuildPass) screens via ServableNames.state - the walker discloses no served name itself");
-        allow.put("walk/store/build/jenesis/repository/walk/store/Trees.java",
+        allow.put("walk/spi/build/jenesis/repository/walk/Trees.java",
                 "the iterative descent primitive extracted from StoreArtifactWalk (which now delegates to it): "
                         + "pages every key of every namespace to a visitor; screening lives in the visitor/consumer, "
                         + "not the walk internal - it discloses no served name itself");
+
+        // --- The shared bounded-traversal primitives beside it. Same argument, one level down: they page a subtree /
+        //     a container and hand every name to the CALLER's consumer, which is where the disclosure decision lives
+        //     (a rebuild consumer must see withheld keys; a serving listing must screen them through ServableNames).
+        //     A primitive that screened internally would be wrong for the first and redundant for the second. ---
+        allow.put("walk/spi/build/jenesis/repository/walk/BoundedChildren.java",
+                "the shared bounded flat-child enumeration: pages one container's names to a caller's consumer, "
+                        + "which owns the disclosure decision - it discloses no served name itself");
 
         return Map.copyOf(allow);
     }

@@ -15,6 +15,18 @@
  * refresh and self-heal = the walk), discovered the same way and driven by the shared {@code RebuildPass} - one
  * enumeration of the pointer roots feeding every discovered consumer.
  *
+ * <p>Beside the pass model the module owns the shared <em>traversal primitives</em> every scoped store enumeration
+ * rides, so a format never hand-rolls a stack walk or a page loop again: {@code Trees} is the one iterative
+ * (never recursive) depth-first descent over a store's key layout - the reference {@code ArtifactWalk} implementation
+ * drives it too, so there is exactly one descent in the product; {@code PagedTreeWalk} adds depth / step / entry /
+ * page caps and a continuation cursor to it for a request-scoped subtree walk; {@code BoundedChildren} is its flat
+ * sibling for the many surfaces that enumerate one container (a search window, a version list, a marker space) and
+ * are not subtree walks at all. All three answer in the {@code Traversal} vocabulary - {@code EXHAUSTED} or
+ * {@code TRUNCATED} with a resume cursor, and a named {@code TraversalException} for the depth / step / hostile-segment
+ * bounds that have no safe continuation - so a cap can never be mistaken for a complete listing. They are deliberately
+ * here rather than in the {@code walk.store} implementation module: a serving surface adopts the bounds without
+ * requiring, or being coupled to, a walk implementation, and the module stays {@code java.base} plus the store SPI.
+ *
  * @jenesis.release 25
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
  */

@@ -1,7 +1,6 @@
 package build.jenesis.repository.walk.test;
 
-import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.walk.store.Trees;
+import build.jenesis.repository.walk.Trees;
 import module org.junit.jupiter.api;
 
 import module java.base;
@@ -102,101 +101,5 @@ class TreesDescendTest {
         assertThat(visited)
                 .as("only leaves in [root/a, root/c) are visited, in path order")
                 .containsExactly("root/a/1", "root/a/2", "root/b/1");
-    }
-
-    /** A minimal in-memory {@link ArtifactStore} for driving {@link Trees#descend} over a synthetic key tree of any
-     *  shape without touching disk: objects in a sorted map, immediate-child enumeration derived from it, and only the
-     *  {@code exists} / {@code page} the descent consumes implemented (every other operation is unused here). */
-    private static final class MemoryStore implements ArtifactStore {
-
-        private final NavigableSet<String> keys = new TreeSet<>();
-
-        private void seed(String key) {
-            keys.add(key);
-        }
-
-        @Override
-        public boolean exists(String key) {
-            return keys.contains(key);
-        }
-
-        @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            String base = prefix.isEmpty() ? "" : prefix + "/";
-            NavigableSet<String> names = new TreeSet<>();
-            for (String key : keys) {
-                if (!base.isEmpty() && !key.startsWith(base)) {
-                    continue;
-                }
-                String rest = key.substring(base.length());
-                if (rest.isEmpty()) {
-                    continue;
-                }
-                int slash = rest.indexOf('/');
-                names.add(slash < 0 ? rest : rest.substring(0, slash));
-            }
-            int emitted = 0;
-            for (String name : names) {
-                if (name.compareTo(startAfter) <= 0) {
-                    continue;
-                }
-                if (emitted++ >= limit) {
-                    break;
-                }
-                consumer.accept(name);
-            }
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            List<String> names = new ArrayList<>();
-            page(prefix, "", Integer.MAX_VALUE, names::add);
-            return names;
-        }
-
-        @Override
-        public ArtifactStore scope(String tenant) {
-            return this;
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) {
-            return Optional.empty();
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public long size(String key) {
-            return exists(key) ? 0L : -1L;
-        }
-
-        @Override
-        public void delete(String key) {
-            keys.remove(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public InputStream open(String key) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void write(String key, InputStream in) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public String writeBlob(InputStream in) {
-            throw new UnsupportedOperationException();
-        }
     }
 }
