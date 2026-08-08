@@ -2,6 +2,8 @@ package build.jenesis.repository.ui;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.walk.BoundedChildren;
+import build.jenesis.repository.walk.ScreenedNames;
 
 import module java.base;
 
@@ -14,6 +16,10 @@ import module java.base;
  * are HTML-escaped before they are placed in the fragment (the shell drops the body in unescaped).
  */
 public final class BrowsePanel implements Panel {
+
+    /** How many top-level namespace quick links the panel renders (and examines) - a format's request-path root, so a
+     *  realistic store has a handful; the cap is what keeps a panel render bounded regardless. */
+    private static final int NAMESPACES = 1_000;
 
     @Override
     public String id() {
@@ -30,14 +36,17 @@ public final class BrowsePanel implements Panel {
         StringBuilder html = new StringBuilder();
         html.append("<p>Browse the repository's published artifacts as a breadcrumbed, navigable tree.</p>");
         html.append("<p><a href=\"/browse\" role=\"button\" class=\"secondary\">Open the repository browser &rarr;</a></p>");
-        // The reserved publish/quarantine review subtree is not a browsable namespace (a GET withholds it and the
-        // /assets export never walks it), so it is not offered as a quick link - matching BrowseController's browse.
+        // The top-level namespaces come from the shared screened enumeration, so this panel lists exactly what the
+        // browse it links into would show. Every root child is a namespace directory (a container), so it forwards on
+        // its own listing's screen rather than being screened as a leaf; the reserved publish/quarantine review subtree
+        // is suppressed by the seam itself - it is not a browsable namespace (a GET withholds it and the /assets export
+        // never walks it). Bounded: a quick-link row is a namespace, and a store with more than the cap has an
+        // operator problem the panel must not turn into an unbounded read.
         List<String> namespaces = new ArrayList<>();
-        for (String name : store.list("publish")) {
-            if (!ServableNames.reviewSubtree(name)) {
-                namespaces.add(name);
-            }
-        }
+        ScreenedNames.paths(new ServableNames(store), ServableNames.Policy.HIDE_WITHHELD_AND_GONE)
+                .containers(_ -> true)
+                .scanning(BoundedChildren.bounded().entries(NAMESPACES).page(NAMESPACES))
+                .scan(store, ServableNames.PUBLISHED, (name, _) -> namespaces.add(name));
         if (namespaces.isEmpty()) {
             html.append("<p>The repository is empty. Publish an artifact to see it here.</p>");
             return html.toString();

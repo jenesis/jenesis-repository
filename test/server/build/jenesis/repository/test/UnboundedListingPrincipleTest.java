@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * domain collection. Each site is keyed by {@code SimpleClassName#anchor} where the anchor is the {@code list(...)}
  * substring of the call, and is an <b>offender</b> unless the {@link #ALLOWLIST} carries an entry whose class matches and
  * whose anchor is a substring of the call line, with a one-line boundedness justification. The allowlist was seeded from
- * the FULL census at this tip ({@value #ALLOWLIST_SIZE} distinct {@code ClassName#anchor} keys over 24 distinct call
+ * the FULL census at this tip ({@value #ALLOWLIST_SIZE} distinct {@code ClassName#anchor} keys over 21 distinct call
  * lines), each entry read at its call site so the justification is truthful, not assumed.
  *
  * <h2>The boundedness classes</h2>
@@ -41,12 +41,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li><b>one node's immediate children</b> &mdash; the store contract is "immediate child names", so a
  *       {@code store.list(prefix)} inside an iterative descent (the GC condemned-space walk, the {@code publish/} browse
  *       and asset walks, the alias-hold walk) lists one node's children, the O(depth), never self-recursive walk shape;</li>
- *   <li><b>per-coordinate versions/files</b> &mdash; {@code list("publish/maven/" + coord)} enumerates ONE coordinate's
- *       version folders, and {@code list("oci/uploads/" + id)} ONE upload session's chunks, bounded by that
- *       coordinate/session's authenticated upload count, not by any single unauthenticated request;</li>
- *   <li><b>per-image tags</b> &mdash; {@code list("oci/" + name + "/tags")} lists ONE image's tags (the catalog-inclusion
- *       short-circuit), bounded by that image's publish count; the OCI catalog itself PAGES ({@code store.page}, the
- *       {@code catalogPage} seek-resume primitive), never a whole {@code list};</li>
+ *   <li><b>per-session chunks</b> &mdash; {@code list("oci/uploads/" + id)} enumerates ONE upload session's chunks,
+ *       bounded by that session's authenticated upload count, not by any single unauthenticated request. The
+ *       per-coordinate and per-image siblings that used to sit here ({@code list("publish/maven/" + coord)} version
+ *       folders, {@code list("oci/" + name + "/tags")} tag sets, {@code list("publish")} console namespaces) are gone
+ *       from the census entirely: T-103a migrated those enumerations onto the shared screened enumeration, which pages
+ *       and screens under an explicit cap, so their grants were deleted rather than re-justified;</li>
  *   <li><b>in-flight / pending sets</b> &mdash; {@code list("oci/upload-sessions")} (concurrent chunked pushes),
  *       {@code list(dirtyPrefix)} (pending dirty-index markers, the O(&Delta;) feed read);</li>
  *   <li><b>config / tenant / auth / GC-bookkeeping sets</b> &mdash; {@code list("auth/" + tenant)} (one tenant's auth
@@ -81,10 +81,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class UnboundedListingPrincipleTest {
 
     /** The pinned size of {@link #ALLOWLIST}: the distinct {@code ClassName#anchor} keys at this tip. Shrink-only. */
-    private static final int ALLOWLIST_SIZE = 23;
+    private static final int ALLOWLIST_SIZE = 20;
 
     /** A conservative floor on the number of distinct list call lines the matcher must find, so a broken matcher (or a
-     *  source walk that finds nothing) cannot pass the offender leg vacuously. The census has 24 today. */
+     *  source walk that finds nothing) cannot pass the offender leg vacuously. The census has 21 today. */
     private static final int LIST_SITE_FLOOR = 20;
 
     /** Every censused {@code .list(prefix)} call site in free {@code source/}, keyed {@code SimpleClassName#list(anchor)},
@@ -105,18 +105,12 @@ class UnboundedListingPrincipleTest {
                 "one node's immediate children in the GC condemned-subtree drop / reference-batch walk");
         a.put("StoreInvariants#list(prefix)", "one node's immediate children in the testkit store-invariant walk");
 
-        // --- per-coordinate versions / per-session chunks: ONE coordinate's or session's uploads, bounded by its
-        //     authenticated publish/upload count (a publisher paying for their own breadth) ------------------------------
-        a.put("MavenMetadata#list(\"publish/maven/\" + coordinatePath)",
-                "version folders of ONE maven coordinate - bounded by that coordinate's upload count");
+        // --- per-session chunks: ONE upload session's objects, bounded by its authenticated upload count (a publisher
+        //     paying for their own breadth). The per-coordinate and per-image siblings that sat here are gone: T-103a
+        //     moved those enumerations onto the shared screened enumeration, so their grants were deleted -------------
         a.put("OciFormat#list(\"oci/uploads/\" + id)",
                 "chunk objects of ONE chunked-upload session (concatenated in order / cleaned up) - bounded by that "
                         + "authenticated upload's chunk count");
-
-        // --- per-image tags: the catalog-inclusion short-circuit over ONE image; the catalog itself PAGES --------------
-        a.put("OciFormat#list(\"oci/\" + name + \"/tags\")",
-                "tags of ONE OCI image (hasSurvivingTag short-circuits at the first servable tag) - bounded by that "
-                        + "image's tag count; the catalog itself pages via store.page (catalogPage), never a whole list");
 
         // --- in-flight / pending sets: bounded by concurrent operations or the pending delta -----------------------------
         a.put("OciFormat#list(\"oci/upload-sessions\")",
@@ -131,8 +125,6 @@ class UnboundedListingPrincipleTest {
         a.put("MarkSweepGarbageCollector#list(\"gc\")",
                 "the gc/ pass-generation bookkeeping space (lastCompletedGeneration / converge) - bounded by the retained "
                         + "pass generations, not artifacts");
-        a.put("BrowsePanel#list(\"publish\")",
-                "top-level publish/ children for the console namespace panel - one node's immediate children");
         a.put("DemoSeeder#list(\"blobs\")",
                 "demo-seed emptiness gate: probes for any content-addressed blob before seeding a demo - runs only on an "
                         + "operator/dev demo-seed action, refuses unless empty, never an attacker-reachable serve path");
@@ -165,7 +157,7 @@ class UnboundedListingPrincipleTest {
 
     // --- non-vacuity pins --------------------------------------------------------------------------------------------
 
-    private static final String MAVEN = "format/maven/build/jenesis/repository/format/maven/MavenMetadata.java";
+    private static final String ASSETS = "store/spi/build/jenesis/repository/store/PublishedAssets.java";
     private static final String OCI = "format/oci/build/jenesis/repository/format/oci/OciFormat.java";
 
     @Test
@@ -217,11 +209,11 @@ class UnboundedListingPrincipleTest {
 
         // Two known sites must be found, so a matcher that silently stops matching cannot pass.
         assertThat(scan.sites())
-                .as("MavenMetadata.list(\"publish/maven/\" + coordinatePath) (a per-coordinate version enumeration) must be a scanned list site")
-                .anyMatch(s -> s.relPath().equals(MAVEN) && s.line().contains("list(\"publish/maven/\" + coordinatePath)"));
+                .as("PublishedAssets.list(...) (the shared publish/ pointer-tree walk) must be a scanned list site")
+                .anyMatch(s -> s.relPath().equals(ASSETS) && s.line().contains("list("));
         assertThat(scan.sites())
-                .as("OciFormat.list(\"oci/\" + name + \"/tags\") (the per-image tag enumeration) must be a scanned list site")
-                .anyMatch(s -> s.relPath().equals(OCI) && s.line().contains("list(\"oci/\" + name + \"/tags\")"));
+                .as("OciFormat.list(\"oci/uploads/\" + id) (one chunked-upload session's chunks) must be a scanned list site")
+                .anyMatch(s -> s.relPath().equals(OCI) && s.line().contains("list(\"oci/uploads/\" + id)"));
     }
 
     @Test

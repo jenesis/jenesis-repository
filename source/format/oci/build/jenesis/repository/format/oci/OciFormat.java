@@ -10,6 +10,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.Withheld;
+import build.jenesis.repository.walk.BoundedChildren;
+import build.jenesis.repository.walk.ScreenedNames;
+import build.jenesis.repository.walk.Traversal;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -452,16 +455,25 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      *  {@link ArtifactStore#list} + sort. Over-fetching past withheld pointers pages on across batches as needed. */
     private static final int PAGE_BATCH = 256;
 
+    /** How many stored tag names one screened enumeration may examine - the bound that covers a tag space whose
+     *  entries are mostly withheld, where the servable-tag page cap alone would never fire. Far above any real image's
+     *  tag history; reaching it answers a continuation cursor on {@code tags/list}, and raises on the catalog's
+     *  membership question, which has no continuation to hand back. */
+    private static final int TAG_SCAN = 50_000;
+
     /**
      * {@code GET /v2/<name>/tags/list} honouring the Distribution API's optional {@code n} (max results) and
-     * {@code last} (resume-after) paging: the tag pointer set is paged through the store's
-     * {@link ArtifactStore#page seek-resume primitive} (immediate children, lexicographic order) rather than listed and
-     * sorted whole, so a request reads a bounded window of tags, not the entire set into heap. A withheld tag is
-     * screened out exactly as its manifest 404s on a pull - the tags/list must not disclose a tag whose manifest is
-     * held (AUDIT §5/§8, its existence included) - and the walk over-fetches past withheld tags so a full page of
-     * <em>servable</em> tags is still returned when some are screened. When a further page remains a
-     * {@code Link; rel="next"} carries the next {@code n}/{@code last}, exactly as {@link #catalog} does for
-     * {@code _catalog}.
+     * {@code last} (resume-after) paging: the tag pointer set is <em>listed and screened in one call</em> through the
+     * shared {@link ScreenedNames} enumeration, which pages the tag pointers with the bounded primitive (immediate
+     * children, lexicographic order - never a whole-set list + sort) and routes every name through the servable-name
+     * seam's {@code blobs}-namespace face. A withheld tag is therefore screened out exactly as its manifest 404s on a
+     * pull - the tags/list must not disclose a tag whose manifest is held (AUDIT §5/§8, its existence included) - and
+     * the response cannot page-then-forget the screen, because this method never sees an unscreened tag name. The
+     * {@code take} cap is counted in <em>servable</em> tags, so the enumeration over-fetches past screened tags and
+     * still returns a full page. When the enumeration is truncated - a further servable tag proven, or the scan bound
+     * reached - a {@code Link; rel="next"} carries the continuation, exactly as {@link #catalog} does for
+     * {@code _catalog}; the cursor resumes past everything already examined, so a page of screened tags is never
+     * re-screened and never mistaken for the end of the set.
      */
     private void tags(String name, ArtifactStore store, FormatExchange exchange) throws IOException {
         if (!isImageName(name)) {
@@ -472,40 +484,30 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         if (limit == null) {
             return;                                             // a non-numeric or non-positive n is a 400, already sent
         }
-        String last = exchange.queryParameter("last");
-        String base = "oci/" + name + "/tags";
-        ServableNames names = new ServableNames(store);
-        List<String> tags = new ArrayList<>();
-        boolean more = false;
-        String cursor = last == null ? "" : last;
-        paging:
-        while (true) {
-            List<String> batch = new ArrayList<>();
-            store.page(base, cursor, PAGE_BATCH, batch::add);
-            if (batch.isEmpty()) {
-                break;                                          // no further children past the cursor
-            }
-            cursor = batch.getLast();
-            for (String tag : batch) {
-                if (tagWithheld(names, store, name, tag)) {
-                    continue;                                   // over-fetch past a withheld tag, never disclosing it
-                }
-                if (tags.size() == limit) {
-                    more = true;                                // a servable tag beyond the page proves a next page
-                    break paging;
-                }
-                tags.add(tag);
-            }
-            if (batch.size() < PAGE_BATCH) {
-                break;                                          // the store had no full batch left - the set is drained
-            }
+        String parameter = exchange.queryParameter("last");
+        String last = parameter == null || parameter.isEmpty() ? null : parameter;   // ?last= is "from the beginning"
+        if (last != null && !isTag(last)) {
+            // A resume cursor that is not a tag name cannot address a position in the tag namespace. Refused rather
+            // than silently ignored: paging from the beginning under a cursor the client believes it supplied would
+            // repeat a page and could never terminate.
+            exchange.respond(400);
+            return;
         }
+        String base = "oci/" + name + "/tags";
+        List<String> tags = new ArrayList<>();
+        Traversal.Result scanned = ScreenedNames
+                .keys(new ServableNames(store), ServableNames.Policy.HIDE_WITHHELD)
+                .scanning(BoundedChildren.bounded().entries(TAG_SCAN).page(PAGE_BATCH))
+                .take(limit)
+                .scan(store, base, last == null ? null : base + "/" + last, (tag, _) -> tags.add(tag));
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("name", name);
         body.put("tags", tags);
-        if (more) {
-            exchange.setResponseHeader("Link", "</v2/" + name + "/tags/list?n=" + limit + "&last="
-                    + URLEncoder.encode(tags.getLast(), StandardCharsets.UTF_8) + ">; rel=\"next\"");
+        if (scanned.truncated()) {
+            String resume = scanned.cursor().orElseThrow().substring(base.length() + 1);
+            String size = exchange.queryParameter("n") == null ? "" : "n=" + limit + "&";
+            exchange.setResponseHeader("Link", "</v2/" + name + "/tags/list?" + size + "last="
+                    + URLEncoder.encode(resume, StandardCharsets.UTF_8) + ">; rel=\"next\"");
         }
         exchange.setResponseHeader("Content-Type", "application/json");
         exchange.respond(200, JSON.writeValueAsString(body).getBytes(StandardCharsets.UTF_8));
@@ -531,27 +533,12 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return page;
     }
 
-    /** Whether the manifest {@code tag} of {@code name} points at is currently withheld - the tag resolved through its
-     *  {@code oci/<name>/tags/<tag>} pointer to a digest, then screened by the same {@code withheld/<hash>} marker the
-     *  blob and manifest serve paths honour (the one seam a held image 404s through). A tag whose pointer is missing or
-     *  does not resolve to a real digest is not treated as withheld here - it is not a held artifact, and the serve
-     *  path's own guards answer it - so only a genuinely held tag is dropped from the catalog and the tags/list.
-     *
-     *  <p>The tag pointer stores the digest in its {@code sha256:<hex>} display form (see {@link #linkTag}), so the
-     *  marker probe is routed through {@link ServableNames#withheldHash} on the bare {@code hex} the {@code withheld/}
-     *  marker is keyed by - not {@link ServableNames#disclosableKey}, which would probe {@code withheld/} with the
-     *  {@code sha256:}-prefixed pointer content and so never match the bare-hex marker. This is the same seam face the
-     *  blob and manifest serve paths honour, kept behaviour-identical to the former inline
-     *  {@code store.exists("withheld/" + hex)}. */
-    private static boolean tagWithheld(ServableNames names, ArtifactStore store, String name, String tag)
-            throws IOException {
-        Optional<ArtifactStore.Versioned> pointer = store.readVersioned("oci/" + name + "/tags/" + tag);
-        if (pointer.isEmpty()) {
-            return false;
-        }
-        String hex = hex(new String(pointer.get().content(), StandardCharsets.UTF_8).trim());
-        return isDigestHex(hex) && names.withheldHash(hex);
-    }
+    // The former hand-rolled tagWithheld(...) - resolve the tag pointer, strip the sha256: qualifier, probe the
+    // withheld/<hex> marker - is gone: both surfaces that used it (tags/list and the catalog inclusion test) now
+    // enumerate through ScreenedNames, whose blobs-namespace face makes exactly that decision. It existed only because
+    // ServableNames.disclosableKey probed the marker with the raw pointer body, which for OCI's sha256:<hex> tag
+    // pointer never matched the bare-hex marker; the seam now normalises a pointer body to its content hash
+    // (ServableNames.hash), so the shared face is correct for this dialect and the private copy is redundant.
 
     /**
      * The Distribution catalog ({@code GET /v2/_catalog}): every image name that carries at least one servable
@@ -758,16 +745,16 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
-    /** Whether {@code name} carries at least one non-withheld tag - the catalog inclusion test. Short-circuits at the
-     *  first surviving tag, so an image with any servable tag costs one pointer resolve, and a wholly-withheld one is
-     *  screened over the tag listing already in hand (bounded, §7 - never an unbounded re-list per image). */
+    /** Whether {@code name} carries at least one servable tag - the catalog inclusion test, asked of the shared
+     *  screened enumeration ({@link ScreenedNames#any}) so it is the same seam face, the same fail-closed containment
+     *  and the same bound the tags/list uses rather than a second hand-rolled screen. It short-circuits at the first
+     *  surviving tag, so an image with any servable tag costs one pointer resolve; a wholly-withheld image is screened
+     *  over a bounded scan of its tag space (never an unbounded {@code list} per image, §7), and a tag space too wide
+     *  to answer within that bound raises rather than reporting a plausible "no servable tags". */
     private static boolean hasSurvivingTag(ServableNames names, ArtifactStore store, String name) throws IOException {
-        for (String tag : store.list("oci/" + name + "/tags")) {
-            if (!tagWithheld(names, store, name, tag)) {
-                return true;
-            }
-        }
-        return false;
+        return ScreenedNames.keys(names, ServableNames.Policy.HIDE_WITHHELD)
+                .scanning(BoundedChildren.bounded().entries(TAG_SCAN).page(PAGE_BATCH))
+                .any(store, "oci/" + name + "/tags");
     }
 
     /**

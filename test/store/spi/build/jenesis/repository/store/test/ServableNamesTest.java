@@ -176,42 +176,46 @@ class ServableNamesTest {
                 .doesNotThrowAnyException();
     }
 
-    @Test
-    void one_hostile_name_in_a_listing_does_not_500_the_whole_page() {
-        HostileStore store = new HostileStore();
-        ServableNames names = new ServableNames(store);
-        List<String> forwarded = new ArrayList<>();
-        // isDirectory itself throws for the hostile child, exercising screening's own containment.
-        Consumer<String> screen = names.screening("/maven/g/a", Policy.HIDE_WITHHELD_AND_GONE,
-                child -> {
-                    if (child.contains("\uD800")) {
-                        throw new java.nio.file.InvalidPathException(child, "unmappable");
-                    }
-                    return false;
-                }, forwarded::add);
+    // The listing-level containment ("one hostile name does not 500 the page", "the quarantine root child is
+    // suppressed, containers forward unconditionally") is asserted against the screened ENUMERATION that owns those
+    // rules now - build.jenesis.repository.walk.ScreenedNames, exercised by ScreenedNamesTest in test/walk. This suite
+    // keeps the per-name seam behaviour those rules compose.
 
-        assertThatCode(() -> {
-            screen.accept("\uD800bad");
-            screen.accept("good.jar");
-        }).as("a hostile child must be contained, not propagate out of the paged consumer")
-                .doesNotThrowAnyException();
-        assertThat(forwarded).as("the hostile child is dropped; a resolvable leaf is still screened").isEmpty();
+    // ---- the pointer dialect: withheld/<hash> is keyed by the bare hex ------------------------------------------
+
+    @Test
+    void a_digest_qualified_pointer_body_is_screened_against_the_bare_hex_marker() throws IOException {
+        // OCI writes its tag pointers in the Distribution display form (sha256:<hex>) while the withhold marker is -
+        // and must stay - keyed by the bare content hash. Probing withheld/sha256:<hex> matched nothing, so the seam's
+        // blobs-namespace face failed OPEN for exactly the dialect a held image is disclosed through. The seam now
+        // normalises a pointer body to its content hash, so both dialects screen identically.
+        MapStore store = new MapStore();
+        store.pointer("oci/library/app/tags/1.0", "sha256:" + HASH_A);
+        store.pointer("npm/pkg/tarballs/pkg-1.0.tgz", HASH_A);
+        store.blob(HASH_A);
+        store.objects.put(Withheld.ROOT + HASH_A, new byte[0]);          // the hold, keyed by the bare hex
+        ServableNames names = new ServableNames(store);
+
+        assertThat(names.disclosableKey("oci/library/app/tags/1.0", Policy.HIDE_WITHHELD))
+                .as("a sha256:-qualified pointer body must resolve to the bare hex the marker is keyed by").isFalse();
+        assertThat(names.keyState("oci/library/app/tags/1.0")).isEqualTo(State.WITHHELD);
+        assertThat(names.disclosableKey("npm/pkg/tarballs/pkg-1.0.tgz", Policy.HIDE_WITHHELD))
+                .as("the bare-hex dialect is unchanged").isFalse();
     }
 
     @Test
-    void the_quarantine_root_child_is_always_suppressed_and_directories_forward_unconditionally() {
+    void a_digest_qualified_pointer_to_an_unheld_blob_still_serves_and_states_its_blob() throws IOException {
+        // The control: normalising must only ever hide MORE. With no marker the qualified pointer discloses exactly as
+        // the bare one does, and serve-parity resolves the blob it names rather than reporting it gone.
         MapStore store = new MapStore();
-        store.pointer("publish/maven/g/a/1/served.jar", HASH_A);
-        store.blob(HASH_A);
+        store.pointer("oci/library/app/tags/2.0", "sha256:" + HASH_B);
+        store.blob(HASH_B);
         ServableNames names = new ServableNames(store);
-        List<String> forwarded = new ArrayList<>();
 
-        Consumer<String> root = names.screening("", Policy.HIDE_WITHHELD_AND_GONE,
-                child -> true /* every root child is a directory */, forwarded::add);
-        root.accept(ServableNames.QUARANTINE);
-        root.accept("maven");
-        assertThat(forwarded).as("the review subtree is never enumerated; a real namespace directory is")
-                .containsExactly("maven");
+        assertThat(names.disclosableKey("oci/library/app/tags/2.0", Policy.HIDE_WITHHELD)).isTrue();
+        assertThat(names.keyState("oci/library/app/tags/2.0"))
+                .as("the qualified body resolves to blobs/<hex>, so serve-parity is SERVABLE - not BLOB_GONE")
+                .isEqualTo(State.SERVABLE);
     }
 
     // ---- disclosableVersionFolder ------------------------------------------------------------------------------

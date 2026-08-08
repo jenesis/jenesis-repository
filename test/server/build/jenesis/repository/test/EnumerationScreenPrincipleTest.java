@@ -39,7 +39,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       shape is caught the moment it lands, not invented matches.</li>
  *   <li><b>screened</b> - the file contains any {@link #SEAM_TOKENS seam token}, i.e. it routes a disclosure decision
  *       through {@code ServableNames} (or the promoted {@code Withheld} marker convention).</li>
- *   <li><b>offender</b> = enumerating &and; &not;screened &and; &not;allowlisted. An offender fails the build.</li>
+ *   <li><b>helped</b> - the file drives the shared screened <em>enumeration</em>
+ *       ({@code build.jenesis.repository.walk.ScreenedNames}), which lists and screens in one call.</li>
+ *   <li><b>offender</b> = enumerating &and; &not;screened &and; &not;allowlisted. An offender fails the build. Since
+ *       T-103a a second, tighter leg applies to serving surfaces: enumerating &and; &not;helped &and; not a walk
+ *       internal &and; &not;{@link #HAND_SCREENED} also fails, because screening per name is separable from listing and
+ *       the separable half is the one that gets lost.</li>
  * </ol>
  *
  * <h2>The allowlist</h2>
@@ -56,10 +61,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * screening (so a grant cannot rot into a dead mask).
  *
  * <h2>Non-vacuity &amp; the negative control</h2>
- * The scan asserts it saw {@literal >} 0 enumerating files, that the two known free name-disclosure surfaces
- * ({@code BrowseController}, {@code MavenMetadata}) are among the scanned set <em>and</em> classified enumerating, and
- * that {@literal >=} 1 scanned file references the seam (proving the seam-token list is alive, not a dead matcher that
- * would pass every offender). The <b>negative control was verified during implementation</b>: temporarily deleting the
+ * The scan asserts it saw {@literal >} 0 enumerating files, that every known free name-disclosure surface
+ * ({@link #SCREENED_SURFACES}) is in the scanned set <em>and</em> classified screened, that {@literal >=} 1 scanned file
+ * references the seam and that {@literal >=} 1 drives the shared enumeration (proving neither token list is a dead
+ * matcher that would pass every offender). The surfaces are pinned on "screened" rather than "enumerating" precisely
+ * because adopting the shared enumeration REMOVES a surface's raw {@code store.list}/{@code store.page} call - the fix
+ * must not read as the regression. The <b>negative control was verified during implementation</b>: temporarily deleting the
  * {@code ServableNames} import + call from {@code BrowseController} (unscreening a real free surface) made this test
  * FAIL and name {@code ui/.../BrowseController.java} as an offender; adding a dummy enumerating-without-seam file under
  * {@code source/format/} likewise failed and named it; both were reverted, confirming the guard bites.
@@ -83,17 +90,36 @@ class EnumerationScreenPrincipleTest {
             ".children(", ".coordinates(", ".versions(", "releases(");
 
     /**
-     * Seam faces; any hit marks a file "screened". {@code ServableNames} is the seam type; {@code .disclosable} covers
-     * {@code disclosable(path, policy)} / {@code disclosableKey(...)}; {@code disclosableVersionFolder(} is the
-     * maven-metadata version face; {@code withheldHash(} is the bare {@code withheld/<hash>} marker face; {@code
-     * screening(} is the streaming listing decorator; {@code reviewSubtree} is the reserved-quarantine-name face; {@code
-     * Withheld.is(} is the promoted marker convention. On the current free tree {@code ServableNames}, {@code
-     * .disclosable}, {@code disclosableVersionFolder(}, {@code withheldHash(} and {@code reviewSubtree} fire; {@code
-     * screening(} and {@code Withheld.is(} are seam faces that adopters may route through as the surfaces evolve.
+     * The shared screened-enumeration primitive ({@code build.jenesis.repository.walk.ScreenedNames}): one call that
+     * pages a container AND applies the {@code ServableNames} verdict to every name, so a serving surface never holds
+     * an unscreened name and cannot page-then-forget. Referencing the seam per name is no longer enough for a serving
+     * surface that enumerates - {@link #a_serving_surface_that_enumerates_uses_the_shared_screened_enumeration()}
+     * requires this - because hand-assembled "page, then screen" is precisely the shape that loses its second half in
+     * the next refactor.
+     */
+    private static final String HELPER = "ScreenedNames";
+
+    /** The free surfaces that materialise served names today - the browse tree and its panel, the raw directory
+     *  listing, the maven-metadata version index, the OCI catalog/tags. Each must stay in the scanned set and stay
+     *  screened; the list is the guard's non-vacuity pin, so deleting a surface from it is a deliberate act. */
+    private static final List<String> SCREENED_SURFACES = List.of(
+            "ui/build/jenesis/repository/ui/BrowseController.java",
+            "ui/build/jenesis/repository/ui/BrowsePanel.java",
+            "format/raw/build/jenesis/repository/format/raw/RawFormat.java",
+            "format/maven/build/jenesis/repository/format/maven/MavenMetadata.java",
+            "format/oci/build/jenesis/repository/format/oci/OciFormat.java");
+
+    /**
+     * Seam faces; any hit marks a file "screened". {@code ServableNames} is the seam type; {@link #HELPER} is the
+     * shared screened <em>enumeration</em> built on it; {@code .disclosable} covers {@code disclosable(path, policy)} /
+     * {@code disclosableKey(...)}; {@code disclosableVersionFolder(} is the version-index face; {@code withheldHash(}
+     * is the bare {@code withheld/<hash>} marker face; {@code reviewSubtree} is the reserved-quarantine-name face;
+     * {@code Withheld.is(} is the promoted marker convention. On the current free tree every token but
+     * {@code Withheld.is(} fires.
      */
     private static final List<String> SEAM_TOKENS = List.of(
-            "ServableNames", ".disclosable", "withheldHash(", "Withheld.is(",
-            "disclosableVersionFolder(", "screening(", "reviewSubtree");
+            "ServableNames", HELPER, ".disclosable", "withheldHash(", "Withheld.is(",
+            "disclosableVersionFolder(", "reviewSubtree");
 
     /**
      * Genuine non-name-disclosure enumerations, keyed by {@code source}-relative path with a one-line justification.
@@ -128,6 +154,20 @@ class EnumerationScreenPrincipleTest {
         return Map.copyOf(allow);
     }
 
+    /**
+     * Serving surfaces that enumerate but may not use the shared screened enumeration, keyed by {@code source}
+     * -relative path with a one-line justification. This is a strictly smaller grant than {@link #ALLOWLIST}: an entry
+     * here still MUST screen through the seam (it is checked by
+     * {@link #every_enumeration_surface_routes_through_the_servable_name_seam()} like everything else); it is only
+     * excused from routing through the shared primitive, and only for a structural reason.
+     */
+    private static final Map<String, String> HAND_SCREENED = Map.of(
+            "store/spi/build/jenesis/repository/store/PublishedAssets.java",
+            "the one shared publish/-tree walk (the /assets export and /api/assets catalogue) - it IS the seam's tree "
+                    + "face and screens every emitted leaf through ServableNames.state, but it lives in the store SPI "
+                    + "module that the walk module (where the shared screened enumeration and the bounded traversal "
+                    + "primitives live) depends on, so adopting the helper here would be a module cycle");
+
     @Test
     void every_enumeration_surface_routes_through_the_servable_name_seam() throws IOException {
         Scan scan = scan(sourceRoot());
@@ -138,16 +178,15 @@ class EnumerationScreenPrincipleTest {
                         + "broken; this structural check would then pass vacuously")
                 .isNotEmpty();
 
-        // The two known free name-disclosure surfaces must be present in the scanned set AND classified enumerating -
-        // if either drops out of scope or stops enumerating, the guard has lost the surface it exists to protect.
-        assertThat(scan.enumerating())
-                .as("the free console browse tree (BrowseController) must be scanned and classified enumerating - it "
-                        + "lists publish/ children per level")
-                .anyMatch(f -> f.endsWith("ui/build/jenesis/repository/ui/BrowseController.java"));
-        assertThat(scan.enumerating())
-                .as("the maven-metadata version index (MavenMetadata) must be scanned and classified enumerating - it "
-                        + "lists version folders under publish/maven/<coord>")
-                .anyMatch(f -> f.endsWith("format/maven/build/jenesis/repository/format/maven/MavenMetadata.java"));
+        // The known free name-disclosure surfaces must be present in the scanned set AND classified screened. They are
+        // pinned on "screened" rather than "enumerating" because that is the property this guard defends: a surface
+        // that adopts the shared screened enumeration stops calling store.list/page itself, which is the fix, not a
+        // regression. If one drops out of scope or stops screening, the guard has lost a surface it exists to protect.
+        for (String surface : SCREENED_SURFACES) {
+            assertThat(scan.screened())
+                    .as("the free name-disclosure surface %s must be scanned and classified screened", surface)
+                    .anyMatch(f -> f.endsWith(surface));
+        }
 
         // The seam-token list is alive: at least one scanned file actually references the seam. A dead seam-token list
         // (a rename that matches nothing) would classify every enumerating file "unscreened" - this catches that.
@@ -167,11 +206,64 @@ class EnumerationScreenPrincipleTest {
                 .as("these files enumerate stored names but route no disclosure decision through the servable-name "
                         + "seam (build.jenesis.repository.store.ServableNames), so a withheld/held artifact's existence "
                         + "can leak through the listing. Screen the enumeration - filter names through "
-                        + "ServableNames.disclosable / disclosableVersionFolder / withheldHash / the screening(...) "
-                        + "decorator under the surface's policy - or, if this enumeration genuinely discloses no served "
+                        + "the names through the shared ScreenedNames enumeration, or (for a single name) through "
+                        + "ServableNames.disclosable / disclosableVersionFolder / withheldHash - or, if this "
+                        + "enumeration genuinely discloses no served "
                         + "name (a walk internal, a retention/GC scan that must see withheld artifacts), add it to "
                         + "ALLOWLIST (keyed by source-relative path) with a one-line justification.%n%s",
                         String.join(System.lineSeparator(), offenders))
+                .isEmpty();
+    }
+
+    @Test
+    void a_serving_surface_that_enumerates_uses_the_shared_screened_enumeration() throws IOException {
+        Scan scan = scan(sourceRoot());
+
+        // The tightened clause (T-103a): screening per name is no longer enough for a serving surface that enumerates.
+        // "Page the container, then screen each name" is two separable steps, and the second one is what gets lost -
+        // to a refactor, to a new surface copied from an older one, to a format author who only knows the first step.
+        // The shared primitive fuses them, so the failure mode stops being expressible. Walk internals are exempt by
+        // the same argument as ALLOWLIST (they hand every name to a caller's consumer, which owns the decision), and
+        // the shared primitive itself obviously cannot require itself.
+        List<String> offenders = scan.enumerating().stream()
+                .filter(file -> !file.startsWith("walk/"))
+                .filter(file -> !ALLOWLIST.containsKey(file))
+                .filter(file -> !HAND_SCREENED.containsKey(file))
+                .filter(file -> !scan.helped().contains(file))
+                .sorted()
+                .map(file -> "  - " + file)
+                .toList();
+
+        assertThat(offenders)
+                .as("these serving surfaces enumerate stored names and screen them by hand instead of listing AND "
+                        + "screening in one call through the shared primitive (%s). Drive the enumeration through it - "
+                        + "it applies the very ServableNames faces this file calls, and a caller never sees an "
+                        + "unscreened name - or, if the surface genuinely cannot (a module cycle, a walk internal), "
+                        + "add it to HAND_SCREENED with a structural justification.%n%s",
+                        HELPER, String.join(System.lineSeparator(), offenders))
+                .isEmpty();
+
+        // Non-vacuity: the primitive is actually adopted somewhere, so a rename that matches nothing cannot make this
+        // clause pass by classifying every surface "not enumerating" or "not helped".
+        assertThat(scan.helped())
+                .as("no scanned file uses the shared screened enumeration - the HELPER token is dead (a rename?), and "
+                        + "this clause would then be vacuous")
+                .isNotEmpty();
+    }
+
+    @Test
+    void the_hand_screened_grants_stay_live_and_would_be_offenders() throws IOException {
+        Scan scan = scan(sourceRoot());
+        List<String> dead = HAND_SCREENED.keySet().stream()
+                .filter(file -> !scan.enumerating().contains(file) || scan.helped().contains(file))
+                .sorted()
+                .map(file -> "  - " + file)
+                .toList();
+        assertThat(dead)
+                .as("these HAND_SCREENED entries no longer enumerate by hand - the file moved, stopped enumerating, or "
+                        + "now routes through the shared primitive, so the grant masks nothing; remove or update it so "
+                        + "the exemption tracks the source and cannot rot into a dead grant.%n%s",
+                        String.join(System.lineSeparator(), dead))
                 .isEmpty();
     }
 
@@ -193,13 +285,14 @@ class EnumerationScreenPrincipleTest {
 
     // --- the scan -----------------------------------------------------------------------------------------------------
 
-    /** The classification result: the source-relative path of every scanned file that is enumerating, and of every
-     *  scanned file that references the seam. */
-    private record Scan(Set<String> enumerating, Set<String> screened) {}
+    /** The classification result: the source-relative path of every scanned file that is enumerating, of every scanned
+     *  file that references the seam, and of every scanned file that drives the shared screened enumeration. */
+    private record Scan(Set<String> enumerating, Set<String> screened, Set<String> helped) {}
 
     private static Scan scan(Path sourceRoot) throws IOException {
         Set<String> enumerating = new TreeSet<>();
         Set<String> screened = new TreeSet<>();
+        Set<String> helped = new TreeSet<>();
         try (Stream<Path> files = Files.walk(sourceRoot)) {
             for (Path file : (Iterable<Path>) files.filter(EnumerationScreenPrincipleTest::isJava)::iterator) {
                 String relative = sourceRoot.relativize(file).toString().replace(File.separatorChar, '/');
@@ -213,9 +306,12 @@ class EnumerationScreenPrincipleTest {
                 if (SEAM_TOKENS.stream().anyMatch(body::contains)) {
                     screened.add(relative);
                 }
+                if (body.contains(HELPER)) {
+                    helped.add(relative);
+                }
             }
         }
-        return new Scan(enumerating, screened);
+        return new Scan(enumerating, screened, helped);
     }
 
     /** The scanned set: files that can materialise served names. {@code source/format/}, {@code source/ui/} and
