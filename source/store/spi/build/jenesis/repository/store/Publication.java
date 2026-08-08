@@ -31,7 +31,7 @@ import module java.base;
  *       identical bytes dedupes to the same object; a sidecar re-derived from the same blob is rewritten identically;
  *       the pointer compare-and-set re-lands the same body. A byte-identical re-{@link #commit} therefore leaves the
  *       store byte-identical and <em>repairs</em> a first attempt that crashed mid-layout. The after-commit observers
- *       are notified again on a replay, so an observer must tolerate at-least-once delivery of the same publish.</li>
+ *       are notified again on a replay, so an observer must tolerate duplicate delivery of the same publish.</li>
  *   <li><b>Absence sentinel.</b> {@link #located}, {@link #blob} and the pointer probes answer {@link Optional#empty}
  *       for "nothing published there"; {@code null} is never returned. A refused republish is an exception
  *       ({@link RepublishConflict}), never a silent no-op.</li>
