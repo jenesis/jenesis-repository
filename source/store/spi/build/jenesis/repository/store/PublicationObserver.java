@@ -26,6 +26,57 @@ import module java.base;
  * not live. The walk must be able to fully rebuild the plugin's derived state wherever the data is re-derivable from
  * the durable store; primary rows that record a human decision or a point-in-time observation (a pin, an override, a
  * download marker) are never "rebuilt" and are excluded by design.
+ *
+ * <h2>Contract</h2>
+ * <ol>
+ *   <li><b>Thread-safety.</b> One discovered instance serves the whole process and is called from every request
+ *       thread that publishes or removes, so an implementation must be safe for concurrent calls and must not keep
+ *       per-call state in fields. Two notifications for two different artifacts may run at the same time.</li>
+ *   <li><b>Idempotency / replay.</b> Every callback here is at-least-once <em>within</em> what it delivers: a
+ *       byte-identical re-publish notifies again, a retried publish after a failed first attempt notifies again, and
+ *       the {@code WalkConsumer} back-fill re-presents artifacts the live events already carried. An implementation
+ *       must converge on repetition - upsert, never blind-append or blind-increment on a correctness-bearing
+ *       counter.</li>
+ *   <li><b>Absence sentinel.</b> Not applicable: these are void notifications, not lookups. A descriptor's optional
+ *       fields ({@code coordinate}, {@code version}, {@code contentType}) may legitimately be {@code null} for a
+ *       coordinate-less path, and {@code hash} is {@code null} only where the removal site could not read one - an
+ *       observer must tolerate that rather than assume a coordinate.</li>
+ *   <li><b>Streaming.</b> The callback receives a descriptor and the scoped store, never the artifact bytes. An
+ *       observer that needs content re-opens {@code blobs/<hash>} through the store and streams it; it must never
+ *       materialise an artifact (&sect;1), and anything slow belongs in a background worker this callback only leaves
+ *       a small durable note for.</li>
+ *   <li><b>Tenant scoping.</b> The {@link ArtifactStore} handed in is already scoped to the tenant and repository the
+ *       artifact was published into; an observer records its derived state through that store and must not reach for
+ *       a differently scoped one.</li>
+ *   <li><b>Error visibility.</b> Every method here is <b>contained</b>: a thrown exception is logged by
+ *       {@link Publication} and the publish, removal or withhold transition stands. That is deliberate - an
+ *       after-commit observer has no say in the disposition - and it bounds the blast radius of a failure to the
+ *       observer's own derived surface, which may then over-serve or over-count but can never hide a served artifact
+ *       or a hold. The verdict-bearing legs of the {@link PublishInterceptor} sub-interface are the opposite and
+ *       propagate; do not confuse the two.</li>
+ *   <li><b>Read purity.</b> Not a read path: these fire on a write, and an observer may write its own derived store
+ *       objects. It must not perform external I/O inline (a webhook, a replication push) - it records a durable note
+ *       and a background drain performs the call, so a remote target's latency or outage never couples into a
+ *       publish.</li>
+ *   <li><b>Lifecycle / ownership.</b> Instances are {@link java.util.ServiceLoader}-discovered once at
+ *       {@code Publication} class load and cached for the life of the process; there is no close hook, so an observer
+ *       that owns a thread or client owns it for the process lifetime and must size it accordingly.</li>
+ *   <li><b>Ordering / concurrency.</b> Observers are notified sequentially in discovery order, which is
+ *       <em>not</em> stable across module-path arrangements: an implementation must not depend on running before or
+ *       after another observer. Ordering between the callbacks of one publication is fixed
+ *       ({@code onWithheld}/{@code onWithholdCleared} fire at their own durable transitions,
+ *       {@code onPublished}/{@code onDeleted} after theirs), but no ordering is promised <em>between</em> two
+ *       concurrent publications.</li>
+ *   <li><b>Durability / delivery.</b> The declared delivery class is <b>best-effort, repaired by the full walk</b> -
+ *       explicitly <em>not</em> at-least-once. {@link Publication#commit} makes the artifact visible at its declared
+ *       serving pointer and only then calls {@code onPublished}, so a crash in that window leaves an artifact that
+ *       serves and was never observed; the mirrors hold for {@code onDeleted} (after the pointer delete) and for both
+ *       withhold legs (after the durable marker or review-pointer write). Writing an outbox <em>inside</em> the
+ *       callback does not close the window - it only makes what was delivered durable. The durable source of truth is
+ *       the store itself, and the heal-all is the second route of the two-route contract above: the walk SPI's
+ *       {@code WalkConsumer} re-presents every retained artifact from the durable store, so a derived surface that
+ *       must be complete rebuilds from it rather than trusting the event stream.</li>
+ * </ol>
  */
 public interface PublicationObserver {
 

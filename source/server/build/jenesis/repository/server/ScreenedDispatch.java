@@ -12,16 +12,15 @@ import module java.base;
 /**
  * The ingress write edge for the free repository: it runs the discovered {@link build.jenesis.repository.store.PublishInterceptor}
  * screen chain over a claimed single-body write <em>before</em> the format lays it out, so screening lives at the edge
- * and a {@link RepositoryFormat} is a pure layout writer. It is the core mirror of the downstream deploy edge's
- * screen/layout/observe choreography, sharing the same {@link Publication#screen} + restream + {@link Publication#published}
- * split, so the two editions converge on one write choreography (the downstream deploy edge is retired onto this seam
- * in a later step).
+ * and a {@link RepositoryFormat} is a pure layout writer. It runs the shared hosted-publish operation
+ * {@link Publication#commit} rather than re-assembling the screen/layout/notify sequence, so the two editions converge
+ * on one write choreography and one publish commit point.
  *
  * <p>For a {@code PUT}/{@code POST}/{@code PATCH} claimed by a {@link RepositoryFormat#screened() screened} format the
- * edge:
+ * edge hands {@link Publication#commit} the request body, which:
  * <ul>
- *   <li>{@link Publication#screen screens} the request body: it is stored content-addressed and the interceptor chain
- *       runs once over its {@link ArtifactDescriptor} - {@link ArtifactLayout#describe the format's layout descriptor}
+ *   <li>screens it exactly once: it is stored content-addressed and the interceptor chain
+ *       runs over its {@link ArtifactDescriptor} - {@link ArtifactLayout#describe the format's layout descriptor}
  *       when it has one, else a bare {@link ArtifactDescriptor#at coordinate-less descriptor};</li>
  *   <li>on {@code ACCEPT} restreams the stored {@code blobs/<hash>} into {@link RepositoryFormat#handle}, which lays the
  *       bytes out in its namespace and writes the response, then fires {@link Publication#published} with the descriptor
@@ -84,35 +83,44 @@ public final class ScreenedDispatch {
      *  write has, now with the body already screened. */
     private void screen(RepositoryFormat format, FormatExchange exchange, ArtifactStore store) throws IOException {
         ArtifactDescriptor descriptor = describe(format, exchange.path());
-        Publication.Published outcome = new Publication(store).screen(descriptor, exchange.requestStream());
-        switch (outcome.disposition()) {
+        // The one hosted-publish choreography: Publication.commit screens once, hands the accepted blob to the layout
+        // below, and fires published() itself once visibility has committed - so this edge no longer re-assembles the
+        // screen/layout/notify sequence by hand, and cannot get its order wrong.
+        Publication.Commit commit = new Publication(store).commit(descriptor, exchange.requestStream(),
+                // Last-writer-wins, the free formats' behaviour: a republish is just a pointer update.
+                Publication.Republish.overwrite(),
+                accepted -> {
+                    // The edge plug-in seam runs post-hash but pre-layout: a present Refusal short-circuits (the
+                    // downstream edge's release-immutability 409), so nothing is laid out and no published() fires.
+                    // With the free no-op hooks this is always empty and the accepted body lays out exactly as before.
+                    Optional<EdgeHooks.Refusal> refusal =
+                            hooks.beforeLayout(format, store, descriptor, accepted.hash(), exchange);
+                    if (refusal.isPresent()) {
+                        EdgeHooks.Refusal refused = refusal.get();
+                        exchange.respond(refused.status(), refused.message() == null
+                                ? new byte[0] : refused.message().getBytes(StandardCharsets.UTF_8));
+                        return Publication.Visibility.declined();
+                    }
+                    // An opaque format-SPI layout: RepositoryFormat.handle writes the format's own namespace and its
+                    // response, so it links its own serving pointer inside this callback rather than declaring it.
+                    // The ingress census asserts the pointer-last ordering behaviourally for this shape.
+                    format.handle(new RestreamExchange(exchange, accepted::open), store);
+                    return Publication.Visibility.laidOut();
+                });
+        switch (commit.disposition()) {
+            // ACCEPT responded inside the layout above - the format writes its own 201, and a refusal its own status.
             case ACCEPT -> {
-                String hash = outcome.hash();
-                // The edge plug-in seam runs post-hash but pre-layout: a present Refusal short-circuits (the downstream
-                // edge's release-immutability 409), so nothing is laid out and no published() fires. With the free
-                // no-op hooks this is always empty and the accepted body lays out exactly as before.
-                Optional<EdgeHooks.Refusal> refusal = hooks.beforeLayout(format, store, descriptor, hash, exchange);
-                if (refusal.isPresent()) {
-                    EdgeHooks.Refusal refused = refusal.get();
-                    exchange.respond(refused.status(), refused.message() == null
-                            ? new byte[0] : refused.message().getBytes(StandardCharsets.UTF_8));
-                } else {
-                    format.handle(new RestreamExchange(exchange, () -> store.open("blobs/" + hash)), store);
-                    // Enrich the descriptor with the accepted blob's identity (as Publication.route() does inline) so
-                    // the after-commit observers ride the edge-screened publish with the hash and size, not just the path.
-                    new Publication(store).published(descriptor.withBlob(hash, store.size("blobs/" + hash)));
-                }
             }
             case QUARANTINE -> {
                 // The held branch: the body is stored for review, not laid out. An edition records its replay context
                 // around the 202 (the downstream QuarantineDispatch record); the free no-op hook does nothing.
-                hooks.held(format, store, exchange.path(), outcome.hash(), exchange);
+                hooks.held(format, store, exchange.path(), commit.hash(), exchange);
                 exchange.respond(202);
             }
             case REJECT -> exchange.respond(422);
         }
         // One verdict per screened write for an edition's deploy observation/metric; a no-op for the core.
-        hooks.verdict(outcome.disposition(), descriptor.withBlob(outcome.hash(), store.size("blobs/" + outcome.hash())), exchange);
+        hooks.verdict(commit.disposition(), commit.artifact(), exchange);
     }
 
     /** The claiming format's layout descriptor for the path when it has one (so an observer keys on the neutral
