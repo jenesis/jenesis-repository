@@ -5,6 +5,7 @@ import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.ArtifactWalk;
+import build.jenesis.repository.walk.Trees;
 import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkSegment;
 
