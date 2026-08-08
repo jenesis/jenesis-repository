@@ -1,19 +1,36 @@
 /**
- * Integration tests for what is <em>particular</em> to the S3 artifact-store backend, run against a MinIO
- * S3-compatible container: a bucket-level 404 that must surface as a transport error rather than a silent
- * compare-and-set conflict, a ranged read that must issue a real {@code Range} GET, an endpoint scheme screen, a
- * presigned direct-fetch URL, server-side encryption, owner-only upload spooling, and a &gt;1000-key prefix that must
- * cross {@code ListObjectsV2}'s own page boundary. The cross-backend {@code ArtifactStore} contract itself - blob
- * round-trips, content-addressed writes, enumeration, scoping, ordered paging, compare-and-set and per-entry batch
- * outcomes - lives in the shared {@code StoreContract} kit and runs against this backend from
- * {@code test/store/contract}. The suite skips itself (JUnit assumptions) when no Docker daemon is reachable, so a
- * checkout without Docker still builds green.
+ * The store-backend contract suite: the JUnit driver for the testkit's {@code StoreContract}, one fixture per
+ * {@code ArtifactStoreProvider} backend, and the completeness census that keeps the two in step.
+ *
+ * <p>The suite exists because {@code StoreInvariants} / {@code FaultInjectingStore} were shared but the backend
+ * <em>contract</em> was not: {@code test/store/{filesystem,s3,gcs,azure}} each hand-wrote their own idea of
+ * what an {@code ArtifactStore} promises and drifted apart. Here the contract is stated once in the testkit and every
+ * backend runs all of it through a {@link build.jenesis.repository.store.testkit.StoreFixture}: the filesystem inline
+ * on a temporary directory, {@code s3} and {@code gcs} against one MinIO container (the GCS backend speaks the
+ * S3-compatible XML surface), {@code azure-blob} against Azurite. The containerised fixtures self-skip without a
+ * Docker daemon and <em>fail</em> under the strict lane's {@code -Djenesis.test.required}, where the environment is
+ * declared complete and a skip would be a broken lane reported as green.
+ *
+ * <p>This module deliberately requires all four backend implementations and reaches them only through
+ * {@code ArtifactStoreProvider.resolve} - the way a deployment does - so it is simultaneously the runtime-discovery
+ * graph the census needs: a backend module omitted here disappears from {@code ServiceLoader}, and the census fails
+ * because the source {@code provides} scan still declares it.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.store.s3
+ * @jenesis.test build.jenesis.repository.store.testkit
  * @jenesis.alias org.containers org.containers/containers 2.0.5
- * @jenesis.alias wiremock.standalone org.wiremock/wiremock-standalone 4.0.0-beta.38
- * @jenesis.pin com.fasterxml.jackson.core/jackson-annotations 2.20 SHA-256/959a2ffb2d591436f51f183c6a521fc89347912f711bf0cae008cdf045d95319
+ * @jenesis.pin com.azure.storage.blob 12.35.0
+ * @jenesis.pin com.azure/azure-core 1.58.1 SHA-256/7b339126e92af79b07fcf96fe16fa5ba2a2854bb8ce7e03ac4776b9474fe7df5
+ * @jenesis.pin com.azure/azure-core-http-netty 1.16.5 SHA-256/61091ba5634e711e396721edfcca5c6782be1c1e86f2ecf856eb57aa20260c0c
+ * @jenesis.pin com.azure/azure-json 1.5.1 SHA-256/bad21d5eb306d82b85951b58a1d9e501a9b09970e452bee6d4d445fd5a91c519
+ * @jenesis.pin com.azure/azure-storage-blob 12.35.0 SHA-256/c1f7dac599b0c057e406db76e7684bf2a5aae8f960f58bcecc18233298092eb8
+ * @jenesis.pin com.azure/azure-storage-common 12.34.0 SHA-256/9ddbf4a4e7680e6d062995928b3933e496353d1e62449f2ce5662f9db0820325
+ * @jenesis.pin com.azure/azure-storage-internal-avro 12.20.0 SHA-256/b80addb78cdc7ea6af99b8e76ac91c9a553e1a088850391bf2d7b3f7e2bc8dab
+ * @jenesis.pin com.azure/azure-xml 1.2.1 SHA-256/08b458481b656554605215ab0b165f68e6025359e52bea4736d032328d40ba3b
+ * @jenesis.pin com.fasterxml.jackson.core/jackson-annotations 2.18.7 SHA-256/4c992ecef3569e73f19cd6b3be027108fb73139bb67d55d1218ac72e92219ebc
+ * @jenesis.pin com.fasterxml.jackson.core/jackson-core 2.18.7 SHA-256/e1c578d374f519aa9aa74cbdc251c6705ffa08ac78faea5fa36bad213de30dc8
+ * @jenesis.pin com.fasterxml.jackson.core/jackson-databind 2.18.7 SHA-256/aa3c034534fce966b6dbd706b1f466b8a15c266127e5a15f96522091093dbd9b
+ * @jenesis.pin com.fasterxml.jackson.datatype/jackson-datatype-jsr310 2.18.7 SHA-256/29b8f1f8e055653297b07c3844a056541bdbf5c8199517598d9fa6edbefcc82e
  * @jenesis.pin com.github.docker-java/docker-java-api 3.7.1 SHA-256/dad153d484b1f4ef009e2fdbad27e07aeb3191122da52b8985507ac504300081
  * @jenesis.pin com.github.docker-java/docker-java-transport 3.7.1 SHA-256/d15eec8034bf0f92c2a48ca9172691804048115c96dc853272f9486fa2695c3c
  * @jenesis.pin com.github.docker-java/docker-java-transport-zerodep 3.7.1 SHA-256/b89bdb1754160323597f9ea32a7fe7a4a3aa8f5b3b43b88e8d71fff3b267ab21
@@ -23,14 +40,33 @@
  * @jenesis.pin commons-io/commons-io 2.20.0 SHA-256/df90bba0fe3cb586b7f164e78fe8f8f4da3f2dd5c27fa645f888100ccc25dd72
  * @jenesis.pin io.netty/netty-buffer 4.1.135.Final SHA-256/2a194f99fc93d07c4d442d04ac71bd2dc56d3188cd0e4270cdc2a953d1956bf9
  * @jenesis.pin io.netty/netty-codec 4.1.135.Final SHA-256/7252171264dbb5bb8ed38e77f89643b31e3cabc96144ec27b6882435d718a61e
+ * @jenesis.pin io.netty/netty-codec-dns 4.1.135.Final SHA-256/5e996d7ac7597f368ab114fbb91d16788918c7e5bf166345c51e56db54d50fd1
  * @jenesis.pin io.netty/netty-codec-http 4.1.135.Final SHA-256/4018529d3d6aecf4044b98c75d9a90c91839ddf49c7aa484c5ac81c90a15da02
  * @jenesis.pin io.netty/netty-codec-http2 4.1.135.Final SHA-256/aa4e81ab5fa3b7b243eb3e814aa582ab26c073d31b0abffdbb58ee150fa49c16
+ * @jenesis.pin io.netty/netty-codec-socks 4.1.135.Final SHA-256/ec7a39e8d7d7e223014115a021273f011c3cb1e8fb187cbfb90a74e76d68c25c
  * @jenesis.pin io.netty/netty-common 4.1.135.Final SHA-256/26775ca95820711403cf065fa2ec0134a0a04ff5417c688c0237aee68b55838d
  * @jenesis.pin io.netty/netty-handler 4.1.135.Final SHA-256/245e74e04b6f4e8ef98853152412e3bf1499ce6fcf15329b798c8ce36c3537e2
+ * @jenesis.pin io.netty/netty-handler-proxy 4.1.135.Final SHA-256/75661010630a44468f0e85d7ed8be7779c0cb1369fe85d30799cedc52e9ed3b7
  * @jenesis.pin io.netty/netty-resolver 4.1.135.Final SHA-256/77dd03865965b6c12b9e521bddec82f035caeb33156e09c158289c5094318481
+ * @jenesis.pin io.netty/netty-resolver-dns 4.1.135.Final SHA-256/ca25581e4cebd55797ef3b4d0953b75df32c1af77fe771b96bfaa9e701cdb7c3
+ * @jenesis.pin io.netty/netty-resolver-dns-classes-macos 4.1.135.Final SHA-256/4aab49a507dbbe446ad2c6a7587fe69c511defa6c273ce1a559e3458a3378a5b
+ * @jenesis.pin io.netty/netty-tcnative-boringssl-static 2.0.78.Final SHA-256/0e21ede32de7363affc2ae1bc412ed612853957c7081d87ca5320281db3f30bf
+ * @jenesis.pin io.netty/netty-tcnative-classes 2.0.78.Final SHA-256/3ca66d8c6c0f003242f954cc1822a32445109ac25b8582840ba3d8e3c92f0a3e
  * @jenesis.pin io.netty/netty-transport 4.1.135.Final SHA-256/6bde734d1ec073142eed31b1e68cd5d68fbf241e060b37f07a164e5ecb15631c
  * @jenesis.pin io.netty/netty-transport-classes-epoll 4.1.135.Final SHA-256/9d9537ab9e15164c9f0dc0748884c148814a18d78ac6dfa65cf4b3d06068ce01
+ * @jenesis.pin io.netty/netty-transport-classes-kqueue 4.1.135.Final SHA-256/b1f2c39d9bf7af4ecd1eb40b6bb92c5741460623aabf351de166beecbd06827d
  * @jenesis.pin io.netty/netty-transport-native-unix-common 4.1.135.Final SHA-256/a7895075f112611d1640a596c2678a28aab92d5681c1c14755b109b8998f995e
+ * @jenesis.pin io.projectreactor.netty/reactor-netty-core 1.2.18 SHA-256/2d1ff55147102d4284c6f9c59c06d4288e3a59b1921da01647fef24869cfefc3
+ * @jenesis.pin io.projectreactor.netty/reactor-netty-http 1.2.18 SHA-256/5b8409741ebe7fd95ae44519a90115352fb4bf9d32f2af579c89da7003b0db10
+ * @jenesis.pin io.projectreactor/reactor-core 3.7.18 SHA-256/7d9b507c0d651de30a20dac634e7cb7ca908a7c23d57ce05e71bbb9bb79bf0c4
+ * @jenesis.pin main/maven/io.netty/netty-resolver-dns-native-macos/jar/osx-x86_64 4.1.135.Final SHA-256/0c86fa27317c4172fff03a0c20286e2c62ef9d60ad78f389a83ede48a5bb54cd
+ * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/linux-aarch_64 2.0.78.Final SHA-256/85f6e25942df7308c9a6e66015a5ba87589d6f239231fb5b175138afe451b592
+ * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/linux-x86_64 2.0.78.Final SHA-256/bb830d661dc70fac2df8d147ffb64d61566211455272bb75d09d1662ec843aae
+ * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/osx-aarch_64 2.0.78.Final SHA-256/29019bf2e3045acaf4fd17b9e4033536141c8971939cd78cc82a12fe74fe24c1
+ * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/osx-x86_64 2.0.78.Final SHA-256/6c6c574bf9ee85b53f176d7de1101d348cf4374014df2ea26b691e7f335d69ba
+ * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/windows-x86_64 2.0.78.Final SHA-256/c720390d4733fa4997f4648327fcb63a688a72afd3ddd05d368759c6c65aef6b
+ * @jenesis.pin main/maven/io.netty/netty-transport-native-epoll/jar/linux-x86_64 4.1.135.Final SHA-256/18a40063da3364cffff81c6c2097fb6ebcb45c62264dabcce45aade4fdac3125
+ * @jenesis.pin main/maven/io.netty/netty-transport-native-kqueue/jar/osx-x86_64 4.1.135.Final SHA-256/412e10daef5aa4647984397fa6728acf88dffd0d4c53ad91f486ea6492f8f08f
  * @jenesis.pin net.bytebuddy/byte-buddy 1.18.3 SHA-256/d78396e3c5bce3f2865c9186647481e5589d34cacc632484715b686108d17c66
  * @jenesis.pin net.bytebuddy/byte-buddy-agent 1.12.10 SHA-256/5e8606d14a844c1ec70d2eb8f50c4009fb16138905dee8ca50a328116c041257
  * @jenesis.pin net.java.dev.jna/jna 5.18.1 SHA-256/260c4b1e22b1db9e110ee441c4f13ce115f841fa48c41d78750986214b395557
@@ -58,7 +94,7 @@
  * @jenesis.pin org.junit.platform/junit-platform-engine 6.1.0 SHA-256/3fb6be76c26ab0f94fe084e3fd0a39e1d25e22129929a61b29bd80a052b93ea5
  * @jenesis.pin org.junit.platform/junit-platform-launcher 6.1.0 SHA-256/0995e6ed244d66196cbda019e2f879504d0b48971edae9cc3dea46a1b31c0377
  * @jenesis.pin org.junit.platform/junit-platform-reporting 6.1.0 SHA-256/6bceb2bb75a5b32774beaa7c520201b863463cf922f2f2b0b6492a850af06a8b
- * @jenesis.pin org.mockito/mockito-core 4.6.0 SHA-256/125899de3dad49e375ad9ed34004d2ed582fa60b1f070a5b344bd928f9eac876
+ * @jenesis.pin org.mockito/mockito-core 4.11.0 SHA-256/4b909690cab288c761eb94c0bf0e814496cf3921d8affac84cd87774530351e5
  * @jenesis.pin org.mockito/mockito-junit-jupiter 4.6.0 SHA-256/a773c0a51530291b72d03aca35191928bb18967700a8ceb53694e9bc8a1cff15
  * @jenesis.pin org.objenesis/objenesis 3.2 SHA-256/03d960bd5aef03c653eb000413ada15eb77cdd2b8e4448886edf5692805e35f3
  * @jenesis.pin org.opentest4j 1.3.0
@@ -69,7 +105,6 @@
  * @jenesis.pin org.rnorth.duct-tape/duct-tape 1.0.8 SHA-256/31cef12ddec979d1f86d7cf708c41a17da523d05c685fd6642e9d0b2addb7240
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
  * @jenesis.pin org.containers/containers 2.0.5 SHA-256/0466f481343d5f350a91274cd7bf984308cbaf90d706247fd1cf4b1a8010c2e1
- * @jenesis.pin org.wiremock/wiremock-standalone 4.0.0-beta.38 SHA-256/76353b4feae89bff66583a48010272c452df74d969452bf50977afe9db441211
  * @jenesis.pin software.amazon.awssdk.auth 2.46.15
  * @jenesis.pin software.amazon.awssdk.http.urlconnection 2.46.15
  * @jenesis.pin software.amazon.awssdk.regions 2.46.15
@@ -107,19 +142,20 @@
  * @jenesis.pin software.amazon.awssdk/utils-lite 2.46.17 SHA-256/1d5bcc1929c7adb9d82d3f66e95b410602bd567c7704f8c73aca4e62c35ab5dd
  * @jenesis.pin software.amazon.eventstream/eventstream 1.0.1 SHA-256/0c37d8e696117f02c302191b8110b0d0eb20fa412fce34c3a269ec73c16ce822
  */
-open module build.jenesis.repository.store.s3.test {
-    requires build.jenesis.repository.store.s3;
+open module build.jenesis.repository.store.contract.test {
     requires build.jenesis.repository.store;
-    requires software.amazon.awssdk.services.s3;
-    requires software.amazon.awssdk.regions;
-    requires software.amazon.awssdk.auth;
-    requires software.amazon.awssdk.http.urlconnection;
+    requires build.jenesis.repository.store.testkit;
+    requires build.jenesis.repository.contract.testkit;
+    requires build.jenesis.repository.store.filesystem;
+    requires build.jenesis.repository.store.s3;
+    requires build.jenesis.repository.store.gcs;
+    requires build.jenesis.repository.store.azure;
     requires org.junit.jupiter;
     requires org.assertj.core;
     requires org.containers;
 
-    // WireMock's shaded HttpClient5 reaches for jdk/net/Sockets at runtime; an automatic module roots no requires, so
-    // the consumer must root jdk.net explicitly or the tests throw NoClassDefFoundError: jdk/net/Sockets.
-    requires jdk.net;
-    requires wiremock.standalone;
+    // Discovery is the thing under test here, so this module loads the SPI itself rather than through a resolver
+    // static: the census has to enumerate what ServiceLoader really sees in this graph and compare it against the
+    // source `provides` scan. The same `uses`-in-a-test-module shape the importer census already uses in test/server.
+    uses build.jenesis.repository.store.ArtifactStoreProvider;
 }

@@ -37,6 +37,18 @@ Every SPI interface documents its contract in a **dedicated final javadoc block 
 
 **Adding an SPI, a provider, or a role sub-interface therefore means updating that inventory in the same change.** A surface with no Contract block needs a reason-bearing entry in the test's `UNDOCUMENTED` allowlist; the allowlist is a burn-down list, so an entry whose block has landed or whose SPI is gone fails the build.
 
+### Contract kits
+
+Where an SPI's clauses are observable but not generifiable, they are asserted by **one parameterized suite over every implementation**, driven by a per-implementation **fixture** and guarded by a `ContractCensus` completeness ratchet — never by a per-implementation hand-written suite, which is how implementations drift apart. The store is the reference shape:
+
+- the contract body lives JUnit-free beside the SPI's other test support (`source/store/testkit`: `StoreContract` names each clause as a `Property`; `StoreFixture` is how a backend registers), so the downstream distribution can require it;
+- the JUnit driver, the fixtures and the census live under `test/**` (`test/store/contract`), and that module `requires` **every** provider module, so it doubles as the bundle-backed runtime-discovery graph;
+- the census asserts the **static** `provides` scan and the **runtime** `ServiceLoader` graph *separately* — neither substitutes for the other, because `ServiceLoader` cannot see a provider module the test forgot to `requires`;
+- a fixture may exclude a property only with a reason naming where the property is proven instead, and a property every fixture excludes fails the census;
+- a per-implementation suite keeps only what is **particular** to that implementation. Adding a generic assertion back to one of them is the drift the kit exists to prevent.
+
+A containerised fixture self-skips without Docker and **fails** under the strict lane (`-Djenesis.project.properties=ci`, which sets `-Djenesis.test.required`): the decision lives once in `StoreFixture.skipReason`, so a required backend that cannot start is a red build rather than a green skip.
+
 ## Engineering principles
 
 These rules are the pass/fail checklist. Run every applicable rule by eye over each diff and fix or explicitly flag failures before the change lands. This core is the shared base downstream editions reuse, so keep its seams clean and never fork its mechanism downstream.

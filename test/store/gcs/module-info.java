@@ -1,9 +1,10 @@
 /**
- * Tests for the GCS artifact-store backend, in three legs. The generic streaming contract (blob
- * round-trip, content-addressed blobs, enumeration, tenant scoping, ranged reads, list paging) runs
- * against a MinIO container started through the {@code docker} CLI - the backend's S3-compatible
- * surface is exactly the {@code s3} backend's, so the same emulator drives it; the suite self-skips
- * without a Docker daemon. The GCS-specific conditional writes ({@code x-goog-if-generation-match},
+ * Tests for the GCS artifact-store backend, in three legs. The data-path leg (ranged reads and a &gt;1000-key list
+ * paging boundary) runs against a MinIO container - the backend's S3-compatible surface is exactly the {@code s3}
+ * backend's, so the same emulator drives it; the suite self-skips without a Docker daemon. The cross-backend
+ * {@code ArtifactStore} contract itself lives in the shared {@code StoreContract} kit and runs against this backend
+ * from {@code test/store/contract}, where the versioned half is excluded with a reason for exactly the emulator gap
+ * below. The GCS-specific conditional writes ({@code x-goog-if-generation-match},
  * which MinIO does not honour) are proven against an in-process generation-aware stub on
  * {@code jdk.httpserver}, driven through the real SDK client: create-if-absent, update-if-unchanged,
  * both rejections, and the {@code x-goog-generation} version token. A live smoke runs the full

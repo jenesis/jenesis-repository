@@ -80,6 +80,12 @@ jobs:
           if match '^source/store/gcs/' || match '^test/store/gcs/'; then inc_gcs=true; fi
           inc_azure=false
           if match '^source/store/azure/' || match '^test/store/azure/'; then inc_azure=true; fi
+          # The shared store contract kit and its fixtures drive every backend, so a change to either has to pull in
+          # all three containerised legs - none of them lives under source/store/<backend>/ or test/store/<backend>/,
+          # so without this a kit change would run only the filesystem leg and report green.
+          if match '^source/store/testkit/' || match '^test/store/contract/'; then
+            inc_s3=true; inc_gcs=true; inc_azure=true
+          fi
           exclude=()
           $inc_oci   || exclude+=(docker helm)
           $inc_proxy || exclude+=(proxy)
