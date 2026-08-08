@@ -1,9 +1,13 @@
 /**
  * The dual-layout repository server: it serves the same artifacts under the Maven layout ({@code /maven/...})
  * and the Jenesis module layout ({@code /module/...}, {@code /artifact/...}), generating the POM and
- * {@code maven-metadata.xml} when a module is uploaded. Headless and stateless over the ArtifactStore SPI
- * (filesystem by default; a cloud backend is selected through ArtifactStoreProvider.resolve via
- * {@code JENESIS_STORE}). It runs on a Spring Boot virtual-thread stack ({@code RepositoryApplication}, the module's
+ * {@code maven-metadata.xml} when a module is uploaded. Headless and stateless over the ArtifactStore SPI: it
+ * {@code requires} no backend at all and resolves the one named by {@code JENESIS_STORE} through
+ * {@code ArtifactStoreProvider.resolve} over {@code ServiceLoader}, exactly as it discovers formats - the backends a
+ * deployment can select are a distribution decision (the bundle requires filesystem, s3, gcs and azure), never a
+ * compile-time edge from the server. An <em>explicitly selected</em> backend whose module is not on the path still
+ * fails at resolution naming the selection; only the unselected default degrades to whichever bundled provider answers
+ * to {@code filesystem}. It runs on a Spring Boot virtual-thread stack ({@code RepositoryApplication}, the module's
  * declared main) with Actuator observability and Spring Security gating the wire, dispatching to the
  * ServiceLoader-discovered formats over the framework-neutral core. Open so Spring can reflect over the beans and
  * controller.
@@ -90,7 +94,6 @@
 open module build.jenesis.repository.server {
     requires transitive build.jenesis.repository.server.spi;
     requires build.jenesis.repository.store;
-    requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.posture;
