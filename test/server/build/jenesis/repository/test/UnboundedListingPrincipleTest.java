@@ -32,8 +32,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * domain collection. Each site is keyed by {@code SimpleClassName#anchor} where the anchor is the {@code list(...)}
  * substring of the call, and is an <b>offender</b> unless the {@link #ALLOWLIST} carries an entry whose class matches and
  * whose anchor is a substring of the call line, with a one-line boundedness justification. The allowlist was seeded from
- * the FULL census at this tip ({@value #ALLOWLIST_SIZE} distinct {@code ClassName#anchor} keys over 21 distinct call
- * lines), each entry read at its call site so the justification is truthful, not assumed.
+ * the FULL census at this tip ({@value #ALLOWLIST_SIZE} distinct {@code ClassName#anchor} keys over 17 distinct call
+ * lines), each entry read at its call site so the justification is truthful, not assumed. One source tree is out of
+ * scan scope entirely - {@code source/store/testkit}, the JUnit-free store contract kit and fault fixtures, which ship
+ * in no bundle, provide no service and serve no request; see {@link #TEST_SUPPORT}.
  *
  * <h2>The boundedness classes</h2>
  * Every surviving free call site falls into one of a few provably-bounded shapes, and the justification names which:
@@ -51,8 +53,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       {@code list(dirtyPrefix)} (pending dirty-index markers, the O(&Delta;) feed read);</li>
  *   <li><b>config / tenant / auth / GC-bookkeeping sets</b> &mdash; {@code list("auth/" + tenant)} (one tenant's auth
  *       entries), {@code list("gc")} (the pass-generation bookkeeping space), the demo-seed emptiness gate;</li>
- *   <li><b>store wrapper / testkit pass-throughs</b> &mdash; the read-only / quota / fault-injecting {@code ArtifactStore}
- *       decorators forward {@code list} to a delegate whose (allowlisted) callers carry the boundedness, and the
+ *   <li><b>store wrapper pass-throughs</b> &mdash; the read-only / quota {@code ArtifactStore} decorators forward
+ *       {@code list} to a delegate whose (allowlisted) callers carry the boundedness, and the
  *       {@code FilesystemArtifactStore} backing primitive lists one on-disk directory's entries.</li>
  * </ul>
  * The genuinely attacker-shaped per-request enumerations that were the historical C2 defects are NOT here: the OCI
@@ -81,11 +83,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class UnboundedListingPrincipleTest {
 
     /** The pinned size of {@link #ALLOWLIST}: the distinct {@code ClassName#anchor} keys at this tip. Shrink-only. */
-    private static final int ALLOWLIST_SIZE = 20;
+    private static final int ALLOWLIST_SIZE = 16;
 
     /** A conservative floor on the number of distinct list call lines the matcher must find, so a broken matcher (or a
-     *  source walk that finds nothing) cannot pass the offender leg vacuously. The census has 21 today. */
-    private static final int LIST_SITE_FLOOR = 20;
+     *  source walk that finds nothing) cannot pass the offender leg vacuously. The census has 17 today. */
+    private static final int LIST_SITE_FLOOR = 16;
 
     /** Every censused {@code .list(prefix)} call site in free {@code source/}, keyed {@code SimpleClassName#list(anchor)},
      *  with a one-line boundedness justification READ at the call site. An argument-bearing {@code .list(} site whose
@@ -103,7 +105,6 @@ class UnboundedListingPrincipleTest {
         a.put("Publication#list(prefix)", "one node's immediate children in the alias-hold publish-tree walk");
         a.put("MarkSweepGarbageCollector#list(prefix)",
                 "one node's immediate children in the GC condemned-subtree drop / reference-batch walk");
-        a.put("StoreInvariants#list(prefix)", "one node's immediate children in the testkit store-invariant walk");
 
         // --- per-session chunks: ONE upload session's objects, bounded by its authenticated upload count (a publisher
         //     paying for their own breadth). The per-coordinate and per-image siblings that sat here are gone: T-103a
@@ -143,14 +144,8 @@ class UnboundedListingPrincipleTest {
         // --- store wrapper / testkit pass-throughs: the primitive; boundedness is the (allowlisted) caller's -----------
         a.put("ReadOnlyArtifactStore#list(prefix)", "the read-only ArtifactStore wrapper's list pass-through to its delegate");
         a.put("QuotaArtifactStore#list(prefix)", "the quota-metering ArtifactStore wrapper's list pass-through to its delegate");
-        a.put("FaultInjectingStore#delegate.list(prefix)",
-                "testkit fault-injecting ArtifactStore wrapper's list pass-through to its delegate");
-        a.put("FaultInjectingStore#scoped.list(prefix)",
-                "testkit fault-injecting ArtifactStore wrapper's list pass-through to its tenant-scoped delegate");
         a.put("FilesystemArtifactStore#Files.list(dir)",
                 "the filesystem backing primitive: lists ONE on-disk directory's immediate entries (the store.list impl)");
-        a.put("StoreInvariants#list(\"blobs\")",
-                "testkit invariant checker: enumerates stored blobs to assert store invariants in tests - not a serve path");
 
         return Map.copyOf(a);
     }
@@ -330,8 +325,20 @@ class UnboundedListingPrincipleTest {
     }
 
     private static boolean isJava(Path path) {
-        return Files.isRegularFile(path) && path.getFileName().toString().endsWith(".java");
+        return Files.isRegularFile(path) && path.getFileName().toString().endsWith(".java")
+                && !TEST_SUPPORT.matcher(path.toString().replace(File.separatorChar, '/')).find();
     }
+
+    /**
+     * The one source tree this ratchet does not scan: {@code source/store/testkit}, the JUnit-free contract kit and
+     * fault fixtures ({@code StoreContract}, {@code StoreInvariants}, {@code FaultInjectingStore}). It ships in no
+     * bundle, provides no service and serves no request - its {@code list} calls exist precisely to <em>assert</em> the
+     * {@code ArtifactStore} enumeration contract on every backend, which is the opposite of an unbounded serve-path
+     * listing. Scanning it produced four grants that masked nothing, and would force every new contract assertion to
+     * buy an allowlist entry; excluding it shrank the census from 21 lines / 20 grants to 17 / 16. The exclusion is
+     * deliberately one module deep, not a {@code testkit} glob, so no future directory can opt itself out by name.
+     */
+    private static final Pattern TEST_SUPPORT = Pattern.compile("(^|/)store/testkit/");
 
     /** Blanks out {@code //} and {@code /* *}{@code /} comments (preserving newlines and string/char literals) so the scan
      *  never trips on a {@code .list(} that appears inside a javadoc example rather than in real code. Ported verbatim from

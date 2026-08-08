@@ -46,7 +46,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <h2>Scope &amp; honest limitations</h2>
  * The scan covers all of the free {@code source/} (excludes {@code test/} and {@code target/} simply by walking only
- * {@code source/}). Like its downstream twin it is a text scan matching the idioms above; a hand-rolled
+ * {@code source/}) except the one test-support module {@link #TEST_SUPPORT} names. Like its downstream twin it is a
+ * text scan matching the idioms above; a hand-rolled
  * {@code while ((n = in.read(chunk)) >= 0) baos.write(chunk, 0, n)} copy loop is <em>not</em> matched (modern code uses
  * {@code transferTo}, which is). The value it delivers is that a new {@code someArtifactStream.readAllBytes()} /
  * {@code toByteArray()} / a fresh {@code store.read(artifactKey, aByteArrayOutputStream)} on an upload/download/proxy path
@@ -275,8 +276,20 @@ class StreamingPrincipleTest {
     }
 
     private static boolean isJava(Path path) {
-        return Files.isRegularFile(path) && path.getFileName().toString().endsWith(".java");
+        return Files.isRegularFile(path) && path.getFileName().toString().endsWith(".java")
+                && !TEST_SUPPORT.matcher(path.toString().replace(File.separatorChar, '/')).find();
     }
+
+    /**
+     * The one source tree this ratchet does not scan: {@code source/store/testkit}, the JUnit-free store contract kit
+     * and fault fixtures ({@code StoreContract}, {@code StoreInvariants}, {@code FaultInjectingStore}). It ships in no
+     * bundle, provides no service and is on no upload/download/proxy path - its whole-body reads exist precisely to
+     * <em>assert</em> that a backend streams a small test blob back byte-identically, which is the opposite of
+     * materialising an artifact on a serve path. Scanning it would force every contract assertion to buy an allowlist
+     * entry and dilute the grants that mask real production reads. Deliberately one module deep, not a {@code testkit}
+     * glob, so no future directory can opt itself out by name.
+     */
+    private static final Pattern TEST_SUPPORT = Pattern.compile("(^|/)store/testkit/");
 
     /** The module sources directory ({@code <repo>/source}) - located by walking up from the working directory to the
      *  first ancestor holding {@code source/} beside {@code build/jenesis}. Fails loudly if the tree is not reachable, so

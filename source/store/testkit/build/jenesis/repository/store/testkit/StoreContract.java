@@ -1,0 +1,635 @@
+package build.jenesis.repository.store.testkit;
+
+import module java.base;
+import build.jenesis.repository.store.ArtifactStore;
+
+/**
+ * The executable {@link ArtifactStore} contract: one parameterized body of checks that every backend runs through a
+ * {@link StoreFixture}, so a store property is stated once and proven four times instead of being re-asserted - and
+ * quietly re-interpreted - in four hand-written backend suites. Each {@link Property} names one documented contract
+ * clause; {@link #checks(StoreFixture)} binds them to a fixture's store, skipping only the properties that fixture's
+ * environment declares (with a reason) it cannot express.
+ *
+ * <p>Assertion-library-free on purpose: a check throws {@link AssertionError} naming the backend, the property and the
+ * expectation, so this module stays {@code java.base} + the store SPI and the downstream distribution can require it
+ * exactly as it already requires {@link FaultInjectingStore}. The JUnit driver lives under {@code test/**} and turns
+ * each check into one dynamic test.
+ *
+ * <p>Two of the kit's checks drive the fixtures this module already ships rather than re-implementing them:
+ * {@link Property#BATCH_FAILURE_IS_PER_ENTRY} arms a {@link FaultInjectingStore} over the real backend to prove a
+ * thrown write becomes one {@code FAILED} entry instead of aborting the batch, and {@link Property#STORE_INVARIANTS}
+ * runs {@link StoreInvariants} against a freshly scoped subspace of the live backend.
+ */
+public final class StoreContract {
+
+    /**
+     * One documented contract clause of {@link ArtifactStore}. The enum is the kit's vocabulary: a fixture excludes a
+     * property by name and reason, and the census fails on a property no fixture anywhere exercises, so the list can
+     * never grow a clause that is asserted nowhere.
+     */
+    public enum Property {
+        /** A keyed blob round-trips through {@code write}/{@code read}/{@code open}; absence is {@code false},
+         *  {@code -1} and an {@code IOException}, never a silent empty stream; {@code delete} is idempotent. */
+        KEYED_BLOB_ROUND_TRIP,
+        /** {@code writeBlob} content-addresses by SHA-256, lands at {@code blobs/<hash>}, and an identical body
+         *  dedupes to the same key rather than being stored twice. */
+        CONTENT_ADDRESSED_WRITE,
+        /** A source that fails mid-stream commits nothing: the key stays absent and sizes to {@code -1}, so a
+         *  truncated body can never be mistaken for the real one (and never poisons the CAS dedupe probe). */
+        ABORTED_WRITE_COMMITS_NOTHING,
+        /** A scoped view is a subspace: a sibling scope sees none of its objects, and the parent addresses them
+         *  under the scope segment. */
+        SCOPE_ISOLATION,
+        /** {@code scope} rejects every traversal-shaped segment through {@link ArtifactStore#segment}, while a
+         *  hidden internal space stays legal. */
+        SEGMENT_TRAVERSAL_REJECTED,
+        /** Write paths reject a key past {@link ArtifactStore#MAX_SEGMENTS} or {@link ArtifactStore#MAX_KEY_BYTES}
+         *  through {@link ArtifactStore#key}, storing nothing; a key at the cap is accepted. */
+        KEY_SHAPE_REJECTED,
+        /** Write paths reject a key carrying a {@code .} or {@code ..} segment, storing nothing - the same screen
+         *  {@code scope} applies to a segment, applied to the key. */
+        KEY_TRAVERSAL_REJECTED,
+        /** {@code list} returns the immediate children of a prefix and nothing deeper; a leaf and an absent prefix
+         *  both list empty. */
+        LISTING_IMMEDIATE_CHILDREN,
+        /** {@code page} streams immediate children in lexicographic order, strictly after {@code startAfter},
+         *  bounded by {@code limit}, and repeated pages traverse the whole child set exactly once. */
+        PAGING_ORDER_AND_START_AFTER,
+        /** {@code writeVersioned} with a {@code null} expectation is create-if-absent: it lands once and is refused
+         *  while the object exists, leaving the stored content untouched. */
+        VERSIONED_CREATE_IF_ABSENT,
+        /** {@code writeVersioned} with a token is update-if-unchanged: it lands against the current token and is
+         *  refused against a superseded one, leaving the stored content untouched. */
+        VERSIONED_UPDATE_IF_UNCHANGED,
+        /** The version token is opaque and per-version: never {@code null}, never interpreted by the caller, changed
+         *  by every successful write, and refused once superseded. Absence reads as {@code Optional.empty()}. */
+        VERSION_TOKEN_OPAQUE,
+        /** {@code writeBatch} answers exactly one outcome per write, in input order, keyed to that write; two writes
+         *  to one key apply in input order rather than racing. */
+        BATCH_ORDERED_PER_ENTRY_OUTCOMES,
+        /** {@code writeBatch} is explicitly not a transaction: a losing compare-and-set neither rolls back nor
+         *  prevents its neighbours, and the conflicted key keeps its prior value. */
+        BATCH_IS_NOT_A_TRANSACTION,
+        /** A write that throws fails that entry only: its outcome carries the {@link IOException} while the rest of
+         *  the batch still commits. */
+        BATCH_FAILURE_IS_PER_ENTRY,
+        /** The store-primitive invariants hold on a live backend: no {@code publish/} pointer without its blob, no
+         *  unreferenced blob - and a planted dangling pointer is caught. */
+        STORE_INVARIANTS
+    }
+
+    /** One named, independently runnable contract check. */
+    public record Check(Property property, String name, Body body) {
+
+        public Check {
+            Objects.requireNonNull(property, "property");
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(body, "body");
+        }
+    }
+
+    /** The body of a {@link Check}, run against the fixture's store. */
+    @FunctionalInterface
+    public interface Body {
+        void run(ArtifactStore store) throws Exception;
+    }
+
+    private StoreContract() {
+    }
+
+    /**
+     * Every contract check, in declaration order, independent of any fixture. The list is the contract: a backend runs
+     * all of it or names - with a reason - the properties its environment cannot express.
+     */
+    public static List<Check> checks() {
+        List<Check> checks = new ArrayList<>();
+        checks.add(new Check(Property.KEYED_BLOB_ROUND_TRIP,
+                "a keyed blob round-trips and absence is false, -1 and an IOException",
+                StoreContract::keyedBlobRoundTrip));
+        checks.add(new Check(Property.CONTENT_ADDRESSED_WRITE,
+                "writeBlob content-addresses by SHA-256 and dedupes an identical body",
+                StoreContract::contentAddressedWrite));
+        checks.add(new Check(Property.ABORTED_WRITE_COMMITS_NOTHING,
+                "a source that fails mid-stream commits nothing at the key",
+                StoreContract::abortedWriteCommitsNothing));
+        checks.add(new Check(Property.SCOPE_ISOLATION,
+                "a scoped view is a subspace a sibling scope cannot read",
+                StoreContract::scopeIsolation));
+        checks.add(new Check(Property.SEGMENT_TRAVERSAL_REJECTED,
+                "scope rejects every traversal-shaped segment and admits a hidden space",
+                StoreContract::segmentTraversalRejected));
+        checks.add(new Check(Property.KEY_SHAPE_REJECTED,
+                "a write past the segment or byte cap is rejected and stores nothing",
+                StoreContract::keyShapeRejected));
+        checks.add(new Check(Property.KEY_TRAVERSAL_REJECTED,
+                "a write whose key carries a . or .. segment is rejected and stores nothing",
+                StoreContract::keyTraversalRejected));
+        checks.add(new Check(Property.LISTING_IMMEDIATE_CHILDREN,
+                "list returns the immediate children of a prefix and nothing deeper",
+                StoreContract::listingImmediateChildren));
+        checks.add(new Check(Property.PAGING_ORDER_AND_START_AFTER,
+                "page streams ordered children strictly after the boundary, bounded by the limit",
+                StoreContract::pagingOrderAndStartAfter));
+        checks.add(new Check(Property.VERSIONED_CREATE_IF_ABSENT,
+                "writeVersioned against a null expectation is create-if-absent",
+                StoreContract::versionedCreateIfAbsent));
+        checks.add(new Check(Property.VERSIONED_UPDATE_IF_UNCHANGED,
+                "writeVersioned against a token is update-if-unchanged",
+                StoreContract::versionedUpdateIfUnchanged));
+        checks.add(new Check(Property.VERSION_TOKEN_OPAQUE,
+                "the version token is opaque, per-version and refused once superseded",
+                StoreContract::versionTokenOpaque));
+        checks.add(new Check(Property.BATCH_ORDERED_PER_ENTRY_OUTCOMES,
+                "writeBatch answers one outcome per write, in input order",
+                StoreContract::batchOrderedPerEntryOutcomes));
+        checks.add(new Check(Property.BATCH_IS_NOT_A_TRANSACTION,
+                "a losing compare-and-set neither rolls back nor prevents its neighbours",
+                StoreContract::batchIsNotATransaction));
+        checks.add(new Check(Property.BATCH_FAILURE_IS_PER_ENTRY,
+                "a thrown write fails its own entry while the rest of the batch commits",
+                StoreContract::batchFailureIsPerEntry));
+        checks.add(new Check(Property.STORE_INVARIANTS,
+                "the store-primitive invariants hold and a dangling pointer is caught",
+                StoreContract::storeInvariants));
+        return List.copyOf(checks);
+    }
+
+    /**
+     * The checks {@code fixture} runs: every check whose property the fixture does not exclude. Excluding a property
+     * the enum does not declare, or excluding one without a reason, fails here rather than silently shrinking the
+     * suite.
+     */
+    public static List<Check> checks(StoreFixture fixture) {
+        Objects.requireNonNull(fixture, "fixture");
+        Map<Property, String> unsupported = fixture.unsupported();
+        unsupported.forEach((property, reason) -> {
+            Objects.requireNonNull(property, "unsupported property");
+            if (reason == null || reason.isBlank()) {
+                throw new AssertionError("The '" + fixture.backend() + "' fixture excludes " + property
+                        + " without a reason; an exclusion must say what cannot be expressed and where the property "
+                        + "is proven instead.");
+            }
+        });
+        return checks().stream().filter(check -> !unsupported.containsKey(check.property())).toList();
+    }
+
+    // --- the contract ------------------------------------------------------------------------------------------
+
+    private static void keyedBlobRoundTrip(ArtifactStore store) throws Exception {
+        String key = "kit/roundtrip/artifact.bin";
+        byte[] body = ramp(64);
+
+        isFalse(store.exists(key), "an unwritten key does not exist");
+        equal(store.size(key), -1L, "an unwritten key sizes to -1 rather than 0");
+        throwsIo(() -> store.read(key, new ByteArrayOutputStream()), "reading an absent key");
+        throwsIo(() -> drain(store.open(key)), "opening an absent key");
+
+        store.write(key, new ByteArrayInputStream(body));
+        isTrue(store.exists(key), "a written key exists");
+        equal(store.size(key), (long) body.length, "the stored byte length");
+        ByteArrayOutputStream read = new ByteArrayOutputStream();
+        store.read(key, read);
+        equal(read.toByteArray(), body, "read streams the stored bytes back");
+        equal(drain(store.open(key)), body, "open streams the same bytes back");
+
+        store.delete(key);
+        isFalse(store.exists(key), "a deleted key no longer exists");
+        equal(store.size(key), -1L, "a deleted key sizes to -1");
+        store.delete(key);      // a repeated delete converges rather than throwing - crash-resume replays it
+    }
+
+    private static void contentAddressedWrite(ArtifactStore store) throws Exception {
+        byte[] body = "kit/content-addressed/payload".getBytes(StandardCharsets.UTF_8);
+        String expected = sha256(body);
+
+        String hash = store.writeBlob(new ByteArrayInputStream(body));
+        equal(hash, expected, "writeBlob returns the content's SHA-256 in lowercase hex");
+        isTrue(store.exists("blobs/" + hash), "the blob lands at the content-addressed key blobs/<hash>");
+        equal(drain(store.open("blobs/" + hash)), body, "the content-addressed blob streams back byte-identical");
+        equal(store.writeBlob(new ByteArrayInputStream(body)), hash,
+                "an identical body dedupes to the one blob rather than being stored twice");
+        store.delete("blobs/" + hash);
+    }
+
+    private static void abortedWriteCommitsNothing(ArtifactStore store) throws Exception {
+        String key = "kit/aborted/artifact.bin";
+        throwsIo(() -> store.write(key, failsAfter(3)), "a source that fails mid-stream");
+        isFalse(store.exists(key), "an aborted write commits nothing - no truncated body at the key");
+        equal(store.size(key), -1L, "an aborted write leaves no partial length behind");
+
+        // ... and the key is still clean, so the real bytes land afterwards: an aborted upload must never be able to
+        // park a truncated body that a later content-addressed probe would then treat as already stored.
+        byte[] body = ramp(16);
+        store.write(key, new ByteArrayInputStream(body));
+        equal(drain(store.open(key)), body, "the real bytes land after the earlier abort left the key clean");
+        store.delete(key);
+    }
+
+    private static void scopeIsolation(ArtifactStore store) throws Exception {
+        ArtifactStore left = store.scope("kitleft"), right = store.scope("kitright");
+        left.write("space/object", new ByteArrayInputStream(ramp(8)));
+
+        isTrue(left.exists("space/object"), "the writing scope sees its own object");
+        isFalse(right.exists("space/object"), "a sibling scope never reads across the subspace boundary");
+        equal(right.list("space"), List.of(), "a sibling scope enumerates none of it either");
+        isTrue(store.exists("kitleft/space/object"), "the parent addresses it under the scope segment");
+        left.delete("space/object");
+    }
+
+    private static void segmentTraversalRejected(ArtifactStore store) throws Exception {
+        for (String segment : new String[]{"..", "../escape", "a/b", "a\\b", ".", ""}) {
+            throwsIae(() -> store.scope(segment), "scoping to the traversal-shaped segment '" + segment + "'");
+        }
+        throwsIae(() -> store.scope(null), "scoping to a null segment");
+
+        // A plain hidden subspace (the .tests / .scans internal spaces) is a legal segment, not a traversal.
+        ArtifactStore hidden = store.scope(".tests");
+        hidden.write("object", new ByteArrayInputStream(ramp(4)));
+        isTrue(store.exists(".tests/object"), "a hidden internal space still scopes as a subspace");
+        hidden.delete("object");
+    }
+
+    private static void keyShapeRejected(ArtifactStore store) throws Exception {
+        String atCap = String.join("/", Collections.nCopies(ArtifactStore.MAX_SEGMENTS, "a"));
+        store.write(atCap, new ByteArrayInputStream(ramp(4)));
+        isTrue(store.exists(atCap), "a key at exactly the segment cap is accepted");
+        store.delete(atCap);
+
+        String overDeep = String.join("/", Collections.nCopies(ArtifactStore.MAX_SEGMENTS + 1, "a"));
+        String overLong = "kit/" + "a".repeat(ArtifactStore.MAX_KEY_BYTES);
+        // The rejection is the screen ArtifactStore.key runs before the backend touches a path or a wire, so nothing is
+        // attempted; probing exists() for the over-shaped key back is deliberately not asserted, because an object
+        // store answers a key past its own 1 KiB limit with a protocol error rather than a clean miss.
+        for (String key : new String[]{overDeep, overLong}) {
+            throwsIae(() -> store.write(key, new ByteArrayInputStream(ramp(4))),
+                    "writing a key past the shape cap");
+            throwsIae(() -> store.writeVersioned(key, ramp(4), null),
+                    "versioned-writing a key past the shape cap");
+        }
+    }
+
+    private static void keyTraversalRejected(ArtifactStore store) throws Exception {
+        // This check found a real three-way divergence, which is why it exists. Before the screen landed in
+        // ArtifactStore.key, one `store.write("kit/../escape", ...)` did three different things: the filesystem
+        // silently NORMALISED it and stored the body one level up, at a key the caller never named; Azure stored it
+        // LITERALLY at the traversal-shaped key; and S3/GCS answered a transport IOException from the object store's
+        // own key screen. No backend suite tested a traversal-shaped key on the write path, so nothing saw it. The
+        // screen sits at the one choke point every backend already calls, before any I/O, so all four now refuse the
+        // same publish the same way and a store migration cannot relocate or lose an object.
+        for (String key : new String[]{"kit/../escape", "../escape", "kit/./here", "..", "."}) {
+            throwsIae(() -> store.write(key, new ByteArrayInputStream(ramp(4))),
+                    "writing the traversal-shaped key '" + key + "'");
+            throwsIae(() -> store.writeVersioned(key, ramp(4), null),
+                    "versioned-writing the traversal-shaped key '" + key + "'");
+        }
+        isFalse(store.exists("escape"), "a rejected traversal key stores nothing where it aimed");
+    }
+
+    private static void listingImmediateChildren(ArtifactStore store) throws Exception {
+        String base = "kit/listing";
+        store.write(base + "/alpha", new ByteArrayInputStream(ramp(4)));
+        store.write(base + "/beta/nested", new ByteArrayInputStream(ramp(4)));
+        store.write(base + "/gamma", new ByteArrayInputStream(ramp(4)));
+
+        equal(store.list(base), List.of("alpha", "beta", "gamma"),
+                "list returns the immediate children - a container by its name, not its descendants");
+        equal(store.list(base + "/beta"), List.of("nested"), "a container lists its own children");
+        equal(store.list(base + "/alpha"), List.of(), "a leaf has no children");
+        equal(store.list(base + "/absent"), List.of(), "an absent prefix lists empty rather than failing");
+
+        store.delete(base + "/alpha");
+        store.delete(base + "/beta/nested");
+        store.delete(base + "/gamma");
+    }
+
+    private static void pagingOrderAndStartAfter(ArtifactStore store) throws Exception {
+        // "beta" (a container) beside "beta.txt" (a leaf) is the ordering trap every object-store backend has to
+        // repair: '.' sorts below '/', so the raw key stream hands out beta.txt before the grouped prefix beta/,
+        // while the child name `beta` must page first. A backend that streams raw key order fails here.
+        String base = "kit/paging";
+        store.write(base + "/alpha", new ByteArrayInputStream(ramp(4)));
+        store.write(base + "/beta/nested", new ByteArrayInputStream(ramp(4)));
+        store.write(base + "/beta.txt", new ByteArrayInputStream(ramp(4)));
+        store.write(base + "/delta", new ByteArrayInputStream(ramp(4)));
+        List<String> children = List.of("alpha", "beta", "beta.txt", "delta");
+
+        equal(page(store, base, "", 10), children, "page streams every immediate child in lexicographic order");
+        equal(page(store, base, "beta", 10), List.of("beta.txt", "delta"),
+                "startAfter is strict - the boundary name itself never re-emits, container or leaf");
+        equal(page(store, base, "", 2), List.of("alpha", "beta"), "the limit bounds the page");
+        equal(page(store, base, "", 0), List.of(), "a non-positive limit emits nothing");
+        equal(page(store, base, "zzz", 10), List.of(), "a boundary past every child emits nothing");
+        equal(page(store, base + "/absent", "", 10), List.of(), "an absent prefix pages empty rather than failing");
+        equal(page(store, base + "/alpha", "", 10), List.of(), "a leaf pages empty");
+
+        // Repeated single-entry pages, each resuming after the last name of the one before, traverse the whole child
+        // set exactly once - the primitive the shared artifact walk is built on.
+        List<String> traversed = new ArrayList<>();
+        for (String cursor = ""; ; ) {
+            List<String> next = page(store, base, cursor, 1);
+            if (next.isEmpty()) {
+                break;
+            }
+            traversed.addAll(next);
+            cursor = next.get(next.size() - 1);
+        }
+        equal(traversed, children, "paging in strides of one traverses every child exactly once, in order");
+        equal(new ArrayList<>(store.list(base)), children, "list and a full paging agree on the child set");
+
+        store.delete(base + "/alpha");
+        store.delete(base + "/beta/nested");
+        store.delete(base + "/beta.txt");
+        store.delete(base + "/delta");
+    }
+
+    private static void versionedCreateIfAbsent(ArtifactStore store) throws Exception {
+        String key = "kit/versioned/create";
+        equal(store.readVersioned(key).isPresent(), false, "an absent object reads as Optional.empty()");
+        isTrue(store.writeVersioned(key, utf8("one"), null), "create-if-absent lands against a null expectation");
+        isFalse(store.writeVersioned(key, utf8("two"), null),
+                "create-if-absent is refused while the object exists, rather than overwriting it");
+        equal(content(store, key), "one", "the refused write left the stored content untouched");
+        store.delete(key);
+    }
+
+    private static void versionedUpdateIfUnchanged(ArtifactStore store) throws Exception {
+        String key = "kit/versioned/update";
+        isTrue(store.writeVersioned(key, utf8("v1"), null), "the object is created");
+        Object token = store.readVersioned(key).orElseThrow().token();
+        isTrue(store.writeVersioned(key, utf8("v2"), token), "update-if-unchanged lands against the current token");
+        isFalse(store.writeVersioned(key, utf8("v3"), token),
+                "the same token no longer passes once it has been superseded - a lost update is impossible");
+        equal(content(store, key), "v2", "the refused write left the stored content untouched");
+        store.delete(key);
+    }
+
+    private static void versionTokenOpaque(ArtifactStore store) throws Exception {
+        String key = "kit/versioned/token";
+        isTrue(store.writeVersioned(key, utf8("a"), null), "the object is created");
+        Object first = store.readVersioned(key).orElseThrow().token();
+        notNull(first, "a present object always carries a version token");
+
+        isTrue(store.writeVersioned(key, utf8("b"), first), "the token the store handed out is the one it accepts");
+        Object second = store.readVersioned(key).orElseThrow().token();
+        notNull(second, "the token survives an update");
+        if (Objects.equals(first, second)) {
+            throw failure("the version token advances on every successful write (a backend whose token can repeat "
+                    + "lets a writer holding the pre-update token pass a stale write off as current), but the token "
+                    + "was " + first + " before and after");
+        }
+
+        isTrue(store.writeVersioned(key, utf8("c"), second), "the current token still passes");
+        isFalse(store.writeVersioned(key, utf8("d"), first),
+                "a token two versions stale is refused, not merely the immediately previous one");
+        equal(content(store, key), "c", "the refused write left the stored content untouched");
+
+        store.delete(key);
+        equal(store.readVersioned(key).isPresent(), false, "a deleted object reads as Optional.empty() again");
+    }
+
+    private static void batchOrderedPerEntryOutcomes(ArtifactStore store) throws Exception {
+        String base = "kit/batch/ordered/";
+        List<ArtifactStore.BatchWrite> writes = List.of(
+                new ArtifactStore.BatchWrite(base + "alpha", utf8("A"), null),
+                new ArtifactStore.BatchWrite(base + "beta", utf8("B"), null),
+                new ArtifactStore.BatchWrite(base + "gamma", utf8("C"), null));
+        List<ArtifactStore.BatchOutcome> outcomes = store.writeBatch(writes);
+
+        equal(outcomes.size(), writes.size(), "exactly one outcome per write");
+        equal(outcomes.stream().map(ArtifactStore.BatchOutcome::key).toList(),
+                writes.stream().map(ArtifactStore.BatchWrite::key).toList(),
+                "the outcomes come back in input order, each keyed to its own write");
+        for (ArtifactStore.BatchOutcome outcome : outcomes) {
+            equal(outcome.status(), ArtifactStore.BatchOutcome.Status.COMMITTED, "a disjoint create commits");
+            if (outcome.failure() != null) {
+                throw failure("a COMMITTED outcome carries no failure, but " + outcome.key() + " carried "
+                        + outcome.failure());
+            }
+        }
+        equal(content(store, base + "alpha"), "A", "the batch really landed the bytes");
+
+        equal(store.writeBatch(List.of()), List.of(), "an empty batch is an empty outcome list, not a failure");
+
+        // Two writes to one key are applied in input order on one task rather than racing: the first create lands and
+        // the second - now no longer create-if-absent - conflicts. A backend that fanned the same key out in parallel
+        // would report a discovery-order winner instead.
+        String repeated = base + "repeated";
+        List<ArtifactStore.BatchOutcome> sameKey = store.writeBatch(List.of(
+                new ArtifactStore.BatchWrite(repeated, utf8("first"), null),
+                new ArtifactStore.BatchWrite(repeated, utf8("second"), null)));
+        equal(sameKey.stream().map(ArtifactStore.BatchOutcome::status).toList(),
+                List.of(ArtifactStore.BatchOutcome.Status.COMMITTED, ArtifactStore.BatchOutcome.Status.CONFLICTED),
+                "two writes to one key apply in input order");
+        equal(content(store, repeated), "first", "the earlier write of the pair is the one that stands");
+
+        for (String key : new String[]{base + "alpha", base + "beta", base + "gamma", repeated}) {
+            store.delete(key);
+        }
+    }
+
+    private static void batchIsNotATransaction(ArtifactStore store) throws Exception {
+        String base = "kit/batch/partial/";
+        String conflicting = base + "conflicting", updated = base + "updated", created = base + "created";
+
+        // A genuinely superseded token of this backend's own type - never a fabricated one, because the token is
+        // opaque and a caller may not manufacture a value of it.
+        isTrue(store.writeVersioned(conflicting, utf8("v1"), null), "the conflicting key is seeded");
+        Object stale = store.readVersioned(conflicting).orElseThrow().token();
+        isTrue(store.writeVersioned(conflicting, utf8("v2"), stale), "and then superseded, so the token goes stale");
+        isTrue(store.writeVersioned(updated, utf8("u1"), null), "the neighbour key is seeded");
+        Object current = store.readVersioned(updated).orElseThrow().token();
+
+        List<ArtifactStore.BatchOutcome> outcomes = store.writeBatch(List.of(
+                new ArtifactStore.BatchWrite(conflicting, utf8("v3"), stale),
+                new ArtifactStore.BatchWrite(updated, utf8("u2"), current),
+                new ArtifactStore.BatchWrite(created, utf8("c1"), null)));
+
+        equal(outcomes.stream().map(ArtifactStore.BatchOutcome::status).toList(),
+                List.of(ArtifactStore.BatchOutcome.Status.CONFLICTED,
+                        ArtifactStore.BatchOutcome.Status.COMMITTED,
+                        ArtifactStore.BatchOutcome.Status.COMMITTED),
+                "a lost compare-and-set is reported per entry, exactly as a false from writeVersioned");
+        equal(content(store, conflicting), "v2", "the conflicted key kept its prior value - nothing was overwritten");
+        equal(content(store, updated), "u2",
+                "and its neighbours still committed: writeBatch is best-effort per key, never a transaction that "
+                        + "rolls back on one conflict");
+        equal(content(store, created), "c1", "including the create in the same batch");
+
+        for (String key : new String[]{conflicting, updated, created}) {
+            store.delete(key);
+        }
+    }
+
+    private static void batchFailureIsPerEntry(ArtifactStore store) throws Exception {
+        // The kit's own FaultInjectingStore over the live backend: only an injected fault can drive the FAILED leg,
+        // because a real backend cannot be asked to throw on one key. The decorator does not override writeBatch, so
+        // this exercises the SPI's default sequential batch and the shared ArtifactStore.writeOne classification every
+        // backend's parallel override also routes through, against that backend's real writeVersioned.
+        String base = "kit/batch/failure/";
+        String alpha = base + "alpha", beta = base + "beta", gamma = base + "gamma";
+        FaultInjectingStore faulty = FaultInjectingStore.wrap(store)
+                .failNextOn(FaultInjectingStore.Op.WRITE_VERSIONED, FaultInjectingStore.keyContaining("beta"));
+
+        List<ArtifactStore.BatchOutcome> outcomes = faulty.writeBatch(List.of(
+                new ArtifactStore.BatchWrite(alpha, utf8("A"), null),
+                new ArtifactStore.BatchWrite(beta, utf8("B"), null),
+                new ArtifactStore.BatchWrite(gamma, utf8("C"), null)));
+
+        equal(outcomes.stream().map(ArtifactStore.BatchOutcome::status).toList(),
+                List.of(ArtifactStore.BatchOutcome.Status.COMMITTED,
+                        ArtifactStore.BatchOutcome.Status.FAILED,
+                        ArtifactStore.BatchOutcome.Status.COMMITTED),
+                "a thrown write fails its own entry rather than aborting the batch");
+        notNull(outcomes.get(1).failure(), "a FAILED outcome carries the IOException that caused it");
+        equal(outcomes.get(1).key(), beta, "the failure is attributed to the write that threw");
+        isTrue(store.exists(alpha), "the entry before the failure stayed committed in the real backend");
+        isFalse(store.exists(beta), "the failed entry landed nothing");
+        isTrue(store.exists(gamma), "and the batch carried on past the failure");
+
+        store.delete(alpha);
+        store.delete(gamma);
+    }
+
+    private static void storeInvariants(ArtifactStore store) throws Exception {
+        // A freshly scoped subspace, so the blobs/ and publish/ namespaces the checker walks are this check's alone.
+        ArtifactStore isolated = store.scope("kitinvariants");
+        byte[] body = "kit/invariants/payload".getBytes(StandardCharsets.UTF_8);
+        String hash = isolated.writeBlob(new ByteArrayInputStream(body));
+        String pointer = "publish/maven/org/example/lib/1.0/lib-1.0.jar";
+        isTrue(isolated.writeVersioned(pointer, utf8(hash), null), "the serving pointer links the stored blob");
+
+        new StoreInvariants(isolated).assertConsistent();
+
+        // ... and the checker is not vacuous on this backend: a pointer to a blob that was never stored is caught.
+        isTrue(isolated.writeVersioned("publish/maven/org/example/lib/1.0/lib-1.0.pom", utf8("0".repeat(64)), null),
+                "a dangling pointer is planted");
+        boolean caught = false;
+        try {
+            new StoreInvariants(isolated).assertNoDanglingPointer();
+        } catch (AssertionError expected) {
+            caught = true;
+        }
+        isTrue(caught, "a publish/ pointer whose blob is missing is reported, not walked past");
+
+        isolated.delete(pointer);
+        isolated.delete("publish/maven/org/example/lib/1.0/lib-1.0.pom");
+        isolated.delete("blobs/" + hash);
+    }
+
+    // --- helpers -----------------------------------------------------------------------------------------------
+
+    private static List<String> page(ArtifactStore store, String prefix, String startAfter, int limit) {
+        List<String> names = new ArrayList<>();
+        store.page(prefix, startAfter, limit, names::add);
+        return names;
+    }
+
+    private static String content(ArtifactStore store, String key) throws IOException {
+        return new String(store.readVersioned(key).orElseThrow(
+                () -> failure("expected an object at " + key + " but found none")).content(), StandardCharsets.UTF_8);
+    }
+
+    private static byte[] utf8(String value) {
+        return value.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** A body whose every byte differs from its neighbours, so a truncated or mis-offset read is visible. */
+    private static byte[] ramp(int length) {
+        byte[] body = new byte[length];
+        for (int index = 0; index < length; index++) {
+            body[index] = (byte) index;
+        }
+        return body;
+    }
+
+    /** A source that serves {@code served} bytes and then fails - a client hanging up mid-upload. */
+    private static InputStream failsAfter(int served) {
+        return new InputStream() {
+            private int delivered;
+
+            @Override
+            public int read() throws IOException {
+                if (delivered++ < served) {
+                    return 'x';
+                }
+                throw new IOException("the source hung up mid-stream");
+            }
+        };
+    }
+
+    private static byte[] drain(InputStream in) throws IOException {
+        try (InputStream stream = in) {
+            return stream.readAllBytes();
+        }
+    }
+
+    private static String sha256(byte[] body) throws NoSuchAlgorithmException {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body));
+    }
+
+    private static void equal(Object actual, Object expected, String what) {
+        if (!Objects.deepEquals(actual, expected)) {
+            throw failure(what + " - expected " + render(expected) + " but was " + render(actual));
+        }
+    }
+
+    private static void isTrue(boolean actual, String what) {
+        if (!actual) {
+            throw failure(what + " - expected true but was false");
+        }
+    }
+
+    private static void isFalse(boolean actual, String what) {
+        if (actual) {
+            throw failure(what + " - expected false but was true");
+        }
+    }
+
+    private static void notNull(Object actual, String what) {
+        if (actual == null) {
+            throw failure(what + " - expected a value but was null");
+        }
+    }
+
+    /** A body that must fail with an {@link IOException} - the SPI's transport-failure shape. */
+    private static void throwsIo(Fallible body, String what) {
+        try {
+            body.run();
+        } catch (IOException expected) {
+            return;
+        } catch (Exception e) {
+            throw failure(what + " - expected an IOException but " + e.getClass().getName() + " was thrown: "
+                    + e.getMessage());
+        }
+        throw failure(what + " - expected an IOException but nothing was thrown");
+    }
+
+    /** A body that must fail with an {@link IllegalArgumentException} - the SPI's rejected-shape screen. */
+    private static void throwsIae(Fallible body, String what) {
+        try {
+            body.run();
+        } catch (IllegalArgumentException expected) {
+            return;
+        } catch (Exception e) {
+            throw failure(what + " - expected an IllegalArgumentException but " + e.getClass().getName()
+                    + " was thrown: " + e.getMessage());
+        }
+        throw failure(what + " - expected an IllegalArgumentException but nothing was thrown");
+    }
+
+    @FunctionalInterface
+    private interface Fallible {
+        void run() throws Exception;
+    }
+
+    private static AssertionError failure(String message) {
+        return new AssertionError(message);
+    }
+
+    private static String render(Object value) {
+        if (value instanceof byte[] bytes) {
+            return bytes.length + " bytes " + HexFormat.of().formatHex(bytes, 0, Math.min(bytes.length, 32));
+        }
+        return String.valueOf(value);
+    }
+}

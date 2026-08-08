@@ -1,11 +1,12 @@
 /**
- * Integration test for the Azure Blob artifact-store backend, run against an Azurite emulator the test
- * starts and stops itself through the {@code docker} CLI (the {@link Docker} helper drives the container
- * with {@code java.base} alone). It points an azure-storage-blob client at the container and exercises the
- * real {@link build.jenesis.repository.store.azure.AzureArtifactStore} through the {@code ArtifactStore} contract,
- * including the conditional compare-and-set of {@code writeVersioned} (create-if-absent and
- * update-if-unchanged, and their rejections). The suite skips itself (JUnit assumptions) when no Docker
- * daemon is reachable, so a checkout without Docker still builds green.
+ * Integration tests for what is <em>particular</em> to the Azure Blob artifact-store backend, run against an Azurite
+ * emulator: an aborted upload that must abandon its {@code BlobOutputStream} unclosed so the staged block list is
+ * never committed as a truncated blob, a container-level 404 that must surface as a transport error rather than a
+ * silent compare-and-set conflict, a ranged read over a real {@code BlobRange}, a presigned SAS URL, owner-only upload
+ * spooling, and a &gt;1000-key prefix that must drain every page of the SDK's {@code PagedIterable}. The cross-backend
+ * {@code ArtifactStore} contract itself lives in the shared {@code StoreContract} kit and runs against this backend
+ * from {@code test/store/contract}. The suite skips itself (JUnit assumptions) when no Docker daemon is reachable, so
+ * a checkout without Docker still builds green.
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.store.azure

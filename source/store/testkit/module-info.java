@@ -1,11 +1,22 @@
 /**
- * Shared crash-recovery test fixtures over the artifact-store SPI: a {@code FaultInjectingStore} decorator that injects
- * a store fault at a chosen point (a write that never lands, a read that fails, a compare-and-set that loses its race)
- * and a {@code StoreInvariants} checker for the two store-primitive consistency invariants the {@code Publication} /
- * {@code ArtifactStore} layer owns (no dangling {@code publish/} pointer, no unreferenced {@code blobs/} object after a
- * GC). It depends only on the store SPI - no junit, no format, no server - so both this repository's and the
- * downstream distribution's test modules can require the same fixture rather than each hand-rolling a bespoke throwing
- * decorator. The classes are test doubles; nothing here provides a service, so the module is inert on a runtime graph.
+ * Shared test support over the artifact-store SPI, in two halves.
+ *
+ * <p><b>Fault fixtures:</b> a {@code FaultInjectingStore} decorator that injects a store fault at a chosen point (a
+ * write that never lands, a read that fails, a compare-and-set that loses its race) and a {@code StoreInvariants}
+ * checker for the two store-primitive consistency invariants the {@code Publication} / {@code ArtifactStore} layer owns
+ * (no dangling {@code publish/} pointer, no unreferenced {@code blobs/} object after a GC).
+ *
+ * <p><b>The store contract kit:</b> {@code StoreContract} is the executable {@code ArtifactStore} contract - one
+ * parameterized body of checks covering content-addressed writes, compare-and-set conflict semantics, opaque version
+ * tokens, ordered paging, traversal rejection and the explicitly non-transactional per-entry batch outcomes - and
+ * {@code StoreFixture} is how one backend registers with it. A backend is covered by writing a fixture, never by
+ * copying assertions, and the kit drives the two fault fixtures above rather than duplicating them. The JUnit driver
+ * and the four backend fixtures live in {@code test/store/contract}, which also carries the completeness census.
+ *
+ * <p>The module depends only on the store SPI - no junit, no assertion library, no format, no server - so both this
+ * repository's and the downstream distribution's test modules can require it rather than each hand-rolling a bespoke
+ * throwing decorator. The classes are test doubles; nothing here provides a service, so the module is inert on a
+ * runtime graph.
  *
  * @jenesis.release 25
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55

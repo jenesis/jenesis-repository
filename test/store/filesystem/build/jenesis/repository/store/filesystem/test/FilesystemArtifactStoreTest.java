@@ -10,12 +10,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The default filesystem store exercised against the full {@link ArtifactStore} contract on a {@code @TempDir}: keyed
- * writes round-trip and stream, content-addressed writes dedupe and return the SHA-256, sizing and existence report
- * correctly, deletion tidies the empty containers it leaves behind, listing returns sorted immediate children while
- * hiding an atomic write's in-flight {@code .upload*.tmp}, tenant scoping confines a view to a subdirectory, the
- * last-modified compare-and-set of {@code writeVersioned} enforces create-if-absent and update-if-unchanged, and a key
- * that escapes the store root is rejected.
+ * What is <em>particular</em> to the filesystem store, on a {@code @TempDir}. The cross-backend {@link ArtifactStore}
+ * contract - keyed and content-addressed round-trips, sizing, absence, scoping and its traversal screen, ordered
+ * paging, compare-and-set create/update, opaque version tokens, per-entry batch outcomes - moved into the shared
+ * {@code StoreContract} kit, which runs all of it against this backend in {@code test/store/contract}; re-asserting it
+ * here is what let the four backend suites drift apart in the first place.
+ *
+ * <p>What stays is what only a filesystem can express or only this backend implements: deletion tidies the empty
+ * container directories it leaves behind, listing hides an atomic write's in-flight {@code .upload*.tmp} sibling, the
+ * last-modified token advances strictly even for updates inside one clock tick, concurrent compare-and-set increments
+ * never lose one another, an aborted write leaks no spool file, a blob and its containers are created owner-only
+ * rather than at the process umask, {@code readVersioned} reads a racing delete as empty instead of throwing, and a
+ * key that escapes the store root is rejected on the <em>read</em> path too (the object stores have no such path to
+ * escape, so this guard has no cross-backend counterpart).
  */
 class FilesystemArtifactStoreTest {
 
@@ -32,43 +39,6 @@ class FilesystemArtifactStoreTest {
 
     private static ByteArrayInputStream bytes(String content) {
         return new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private String read(String key) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        store.read(key, out);
-        return out.toString(StandardCharsets.UTF_8);
-    }
-
-    private static String sha256Hex(String content) throws Exception {
-        return HexFormat.of().formatHex(
-                MessageDigest.getInstance("SHA-256").digest(content.getBytes(StandardCharsets.UTF_8)));
-    }
-
-    @Test
-    void a_keyed_write_round_trips_through_read_and_open() throws IOException {
-        store.write("a/b/c.bin", bytes("hello"));
-        assertThat(store.exists("a/b/c.bin")).isTrue();
-        assertThat(read("a/b/c.bin")).isEqualTo("hello");
-        try (InputStream in = store.open("a/b/c.bin")) {
-            assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("hello");
-        }
-    }
-
-    @Test
-    void write_blob_content_addresses_and_dedupes_and_reports_size() throws Exception {
-        String hash = store.writeBlob(bytes("payload"));
-        assertThat(hash).isEqualTo(sha256Hex("payload"));
-        assertThat(store.exists("blobs/" + hash)).isTrue();
-        assertThat(store.size("blobs/" + hash)).isEqualTo("payload".getBytes(StandardCharsets.UTF_8).length);
-
-        String again = store.writeBlob(bytes("payload"));
-        assertThat(again).as("identical content addresses to one blob").isEqualTo(hash);
-    }
-
-    @Test
-    void size_is_minus_one_for_an_absent_key() throws IOException {
-        assertThat(store.size("nope")).isEqualTo(-1L);
     }
 
     @Test
@@ -185,62 +155,6 @@ class FilesystemArtifactStoreTest {
             assertThat(files.filter(Files::isRegularFile))
                     .as("the atomic write's spool file is cleaned up, not leaked").isEmpty();
         }
-    }
-
-    @Test
-    void a_scoped_view_confines_writes_to_the_tenant_subdirectory() throws IOException {
-        ArtifactStore tenant = store.scope("acme");
-        tenant.write("blobs/x", bytes("scoped"));
-
-        assertThat(tenant.exists("blobs/x")).isTrue();
-        assertThat(store.exists("acme/blobs/x")).as("the scope is a subdirectory of the root").isTrue();
-        assertThat(store.exists("blobs/x")).isFalse();
-    }
-
-    @Test
-    void a_scope_name_that_escapes_its_subspace_is_rejected_but_a_hidden_space_is_allowed() throws IOException {
-        assertThatThrownBy(() -> store.scope("../escape"))
-                .as("a parent traversal never scopes the store").isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> store.scope("a/b"))
-                .as("a path separator never scopes the store").isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> store.scope(".."))
-                .as("a bare parent segment is rejected").isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> store.scope(""))
-                .as("an empty segment is rejected").isInstanceOf(IllegalArgumentException.class);
-
-        ArtifactStore hidden = store.scope(".tests");
-        hidden.write("blobs/x", bytes("internal"));
-        assertThat(store.exists(".tests/blobs/x"))
-                .as("a hidden internal space (.tests / .scans) still scopes as a subdirectory").isTrue();
-    }
-
-    @Test
-    void write_versioned_is_a_compare_and_set_on_the_last_modified_token() throws IOException {
-        assertThat(store.writeVersioned("meta/m", "v1".getBytes(StandardCharsets.UTF_8), null))
-                .as("create-if-absent succeeds against a null expectation").isTrue();
-
-        Optional<ArtifactStore.Versioned> read = store.readVersioned("meta/m");
-        assertThat(read).isPresent();
-        assertThat(new String(read.get().content(), StandardCharsets.UTF_8)).isEqualTo("v1");
-        Object token = read.get().token();
-        assertThat(token).isNotNull();
-
-        assertThat(store.writeVersioned("meta/m", "stale".getBytes(StandardCharsets.UTF_8), ((Long) token) + 1))
-                .as("a stale token is rejected").isFalse();
-        assertThat(store.writeVersioned("meta/m", "again".getBytes(StandardCharsets.UTF_8), null))
-                .as("create-if-absent is rejected when the object already exists").isFalse();
-        assertThat(new String(store.readVersioned("meta/m").orElseThrow().content(), StandardCharsets.UTF_8))
-                .as("a rejected write leaves the stored content untouched").isEqualTo("v1");
-
-        assertThat(store.writeVersioned("meta/m", "v2".getBytes(StandardCharsets.UTF_8), token))
-                .as("update-if-unchanged succeeds against the current token").isTrue();
-        assertThat(new String(store.readVersioned("meta/m").orElseThrow().content(), StandardCharsets.UTF_8))
-                .isEqualTo("v2");
-    }
-
-    @Test
-    void read_versioned_is_empty_for_an_absent_object() throws IOException {
-        assertThat(store.readVersioned("meta/none")).isEmpty();
     }
 
     @Test

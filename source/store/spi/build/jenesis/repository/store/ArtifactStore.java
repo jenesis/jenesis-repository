@@ -12,6 +12,68 @@ import module java.base;
  * {@code maven-metadata.xml}) use {@link #readVersioned} / {@link #writeVersioned}: a compare-and-set
  * keyed on an opaque token, so concurrent metadata edits never lose one another. On a filesystem the
  * token is the last-modified stamp; an object-store backend maps it to the blob's ETag or generation.
+ *
+ * <h2>Contract</h2>
+ * Every clause below is executable: {@code StoreContract} in the store testkit states it once and each backend runs
+ * it through a fixture, so a clause is proven on the filesystem and on containerised S3 / GCS / Azure alike rather
+ * than being re-interpreted per backend.
+ * <ol>
+ * <li><b>Thread-safety.</b> A store is a shared singleton the server calls concurrently from every request thread;
+ *     every method must be safe under concurrent use, including two writers racing on one key. {@link #scope} may be
+ *     called concurrently and returns an independent view that is itself shared and thread-safe.</li>
+ * <li><b>Idempotency / replay.</b> Every mutation is replay-safe, because a crash-resume re-runs it: {@link #write}
+ *     of the same bytes to the same key converges on those bytes, {@link #writeBlob} of an identical body returns the
+ *     same hash and stores it once, and {@link #delete} of an absent key is a no-op rather than a failure. Only
+ *     {@link #writeVersioned} is deliberately <em>not</em> idempotent across a version change: a replayed write
+ *     carrying a superseded token is refused, which is what makes it safe to retry.</li>
+ * <li><b>Absence sentinel.</b> Absence is a value, never {@code null} and never an exception:
+ *     {@link #exists} is {@code false}, {@link #size} is {@code -1}, {@link #list} and {@link #page} yield nothing,
+ *     and {@link #readVersioned} is {@link Optional#empty()} - including when a concurrent delete vanishes the object
+ *     mid-read. Reading the <em>body</em> of an absent key is the one exception: {@link #read} and {@link #open}
+ *     throw {@link IOException} rather than serving an empty stream, because a caller streaming a missing artifact
+ *     must not silently transfer zero bytes as if they were the artifact.</li>
+ * <li><b>Streaming (&sect;1).</b> {@link #write}, {@link #writeBlob}, {@link #read} and {@link #open} are the
+ *     artifact-sized paths and must not materialise a body: a backend that needs a length or a hash before it can
+ *     upload spools to disk, never to the heap, so the JVM stays bounded under a multi-gigabyte publish.
+ *     {@link #readVersioned} / {@link #writeVersioned} / {@link #writeBatch} are the small-object paths and do
+ *     materialise, so only pointers, indexes and metadata may travel through them. A {@link RangedSink} passed to
+ *     {@link #read} is a request to transfer only that window; a backend that cannot seek still writes the whole
+ *     blob through and the sink forwards only the window, so the answer is correct either way.</li>
+ * <li><b>Tenant scoping (&sect;6).</b> {@link #scope} is the only tenancy seam: the returned view confines every key
+ *     to that subspace, a sibling scope can neither read nor enumerate across it, and scopes nest. The segment is
+ *     screened through {@link #segment}, and a key through {@link #key}, so neither a traversal-shaped scope name nor
+ *     a traversal-shaped key can address storage outside the subspace it was handed.</li>
+ * <li><b>Error visibility (&sect;9).</b> Nothing on a correctness-bearing path is swallowed. Only a genuine
+ *     object-level miss reads as absent: a throttle, an authorization failure or a missing bucket/container must
+ *     surface, never degrade {@link #exists} to {@code false}, {@link #size} to {@code -1} or {@link #writeVersioned}
+ *     to a {@code false} the caller would retry into exhaustion. A write that fails commits nothing at the key: an
+ *     aborted upload leaves it absent, never a truncated body a later content-addressed probe would accept as
+ *     already stored.</li>
+ * <li><b>Lifecycle / ownership.</b> The composition builds one store through {@link ArtifactStoreProvider} and keeps
+ *     it for the life of the process; a store may own the client, pool or threads its backend needs. A
+ *     {@link #scope}d view is a cheap derived value, not a resource: callers create them freely and close nothing.
+ *     A stream handed out by {@link #open} is the caller's to close.</li>
+ * <li><b>Ordering / concurrency.</b> {@link #page} is the ordering primitive: names stream in lexicographic order of
+ *     the child name, strictly after {@code startAfter}, so repeated pages traverse an arbitrarily large child set
+ *     exactly once. A container and a same-named leaf are one child, and the ordering is by child name - never by the
+ *     backend's raw key order, in which a grouped prefix sorts after a sibling whose name extends it past a character
+ *     below {@code '/'}. {@link #list} enumerates the same children as a full paging. {@link #writeBatch} answers
+ *     one outcome per write in input order, may execute disjoint keys concurrently, and never reorders or overlaps
+ *     two writes to the same key.</li>
+ * <li><b>Bounded work / cancellation.</b> {@link #page}'s {@code limit} bounds both what is emitted and what the
+ *     backend buffers, so paging a millions-entry namespace costs O(limit) memory; a non-positive limit emits
+ *     nothing. {@link #key} caps a new key at {@link #MAX_SEGMENTS} segments and {@link #MAX_KEY_BYTES} bytes, so no
+ *     descent over stored keys can be driven arbitrarily deep. {@link #list} is deliberately unbounded and is for
+ *     small child sets only - anything attacker-shaped pages.</li>
+ * <li><b>Durability / delivery.</b> The commit point of {@link #write} and {@link #writeBlob} is the moment the key
+ *     becomes readable, and it is atomic: a reader observes the whole previous object or the whole new one, never a
+ *     partial write. {@link #writeVersioned} commits only while the stored version still matches the token it was
+ *     given, which is what lets many nodes edit one pointer with no lock or database; the token is <em>opaque</em> -
+ *     a caller may only hand back a value the store gave it - and changes on every successful write, so a superseded
+ *     token can never pass. {@link #writeBatch} is explicitly <b>not</b> a transaction: there is no atomicity across
+ *     keys and no rollback, each entry commits, conflicts or fails on its own, and a caller must read the per-entry
+ *     outcomes rather than assume the batch succeeded or failed as a unit.</li>
+ * </ol>
  */
 public interface ArtifactStore {
 
@@ -53,14 +115,21 @@ public interface ArtifactStore {
     int MAX_KEY_BYTES = 4096;
 
     /**
-     * Validate {@code key} as a storable object key of bounded shape and return it - the write-path companion of the
-     * {@link #segment(String)} scope screen, applied at the same choke point each backend already screens a key on
-     * before a write lands. A key is rejected with the same {@link IllegalArgumentException} a traversal violation
-     * raises when it exceeds {@link #MAX_SEGMENTS} {@code '/'}-separated segments or {@link #MAX_KEY_BYTES} UTF-8
-     * bytes, so an attacker-controlled coordinate can never plant a key deep or long enough to drive an unbounded
-     * recursive descent, or an outsized per-key cost, anywhere downstream. Enforced on new writes only: any key
-     * already stored predates the cap and stays readable and walkable (the iterative store walk bounds traversal
-     * regardless of a legacy key's depth).
+     * Validate {@code key} as a storable object key of bounded, traversal-free shape and return it - the write-path
+     * companion of the {@link #segment(String)} scope screen, applied at the same choke point each backend already
+     * screens a key on before a write lands. A key is rejected with an {@link IllegalArgumentException} when it
+     * exceeds {@link #MAX_SEGMENTS} {@code '/'}-separated segments or {@link #MAX_KEY_BYTES} UTF-8 bytes, so an
+     * attacker-controlled coordinate can never plant a key deep or long enough to drive an unbounded recursive
+     * descent, or an outsized per-key cost, anywhere downstream.
+     *
+     * <p>A key carrying a {@code .} or {@code ..} segment is rejected here too, for the same reason
+     * {@link #segment(String)} refuses one: on a filesystem such a key walks out of the subspace it was addressed in,
+     * and on an object store it lands a literal key that no other backend can then address - so the same publish
+     * would be refused on one backend and silently accepted on another (&sect;13). Screening it at the one write
+     * choke point every backend already calls keeps the four backends interchangeable, which is what makes a store
+     * migration a configuration change. Enforced on new writes only: any key already stored predates the screen and
+     * stays readable, deletable and walkable (the iterative store walk bounds traversal regardless of a legacy key's
+     * depth), so a store that predates this cannot become unreadable.
      */
     static String key(String key) {
         if (key == null) {
@@ -72,9 +141,16 @@ public interface ArtifactStore {
                     "Key exceeds the " + MAX_KEY_BYTES + "-byte cap (" + bytes + " bytes): " + key);
         }
         int segments = 1;
-        for (int index = 0; index < key.length(); index++) {
-            if (key.charAt(index) == '/') {
-                segments++;
+        for (int index = 0, start = 0; index <= key.length(); index++) {
+            if (index == key.length() || key.charAt(index) == '/') {
+                int length = index - start;
+                if (length == 1 && key.charAt(start) == '.' || length == 2 && key.startsWith("..", start)) {
+                    throw new IllegalArgumentException("Not a traversal-free storable key: " + key);
+                }
+                start = index + 1;
+                if (index < key.length()) {
+                    segments++;
+                }
             }
         }
         if (segments > MAX_SEGMENTS) {
