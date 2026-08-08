@@ -13,15 +13,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * were demoted to pure layout writers. This is a source-scanning guard in the shape of the downstream structural guards
  * (a {@code *PrincipleTest} that reads the sources rather than booting anything): it walks every concrete
  * format/importer source under {@code source/format/} and asserts none reaches for a screening seam - it neither
- * references the screen SPI type {@code PublishInterceptor}, nor invokes {@link build.jenesis.repository.store.Publication#screen},
- * nor the removed combined {@code Publication.publish}. A NEW screen-in-a-format therefore fails the build.
+ * invokes {@link build.jenesis.repository.store.Publication#screen} nor the removed combined
+ * {@code Publication.publish}, and it does not reference the screen SPI type {@code PublishInterceptor}. A NEW
+ * screen-in-a-format therefore fails the build.
  *
- * <p>{@code OciManifests} is the single sanctioned exception, allowlisted explicitly below with its justification: OCI's
- * multi-request {@code /v2/} push carries no single body for the {@code ScreenedDispatch} edge, so OCI opts out of that
- * edge and screens its manifest at its own documented choke point (T26.7), running the one in-format
- * {@link build.jenesis.repository.store.Publication#screen}. Keeping the exception a named, justified allowlist entry
- * (rather than a silent scope hole) means any other format that starts screening is caught, and this OCI carve-out
- * stays visible for review.
+ * <p>Since T-104a the <b>invocation</b> half has no exception at all. {@code OciManifests} - OCI's documented choke
+ * point (T26.7), which exists because a multi-request {@code /v2/} push carries no single body for the
+ * {@code ScreenedDispatch} edge - drives the shared hosted-publish operation
+ * {@link build.jenesis.repository.store.Publication#commit}, which screens once on its behalf and fires the
+ * after-commit observers once OCI's declared visibility has committed. It therefore invokes no screen of its own; it
+ * only reads the operation's {@code Disposition} back to map the verdict onto OCI's protocol codes, which is the sole
+ * remaining, explicitly justified carve-out for the <b>type reference</b> half.
  *
  * <p>The {@code source/format/spi} contract module is out of scope: it is the format <em>SPI</em>, not a format or
  * importer, and its interface javadoc necessarily names the screen SPI when documenting where screening happens - it
@@ -29,57 +31,91 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class FormatScreeningMonopolyPrincipleTest {
 
-    /** The one sanctioned in-format screen: OCI's manifest choke point (T26.7), which has no single-body ingress edge
-     *  to ride because a {@code /v2/} push is multi-request, so it runs {@code Publication.screen} over the manifest
-     *  itself. Named here so the carve-out is explicit and any other screening format is caught. */
-    private static final String ALLOWLISTED_OCI_CHOKE_POINT = "OciManifests.java";
+    /** The one file that may still <em>name</em> the screen SPI type: OCI's manifest choke point (T26.7), which has no
+     *  single-body ingress edge to ride because a {@code /v2/} push is multi-request, so it drives the shared
+     *  hosted-publish operation itself and reads {@code PublishInterceptor.Disposition} back off the commit to map the
+     *  verdict onto OCI's protocol codes. It <em>invokes</em> no screen (T-104a routed it through
+     *  {@code Publication.commit}), so it is no longer exempt from the invocation check below - only from the type
+     *  reference. Named here so the carve-out is explicit and any other format naming the screen SPI is caught. */
+    private static final String ALLOWLISTED_DISPOSITION_READER = "OciManifests.java";
 
     /** The format SPI contract module - interfaces the concrete formats implement, not a format itself; its javadoc
      *  names the screen SPI when documenting the edge relationship, so it is not scanned. */
     private static final String CONTRACT_MODULE = "spi";
 
-    /** The screening seams a demoted format/importer must never reach for. {@code PublishInterceptor} is the screen SPI
-     *  type; {@code .screen(} is the screen invocation; {@code Publication.publish} / {@code Publication#publish} is the
-     *  removed combined screen-and-link. Layout-only use of {@code Publication} ({@code storeBlob}, {@code link},
-     *  {@code located}, {@code unpublish}) and the {@code ModuleView}/{@code ModuleViewPublisher} cross-publish
-     *  ({@code view.publish(...)}) are format concerns and stay allowed. */
+    /** The screen SPI type. Naming it is allowed only in {@link #ALLOWLISTED_DISPOSITION_READER}, which maps the shared
+     *  operation's {@code Disposition} onto OCI's protocol codes. */
+    private static final String SCREEN_SPI = "PublishInterceptor";
+
+    /** The screening <em>invocations</em> no format/importer may make - <b>with no exception at all</b> since T-104a
+     *  routed the OCI choke point through {@code Publication.commit}: {@code .screen(} is the screen invocation and
+     *  {@code Publication.publish} / {@code Publication#publish} is the removed combined screen-and-link. Layout-only
+     *  use of {@code Publication} ({@code storeBlob}, {@code link}, {@code located}, {@code unpublish}) and the
+     *  {@code ModuleView}/{@code ModuleViewPublisher} cross-publish ({@code view.publish(...)}) are format concerns and
+     *  stay allowed, as is the shared {@code Publication.commit} operation a choke point drives. */
     private static final List<String> FORBIDDEN = List.of(
-            "PublishInterceptor", ".screen(", "Publication.publish", "Publication#publish");
+            ".screen(", "Publication.publish", "Publication#publish");
 
     @Test
     void no_format_or_importer_screens_outside_the_ingress_edges() throws IOException {
-        Path formats = repositoryRoot().resolve("source").resolve("format");
-        assertThat(Files.isDirectory(formats))
-                .as("the format sources must be present for the guard to scan them: " + formats).isTrue();
-
         List<String> offenders = new ArrayList<>();
-        try (Stream<Path> sources = Files.walk(formats)) {
-            List<Path> files = sources.filter(path -> path.toString().endsWith(".java")).toList();
-            for (Path source : files) {
-                String name = source.getFileName().toString();
-                if (name.equals("module-info.java") || name.equals(ALLOWLISTED_OCI_CHOKE_POINT)) {
-                    continue; // OciManifests is the single allowlisted OCI structural choke point
-                }
-                if (formats.relativize(source).getName(0).toString().equals(CONTRACT_MODULE)) {
-                    continue; // the format SPI contract module is not a format/importer
-                }
-                String body = Files.readString(source);
-                for (String forbidden : FORBIDDEN) {
-                    if (body.contains(forbidden)) {
-                        offenders.add(name + " references '" + forbidden + "'");
-                    }
+        for (Path source : formatSources()) {
+            String name = source.getFileName().toString();
+            String body = Files.readString(source);
+            for (String forbidden : FORBIDDEN) {
+                if (body.contains(forbidden)) {
+                    offenders.add(name + " invokes '" + forbidden + "'");
                 }
             }
         }
 
         assertThat(offenders)
-                .as("screening is the ingress edges' monopoly - a format/importer must lay out only, never screen; "
-                        + OciManifests_note())
+                .as("screening is the ingress edges' monopoly - a format/importer must lay out only, never screen. "
+                        + "A format with no single-body ingress edge to ride (OCI) drives the shared hosted-publish "
+                        + "operation Publication.commit, which screens once on its behalf; it never invokes the screen "
+                        + "itself, so this check has no exceptions")
                 .isEmpty();
     }
 
-    private static String OciManifests_note() {
-        return ALLOWLISTED_OCI_CHOKE_POINT + " is the sole allowlisted exception (the documented OCI manifest choke point)";
+    @Test
+    void only_the_oci_choke_point_names_the_screen_spi() throws IOException {
+        List<String> offenders = new ArrayList<>();
+        boolean readerFound = false;
+        for (Path source : formatSources()) {
+            String name = source.getFileName().toString();
+            boolean names = Files.readString(source).contains(SCREEN_SPI);
+            if (name.equals(ALLOWLISTED_DISPOSITION_READER)) {
+                readerFound = names;
+            } else if (names) {
+                offenders.add(name + " references '" + SCREEN_SPI + "'");
+            }
+        }
+
+        assertThat(offenders)
+                .as("only " + ALLOWLISTED_DISPOSITION_READER + " may name the screen SPI, to map the shared "
+                        + "operation's Disposition onto OCI's protocol codes; a format that needs a verdict takes it "
+                        + "from the Publication.commit outcome it already has")
+                .isEmpty();
+        assertThat(readerFound)
+                .as("the " + ALLOWLISTED_DISPOSITION_READER + " carve-out no longer matches anything - it stopped "
+                        + "naming " + SCREEN_SPI + ", so drop the allowlist entry rather than let it mask a future "
+                        + "screen SPI reference")
+                .isTrue();
+    }
+
+    /** Every concrete format/importer source: the {@code source/format} tree minus {@code module-info.java} and the
+     *  format SPI contract module (interfaces, not formats). */
+    private static List<Path> formatSources() throws IOException {
+        Path formats = repositoryRoot().resolve("source").resolve("format");
+        assertThat(Files.isDirectory(formats))
+                .as("the format sources must be present for the guard to scan them: " + formats).isTrue();
+        try (Stream<Path> sources = Files.walk(formats)) {
+            return sources.filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> !path.getFileName().toString().equals("module-info.java"))
+                    .filter(path -> !formats.relativize(path).getName(0).toString().equals(CONTRACT_MODULE))
+                    .sorted()
+                    .toList();
+        }
     }
 
     /** The repository root: walk up from the working directory (the reactor runs each test JVM from the repo root)

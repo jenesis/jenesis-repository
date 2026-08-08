@@ -23,10 +23,10 @@ import build.jenesis.repository.store.Publication;
  *
  * <p>The import walk is an ingress <em>edge</em> (EPIC 26): it screens each asset before the demoted, layout-only
  * importer lays it out, so a migration off an incumbent lands the same {@link build.jenesis.repository.store.PublishInterceptor}
- * gate a deploy or batch upload passes - the deploy edge ({@link ScreenedDispatch}) and the import edge share the one
- * {@link Publication#screen} + restream + {@link Publication#published} choreography. For each asset the importer
- * {@link RepositoryImporter#importTarget describes} the target coordinate it will occupy; the edge
- * {@link Publication#screen screens} the asset against that descriptor and, on {@code ACCEPT}, restreams the stored
+ * gate a deploy or batch upload passes - the deploy edge ({@link ScreenedDispatch}) and the import edge run the one
+ * shared hosted-publish operation {@link Publication#commit}. For each asset the importer
+ * {@link RepositoryImporter#importTarget describes} the target coordinate it will occupy; the edge commits the asset
+ * against that descriptor, which screens it once and, on {@code ACCEPT}, restreams the stored
  * {@code blobs/<hash>} into {@link RepositoryImporter#importArtifact} then fires {@link Publication#published}. A
  * {@code QUARANTINE} is held (the screen diverted its blob to {@code /quarantine<target-path>}, never laid out) and a
  * {@code REJECT} is skipped; either way the walk continues to the next asset, so one screened-out artifact never
@@ -103,27 +103,30 @@ public final class RepositoryImport {
             return;
         }
         ArtifactDescriptor descriptor = described.get();
-        Publication.Published outcome;
+        Publication.Commit commit;
         try (InputStream in = content.open()) {
-            // screen() stores the body content-addressed as it reads (never buffered whole) and runs the chain over the
-            // real target coordinate; a QUARANTINE is already diverted to /quarantine<target-path> inside screen().
-            outcome = new Publication(store).screen(descriptor, in);
-        }
-        switch (outcome.disposition()) {
-            case ACCEPT -> {
-                String blob = "blobs/" + outcome.hash();
-                // Restream the screened blob into the layout-only importer - never the raw source download - so the
-                // importer lays out exactly the bytes the gate saw, without holding the artifact in memory.
-                try (InputStream restream = store.open(blob)) {
+            // The one hosted-publish choreography: commit() stores the body content-addressed as it reads (never
+            // buffered whole), runs the chain once over the real target coordinate, restreams the accepted blob into
+            // the layout-only importer - never the raw source download, so the importer lays out exactly the bytes the
+            // gate saw - and fires published() itself once the importer has laid the artifact out. A QUARANTINE is
+            // already diverted to /quarantine<target-path> inside the screen.
+            commit = new Publication(store).commit(descriptor, in, Publication.Republish.overwrite(), accepted -> {
+                try (InputStream restream = accepted.open()) {
                     importer.importArtifact(path, restream, store);
                 }
-                new Publication(store).published(descriptor.withBlob(outcome.hash(), store.size(blob)));
+                // An opaque format-SPI layout: RepositoryImporter.importArtifact links its own serving pointer inside
+                // this callback. The ingress census asserts the pointer-last ordering behaviourally for this shape.
+                return Publication.Visibility.laidOut();
+            });
+        }
+        switch (commit.disposition()) {
+            case ACCEPT -> {
                 imported.incrementAndGet();
                 listener.imported(path);
             }
             case QUARANTINE -> {
                 held.incrementAndGet();
-                listener.held(path, descriptor, outcome.hash());
+                listener.held(path, descriptor, commit.hash());
             }
             case REJECT -> {
                 rejected.incrementAndGet();

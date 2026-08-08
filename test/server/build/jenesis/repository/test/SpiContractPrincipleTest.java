@@ -248,9 +248,9 @@ class SpiContractPrincipleTest {
         // --- T-301a: store, format and walk SPIs ---
         // ArtifactStoreProvider and TenantsProvider burnt down by T-101b, which migrated both onto the shared
         // Providers primitives and wrote their numbered blocks (TenantsProvider's silent selected-miss fixed there).
-        allow.put("build.jenesis.repository.store.PublicationObserver",
-                "T-301a: ordering, idempotency, the commit-to-callback crash window and the contained blast radius of "
-                        + "an after-commit throw; the delivery class is pending the T-107 spike");
+        // PublicationObserver burnt down by T-104a, which made the publish commit point singular (Publication.commit)
+        // and could therefore state the crash windows and the delivery class exactly: best-effort, repaired by the
+        // full walk. T-107 may only strengthen that by proving a pre-commit intent machine at every crash point.
         allow.put("build.jenesis.repository.store.PublishInterceptor",
                 "T-301a: the pre-commit sub-contract - chain ordering, disposition strength, per-method failure "
                         + "semantics (verdict legs propagate, inherited observer legs are contained) and withheld "

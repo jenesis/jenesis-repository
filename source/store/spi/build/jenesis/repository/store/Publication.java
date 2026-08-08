@@ -12,12 +12,73 @@ import module java.base;
  * this storage primitive.
  *
  * <p>The upload choreography runs at an ingress <em>edge</em> (a deploy controller, a batch explode, an import walk),
- * not inside a format: {@link #screen} stores the streamed body content-addressed and runs the discovered
- * {@link PublishInterceptor} chain once, and on {@code ACCEPT} the edge restreams the stored blob into the claiming
- * format, which lays out its own namespace with {@link #storeBlob}/{@link #link} (a {@code publish/} pointer) or a
- * {@code Blobs} write, then calls {@link #published} so the after-commit {@link PublicationObserver}s ride the accepted
- * publish. Screening a body inside a format (a second, format-embedded chain run over already-screened bytes) is not
- * this model; the {@code screen} + layout + {@code published} split is the one documented idiom.
+ * not inside a format, and it runs through one operation: {@link #commit}. It stores the streamed body
+ * content-addressed, runs the discovered {@link PublishInterceptor} chain <em>once</em>, gates the republish, hands the
+ * accepted blob to the claiming format's {@link AcceptedLayout} - which writes its parse results and sidecars and
+ * <em>declares</em> what makes the artifact visible - links that declared {@link Visibility} last, and only then fires
+ * {@link #published} so the after-commit {@link PublicationObserver}s ride the accepted publish. Screening a body
+ * inside a format (a second, format-embedded chain run over already-screened bytes) is not this model, and neither is
+ * an edge re-assembling the sequence by hand: {@code commit} is the one hosted-publish choreography, and the ingress
+ * census asserts every hosted route runs through it.
+ *
+ * <h2>Contract</h2>
+ * <ol>
+ *   <li><b>Thread-safety.</b> An instance is a stateless view over one scoped {@link ArtifactStore} and its two hook
+ *       lists; concurrent calls on one instance are safe and expected (the server creates them freely per request).
+ *       Concurrency between two publications of the <em>same</em> request path resolves to last-writer-wins at the
+ *       pointer compare-and-set, which is the outcome the two writes would have had a moment apart.</li>
+ *   <li><b>Idempotency / replay.</b> Every write on this path converges: the blob is content-addressed, so a replay of
+ *       identical bytes dedupes to the same object; a sidecar re-derived from the same blob is rewritten identically;
+ *       the pointer compare-and-set re-lands the same body. A byte-identical re-{@link #commit} therefore leaves the
+ *       store byte-identical and <em>repairs</em> a first attempt that crashed mid-layout. The after-commit observers
+ *       are notified again on a replay, so an observer must tolerate at-least-once delivery of the same publish.</li>
+ *   <li><b>Absence sentinel.</b> {@link #located}, {@link #blob} and the pointer probes answer {@link Optional#empty}
+ *       for "nothing published there"; {@code null} is never returned. A refused republish is an exception
+ *       ({@link RepublishConflict}), never a silent no-op.</li>
+ *   <li><b>Streaming.</b> The {@code body} of a {@link #commit} and the stream a layout takes from
+ *       {@link Acceptance#open} are never materialised: the body is hashed on write into the content-addressed store
+ *       and read back as a fresh stream. Only bounded metadata is buffered - a
+ *       {@link PublishInterceptor.Content#sibling} read is capped at {@value #LARGEST_SIBLING} bytes and a
+ *       {@link Acceptance#sidecar(String, byte[])} body is a small derived document by definition.</li>
+ *   <li><b>Tenant scoping.</b> The store handed to the constructor is already tenant-and-repository scoped; every key
+ *       this primitive writes ({@code blobs/}, {@code publish/}, {@code gc/condemned/}) and every key it hands a
+ *       layout is relative to that scope, so nothing here can read or write across tenants.</li>
+ *   <li><b>Error visibility.</b> Everything up to and including the commit point propagates: a screen that cannot
+ *       render a verdict, a refused republish, a failing sidecar, a pointer that loses its compare-and-set three
+ *       times - each fails the publish loudly and leaves nothing servable. Only the after-commit observer
+ *       notifications are contained: a throwing {@link PublicationObserver} is logged and the publish stands, because
+ *       a lost notification may over-serve or over-count but can never hide a served artifact or a hold.</li>
+ *   <li><b>Ordering / concurrency.</b> Within one {@code commit} the order is fixed and total: store, screen, gate the
+ *       republish, lay out sidecars, link the declared visibility in declaration order, notify. Interceptors run
+ *       sorted by {@link PublishInterceptor#order()} (ties keep discovery order) and the strongest disposition across
+ *       the chain routes the publication; observers are notified in discovery order, sequentially, and no observer
+ *       ordering is otherwise promised.</li>
+ *   <li><b>Bounded work / cancellation.</b> A pointer compare-and-set retries at most three times before failing by
+ *       name; the {@code /quarantine} alias scan is bounded by the review queue and short-circuits on the first live
+ *       alias; a sibling read is byte-capped. No step here loops on an attacker-shaped input, and no bound is reached
+ *       silently - each answers an explicit failure.</li>
+ *   <li><b>Durability / delivery.</b> The durable source of truth is the store: {@code blobs/<hash>} for content and
+ *       the declared serving pointer(s) for visibility. <b>The commit point is the declared visibility write.</b>
+ *       Before the first declared step nothing serves; after the last, everything does. Three crash windows follow,
+ *       and none is papered over:
+ *       <ul>
+ *         <li><b>Before the commit point</b> - a crash after the blob landed, or after some sidecars landed, leaves an
+ *             unreferenced blob and inert sidecars. Nothing serves, nothing is observed, and a replay of the same
+ *             bytes converges onto exactly the same state (clause 2). Unreferenced blobs are reclaimed by garbage
+ *             collection.</li>
+ *         <li><b>Between two declared visibility steps</b> - a multi-pointer layout is <em>not</em> atomic across its
+ *             pointers. A crash there leaves the artifact servable under the pointers already linked and absent under
+ *             the rest, with no observer notified; the caller is told the publish failed, and a replay completes it.
+ *             A layout that cannot tolerate partial visibility declares one pointer, not several.</li>
+ *         <li><b>Between the commit point and {@link #published}</b> - the artifact serves but the after-commit
+ *             observers never saw it. This window is inherent to a callback fired after a durable mutation and is not
+ *             closed by anything in this class.</li>
+ *       </ul>
+ *       The delivery class of {@link PublicationObserver#onPublished} is therefore <b>best-effort, repaired by the
+ *       full walk</b> - not at-least-once. A derived surface that must be complete rebuilds from the durable store
+ *       through the walk SPI's {@code WalkConsumer}, exactly as {@link PublicationObserver}'s two-route contract
+ *       requires; the live event is the steady state, the walk is the crash and gap heal-all.</li>
+ * </ol>
  */
 public final class Publication {
 
@@ -161,7 +222,14 @@ public final class Publication {
 
     /** The content hash a path currently points at, or empty if nothing is published there. */
     public Optional<String> blob(String requestPath) throws IOException {
-        return store.readVersioned("publish" + requestPath)
+        return pointer("publish" + requestPath);
+    }
+
+    /** The hash body of an arbitrary pointer object, or empty when nothing is stored at the key - the keyed face of
+     *  {@link #blob}, so the republish policy can probe a format's own serving-pointer namespace (an {@code npm/},
+     *  {@code nuget/}, {@code pypi/} key) rather than only the {@code publish/} one this primitive owns. */
+    private Optional<String> pointer(String key) throws IOException {
+        return store.readVersioned(key)
                 .map(versioned -> new String(versioned.content(), StandardCharsets.UTF_8).trim());
     }
 
@@ -386,12 +454,13 @@ public final class Publication {
      * gates before any link - nothing is buffered and there is no published-then-retracted window. With the default
      * empty chain this is exactly a {@link #storeBlob} that always {@code ACCEPT}s.
      *
-     * <p>This is the single sanctioned screen seam. An ingress edge (the deploy edge {@code ScreenedDispatch}, the
-     * batch explode, the import walk, or OCI's manifest choke point) screens an upload here, then - on {@code ACCEPT} -
-     * lays the stored body out in a format's namespace with {@link #storeBlob}/{@link #link} (or a {@code Blobs} write)
-     * and fires {@link #published} so the after-commit {@link PublicationObserver}s ride the accepted publish. The
-     * interceptors' {@link PublishInterceptor#committed} notifications fire here; the after-commit observers do not -
-     * they ride the {@link #published} seam the edge calls once it has laid the accepted artifact out.
+     * <p>This is the single sanctioned screen seam, and {@link #commit} is its only caller: an ingress edge does not
+     * screen by hand, it commits, and the operation screens once on its behalf, gates the republish, drives the
+     * accepted layout and fires {@link #published} after the declared visibility has landed. A hosted route that
+     * called this directly would own the ordering that {@code commit} exists to own, so the core's ingress census
+     * asserts there is no such caller. The interceptors' {@link PublishInterceptor#committed} notifications fire here,
+     * before any layout; the after-commit observers do not - they ride the {@link #published} seam
+     * {@code commit} fires once the accepted artifact is visible.
      */
     public Published screen(ArtifactDescriptor artifact, InputStream content) throws IOException {
         return route(artifact, content);
@@ -423,6 +492,409 @@ public final class Publication {
             interceptor.committed(stored, disposition, store);
         }
         return new Published(disposition, hash);
+    }
+
+    // --- the pointer-last accepted-layout commit --------------------------------------------------------------------
+
+    /**
+     * The republish conflict / idempotency policy an ingress edge hands {@link #commit} as <em>data</em>, so a format
+     * never re-implements "is this coordinate already taken" beside the layout it actually owns. The policy is
+     * evaluated once, <em>before</em> the accepted layout writes anything, so a refused republish fails loudly with
+     * nothing half-written (&sect;9).
+     *
+     * <p>{@code pointer} is the store key whose body is the currently published content hash - a format's own serving
+     * pointer, since the coordinate a republish collides on is the format's, not this primitive's. A {@code null}
+     * pointer means the publication's own {@code publish/<request-path>} object, derived from the descriptor.
+     *
+     * @param mode    what a collision means
+     * @param pointer the probed serving-pointer key, or {@code null} for {@code publish/<descriptor path>}
+     */
+    public record Republish(Mode mode, String pointer) {
+
+        /** What an already-published coordinate means for the incoming upload. */
+        public enum Mode {
+            /** Last-writer-wins: no probe at all, the pointer simply moves. The free formats' behaviour today. */
+            OVERWRITE,
+            /** A re-publish of <em>identical</em> bytes converges (the layout re-runs and lands the same state, so a
+             *  half-written first attempt is repaired); different bytes at a taken coordinate raise
+             *  {@link RepublishConflict}. The retry-safe policy for a registry that owns immutable versions. */
+            IDEMPOTENT,
+            /** Any already-published coordinate raises {@link RepublishConflict}, identical bytes included - the
+             *  strict "cannot publish over a previously published version" registries advertise. */
+            REFUSED
+        }
+
+        public Republish {
+            Objects.requireNonNull(mode, "republish mode");
+            if (mode == Mode.OVERWRITE && pointer != null) {
+                throw new IllegalArgumentException("OVERWRITE probes no pointer, so naming " + pointer
+                        + " would suggest a check that never runs");
+            }
+        }
+
+        /** Last-writer-wins, the policy every free format publishes under today: no probe, no extra read. */
+        public static Republish overwrite() {
+            return new Republish(Mode.OVERWRITE, null);
+        }
+
+        /** {@link Mode#IDEMPOTENT} against the publication's own {@code publish/<request-path>} pointer. */
+        public static Republish idempotent() {
+            return new Republish(Mode.IDEMPOTENT, null);
+        }
+
+        /** {@link Mode#IDEMPOTENT} against a format's own serving-pointer key. */
+        public static Republish idempotent(String pointer) {
+            return new Republish(Mode.IDEMPOTENT, Objects.requireNonNull(pointer, "pointer"));
+        }
+
+        /** {@link Mode#REFUSED} against the publication's own {@code publish/<request-path>} pointer. */
+        public static Republish refused() {
+            return new Republish(Mode.REFUSED, null);
+        }
+
+        /** {@link Mode#REFUSED} against a format's own serving-pointer key. */
+        public static Republish refused(String pointer) {
+            return new Republish(Mode.REFUSED, Objects.requireNonNull(pointer, "pointer"));
+        }
+
+        /** The key this policy probes for {@code artifact} - the explicit one, or the publication's own pointer. */
+        String key(ArtifactDescriptor artifact) {
+            return pointer != null ? pointer : "publish" + artifact.path();
+        }
+    }
+
+    /**
+     * Raised by {@link #commit} when the {@link Republish} policy refuses an upload whose coordinate is already
+     * published. It is thrown <em>before</em> the accepted layout runs, so nothing was laid out and no serving pointer
+     * moved; the stored blob is the usual unreferenced content-addressed object a garbage collection reclaims. An
+     * ingress edge maps it to its format's documented status (a {@code 409}, a {@code 403}, a {@code 400}); it carries
+     * the probed key and both hashes so the response can say which coordinate collided with what.
+     */
+    public static final class RepublishConflict extends IOException {
+
+        private final String pointer;
+        private final String published;
+        private final String offered;
+
+        RepublishConflict(String pointer, String published, String offered) {
+            super(pointer + " is already published as " + published
+                    + (published.equals(offered) ? " and this policy refuses a re-publish of identical bytes"
+                            : " and cannot be re-published as " + offered));
+            this.pointer = pointer;
+            this.published = published;
+            this.offered = offered;
+        }
+
+        /** The serving-pointer key that was already taken. */
+        public String pointer() {
+            return pointer;
+        }
+
+        /** The content hash currently published at {@link #pointer()}. */
+        public String published() {
+            return published;
+        }
+
+        /** The content hash the refused upload was stored under. */
+        public String offered() {
+            return offered;
+        }
+    }
+
+    /**
+     * The accepted upload handed to an {@link AcceptedLayout}: the blob is already in the content-addressed store and
+     * has already passed the one screen, and nothing serves it yet. A layout reads the bytes back through
+     * {@link #open} (a restream, never a buffer) and writes its parse results through {@link #sidecar}; the serving
+     * pointer is <em>not</em> its to write - it declares it in the returned {@link Visibility}, and {@link #commit}
+     * links it once the layout has returned. That split is what makes "sidecars before the pointer" the only order a
+     * declaring layout can express.
+     */
+    public interface Acceptance {
+
+        /** The accepted artifact with its content-addressed identity (hash and stored size) stamped on. */
+        ArtifactDescriptor artifact();
+
+        /** The SHA-256 the accepted body was stored under ({@code blobs/<hash>}). */
+        default String hash() {
+            return artifact().hash();
+        }
+
+        /** The accepted body's stored byte length. */
+        default long size() {
+            return artifact().size();
+        }
+
+        /** The scoped store the publication runs against, for the reads and format-native writes a layout needs. */
+        ArtifactStore store();
+
+        /** Reopen the accepted blob. A fresh stream each call, so a layout that parses and then re-reads never holds
+         *  the artifact in memory (&sect;1); the caller closes it. */
+        InputStream open() throws IOException;
+
+        /** Write one parse result / derived document beside the accepted artifact, <em>before</em> any serving pointer
+         *  exists. A sidecar is not a serving surface, so the key may not live in the {@code publish/} pointer
+         *  namespace - a would-be pointer written here would defeat the ordering this operation exists to guarantee,
+         *  and is refused rather than silently accepted. */
+        void sidecar(String key, byte[] body) throws IOException;
+
+        /** Streaming {@link #sidecar(String, byte[])} for a derived document large enough to be worth not buffering. */
+        void sidecar(String key, InputStream body) throws IOException;
+    }
+
+    /** One serving-visibility write {@link #commit} performs after the accepted layout returned - the "pointer" half of
+     *  pointer-last. It receives the accepted content hash and the scoped store, so a format links its own native
+     *  pointer (an OCI tag object, an ecosystem's version file) without this primitive knowing that layout. */
+    @FunctionalInterface
+    public interface Serving {
+        void link(String hash, ArtifactStore store) throws IOException;
+    }
+
+    /** The format-specific half of a hosted publish: write the parse results and sidecars for an accepted blob, then
+     *  <em>declare</em> what makes it visible. Never a second gate - the body reaching a layout has already passed the
+     *  one screen {@link #commit} ran, and a layout that wants to refuse the write answers {@link Visibility#declined}
+     *  rather than screening again. */
+    @FunctionalInterface
+    public interface AcceptedLayout {
+        Visibility lay(Acceptance accepted) throws IOException;
+    }
+
+    /**
+     * What an {@link AcceptedLayout} declares makes its accepted artifact visible - the last thing a hosted publish
+     * writes, and the point after which {@link PublicationObserver#onPublished} may fire. Four shapes:
+     * <ul>
+     *   <li>{@link #at} - one or more {@code publish/<request-path>} pointers this primitive links from the accepted
+     *       hash, in declaration order;</li>
+     *   <li>{@link #through} - format-native pointer writes ({@code Serving} steps) run in declaration order, for a
+     *       layout whose serving surface is not a {@code publish/} pointer (an OCI tag object, an ecosystem key
+     *       namespace);</li>
+     *   <li>{@link #laidOut} - the layout is an opaque format-SPI callback ({@code RepositoryFormat.handle},
+     *       {@code RepositoryImporter.importArtifact}) that linked its own pointer inside the callback. The ordering
+     *       cannot be enforced structurally for these, so the ingress census asserts it behaviourally instead;</li>
+     *   <li>{@link #declined} - the layout wrote nothing servable (an edge refusal). No pointer, and no observer.</li>
+     * </ul>
+     * A layout may additionally {@linkplain #describing refine} the neutral descriptor the observers are notified with,
+     * for the formats whose real coordinate is only known once the stored bytes have been parsed.
+     */
+    public static final class Visibility {
+
+        /** One declared visibility write: exactly one of the two components is set. */
+        private record Step(String requestPath, Serving serving) {
+        }
+
+        private static final Visibility DECLINED = new Visibility(false, List.of(), null);
+        private static final Visibility LAID_OUT = new Visibility(true, List.of(), null);
+
+        private final boolean commits;
+        private final List<Step> steps;
+        private final ArtifactDescriptor described;
+
+        private Visibility(boolean commits, List<Step> steps, ArtifactDescriptor described) {
+            this.commits = commits;
+            this.steps = steps;
+            this.described = described;
+        }
+
+        /** Nothing servable was written, so no pointer is linked and no observer is notified - the shape an edge
+         *  refusal takes once the body has already been screened and stored. */
+        public static Visibility declined() {
+            return DECLINED;
+        }
+
+        /** The layout already linked its own serving pointer inside an opaque format-SPI callback. */
+        public static Visibility laidOut() {
+            return LAID_OUT;
+        }
+
+        /** Link {@code publish/<requestPath>} at the accepted hash once the layout has returned. */
+        public static Visibility at(String requestPath) {
+            return new Visibility(true, List.of(new Step(requireRequestPath(requestPath), null)), null);
+        }
+
+        /** Run the declared format-native pointer writes, in order, once the layout has returned. */
+        public static Visibility through(Serving serving) {
+            return new Visibility(true, List.of(new Step(null, Objects.requireNonNull(serving, "serving"))), null);
+        }
+
+        /** A further {@code publish/} pointer, linked after the steps already declared. */
+        public Visibility andAt(String requestPath) {
+            return new Visibility(true, appended(new Step(requireRequestPath(requestPath), null)), described);
+        }
+
+        /** A further format-native pointer write, run after the steps already declared. */
+        public Visibility andThrough(Serving serving) {
+            return new Visibility(true,
+                    appended(new Step(null, Objects.requireNonNull(serving, "serving"))), described);
+        }
+
+        /**
+         * Notify the after-commit observers with {@code refined} rather than the descriptor the ingress edge screened
+         * against. The seam for a format whose real coordinate is only readable <em>after</em> the bytes are stored
+         * and parsed (a package archive whose manifest carries the id and version, an envelope endpoint whose request
+         * path carries no version at all), so an observer keyed on the neutral ecosystem/coordinate/version triple is
+         * not handed a coordinate-less envelope path. The content-addressed identity is stamped on by {@link #commit},
+         * so a refinement never has to carry the hash.
+         */
+        public Visibility describing(ArtifactDescriptor refined) {
+            if (!commits) {
+                throw new IllegalStateException("a declined visibility notifies no observer, so it describes nothing");
+            }
+            return new Visibility(true, steps, Objects.requireNonNull(refined, "refined"));
+        }
+
+        private List<Step> appended(Step step) {
+            if (!commits) {
+                throw new IllegalStateException("a declined visibility commits nothing, so it takes no further step");
+            }
+            List<Step> extended = new ArrayList<>(steps);
+            extended.add(step);
+            return List.copyOf(extended);
+        }
+
+        private static String requireRequestPath(String requestPath) {
+            Objects.requireNonNull(requestPath, "requestPath");
+            if (requestPath.isEmpty() || requestPath.charAt(0) != '/') {
+                throw new IllegalArgumentException("a publish pointer is declared by request path, so it starts with "
+                        + "'/': " + requestPath);
+            }
+            return requestPath;
+        }
+    }
+
+    /** The outcome of a {@link #commit}: the one screen's disposition, the artifact with its content-addressed
+     *  identity (and any {@linkplain Visibility#describing refinement} the layout applied), and whether visibility
+     *  actually committed - false for a non-{@code ACCEPT} disposition and for an accepted body whose layout
+     *  {@linkplain Visibility#declined declined}. The after-commit observers were notified exactly when
+     *  {@code visible} is true. */
+    public record Commit(PublishInterceptor.Disposition disposition, ArtifactDescriptor artifact, boolean visible) {
+
+        /** The SHA-256 the body was stored under, present whatever the disposition. */
+        public String hash() {
+            return artifact.hash();
+        }
+    }
+
+    /**
+     * The one hosted-publish choreography: screen once, gate the republish, lay the accepted blob out sidecars-first,
+     * link the serving pointer last, and only then notify the after-commit observers. Every free ingress edge - the
+     * deploy edge, the import walk, the OCI manifest choke point - runs a hosted publish through here, so there is one
+     * publish commit point in the product rather than one per format.
+     *
+     * <p>In order:
+     * <ol>
+     *   <li>{@link #screen} stores the body content-addressed as it is read (hash-on-write, never buffered) and runs
+     *       the discovered {@link PublishInterceptor} chain <b>exactly once</b>. A {@code QUARANTINE} is diverted to
+     *       the review view and a {@code REJECT} leaves an unreferenced blob; neither lays out and neither observes.</li>
+     *   <li>The {@link Republish} policy is evaluated against the already-known content hash, before any layout write:
+     *       a refusal raises {@link RepublishConflict} with nothing half-written.</li>
+     *   <li>The {@link AcceptedLayout} writes its parse results and sidecars and <em>declares</em> its
+     *       {@link Visibility}. Nothing it writes here is servable.</li>
+     *   <li>The declared visibility is linked, in declaration order. <b>This is the commit point</b>: before the first
+     *       step the publication serves nothing, after the last it serves fully.</li>
+     *   <li>{@link #published} notifies the after-commit observers exactly once - strictly after visibility committed,
+     *       never before, and never at all when the layout declined or the chain did not accept.</li>
+     * </ol>
+     *
+     * <p>A failure at any step before the commit point propagates and leaves nothing servable; a failure inside a
+     * declared visibility step propagates too, so a partly-linked multi-pointer layout is reported rather than
+     * silently reported as published. See the {@code Contract} block's durability clause for the exact crash windows
+     * this ordering leaves and the delivery class it supports.
+     */
+    public Commit commit(ArtifactDescriptor artifact, InputStream body, Republish republish, AcceptedLayout layout)
+            throws IOException {
+        Objects.requireNonNull(republish, "republish");
+        Objects.requireNonNull(layout, "layout");
+        Published screened = screen(artifact, body);
+        String hash = screened.hash();
+        ArtifactDescriptor stored = artifact.withBlob(hash, store.size("blobs/" + hash));
+        if (screened.disposition() != PublishInterceptor.Disposition.ACCEPT) {
+            return new Commit(screened.disposition(), stored, false);
+        }
+        admit(republish, artifact, hash);
+        Visibility visibility = layout.lay(new Accepted(stored));
+        if (!visibility.commits) {
+            return new Commit(PublishInterceptor.Disposition.ACCEPT, stored, false);
+        }
+        // The commit point. Every declared step is a compare-and-set write of a small pointer object; the artifact is
+        // servable from the first one that lands and completely visible once the last has.
+        for (Visibility.Step step : visibility.steps) {
+            if (step.requestPath() != null) {
+                link(step.requestPath(), hash);
+            } else {
+                step.serving().link(hash, store);
+            }
+        }
+        ArtifactDescriptor committed = visibility.described == null
+                ? stored
+                : visibility.described.withBlob(hash, stored.size());
+        published(committed);
+        return new Commit(PublishInterceptor.Disposition.ACCEPT, committed, true);
+    }
+
+    /** Evaluate the republish policy before the layout writes anything: {@code OVERWRITE} does not even read, so the
+     *  hot path pays nothing for a policy no free format uses; the probing modes read the named pointer once and raise
+     *  {@link RepublishConflict} rather than letting a layout discover the collision mid-write. */
+    private void admit(Republish republish, ArtifactDescriptor artifact, String hash) throws IOException {
+        if (republish.mode() == Republish.Mode.OVERWRITE) {
+            return;
+        }
+        String key = republish.key(artifact);
+        Optional<String> current = pointer(key);
+        if (current.isEmpty() || (republish.mode() == Republish.Mode.IDEMPOTENT && current.get().equals(hash))) {
+            return;
+        }
+        throw new RepublishConflict(key, current.get(), hash);
+    }
+
+    /** The {@link Acceptance} handed to an {@link AcceptedLayout}: a restream view over the accepted blob plus the
+     *  sidecar writer, whose {@code publish/} refusal is the structural half of pointer-last. */
+    private final class Accepted implements Acceptance {
+
+        private final ArtifactDescriptor artifact;
+
+        private Accepted(ArtifactDescriptor artifact) {
+            this.artifact = artifact;
+        }
+
+        @Override
+        public ArtifactDescriptor artifact() {
+            return artifact;
+        }
+
+        @Override
+        public ArtifactStore store() {
+            return store;
+        }
+
+        @Override
+        public InputStream open() throws IOException {
+            return store.open("blobs/" + artifact.hash());
+        }
+
+        @Override
+        public void sidecar(String key, byte[] body) throws IOException {
+            sidecar(key, new ByteArrayInputStream(body));
+        }
+
+        @Override
+        public void sidecar(String key, InputStream body) throws IOException {
+            store.write(requireSidecarKey(key), body);
+        }
+    }
+
+    /** A sidecar is a parse result beside the artifact, never the thing that makes it servable, so the
+     *  {@code publish/} pointer namespace is refused here: writing a serving pointer through the sidecar seam would
+     *  put it <em>before</em> the rest of the layout, which is exactly the ordering this operation removes. A layout
+     *  that means to publish declares it in its {@link Visibility} instead. */
+    private static String requireSidecarKey(String key) {
+        Objects.requireNonNull(key, "key");
+        if (key.isEmpty()) {
+            throw new IllegalArgumentException("a sidecar needs a key");
+        }
+        if (key.equals("publish") || key.startsWith("publish/")) {
+            throw new IllegalArgumentException("publish/ is the serving-pointer namespace, so " + key
+                    + " is a pointer, not a sidecar - declare it in the returned Visibility so it is linked last");
+        }
+        return key;
     }
 
     /** A read view over the just-stored blob and its published siblings, handed to each interceptor so a gate reads
