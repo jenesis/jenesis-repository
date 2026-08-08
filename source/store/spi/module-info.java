@@ -13,7 +13,12 @@
  * {@code PublishInterceptor} (accept / quarantine / reject before the pointer links, withhold on read) as its
  * {@code instanceof}-detected sub-interface: one {@code uses PublicationObserver} clause discovers both, and
  * {@code Publication} splits the discovered list to drive the interceptor chain while notifying every observer.
- * Both are empty by default.
+ * Both are empty by default. Alongside them live the two halves of the shared SPI convention every discovered
+ * seam in the product reuses: {@code Features} (is an implementation switched on, and which one did the operator
+ * select) and {@code Providers} (the per-policy resolution primitives - {@code all}, {@code optionalUnique},
+ * {@code namedUnique}, {@code exclusiveWithDefault}, {@code installedNames} - an SPI's own {@code resolve} /
+ * {@code installed} statics delegate to, so an explicitly selected implementation that is absent, switched off or
+ * misconfigured fails loudly instead of silently degrading to the unselected default).
  *
  * @jenesis.release 25
  * @jenesis.pin org.slf4j 2.0.18
