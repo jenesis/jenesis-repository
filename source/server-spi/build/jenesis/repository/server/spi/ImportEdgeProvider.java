@@ -25,6 +25,37 @@ import module java.base;
  * shared {@link Features} enable/disable convention (a {@code jenesis.repository.<name>=false} switch and the
  * required-config self-disable), so a provider that is present but not configured for is inert, exactly as a missing
  * module would be.
+ *
+ * <h2>Contract</h2>
+ * <ol>
+ *   <li><b>Thread-safety.</b> {@link #name()} and {@link #requiredConfig()} may be called from any thread and must be
+ *       safe to call concurrently. In practice {@link #installed()} runs once, on the boot thread, before the web
+ *       layer is up.</li>
+ *   <li><b>Absence sentinel.</b> {@link #installed()} answers {@code false} - never {@code null}, never an exception -
+ *       when no provider is installed, when every discovered provider is switched off, and when a provider's
+ *       {@link #requiredConfig()} is unset. {@code false} means the free import edge is served byte-for-byte as it is
+ *       without this SPI. Neither {@link #name()} nor {@link #requiredConfig()} may return {@code null}.</li>
+ *   <li><b>Selection failure.</b> There is nothing to select: this is a presence signal, not a named capability, so no
+ *       configuration can name an edge that is absent. A provider that is installed but inert (switched off, required
+ *       config unset) is indistinguishable from an absent module <em>by design</em>, and yielding the edge back to the
+ *       free controller is the intended outcome rather than a silent fallback.</li>
+ *   <li><b>Read purity.</b> {@link #name()} and {@link #requiredConfig()} are pure declarations: no store access, no
+ *       network, no filesystem, no lazy initialisation. They are read while the application context is still being
+ *       built, so any I/O here happens before the store, the settings layer or the tenant directory exist.</li>
+ *   <li><b>Error visibility.</b> A throw from either method propagates out of {@link #installed()} and fails the boot.
+ *       That is deliberate and must not be softened: a swallowed failure here would silently register <em>both</em>
+ *       import edges or <em>neither</em>, and an import surface that is quietly missing or quietly duplicated is worse
+ *       than a refused start (PRINCIPLES §9).</li>
+ *   <li><b>Lifecycle / ownership.</b> The core owns the lifecycle: every {@link #installed()} call loads the
+ *       service afresh through {@link ServiceLoader}, so instances are created, consulted and discarded - they are not
+ *       cached and never closed. A provider must therefore be a cheap, stateless declaration: it may not open threads,
+ *       clients, connections or files, and it may not carry state a later call depends on. The distribution's actual
+ *       import controller is contributed as an ordinary bean, not by this provider.</li>
+ *   <li><b>Ordering / concurrency.</b> The answer must not depend on discovery order: any single active provider
+ *       claims the edge, so the result is order-independent by construction. At most one distribution may install a
+ *       provider - two active providers would contribute two colliding controllers, which this SPI exists to prevent -
+ *       so the outcome is well-defined only while that holds.</li>
+ * </ol>
  */
 public interface ImportEdgeProvider {
 
