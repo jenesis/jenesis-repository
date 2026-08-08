@@ -13,6 +13,40 @@ import module java.base;
  * decision (see the {@code bundle} module) and not an edge that rebuilds every consumer whenever a backend changes.
  * A selected backend whose {@link #requiredConfig() required configuration} is unset fails loudly rather than self-disabling:
  * silently falling back to another store would serve and persist against the wrong backend.
+ *
+ * <h2>Contract</h2>
+ * <ol>
+ * <li><b>Thread-safety.</b> {@link #name()} and {@link #requiredConfig()} are pure declarations callable from any
+ *     thread; {@link #create} runs once, on the boot thread, before the web layer is up. The {@link ArtifactStore} it
+ *     returns is a shared singleton the server calls concurrently from every request thread, so <em>that</em> object
+ *     must be thread-safe - the provider itself need not be.</li>
+ * <li><b>Idempotency / replay.</b> {@link #create} may be called more than once (a second application context, a test
+ *     harness) and must then hand back an equivalent view of the same durable content rather than reformatting,
+ *     truncating or re-provisioning the backend. Building a store performs no destructive setup.</li>
+ * <li><b>Absence sentinel.</b> There is none: exactly one backend always resolves. {@link #resolve} answers a live
+ *     store or throws - it never returns {@code null}, and a provider returning {@code null} from {@link #create}
+ *     fails loudly naming the provider class. {@link #name()} and {@link #requiredConfig()} may not return
+ *     {@code null} either; an empty {@link #requiredConfig()} means "needs nothing".</li>
+ * <li><b>Selection failure (&sect;9).</b> An explicitly selected backend that no provider answers to - its module is
+ *     off the module path, or the name is misspelled - throws {@link IllegalStateException} at resolution naming the
+ *     selection, the {@code filesystem} default it refuses to fall back to, and the installed provider names. A
+ *     selected backend whose {@link #requiredConfig()} is unset likewise throws, naming <em>every</em> missing key at
+ *     once, and is never constructed. This SPI deliberately does not self-disable the way an optional capability may:
+ *     {@code jenesis.repository.store=s3} with the s3 module absent must not boot against the local disk, publishing
+ *     into ephemeral storage while every artifact in the intended bucket 404s. Only an <em>unselected</em> deployment
+ *     gets the {@code filesystem} default, and its required configuration is checked just the same.</li>
+ * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Two providers answering to one name, or one provider
+ *     registered twice, are packaging errors and throw rather than letting module-path order pick the backend a
+ *     deployment persists into. Configuration problems surface as one message naming the keys, never as a degraded
+ *     store.</li>
+ * <li><b>Lifecycle / ownership.</b> The composition owns the store: {@link #resolve} constructs exactly one instance
+ *     and hands it over, caching nothing and closing nothing. A provider may hand its store a client, connection pool
+ *     or thread it owns, and the store closes them through its own lifecycle; the provider instance itself is
+ *     discarded immediately and must hold no state a later call depends on.</li>
+ * <li><b>Ordering / determinism.</b> The resolved backend is a function of the configured name and the installed
+ *     providers only - never of {@link ServiceLoader} discovery order. Providers are matched by name
+ *     case-insensitively and every diagnostic lists them in one stable, name-sorted order.</li>
+ * </ol>
  */
 public interface ArtifactStoreProvider {
 
@@ -30,37 +64,18 @@ public interface ArtifactStoreProvider {
         return Set.of();
     }
 
-    /** Resolve the named backend via {@link ServiceLoader}, falling back to the bundled {@code filesystem} backend only
-     *  when no backend was explicitly selected. An explicitly-named backend that no provider answers to fails loudly
-     *  rather than silently serving and persisting against the local disk. */
+    /** Resolve the named backend through the shared {@link Providers#exclusiveWithDefault} policy: the bundled
+     *  {@code filesystem} backend answers an <em>unselected</em> deployment, an explicitly named backend no provider
+     *  answers to fails loudly rather than silently serving and persisting against the local disk, and the chosen
+     *  backend's {@link #requiredConfig() required configuration} is validated before it is ever built. Discovery
+     *  stays here, with the {@code uses} clause: the primitive resolves over the loader it is handed. */
     static ArtifactStore resolve(String name, UnaryOperator<String> config) {
-        ArtifactStoreProvider chosen = null, filesystem = null;
-        for (ArtifactStoreProvider provider : ServiceLoader.load(ArtifactStoreProvider.class)) {
-            if (provider.name().equalsIgnoreCase(name)) {
-                chosen = provider;
-            }
-            if (provider.name().equalsIgnoreCase("filesystem")) {
-                filesystem = provider;
-            }
-        }
-        if (chosen == null && name != null && !name.isBlank() && !name.equalsIgnoreCase("filesystem")) {
-            // A backend was explicitly configured but its module is not on the path (or the name is misspelled).
-            // Refuse to fall back to the local filesystem: that silently serves and persists against the wrong
-            // backend - publishes land in ephemeral storage and every artifact in the intended bucket 404s.
-            throw new IllegalStateException("The '" + name + "' artifact store backend is selected but no provider"
-                    + " answers to it (its module is not on the path, or the name is misspelled); refusing to fall"
-                    + " back to the local filesystem.");
-        }
-        ArtifactStoreProvider selected = chosen != null ? chosen : filesystem;
-        if (selected == null) {
-            throw new IllegalStateException("No artifact store provider answers to '" + name + "', and no filesystem fallback is present");
-        }
-        List<String> missing = Features.missing(selected.requiredConfig(), config);
-        if (!missing.isEmpty()) {
-            // The store is the one exclusive SPI that must not self-disable: fail loudly, naming what is unset.
-            throw new IllegalStateException("The " + selected.name() + " artifact store backend is selected but its"
-                    + " required configuration is missing: " + String.join(", ", missing));
-        }
-        return selected.create(config);
+        return Providers.exclusiveWithDefault("store",
+                ServiceLoader.load(ArtifactStoreProvider.class),
+                ArtifactStoreProvider::name,
+                Optional.ofNullable(name),
+                "filesystem",
+                provider -> Features.missing(provider.requiredConfig(), config),
+                provider -> provider.create(config));
     }
 }

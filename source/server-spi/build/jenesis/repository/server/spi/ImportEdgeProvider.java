@@ -1,6 +1,7 @@
 package build.jenesis.repository.server.spi;
 
 import build.jenesis.repository.store.Features;
+import build.jenesis.repository.store.Providers;
 
 import module java.base;
 
@@ -36,9 +37,11 @@ import module java.base;
  *       {@link #requiredConfig()} is unset. {@code false} means the free import edge is served byte-for-byte as it is
  *       without this SPI. Neither {@link #name()} nor {@link #requiredConfig()} may return {@code null}.</li>
  *   <li><b>Selection failure.</b> There is nothing to select: this is a presence signal, not a named capability, so no
- *       configuration can name an edge that is absent. A provider that is installed but inert (switched off, required
- *       config unset) is indistinguishable from an absent module <em>by design</em>, and yielding the edge back to the
- *       free controller is the intended outcome rather than a silent fallback.</li>
+ *       configuration can name an edge that is absent. Unlike the named singleton SPIs beside it there is no
+ *       {@code jenesis.repository.import-edge=<name>} key, so the §9 "explicitly selected but unavailable" case
+ *       cannot arise here and setting such a key changes nothing. A provider that is installed but inert (switched
+ *       off, required config unset) is indistinguishable from an absent module <em>by design</em>, and yielding the
+ *       edge back to the free controller is the intended outcome rather than a silent fallback.</li>
  *   <li><b>Read purity.</b> {@link #name()} and {@link #requiredConfig()} are pure declarations: no store access, no
  *       network, no filesystem, no lazy initialisation. They are read while the application context is still being
  *       built, so any I/O here happens before the store, the settings layer or the tenant directory exist.</li>
@@ -52,9 +55,11 @@ import module java.base;
  *       clients, connections or files, and it may not carry state a later call depends on. The distribution's actual
  *       import controller is contributed as an ordinary bean, not by this provider.</li>
  *   <li><b>Ordering / concurrency.</b> The answer must not depend on discovery order: any single active provider
- *       claims the edge, so the result is order-independent by construction. At most one distribution may install a
- *       provider - two active providers would contribute two colliding controllers, which this SPI exists to prevent -
- *       so the outcome is well-defined only while that holds.</li>
+ *       claims the edge, so the result is order-independent by construction, and the shared
+ *       {@link Providers#installedNames} primitive additionally refuses a duplicate provider name or a provider
+ *       registered twice - packaging errors a presence poll would otherwise absorb silently. At most one distribution
+ *       may install a provider - two active providers would contribute two colliding controllers, which this SPI
+ *       exists to prevent - so the outcome is well-defined only while that holds.</li>
  * </ol>
  */
 public interface ImportEdgeProvider {
@@ -77,11 +82,9 @@ public interface ImportEdgeProvider {
      *  configured off / missing its required config) means the free import edge is served; {@code true} means a
      *  distribution owns the import edge and the free controller yields, its mapping never registered. */
     static boolean installed() {
-        for (ImportEdgeProvider provider : ServiceLoader.load(ImportEdgeProvider.class)) {
-            if (Features.active(provider.name(), provider.requiredConfig())) {
-                return true;
-            }
-        }
-        return false;
+        return !Providers.installedNames("import-edge",
+                ServiceLoader.load(ImportEdgeProvider.class),
+                ImportEdgeProvider::name,
+                provider -> Features.active(provider.name(), provider.requiredConfig())).isEmpty();
     }
 }

@@ -14,9 +14,12 @@ import module java.base;
  *     where {@code <feature>} is the provider's {@code name()}. Nothing set means <em>enabled</em>; only an explicit
  *     {@code false} disables. A disabled implementation is simply not activated at {@link ServiceLoader} discovery,
  *     so it degrades exactly like a missing module (its endpoint answers {@code 501} / not-found, the rest runs).</li>
- * <li>An <em>exclusive</em> SPI (one active implementation - the store backend, the token exchange) selects its
+ * <li>A <em>singleton</em> SPI (one active implementation - the store backend, the token exchange) selects its
  *     implementation with {@code jenesis.repository.<spi>=<feature>}; nothing set picks the most universally
- *     applicable default (the {@code filesystem} store) or the first enabled implementation in discovery order.</li>
+ *     applicable default (the {@code filesystem} store) or, where the SPI is optional, the single enabled
+ *     implementation. Resolution runs through the {@link Providers} primitives, so an explicitly selected
+ *     implementation that is absent, switched off or unconfigured fails loudly (&sect;9) and two enabled
+ *     implementations are ambiguous - discovery order never picks a winner.</li>
  * <li>An implementation's own settings live under {@code jenesis.<feature>.<property>=<value>} or its documented
  *     settings keys; they are never consulted here.</li>
  * <li><em>Required-config self-disable:</em> a provider declares the config keys it cannot run without (a
@@ -62,8 +65,10 @@ public final class Features {
         return !"false".equalsIgnoreCase(config.apply(NAMESPACE + feature));
     }
 
-    /** The implementation name an exclusive SPI is configured to ({@code jenesis.repository.<spi>=<feature>}), or
-     *  empty when unset - the caller then applies its own most-universal default or discovery order. */
+    /** The implementation name a singleton SPI is configured to ({@code jenesis.repository.<spi>=<feature>}), or
+     *  empty when unset - the caller then applies its own most-universal default, or resolves the single enabled
+     *  implementation through {@link Providers}. A <em>present</em> value is an explicit operator decision, so the
+     *  resolution primitives fail rather than degrade when nothing answers to it (&sect;9). */
     public static Optional<String> selection(String spi) {
         String value = config.apply(NAMESPACE + spi);
         return value == null || value.isBlank() ? Optional.empty() : Optional.of(value.trim());

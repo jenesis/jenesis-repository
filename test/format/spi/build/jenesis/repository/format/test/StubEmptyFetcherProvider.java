@@ -5,9 +5,10 @@ import build.jenesis.repository.format.ProxyFormat;
 
 import module java.base;
 
-/** A stub fetcher provider whose {@code create} always declines (empty): its config never enables it, so
- *  {@link FetcherProvider#resolve} must skip it and continue to the next discovered provider. Declared first in the
- *  service list so the skip-and-continue path is exercised before any provider that builds a fetcher. */
+/** A stub fetcher provider whose {@code create} always declines (empty): its config never enables it. Unselected and
+ *  alone it is the absence that degrades to {@code Fetcher.NONE}; <em>selected</em> by name it is the §9 case that
+ *  must fail loudly rather than degrade. Declared first in the service list, so a resolver that still preferred
+ *  discovery order over an explicit policy would be caught by it. */
 public final class StubEmptyFetcherProvider implements FetcherProvider {
 
     @Override

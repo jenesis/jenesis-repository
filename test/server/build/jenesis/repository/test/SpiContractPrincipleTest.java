@@ -63,17 +63,33 @@ class SpiContractPrincipleTest {
     /**
      * How a consumer selects among discovered providers - the metadata T-101's resolution primitives are keyed by.
      *
+     * The four names match the {@code Providers} primitive each policy resolves through one-for-one (T-101), so the
+     * metadata recorded here is what a migrated resolver actually calls rather than a parallel vocabulary:
+     *
      * <ul>
      *   <li>{@link #ALL} - additive fan-out: every discovered provider participates (formats, observers, panels,
-     *       importers, walk consumers). There is nothing to select and nothing to fail.</li>
-     *   <li>{@link #OPTIONAL_UNIQUE} - at most one provider may be installed; its absence degrades to the SPI's
-     *       declared sentinel. Two installed providers is a configuration error, not a choice.</li>
-     *   <li>{@link #NAMED_UNIQUE} - several providers may be installed and one is chosen by an explicit configured
-     *       name; an explicitly selected miss must fail at resolution (PRINCIPLES §9), while unselected absence
-     *       degrades to the sentinel.</li>
-     *   <li>{@link #EXCLUSIVE_WITH_DEFAULT} - {@link #NAMED_UNIQUE} plus a built-in default when nothing is
-     *       selected (the {@code filesystem} artifact store, the fixed single-tenant directory).</li>
+     *       importers, walk consumers), or - the degenerate additive case - the SPI is a pure presence signal whose
+     *       providers are only ever counted ({@code ImportEdgeProvider}). There is nothing to select and nothing to
+     *       fail. Resolves through {@code Providers.all} / {@code Providers.installedNames}.</li>
+     *   <li>{@link #OPTIONAL_UNIQUE} - a singleton capability that may legitimately be absent: <em>exactly one</em>
+     *       enabled provider resolves, unselected absence degrades to the SPI's declared sentinel
+     *       ({@code NONE}, {@code Optional.empty()}, the fixed tenant directory), and more than one enabled provider
+     *       is a configuration error rather than a discovery-order winner. An <em>explicitly</em> selected
+     *       {@code jenesis.repository.<spi>=<name>} that no provider answers to fails at resolution (PRINCIPLES §9);
+     *       the selection is optional, not the implementation. Resolves through {@code Providers.optionalUnique}.</li>
+     *   <li>{@link #NAMED_UNIQUE} - the selection is <em>mandatory</em>: there is no unselected outcome and no
+     *       sentinel at all, so both a missing selection and a selected miss fail. No core SPI is this today.
+     *       Resolves through {@code Providers.namedUnique}.</li>
+     *   <li>{@link #EXCLUSIVE_WITH_DEFAULT} - exactly one implementation always resolves: an unselected deployment
+     *       gets the provider answering to a named built-in default (the {@code filesystem} artifact store) and the
+     *       chosen provider's required configuration is validated before it is built. There is no sentinel; a
+     *       selected miss refuses to fall back. Resolves through {@code Providers.exclusiveWithDefault}.</li>
      * </ul>
+     *
+     * <p>The line between {@link #OPTIONAL_UNIQUE} and {@link #EXCLUSIVE_WITH_DEFAULT} is whether the unselected
+     * default is a <em>discovered provider</em> or a sentinel the SPI builds itself: {@code TenantsProvider} falls
+     * back to {@code Tenants.fixed(tenant)}, which no provider declares, so it is optional-unique with a sentinel and
+     * not exclusive-with-default.
      */
     enum Policy {
         ALL, OPTIONAL_UNIQUE, NAMED_UNIQUE, EXCLUSIVE_WITH_DEFAULT
@@ -140,8 +156,10 @@ class SpiContractPrincipleTest {
         // unselected default, and an explicitly selected miss throws rather than serving the local disk (§9).
         surfaces.add(Surface.root("build.jenesis.repository.store.ArtifactStoreProvider",
                 Policy.EXCLUSIVE_WITH_DEFAULT));
-        // `jenesis.repository.tenants=<name>` selects a directory; Tenants.fixed(tenant) is the built-in default.
-        surfaces.add(Surface.root("build.jenesis.repository.store.TenantsProvider", Policy.EXCLUSIVE_WITH_DEFAULT));
+        // `jenesis.repository.tenants=<name>` selects a directory when one is installed; with none installed the
+        // sentinel is Tenants.fixed(tenant), which the SPI builds itself rather than discovering - so this is
+        // optional-unique with a sentinel, not exclusive-with-default (T-101b corrected the recorded policy).
+        surfaces.add(Surface.root("build.jenesis.repository.store.TenantsProvider", Policy.OPTIONAL_UNIQUE));
         // Every discovered observer is notified; Publication splits the discovered list by instanceof.
         surfaces.add(Surface.root("build.jenesis.repository.store.PublicationObserver", Policy.ALL));
         // ROLE: the pre-commit, fail-closed half of the same clause. Its verdict legs propagate and fail the write,
@@ -164,19 +182,19 @@ class SpiContractPrincipleTest {
         surfaces.add(Surface.role("build.jenesis.repository.format.RepositoryImporter",
                 "build.jenesis.repository.format.RepositoryFormat", Policy.ALL));
         // `jenesis.repository.fetcher=<name>` selects one; Fetcher.NONE is the unselected sentinel.
-        surfaces.add(Surface.root("build.jenesis.repository.format.FetcherProvider", Policy.NAMED_UNIQUE));
+        surfaces.add(Surface.root("build.jenesis.repository.format.FetcherProvider", Policy.OPTIONAL_UNIQUE));
         // Every discovered module view contributes to the Maven bridge's rendering.
         surfaces.add(Surface.root("build.jenesis.repository.format.java.bridge.ModuleView", Policy.ALL));
 
         // --- walk --------------------------------------------------------------------------------------------
         // `jenesis.repository.walk=<name>` selects one; Optional.empty() is the unselected sentinel.
-        surfaces.add(Surface.root("build.jenesis.repository.walk.WalkProvider", Policy.NAMED_UNIQUE));
+        surfaces.add(Surface.root("build.jenesis.repository.walk.WalkProvider", Policy.OPTIONAL_UNIQUE));
         // Every discovered consumer sees every pass (WalkConsumer.discovered()).
         surfaces.add(Surface.root("build.jenesis.repository.walk.WalkConsumer", Policy.ALL));
 
         // --- gc / importer / posture / observation / ui -------------------------------------------------------
         // `jenesis.repository.gc=<name>` selects one; Optional.empty() is the unselected sentinel.
-        surfaces.add(Surface.root("build.jenesis.repository.gc.GarbageCollectorProvider", Policy.NAMED_UNIQUE));
+        surfaces.add(Surface.root("build.jenesis.repository.gc.GarbageCollectorProvider", Policy.OPTIONAL_UNIQUE));
         // A keyed catalogue of import sources; the import edge looks one up by name, all are advertised.
         surfaces.add(Surface.root("build.jenesis.repository.importer.ImportSourceProvider", Policy.ALL));
         // Every advisor folds into one PostureReport.
@@ -189,15 +207,18 @@ class SpiContractPrincipleTest {
         // --- server-spi --------------------------------------------------------------------------------------
         // Every contributor's keys are merged into /api/capabilities.
         surfaces.add(Surface.root("build.jenesis.repository.server.spi.CapabilityContributor", Policy.ALL));
-        // Presence alone claims the import edge from the free controller: at most one distribution may own it, and
-        // no provider (or every provider configured off) means the free edge is served - the sentinel.
-        surfaces.add(Surface.root("build.jenesis.repository.server.spi.ImportEdgeProvider", Policy.OPTIONAL_UNIQUE));
+        // Presence alone claims the import edge from the free controller: any active provider claims it, no provider
+        // (or every provider configured off) means the free edge is served, and there is no selection key at all - so
+        // it is the degenerate additive case, counted through installedNames, not a named singleton (T-101b corrected
+        // the recorded policy: OPTIONAL_UNIQUE would key it to a resolution primitive it has no product for).
+        surfaces.add(Surface.root("build.jenesis.repository.server.spi.ImportEdgeProvider", Policy.ALL));
         // `jenesis.repository.rate-limiter=<name>` selects one; RateLimiter.NONE is the unselected sentinel.
-        surfaces.add(Surface.root("build.jenesis.repository.server.spi.RateLimiterProvider", Policy.NAMED_UNIQUE));
+        surfaces.add(Surface.root("build.jenesis.repository.server.spi.RateLimiterProvider", Policy.OPTIONAL_UNIQUE));
         // `jenesis.repository.token-exchange=<name>` selects one; TokenExchange.NONE is the unselected sentinel.
-        surfaces.add(Surface.root("build.jenesis.repository.server.spi.TokenExchangeProvider", Policy.NAMED_UNIQUE));
+        surfaces.add(Surface.root("build.jenesis.repository.server.spi.TokenExchangeProvider", Policy.OPTIONAL_UNIQUE));
         // `jenesis.repository.key-usage=<name>` selects one; KeyUsageTracker.NONE is the unselected sentinel.
-        surfaces.add(Surface.root("build.jenesis.repository.server.spi.KeyUsageTrackerProvider", Policy.NAMED_UNIQUE));
+        surfaces.add(Surface.root("build.jenesis.repository.server.spi.KeyUsageTrackerProvider",
+                Policy.OPTIONAL_UNIQUE));
 
         return List.copyOf(surfaces);
     }
@@ -225,13 +246,8 @@ class SpiContractPrincipleTest {
         Map<String, String> allow = new LinkedHashMap<>();
 
         // --- T-301a: store, format and walk SPIs ---
-        allow.put("build.jenesis.repository.store.ArtifactStoreProvider",
-                "T-301a: the exclusive-with-default selection, the required-config fail-fast and the created store's "
-                        + "ownership/lifecycle are documented in prose but not yet folded into the numbered block");
-        allow.put("build.jenesis.repository.store.TenantsProvider",
-                "T-301a: needs the tenant-scoping, absence-sentinel and selection-failure clauses written out - today "
-                        + "an explicitly selected but absent directory degrades to the fixed tenant instead of "
-                        + "throwing, which the Contract block must state or T-101c must fix");
+        // ArtifactStoreProvider and TenantsProvider burnt down by T-101b, which migrated both onto the shared
+        // Providers primitives and wrote their numbered blocks (TenantsProvider's silent selected-miss fixed there).
         allow.put("build.jenesis.repository.store.PublicationObserver",
                 "T-301a: ordering, idempotency, the commit-to-callback crash window and the contained blast radius of "
                         + "an after-commit throw; the delivery class is pending the T-107 spike");
@@ -251,20 +267,15 @@ class SpiContractPrincipleTest {
         allow.put("build.jenesis.repository.format.RepositoryImporter",
                 "T-301a: streaming transfer, resumability and error classification, shared with the T-203 importer "
                         + "contract extension");
-        allow.put("build.jenesis.repository.format.FetcherProvider",
-                "T-301a: streaming, SSRF posture, redirect policy, timeout/bounded-work and the NONE sentinel");
+        // FetcherProvider and WalkProvider burnt down by T-101b together with their migration onto optionalUnique.
         allow.put("build.jenesis.repository.format.java.bridge.ModuleView",
                 "T-301b: read purity and determinism across discovery order for the Maven bridge's rendering");
-        allow.put("build.jenesis.repository.walk.WalkProvider",
-                "T-301a: bounded work, cancellation and the empty sentinel; the selection-failure clause depends on "
-                        + "the T-101 namedUnique primitive");
         allow.put("build.jenesis.repository.walk.WalkConsumer",
                 "T-301a: the javadoc already promises idempotency and at-least-once crash-resume in prose - T-204 "
                         + "asserts it and this block states it in the numbered form");
 
         // --- T-301b: server-spi, importer, observers and the remaining SPIs ---
-        allow.put("build.jenesis.repository.gc.GarbageCollectorProvider",
-                "T-301b: bounded work, lease ownership and the reclaim-safety window between mark and sweep");
+        // GarbageCollectorProvider burnt down by T-101b together with its migration onto optionalUnique.
         allow.put("build.jenesis.repository.importer.ImportSourceProvider",
                 "T-301b: resumability, streaming transfer, error classification and credential self-skip - the "
                         + "behavioural rows T-203 turns into fixtures");
@@ -275,14 +286,8 @@ class SpiContractPrincipleTest {
         allow.put("build.jenesis.repository.server.spi.CapabilityContributor",
                 "T-301b: key ownership, duplicate-key fail-fast on merge and the zero-contributor byte-identical "
                         + "guarantee; lands with the T-208 contributor suite");
-        allow.put("build.jenesis.repository.server.spi.RateLimiterProvider",
-                "T-301b: thread-safety under concurrent request admission, the NONE sentinel and selection failure "
-                        + "(post T-101)");
-        allow.put("build.jenesis.repository.server.spi.TokenExchangeProvider",
-                "T-301b: protocol handling, credential lifecycle/ownership and the NONE sentinel (post T-101)");
-        allow.put("build.jenesis.repository.server.spi.KeyUsageTrackerProvider",
-                "T-301b: best-effort error visibility (a lost usage record may only under-count), batching/durability "
-                        + "and the NONE sentinel (post T-101)");
+        // RateLimiterProvider, TokenExchangeProvider and KeyUsageTrackerProvider burnt down by T-101b together with
+        // their migration onto optionalUnique - the blocks the waivers deferred "post T-101" are written.
 
         return Map.copyOf(allow);
     }
@@ -523,11 +528,13 @@ class SpiContractPrincipleTest {
         }
 
         assertThat(ambiguous)
-                .as("these SPIs are inventoried OPTIONAL_UNIQUE - at most one provider may be installed, and their "
-                        + "resolvers take the first discovered one - yet more than one provider is declared, so which "
-                        + "implementation wins is module-path order. Either the second provider is a mistake, or the "
-                        + "SPI is really NAMED_UNIQUE and needs an explicit selection whose miss fails at resolution "
-                        + "(PRINCIPLES §9).%n%s", String.join(System.lineSeparator(), ambiguous))
+                .as("these SPIs are inventoried OPTIONAL_UNIQUE - exactly one enabled provider resolves - yet this "
+                        + "repository declares more than one, so a default deployment that enables both now fails at "
+                        + "resolution (Providers.optionalUnique refuses to pick a discovery-order winner) until an "
+                        + "operator disambiguates with jenesis.repository.<spi>=<name>. Catching that here, at build "
+                        + "time, is cheaper than catching it at boot: either the second provider is a mistake, or the "
+                        + "SPI must ship a documented default selection.%n%s",
+                        String.join(System.lineSeparator(), ambiguous))
                 .isEmpty();
     }
 

@@ -8,8 +8,11 @@
  * Micrometer or Jackson, exactly the "SPI contract modules stay java.base-light; the heavy deps ride the impl/bundle"
  * rule (&sect;2).
  *
- * <p>It holds the credential model ({@code Authorization}) and the exclusive-selection provider seams the server
- * {@code uses}: the rate limiter ({@code RateLimiter} / {@code RateLimiterProvider}), the credential usage tracker
+ * <p>It holds the credential model ({@code Authorization}) and the optional-unique provider seams the server
+ * {@code uses} - each resolving through the shared {@code Providers} primitives, so an explicitly selected
+ * implementation that no provider answers to fails at resolution rather than degrading to the seam's {@code NONE}
+ * sentinel (&sect;9): the rate limiter ({@code RateLimiter} / {@code RateLimiterProvider}), the credential usage
+ * tracker
  * ({@code KeyUsageTracker} / {@code KeyUsageTrackerProvider}), the workload-identity token exchange
  * ({@code TokenExchange} / {@code TokenExchangeProvider}), the {@code /api/capabilities} contributor
  * ({@code CapabilityContributor}) and the import-edge ownership signal ({@code ImportEdgeProvider}). The

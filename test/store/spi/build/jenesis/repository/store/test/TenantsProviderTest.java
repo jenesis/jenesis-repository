@@ -2,6 +2,7 @@ package build.jenesis.repository.store.test;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Tenants;
 import build.jenesis.repository.store.TenantsProvider;
 import module org.junit.jupiter.api;
@@ -19,11 +20,28 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@code <tenant>/<repository>/...} layout rests on. A store-backed directory is a provider module's part (the
  * multi-tenant edition's), exercised there; like the publish-interceptor chain, the core's discovery is
  * empty by design.
+ *
+ * <p>Since T-101b the seam resolves through the shared {@code Providers.optionalUnique} primitive, which fixes the
+ * §9 defect the T-002 inventory pass found here: an <em>explicitly selected</em>
+ * {@code jenesis.repository.tenants=<name>} that no provider answers to used to degrade silently to the fixed single
+ * tenant, collapsing a multi-tenant deployment onto one tenant and hiding every other tenant's artifacts behind a
+ * 404 that looks like an empty repository. It now throws, exactly as the store backend already did. Only
+ * <em>unselected</em> absence still degrades.
  */
 class TenantsProviderTest {
 
     @TempDir
     Path root;
+
+    @AfterEach
+    void restore() {
+        Features.reset();
+    }
+
+    private ArtifactStore store() {
+        return ArtifactStoreProvider.resolve(
+                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+    }
 
     @Test
     void the_free_edition_installs_no_tenants_module() {
@@ -32,12 +50,34 @@ class TenantsProviderTest {
 
     @Test
     void resolve_falls_back_to_the_fixed_directory_over_the_configured_tenant() throws IOException {
-        ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
-        Tenants tenants = TenantsProvider.resolve(store, key -> null, "acme");
+        Tenants tenants = TenantsProvider.resolve(store(), key -> null, "acme");
         assertThat(tenants.list()).containsExactly("acme");
         assertThat(tenants.exists("acme")).isTrue();
         assertThat(tenants.exists("other")).isFalse();
+    }
+
+    @Test
+    void an_explicitly_selected_directory_no_provider_answers_to_fails_loudly() {
+        // The §9 fix (T-101b): before, this silently answered the fixed single-tenant directory, so a deployment
+        // that configured a tenants module it had not installed - or misspelled its name - came up looking like a
+        // healthy single-tenant server while every other tenant's artifacts 404'd.
+        Features.configure(key -> "jenesis.repository.tenants".equals(key) ? "store-tenants" : null);
+        ArtifactStore store = store();
+        assertThatThrownBy(() -> TenantsProvider.resolve(store, key -> null, "acme"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("'store-tenants'")
+                .hasMessageContaining("jenesis.repository.tenants=store-tenants")
+                .hasMessageContaining("no installed provider answers to it")
+                .hasMessageContaining("refusing to degrade silently");
+    }
+
+    @Test
+    void an_unselected_deployment_still_degrades_to_the_fixed_directory() throws IOException {
+        // The other half of the contract: absence with nothing selected is not an error, so a free single-tenant
+        // deployment boots on the fixed directory exactly as before.
+        Features.configure(key -> null);
+        assertThat(TenantsProvider.resolve(store(), key -> null, "acme").list()).containsExactly("acme");
+        assertThat(TenantsProvider.installed()).isFalse();
     }
 
     @Test

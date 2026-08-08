@@ -1,8 +1,9 @@
 /**
  * Focused unit tests for the format SPI's shared helpers: the SSRF private-range classifier
  * {@link build.jenesis.repository.format.PrivateHosts} (its hand-rolled CGNAT and IPv6 unique-local branches the JDK
- * does not recognise) and the {@link build.jenesis.repository.format.FetcherProvider#resolve} exclusive-SPI seam
- * (explicit selection, a create()-empty provider skipped, and {@code NONE} when nothing is enabled), driven through
+ * does not recognise) and the {@link build.jenesis.repository.format.FetcherProvider#resolve} optional-unique SPI seam
+ * (explicit selection, ambiguity when more than one fetcher is enabled, a loud failure when the selection names a
+ * fetcher nothing answers to, and {@code NONE} only when nothing is enabled), driven through
  * {@link java.util.ServiceLoader}-discovered stub providers registered by this module - no network, no store.
  *
  * @jenesis.release 25
