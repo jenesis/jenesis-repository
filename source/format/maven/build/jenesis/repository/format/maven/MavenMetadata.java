@@ -4,6 +4,9 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.walk.BoundedChildren;
+import build.jenesis.repository.walk.ScreenedNames;
+import build.jenesis.repository.walk.Traversal;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
@@ -36,6 +39,11 @@ public final class MavenMetadata {
      *  artifact-level {@code maven-metadata.xml} rather than serving the stored bytes verbatim - default off, read
      *  off the exchange so the free format needs no settings dependency. */
     public static final String COMPUTE_SETTING = "maven-metadata-compute";
+
+    /** How many stored children of one coordinate a metadata render may examine. Far above any real release history
+     *  (the widest public Maven coordinates hold a few thousand versions) and far below the work an attacker-shaped
+     *  coordinate could otherwise force out of one GET. Reaching it fails the render - see {@link #versions}. */
+    private static final int VERSION_SCAN = 50_000;
 
     private final ArtifactStore store;
 
@@ -341,30 +349,42 @@ public final class MavenMetadata {
         return Optional.of(xml);
     }
 
+    /**
+     * The coordinate's disclosable version folders, in Maven version order.
+     *
+     * <p>Listed and screened in one call through the shared {@link ScreenedNames} enumeration face
+     * ({@link ScreenedNames#versionFolders}): the version FOLDER is the unit of disclosure, so a withheld version's
+     * name never appears in the served or reconciled {@code <versions>}/{@code <latest>}/{@code <release>}. The face
+     * stats NO blob, so a fake-hash / no-blob / non-jar-packaging version keeps listing - only a version a hold
+     * retracts (a quarantine review pointer, or the interceptor chain) is dropped - and a hostile / non-ASCII folder
+     * name is contained inside the seam, never an {@code InvalidPathException} out of metadata generation. Packaging-
+     * neutral: no extension heuristic, the whole folder is judged.
+     *
+     * <p>The enumeration is bounded ({@value #VERSION_SCAN} folders per coordinate, the shared primitive's cursor
+     * proving the rest). A coordinate wider than that is a pathological write pattern, not a release history: the
+     * document is refused rather than rendered from a silently truncated version list, since a metadata document that
+     * omits versions is what a resolver reads as "that version does not exist".
+     */
     private List<String> versions(String coordinatePath) throws IOException {
-        ServableNames servableNames = new ServableNames(store);
         List<String> versions = new ArrayList<>();
-        for (String child : store.list("publish/maven/" + coordinatePath)) {
-            // The coordinate directory holds version folders alongside the artifact-level maven-metadata.xml and
-            // its sidecars. Skip the document and every sidecar it can carry - not just the .sha1/.md5/.asc the
-            // publisher writes, but the .sha256/.sha512 a client or the proxy's checksum cache may deposit here
-            // (MavenFormat.isChecksum accepts those) - or a stray checksum sibling is enumerated as a version.
-            if (child.equals("maven-metadata.xml") || child.startsWith("maven-metadata.xml.")
-                    || child.endsWith(".sha1") || child.endsWith(".md5") || child.endsWith(".sha256")
-                    || child.endsWith(".sha512") || child.endsWith(".asc")) {
-                continue;
-            }
-            // Screen the version FOLDER through the one enumeration seam (F5): a withheld version's name must never
-            // appear in the served or reconciled <versions>/<latest>/<release>. HIDE_WITHHELD (the policy
-            // disclosableVersionFolder applies) stats NO blob, so a fake-hash / no-blob / non-jar-packaging version
-            // keeps listing - only a version a hold retracts (a quarantine review pointer, or the interceptor chain)
-            // is dropped. A hostile / non-ASCII folder name is contained inside the seam and fails closed, never an
-            // InvalidPathException out of metadata generation. This is packaging-neutral: no extension heuristic, the
-            // whole version folder is the unit of disclosure.
-            if (!servableNames.disclosableVersionFolder("/maven/" + coordinatePath + "/" + child)) {
-                continue;
-            }
-            versions.add(child);
+        String prefix = ServableNames.PUBLISHED + "/maven/" + coordinatePath;
+        Traversal.Result scanned = ScreenedNames.versionFolders(new ServableNames(store))
+                .scanning(BoundedChildren.bounded().entries(VERSION_SCAN))
+                .scan(store, prefix, (child, _) -> {
+                    // The coordinate directory holds version folders alongside the artifact-level maven-metadata.xml
+                    // and its sidecars. Skip the document and every sidecar it can carry - not just the .sha1/.md5/.asc
+                    // the publisher writes, but the .sha256/.sha512 a client or the proxy's checksum cache may deposit
+                    // here (MavenFormat.isChecksum accepts those) - or a stray checksum sibling is a "version".
+                    if (child.equals("maven-metadata.xml") || child.startsWith("maven-metadata.xml.")
+                            || child.endsWith(".sha1") || child.endsWith(".md5") || child.endsWith(".sha256")
+                            || child.endsWith(".sha512") || child.endsWith(".asc")) {
+                        return;
+                    }
+                    versions.add(child);
+                });
+        if (scanned.truncated()) {
+            throw new IOException("the coordinate '" + coordinatePath + "' holds more than " + VERSION_SCAN
+                    + " version folders; refusing to generate a maven-metadata document from a partial version list");
         }
         versions.sort(MavenMetadata::compareVersions);
         return versions;

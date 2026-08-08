@@ -4,6 +4,9 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishedAssets;
 import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.walk.BoundedChildren;
+import build.jenesis.repository.walk.ScreenedNames;
+import build.jenesis.repository.walk.Traversal;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -135,6 +138,12 @@ public class BrowseController {
      *  set in heap. */
     private static final int MAX_CHILDREN = 1000;
 
+    /** How many stored children one browse request may examine to fill its {@value #MAX_CHILDREN} rows. The render cap
+     *  alone does not bound the work when most children are screened away (a coordinate whose versions are all held),
+     *  so the scan is capped too; reaching either cap flags the listing truncated rather than passing an incomplete
+     *  page off as the whole directory. */
+    private static final int CHILD_SCAN = 50_000;
+
     /** The immediate children under a (sanitized) browse path, each classified folder-vs-artifact with a size - paged
      *  and capped so a high-fan-out directory can never materialise a millions-entry {@code List} (or fire a store
      *  round-trip per child) and OOM the console. */
@@ -142,39 +151,34 @@ public class BrowseController {
         String prefix = path.isEmpty() ? ROOT : ROOT + "/" + path;
         int depth = path.isEmpty() ? 1 : path.split("/").length + 1;
         List<Map<String, Object>> entries = new ArrayList<>();
-        int[] seen = {0};
-        // Page the immediate children (one past the cap, to detect truncation) instead of materialising the whole
-        // directory as one List; a real backend seeks rather than re-lists. The withheld-review subtree is never part
-        // of the served namespace, so it is skipped at the root (through the servable-name seam's one home of the
-        // reserved name). A leaf is disclosed only when the seam judges it servable under HIDE_WITHHELD_AND_GONE
-        // (published, blob present, not withheld) - the same serve-screen the raw listing and the /assets export apply,
-        // routed through the one seam so the browse can never disagree with a GET on what is held: a retracted or
-        // quarantined artifact, or a pointer whose blob a garbage collection reclaimed, is never leaked by name or tree
-        // position. A sub-directory is kept unconditionally (it is a listing, not a servable leaf). `seen` counts the
-        // raw children so a screened-out leaf can never hide the truncation flag (it stays keyed on the store's child
-        // count, not the rendered rows).
-        try {
-            store.page(prefix, "", MAX_CHILDREN + 1, name -> {
-                if (path.isEmpty() && ServableNames.reviewSubtree(name)) {
-                    return;
-                }
-                seen[0]++;
-                if (entries.size() >= MAX_CHILDREN) {
-                    return;                              // render cap reached; keep counting `seen` for truncation
-                }
-                String childPath = path.isEmpty() ? name : path + "/" + name;
-                try {
-                    boolean folder = hasChild(ROOT + "/" + childPath);
-                    String size;
-                    if (folder) {
-                        size = "—";
-                    } else {
-                        if (!names.disclosable("/" + childPath, ServableNames.Policy.HIDE_WITHHELD_AND_GONE)) {
-                            return;                      // a leaf a GET would not serve: do not disclose its name
-                        }
+        // The browse is produced by the shared screened enumeration: ScreenedNames pages the immediate children AND
+        // applies the servable-name screen under HIDE_WITHHELD_AND_GONE (published, blob present, not withheld) in one
+        // call, so this controller never holds an unscreened child name and cannot page-then-forget the screen. It is
+        // the same serve-parity screen the raw listing and the /assets export apply, through the one seam, so the
+        // browse can never disagree with a GET on what is held: a retracted or quarantined artifact, or a pointer whose
+        // blob a garbage collection reclaimed, is never leaked by name or tree position. A sub-directory is declared a
+        // container and kept unconditionally (it is a listing, not a servable leaf; its own leaves carry the screen),
+        // and the reserved review subtree is suppressed at the served root by the seam itself.
+        //
+        // The caps are the primitive's: at most MAX_CHILDREN rendered rows and at most CHILD_SCAN examined children per
+        // request, so a directory with a million entries - or a million withheld ones, where a render cap alone would
+        // never fire - can neither be materialised nor turned into an unbounded probe storm. Truncation is the
+        // primitive's own outcome, so the flag says exactly "there is more past this page", and a screened-out leaf can
+        // never make an incomplete listing look complete.
+        Traversal.Result scanned = ScreenedNames.paths(names, ServableNames.Policy.HIDE_WITHHELD_AND_GONE)
+                .containers(this::hasChild)
+                .scanning(BoundedChildren.bounded().entries(CHILD_SCAN).page(MAX_CHILDREN + 1))
+                .take(MAX_CHILDREN)
+                .scan(store, prefix, (name, folder) -> {
+                    String childPath = path.isEmpty() ? name : path + "/" + name;
+                    String size = "—";
+                    if (!folder) {
+                        // Race-tolerant follow-up read: the screen and this pointer read are two round-trips, and a
+                        // concurrent unpublish can remove the pointer between them. A leaf that vanished after it
+                        // screened servable is dropped rather than rendered with a phantom size.
                         Optional<String> located = publication.located("/" + childPath);
                         if (located.isEmpty()) {
-                            return;                      // raced away between the screen and the size read
+                            return;
                         }
                         long bytes = store.size(located.get());
                         size = bytes < 0 ? "—" : humanSize(bytes);
@@ -186,15 +190,8 @@ public class BrowseController {
                     entry.put("depth", depth);
                     entry.put("size", size);
                     entries.add(entry);
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            });
-        } catch (UncheckedIOException e) {
-            throw e.getCause();
-        }
-        boolean truncated = seen[0] > MAX_CHILDREN;
-        return new Listing(entries, truncated);
+                });
+        return new Listing(entries, scanned.truncated());
     }
 
     /** Whether a prefix has at least one immediate child, tested with a bounded one-element page rather than listing

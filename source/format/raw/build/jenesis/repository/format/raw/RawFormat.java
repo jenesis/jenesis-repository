@@ -9,6 +9,8 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.walk.BoundedChildren;
+import build.jenesis.repository.walk.ScreenedNames;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
@@ -31,6 +33,14 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
      *  repeated bounded pages rather than one whole-directory {@code list()} snapshot, so a raw directory with an
      *  enormous fan-out is never materialised twice (the raw child set and the screened subset) in heap at once. */
     private static final int LISTING_PAGE = 1_000;
+
+    /** How many entries one rendered listing document may carry. A directory browser is navigated into, not scrolled,
+     *  so an enormous directory renders its first page rather than building a millions-anchor document in heap. */
+    private static final int LISTING_ENTRIES = 10_000;
+
+    /** How many stored child names one listing may examine to fill {@link #LISTING_ENTRIES} - the bound that also
+     *  covers a directory whose children are mostly screened away, where the entry cap alone would never fire. */
+    private static final int LISTING_SCAN = 50_000;
 
     /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link RawImporter} - the format IS
      *  the discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
@@ -115,35 +125,26 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     private void listing(String path, ArtifactStore store, FormatExchange exchange) throws IOException {
-        String prefix = "publish" + path.substring(0, path.length() - 1);
-        // The directory listing must not disclose a leaf a GET/HEAD would not serve: the servable-name seam applies the
-        // withheld (quarantine/retraction) screen under HIDE_WITHHELD_AND_GONE - serve-parity - so a withheld artifact
-        // 404s on GET but its pointer name still lives under publish/, and writing every child verbatim leaked the
-        // existence - and the name - of a withheld artifact. Screen each leaf through the one seam the item routes'
-        // located() also delegates to, so the listing can never disagree with a GET on what is held. A child that is
-        // itself a directory (it has its own children under publish/) is a sub-listing, not a servable leaf, so it is
-        // kept unconditionally; a leaf is kept only when the seam judges it servable (published, blob present, not
-        // withheld).
-        //
-        // Page the immediate children rather than materialising the whole directory as one list() snapshot, and probe
-        // folder-ness with a bounded one-element page instead of listing (and discarding) each child's entire subtree -
-        // the old list(child).isEmpty() was a full subtree scan per child, quadratic across a large directory. Only the
-        // screened-visible names are retained (they are rendered anyway); the raw child set is never held whole.
-        ServableNames names = new ServableNames(store, new Publication(store));
+        String prefix = ServableNames.PUBLISHED + path.substring(0, path.length() - 1);
+        // The directory listing must not disclose a leaf a GET/HEAD would not serve: a withheld artifact 404s on GET
+        // but its pointer name still lives under publish/, so writing every child verbatim leaked the existence - and
+        // the name - of a withheld artifact. The listing is therefore produced by the shared screened enumeration:
+        // ScreenedNames pages the children AND applies the servable-name seam's serve-parity screen
+        // (HIDE_WITHHELD_AND_GONE, exactly what the item routes' located() decides) in one call, so this surface never
+        // holds an unscreened child name and cannot page-then-forget. A child that is itself a directory (it has its
+        // own children under publish/) is a sub-listing rather than a servable leaf, so it is declared a container and
+        // forwards unconditionally - its own leaves carry the screen. Folder-ness is probed with a bounded one-element
+        // page rather than listing (and discarding) each child's entire subtree, which was quadratic across a large
+        // directory. Only the screened-visible names are retained (they are rendered anyway); the raw child set is
+        // never held whole, and the render is bounded - a directory wider than the cap renders its first page rather
+        // than materialising an unbounded document.
+        ScreenedNames screened = ScreenedNames
+                .paths(new ServableNames(store, new Publication(store)), ServableNames.Policy.HIDE_WITHHELD_AND_GONE)
+                .containers(childKey -> hasChild(store, childKey))
+                .scanning(BoundedChildren.bounded().entries(LISTING_SCAN).page(LISTING_PAGE))
+                .take(LISTING_ENTRIES);
         List<String> visible = new ArrayList<>();
-        List<String> page = new ArrayList<>();
-        String startAfter = "";
-        do {
-            page.clear();
-            store.page(prefix, startAfter, LISTING_PAGE, page::add);
-            for (String child : page) {
-                if (hasChild(store, prefix + "/" + child)
-                        || names.disclosable(path + child, ServableNames.Policy.HIDE_WITHHELD_AND_GONE)) {
-                    visible.add(child);
-                }
-            }
-            startAfter = page.isEmpty() ? null : page.get(page.size() - 1);
-        } while (startAfter != null && page.size() == LISTING_PAGE);
+        screened.scan(store, prefix, (child, _) -> visible.add(child));
         if (visible.isEmpty()) {
             exchange.respond(404);   // no children at all, or every child screened away - both 404, as before
             return;

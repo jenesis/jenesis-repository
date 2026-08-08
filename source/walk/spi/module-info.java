@@ -27,6 +27,11 @@
  * bounds that have no safe continuation - so a cap can never be mistaken for a complete listing. They are deliberately
  * here rather than in the {@code walk.store} implementation module: a serving surface adopts the bounds without
  * requiring, or being coupled to, a walk implementation, and the module stays {@code java.base} plus the store SPI.
+ * {@code ScreenedNames} is the serving-side composition of the two SPIs this module already sits between: a bounded
+ * child enumeration whose every name is judged by the store SPI's {@code ServableNames} seam before it is delivered,
+ * so a format or console lists and screens in one call and cannot page a container and then forget the withhold
+ * screen. It decides nothing itself - the disclosure verdict stays the store seam's - and it lives here because the
+ * store SPI must not depend on the traversal primitives it is built from.
  *
  * @jenesis.release 25
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55

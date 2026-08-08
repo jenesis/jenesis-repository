@@ -22,6 +22,53 @@ import module java.base;
  * being broken by - a blob stat: {@link Policy#HIDE_WITHHELD} runs only the withhold read and stats no blob, so a
  * coordinate recorded with a fake hash and no stored blob still lists, while {@link Policy#HIDE_WITHHELD_AND_GONE} is
  * bit-for-bit the serve-parity screen the browse / assets surfaces already pay for their size column.
+ *
+ * <p><b>Deciding is here; enumerating is not.</b> This type answers "may this ONE name be disclosed?". A surface that
+ * must enumerate names drives {@code build.jenesis.repository.walk.ScreenedNames}, the screened-enumeration face that
+ * pages a container through the shared bounded primitives and applies these very methods per name, so a listing
+ * surface cannot page and then <em>forget</em> to screen. It composes this seam; it never re-decides disclosure.
+ *
+ * <h2>Contract</h2>
+ * <ol>
+ *   <li><b>Thread-safety.</b> An immutable pair of a store and a {@link Publication}, safe to share and to probe
+ *       concurrently; every method is a stateless read that keeps no per-call state on the instance.</li>
+ *   <li><b>Idempotency / replay.</b> Every method is a pure read that commits nothing, so a repeated or replayed probe
+ *       is always safe and always answers from the store's current durable truth.</li>
+ *   <li><b>Absence sentinel.</b> {@code null} is never returned or accepted as an answer: an unpublished path is
+ *       {@link State#UNPUBLISHED} (not an exception), and every {@code disclosable*} method answers a boolean whose
+ *       {@code false} means "do not disclose" - never a null or an empty listing standing in for a verdict.</li>
+ *   <li><b>Selection failure.</b> The screen is chosen by {@link Policy}, an enum, so there is no name to misspell and
+ *       no silent fallback: a caller cannot select a screen that does not exist. A name a store backend cannot even
+ *       resolve is not a selection failure but a screening failure - see clause 7.</li>
+ *   <li><b>Streaming.</b> Nothing is materialised but small objects: a pointer body, an existence probe, and - in
+ *       {@link #disclosableVersionFolder} alone - one version folder's child names, bounded by {@value #PROBE_CAP}.
+ *       No artifact blob is ever opened by a disclosure decision.</li>
+ *   <li><b>Tenant scoping.</b> The {@link ArtifactStore} handed to the constructor is the already tenant-scoped store;
+ *       every probe composes a key under that scope only, so a screen can never read another tenant's keys, and a
+ *       caller must never hand it a root store while screening a tenant's names.</li>
+ *   <li><b>Error visibility.</b> A screen may never fail <em>open</em>. A {@link RuntimeException} from a store probe
+ *       (an encoding-hostile name a backend cannot resolve) is contained: the name is judged NOT disclosable and the
+ *       failure is logged at WARN, so one hostile name neither leaks nor fails a whole listing. A checked
+ *       {@link IOException} - a real store outage, an interceptor failing closed - propagates unchanged, so the
+ *       calling surface fails visibly instead of serving a listing that silently lost names.</li>
+ *   <li><b>Read purity.</b> Store reads only ({@code readVersioned}, {@code exists}, {@code list}); no write, no
+ *       external fetch, no cache mutation - a disclosure decision renders durable state and nothing else.</li>
+ *   <li><b>Staleness.</b> A live read, never a snapshot: a hold that lands between two probes is honoured by the
+ *       second. An enumeration is therefore not point-in-time consistent, which is the safe direction - a name held
+ *       mid-listing disappears from the rest of that listing.</li>
+ *   <li><b>Lifecycle / ownership.</b> The caller constructs and discards instances; they own no thread, client or
+ *       cache. The {@link #ServableNames(ArtifactStore, Publication)} constructor exists so the withheld chain is the
+ *       caller's already-discovered {@link PublishInterceptor} list rather than a second, independently discovered
+ *       one.</li>
+ *   <li><b>Ordering / concurrency.</b> The seam imposes no ordering of its own and is re-entrant; a verdict depends
+ *       only on the name and the store's current state, never on discovery order or on which surface asks.</li>
+ *   <li><b>Bounded work / cancellation.</b> Each single-name method costs a fixed, small number of store round-trips
+ *       (one to three). {@link #disclosableVersionFolder} is the one fan-out and is capped at {@value #PROBE_CAP}
+ *       probed leaves, past which it fails CLOSED rather than sampling. Enumerating many names is bounded by the
+ *       caller's traversal primitive, not here.</li>
+ *   <li><b>Durability / delivery.</b> Nothing is committed and nothing is delivered: this type has no crash window of
+ *       its own, and any surface it screens keeps its own commit point.</li>
+ * </ol>
  */
 public final class ServableNames {
 
@@ -31,6 +78,13 @@ public final class ServableNames {
      *  {@code "quarantine"} constant in the free {@code BrowseController}, {@code PublishedAssets}, {@code BrowsePanel}
      *  and the downstream console browse). A held upload's pointer is diverted to {@code publish/quarantine<path>}. */
     public static final String QUARANTINE = "quarantine";
+
+    /** The store root of the served pointer namespace ({@code publish/<request-path> -> <sha256>}) - owned here once
+     *  beside {@link #QUARANTINE}, because the two are one convention: a name enumerated under this root is a served
+     *  request path (so {@link #state}/{@link #disclosable} decide it), and {@link #QUARANTINE} is the one child of
+     *  this root that is stored but never served. Every surface that turns a {@code publish/} key into a request path,
+     *  or a request path into a key, means exactly this prefix. */
+    public static final String PUBLISHED = "publish";
 
     /** The number of a version folder's leaves the interceptor chain is probed against in
      *  {@link #disclosableVersionFolder}: a bound so a pathologically wide folder cannot turn one folder's disclosure
@@ -168,7 +222,7 @@ public final class ServableNames {
             if (pointer.isEmpty()) {
                 return State.UNPUBLISHED;
             }
-            String hash = new String(pointer.get().content(), StandardCharsets.UTF_8).trim();
+            String hash = hash(pointer.get().content());
             if (Withheld.is(store, hash)) {
                 return State.WITHHELD;
             }
@@ -191,8 +245,7 @@ public final class ServableNames {
                 if (pointer.isEmpty()) {
                     return true; // no pointer -> nothing withheld to hide, exactly Blobs.withheld's false
                 }
-                String hash = new String(pointer.get().content(), StandardCharsets.UTF_8).trim();
-                return !Withheld.is(store, hash);
+                return !Withheld.is(store, hash(pointer.get().content()));
             } catch (RuntimeException hostile) {
                 LOGGER.warn("blobs-namespace key withhold probe of {} failed; hiding (fail-closed)",
                         pointerKey, hostile);
@@ -200,6 +253,30 @@ public final class ServableNames {
             }
         }
         return keyState(pointerKey) == State.SERVABLE;
+    }
+
+    /**
+     * The content hash a stored pointer body names - the one place the seam reads a pointer's dialect, so every face
+     * ({@link #keyState}, {@link #disclosableKey}) and every adopter agrees on what {@code withheld/<hash>} is keyed
+     * by. A body is either the bare lower-case SHA-256 hex the {@code publish/} and {@code blobs/} pointers carry, or
+     * an algorithm-qualified digest reference ({@code sha256:<hex>} - the OCI tag-pointer dialect, and the wire form of
+     * every Distribution digest); both denote the same blob, so the qualifier is stripped.
+     *
+     * <p>This is a <b>disclosure fix, not a convenience</b>: the marker convention is keyed by the bare hex, so a
+     * screen that probed {@code withheld/sha256:<hex>} would never match a real marker and would fail <em>open</em> -
+     * a held image disclosing its tag through every enumeration surface that screens through {@link #disclosableKey}.
+     * Normalising here can only ever hide more, never disclose more: a body that is neither dialect (a torn or
+     * hand-edited pointer) still matches no marker, exactly as before.
+     */
+    public static String hash(byte[] pointerBody) {
+        return hash(new String(pointerBody, StandardCharsets.UTF_8));
+    }
+
+    /** {@link #hash(byte[])} over an already-decoded pointer body. */
+    public static String hash(String pointerBody) {
+        String trimmed = pointerBody.trim();
+        int colon = trimmed.indexOf(':');
+        return colon < 0 ? trimmed : trimmed.substring(colon + 1);
     }
 
     /** The raw marker probe ({@code store.exists("withheld/" + sha256)}, via {@link Withheld#is}) - the hash-level
@@ -213,41 +290,15 @@ public final class ServableNames {
         }
     }
 
-    // ---- streaming face for paged listings ----
-
-    /**
-     * Decorate a {@code store.page}/{@code list} child consumer: forward a child name only when it is disclosable.
-     * {@code prefix} is the request-path parent of the children ({@code ""} for the root, otherwise a leading-slash
-     * path like {@code "/maven/g/a"}); a child the caller-supplied {@code isDirectory} probe classifies as a directory
-     * is forwarded unconditionally (its own leaves carry the screen), the {@link #reviewSubtree quarantine} root child
-     * is always suppressed at the root, and a leaf is forwarded only when {@link #disclosable} passes under
-     * {@code policy}. A probe (or the {@code isDirectory} predicate) that throws on one name is contained - the name
-     * is skipped and a WARN is logged once per listing - so one hostile name can never 500 the whole page.
-     */
-    public Consumer<String> screening(String prefix, Policy policy,
-                                      Predicate<String> isDirectory, Consumer<String> downstream) {
-        String parent = prefix == null ? "" : prefix;
-        boolean[] warned = {false};
-        return child -> {
-            try {
-                if (parent.isEmpty() && reviewSubtree(child)) {
-                    return; // the review subtree is stored but never served
-                }
-                if (isDirectory.test(child)) {
-                    downstream.accept(child); // a container forwards unconditionally; its leaves are screened
-                    return;
-                }
-                if (disclosable(parent + "/" + child, policy)) {
-                    downstream.accept(child);
-                }
-            } catch (RuntimeException | IOException failed) {
-                if (!warned[0]) {
-                    LOGGER.warn("screening a child of '{}' failed; skipping it (fail-closed)", parent, failed);
-                    warned[0] = true;
-                }
-            }
-        };
-    }
+    // ---- the enumeration face lives beside the bounded traversal primitives ----
+    //
+    // There is deliberately no "decorate my page consumer" helper here any more. A decorator is opt-in: a surface that
+    // pages the store itself can always forget to wrap its consumer, which is the disclosure class (C3) this seam
+    // exists to end. The screened-enumeration face is build.jenesis.repository.walk.ScreenedNames, which owns the
+    // paging - a caller hands it a container and receives ONLY disclosable names, and cannot obtain the raw ones - and
+    // routes every per-name verdict back through the methods above. It lives in the walk module because that is where
+    // the bounded traversal primitives (BoundedChildren, Trees) live and this module must not depend on them; the
+    // disclosure decision stays here, so there is still exactly one screen.
 
     /** Whether a root child name is the reserved review subtree - the one home of the {@code "quarantine"} test that
      *  today lives inline in four free/downstream enumeration surfaces. */
