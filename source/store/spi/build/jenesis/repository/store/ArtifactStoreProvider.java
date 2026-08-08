@@ -7,9 +7,11 @@ import module java.base;
  * The store is an <em>exclusive</em> SPI in the {@link Features} convention: the server selects one by name
  * (the {@code jenesis.repository.store} setting, default {@code filesystem} - the most universally applicable
  * backend); each provider reads its own configuration through the {@code config} lookup, staying free of any
- * framework dependency. An optional cloud backend (S3 / GCS / Azure Blob) is added to the module graph at deploy
- * time and bound here through {@code provides}, with no compile-time dependency from the server. A selected
- * backend whose {@link #requiredConfig() required configuration} is unset fails loudly rather than self-disabling:
+ * framework dependency. <strong>Every</strong> backend - the bundled filesystem one no less than S3 / GCS / Azure
+ * Blob - is added to the module graph by the distribution and bound here through {@code provides}: no consumer, the
+ * server included, {@code requires} an implementation, so which backends a deployment can select is a packaging
+ * decision (see the {@code bundle} module) and not an edge that rebuilds every consumer whenever a backend changes.
+ * A selected backend whose {@link #requiredConfig() required configuration} is unset fails loudly rather than self-disabling:
  * silently falling back to another store would serve and persist against the wrong backend.
  */
 public interface ArtifactStoreProvider {
