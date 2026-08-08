@@ -133,6 +133,17 @@ public class IngressCensusTest {
     /** How an ingress body reaches this codebase. A file containing either anchor is an ingress-body consumer. */
     private static final List<String> INGRESS_ANCHORS = List.of("requestStream()", "ImportSource.Content");
 
+    /**
+     * A file runs the hosted-publish operation only if it both invokes {@code commit} and names {@link
+     * build.jenesis.repository.store.Publication} - the type it must hold to reach that method. {@code .commit(} alone
+     * is not enough: unrelated durable writes spell their own commit (the feed client commits a feed snapshot through
+     * {@code FeedSnapshots.commit}), and pulling those into an <em>ingress</em> census would dilute exactly the signal
+     * it exists to carry. A new hosted route cannot evade this - it cannot call the operation without the type.
+     */
+    private static boolean runsTheHostedPublish(String code) {
+        return code.contains(".commit(") && code.contains("Publication");
+    }
+
     // --- the static legs -------------------------------------------------------------------------------------------
 
     @Test
@@ -144,7 +155,7 @@ public class IngressCensusTest {
         for (Map.Entry<String, String> source : sources.entrySet()) {
             String code = stripped(source.getValue());
             boolean ingress = INGRESS_ANCHORS.stream().anyMatch(code::contains);
-            boolean commits = code.contains(".commit(");
+            boolean commits = runsTheHostedPublish(code);
             if ((ingress || commits) && !classified.contains(source.getKey())) {
                 unclassified.add("  - " + source.getKey() + (commits ? "  (runs Publication.commit)" : "")
                         + (ingress ? "  (consumes an ingress body)" : ""));
@@ -178,7 +189,7 @@ public class IngressCensusTest {
             String body = stripped(source);
             boolean ingress = INGRESS_ANCHORS.stream().anyMatch(body::contains);
             if (route.kind() == Kind.HOSTED) {
-                if (!body.contains(".commit(")) {
+                if (!runsTheHostedPublish(body)) {
                     stale.add("  - " + route.file() + "  (classified HOSTED, but it no longer runs Publication.commit "
                             + "- either it stopped being a hosted route, or it grew a second publish path)");
                 }
