@@ -118,13 +118,36 @@ class StoreWalkTest {
     }
 
     @Test
-    void the_provider_resolves_the_store_walk_and_honours_the_exclusive_selection() {
+    void the_provider_resolves_the_store_walk_without_a_selection() {
         assertThat(WalkProvider.installed()).isTrue();
         assertThat(WalkProvider.resolve(key -> null)).isPresent();
+    }
+
+    @Test
+    void an_explicitly_selected_walk_no_provider_answers_to_fails_loudly() {
+        // T-101b (§9): this used to resolve to empty, so `jenesis.repository.walk=other` silently turned every
+        // walk-riding sweep - garbage collection, reconcile, retroactive hold enforcement - into a no-op that looks
+        // exactly like a healthy idle system.
         Features.configure(key -> "jenesis.repository.walk".equals(key) ? "other" : null);
         try {
-            assertThat(WalkProvider.resolve(key -> null))
-                    .as("an explicit selection of another implementation skips this one").isEmpty();
+            assertThatThrownBy(() -> WalkProvider.resolve(key -> null))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("'other'")
+                    .hasMessageContaining("no installed provider answers to it")
+                    .hasMessageContaining("refusing to degrade silently")
+                    .hasMessageContaining("[store]");
+        } finally {
+            Features.reset();
+        }
+    }
+
+    @Test
+    void a_walk_switched_off_resolves_to_the_empty_sentinel() {
+        // Unselected absence is the one outcome that still degrades: nothing enumerates and the caller says so.
+        Features.configure(key -> "jenesis.repository.store".equals(key) ? "false" : null);
+        try {
+            assertThat(WalkProvider.resolve(key -> null)).isEmpty();
+            assertThat(WalkProvider.installed()).isFalse();
         } finally {
             Features.reset();
         }

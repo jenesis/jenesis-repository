@@ -41,10 +41,14 @@ class ArtifactStoreProviderTest {
     @Test
     void an_explicitly_named_backend_with_no_provider_fails_loudly() {
         // A misconfigured or misspelled explicit selection must not silently serve and persist against the local
-        // filesystem while the intended bucket 404s - it fails loudly, naming the backend it could not resolve.
+        // filesystem while the intended bucket 404s - it fails loudly, naming the backend it could not resolve, the
+        // default it refuses to fall back to, and what is actually installed.
         assertThatThrownBy(() -> ArtifactStoreProvider.resolve(
                 "does-not-exist", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("does-not-exist");
+                .hasMessageContaining("'does-not-exist'")
+                .hasMessageContaining("refusing to fall back to the 'filesystem' default")
+                .hasMessageContaining("filesystem")
+                .hasMessageContaining("needy");
     }
 }
