@@ -15,6 +15,28 @@ The core: the repository / build-cache server modules consumed by downstream edi
 - Container-backed tests **self-skip without Docker**; the strict CI lane (`-Djenesis.project.properties=ci`) makes them *fail* instead. A full local run is therefore `java -Djenesis.project.properties=ci build/jenesis/Project.java` — a green run there is a run that really executed every tagged suite.
 - A few tests need a **UTF-8 locale**: `MavenMetadataTest` publishes non-ASCII versions (`naïve`, `café`) into a filesystem store, where they become real filenames and so depend on `sun.jnu.encoding`. Set `LANG=C.UTF-8` if your locale is not already UTF-8.
 
+## SPI contracts
+
+Every SPI interface documents its contract in a **dedicated final javadoc block titled `Contract`** — `<h2>Contract</h2>` (or a `Contract:` heading) followed by a numbered list carrying whichever of these clauses apply. Only the applicable ones; each stated concretely, not as a platitude.
+
+1. **Thread-safety** — may the server call concurrently; is the instance shared.
+2. **Idempotency / replay** — what a repeated call (crash-resume, at-least-once delivery) must produce.
+3. **Absence sentinel** — `NONE`/empty object vs `Optional.empty()` vs exception; `null` is never a legal return.
+4. **Selection failure** — explicitly-selected-but-unavailable must throw at resolution, naming the selection and what is missing (§9); unselected absence degrades to the sentinel.
+5. **Streaming** — which arguments/results must not be fully materialised (§1).
+6. **Tenant scoping** — which inputs carry the tenant; cross-tenant reads forbidden (§6).
+7. **Error visibility** — which failures may be swallowed as best-effort and the blast radius of a lost call (may over-serve/over-count, must never hide a served artifact or a hold — §4).
+8. **Read purity** — whether the method may perform external I/O; read paths render stored state only (§10).
+9. **Staleness** — how the implementation surfaces "when was this last refreshed".
+10. **Lifecycle / ownership** — who creates and closes instances, whether they may own threads/clients, whether `ServiceLoader` instances are cached or recreated.
+11. **Ordering / concurrency** — callback ordering, allowed parallelism, re-entrancy, whether results must be deterministic across discovery order.
+12. **Bounded work / cancellation** — byte, page, entry and fan-out bounds; the visible outcome at a bound; interruption and timeout behaviour.
+13. **Durability / delivery** — the exact commit point, delivery class (best-effort, durable-after-enqueue, or commit-coupled at-least-once), crash windows, and the durable source of truth used to heal.
+
+`SpiContractPrincipleTest` (`test/server`) is the build guard. It parses every source `module-info.java` for both `uses` **and** `provides ... with ...` clauses into an **executable SPI inventory** recording, per surface: the service interface, its owning module, its **selection policy** (`ALL`, `OPTIONAL_UNIQUE`, `NAMED_UNIQUE`, `EXCLUSIVE_WITH_DEFAULT`), its provider classes, and its **role sub-interfaces as distinct contract surfaces** (`PublishInterceptor` rides the single `uses PublicationObserver` clause; `ProxyFormat`/`ArtifactLayout`/`RepositoryImporter` ride `uses RepositoryFormat`) — a provider is keyed by the role interface it actually implements, because a pre-commit fail-closed screen and a contained after-commit observer have opposite failure semantics.
+
+**Adding an SPI, a provider, or a role sub-interface therefore means updating that inventory in the same change.** A surface with no Contract block needs a reason-bearing entry in the test's `UNDOCUMENTED` allowlist; the allowlist is a burn-down list, so an entry whose block has landed or whose SPI is gone fails the build.
+
 ## Engineering principles
 
 These rules are the pass/fail checklist. Run every applicable rule by eye over each diff and fix or explicitly flag failures before the change lands. This core is the shared base downstream editions reuse, so keep its seams clean and never fork its mechanism downstream.
