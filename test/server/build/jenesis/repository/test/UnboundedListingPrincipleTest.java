@@ -330,17 +330,20 @@ class UnboundedListingPrincipleTest {
     }
 
     /**
-     * The two source trees this ratchet does not scan: {@code source/store/testkit}, the JUnit-free contract kit and
-     * fault fixtures ({@code StoreContract}, {@code StoreInvariants}, {@code FaultInjectingStore}), and
-     * {@code source/format/testkit}, the JUnit-free format contract kit. Neither ships in a bundle, provides a service
+     * The three source trees this ratchet does not scan: {@code source/store/testkit}, the JUnit-free contract kit and
+     * fault fixtures ({@code StoreContract}, {@code StoreInvariants}, {@code FaultInjectingStore}),
+     * {@code source/format/testkit}, the JUnit-free format contract kit, and {@code source/walk/testkit}, the
+     * JUnit-free walk-consumer contract kit ({@code WalkConsumerContract}). None ships in a bundle, provides a service
      * or serves a request - their {@code list} calls exist precisely to <em>assert</em> a contract on every
      * implementation, which is the opposite of an unbounded serve-path listing: the format kit's one walk enumerates a
-     * temporary test store after a traversal probe to prove nothing escaped the format's namespace. Scanning the store
-     * kit produced four grants that masked nothing, and would force every new contract assertion to buy an allowlist
-     * entry; excluding it shrank the census from 21 lines / 20 grants to 17 / 16. The exclusion is deliberately
-     * enumerated one module deep, not a {@code testkit} glob, so no future directory can opt itself out by name.
+     * temporary test store after a traversal probe to prove nothing escaped the format's namespace, and the walk kit's
+     * enumerates one after a rebuild pass to prove a consumer wrote nothing outside its declared namespaces. Scanning
+     * the store kit produced four grants that masked nothing, and would force every new contract assertion to buy an
+     * allowlist entry; excluding it shrank the census from 21 lines / 20 grants to 17 / 16. The exclusion is
+     * deliberately enumerated one module deep, not a {@code testkit} glob, so no future directory can opt itself out
+     * by name.
      */
-    private static final Pattern TEST_SUPPORT = Pattern.compile("(^|/)(store|format)/testkit/");
+    private static final Pattern TEST_SUPPORT = Pattern.compile("(^|/)(store|format|walk)/testkit/");
 
     /** Blanks out {@code //} and {@code /* *}{@code /} comments (preserving newlines and string/char literals) so the scan
      *  never trips on a {@code .list(} that appears inside a javadoc example rather than in real code. Ported verbatim from
