@@ -286,9 +286,8 @@ class SpiContractPrincipleTest {
                 "T-301b: default-deny semantics and read purity (an advisor renders stored state, never probes)");
         allow.put("build.jenesis.repository.ui.Panel",
                 "T-301b: read purity, rendering determinism and tenant scoping of a console panel");
-        allow.put("build.jenesis.repository.server.spi.CapabilityContributor",
-                "T-301b: key ownership, duplicate-key fail-fast on merge and the zero-contributor byte-identical "
-                        + "guarantee; lands with the T-208 contributor suite");
+        // CapabilityContributor's block landed with D-047: key ownership, the reported (not silent, and deliberately
+        // not throwing) outcome of a refused contribution, and the zero-contributor byte-identical guarantee.
         // RateLimiterProvider, TokenExchangeProvider and KeyUsageTrackerProvider burnt down by T-101b together with
         // their migration onto optionalUnique - the blocks the waivers deferred "post T-101" are written.
 

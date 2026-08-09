@@ -36,6 +36,8 @@ import module java.base;
 @RestController
 public class RepositoryController {
 
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(RepositoryController.class);
+
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /** A routable repository name, the same traversal-free segment shape the multi-tenant edition validates, so a
@@ -54,6 +56,13 @@ public class RepositoryController {
     private final UnaryOperator<String> settings;
     private final ArtifactStore root;
     private final RoutedServing routed;
+
+    /** The capability-merge report last written to the log, so a collision is logged when it appears or changes rather
+     *  than on every hit of a polled endpoint - which contributions collide is a property of the installed module set,
+     *  so an unchanged deployment would otherwise repeat one line forever and bury it. The held value is an immutable
+     *  list published through {@code volatile}, the same once-set-holder idiom the core's other lock-free
+     *  memoized seams use; a benign race logs the same report twice and never loses one. */
+    private volatile List<String> reportedCapabilityProblems = List.of();
 
     public RepositoryController(RepositoryRouting routing,
                                 FormatDispatcher dispatcher,
@@ -291,6 +300,13 @@ public class RepositoryController {
      * no core change is needed. With no contributor installed (the free product) the served map is exactly the base map,
      * byte-for-byte unchanged. On a key conflict the base key wins (see {@link CapabilityContributor}'s merge rule), so a
      * contributor can only extend the free product's own flags, never shadow them.
+     *
+     * <p>What the rule <em>refuses</em> is served too. A contributed key the base already owns, or a contributor that
+     * threw building its view, is named in the body under {@code capabilityConflicts} / {@code capabilityFailures} and
+     * logged once here - never dropped in silence, which would leave an operator debugging a console that renders the
+     * wrong thing with nothing anywhere to explain it. The endpoint still answers: a plugin's mistake costs that
+     * plugin's entry, never the free product's own capability advertisement (&sect;3). A healthy deployment reports
+     * nothing, so neither key appears and the zero-contributor body is unchanged.
      */
     @GetMapping("/api/capabilities")
     public void capabilities(HttpServletResponse response) throws IOException {
@@ -306,9 +322,27 @@ public class RepositoryController {
         // WebMvcRegistrations mapping-suppression stopgap). Base keys win a conflict; with no contributor the body is
         // the base map unchanged. Discovered per request through the same ServiceLoader seam the formats/import-sources
         // use, so a distribution plugs in with no core change.
-        Map<String, Object> body = CapabilityContributor.merge(base, ServiceLoader.load(CapabilityContributor.class));
+        CapabilityContributor.Merged merged =
+                CapabilityContributor.merge(base, ServiceLoader.load(CapabilityContributor.class));
+        report(merged);
         response.setHeader("Content-Type", "application/json");
-        respond(response, 200, JSON.writeValueAsString(body));
+        respond(response, 200, JSON.writeValueAsString(merged.capabilities()));
+    }
+
+    /** Log what the capability merge refused - a contributed key the base already owned, a contributor that threw -
+     *  so the drop is visible to an operator reading logs as well as to one reading the body. Logged on <em>change</em>
+     *  rather than per request: which contributions collide is a property of the installed module set, so it is the
+     *  same report on every hit of a polled endpoint, and repeating it would bury it. A deployment that stops
+     *  colliding is logged clear the same way. */
+    private void report(CapabilityContributor.Merged merged) {
+        List<String> lines = merged.report();
+        if (!lines.equals(reportedCapabilityProblems)) {
+            reportedCapabilityProblems = List.copyOf(lines);
+            lines.forEach(LOGGER::warn);
+            if (lines.isEmpty()) {
+                LOGGER.info("Every /api/capabilities contribution is now served; the previous conflicts are resolved");
+            }
+        }
     }
 
     /** The deployment-wide read-only flag, read off the same {@code jenesis.repository.*} settings the formats read a
