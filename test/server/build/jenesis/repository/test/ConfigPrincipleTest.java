@@ -77,6 +77,8 @@ class ConfigPrincipleTest {
         allow.put("JENESIS_AZURE_CONNECTION_STRING", "Azure store connection string - deploy-time store-backend "
                 + "credential");
         allow.put("JENESIS_AZURE_CONTAINER", "Azure store container - deploy-time backend selection");
+        allow.put("JENESIS_AZURE_ALLOW_INSECURE_ENDPOINT",
+                "Azure insecure-endpoint opt-in - deploy-time backend selection");
 
         // --- Fixed-tenant routing: the single-space routing target read at boot - a restart-level deployment shape,
         //     not a runtime dial. ---

@@ -67,6 +67,31 @@ public interface StoreFixture extends AutoCloseable {
         return Map.of();
     }
 
+    /**
+     * The plaintext-transport declaration behind {@link StoreContract.Property#PLAINTEXT_ENDPOINT_REFUSED}: the config
+     * this fixture resolves its backend with, and the key inside it that opts out of the https-only endpoint screen.
+     * Empty - the default - declares that this backend has no endpoint at all, which is a statement the fixture must
+     * then also make as a reason-bearing {@link #unsupported()} exclusion, so a missing declaration can never quietly
+     * drop the property.
+     *
+     * <p>Every containerised fixture here reaches its emulator over plaintext {@code http}, so its declared config
+     * <em>must</em> carry the opt-out set to {@code true}. That is not an inconvenience of the kit; it is the proof the
+     * screen bites, and the check asserts both halves - the config is refused without the opt-out, and honoured with it.
+     */
+    default Optional<Plaintext> plaintext() {
+        return Optional.empty();
+    }
+
+    /** A fixture's plaintext-endpoint declaration: the whole config map {@link #start()} resolves the backend with,
+     *  and the opt-out key inside it. */
+    record Plaintext(Map<String, String> config, String allowInsecureKey) {
+
+        public Plaintext {
+            config = Map.copyOf(Objects.requireNonNull(config, "config"));
+            Objects.requireNonNull(allowInsecureKey, "allowInsecureKey");
+        }
+    }
+
     @Override
     default void close() throws Exception {
     }
