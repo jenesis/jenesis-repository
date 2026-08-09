@@ -38,8 +38,10 @@ import module java.base;
  *   <li><b>Streaming.</b> The {@code body} of a {@link #commit} and the stream a layout takes from
  *       {@link Acceptance#open} are never materialised: the body is hashed on write into the content-addressed store
  *       and read back as a fresh stream. Only bounded metadata is buffered - a
- *       {@link PublishInterceptor.Content#sibling} read is capped at {@value #LARGEST_SIBLING} bytes and a
- *       {@link Acceptance#sidecar(String, byte[])} body is a small derived document by definition.</li>
+ *       whole-document {@link PublishInterceptor.Content#sibling(String)} read is capped at
+ *       {@value PublishInterceptor.Content#LARGEST_SIBLING} bytes, a bounded
+ *       {@link PublishInterceptor.Content#sibling(String, int)} read materialises no more than the caller's own limit,
+ *       and a {@link Acceptance#sidecar(String, byte[])} body is a small derived document by definition.</li>
  *   <li><b>Tenant scoping.</b> The store handed to the constructor is already tenant-and-repository scoped; every key
  *       this primitive writes ({@code blobs/}, {@code publish/}, {@code gc/condemned/}) and every key it hands a
  *       layout is relative to that scope, so nothing here can read or write across tenants.</li>
@@ -55,8 +57,16 @@ import module java.base;
  *       ordering is otherwise promised.</li>
  *   <li><b>Bounded work / cancellation.</b> A pointer compare-and-set retries at most three times before failing by
  *       name; the {@code /quarantine} alias scan is bounded by the review queue and short-circuits on the first live
- *       alias; a sibling read is byte-capped. No step here loops on an attacker-shaped input, and no bound is reached
- *       silently - each answers an explicit failure.</li>
+ *       alias; both sibling reads are byte-capped. No step here loops on an attacker-shaped input, and no bound is
+ *       reached silently - though the two sibling reads do not answer a bound the same way, because they are not
+ *       asked the same question. The whole-document {@link PublishInterceptor.Content#sibling(String)} read
+ *       <em>throws</em> past {@value PublishInterceptor.Content#LARGEST_SIBLING}: its caller wants the document
+ *       entire and has no use for a prefix, so handing one back as if it were whole would be the silently-incomplete
+ *       answer. The bounded {@link PublishInterceptor.Content#sibling(String, int)} read <em>reports</em>: it honours
+ *       the caller's own limit exactly - never this class's ceiling - and flags {@code truncated} rather than
+ *       failing, because its caller asked to be told about the overflow and has a defined answer for it. Neither is
+ *       silent, and both bounds are the caller's to reason about, so an inspector reading a companion through this
+ *       view gets the same outcome it would get on any other ingress leg offering the same two reads.</li>
  *   <li><b>Durability / delivery.</b> The durable source of truth is the store: {@code blobs/<hash>} for content and
  *       the declared serving pointer(s) for visibility. <b>The commit point is the declared visibility write.</b>
  *       Before the first declared step nothing serves; after the last, everything does. Three crash windows follow,
@@ -83,12 +93,6 @@ import module java.base;
 public final class Publication {
 
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(Publication.class);
-
-    /** The ceiling on a {@link PublishInterceptor.Content#sibling} read. A sibling is small published metadata a gate
-     *  inspects beside the artifact (a jar reading its POM, a package reading its manifest) - never a whole artifact -
-     *  so the buffered read is capped at a few MiB. Past it the read fails loudly rather than materialising an
-     *  arbitrarily large blob into the heap, which would let a screen be turned into an out-of-memory lever. */
-    private static final int LARGEST_SIBLING = 8 * 1024 * 1024;
 
     /** The one discovered publication hook class, loaded once at class load like {@code MavenFormat.MODULE_VIEWS}:
      *  every {@link PublicationObserver} on the module path, the interceptors among them included - a
@@ -922,21 +926,45 @@ public final class Publication {
 
             @Override
             public Optional<byte[]> sibling(String path) throws IOException {
+                // The whole-document read, expressed over the bounded one at this seam's own ceiling: a sibling read
+                // whole is small metadata, and an oversized one is an anomaly a gate must be told about, not silently
+                // fed a prefix it would mistake for the document. The bounded read never buffers past the ceiling, so
+                // the over-limit blob never lands whole in memory before we notice.
+                Optional<PublishInterceptor.Content.Bounded> bounded =
+                        sibling(path, PublishInterceptor.Content.LARGEST_SIBLING);
+                if (bounded.isEmpty()) {
+                    return Optional.empty();
+                }
+                if (bounded.get().truncated()) {
+                    throw new IOException("sibling " + path + " exceeds the "
+                            + PublishInterceptor.Content.LARGEST_SIBLING + "-byte cap for a whole-sibling metadata "
+                            + "read; a caller that can work from a prefix reads it through sibling(path, limit), "
+                            + "which honours its own bound and reports the overflow instead of failing on it");
+                }
+                return Optional.of(bounded.get().content());
+            }
+
+            @Override
+            public Optional<PublishInterceptor.Content.Bounded> sibling(String path, int limit) throws IOException {
+                if (limit <= 0) {
+                    throw new IllegalArgumentException("a bounded sibling read needs a positive limit, not " + limit);
+                }
                 Optional<String> key = located(path);
                 if (key.isEmpty()) {
                     return Optional.empty();
                 }
-                // Read at most LARGEST_SIBLING + 1 bytes so the heap is bounded whatever the blob's real size: a
-                // sibling read is small metadata, and an oversized one is an anomaly a gate must be told about, not
-                // silently fed. readNBytes never buffers more than the cap, so the over-limit blob never lands whole
-                // in memory before we notice.
+                // Read one byte PAST the caller's limit and nothing more. That single extra byte is what separates
+                // "the sibling is exactly limit bytes and you hold all of it" from "there is more behind the bound",
+                // so a companion of exactly the requested size is reported whole rather than pessimistically flagged -
+                // a digest computed over it really is the companion's digest. The bound honoured here is the caller's
+                // own, never LARGEST_SIBLING: a caller that asked for more than the whole-document ceiling asked
+                // because it can account for the bytes, and cutting it back to a ceiling it never named would hand it
+                // a prefix under a bound it did not choose.
                 try (InputStream in = store.open(key.get())) {
-                    byte[] bytes = in.readNBytes(LARGEST_SIBLING + 1);
-                    if (bytes.length > LARGEST_SIBLING) {
-                        throw new IOException("sibling " + path + " exceeds the " + LARGEST_SIBLING
-                                + "-byte cap for a sibling metadata read");
-                    }
-                    return Optional.of(bytes);
+                    byte[] prefix = in.readNBytes(limit + 1);
+                    boolean truncated = prefix.length > limit;
+                    return Optional.of(new PublishInterceptor.Content.Bounded(
+                            truncated ? Arrays.copyOf(prefix, limit) : prefix, truncated));
                 }
             }
         };
