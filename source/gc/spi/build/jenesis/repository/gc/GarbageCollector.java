@@ -19,6 +19,14 @@ import module java.base;
  * pointers. A root missing from the list makes its blobs invisible to the reference scan and eligible for
  * reclamation, so the caller must name every one.
  *
+ * <p>Naming the roots is <em>necessary</em> and, for some formats, not <em>sufficient</em>: one leaf naming one blob
+ * holds only where every served blob has a pointer, and a format may serve blobs reachable solely through a stored
+ * document (OCI's config and layer digests live inside the manifest JSON, and a manifest pulled by digest carries no
+ * tag pointer at all). Such a format declares the rest through
+ * {@code build.jenesis.repository.format.BlobReferences.references}, which an implementation consults for the keys it
+ * visits beneath that format's roots. The knowledge stays where it belongs - a collector still parses no format's
+ * documents - and an implementation handed no lenders is the pointer-body-only scan described above.
+ *
  * <p>Mirrors the retention sweeper's shape: {@link #plan} computes what would be reclaimed right now without
  * writing anything - the dry run a maintenance console previews - and {@link #collect} computes and applies. Both
  * run over arbitrarily large stores, so an implementation enumerates through the shared artifact walk (resumable,

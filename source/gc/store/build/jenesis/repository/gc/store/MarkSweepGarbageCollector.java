@@ -1,5 +1,6 @@
 package build.jenesis.repository.gc.store;
 
+import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GarbageCollector;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.observation.Metric;
@@ -48,6 +49,14 @@ import module java.base;
  * the mark's <em>body</em> read normalises: every other name the collector judges ({@code gc/condemned/<hash>}
  * children, {@code blobs/} names, a raw hash) is a store key it writes itself and stays strictly bare hex.
  *
+ * <p><b>What a pointer body cannot say, its format says.</b> One body naming one blob is exact only for a format whose
+ * every served blob has a pointer. A format that serves blobs reachable only through a stored <em>document</em> has
+ * more to declare, and declares it through {@link BlobReferences#references}: the mark asks the format that owns a
+ * visited key what else that key keeps alive and unions the answer into the same reference set. The collector itself
+ * still parses no format's documents - that neutrality is the reason this is a seam and not a special case - it only
+ * unions what the owning format tells it with the hash it read itself. Handing it no lenders (the core's own
+ * shape, and every existing test) leaves the mark byte-for-byte what it was.
+ *
  * <p>An installed collector is its own {@link ObservabilitySource}: once it has run a {@link #collect} it reports
  * {@code jenesis.gc.condemned} - a gauge of the blobs currently condemned ({@code gc/condemned/}) awaiting the
  * confirming pass, the in-flight condemn-then-collect set the last sweep left standing - the
@@ -83,6 +92,20 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
      *  the generation rule would spare. */
     private final Duration graceFloor;
 
+    /** The installed formats that lend their reference sets, paired with the roots each declared - so a visited key is
+     *  only ever offered to the format that owns its root, and a pointer-only deployment pays one prefix test per leaf.
+     *  Empty for a deployment with no blobs-namespace format installed, which is exactly the pre-seam behaviour. */
+    private final List<Lender> lenders;
+
+    /** One format's reference-lending capability, narrowed to the root it declared it under. A format that declares
+     *  several roots contributes one of these per root, so the ownership test stays a single {@code startsWith}. */
+    private record Lender(String root, BlobReferences format) {
+
+        private boolean owns(String key) {
+            return key.length() > root.length() && key.startsWith(root) && key.charAt(root.length()) == '/';
+        }
+    }
+
     /** This collector's identity inside reference-batch names, so concurrent collectors never contend on a key. */
     private final String collector = UUID.randomUUID().toString().substring(0, 8);
     private final AtomicLong batches = new AtomicLong();
@@ -105,8 +128,25 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
     }
 
     public MarkSweepGarbageCollector(ArtifactWalk walk, Duration graceFloor) {
+        this(walk, graceFloor, List.of());
+    }
+
+    /** {@code lenders} are the installed {@link BlobReferences} formats ({@link BlobReferences#installed()}, resolved
+     *  once by the provider so the collector itself carries no discovery), each contributing the blobs its documents
+     *  keep alive beyond what a pointer body names. Handing an empty list is the pointer-body-only mark this collector
+     *  has always run. A lender declaring a root the collector owns or judges ({@code blobs}, {@code gc},
+     *  {@code walks}) is refused here rather than silently ignored: a format claiming to lend references under the
+     *  namespace being swept is a wiring bug, and swallowing it would leave its blobs unmarked. */
+    public MarkSweepGarbageCollector(ArtifactWalk walk, Duration graceFloor, List<BlobReferences> lenders) {
         this.walk = walk;
         this.graceFloor = graceFloor == null ? Duration.ZERO : graceFloor;
+        List<Lender> owners = new ArrayList<>();
+        for (BlobReferences lender : lenders == null ? List.<BlobReferences>of() : lenders) {
+            for (String root : lender.blobRoots()) {
+                owners.add(new Lender(root(root), lender));
+            }
+        }
+        this.lenders = List.copyOf(owners);
     }
 
     @Override
@@ -169,7 +209,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
 
     @Override
     public GcPlan collect(ArtifactStore store, List<String> pointerRoots, Instant now) throws IOException {
-        WalkPass marked = walk.walk(store, MARK, roots(pointerRoots), new Mark(store));
+        WalkPass marked = walk.walk(store, MARK, markRoots(pointerRoots), new Mark(store));
         if (!marked.complete()) {
             // Another node still holds mark segments: the reference shards are not yet complete, and judging
             // blobs against an incomplete mark could condemn (though never delete) everything it missed. Report
@@ -271,13 +311,30 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
         if (pointerRoots == null || pointerRoots.isEmpty()) {
             throw new IllegalArgumentException("garbage collection needs at least one pointer root, e.g. publish");
         }
-        List<String> roots = pointerRoots.stream().distinct().sorted().toList();
-        for (String root : roots) {
-            if (root == null || root.isBlank() || root.equals("blobs") || root.equals("gc") || root.equals("walks")) {
-                throw new IllegalArgumentException("not a pointer root: " + root);
-            }
+        return pointerRoots.stream().distinct().sorted().map(MarkSweepGarbageCollector::root).toList();
+    }
+
+    /** The roots the mark actually walks: the caller's, plus the roots every installed lender declared for itself.
+     *  The caller still owns the layout - it names {@code publish} and whatever else it knows - but a lender that says
+     *  "my blobs live under {@code oci/}" is the format's own word for it, and a deployment whose caller forgot that
+     *  root would have the lender installed and never be asked, which is precisely how a blobs-namespace format's
+     *  content becomes invisible to the scan and is reclaimed out from under it. Unioning can only ever enumerate more
+     *  and therefore mark more, so it never deletes something the caller's list would have spared; each added root
+     *  passes the same screen. In the ordinary case the caller already named them and this changes nothing. */
+    private List<String> markRoots(List<String> pointerRoots) {
+        Set<String> union = new TreeSet<>(roots(pointerRoots));
+        for (Lender lender : lenders) {
+            union.add(lender.root());
         }
-        return roots;
+        return List.copyOf(union);
+    }
+
+    /** One root, validated: never a namespace the collector itself owns or judges. */
+    private static String root(String root) {
+        if (root == null || root.isBlank() || root.equals("blobs") || root.equals("gc") || root.equals("walks")) {
+            throw new IllegalArgumentException("not a pointer root: " + root);
+        }
+        return root;
     }
 
     /** The mark phase's visitor: buffer every hash a pointer leaf names, flushed as append-only batch objects
@@ -294,6 +351,30 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
 
         @Override
         public void visit(String key) throws IOException {
+            // The format-declared references FIRST, and deliberately outside the pointer-size gate below: that gate
+            // bounds how large an object this phase will read as a POINTER BODY, and a format whose references live in
+            // a document knows its own bound (BlobReferences clause 6). Asking after the gate would silently drop the
+            // references of any key that is not itself pointer-shaped - the same class of omission D-022 fixed one line
+            // down, and with the same consequence: an unmarked blob is condemned and then deleted.
+            //
+            // An IOException from a lender is NOT contained: BlobReferences clause 3 makes a short list illegal, so a
+            // lender that cannot resolve a key it recognises throws, and the only safe reading of "I do not know what
+            // this keeps alive" is to fail the pass. The walk propagates it, collect() never reaches the sweep, and
+            // nothing is deleted. Catching it here would turn "cannot enumerate" into "references nothing", which is
+            // exactly the fail-OPEN this seam exists to make unrepresentable.
+            for (Lender lender : lenders) {
+                if (!lender.owns(key)) {
+                    continue;
+                }
+                for (String reference : lender.format().references(key, store)) {
+                    // Judged by the same bare-hex predicate the body read is judged by, and sharded the same way, so a
+                    // lent hash lands exactly where the sweep - which names a blob by its bare hex - looks for it.
+                    String named = ServableNames.hash(reference);
+                    if (hash(named)) {
+                        buffer.computeIfAbsent(named.substring(0, 2), _ -> new ArrayList<>()).add(named);
+                    }
+                }
+            }
             long size = store.size(key);
             if (size < 0 || size > LARGEST_POINTER) {
                 return;

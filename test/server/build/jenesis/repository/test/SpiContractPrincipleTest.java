@@ -181,6 +181,11 @@ class SpiContractPrincipleTest {
                 "build.jenesis.repository.format.RepositoryFormat", Policy.ALL));
         surfaces.add(Surface.role("build.jenesis.repository.format.RepositoryImporter",
                 "build.jenesis.repository.format.RepositoryFormat", Policy.ALL));
+        // Which content blobs a format that serves out of the shared blobs/ namespace still keeps alive - the seam a
+        // reference scan consults for what no pointer body names. Its own contract, and a strictly fail-closed one: a
+        // short answer here is a live blob deleted, where the other roles' worst case is a path that does not resolve.
+        surfaces.add(Surface.role("build.jenesis.repository.format.BlobReferences",
+                "build.jenesis.repository.format.RepositoryFormat", Policy.ALL));
         // `jenesis.repository.fetcher=<name>` selects one; Fetcher.NONE is the unselected sentinel.
         surfaces.add(Surface.root("build.jenesis.repository.format.FetcherProvider", Policy.OPTIONAL_UNIQUE));
         // Every discovered module view contributes to the Maven bridge's rendering.

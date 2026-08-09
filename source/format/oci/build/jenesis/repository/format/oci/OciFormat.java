@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.oci;
 
 import module java.base;
+import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
@@ -24,8 +25,15 @@ import tools.jackson.databind.json.JsonMapper;
  * uploads blobs (monolithic, or a session of chunks) then a manifest, both stored by digest; a tag is a small
  * pointer ({@code oci/<name>/tags/<tag>} to a digest); a manifest's media type is kept in a sidecar so a pull
  * returns it verbatim. Stateless: the dispatcher passes the tenant-and-repository-scoped store on each call.
+ *
+ * <p>That clean fit has one cost, and it is why this format implements {@link BlobReferences}: the only OCI store key
+ * whose <em>body</em> names a blob is the tag pointer, and it names the manifest. An image's config and layer digests
+ * live inside the manifest JSON, behind no key at all, and a manifest pulled by digest has no tag pointer at all - so
+ * a reference scan that reads pointer bodies alone sees a fraction of what an image serves. {@link #references} lends
+ * the rest, which is the whole of what stands between a garbage collection pass and a live image whose manifest pulls
+ * {@code 200} while its layers {@code 404}.
  */
-public final class OciFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter {
+public final class OciFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, BlobReferences {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -320,6 +328,172 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             }
         }
         return reaped;
+    }
+
+    // ---- the reference-scan seam (BlobReferences): which blobs a live image keeps alive ----
+
+    @Override
+    public List<String> blobRoots() {
+        // Every key this format pins a blob under lives beneath oci/: the tag pointers (oci/<name>/tags/<tag>), the
+        // media-type sidecars (oci/types/<hex>) and the transient upload staging. A reference scan lists the leaves
+        // beneath this and asks references() what each one keeps alive.
+        return List.of("oci");
+    }
+
+    /**
+     * The blobs an OCI key keeps alive beyond the one its own pointer body names - the answer that stops a garbage
+     * collection pass deleting a live image's layers (D-027).
+     *
+     * <p>OCI is the standing example of a format a pointer-body reference scan cannot see: the ONLY store key whose
+     * body names a blob is the tag pointer, and it names the <em>manifest</em>. An image's config and layer digests
+     * live inside the manifest JSON, behind no key at all, and a manifest pulled by digest carries no tag pointer
+     * either - yet it is live content this format serves (a {@code GET /v2/<name>/manifests/sha256:<hex>} reads
+     * {@code blobs/<hex>} directly, and there is no DELETE in this API to retire it). So both faces are resolved here:
+     * <ul>
+     *   <li>{@code oci/<name>/tags/<tag>} - the tag pointer, whose body resolves the manifest;</li>
+     *   <li>{@code oci/types/<hex>} - the media-type sidecar, the durable record that {@code <hex>} is a manifest this
+     *       registry ingested and serves. It is written for EVERY accepted manifest ({@code OciManifests.ingest}),
+     *       tagged or not, so it is the digest-only image's one lifeline.</li>
+     * </ul>
+     * Both resolve to a manifest hex, and from there the image's own set: the manifest itself, an image index's
+     * sub-manifests (expanded with a work-list and an emitted set, never self-recursion - a hostile nested index must
+     * not overflow the sweep's stack), and each sub-manifest's config, layers and legacy {@code fsLayers} blobSums.
+     * The upload staging ({@code oci/uploads/}, {@code oci/upload-sessions/}) names no served blob and answers empty:
+     * a never-finalized push is exactly what garbage collection is for, and {@link #reap} already retires it.
+     *
+     * <p><b>It refuses rather than under-reports.</b> A root manifest blob that is present but unparseable or past
+     * {@link #MAX_MANIFEST} raises - its layers cannot be enumerated, and answering "just the manifest" would hand a
+     * reference scan a short list, which is a live layer condemned on one pass and DELETED on the next (the fail-open
+     * this seam's contract clause 3 makes illegal). Failing the pass deletes nothing, and the message names the key so
+     * an operator can discard the manifest. The state is unrepresentable for anything pushed since manifest validation
+     * landed; this bites only stored legacy bytes. A <em>sub</em>-manifest of an index degrades silently instead: a
+     * hostile index entry may legitimately point at a layer blob, which has no children to lose, so only the root - the
+     * one blob that is contractually a manifest - is an invariant break.
+     */
+    @Override
+    public List<String> references(String key, ArtifactStore store) throws IOException {
+        Optional<String> root = manifestOf(key, store);
+        if (root.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> hashes = new LinkedHashSet<>();
+        hashes.add(root.get());
+        Deque<String> pending = new ArrayDeque<>();
+        pending.push(root.get());
+        Set<String> expanded = new HashSet<>();
+        while (!pending.isEmpty()) {
+            String hex = pending.pop();
+            if (!expanded.add(hex)) {
+                continue;                                       // each manifest expanded once (a shared/nested digest)
+            }
+            JsonNode node = referencedManifest(hex, store, hex.equals(root.get()) ? key : null);
+            if (node == null) {
+                continue;                                       // absent, or a sub-manifest that is not one
+            }
+            if (node.has("manifests")) {
+                for (JsonNode child : node.path("manifests")) {
+                    String digest = referenced(child.path("digest").asString(null));
+                    if (digest != null && hashes.add(digest)) {
+                        pending.push(digest);                   // its own config/layers, through the work-list
+                    }
+                }
+                continue;
+            }
+            String config = referenced(node.path("config").path("digest").asString(null));
+            if (config != null) {
+                hashes.add(config);
+            }
+            for (JsonNode layer : node.path("layers")) {
+                String digest = referenced(layer.path("digest").asString(null));
+                if (digest != null) {
+                    hashes.add(digest);
+                }
+            }
+            for (JsonNode layer : node.path("fsLayers")) {      // the legacy Docker schema-1 layer shape
+                String digest = referenced(layer.path("blobSum").asString(null));
+                if (digest != null) {
+                    hashes.add(digest);
+                }
+            }
+        }
+        return List.copyOf(hashes);
+    }
+
+    /** The manifest an {@code oci/} key resolves to, or empty when the key names no manifest - the upload staging, a
+     *  sidecar whose name is not a digest, a tag pointer that is gone or whose body is not a digest. Empty is the
+     *  honest "this key keeps no further blob alive"; it is never how an unreadable manifest is reported. */
+    private static Optional<String> manifestOf(String key, ArtifactStore store) throws IOException {
+        if (!key.startsWith("oci/")) {
+            return Optional.empty();
+        }
+        String rest = key.substring("oci/".length());
+        if (rest.startsWith("types/")) {
+            String hex = rest.substring("types/".length());
+            return isDigestHex(hex) ? Optional.of(hex) : Optional.empty();
+        }
+        if (rest.startsWith("uploads/") || rest.startsWith("upload-sessions/")) {
+            return Optional.empty();                            // staged chunks of a push that never became an image
+        }
+        // A tag pointer is oci/<name>/tags/<tag> and an image name is itself multi-segment, so the tag level is the
+        // LAST /tags/ - the same resolution a pull performs. Anything else under oci/ names no manifest.
+        int tags = rest.lastIndexOf("/tags/");
+        if (tags < 0) {
+            return Optional.empty();
+        }
+        String hex = store.readVersioned(key)
+                .map(versioned -> hex(new String(versioned.content(), StandardCharsets.UTF_8).trim()))
+                .orElse(null);
+        return hex != null && isDigestHex(hex) ? Optional.of(hex) : Optional.empty();
+    }
+
+    /** Read and parse a manifest blob for the reference scan, bounded by {@link #MAX_MANIFEST} exactly as ingest
+     *  bounds it. {@code rootKey} is the visited key when {@code hex} is the ROOT this scan resolved (and so is
+     *  contractually a manifest) and {@code null} for a sub-manifest of an index. Absent is {@code null} either way -
+     *  residue of an already-collected blob, nothing to keep alive - but a root that is PRESENT and unreadable raises:
+     *  its layers are unknowable, and a short reference list gets them deleted. */
+    private static JsonNode referencedManifest(String hex, ArtifactStore store, String rootKey) throws IOException {
+        if (!store.exists("blobs/" + hex)) {
+            return null;
+        }
+        byte[] body;
+        try (InputStream in = store.open("blobs/" + hex)) {
+            body = in.readNBytes(MAX_MANIFEST + 1);
+        }
+        if (body.length > MAX_MANIFEST) {
+            if (rootKey == null) {
+                return null;                                    // an index entry aimed at a layer blob has no children
+            }
+            throw new IOException("the manifest " + hex + " that " + rootKey + " serves is past the " + MAX_MANIFEST
+                    + "-byte manifest bound, so the blobs it references cannot be enumerated; discard it rather than "
+                    + "risk collecting them");
+        }
+        JsonNode node;
+        try {
+            node = JSON.readTree(new String(body, StandardCharsets.UTF_8));
+        } catch (RuntimeException malformed) {
+            node = null;
+        }
+        // isObject(), not merely "parses": a top-level array or scalar has no config/layers/manifests to enumerate,
+        // which is the same un-enumerable state an outright parse failure leaves - the ingest guard refuses both.
+        if (node != null && node.isObject()) {
+            return node;
+        }
+        if (rootKey == null) {
+            return null;
+        }
+        throw new IOException("the manifest " + hex + " that " + rootKey + " serves is not a parseable JSON manifest "
+                + "document, so the blobs it references cannot be enumerated; discard it rather than risk collecting "
+                + "them");
+    }
+
+    /** The bare hex of a digest a manifest references, or {@code null} when it is not a real sha256 digest - so a
+     *  malformed entry never becomes a hash a reference scan (or anything else) then keys on. */
+    private static String referenced(String digest) {
+        if (digest == null) {
+            return null;
+        }
+        String hex = hex(digest);
+        return isDigestHex(hex) ? hex : null;
     }
 
     private void store(String digest, InputStream content, ArtifactStore store, String name, FormatExchange exchange)
