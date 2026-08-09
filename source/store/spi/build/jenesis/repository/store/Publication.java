@@ -259,14 +259,23 @@ public final class Publication {
      *  {@code excludedPaths}, whose body is {@code hash}. {@code prefix} is the current key, its immediate children are
      *  enumerated with {@link ArtifactStore#list}, and a leaf is a key with no children. Each non-root node is probed as
      *  a pointer (a directory node reads empty and is skipped), so a pointer that also has descendants is not missed, and
-     *  the walk short-circuits on the first alias. Mirror of the downstream {@code HoldLifecycle.aliasHeld}. */
+     *  the walk short-circuits on the first alias. A body is compared through {@link ServableNames#hash(byte[])}, so a
+     *  pointer linked in the qualified {@code sha256:<hex>} dialect still counts as the alias it is rather than
+     *  silently clearing a live hold. Mirror of the downstream {@code HoldLifecycle.aliasHeld}. */
     private boolean aliasHeld(String root, String prefix, String hash, Set<String> excludedPaths) throws IOException {
         if (!prefix.equals(root)) {
             String servedPath = prefix.substring(root.length());   // the /quarantine prefix stripped == the served path
             if (!excludedPaths.contains(servedPath)) {
                 try {
+                    // The body is read through the one seam that owns a stored pointer's dialect rather than compared
+                    // raw: a review pointer's body is the bare content hash every hold writer links today, but the
+                    // comparison target is the bare hash the withheld/<hash> marker is keyed by, so a body ever linked
+                    // in the algorithm-qualified sha256:<hex> dialect would compare unequal, the scan would report NO
+                    // other alias and the clear would lift a marker a sibling coordinate still holds - a fail-OPEN
+                    // disclosure, the exact class ServableNames.hash was introduced for. Normalising can only ever
+                    // find MORE aliases, so it only ever narrows the clear, which is this guard's declared direction.
                     Optional<String> pointer = store.readVersioned(prefix)
-                            .map(versioned -> new String(versioned.content(), StandardCharsets.UTF_8).trim());
+                            .map(versioned -> ServableNames.hash(versioned.content()));
                     if (pointer.isPresent() && pointer.get().equals(hash)) {
                         return true;   // a byte-identical sibling coordinate still holds the hash
                     }

@@ -59,6 +59,18 @@ class PublicationQuarantineAliasTest {
     }
 
     @Test
+    void a_sibling_pointer_in_the_qualified_dialect_is_still_an_alias() throws IOException {
+        // A stored pointer body carries either the bare lower-case hex or the algorithm-qualified sha256:<hex> of the
+        // OCI Distribution digests; both name the same blob and both must count. Compared raw, a qualified body reads
+        // unequal, the scan reports NO other alias and the caller clears a withheld/<hash> marker a sibling coordinate
+        // still holds - a fail-OPEN disclosure. Reading the body through ServableNames.hash only ever finds MORE
+        // aliases, so it only ever narrows the clear.
+        quarantine("/v2/sibling/app/manifests/1.0", "sha256:" + HASH);
+        assertThat(publication.quarantineAliasExists(HASH, Set.of("/v2/self/app/manifests/1.0")))
+                .as("a qualified sibling body names the same blob, so the marker stays").isTrue();
+    }
+
+    @Test
     void a_pointer_holding_a_different_hash_is_not_an_alias() throws IOException {
         quarantine("/v2/sibling/app/manifests/1.0", OTHER);
         assertThat(publication.quarantineAliasExists(HASH, Set.of())).isFalse();
