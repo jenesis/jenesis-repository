@@ -35,8 +35,12 @@ import module java.base;
  * only a path whose blob is present yet unlocatable is screened out. The screen is the {@code publish/} withhold
  * model's; a format's own blobs-namespace root carries no publication pointer and is delivered raw as before.
  *
- * <p><b>Delivery and failure.</b> The walk's contract carries over: every retained pointer is delivered exactly
- * once per pass, and at least once for the uncommitted stride tail after a crash-resume - consumers are idempotent.
+ * <p><b>Delivery and failure.</b> The walk's contract carries over <em>whole</em>: every retained pointer is delivered
+ * exactly once per pass, and at least once for the uncommitted stride tail after a crash-resume - consumers are
+ * idempotent - and the walk's flush hook reaches them too, as {@link WalkConsumer#beforeCheckpoint}, fired on every
+ * consumer before the cursor covering those deliveries is committed. That forward is what makes a buffering consumer
+ * (one durable write per stride rather than per artifact) safe rather than lossy: without it a landed cursor would
+ * skip items still sitting in a consumer's buffer when the process died, and nothing would ever replay them.
  * A consumer failure propagates and stops this worker's segment with its claim left to expire; the pass then
  * resumes from the last committed cursor, so a failure delays a rebuild but never silently truncates it - a stuck
  * pass is visible through {@link ArtifactWalk#pass} / {@link ArtifactWalk#segments}, never a quietly-incomplete
@@ -148,6 +152,23 @@ public final class RebuildPass {
             started = true;
             for (WalkConsumer consumer : consumers) {
                 consumer.onPassStarted(pass);
+            }
+        }
+
+        /** The walk is about to commit {@code cursor}: hand every consumer its flush moment first, so a consumer that
+         *  buffers derived writes is never resumed past an item whose write is still in its buffer. The walk's own
+         *  contract ({@link ArtifactWalk.KeyVisitor#beforeCheckpoint}) is what carries over here - without this
+         *  forward a consumer could only ever write through per item, and a buffering one would lose, permanently,
+         *  every item covered by a cursor that landed. Suppressed before the first delivery on this worker: nothing
+         *  has been handed over, so there is nothing to flush, and {@link WalkConsumer#onPassStarted} always comes
+         *  first. */
+        @Override
+        public void beforeCheckpoint(String cursor) throws IOException {
+            if (!started) {
+                return;
+            }
+            for (WalkConsumer consumer : consumers) {
+                consumer.beforeCheckpoint(cursor);
             }
         }
 

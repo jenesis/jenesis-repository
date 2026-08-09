@@ -265,9 +265,10 @@ class SpiContractPrincipleTest {
         // FetcherProvider and WalkProvider burnt down by T-101b together with their migration onto optionalUnique.
         allow.put("build.jenesis.repository.format.java.bridge.ModuleView",
                 "T-301b: read purity and determinism across discovery order for the Maven bridge's rendering");
-        allow.put("build.jenesis.repository.walk.WalkConsumer",
-                "T-301a: the javadoc already promises idempotency and at-least-once crash-resume in prose - T-204 "
-                        + "asserts it and this block states it in the numbered form");
+        // WalkConsumer burnt down by T-204, which built the walk-consumer contract kit (source/walk/testkit +
+        // test/walkconsumer) and could therefore state the clauses it now asserts: the cursor commit as the commit
+        // point, the three delivery classes and what a crash-resume converges for each, and the flush hook that makes
+        // a batching consumer safe rather than lossy.
 
         // --- T-301b: server-spi, importer, observers and the remaining SPIs ---
         // GarbageCollectorProvider burnt down by T-101b together with its migration onto optionalUnique.
