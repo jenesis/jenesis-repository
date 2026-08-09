@@ -1,5 +1,6 @@
 package build.jenesis.repository.gc.store;
 
+import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GarbageCollector;
 import build.jenesis.repository.gc.GarbageCollectorProvider;
 import build.jenesis.repository.walk.WalkProvider;
@@ -21,6 +22,11 @@ import module java.base;
  * carries its condemned marker for at least this long before deletion even when generations advance faster than the
  * collection interval - several nodes collecting, or a node re-collecting after a lease expiry. It only ever delays a
  * deletion, so it never reclaims a blob the generation gap would spare.
+ *
+ * <p>It also resolves the installed {@link BlobReferences} formats once, here, and hands them to the collector: the
+ * discovery lives at the provider like every other provider's does, so the collector stays a mechanism a test can hand
+ * an explicit list. With no blobs-namespace format installed the list is empty and the mark is the pointer-body-only
+ * scan it has always been.
  */
 public final class MarkSweepGarbageCollectorProvider implements GarbageCollectorProvider {
 
@@ -33,9 +39,10 @@ public final class MarkSweepGarbageCollectorProvider implements GarbageCollector
     public Optional<GarbageCollector> create(UnaryOperator<String> config) {
         String stride = Integer.toString(integer(config, "jenesis.gc.stride", 20_000));
         Duration grace = duration(config, "jenesis.gc.grace");
+        List<BlobReferences> lenders = BlobReferences.installed();
         return WalkProvider.resolve(key ->
                         "jenesis.walk.checkpoint".equals(key) ? stride : config.apply(key))
-                .map(walk -> new MarkSweepGarbageCollector(walk, grace));
+                .map(walk -> new MarkSweepGarbageCollector(walk, grace, lenders));
     }
 
     private static Duration duration(UnaryOperator<String> config, String key) {

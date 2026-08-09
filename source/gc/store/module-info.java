@@ -17,7 +17,13 @@ module build.jenesis.repository.gc.store {
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.observation;
-    exports build.jenesis.repository.gc.store to build.jenesis.repository.gc.test;
+    // The reference-lending seam only: a format that serves out of the shared blobs/ namespace declares the roots it
+    // pins blobs under and, through BlobReferences.references, the blobs its stored documents keep alive that no
+    // pointer body names. This is the format SPI, never a format plugin - the collector still knows no format, parses
+    // no format's documents and is handed its lenders by its provider.
+    requires build.jenesis.repository.format;
+    exports build.jenesis.repository.gc.store to build.jenesis.repository.gc.test,
+            build.jenesis.repository.format.oci.test;
     provides build.jenesis.repository.gc.GarbageCollectorProvider
             with build.jenesis.repository.gc.store.MarkSweepGarbageCollectorProvider;
 }

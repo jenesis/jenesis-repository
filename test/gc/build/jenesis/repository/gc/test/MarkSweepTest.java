@@ -1,5 +1,6 @@
 package build.jenesis.repository.gc.test;
 
+import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
@@ -36,6 +37,12 @@ class MarkSweepTest {
 
     private MarkSweepGarbageCollector collector() {
         return new MarkSweepGarbageCollector(new StoreArtifactWalk(5, 4, Duration.ofMinutes(10), clock));
+    }
+
+    /** A collector handed the reference-lending formats a deployment installs - what the provider builds. */
+    private MarkSweepGarbageCollector collector(BlobReferences... lenders) {
+        return new MarkSweepGarbageCollector(new StoreArtifactWalk(5, 4, Duration.ofMinutes(10), clock),
+                Duration.ZERO, List.of(lenders));
     }
 
     private static ByteArrayInputStream bytes(String content) {
@@ -169,6 +176,194 @@ class MarkSweepTest {
         assertThat(next.spared()).isEqualTo(1);
         assertThat(store.exists("blobs/" + blob)).isTrue();
         assertThat(store.exists("gc/condemned/" + blob)).as("the stale marker converged away").isFalse();
+    }
+
+    @Test
+    void a_tagged_images_config_and_layers_are_deleted_when_its_format_lends_nothing() throws IOException {
+        // The D-027 reproduction, and the negative control for every leg below. D-022 made the MANIFEST reachable (its
+        // sha256:<hex> tag-pointer body now names it), but the manifest is the ONLY OCI blob any pointer body names:
+        // an image's config and layer digests live INSIDE the manifest document, behind no store key at all. With no
+        // lender the mark counts them not at all, so one pass condemns them and the next DELETES them - leaving a
+        // manifest that pulls 200 and layers that 404, which is what this asserts happens.
+        ArtifactStore store = store();
+        Publication publication = new Publication(store);
+        String config = publication.storeBlob(bytes("an image config"));
+        String layer = publication.storeBlob(bytes("a layer tarball"));
+        String manifest = publication.storeBlob(bytes(manifest(config, layer)));
+        store.writeVersioned("oci/library/app/tags/1.0",
+                ("sha256:" + manifest).getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+
+        GcPlan first = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        assertThat(first.condemned()).as("the config and the layer are condemned; only the manifest is named").isEqualTo(2);
+
+        GcPlan second = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        assertThat(second.collected()).isEqualTo(2);
+        assertThat(store.exists("blobs/" + manifest)).as("the manifest survives (D-022)").isTrue();
+        assertThat(store.exists("blobs/" + config)).as("D-027: the live image's config is DELETED").isFalse();
+        assertThat(store.exists("blobs/" + layer)).as("D-027: the live image's layer is DELETED").isFalse();
+    }
+
+    @Test
+    void a_tagged_images_config_and_layers_are_never_collected() throws IOException {
+        // The same store, with the format lending what its documents keep alive: the mark unions the lent hashes into
+        // the same reference shards the sweep reads, so nothing an image serves is ever even condemned. The collector
+        // still parses nothing - the derivation is the format's.
+        ArtifactStore store = store();
+        Publication publication = new Publication(store);
+        String config = publication.storeBlob(bytes("an image config"));
+        String layer = publication.storeBlob(bytes("a layer tarball"));
+        String manifest = publication.storeBlob(bytes(manifest(config, layer)));
+        store.writeVersioned("oci/library/app/tags/1.0",
+                ("sha256:" + manifest).getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+
+        GcPlan first = collector(new DocumentReferences())
+                .collect(store, List.of("publish", "oci"), clock.instant());
+        assertThat(first.complete()).isTrue();
+        assertThat(first.condemned()).as("every blob a live image serves is referenced, so none is condemned").isZero();
+        // The lent hashes land in the BARE-hex leading-byte shards the sweep reads, exactly as a pointer body's does.
+        assertThat(store.list("gc/1/refs/" + layer.substring(0, 2))).isNotEmpty();
+
+        GcPlan second = collector(new DocumentReferences())
+                .collect(store, List.of("publish", "oci"), clock.instant());
+        assertThat(second.complete()).isTrue();
+        assertThat(second.collected()).isZero();
+        assertThat(store.exists("blobs/" + manifest)).as("the manifest survives (D-022)").isTrue();
+        assertThat(store.exists("blobs/" + config)).as("the config the manifest names survives").isTrue();
+        assertThat(store.exists("blobs/" + layer)).as("the layer the manifest names survives").isTrue();
+        // Deliberately no StoreInvariants sweep here: its unreferenced-blob leg knows only publish/ pointers, and an
+        // image's config and layer are referenced through the format's own document - the very thing under test.
+    }
+
+    @Test
+    void a_digest_only_manifest_and_its_layers_are_never_collected() throws IOException {
+        // The other half of D-027: a manifest pulled by digest and never tagged is a legitimate OCI state (the format
+        // serves /v2/<name>/manifests/sha256:<hex> straight out of blobs/, and its API has no DELETE to retire one),
+        // and it carries no tag pointer - so even after D-022 NOTHING named it and the sweep deleted the whole image,
+        // manifest included. The per-document sidecar oci/types/<hex> is the durable record that this hex is a manifest
+        // the registry ingested and serves; resolving the image from that key is what makes the untagged case reachable
+        // at all, and it is why a lender is asked about every key under its roots, not only pointer-shaped ones.
+        ArtifactStore store = store();
+        Publication publication = new Publication(store);
+        String config = publication.storeBlob(bytes("an untagged image config"));
+        String layer = publication.storeBlob(bytes("an untagged layer tarball"));
+        String manifest = publication.storeBlob(bytes(manifest(config, layer)));
+        store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+
+        GcPlan bare = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        assertThat(bare.condemned())
+                .as("the negative control: with no lender the whole untagged image is condemned").isEqualTo(3);
+
+        ArtifactStore lending = store();
+        Publication other = new Publication(lending);
+        String config2 = other.storeBlob(bytes("an untagged image config"));
+        String layer2 = other.storeBlob(bytes("an untagged layer tarball"));
+        String manifest2 = other.storeBlob(bytes(manifest(config2, layer2)));
+        lending.writeVersioned("oci/types/" + manifest2, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+
+        GcPlan first = collector(new DocumentReferences())
+                .collect(lending, List.of("publish", "oci"), clock.instant());
+        assertThat(first.condemned()).as("a digest-only image is live content, so nothing is condemned").isZero();
+
+        GcPlan second = collector(new DocumentReferences())
+                .collect(lending, List.of("publish", "oci"), clock.instant());
+        assertThat(second.collected()).isZero();
+        assertThat(lending.exists("blobs/" + manifest2)).as("the untagged manifest survives").isTrue();
+        assertThat(lending.exists("blobs/" + config2)).isTrue();
+        assertThat(lending.exists("blobs/" + layer2)).isTrue();
+    }
+
+    @Test
+    void a_lender_that_cannot_enumerate_a_key_fails_the_pass_rather_than_under_reporting() throws IOException {
+        // BlobReferences clause 3, and the one clause that keeps this seam from being a new way to lose data: a lender
+        // that recognises a key but cannot resolve what it keeps alive must throw, never answer a short list, because
+        // the mark cannot tell a short list from a complete one. The pass fails and the sweep is never reached, so
+        // nothing is condemned and nothing is deleted - "I do not know" resolves to keeping everything.
+        ArtifactStore store = store();
+        Publication publication = new Publication(store);
+        String layer = publication.storeBlob(bytes("a layer of an unreadable image"));
+        String manifest = publication.storeBlob(bytes("!! not a document this format can read " + layer));
+        store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+
+        MarkSweepGarbageCollector collector = collector(new DocumentReferences());
+        assertThatThrownBy(() -> collector.collect(store, List.of("publish", "oci"), clock.instant()))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("cannot be enumerated");
+        assertThat(store.exists("gc/condemned/" + layer))
+                .as("a failed mark never judges a blob, let alone condemns one").isFalse();
+        assertThat(store.exists("blobs/" + layer)).isTrue();
+        assertThat(store.exists("blobs/" + manifest)).isTrue();
+    }
+
+    @Test
+    void a_lender_is_only_asked_about_keys_beneath_its_own_roots() throws IOException {
+        // A lender is narrowed to the roots it declared, so a pointer-only deployment pays one prefix test per leaf and
+        // a format is never handed a neighbour's key to guess at. The publish/ leaf below is a key no lender owns.
+        ArtifactStore store = store();
+        List<String> asked = new ArrayList<>();
+        BlobReferences recording = new BlobReferences() {
+            @Override
+            public List<String> blobRoots() {
+                return List.of("oci");
+            }
+
+            @Override
+            public List<String> references(String key, ArtifactStore ignored) {
+                asked.add(key);
+                return List.of();
+            }
+        };
+        Publication publication = new Publication(store);
+        publication.link("/maven/kept.jar", publication.storeBlob(bytes("a maven artifact")));
+        store.writeVersioned("oci/library/app/tags/1.0", ("sha256:" + "0".repeat(64))
+                .getBytes(StandardCharsets.UTF_8), null);
+
+        var _ = collector(recording).collect(store, List.of("publish", "oci"), clock.instant());
+        assertThat(asked).containsExactly("oci/library/app/tags/1.0");
+    }
+
+    @Test
+    void a_lenders_own_roots_are_marked_even_when_the_caller_forgot_them() throws IOException {
+        // The caller owns the layout, but a lender declaring "my blobs live under oci/" is the format's own word for
+        // it - and a caller that omits that root has the lender installed and never asks it, which is exactly how a
+        // blobs-namespace format's content becomes invisible to the scan. The union can only enumerate MORE.
+        ArtifactStore store = store();
+        Publication publication = new Publication(store);
+        String config = publication.storeBlob(bytes("a config under a forgotten root"));
+        String layer = publication.storeBlob(bytes("a layer under a forgotten root"));
+        String manifest = publication.storeBlob(bytes(manifest(config, layer)));
+        store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+
+        GcPlan only = collector(new DocumentReferences()).collect(store, List.of("publish"), clock.instant());
+        assertThat(only.condemned()).as("the lender's own root is walked though the caller named only publish").isZero();
+        assertThat(store.exists("blobs/" + layer)).isTrue();
+    }
+
+    @Test
+    void a_lender_may_not_claim_a_namespace_the_collector_itself_judges() throws IOException {
+        // The roots screen the caller's pointer roots already pass: a format declaring blobs/, gc/ or walks/ as its own
+        // is a wiring bug, and accepting it would let a lender speak for the namespace being swept.
+        BlobReferences claiming = new BlobReferences() {
+            @Override
+            public List<String> blobRoots() {
+                return List.of("blobs");
+            }
+        };
+        assertThatThrownBy(() -> collector(claiming))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not a pointer root: blobs");
+    }
+
+    private static final String OCI_MANIFEST_TYPE = "application/vnd.oci.image.manifest.v1+json";
+
+    /** A minimal but real OCI image manifest - the shape whose config/layer digests live behind no store key. */
+    private static String manifest(String config, String layer) {
+        return "{\"schemaVersion\":2,\"mediaType\":\"" + OCI_MANIFEST_TYPE + "\","
+                + "\"config\":{\"mediaType\":\"application/vnd.oci.image.config.v1+json\",\"size\":15,"
+                + "\"digest\":\"sha256:" + config + "\"},"
+                + "\"layers\":[{\"mediaType\":\"application/vnd.oci.image.layer.v1.tar+gzip\",\"size\":15,"
+                + "\"digest\":\"sha256:" + layer + "\"}]}";
     }
 
     @Test

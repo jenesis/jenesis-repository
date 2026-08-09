@@ -9,7 +9,11 @@
  * ordering must keep a committed cursor from lying about a lost reference; the dry-run {@code plan} previews the
  * due blobs and writes nothing; condemned bookkeeping and superseded reference shards converge idempotently across
  * kills at each phase boundary; and per-segment claims keep a second collector off a live pass until the holder's
- * lease expires.
+ * lease expires. The reference-lending seam is exercised against its negative control: a format whose served blobs
+ * are reachable only through a stored document loses them to the sweep when it lends nothing, keeps every one when
+ * it lends, is asked only about keys beneath its own declared roots, and fails the whole pass rather than answering
+ * a short set - a short set being indistinguishable from a complete one, and every hash missing from it a live blob
+ * deleted.
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.gc
@@ -39,6 +43,9 @@
 open module build.jenesis.repository.gc.test {
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.gc.store;
+    // The reference-lending seam, exercised through a format-neutral stand-in: the collector's half of D-027 is that
+    // it unions a lender's set into the shards the sweep reads, not how any one format spells its documents.
+    requires build.jenesis.repository.format;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.walk.store;
     requires build.jenesis.repository.observation;

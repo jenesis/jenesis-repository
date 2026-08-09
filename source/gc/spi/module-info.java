@@ -10,7 +10,11 @@
  * maintenance console previews, {@code collect} computes and applies - and is handed the pointer roots by its
  * caller (always {@code publish}; a blobs-namespace format's declared roots are added by the caller that knows
  * them), because which namespaces hold serving pointers is layout knowledge this free primitive deliberately does
- * not have. Deletion is the one unrecoverable act in the product, so an implementation is held to the invariant
+ * not have. Where naming a root is not enough - a format whose served blobs are reachable only through a stored
+ * document, so no pointer body names them - that format lends the rest through
+ * {@code build.jenesis.repository.format.BlobReferences}, and an implementation unions what it is told with the
+ * hashes it read: the derivation stays with the format, never in the collector.
+ * Deletion is the one unrecoverable act in the product, so an implementation is held to the invariant
  * that a referenced, re-linked or in-flight blob is never deleted; the write path cooperates by clearing the
  * collector's {@code gc/condemned/<hash>} marker whenever a pointer links a blob ({@code Publication.link}).
  *
