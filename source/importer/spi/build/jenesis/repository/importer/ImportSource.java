@@ -13,6 +13,45 @@ import module java.base;
  * itself are the built-in ones.
  * Every implementation streams through the same {@link build.jenesis.repository.format.ProxyFormat.Fetcher} the proxy
  * uses, so an import is tested without the network.
+ *
+ * <h2>Contract</h2>
+ * The read half's behavioural contract, proven per connector by {@code ImportContract} in the importer testkit. The
+ * provider that builds a source ({@link ImportSourceProvider}) carries the construction-side clauses.
+ * <ol>
+ * <li><b>Thread-safety.</b> A source is built per migration and walked by one thread; it need not be concurrent. It
+ *     <em>is</em> immutable in its configuration - {@code withCredentials}/{@code from} answer a new instance - so a
+ *     resumed walk never mutates the source an interrupted one held.</li>
+ * <li><b>Idempotency / replay.</b> {@link #forEach} is replayable. A walk resumed from a cursor a prior run reported
+ *     continues rather than re-delivering what that run had fully consumed, and re-running it from the same cursor
+ *     delivers the same assets in the same order. A cursor the source can no longer place (the incumbent's index moved)
+ *     restarts the walk rather than skipping the remainder - an import is idempotent, so re-importing is safe where
+ *     losing assets is not.</li>
+ * <li><b>Absence sentinel.</b> An empty repository is a walk that reports no asset and one terminal {@code null}
+ *     checkpoint, never an exception. A {@code null} cursor means "complete"; a non-{@code null} one means "resume
+ *     here".</li>
+ * <li><b>Streaming (&sect;1).</b> {@link Content#open} is deferred and unbuffered: the asset's bytes are not fetched
+ *     while it is enumerated, and when it is opened the stream comes straight off the network, so the consumer's copy
+ *     to storage is the only pass over the body. A whole-repository listing is itself streamed where the incumbent
+ *     serves one document for it.</li>
+ * <li><b>Error visibility (&sect;9).</b> An incumbent that refuses, is absent or cannot answer surfaces as an
+ *     {@link ImportFailure} carrying its {@link ImportFailure.Kind} - auth, missing, transient and protocol are
+ *     distinguishable without reading the message. A malformed <em>entry</em> is different: an incomplete or
+ *     traversal-laced listing row is skipped and the walk continues, because one bad row must not abort a migration.</li>
+ * <li><b>Traversal refusal.</b> A reported {@link Asset} path is repository-relative and {@link #safePath} - a listing
+ *     path derives from a name someone published to the incumbent, and it becomes a store write on the write half. A
+ *     source screens every path it reports; the importer refuses one that slipped through
+ *     ({@code RepositoryImporter.importable}), and the two screens agree by construction.</li>
+ * <li><b>Ordering / concurrency.</b> The enumeration order is deterministic for a given source state, because that is
+ *     what makes a cursor mean anything: a resumed walk must be able to skip exactly what the interrupted one
+ *     completed. {@link Checkpoint#reached} is called only after every asset of a batch has been fully consumed, so a
+ *     cursor never claims progress the consumer has not made.</li>
+ * <li><b>Bounded work / cancellation.</b> The walk pages rather than materialising a whole catalogue, and every
+ *     recursive descent carries a depth cap. Reaching a cap is an explicit {@link ImportFailure}, never a truncated
+ *     asset list that a caller would read as a complete migration.</li>
+ * <li><b>Durability / delivery.</b> A source is stateless and durable nowhere; the cursor it reports is the only
+ *     progress token, and persisting it is the caller's job. A crash between an asset's import and the next checkpoint
+ *     re-delivers that asset on resume, which the content-addressed store absorbs.</li>
+ * </ol>
  */
 public interface ImportSource {
 

@@ -3,6 +3,7 @@ package build.jenesis.repository.importer.nexus;
 import module java.base;
 import build.jenesis.repository.format.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.importer.ImportFailure;
 import build.jenesis.repository.importer.ImportSource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -67,7 +68,7 @@ public final class NexusSource implements ImportSource {
                     + (token == null ? "" : "&continuationToken=" + URLEncoder.encode(token, StandardCharsets.UTF_8)));
             ProxyFormat.Fetched page = get(url);
             if (page.status() != 200) {
-                throw new IOException("Nexus listing failed (" + page.status() + ") for " + url);
+                throw ImportFailure.status(page.status(), url, "Nexus listing");
             }
             JsonNode body = JSON.readTree(page.body());   // parse straight off the bytes, no intermediate String copy
             for (JsonNode item : body.path("items")) {
@@ -121,10 +122,10 @@ public final class NexusSource implements ImportSource {
                 ? Map.of()
                 : Map.of("Authorization", authorization);
         ProxyFormat.Download download = fetcher.download(url, headers)
-                .orElseThrow(() -> new IOException("No response from " + url));
+                .orElseThrow(() -> ImportFailure.unreachable(url));
         if (download.status() != 200) {
             download.close();
-            throw new IOException("Download failed (" + download.status() + ") for " + url);
+            throw ImportFailure.status(download.status(), url, "Download");
         }
         return download.body();
     }
@@ -136,6 +137,6 @@ public final class NexusSource implements ImportSource {
 
     private ProxyFormat.Fetched get(URI url) throws IOException {
         Map<String, String> headers = authorization == null ? Map.of() : Map.of("Authorization", authorization);
-        return fetcher.fetch(url, headers).orElseThrow(() -> new IOException("No response from " + url));
+        return fetcher.fetch(url, headers).orElseThrow(() -> ImportFailure.unreachable(url));
     }
 }

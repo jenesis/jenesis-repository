@@ -2,6 +2,7 @@ package build.jenesis.repository.importer.maven;
 
 import module java.base;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.importer.ImportFailure;
 import build.jenesis.repository.importer.ImportSource;
 
 /**
@@ -118,13 +119,27 @@ public final class MavenSource implements ImportSource {
             String resume = cursor != null && cursor.startsWith(TREE) ? cursor.substring(TREE.length()) : null;
             walkTree(consumer, checkpoint, "", "", entries, resume, 1);
             checkpoint.reached(null);
-        } else if (get(URI.create(root + RepositoryIndex.PROPERTIES)).status() == 200) {
-            walkIndex(consumer, checkpoint, root);
-        } else {
-            throw new IOException("Cannot enumerate " + root + ": the server exposes no directory listing (status "
-                    + listing.status() + ") and publishes no repository index (" + RepositoryIndex.PROPERTIES
-                    + ") - enable directory listing on the source or have it publish a Maven repository index");
+            return;
         }
+        URI properties = URI.create(root + RepositoryIndex.PROPERTIES);
+        ProxyFormat.Fetched index = get(properties);
+        if (index.status() == 200) {
+            walkIndex(consumer, checkpoint, root);
+            return;
+        }
+        // Neither surface answered - but WHY decides what the operator should do, and this used to collapse every
+        // reason into "enable directory listing". A root and an index probe that both come back 401/403 is a refused
+        // credential, and a 5xx or a throttle is "not now"; telling either of those to switch autoindex on sends the
+        // operator after the wrong thing. Only an honest absence (a 404/410 - nothing published at either surface)
+        // keeps the actionable no-listing-no-index message.
+        ImportFailure.Kind kind = ImportFailure.classify(index.status());
+        if (kind != ImportFailure.Kind.MISSING) {
+            throw ImportFailure.status(index.status(), properties, "Repository index probe");
+        }
+        throw new ImportFailure(ImportFailure.Kind.MISSING, "Cannot enumerate " + root
+                + ": the server exposes no directory listing (status " + listing.status()
+                + ") and publishes no repository index (" + RepositoryIndex.PROPERTIES
+                + ") - enable directory listing on the source or have it publish a Maven repository index");
     }
 
     /**
@@ -146,11 +161,11 @@ public final class MavenSource implements ImportSource {
                     continue;   // the whole subtree was consumed by the interrupted run
                 }
                 if (depth >= MAX_DEPTH) {
-                    throw new IOException("Directory tree exceeds depth " + MAX_DEPTH + " at " + entry.target());
+                    throw ImportFailure.protocol("Directory tree exceeds depth " + MAX_DEPTH + " at " + entry.target());
                 }
                 ProxyFormat.Fetched listing = get(entry.target());
                 if (listing.status() != 200) {
-                    throw new IOException("Directory listing failed (" + listing.status() + ") for " + entry.target());
+                    throw ImportFailure.status(listing.status(), entry.target(), "Directory listing");
                 }
                 walkTree(consumer, checkpoint, directory, rawPath + entry.raw() + "/",
                         HtmlListing.parse(entry.target(), rawPath + entry.raw() + "/",
@@ -210,10 +225,10 @@ public final class MavenSource implements ImportSource {
         Set<String> pomEmitted = new HashSet<>();
         URI url = URI.create(root + RepositoryIndex.FULL);
         ProxyFormat.Download download = fetcher.download(url, headers())
-                .orElseThrow(() -> new IOException("No response from " + url));
+                .orElseThrow(() -> ImportFailure.unreachable(url));
         if (download.status() != 200) {
             download.close();
-            throw new IOException("Repository index download failed (" + download.status() + ") for " + url);
+            throw ImportFailure.status(download.status(), url, "Repository index download");
         }
         long consumed = 0;
         try (RepositoryIndex index = new RepositoryIndex(download.body())) {
@@ -341,16 +356,16 @@ public final class MavenSource implements ImportSource {
 
     private InputStream open(URI url) throws IOException {
         ProxyFormat.Download download = fetcher.download(url, headers())
-                .orElseThrow(() -> new IOException("No response from " + url));
+                .orElseThrow(() -> ImportFailure.unreachable(url));
         if (download.status() != 200) {
             download.close();
-            throw new IOException("Download failed (" + download.status() + ") for " + url);
+            throw ImportFailure.status(download.status(), url, "Download");
         }
         return download.body();
     }
 
     private ProxyFormat.Fetched get(URI url) throws IOException {
-        return fetcher.fetch(url, headers()).orElseThrow(() -> new IOException("No response from " + url));
+        return fetcher.fetch(url, headers()).orElseThrow(() -> ImportFailure.unreachable(url));
     }
 
     private Map<String, String> headers() {

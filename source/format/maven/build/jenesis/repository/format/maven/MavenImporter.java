@@ -22,7 +22,12 @@ public final class MavenImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        String relative = sourcePath.startsWith("/") ? sourcePath.substring(1) : sourcePath;
+        // RepositoryImporter clause 4. MavenFormat.describe falls through to ArtifactDescriptor.at(ECOSYSTEM, path) for
+        // a path that is not a full coordinate, so without this screen a "/../x" asset would describe to the
+        // traversal-shaped "/maven/../x" - the coordinate the edge screens against and an edition records. Screened
+        // here rather than in describe(): describe() answers for a REQUEST path, which MavenFormat.handle has already
+        // refused (T-202a), while this composes a /maven/ path out of a foreign source path.
+        String relative = RepositoryImporter.importablePath(sourcePath, "maven");
         // The coordinate-enriched descriptor MavenFormat parses from the /maven/ path an asset lands on, so the edge
         // screens against the real Maven coordinate/version. Empty for a generated maven-metadata.xml (which the import
         // walk then streams straight to importArtifact, where it is skipped) - the format owns that rule in one place.
@@ -31,7 +36,7 @@ public final class MavenImporter implements RepositoryImporter {
 
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        String relative = path.startsWith("/") ? path.substring(1) : path;
+        String relative = RepositoryImporter.importablePath(path, "maven");
         String name = relative.substring(relative.lastIndexOf('/') + 1);
         if (name.startsWith("maven-metadata.xml")) {
             return;

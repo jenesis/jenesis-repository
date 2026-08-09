@@ -2,6 +2,7 @@ package build.jenesis.repository.importer.artifactory;
 
 import module java.base;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.importer.ImportFailure;
 import build.jenesis.repository.importer.ImportSource;
 import tools.jackson.core.JsonParser;
 import tools.jackson.core.JsonToken;
@@ -72,7 +73,7 @@ public final class ArtifactorySource implements ImportSource {
         // each a bounded page). The download stays open across the emitted assets' own lazy downloads, exactly as the
         // Maven index walk streams its index while assets download.
         try (ProxyFormat.Download page = fetcher.download(listing, headers())
-                .orElseThrow(() -> new IOException("No response from " + listing))) {
+                .orElseThrow(() -> ImportFailure.unreachable(listing))) {
             if (page.status() == 200) {
                 streamDeepList(consumer, prefix, page.body());
                 // the deep listing is a single response, so there is no mid-walk resume point (the cursor is ignored).
@@ -82,7 +83,7 @@ public final class ArtifactorySource implements ImportSource {
                 // available, so walk it recursively for the same files - N requests instead of one.
                 crawlRepository(consumer, checkpoint, prefix);
             } else {
-                throw new IOException("Artifactory listing failed (" + page.status() + ") for " + listing);
+                throw ImportFailure.status(page.status(), listing, "Artifactory listing");
             }
         }
     }
@@ -159,7 +160,7 @@ public final class ArtifactorySource implements ImportSource {
         URI rootFolder = URI.create(prefix + "api/storage/" + encode(repository));
         ProxyFormat.Fetched page = get(rootFolder);
         if (page.status() != 200) {
-            throw new IOException("Artifactory folder listing failed (" + page.status() + ") for " + rootFolder);
+            throw ImportFailure.status(page.status(), rootFolder, "Artifactory folder listing");
         }
         List<JsonNode> children = new ArrayList<>();
         for (JsonNode child : JSON.readTree(new String(page.body(), StandardCharsets.UTF_8)).path("children")) {
@@ -190,7 +191,7 @@ public final class ArtifactorySource implements ImportSource {
         URI folder = URI.create(prefix + "api/storage/" + encode(repository) + "/" + encode(path));
         ProxyFormat.Fetched page = get(folder);
         if (page.status() != 200) {
-            throw new IOException("Artifactory folder listing failed (" + page.status() + ") for " + folder);
+            throw ImportFailure.status(page.status(), folder, "Artifactory folder listing");
         }
         for (JsonNode child : JSON.readTree(new String(page.body(), StandardCharsets.UTF_8)).path("children")) {
             String name = name(child);
@@ -200,7 +201,7 @@ public final class ArtifactorySource implements ImportSource {
             String childPath = path + "/" + name;
             if (child.path("folder").asBoolean(false)) {
                 if (depth >= MAX_DEPTH) {
-                    throw new IOException("Folder tree exceeds depth " + MAX_DEPTH + " at " + childPath);
+                    throw ImportFailure.protocol("Folder tree exceeds depth " + MAX_DEPTH + " at " + childPath);
                 }
                 crawl(consumer, prefix, childPath, depth + 1);
             } else {
@@ -236,16 +237,16 @@ public final class ArtifactorySource implements ImportSource {
 
     private InputStream open(URI url) throws IOException {
         ProxyFormat.Download download = fetcher.download(url, headers())
-                .orElseThrow(() -> new IOException("No response from " + url));
+                .orElseThrow(() -> ImportFailure.unreachable(url));
         if (download.status() != 200) {
             download.close();
-            throw new IOException("Download failed (" + download.status() + ") for " + url);
+            throw ImportFailure.status(download.status(), url, "Download");
         }
         return download.body();
     }
 
     private ProxyFormat.Fetched get(URI url) throws IOException {
-        return fetcher.fetch(url, headers()).orElseThrow(() -> new IOException("No response from " + url));
+        return fetcher.fetch(url, headers()).orElseThrow(() -> ImportFailure.unreachable(url));
     }
 
     private Map<String, String> headers() {

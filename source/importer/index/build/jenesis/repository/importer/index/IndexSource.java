@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.format.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.importer.ImportFailure;
 import build.jenesis.repository.importer.ImportSource;
 
 /**
@@ -101,13 +102,13 @@ public final class IndexSource implements ImportSource {
         // its listing-derived downloads. A SAME-ORIGIN download is not screened: it goes where the operator already
         // pointed the importer (and the credential wrapper only authenticates same-origin reads for the same reason).
         if (!sameOrigin(url) && PrivateHosts.resolvesToPrivate(url.getHost())) {
-            throw new IOException("Refusing a cross-origin download to a private/loopback host: " + url);
+            throw ImportFailure.protocol("Refusing a cross-origin download to a private/loopback host: " + url);
         }
         ProxyFormat.Download download = fetcher.download(url, coordinate.headers())
-                .orElseThrow(() -> new IOException("No response from " + url));
+                .orElseThrow(() -> ImportFailure.unreachable(url));
         if (download.status() != 200) {
             download.close();
-            throw new IOException("Download failed (" + download.status() + ") for " + url);
+            throw ImportFailure.status(download.status(), url, "Download");
         }
         return download.body();
     }

@@ -7,9 +7,13 @@ import build.jenesis.repository.contract.testkit.ContractCensus.Exemption;
 import build.jenesis.repository.contract.testkit.ContractCensus.Provider;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.format.testkit.TraversalVectors;
 import build.jenesis.repository.store.ArtifactDescriptor;
+import build.jenesis.repository.store.ArtifactStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The core half of the cross-format {@link RepositoryImporter} contract (the downstream half lives in the gateway
@@ -24,6 +28,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code Optional.empty()} for {@code importTarget} by design (OCI owns its own manifest screening choke point). The two
  * special shapes are asserted directly; the shared {@link ContractCensus} ratchet then confirms every statically
  * declared format provider is runtime-visible and has importer coverage or a reason-bearing exemption.
+ *
+ * <p>The traversal row below is the one property every importer runs, over the format kit's shared
+ * {@link TraversalVectors} list rather than over per-importer shapes. The <em>read</em> half of a migration - what an
+ * {@code ImportSource} enumerates, resumes, streams and classifies - is the importer kit's job instead
+ * ({@code source/importer/testkit} + {@code test/importer/contract}), and its census covers the five
+ * {@code ImportSourceProvider}s the same way this one covers the three importing formats.
  */
 class ImporterContractTest {
 
@@ -91,6 +101,84 @@ class ImporterContractTest {
         assertThat(oci.importTarget("v2/app/manifests/1.0"))
                 .as("OCI owns its own manifest screening, so importTarget is empty").isEmpty();
         assertThat(oci.importTarget("/v2/app/blobs/sha256:abc")).isEmpty();
+    }
+
+    /**
+     * The traversal row, run over <em>every</em> discovered importer with the shared probe vectors rather than per
+     * format, because a screen that each importer's own suite probes with the shapes its author thought of is exactly
+     * how the coordinate seam rotted format by format before T-202a.
+     *
+     * <p>What it holds open: {@code RawImporter.importTarget("/../x")} used to answer a descriptor whose path was
+     * {@code /raw/../x}, and {@code MavenImporter} inherited {@code MavenFormat.describe}'s fall-through to
+     * {@code ArtifactDescriptor.at(ECOSYSTEM, path)}, so the same shape came back as {@code /maven/../x}. That
+     * descriptor is what the import edge screens against, what an edition records for a held or rejected asset, and
+     * what a quarantine diversion composes its key from - so a traversal-shaped path there points all three at a
+     * coordinate the asset will never occupy. Answering {@link Optional#empty()} instead would be worse, not better:
+     * the edge reads empty as "this format screens elsewhere, stream the source bytes straight through".
+     */
+    @Test
+    void no_importer_echoes_a_traversal_shaped_source_path_into_a_descriptor() {
+        List<RepositoryImporter> importers = discovered();
+        assertThat(importers).as("the traversal row must probe at least one importer").isNotEmpty();
+
+        for (RepositoryImporter importer : importers) {
+            String label = importer.getClass().getSimpleName();
+            for (TraversalVectors.Vector vector : TraversalVectors.all()) {
+                for (String path : List.of(vector.relative(), "/" + vector.relative())) {
+                    String probe = label + " (" + vector.id() + ": " + path + ")";
+                    switch (vector.kind()) {
+                        case DECODED -> {
+                            assertThatThrownBy(() -> importer.importTarget(path))
+                                    .as("%s: a source path carrying a '.' or '..' segment addresses nothing this "
+                                            + "format can lay out, so it is refused by name - never echoed into the "
+                                            + "descriptor the edge screens and records, and never demoted to the "
+                                            + "empty answer that means 'lay it out unscreened'", probe)
+                                    .isInstanceOf(IllegalArgumentException.class);
+                            // The write half refuses the same shapes before it touches the store, so an importer
+                            // reached by another edge cannot compose the key either. The screen runs first, so the
+                            // arguments below are never used.
+                            assertThatThrownBy(() -> importer.importArtifact(path, InputStream.nullInputStream(),
+                                    (ArtifactStore) null))
+                                    .as("%s: the layout half refuses the same shape", probe)
+                                    .isInstanceOf(IllegalArgumentException.class);
+                        }
+                        case ENCODED, SHAPE_CAP -> {
+                            // A percent-encoded traversal is a literal name here (no importer decodes its own paths),
+                            // and an over-shaped one is the store key cap's refusal, not the importer's. Either may
+                            // resolve - what may never happen is that the composed target path is itself traversal
+                            // shaped, which would mean something below decoded or normalised it.
+                            assertThatCode(() -> importer.importTarget(path).ifPresent(descriptor ->
+                                    assertThat(ArtifactStore.traversalFree(descriptor.path()))
+                                            .as("%s: the composed target path '%s' must not carry a traversal segment",
+                                                    probe, descriptor.path())
+                                            .isTrue()))
+                                    .as("%s: a literal or over-shaped name is not the importer's refusal to make",
+                                            probe)
+                                    .doesNotThrowAnyException();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void an_importable_source_path_still_resolves_after_the_traversal_screen() {
+        // Non-vacuity for the row above: the screen refuses the laced shapes because they are laced, not because the
+        // importers stopped answering. A leading slash stays the Nexus 3.71 shape the walk normalises, not an escape.
+        RepositoryImporter raw = importerFor("raw");
+        assertThat(raw.importTarget("dir/sub/file.txt")).isPresent();
+        assertThat(raw.importTarget("/dir/sub/file.txt")).isPresent();
+        assertThat(importerFor("maven").importTarget("org/example/lib/1.0/lib-1.0.jar")).isPresent();
+        assertThat(RepositoryImporter.importable("%2e%2e/name.txt"))
+                .as("a percent-encoded traversal is an ordinary literal name at this seam").isTrue();
+        assertThat(RepositoryImporter.importable("dir/../file.txt")).isFalse();
+        assertThat(RepositoryImporter.importable("dir\\file.txt"))
+                .as("a backslash segment separator is refused here even where the store's key screen still folds none")
+                .isFalse();
+        assertThat(RepositoryImporter.importable("")).isFalse();
+        assertThat(RepositoryImporter.importable("/")).isFalse();
+        assertThat(RepositoryImporter.importable("a//b")).isFalse();
     }
 
     @Test

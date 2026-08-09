@@ -25,6 +25,10 @@ public final class OciImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
+        // RepositoryImporter clause 4, before the empty answer below: empty means "lay this out unscreened", so a
+        // traversal-shaped source path must be refused rather than granted that permission (§13 - the same screen raw
+        // and maven apply, applied by the importer whose answer is the most permissive of the three).
+        RepositoryImporter.importablePath(sourcePath, "oci");
         // Structural exception: an OCI push is not a single-body write - a manifest references blobs pushed as their
         // own assets - so OCI owns its screening choke point through its own manifest choreography (T26.7), not the
         // import edge. Empty tells the walk to lay each OCI asset out unscreened here; the manifest gate screens it.
@@ -38,7 +42,7 @@ public final class OciImporter implements RepositoryImporter {
 
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        String rest = path.startsWith("/") ? path.substring(1) : path;
+        String rest = RepositoryImporter.importablePath(path, "oci");
         if (rest.startsWith("v2/")) {
             rest = rest.substring("v2/".length());
         }
