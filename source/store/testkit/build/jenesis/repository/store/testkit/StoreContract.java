@@ -2,6 +2,7 @@ package build.jenesis.repository.store.testkit;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.ArtifactStoreProvider;
 
 /**
  * The executable {@link ArtifactStore} contract: one parameterized body of checks that every backend runs through a
@@ -75,7 +76,11 @@ public final class StoreContract {
         BATCH_FAILURE_IS_PER_ENTRY,
         /** The store-primitive invariants hold on a live backend: no {@code publish/} pointer without its blob, no
          *  unreferenced blob - and a planted dangling pointer is caught. */
-        STORE_INVARIANTS
+        STORE_INVARIANTS,
+        /** An endpoint an operator points the backend at is required to be {@code https}: a plaintext one is refused
+         *  at resolution, naming the opt-out key, and is honoured only once that opt-out is explicitly set. A backend
+         *  with no endpoint at all (the filesystem) has no transport to screen and excludes the property. */
+        PLAINTEXT_ENDPOINT_REFUSED
     }
 
     /** One named, independently runnable contract check. */
@@ -98,8 +103,14 @@ public final class StoreContract {
     }
 
     /**
-     * Every contract check, in declaration order, independent of any fixture. The list is the contract: a backend runs
-     * all of it or names - with a reason - the properties its environment cannot express.
+     * Every contract check a live store alone can express, in declaration order, independent of any fixture. The list
+     * is the contract: a backend runs all of it or names - with a reason - the properties its environment cannot
+     * express.
+     *
+     * <p>One clause of the SPI is about how a backend is <em>resolved</em> rather than about a store it already handed
+     * out - a plaintext endpoint has to be refused before there is any store to check - so {@link #checks(StoreFixture)}
+     * appends it from the fixture's own declarations. The census counts properties through that overload, so nothing
+     * here shrinks the contract.
      */
     public static List<Check> checks() {
         List<Check> checks = new ArrayList<>();
@@ -158,6 +169,10 @@ public final class StoreContract {
      * The checks {@code fixture} runs: every check whose property the fixture does not exclude. Excluding a property
      * the enum does not declare, or excluding one without a reason, fails here rather than silently shrinking the
      * suite.
+     *
+     * <p>The resolution-level check is built here, closed over {@code fixture}, because it drives
+     * {@link ArtifactStoreProvider#resolve} with the fixture's own config rather than a store it already produced. It
+     * ignores the store argument the driver hands it.
      */
     public static List<Check> checks(StoreFixture fixture) {
         Objects.requireNonNull(fixture, "fixture");
@@ -170,7 +185,11 @@ public final class StoreContract {
                         + "is proven instead.");
             }
         });
-        return checks().stream().filter(check -> !unsupported.containsKey(check.property())).toList();
+        List<Check> checks = new ArrayList<>(checks());
+        checks.add(new Check(Property.PLAINTEXT_ENDPOINT_REFUSED,
+                "a plaintext endpoint is refused at resolution unless the operator opts out",
+                _ -> plaintextEndpointRefused(fixture)));
+        return checks.stream().filter(check -> !unsupported.containsKey(check.property())).toList();
     }
 
     // --- the contract ------------------------------------------------------------------------------------------
@@ -516,6 +535,48 @@ public final class StoreContract {
         isolated.delete("blobs/" + hash);
     }
 
+    /**
+     * The transport screen, driven through the resolution path a deployment takes rather than through a live store: the
+     * fixture's own config - the one it reaches its emulator over plaintext {@code http} with - must be refused when
+     * its opt-out is taken away, and honoured when it is put back.
+     *
+     * <p>The {@code s3} and {@code gcs} backends have refused a non-{@code https} endpoint override since they were
+     * written; the {@code azure-blob} backend had no such screen at all, because its scheme rides <em>inside</em> the
+     * connection string that also carries the account key, so the rule its siblings enforce never applied to it and a
+     * mistyped scheme put the account key and every artifact byte on a plaintext wire with no operator signal. Stating
+     * the rule once here is what stops the next endpoint-configured backend from arriving without it (&sect;13).
+     *
+     * <p>The fixture supplying the config is also what makes the check honest in the other direction: because the
+     * emulators are only reachable over {@code http}, the whole containerised leg is proof that the opt-out really is
+     * an opt-out, and the negative leg here is proof the screen really bites.
+     */
+    private static void plaintextEndpointRefused(StoreFixture fixture) {
+        StoreFixture.Plaintext plaintext = fixture.plaintext().orElseThrow(() -> failure(
+                "the '" + fixture.backend() + "' fixture runs PLAINTEXT_ENDPOINT_REFUSED but declares no plaintext() "
+                        + "config; a backend with an endpoint must declare the config it reaches it over and the key "
+                        + "that opts out, and a backend with no endpoint must exclude the property with a reason"));
+        Map<String, String> allowed = new LinkedHashMap<>(plaintext.config());
+        String optOut = allowed.remove(plaintext.allowInsecureKey());
+        if (!Boolean.parseBoolean(optOut)) {
+            throw failure("the '" + fixture.backend() + "' fixture's declared config must itself carry "
+                    + plaintext.allowInsecureKey() + "=true - its emulator is reachable only over plaintext http, so "
+                    + "a fixture that resolves without the opt-out is proof the screen is not applied at all, but the "
+                    + "value was " + optOut);
+        }
+
+        String message = throwsIse(() -> ArtifactStoreProvider.resolve(fixture.backend(), allowed::get),
+                "resolving the '" + fixture.backend() + "' backend against its plaintext endpoint with the opt-out "
+                        + "removed - credentials and artifact bytes would travel in clear with no operator signal");
+        if (!message.contains(plaintext.allowInsecureKey())) {
+            throw failure("the refusal must name the opt-out key '" + plaintext.allowInsecureKey() + "', or an "
+                    + "operator running a local emulator has no way to act on it, but the message was: " + message);
+        }
+
+        // ... and the screen is an opt-out, not a ban: the same config resolves once the operator sets it.
+        notNull(ArtifactStoreProvider.resolve(fixture.backend(), plaintext.config()::get),
+                "the very same plaintext endpoint resolves once the opt-out is explicitly set");
+    }
+
     // --- helpers -----------------------------------------------------------------------------------------------
 
     private static List<String> page(ArtifactStore store, String prefix, String startAfter, int limit) {
@@ -615,6 +676,20 @@ public final class StoreContract {
                     + " was thrown: " + e.getMessage());
         }
         throw failure(what + " - expected an IllegalArgumentException but nothing was thrown");
+    }
+
+    /** A body that must fail with an {@link IllegalStateException} - the SPI's refused-at-resolution shape (&sect;9) -
+     *  answering its message, so a check can also require the diagnostic to name what the operator has to do. */
+    private static String throwsIse(Fallible body, String what) {
+        try {
+            body.run();
+        } catch (IllegalStateException expected) {
+            return String.valueOf(expected.getMessage());
+        } catch (Exception e) {
+            throw failure(what + " - expected an IllegalStateException but " + e.getClass().getName()
+                    + " was thrown: " + e.getMessage());
+        }
+        throw failure(what + " - expected an IllegalStateException but nothing was thrown");
     }
 
     @FunctionalInterface

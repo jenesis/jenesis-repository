@@ -3,6 +3,7 @@ package build.jenesis.repository.store.contract.test;
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.testkit.StoreContract;
 import build.jenesis.repository.store.testkit.StoreFixture;
 
 /**
@@ -13,6 +14,17 @@ final class FilesystemStoreFixture implements StoreFixture {
 
     private Path root;
     private ArtifactStore store;
+
+    /** The one backend with no endpoint at all: a local directory has no transport to screen. The property is proven
+     *  by the three backends that do have one ({@code s3}, {@code gcs}, {@code azure-blob}), each of which reaches its
+     *  emulator over plaintext http through the explicit opt-out. */
+    @Override
+    public Map<StoreContract.Property, String> unsupported() {
+        return Map.of(StoreContract.Property.PLAINTEXT_ENDPOINT_REFUSED,
+                "the filesystem backend is a directory on the host and has no endpoint, so there is no transport "
+                        + "scheme to refuse; the property is proven by the s3, gcs and azure-blob fixtures, which each "
+                        + "reach their emulator over plaintext http through the explicit opt-out");
+    }
 
     @Override
     public String backend() {
