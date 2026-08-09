@@ -54,15 +54,87 @@ public interface PublishInterceptor extends PublicationObserver {
         REJECT
     }
 
-    /** Read access to the just-stored blob and its already-published siblings, so a gate can inspect the artifact -
-     *  read a jar, or the sibling POM beside it - without reaching into the storage layer or buffering the upload. */
+    /**
+     * Read access to the just-stored blob and its already-published siblings, so a gate can inspect the artifact -
+     * read a jar, or the sibling POM beside it - without reaching into the storage layer or buffering the upload.
+     *
+     * <p><b>Two sibling reads, two different bounds, and the difference is deliberate.</b> A gate reads a companion in
+     * one of two shapes, and conflating them is how a bound stops being honestly reported:
+     * <ul>
+     *   <li>{@link #sibling(String)} is the <em>whole-document</em> read: give me this small published metadata
+     *       document entire, because a fraction of it is worthless (half a POM, half a manifest, half an attestation
+     *       envelope). It has no caller-supplied bound because the caller has no useful answer for a partial read - so
+     *       it carries the seam's own ceiling, {@link #LARGEST_SIBLING}, and past it it <b>throws</b>. That is the only
+     *       honest outcome: silently handing back a prefix the caller believes is whole is the silently-incomplete view
+     *       PRINCIPLES &sect;5 and &sect;9 forbid, and reading without a ceiling turns a gate into an out-of-memory
+     *       lever (&sect;1).</li>
+     *   <li>{@link #sibling(String, int)} is the <em>bounded-fact</em> read: give me at most this many bytes and tell
+     *       me whether there were more, because the caller only needs a bounded fact off the companion (a digest, a
+     *       size, the head of a large document) and has a defined answer for "there was more". It honours the
+     *       <em>caller's</em> bound - never this interface's - and it <b>never fails on size</b>: an over-bound sibling
+     *       comes back as a {@code limit}-length prefix flagged {@link Bounded#truncated()}, which is bound-fails-visibly
+     *       done as an explicit result rather than an exception.</li>
+     * </ul>
+     * A caller that asks for a bounded read must get the bound it asked for. Routing a bounded read through the
+     * whole-document one - reading it whole and trimming afterwards, or letting the whole-document ceiling cut it short -
+     * gives the caller neither: it fails above {@link #LARGEST_SIBLING} however large a bound was requested, and it
+     * buffers the whole companion before deciding to discard most of it. The two reads are therefore separate methods,
+     * each implemented against the store, rather than one expressed in terms of the other.
+     */
     interface Content {
+
+        /**
+         * The ceiling on a whole-document {@link #sibling(String)} read. A sibling read whole is small published
+         * metadata a gate inspects beside the artifact (a jar reading its POM, a package reading its manifest) - never
+         * a whole artifact - so the buffered read is capped at a few MiB. Past it the read fails loudly rather than
+         * materialising an arbitrarily large blob into the heap, which would let a screen be turned into an
+         * out-of-memory lever.
+         *
+         * <p>It bounds {@link #sibling(String)} <b>only</b>. It is emphatically not a ceiling on
+         * {@link #sibling(String, int)}: that read honours the caller's own bound, which may be far larger, precisely
+         * because it never materialises more than the caller asked for and reports the overflow instead of failing on
+         * it. A screen on another ingress leg that caps its own whole-document companion read keys it to this constant
+         * rather than restating the number, so the two legs cannot drift apart on what "too large to read whole" means.
+         */
+        int LARGEST_SIBLING = 8 * 1024 * 1024;
 
         /** Open the blob this artifact was stored under ({@code blobs/<hash>}); the caller closes the stream. */
         InputStream open() throws IOException;
 
-        /** The bytes already published at a sibling request path (a jar reading its POM), or empty if nothing is there. */
+        /** The bytes already published at a sibling request path (a jar reading its POM), or empty if nothing is
+         *  there. The whole document or nothing: past {@link #LARGEST_SIBLING} this throws rather than returning a
+         *  prefix the caller would read as complete. A caller that can use a prefix asks for one through
+         *  {@link #sibling(String, int)} instead. */
         Optional<byte[]> sibling(String path) throws IOException;
+
+        /**
+         * Up to {@code limit} bytes of the sibling already published at this request path, read straight off the store
+         * so nothing beyond the bound is ever materialised - or empty if nothing is published there. The seam a gate
+         * uses when it needs a bounded fact off a companion (the digest of the artifact an attestation names, the head
+         * of an SBOM attachment) and must not pull a multi-gigabyte companion whole into a {@code byte[]} on the
+         * publish thread.
+         *
+         * <p><b>The bound is the caller's and it is honoured exactly.</b> A sibling of at most {@code limit} bytes
+         * comes back whole with {@link Bounded#truncated()} {@code false}; a longer one comes back as its first
+         * {@code limit} bytes with {@code truncated} {@code true}. Size alone never raises here, whatever
+         * {@link #LARGEST_SIBLING} says - an over-bound companion is a fact the caller asked to be told, not a failure
+         * of the publish. Implementations read one byte past {@code limit} to tell the two apart, so a sibling of
+         * <em>exactly</em> {@code limit} bytes is reported whole rather than pessimistically flagged: the caller really
+         * does hold every byte, and a digest computed over it really is the companion's digest.
+         *
+         * @param path  the sibling's published request path
+         * @param limit the most bytes to materialise; must be positive
+         */
+        Optional<Bounded> sibling(String path, int limit) throws IOException;
+
+        /** A bounded read of a sibling: its {@code content} - the whole sibling, or the leading {@code limit} bytes of
+         *  a longer one - and whether it was cut short. {@code truncated} is the caller's signal that a fact derived
+         *  from the whole (a digest, a length, a parse) cannot be confirmed from what it holds, so it must degrade
+         *  explicitly rather than assert something about a prefix. The array is handed over rather than copied: this
+         *  seam exists to keep exactly one bounded buffer alive, and defensively duplicating it would double the very
+         *  heap the bound is protecting. */
+        record Bounded(byte[] content, boolean truncated) {
+        }
 
         /** The scoped store the publication routed through - the doubly-scoped (tenant/repository) space this upload
          *  belongs to, the same store {@link #committed} receives. A screen that must consult already-recorded state
