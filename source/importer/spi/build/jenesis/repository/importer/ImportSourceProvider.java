@@ -11,6 +11,52 @@ import module java.base;
  * {@link #create build} the source from the request and the fetcher the server supplies. So the server carries no
  * knowledge of Nexus or Artifactory (or any future incumbent) - it only knows this contract, and a new one plugs in
  * by adding a module.
+ *
+ * <h2>Contract</h2>
+ * {@code ImportContract} in the importer testkit ({@code source/importer/testkit}) proves clauses 2, 3, 4, 5, 7 and 12
+ * over every discovered provider through a per-connector fixture, and its census fails on a provider with neither.
+ * <ol>
+ * <li><b>Thread-safety.</b> The provider is a discovery singleton the server holds for the process's life and may call
+ *     from several request threads at once, so {@link #name}, {@link #label}, {@link #handles},
+ *     {@link #requiresFormat}, {@link #requiredConfig} and {@link #create} are all safe to call concurrently. The
+ *     {@link ImportSource} {@link #create} returns is per-migration and need not be.</li>
+ * <li><b>Idempotency / replay.</b> {@link #create} is a pure construction: the same request builds an equivalent
+ *     source, and building one starts no walk, opens no connection and mutates nothing. A migration is resumed by
+ *     building a fresh source from the same request carrying {@link ImportRequest#cursor() the checkpointed cursor} -
+ *     the walk then continues rather than re-delivering what the interrupted run had already fully consumed.</li>
+ * <li><b>Absence sentinel.</b> {@link #create} answers {@code null} - not an exception, and not a half-built source
+ *     that fails later - when the request is missing something this source needs (an ecosystem format it declared
+ *     through {@link #requiresFormat}, a root that does not answer at all). The caller reports that as a bad request.
+ *     Every other accessor answers a value; {@link #requiredConfig} answers an empty set, never {@code null}.</li>
+ * <li><b>Selection failure (&sect;9).</b> Providers are additive ({@code ALL}), so there is nothing to select among
+ *     them: a submitted source name reaches the first provider that {@link #handles} it and an unhandled name is a bad
+ *     request. A provider whose {@link #requiredConfig} keys are unset <em>self-disables at discovery</em>
+ *     ({@code Features.active}) rather than being discovered and failing per migration, so an operator sees one line at
+ *     boot naming the missing keys instead of a runtime failure per submission.</li>
+ * <li><b>Streaming (&sect;1).</b> The source this builds streams every asset: bytes go from the incumbent to storage
+ *     through {@link ImportSource.Content#open} without being materialised, and the credentials wrapper a provider puts
+ *     around the fetcher must not turn a streaming {@code download} into a buffered {@code fetch}.</li>
+ * <li><b>Tenant scoping (&sect;6).</b> A provider is deployment-wide and holds no tenant state; the tenant rides the
+ *     store the write half of the migration is given, never the request or the source.</li>
+ * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. An incumbent that refuses, is absent or cannot answer
+ *     surfaces from the walk as an {@link ImportFailure} carrying its {@link ImportFailure.Kind}, so a job can tell a
+ *     bad credential from a throttle rather than string-matching one {@code IOException}.</li>
+ * <li><b>Read purity (&sect;10).</b> {@link #create} may probe the root to decide whether to build a source at all
+ *     (that probe is what makes a typo'd URL a synchronous bad request), but it writes nothing and imports nothing;
+ *     every asset read happens inside the walk.</li>
+ * <li><b>Staleness.</b> An import is a point-in-time walk with no cached view of its own; the cursor a walk checkpoints
+ *     is how far it got, not how fresh it is.</li>
+ * <li><b>Lifecycle / ownership.</b> The server discovers providers once with {@code ServiceLoader} and keeps them; a
+ *     provider owns no threads and no HTTP client - it is handed the shared {@link ProxyFormat.Fetcher} and must use
+ *     it (wrapping it to add credentials is allowed, replacing it is not). The {@link ImportSource} is owned by the
+ *     migration that requested it and is not reused across migrations.</li>
+ * <li><b>Ordering / concurrency.</b> {@link #name} is unique across installed providers and stable across releases (it
+ *     is what an operator writes and what a cursor was issued under); discovery order must not decide which provider
+ *     answers a source name.</li>
+ * <li><b>Bounded work / cancellation.</b> {@link #create} does at most one bounded probe. The walk itself is bounded by
+ *     the source's own paging and depth caps, and reaching one is an explicit {@link ImportFailure}, never a silently
+ *     truncated asset list - a migration that quietly stopped half way looks exactly like a complete one.</li>
+ * </ol>
  */
 public interface ImportSourceProvider {
 

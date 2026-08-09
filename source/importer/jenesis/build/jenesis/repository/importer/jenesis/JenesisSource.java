@@ -2,6 +2,7 @@ package build.jenesis.repository.importer.jenesis;
 
 import module java.base;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.importer.ImportFailure;
 import build.jenesis.repository.importer.ImportSource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -62,7 +63,7 @@ public final class JenesisSource implements ImportSource {
                     + (token == null ? "" : "&cursor=" + URLEncoder.encode(token, StandardCharsets.UTF_8)));
             ProxyFormat.Fetched page = get(url);
             if (page.status() != 200) {
-                throw new IOException("jenesis listing failed (" + page.status() + ") for " + url);
+                throw ImportFailure.status(page.status(), url, "jenesis listing");
             }
             JsonNode body = JSON.readTree(page.body());   // parse straight off the bytes, no intermediate String copy
             for (JsonNode asset : body.path("assets")) {
@@ -98,16 +99,16 @@ public final class JenesisSource implements ImportSource {
 
     private InputStream open(URI url) throws IOException {
         ProxyFormat.Download download = fetcher.download(url, headers())
-                .orElseThrow(() -> new IOException("No response from " + url));
+                .orElseThrow(() -> ImportFailure.unreachable(url));
         if (download.status() != 200) {
             download.close();
-            throw new IOException("Download failed (" + download.status() + ") for " + url);
+            throw ImportFailure.status(download.status(), url, "Download");
         }
         return download.body();
     }
 
     private ProxyFormat.Fetched get(URI url) throws IOException {
-        return fetcher.fetch(url, headers()).orElseThrow(() -> new IOException("No response from " + url));
+        return fetcher.fetch(url, headers()).orElseThrow(() -> ImportFailure.unreachable(url));
     }
 
     private Map<String, String> headers() {

@@ -25,8 +25,83 @@ import module java.base;
  * claiming) and {@link #importTarget} rather than {@code describe} (which {@link ArtifactLayout#describe(String)} owns
  * for the coordinate behind a request path) - so one format object can carry the layout and the importer capability
  * at once. There is no backwards-compatibility constraint; the re-pin batch absorbs the rename.
+ *
+ * <h2>Contract</h2>
+ * This is a role sub-interface of {@link RepositoryFormat}: that contract still binds, and the clauses below state what
+ * absorbing a foreign repository's assets adds. {@code ImportContract} in the importer testkit proves the read half
+ * (the {@code ImportSource} the walk comes from) and {@code ImporterContractTest} proves this half over every
+ * discovered importer.
+ * <ol>
+ * <li><b>Thread-safety.</b> The importer is the format singleton, and the orchestrator may walk several assets
+ *     concurrently, so both methods are safe to call concurrently. Neither may keep per-asset state on the instance.</li>
+ * <li><b>Idempotency / replay.</b> An import is resumable and therefore replayed: {@link #importArtifact} of the same
+ *     path and bytes twice must converge on the same stored state, never duplicate it. The content-addressed blob makes
+ *     the body idempotent; a format's own sidecars and pointers must be written the same way (compare-and-set, or a
+ *     write whose second application is a no-op).</li>
+ * <li><b>Absence sentinel.</b> {@link #importTarget} answers {@link Optional#empty()} for an asset this format lays out
+ *     <em>without</em> an edge screen, and never {@code null}. Empty is a positive declaration ("my own choke point
+ *     screens this"), not a way to decline an asset: the edge reads it as permission to stream the source bytes
+ *     straight through, so an importer that cannot lay an asset out must refuse it rather than answer empty.</li>
+ * <li><b>Traversal refusal.</b> A source path is as client-supplied as a request path - it derives from a name someone
+ *     published to the incumbent - so a path that is not {@link #importable} is refused by <em>both</em> methods with an
+ *     {@link IllegalArgumentException} naming it. It is never echoed into the descriptor {@link #importTarget} returns:
+ *     that descriptor's path is what the import edge screens against and what an edition records for a held or rejected
+ *     asset, and its store key is what a quarantine diversion is composed from, so a traversal-shaped path there aims
+ *     the screen and the record at a coordinate the asset will never occupy. The read half is contract-bound never to
+ *     report such a path ({@code ImportSource.safePath}); this is the belt behind that brace, and it is the one
+ *     {@link ArtifactLayout#addressable} screen the coordinate seam already uses rather than a second definition.</li>
+ * <li><b>Streaming (&sect;1).</b> {@link #importArtifact} copies its stream straight to storage; an artifact is never
+ *     materialised. An importer that must parse a coordinate or a manifest out of the content may buffer it only under
+ *     an explicit cap (the OCI manifest limit is the reference), never a whole artifact.</li>
+ * <li><b>Read purity (&sect;10).</b> {@link #imports} and {@link #importTarget} derive from their arguments alone - no
+ *     store read, no network - so the edge can call {@link #importTarget} before it has spent a byte of bandwidth on
+ *     the asset.</li>
+ * <li><b>Error visibility (&sect;9).</b> {@link #importArtifact} throws rather than swallowing: an asset that could not
+ *     be laid out must not be counted as imported. Only a refusal the format itself renders (an unparseable OCI
+ *     manifest) may be logged and skipped, and only because nothing was laid out.</li>
+ * <li><b>Lifecycle / ownership.</b> The importer is the {@code ServiceLoader}-discovered format instance itself; the
+ *     orchestrator creates nothing and closes nothing. It owns no threads and no clients. The caller opens and closes
+ *     the content stream {@link #importArtifact} is handed.</li>
+ * <li><b>Ordering / concurrency.</b> Assets arrive in the source's enumeration order and the importer may not depend on
+ *     any other order - in particular, a referent may arrive before or after its referrer, so an importer that links
+ *     one asset to another lays out what it has and converges on the rest.</li>
+ * <li><b>Durability / delivery.</b> The commit point is the format's own serving-pointer link inside
+ *     {@link #importArtifact}, which the edge calls from within {@code Publication.commit}'s accepted-layout callback -
+ *     so the screen has already run and the blob is already stored when the pointer lands (pointer-last). A crash
+ *     before the pointer leaves an unreferenced blob the garbage collector reclaims; a crash after it leaves an
+ *     imported asset a resumed walk re-imports idempotently.</li>
+ * </ol>
  */
 public interface RepositoryImporter {
+
+    /**
+     * Whether a source path may be laid out at all: relative (a leading slash is the Nexus 3.71 shape and is dropped),
+     * non-empty, and every segment a single addressable name - no empty, {@code .} or {@code ..} segment, no separator
+     * smuggled inside one, no backslash.
+     *
+     * <p>Deliberately {@link ArtifactLayout#addressable} applied segment by segment rather than a second screen: the
+     * coordinate seam already refuses exactly these shapes through that predicate, and a source path is the same kind
+     * of semi-trusted, client-supplied name one segment at a time. Stating it here means a new importer inherits the
+     * guard instead of being the next one to compose {@code "/raw/" + "../x"} (&sect;13).
+     */
+    static boolean importable(String sourcePath) {
+        if (sourcePath == null) {
+            return false;
+        }
+        String relative = sourcePath.startsWith("/") ? sourcePath.substring(1) : sourcePath;
+        return !relative.isEmpty() && ArtifactLayout.addressable(relative.split("/", -1));
+    }
+
+    /** The screen behind clause 4, applied by every importer at both seams: a source path that is not
+     *  {@link #importable} is refused by name rather than echoed into a descriptor or a store key. */
+    static String importablePath(String sourcePath, String format) {
+        if (!importable(sourcePath)) {
+            throw new IllegalArgumentException("the " + format + " importer refuses the source path '" + sourcePath
+                    + "': a segment is empty, '.', '..' or carries a separator, so it addresses nothing this format "
+                    + "can lay out. An import source must not report such a path (ImportSource.safePath).");
+        }
+        return sourcePath.startsWith("/") ? sourcePath.substring(1) : sourcePath;
+    }
 
     /** Whether this format can import a source repository of the given format - the source manager's name, e.g.
      *  {@code maven2}, {@code docker}, {@code npm}, {@code pypi}, {@code nuget}, {@code rubygems}, {@code raw}. Named

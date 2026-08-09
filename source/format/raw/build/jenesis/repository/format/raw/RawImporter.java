@@ -23,7 +23,11 @@ public final class RawImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        String relative = sourcePath.startsWith("/") ? sourcePath.substring(1) : sourcePath;
+        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, and the descriptor
+        // composed here is what the import edge screens against, what an edition records for a held asset and what a
+        // quarantine diversion keys off - so "/../x" must be refused by name rather than echoed as "/raw/../x".
+        // Empty is not the answer: the edge reads it as "lay this out unscreened".
+        String relative = RepositoryImporter.importablePath(sourcePath, "raw");
         // A raw asset carries no ecosystem coordinate; the target request path it lands on is its screen identity, so
         // the edge gates the /raw/ path the asset will serve from.
         return Optional.of(ArtifactDescriptor.at("raw", "/raw/" + relative));
@@ -31,7 +35,7 @@ public final class RawImporter implements RepositoryImporter {
 
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        String relative = path.startsWith("/") ? path.substring(1) : path;
+        String relative = RepositoryImporter.importablePath(path, "raw");
         Publication publication = new Publication(store);
         // Layout-only (EPIC 26): screening rides the ingress edge (the import walk screens each asset before handing it
         // here), so this lays the asset out - store it content-addressed (streamed, never buffered) and link its

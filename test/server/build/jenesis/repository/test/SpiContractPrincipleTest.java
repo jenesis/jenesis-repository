@@ -259,9 +259,11 @@ class SpiContractPrincipleTest {
         // (source/format/testkit + test/format/contract) and could therefore state the clauses it now asserts:
         // HEAD-from-metadata, traversal refusal at the format seam, withhold-on-enumeration, proxy integrity and
         // streaming, and the determinism a generated index's revalidation rests on.
-        allow.put("build.jenesis.repository.format.RepositoryImporter",
-                "T-301a: streaming transfer, resumability and error classification, shared with the T-203 importer "
-                        + "contract extension");
+        // RepositoryImporter burnt down by T-203, which extended the importer contract from discovery to behaviour
+        // (source/importer/testkit + test/importer/contract) and could therefore state the clauses it now asserts:
+        // the traversal refusal both importer seams apply through ArtifactLayout.addressable, the pointer-last commit
+        // point inside Publication.commit's accepted-layout callback, and the streaming and replay semantics an
+        // import walk depends on.
         // FetcherProvider and WalkProvider burnt down by T-101b together with their migration onto optionalUnique.
         allow.put("build.jenesis.repository.format.java.bridge.ModuleView",
                 "T-301b: read purity and determinism across discovery order for the Maven bridge's rendering");
@@ -272,9 +274,9 @@ class SpiContractPrincipleTest {
 
         // --- T-301b: server-spi, importer, observers and the remaining SPIs ---
         // GarbageCollectorProvider burnt down by T-101b together with its migration onto optionalUnique.
-        allow.put("build.jenesis.repository.importer.ImportSourceProvider",
-                "T-301b: resumability, streaming transfer, error classification and credential self-skip - the "
-                        + "behavioural rows T-203 turns into fixtures");
+        // ImportSourceProvider burnt down by T-203 together with ImportSource's own block: the behavioural rows the
+        // waiver deferred - resumability, streaming transfer, error classification and credential self-skip - are the
+        // ImportContract kit's five properties, run over all five connectors.
         allow.put("build.jenesis.repository.posture.SafetyAdvisor",
                 "T-301b: default-deny semantics and read purity (an advisor renders stored state, never probes)");
         allow.put("build.jenesis.repository.ui.Panel",
