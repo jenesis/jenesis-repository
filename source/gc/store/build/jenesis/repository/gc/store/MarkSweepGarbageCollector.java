@@ -6,6 +6,7 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.WalkPass;
 
@@ -39,8 +40,13 @@ import module java.base;
  * marker whose blob is gone is swept by the convergence leg, which also drops the reference shards of superseded
  * passes.
  *
- * <p>Both phases only ever act on shapes they recognise: a leaf that is not a 64-hex SHA-256 pointer is skipped at
- * mark, and a {@code blobs/} name that is not a hash is never judged, let alone deleted.
+ * <p>Both phases only ever act on shapes they recognise: a leaf that names no SHA-256 is skipped at mark, and a
+ * {@code blobs/} name that is not a hash is never judged, let alone deleted. A pointer body is read through
+ * {@link ServableNames#hash(byte[])}, the one seam that owns the dialect a stored pointer body may carry - the bare
+ * lower-case hex the {@code publish/} and {@code blobs/} pointers carry, or the algorithm-qualified
+ * {@code sha256:<hex>} an OCI tag pointer carries - so both dialects name the same blob and both are counted. Only
+ * the mark's <em>body</em> read normalises: every other name the collector judges ({@code gc/condemned/<hash>}
+ * children, {@code blobs/} names, a raw hash) is a store key it writes itself and stays strictly bare hex.
  *
  * <p>An installed collector is its own {@link ObservabilitySource}: once it has run a {@link #collect} it reports
  * {@code jenesis.gc.condemned} - a gauge of the blobs currently condemned ({@code gc/condemned/}) awaiting the
@@ -296,7 +302,16 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
             if (pointer.isEmpty()) {
                 return; // removed between the walk's listing and this read - nothing references through it
             }
-            String named = new String(pointer.get().content(), StandardCharsets.UTF_8).trim();
+            // The body's dialect is read through the one seam that owns it, never re-parsed here: a pointer body is
+            // either the bare lower-case hex the free publish/ and blobs/ pointers carry or the algorithm-qualified
+            // sha256:<hex> of the OCI Distribution tag pointers, and both denote the same blob. Reading it as bare hex
+            // instead left every tag pointer unparsed, so the blob it references never entered the reference set and
+            // the sweep condemned and then DELETED live content - the one thing this collector may never do. The
+            // judgement below still applies to the bare hash, which is also how the sweep names a blob and how a
+            // reference shard is keyed, so the reference is recorded where the sweep looks for it; a body in neither
+            // dialect still names no hash and is still never counted. Same normalisation ServableNames.hash was
+            // introduced for on the withhold screen, and the one RebuildPass reads its pointer bodies through.
+            String named = ServableNames.hash(pointer.get().content());
             if (hash(named)) {
                 buffer.computeIfAbsent(named.substring(0, 2), _ -> new ArrayList<>()).add(named);
             }
@@ -489,7 +504,12 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
         return true;
     }
 
-    /** Whether a value is a bare SHA-256 - the only shape the collector ever trusts as naming a blob. */
+    /** Whether a value is a bare SHA-256 - the only shape the collector ever trusts as naming a blob. Deliberately
+     *  NOT widened to the qualified {@code sha256:<hex>} dialect: besides the mark's pointer body it also judges
+     *  {@code gc/condemned/<hash>} child names, {@code blobs/} names and a raw hash, all of them store keys the
+     *  collector writes itself and all of them bare hex, so widening here would make it accept a malformed name in
+     *  three places to fix a dialect that occurs in one. The pointer body is normalised at its read instead, and this
+     *  then judges the hash that body named. */
     private static boolean hash(String value) {
         if (value.length() != 64) {
             return false;

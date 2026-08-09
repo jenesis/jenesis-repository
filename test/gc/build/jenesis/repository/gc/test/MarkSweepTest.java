@@ -121,6 +121,57 @@ class MarkSweepTest {
     }
 
     @Test
+    void a_qualified_pointer_body_puts_its_blob_in_the_reference_set() throws IOException {
+        // The OCI Distribution dialect: oci/<name>/tags/<tag> holds "sha256:<hex>", not the bare hex the publish/
+        // pointers carry (exactly what OciFormat.linkTag writes), and `oci` is in the pointer-root union the
+        // downstream callers hand collect(). Read as bare hex the body parses as nothing, the blob it references
+        // never enters the reference set, and the sweep condemns and then DELETES a live image - so this is the
+        // deletion the mark's normalisation exists to prevent, not a cosmetic parse.
+        ArtifactStore store = store();
+        Publication publication = new Publication(store);
+        String blob = publication.storeBlob(bytes("an oci manifest"));
+        store.writeVersioned("oci/library/app/tags/1.0",
+                ("sha256:" + blob).getBytes(StandardCharsets.UTF_8), null);
+
+        GcPlan first = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        assertThat(first.complete()).isTrue();
+        assertThat(first.condemned()).as("a referenced blob is never even condemned").isZero();
+        assertThat(store.exists("gc/condemned/" + blob)).isFalse();
+        // The reference is recorded under the BARE hash's leading-byte shard - the only place the sweep, which names a
+        // blob by its bare hex, ever looks. A predicate merely widened to accept the qualifier would shard it under
+        // "sh" and record "sha256:<hex>", which no sweep would ever match; normalising at the body read is what puts
+        // the hash where it is looked for.
+        assertThat(store.list("gc/1/refs/" + blob.substring(0, 2)))
+                .as("the qualified body's hash lands in the bare-hex shard the sweep reads").isNotEmpty();
+
+        GcPlan second = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        assertThat(second.complete()).isTrue();
+        assertThat(second.collected()).isZero();
+        assertThat(store.exists("blobs/" + blob))
+                .as("the blob an OCI tag pointer references survives every sweep").isTrue();
+    }
+
+    @Test
+    void a_qualified_pointer_body_spares_an_already_condemned_blob() throws IOException {
+        // The §13 twin of the bare-hex leg above: a blobs-namespace format links its pointer after a pass condemned
+        // the blob, and the next mark must spare it and converge the stale marker away whichever dialect the body
+        // spells the hash in.
+        ArtifactStore store = store();
+        Publication publication = new Publication(store);
+        String blob = publication.storeBlob(bytes("a re-tagged manifest"));
+        var _ = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        assertThat(store.exists("gc/condemned/" + blob)).isTrue();
+
+        store.writeVersioned("oci/library/app/tags/latest",
+                ("sha256:" + blob).getBytes(StandardCharsets.UTF_8), null);
+        GcPlan next = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        assertThat(next.collected()).isZero();
+        assertThat(next.spared()).isEqualTo(1);
+        assertThat(store.exists("blobs/" + blob)).isTrue();
+        assertThat(store.exists("gc/condemned/" + blob)).as("the stale marker converged away").isFalse();
+    }
+
+    @Test
     void only_recognised_content_addressed_objects_are_ever_judged() throws IOException {
         ArtifactStore store = store();
         store.writeVersioned("blobs/not-a-content-hash", "junk".getBytes(StandardCharsets.UTF_8), null);
