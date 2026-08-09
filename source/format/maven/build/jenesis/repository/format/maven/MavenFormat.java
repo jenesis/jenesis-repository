@@ -64,9 +64,17 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         if (colon < 0) {
             return List.of();
         }
-        String group = coordinate.substring(0, colon).replace('.', '/');
         String artifact = coordinate.substring(colon + 1);
-        return List.of("/maven/" + group + "/" + artifact + "/" + version);
+        // ArtifactLayout clause 3: a coordinate is as client-supplied as a request path, and these paths are handed to
+        // eviction, which unpublishes and DELETES under them. A groupId's dots become separators, so its components are
+        // screened one by one; the artifactId and the version are single segments. A part that is not addressable maps
+        // nowhere - the empty list this method already documents for a coordinate that maps nowhere - rather than
+        // composing "/maven/g/../1.0" and aiming an eviction delete at a neighbouring key space.
+        String[] group = coordinate.substring(0, colon).split("\\.", -1);
+        if (!ArtifactLayout.addressable(group) || !ArtifactLayout.addressable(artifact, version)) {
+            return List.of();
+        }
+        return List.of("/maven/" + String.join("/", group) + "/" + artifact + "/" + version);
     }
 
     @Override
@@ -119,6 +127,14 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     @Override
     public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
+        // RepositoryFormat clause 6: a request path carrying a . or .. segment addresses nothing under /maven/, so it
+        // is refused here - before Publication.link would hand it to the store's key screen, which throws (an unmapped
+        // 500 where the truth is "no such artifact"). Same screen, same shapes, stated once in ArtifactStore; this is
+        // the in-format seam OciFormat has always carried through isImageName/isTag/isDigestHex (§13 parity).
+        if (!ArtifactStore.traversalFree(path)) {
+            exchange.respond(404);
+            return;
+        }
         if (exchange.method().equals("PUT")) {
             // W5.12(1): a maven-metadata.xml (and its checksum siblings) is stored verbatim like any artifact rather
             // than dropped, so a publisher-authored document round-trips even when the server does not derive one.
@@ -263,7 +279,9 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {
         String path = exchange.path();
-        if (!path.startsWith("/maven/")) {
+        // The proxy leg carries the same clause-6 screen as handle(): a traversal-shaped path is no proxy target
+        // either, so it never reaches the upstream and never lays a fetched body out under a path the store refuses.
+        if (!path.startsWith("/maven/") || !ArtifactStore.traversalFree(path)) {
             return false;
         }
         String rest = path.substring("/maven/".length());

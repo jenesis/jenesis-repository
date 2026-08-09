@@ -49,6 +49,8 @@ Where an SPI's clauses are observable but not generifiable, they are asserted by
 
 A containerised fixture self-skips without Docker and **fails** under the strict lane (`-Djenesis.project.properties=ci`, which sets `-Djenesis.test.required`): the decision lives once in `StoreFixture.skipReason`, so a required backend that cannot start is a red build rather than a green skip.
 
+The format kit (`source/format/testkit` + `test/format/contract`) is the same shape for `RepositoryFormat`/`ProxyFormat`/`ArtifactLayout`, and adds the pattern for a property that cannot be *observed*, only *proven*: `WitnessStore` seals an artifact's blob so a `HEAD` that opens it fails by touching a refused key, and watches a `GeneratedBody`'s read counter so a proxy that buffered the download before handing it to the store shows the whole length where a streaming one shows zero. The traversal probe vectors are one shared `TraversalVectors` list spliced into each namespace by a one-line `FormatFixture.probe`, never re-written per fixture — that list is what stops a guard from rotting format by format. A source testkit under `source/**` is excluded by name from the `Streaming`/`UnboundedListing`/`EnumerationScreen`/`FormatScreeningMonopoly` scans (one module deep, never a `testkit` glob), because a kit that walks a store to *assert* a contract is the opposite of the serve-path surface those guards defend.
+
 ## Engineering principles
 
 These rules are the pass/fail checklist. Run every applicable rule by eye over each diff and fix or explicitly flag failures before the change lands. This core is the shared base downstream editions reuse, so keep its seams clean and never fork its mechanism downstream.

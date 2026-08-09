@@ -13,6 +13,66 @@ import module java.base;
  * storage, multi-tenancy, authorization, retention and console without touching them, and a deployment plugs in
  * whichever layouts it wants. Implementations are stateless: the dispatcher passes the already
  * tenant-and-repository-scoped store on each call.
+ *
+ * <h2>Contract</h2>
+ * Every clause below is executable: {@code FormatContract} in the format testkit states it once and each format runs
+ * it through a {@code FormatFixture}, so a clause is proven for Maven, the Jenesis module layout, OCI and raw alike
+ * rather than being re-interpreted per format (&sect;13 - a guard one format applies to a shared concern is applied by
+ * every format with that concern).
+ * <ol>
+ * <li><b>Thread-safety.</b> A format is a stateless singleton the server calls concurrently from every request
+ *     thread: the dispatcher discovers one instance and hands it the already-scoped store on each call, so a format
+ *     keeps no per-request state on itself and any field it does hold is immutable and shared-safe.</li>
+ * <li><b>Idempotency / replay.</b> A repeated write of the same bytes to the same path converges on that path serving
+ *     those bytes - the content-addressed blob dedupes and the pointer is a compare-and-set - so a client retry after
+ *     a lost response never doubles an artifact or leaves a half-published one. A repeated {@code DELETE} of an absent
+ *     path is a no-op, not a failure.</li>
+ * <li><b>Absence sentinel.</b> A path this format claims but does not serve is answered with a status, never with
+ *     {@code null}, an empty {@code 200} body or an escaping exception: an unpublished, withheld or reclaimed path is
+ *     a {@code 404}, and a path whose <em>shape</em> this format cannot address is a {@code 404} too (clause 6).
+ *     {@link #handles} is a pure predicate over the path and never touches the store.</li>
+ * <li><b>Streaming (&sect;1).</b> An artifact body is never materialised: a write streams the request body into the
+ *     content-addressed store (hash-on-write), a read streams the stored blob to the response with the length taken
+ *     from the store's metadata, and a {@code HEAD} answers <em>from that metadata without opening the blob at all</em>
+ *     - so a {@code HEAD} of a multi-gigabyte artifact costs a stat. Only a small generated document (an index, a
+ *     metadata file, a manifest) may be buffered whole, and a format that buffers one bounds it explicitly.</li>
+ * <li><b>Tenant scoping (&sect;6).</b> The {@link ArtifactStore} handed to {@link #handle} is already scoped to one
+ *     tenant and repository, and it is the only storage a format may touch: every key a format composes stays under
+ *     its own namespace within that scope, so no request path can address another format's or another tenant's keys.</li>
+ * <li><b>Traversal refusal.</b> A request path is client-supplied and is refused before it becomes a store key. A path
+ *     carrying a {@code .} or {@code ..} segment - exactly the shapes {@link ArtifactStore#traversalFree} names -
+ *     addresses nothing in this format's namespace and is answered {@code 404}, storing and serving nothing; the same
+ *     screen applies to every client-supplied name a format splices into a key (an image name, a tag, a digest). A
+ *     format never percent-decodes its own path, so an encoded {@code %2e%2e} stays a literal name rather than
+ *     becoming a traversal one layer below the dispatcher that already decoded. Past that shape screen the store's own
+ *     caps still bind: a path that maps to a key beyond {@link ArtifactStore#MAX_SEGMENTS} or
+ *     {@link ArtifactStore#MAX_KEY_BYTES} is refused by {@link ArtifactStore#key} with an
+ *     {@link IllegalArgumentException} and nothing is stored.</li>
+ * <li><b>Withhold-on-enumeration (&sect;4).</b> Every surface that materialises published <em>names</em> - a directory
+ *     listing, a generated version index, a tag or catalog listing - routes its disclosure decision through the shared
+ *     {@code ServableNames} screen (in practice by enumerating with {@code ScreenedNames}), so a version a hold
+ *     retracts from serving leaves every enumeration surface in the same instant. A listing may never disclose a name
+ *     whose {@code GET} answers {@code 404}.</li>
+ * <li><b>Read purity (&sect;10).</b> {@link #handle} on a {@code GET}/{@code HEAD} renders durably stored state only.
+ *     Fetching an upstream is the separate, opt-in {@link ProxyFormat} capability, never something the hosted read
+ *     path does on a miss.</li>
+ * <li><b>Error visibility (&sect;9).</b> Nothing on a correctness-bearing path is swallowed: a store failure while
+ *     serving or accepting surfaces rather than degrading to a {@code 404}, or to a {@code 201} that stored nothing.</li>
+ * <li><b>Lifecycle / ownership.</b> The dispatcher discovers formats through {@link ServiceLoader} and keeps them for
+ *     the life of the process; a format owns no thread, no client and no cache, and closes nothing. A format whose
+ *     {@link #requiredConfig} is unset self-disables at discovery rather than failing at request time.</li>
+ * <li><b>Ordering / concurrency.</b> Two requests against one path may run concurrently; a format's pointer writes are
+ *     compare-and-set, so a concurrent republish resolves last-writer-wins rather than tearing. A format imposes no
+ *     ordering on the dispatcher and behaves identically whatever order the other formats were discovered in.</li>
+ * <li><b>Bounded work / cancellation (&sect;7).</b> Every enumeration is paged and capped: no surface materialises a
+ *     whole namespace, and reaching a cap yields an explicit continuation (a {@code Link} header, a cursor) or fails by
+ *     name - never a plausible-but-partial index, which a resolver reads as "that version does not exist". A generated
+ *     document is a pure function of the stored state it renders, so the bytes are stable across two serves of
+ *     unchanged state and a conditional re-fetch of it revalidates.</li>
+ * <li><b>Durability / delivery.</b> The commit point of a publish is the moment the serving pointer becomes readable,
+ *     and it lands <em>last</em>: bytes are content-addressed first, derived documents and sidecars next, and only then
+ *     is the path linked - so a crash at any point leaves an unreferenced blob rather than a pointer to nothing.</li>
+ * </ol>
  */
 public interface RepositoryFormat {
 
@@ -22,7 +82,9 @@ public interface RepositoryFormat {
     /** Whether this format owns the given request path (the repository prefix already stripped). */
     boolean handles(String path);
 
-    /** Serve or accept the request against the scoped store, writing the response through the exchange. */
+    /** Serve or accept the request against the scoped store, writing the response through the exchange. Contract
+     *  clauses 3-6 bind here: a path whose shape this format cannot address is a {@code 404}, an artifact body is
+     *  streamed rather than buffered, and every composed key stays inside the scoped store's own namespace. */
     void handle(FormatExchange exchange, ArtifactStore store) throws IOException;
 
     /**

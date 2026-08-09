@@ -58,8 +58,16 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     @Override
     public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
-        Publication publication = new Publication(store);
         String path = exchange.path();
+        // RepositoryFormat clause 6: a request path carrying a . or .. segment addresses nothing under /raw/, so it is
+        // refused here rather than reaching the store's key screen, which throws (an unmapped 500 where the truth is
+        // "no such file"). One screen, stated in ArtifactStore, applied at the format seam exactly as OciFormat has
+        // always applied its own (§13 parity).
+        if (!ArtifactStore.traversalFree(path)) {
+            exchange.respond(404);
+            return;
+        }
+        Publication publication = new Publication(store);
         switch (exchange.method()) {
             case "PUT" -> {
                 // Layout-only (EPIC 26): screening rides the ingress edge, which screens the body to ACCEPT and
@@ -75,8 +83,21 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
             }
             // HEAD must answer exactly what a GET would: located() applies the withheld (quarantine/retraction)
             // screens and confirms the content-addressed blob still exists, where blob() only reads the pointer -
-            // so a withheld or GC-reclaimed path would otherwise HEAD 200 while GET 404s.
-            case "HEAD" -> exchange.respond(publication.located(path).isPresent() ? 200 : 404);
+            // so a withheld or GC-reclaimed path would otherwise HEAD 200 while GET 404s. And "exactly what a GET
+            // would" includes its headers: the Content-Type and the Content-Length are read from the store's metadata
+            // (never by opening the blob), so a client sizing an artifact before pulling it gets the same answer here
+            // as from the GET below - the HEAD-from-metadata shape MavenFormat, JenesisFormat and OciFormat already
+            // carry, which this leg alone was missing (§13).
+            case "HEAD" -> {
+                Optional<String> located = publication.located(path);
+                if (located.isEmpty()) {
+                    exchange.respond(404);
+                    return;
+                }
+                exchange.setResponseHeader("Content-Type", "application/octet-stream");
+                exchange.setResponseHeader("Content-Length", Long.toString(store.size(located.get())));
+                exchange.respond(200);
+            }
             default -> {
                 if (path.endsWith("/")) {
                     listing(path, store, exchange);
@@ -99,7 +120,9 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {
         String path = exchange.path();
-        if (!path.startsWith("/raw/") || path.endsWith("/")) {
+        // The proxy leg carries the same clause-6 screen as handle(): a traversal-shaped path is no proxy target
+        // either, so it never reaches the upstream and never lays a fetched body out under a path the store refuses.
+        if (!path.startsWith("/raw/") || path.endsWith("/") || !ArtifactStore.traversalFree(path)) {
             return false;
         }
         String rest = path.substring("/raw/".length());

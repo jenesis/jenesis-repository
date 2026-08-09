@@ -109,6 +109,12 @@ public class IngressCensusTest {
             new Route("RestreamExchange.java", Kind.TRANSPORT,
                     "the edge's restream view: it replaces requestStream() with a fresh open of the accepted blob so "
                             + "the layout never re-reads the socket"),
+            new Route("ContractExchange.java", Kind.TRANSPORT,
+                    "the format contract kit's in-memory FormatExchange: it hands a check's own bytes (or a generated "
+                            + "body) to the format under test and captures the response. A test double reachable from "
+                            + "no request and publishing nothing - classified rather than exempted, because this "
+                            + "census deliberately has no exemption mechanism: an ingress that is 'obviously not a "
+                            + "route' is exactly the shape a real one would claim"),
             new Route("BatchIngestion.java", Kind.FANOUT,
                     "explodes one archive upload into per-entry writes and re-dispatches each through ScreenedDispatch, "
                             + "so every entry passes the one hosted route rather than a second publish path"),

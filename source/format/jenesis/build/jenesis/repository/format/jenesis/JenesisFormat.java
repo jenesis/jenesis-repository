@@ -52,7 +52,11 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
 
     @Override
     public List<String> paths(String coordinate, String version) {
-        if (coordinate.isEmpty()) {
+        // ArtifactLayout clause 3: the module name and the version are single path segments composed straight into the
+        // request paths an eviction unpublishes and deletes under, so a part that is not addressable (empty, a
+        // separator, "." or "..") maps NOWHERE rather than composing "/module/../1.0". The empty-coordinate guard this
+        // replaces covered only one of those shapes.
+        if (!ArtifactLayout.addressable(coordinate, version)) {
             return List.of();
         }
         // The two link shapes ModuleViewPublisher publishes for a module version: the version directory holding the
@@ -92,6 +96,14 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
     @Override
     public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
+        // RepositoryFormat clause 6: a request path carrying a . or .. segment addresses nothing under /module/ or
+        // /artifact/, so it is refused here rather than reaching the store's key screen, which throws (an unmapped 500
+        // where the truth is "no such artifact"). One screen, stated in ArtifactStore, applied at the format seam
+        // exactly as OciFormat has always applied its own (§13 parity).
+        if (!ArtifactStore.traversalFree(path)) {
+            exchange.respond(404);
+            return;
+        }
         Publication publication = new Publication(store);
         if (exchange.method().equals("PUT")) {
             // Layout-only (EPIC 26): screening rides the ingress edge, which screens the body to ACCEPT and restreams

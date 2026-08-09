@@ -12,6 +12,43 @@ import module java.base;
  * handshake), caches an immutable artifact and serves it, or rewrites and streams a mutable index. The dispatcher
  * only detects the local miss and hands control over; keeping this off the {@link RepositoryFormat} contract means
  * a hosted-only format is unaffected.
+ *
+ * <h2>Contract</h2>
+ * This is a role sub-interface of {@link RepositoryFormat}: every clause of that contract still binds, and the clauses
+ * below add what pulling from an upstream changes. They are executable through {@code FormatContract}'s proxy leg in
+ * the format testkit, so upstream integrity and streaming are proven per format rather than argued per format.
+ * <ol>
+ * <li><b>Idempotency / replay.</b> {@link #proxy} is a cache fill, so a repeated pull of the same immutable artifact
+ *     converges on the same stored blob and serves identical bytes; a mutable index is never cached, so a repeat
+ *     re-reads the upstream rather than serving something a previous request happened to keep.</li>
+ * <li><b>Absence sentinel.</b> {@code false} means "this leg served nothing - let the local {@code 404} stand". It is
+ *     the answer for an unproxyable path, an upstream miss, a transport failure <em>and</em> a refused body (clause 5);
+ *     the adapter never invents a {@code 200}, and never leaves a partially written cache entry behind when it
+ *     declines.</li>
+ * <li><b>Streaming (&sect;1).</b> An artifact is copied from the network into the content-addressed store through
+ *     {@link Fetcher#download} without ever being materialised - the store is handed the still-unread upstream stream,
+ *     never a buffer the adapter filled first - so a multi-gigabyte pull stays bounded in heap. Only a small mutable
+ *     index or a manifest the adapter must parse or rewrite may use the buffered {@link Fetcher#fetch}, and a
+ *     {@code HEAD} uses {@link Fetcher#head}, which opens no body at all.</li>
+ * <li><b>Read purity (&sect;10).</b> A proxy fetch is the one sanctioned exception to the read path rendering only
+ *     stored state, and it is entered solely on a local miss of a path this format claims. A local hit never touches
+ *     the upstream.</li>
+ * <li><b>Upstream integrity.</b> Where the ecosystem's own protocol advertises a digest for the bytes - a
+ *     content-addressed reference, a checksum sibling, a digest header - the fetched body is held to it and a mismatch
+ *     is <em>refused</em>: nothing is linked, nothing is served, every view the fill had already laid out is retracted,
+ *     and the caller lets the local {@code 404} stand so a later pull re-hits the upstream. A body is never cached
+ *     under a digest it does not hash to. An ecosystem that advertises no digest (a plain file mirror) proxies
+ *     unverified rather than fabricating a check, and says so.</li>
+ * <li><b>Error visibility (&sect;9).</b> An upstream error status rides in the {@link Fetched} / {@link Download} /
+ *     {@link Head} so the adapter acts on it (a {@code 401} challenge, a {@code 404} miss); only a transport failure is
+ *     an empty {@link Optional}. A failure while filling the cache may never be swallowed into a served response.</li>
+ * <li><b>Bounded work / cancellation.</b> {@link #enumerate} is lazy - an index page is read only as the stream
+ *     advances - and every index the adapter reads to serve or enumerate is bounded, so neither a hostile upstream nor
+ *     an enormous one can force an unbounded read out of one request.</li>
+ * <li><b>Durability / delivery.</b> A cache fill commits pointer-last exactly as a hosted publish does: the blob is
+ *     content-addressed first and the serving pointer linked only once the bytes are stored and verified, so a crash
+ *     mid-fill leaves an unreferenced blob rather than a pointer to nothing.</li>
+ * </ol>
  */
 public interface ProxyFormat {
 
