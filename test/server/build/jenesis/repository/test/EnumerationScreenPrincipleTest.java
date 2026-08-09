@@ -321,6 +321,15 @@ class EnumerationScreenPrincipleTest {
         if (relative.endsWith("/module-info.java") || relative.equals("module-info.java")) {
             return false;
         }
+        // format/testkit is the JUnit-free format contract kit, not a serving surface: it ships in no bundle, provides
+        // no service and answers no request. Its one store walk enumerates a temporary test store AFTER a traversal
+        // probe, to prove nothing escaped the format's namespace - the opposite of disclosing a served name, and
+        // exactly the kind of assertion that would otherwise have to buy an allowlist entry and dilute the grants that
+        // mask real surfaces. Named one module deep, like the sibling guards' exclusions, so no future directory can
+        // opt itself out by being called "testkit".
+        if (relative.startsWith("format/testkit/")) {
+            return false;
+        }
         if (relative.startsWith("format/") || relative.startsWith("ui/") || relative.startsWith("walk/")) {
             return true;
         }

@@ -255,15 +255,10 @@ class SpiContractPrincipleTest {
                 "T-301a: the pre-commit sub-contract - chain ordering, disposition strength, per-method failure "
                         + "semantics (verdict legs propagate, inherited observer legs are contained) and withheld "
                         + "read-side purity; lands with the T-205 interceptor kit");
-        allow.put("build.jenesis.repository.format.RepositoryFormat",
-                "T-301a: traversal-guard, inflation-cap, withhold-on-enumeration and idempotent store-then-gate "
-                        + "obligations are only implied today; the block lands with the T-202 format kit");
-        allow.put("build.jenesis.repository.format.ProxyFormat",
-                "T-301a: upstream integrity verification, streaming (never materialise an artifact), SSRF posture and "
-                        + "negative-caching semantics; lands with the T-202 proxy leg");
-        allow.put("build.jenesis.repository.format.ArtifactLayout",
-                "T-301a: read purity (path-only, no content read), round-trip fidelity of describe/locate and the "
-                        + "ecosystem-name stability a coordinate consumer depends on");
+        // RepositoryFormat, ProxyFormat and ArtifactLayout burnt down by T-202a, which built the format contract kit
+        // (source/format/testkit + test/format/contract) and could therefore state the clauses it now asserts:
+        // HEAD-from-metadata, traversal refusal at the format seam, withhold-on-enumeration, proxy integrity and
+        // streaming, and the determinism a generated index's revalidation rests on.
         allow.put("build.jenesis.repository.format.RepositoryImporter",
                 "T-301a: streaming transfer, resumability and error classification, shared with the T-203 importer "
                         + "contract extension");

@@ -281,15 +281,18 @@ class StreamingPrincipleTest {
     }
 
     /**
-     * The one source tree this ratchet does not scan: {@code source/store/testkit}, the JUnit-free store contract kit
-     * and fault fixtures ({@code StoreContract}, {@code StoreInvariants}, {@code FaultInjectingStore}). It ships in no
-     * bundle, provides no service and is on no upload/download/proxy path - its whole-body reads exist precisely to
-     * <em>assert</em> that a backend streams a small test blob back byte-identically, which is the opposite of
-     * materialising an artifact on a serve path. Scanning it would force every contract assertion to buy an allowlist
-     * entry and dilute the grants that mask real production reads. Deliberately one module deep, not a {@code testkit}
-     * glob, so no future directory can opt itself out by name.
+     * The two source trees this ratchet does not scan: {@code source/store/testkit}, the JUnit-free store contract kit
+     * and fault fixtures ({@code StoreContract}, {@code StoreInvariants}, {@code FaultInjectingStore}), and
+     * {@code source/format/testkit}, the JUnit-free format contract kit ({@code FormatContract}, {@code WitnessStore},
+     * {@code ContractExchange}). Neither ships in a bundle, provides a service or sits on an upload/download/proxy
+     * path, and their whole-body handling exists precisely to <em>assert</em> streaming: the store kit reads a small
+     * test blob back to prove a backend returned it byte-identically, and the format kit's exchange retains a bounded
+     * response prefix so a check can compare served bytes - it is the very component that proves a format did
+     * <em>not</em> materialise an artifact ({@code WitnessStore}'s tripwire). Scanning them would force every contract
+     * assertion to buy an allowlist entry and dilute the grants that mask real production reads. Deliberately
+     * enumerated one module deep, not a {@code testkit} glob, so no future directory can opt itself out by name.
      */
-    private static final Pattern TEST_SUPPORT = Pattern.compile("(^|/)store/testkit/");
+    private static final Pattern TEST_SUPPORT = Pattern.compile("(^|/)(store|format)/testkit/");
 
     /** The module sources directory ({@code <repo>/source}) - located by walking up from the working directory to the
      *  first ancestor holding {@code source/} beside {@code build/jenesis}. Fails loudly if the tree is not reachable, so

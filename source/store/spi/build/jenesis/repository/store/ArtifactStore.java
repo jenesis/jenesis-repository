@@ -140,17 +140,13 @@ public interface ArtifactStore {
             throw new IllegalArgumentException(
                     "Key exceeds the " + MAX_KEY_BYTES + "-byte cap (" + bytes + " bytes): " + key);
         }
+        if (!traversalFree(key)) {
+            throw new IllegalArgumentException("Not a traversal-free storable key: " + key);
+        }
         int segments = 1;
-        for (int index = 0, start = 0; index <= key.length(); index++) {
-            if (index == key.length() || key.charAt(index) == '/') {
-                int length = index - start;
-                if (length == 1 && key.charAt(start) == '.' || length == 2 && key.startsWith("..", start)) {
-                    throw new IllegalArgumentException("Not a traversal-free storable key: " + key);
-                }
-                start = index + 1;
-                if (index < key.length()) {
-                    segments++;
-                }
+        for (int index = 0; index < key.length(); index++) {
+            if (key.charAt(index) == '/') {
+                segments++;
             }
         }
         if (segments > MAX_SEGMENTS) {
@@ -158,6 +154,40 @@ public interface ArtifactStore {
                     "Key exceeds the " + MAX_SEGMENTS + "-segment cap (" + segments + " segments): " + key);
         }
         return key;
+    }
+
+    /**
+     * Whether a {@code '/'}-separated path carries no {@code .} or {@code ..} segment - the traversal half of the
+     * {@link #key(String)} screen, exposed as a predicate so a caller that must <em>decline</em> rather than throw
+     * asks the same question at the same choke point instead of re-deriving the rule.
+     *
+     * <p>{@link #key(String)} is the write-path screen and throws, because a caller that has already decided to store
+     * something at a traversal-shaped key has a bug. A {@code RepositoryFormat} screening an
+     * <em>incoming request path</em> is in the opposite position: the path is client-supplied, the honest
+     * answer is "this names nothing here", and a thrown {@link IllegalArgumentException} out of a request handler is an
+     * unmapped {@code 500} where a {@code 404} is the truth. Both seams must nevertheless agree on exactly which
+     * shapes are refused - a format that screened a wider or narrower set than the store would either reject a
+     * legitimate publish or hand the store a key it refuses at a point the client cannot understand - so this
+     * predicate is the single definition and {@link #key(String)} is stated in terms of it.
+     *
+     * <p>Only {@code .} and {@code ..} segments are refused. An empty segment is not a traversal (a trailing slash on
+     * a directory listing request, a doubled separator) and a percent-encoded {@code %2e%2e} is not one either: it is
+     * a literal name until something decodes it, and nothing below this line ever does.
+     */
+    static boolean traversalFree(String path) {
+        if (path == null) {
+            return false;
+        }
+        for (int index = 0, start = 0; index <= path.length(); index++) {
+            if (index == path.length() || path.charAt(index) == '/') {
+                int length = index - start;
+                if (length == 1 && path.charAt(start) == '.' || length == 2 && path.startsWith("..", start)) {
+                    return false;
+                }
+                start = index + 1;
+            }
+        }
+        return true;
     }
 
     /** Whether a blob exists at this object key. */

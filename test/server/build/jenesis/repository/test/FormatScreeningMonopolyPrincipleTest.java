@@ -39,9 +39,12 @@ class FormatScreeningMonopolyPrincipleTest {
      *  reference. Named here so the carve-out is explicit and any other format naming the screen SPI is caught. */
     private static final String ALLOWLISTED_DISPOSITION_READER = "OciManifests.java";
 
-    /** The format SPI contract module - interfaces the concrete formats implement, not a format itself; its javadoc
-     *  names the screen SPI when documenting the edge relationship, so it is not scanned. */
-    private static final String CONTRACT_MODULE = "spi";
+    /** The directories under {@code source/format} that hold no format: {@code spi}, the contract module whose
+     *  interfaces the concrete formats implement (its javadoc names the screen SPI when documenting the edge
+     *  relationship), and {@code testkit}, the JUnit-free format contract kit whose test doubles name the screen SPI
+     *  only to explain which of the two serving namespaces a hold is placed through. Both are enumerated by name so a
+     *  real format can never slip out of the scan. */
+    private static final Set<String> NOT_A_FORMAT = Set.of("spi", "testkit");
 
     /** The screen SPI type. Naming it is allowed only in {@link #ALLOWLISTED_DISPOSITION_READER}, which maps the shared
      *  operation's {@code Disposition} onto OCI's protocol codes. */
@@ -103,8 +106,9 @@ class FormatScreeningMonopolyPrincipleTest {
                 .isTrue();
     }
 
-    /** Every concrete format/importer source: the {@code source/format} tree minus {@code module-info.java} and the
-     *  format SPI contract module (interfaces, not formats). */
+    /** Every concrete format/importer source: the {@code source/format} tree minus {@code module-info.java}, the
+     *  format SPI contract module (interfaces, not formats) and the format contract kit (test doubles, not formats -
+     *  it names the screen SPI only to explain which namespace a hold is placed through, and it screens nothing). */
     private static List<Path> formatSources() throws IOException {
         Path formats = repositoryRoot().resolve("source").resolve("format");
         assertThat(Files.isDirectory(formats))
@@ -112,7 +116,7 @@ class FormatScreeningMonopolyPrincipleTest {
         try (Stream<Path> sources = Files.walk(formats)) {
             return sources.filter(path -> path.toString().endsWith(".java"))
                     .filter(path -> !path.getFileName().toString().equals("module-info.java"))
-                    .filter(path -> !formats.relativize(path).getName(0).toString().equals(CONTRACT_MODULE))
+                    .filter(path -> !NOT_A_FORMAT.contains(formats.relativize(path).getName(0).toString()))
                     .sorted()
                     .toList();
         }
