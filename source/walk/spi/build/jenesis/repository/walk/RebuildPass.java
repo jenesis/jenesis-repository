@@ -16,7 +16,10 @@ import module java.base;
  * the periodic refresh and the self-heal - a consumer enabled late rebuilds its whole view from it.
  *
  * <p><b>What a consumer is handed.</b> Every leaf under the walked roots that is a serving pointer - a small object
- * naming a lower-case SHA-256 - is delivered as one {@link WalkConsumer#onRetained} call with the descriptor
+ * naming a SHA-256, in either of the two dialects a stored pointer body uses (the bare lower-case hex the free
+ * {@code publish/} and {@code blobs/} pointers carry, or the algorithm-qualified {@code sha256:<hex>} an OCI tag
+ * pointer carries, both read through {@link ServableNames#hash(byte[])}, the one seam that owns that dialect) - is
+ * delivered as one {@link WalkConsumer#onRetained} call with the descriptor
  * richness this neutral site has: under the core's own {@code publish/} namespace the descriptor's path is the
  * serving request path (exactly what {@code onPublished} / {@code onDeleted} carry); under any other pointer root
  * (a format's own blobs-namespace keys) the path is the raw store key, whose layout only the owning format knows -
@@ -112,7 +115,9 @@ public final class RebuildPass {
         return roots;
     }
 
-    /** Whether a pointer's content is a lower-case SHA-256 hex - the only leaf shape delivered as an artifact. */
+    /** Whether a normalised pointer body is a lower-case SHA-256 hex - the only leaf shape delivered as an artifact.
+     *  Applied to what {@link ServableNames#hash(byte[])} answers, never to the raw body: the raw body carries the
+     *  dialect, and this judges the hash it named. */
     private static boolean hash(String value) {
         if (value.length() != 64) {
             return false;
@@ -182,7 +187,13 @@ public final class RebuildPass {
             if (pointer.isEmpty()) {
                 return; // removed between the walk's listing and this read - nothing is served through it
             }
-            String named = new String(pointer.get().content(), StandardCharsets.UTF_8).trim();
+            // The body's dialect is read through the one seam that owns it, never re-parsed here: a pointer body is
+            // either the bare lower-case hex the free publish/ and blobs/ pointers carry or the algorithm-qualified
+            // sha256:<hex> of the OCI Distribution tag pointers, and both denote the same blob. Reading it as bare hex
+            // instead threw every tag pointer away as "not a serving pointer", so a consumer over an OCI root was
+            // handed nothing and then reported itself converged - the silently-incomplete view §5 forbids, and the
+            // same normalisation ServableNames.hash was introduced for on the withhold screen.
+            String named = ServableNames.hash(pointer.get().content());
             if (!hash(named)) {
                 return; // a sidecar row, marker or index - not a serving pointer, never delivered
             }
