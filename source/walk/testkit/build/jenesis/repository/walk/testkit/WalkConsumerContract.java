@@ -57,6 +57,12 @@ public final class WalkConsumerContract {
          *  from the walk alone, delivering each retained pointer exactly once and writing nowhere outside its own
          *  namespaces (&sect;5, {@code WalkConsumer} clauses 2 and 5). */
         FULL_PASS_REBUILDS_THE_DECLARED_PROJECTION,
+        /** Both dialects a stored pointer body uses reach the consumer: the bare lower-case SHA-256 hex the free
+         *  {@code publish/} and {@code blobs/} pointers carry, and the algorithm-qualified {@code sha256:<hex>} an OCI
+         *  tag pointer carries. They name the same blob, so a corpus spelling its hashes either way converges to the
+         *  one declared projection - a pass that recognised only one of them would hand a consumer over that root
+         *  nothing at all and still report the pass complete (&sect;5). */
+        BOTH_POINTER_DIALECTS_ARE_DELIVERED,
         /** {@code onPassStarted} precedes this worker's first delivery, {@code beforeCheckpoint} follows the
          *  deliveries it covers, and {@code onPassCompleted} closes the pass - once each (clause 10). */
         PASS_HOOKS_BRACKET_EVERY_DELIVERY,
@@ -150,6 +156,9 @@ public final class WalkConsumerContract {
         checks.add(new Check(Property.FULL_PASS_REBUILDS_THE_DECLARED_PROJECTION,
                 "a consumer switched on late rebuilds its whole projection from the walk alone",
                 WalkConsumerContract::fullPassRebuildsTheDeclaredProjection));
+        checks.add(new Check(Property.BOTH_POINTER_DIALECTS_ARE_DELIVERED,
+                "a sha256:-prefixed pointer body is delivered exactly as a bare-hex one is",
+                WalkConsumerContract::bothPointerDialectsAreDelivered));
         checks.add(new Check(Property.PASS_HOOKS_BRACKET_EVERY_DELIVERY,
                 "the pass hooks bracket every delivery and the flush hook precedes every cursor commit",
                 WalkConsumerContract::passHooksBracketEveryDelivery));
@@ -218,6 +227,87 @@ public final class WalkConsumerContract {
             throw failure(fixture, "the pass wrote " + escaped.size() + " key(s) outside this consumer's declared "
                     + "namespaces " + fixture.namespaces() + ": " + escaped);
         }
+    }
+
+    private static void bothPointerDialectsAreDelivered(WalkConsumerFixture fixture, WalkHarness harness,
+                                                        FaultInjectingStore store) throws Exception {
+        Corpus corpus = fixture.seed(store, artifacts(harness));
+
+        // Every second seeded pointer is re-spelled in place as sha256:<hex>, the dialect an OCI tag pointer carries.
+        // Nothing about the corpus changed - a qualified digest reference names the blob its bare hex names - so the
+        // same deliveries and the same projection have to come back. Every SECOND one rather than all, because the
+        // point is that the two dialects coexist inside one enumeration, not that one replaced the other.
+        int requalified = requalify(fixture, store);
+        isTrue(requalified > 0, fixture,
+                "the corpus carries no bare-hex pointer to re-spell, so this check would prove nothing about the "
+                        + "dialect it is named for");
+        isTrue(requalified < corpus.deliveries(), fixture,
+                "at least one pointer stays bare hex, so the pass is asked to read both dialects in one enumeration "
+                        + "(re-spelled " + requalified + " of " + corpus.deliveries() + ")");
+
+        Instrumented worker = pass(fixture, harness, store, null, corpus);
+
+        equal(worker.deliveries, corpus.deliveries(), fixture,
+                "every retained pointer is delivered whichever dialect its body spells the hash in (" + requalified
+                        + " of " + corpus.deliveries() + " re-spelled as sha256:<hex>). A short count here means the "
+                        + "pass reads a pointer body as bare hex only and silently drops every qualified one - so a "
+                        + "consumer over a root whose pointers all carry that dialect is handed nothing at all and "
+                        + "then reports itself converged, the silently-incomplete view \u00a75 forbids.");
+        equal(fixture.projection(store), corpus.converged(), fixture,
+                "and a qualified body resolves to the same blob the bare one does, so the projection is unchanged");
+        equal(fixture.degradation(store), Optional.empty(), fixture,
+                "a pass that converged leaves no degradation behind");
+    }
+
+    /**
+     * Re-spell every second bare-hex pointer body under the fixture's roots as {@code sha256:<hex>} and answer how many
+     * were re-spelled. A versioned rewrite against the token just read, so the kit changes a pointer exactly as a
+     * writer of that pointer would; a leaf that is not a pointer at all (a sidecar row, a marker) is left alone,
+     * because the corpus's non-pointer leaves are what make the delivery count meaningful in the first place.
+     */
+    private static int requalify(WalkConsumerFixture fixture, ArtifactStore store) throws IOException {
+        List<String> keys = new ArrayList<>();
+        for (String root : fixture.pointerRoots()) {
+            Trees.descend(store, root, keys::add);
+        }
+        keys.sort(Comparator.naturalOrder());
+        int requalified = 0;
+        boolean turn = false;
+        for (String key : keys) {
+            Optional<ArtifactStore.Versioned> pointer = store.readVersioned(key);
+            if (pointer.isEmpty()) {
+                continue;
+            }
+            String body = new String(pointer.get().content(), StandardCharsets.UTF_8).trim();
+            if (!bareHash(body)) {
+                continue;
+            }
+            turn = !turn;
+            if (!turn) {
+                continue;
+            }
+            if (!store.writeVersioned(key, ("sha256:" + body).getBytes(StandardCharsets.UTF_8),
+                    pointer.get().token())) {
+                throw failure(fixture, "re-spelling the pointer at " + key + " lost its compare-and-set, so the "
+                        + "corpus this check needs was never established");
+            }
+            requalified++;
+        }
+        return requalified;
+    }
+
+    /** Whether a pointer body is the bare lower-case SHA-256 hex - the dialect this check re-spells away from. */
+    private static boolean bareHash(String body) {
+        if (body.length() != 64) {
+            return false;
+        }
+        for (int index = 0; index < body.length(); index++) {
+            char character = body.charAt(index);
+            if ((character < '0' || character > '9') && (character < 'a' || character > 'f')) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static void passHooksBracketEveryDelivery(WalkConsumerFixture fixture, WalkHarness harness,
