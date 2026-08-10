@@ -46,6 +46,19 @@ import module java.base;
  * <li><b>Ordering / determinism.</b> The resolved backend is a function of the configured name and the installed
  *     providers only - never of {@link ServiceLoader} discovery order. Providers are matched by name
  *     case-insensitively and every diagnostic lists them in one stable, name-sorted order.</li>
+ * <li><b>Transport security (&sect;13).</b> A backend an operator points at an <em>endpoint</em> requires that
+ *     endpoint to be {@code https}, and refuses a plaintext one at resolution with an {@link IllegalStateException}
+ *     whose message <b>names the opt-out key</b> - because credentials and every artifact byte would otherwise travel
+ *     in clear with no operator signal, and the operator running a local emulator needs to be told what to set. It is
+ *     an opt-out, not a ban: the very same configuration resolves once an explicit
+ *     {@code JENESIS_<BACKEND>_ALLOW_INSECURE_ENDPOINT=true} is set, which is how the containerised emulators are
+ *     reached. The rule binds however the endpoint reaches the provider - as its own setting for {@code s3} and
+ *     {@code gcs}, or buried inside a connection string that also carries the account key for {@code azure-blob},
+ *     where the scheme is easiest to mistype and most costly to get wrong. A backend with no endpoint at all (the
+ *     bundled {@code filesystem}) has no transport to screen. Stating the rule at the SPI rather than three times over
+ *     is what makes the next endpoint-configured backend arrive with it; {@code StoreContract}'s
+ *     {@code PLAINTEXT_ENDPOINT_REFUSED} property drives it through {@link #resolve} with each fixture's own
+ *     config.</li>
  * </ol>
  */
 public interface ArtifactStoreProvider {

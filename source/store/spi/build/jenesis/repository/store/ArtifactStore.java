@@ -14,9 +14,32 @@ import module java.base;
  * token is the last-modified stamp; an object-store backend maps it to the blob's ETag or generation.
  *
  * <h2>Contract</h2>
- * Every clause below is executable: {@code StoreContract} in the store testkit states it once and each backend runs
- * it through a fixture, so a clause is proven on the filesystem and on containerised S3 / GCS / Azure alike rather
- * than being re-interpreted per backend.
+ * Most clauses below are executable: {@code StoreContract} in the store testkit states one once and each backend runs
+ * it through a fixture, so it is proven on the filesystem and on containerised S3 / GCS / Azure alike rather than
+ * being re-interpreted per backend. The enforcement is named per clause, because it is not uniform, and a clause is
+ * <em>not</em> weaker for being unproven - it is an audit item (T-304's residue) rather than a build guard:
+ * <ul>
+ *   <li><b>kit-proven</b> - clause 2 ({@code CONTENT_ADDRESSED_WRITE}, {@code KEYED_BLOB_ROUND_TRIP}'s repeated
+ *       delete, {@code VERSIONED_UPDATE_IF_UNCHANGED}), clause 3 ({@code KEYED_BLOB_ROUND_TRIP},
+ *       {@code LISTING_IMMEDIATE_CHILDREN}, {@code PAGING_ORDER_AND_START_AFTER}, {@code VERSIONED_CREATE_IF_ABSENT}),
+ *       clause 5 ({@code SCOPE_ISOLATION}, {@code SEGMENT_TRAVERSAL_REJECTED}, {@code KEY_TRAVERSAL_REJECTED}),
+ *       clause 6 ({@code ABORTED_WRITE_COMMITS_NOTHING}, {@code BATCH_FAILURE_IS_PER_ENTRY}), clause 8
+ *       ({@code PAGING_ORDER_AND_START_AFTER}, {@code BATCH_ORDERED_PER_ENTRY_OUTCOMES}), clause 9's key caps
+ *       ({@code KEY_SHAPE_REJECTED}) and page limit, and clause 10's compare-and-set and batch halves
+ *       ({@code VERSION_TOKEN_OPAQUE}, {@code BATCH_IS_NOT_A_TRANSACTION});</li>
+ *   <li><b>structurally guarded</b> - clause 4 by {@code StreamingPrincipleTest} and clause 9's {@link #list} rule by
+ *       {@code UnboundedListingPrincipleTest}: source scans over the free tree's call sites, which catch a
+ *       <em>new</em> whole-blob read or unbounded listing, not a backend that buffers internally;</li>
+ *   <li><b>documented only</b> - clause 1 in full, clause 3's concurrent-delete-mid-read leg, clause 6's
+ *       throttle/authorization leg, clause 7, clause 9's resident-memory claim and clause 10's write-atomicity claim.
+ *       Each needs a concurrent or fault-injecting driver the kit does not have; every one of them is stated below in
+ *       a form such a driver could assert.</li>
+ * </ul>
+ * Two of the kit's properties are deliberately <em>not</em> clauses of this interface, and the mismatch is recorded
+ * rather than papered over: {@code PLAINTEXT_ENDPOINT_REFUSED} is a resolution-time rule and belongs to
+ * {@link ArtifactStoreProvider}'s contract (where it is now stated), and {@code STORE_INVARIANTS} asserts the
+ * {@code publish/}-pointer-and-{@code blobs/} layout convention that {@link Publication} owns, not a property of this
+ * interface - a store is free to hold an unreferenced blob, which is exactly what a rejected upload leaves behind.
  * <ol>
  * <li><b>Thread-safety.</b> A store is a shared singleton the server calls concurrently from every request thread;
  *     every method must be safe under concurrent use, including two writers racing on one key. {@link #scope} may be
@@ -60,11 +83,17 @@ import module java.base;
  *     below {@code '/'}. {@link #list} enumerates the same children as a full paging. {@link #writeBatch} answers
  *     one outcome per write in input order, may execute disjoint keys concurrently, and never reorders or overlaps
  *     two writes to the same key.</li>
- * <li><b>Bounded work / cancellation.</b> {@link #page}'s {@code limit} bounds both what is emitted and what the
- *     backend buffers, so paging a millions-entry namespace costs O(limit) memory; a non-positive limit emits
- *     nothing. {@link #key} caps a new key at {@link #MAX_SEGMENTS} segments and {@link #MAX_KEY_BYTES} bytes, so no
- *     descent over stored keys can be driven arbitrarily deep. {@link #list} is deliberately unbounded and is for
- *     small child sets only - anything attacker-shaped pages.</li>
+ * <li><b>Bounded work / cancellation.</b> {@link #page}'s {@code limit} bounds what is emitted - always, on every
+ *     backend - and a non-positive limit emits nothing. It bounds what the backend <em>buffers</em> only where the
+ *     backend pages natively, which is the obligation on an implementation and the reason every shipped backend
+ *     overrides {@link #page}: the filesystem scans a directory in bounded strides and the three object stores use
+ *     their own start-after pagination, so paging a millions-entry namespace costs O(limit) memory there. The SPI's
+ *     own {@code default} is a correctness fallback, not that guarantee - it sorts a whole {@link #list} and filters,
+ *     so a backend that inherits it is bounded in what it emits while still materialising the container's entire child
+ *     set to do it. A new backend over an attacker-shaped namespace must therefore override rather than inherit.
+ *     {@link #key} caps a new key at {@link #MAX_SEGMENTS} segments and {@link #MAX_KEY_BYTES} bytes, so no descent
+ *     over stored keys can be driven arbitrarily deep. {@link #list} is deliberately unbounded and is for small child
+ *     sets only - anything attacker-shaped pages.</li>
  * <li><b>Durability / delivery.</b> The commit point of {@link #write} and {@link #writeBlob} is the moment the key
  *     becomes readable, and it is atomic: a reader observes the whole previous object or the whole new one, never a
  *     partial write. {@link #writeVersioned} commits only while the stored version still matches the token it was
