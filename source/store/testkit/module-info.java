@@ -1,5 +1,5 @@
 /**
- * Shared test support over the artifact-store SPI, in two halves.
+ * Shared test support over the artifact-store SPI, in three parts.
  *
  * <p><b>Fault fixtures:</b> a {@code FaultInjectingStore} decorator that injects a store fault at a chosen point (a
  * write that never lands, a read that fails, a compare-and-set that loses its race) and a {@code StoreInvariants}
@@ -12,6 +12,19 @@
  * {@code StoreFixture} is how one backend registers with it. A backend is covered by writing a fixture, never by
  * copying assertions, and the kit drives the two fault fixtures above rather than duplicating them. The JUnit driver
  * and the four backend fixtures live in {@code test/store/contract}, which also carries the completeness census.
+ *
+ * <p><b>The publication-hook contract kit:</b> {@code PublicationHookContract} is the executable contract of the
+ * {@code PublicationObserver} family, and {@code PublicationHookFixture} is how one hook registers with it. The kit's
+ * distinguishing property is that it <em>derives</em> which contract a hook is held to rather than letting the fixture
+ * declare it: the whole family rides one {@code uses PublicationObserver} clause and {@code Publication} splits it by
+ * {@code instanceof PublishInterceptor}, so a contained after-commit observer and a fail-closed pre-commit screen
+ * arrive through the same seam with opposite failure semantics. {@code Role.of} asks an instance exactly what
+ * {@code Publication} asks it, and a fixture whose declaration disagrees is refused - a screen can never be run
+ * through the contained legs and reported green. A third role covers downstream's pre-commit
+ * {@code HoldReleaseObserver} hooks, which are not {@code PublicationObserver}s at all and are reached through an
+ * adapter. The crash windows are armed on the <em>screen</em> path with the {@code FaultInjectingStore} above, and
+ * each is re-verified from durable state so a point that stopped biting fails. The JUnit driver, the synthetic
+ * fixtures and the census live in {@code test/publication}.
  *
  * <p>The module depends only on the store SPI - no junit, no assertion library, no format, no server - so both this
  * repository's and the downstream distribution's test modules can require it rather than each hand-rolling a bespoke

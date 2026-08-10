@@ -72,8 +72,15 @@ import module java.base;
  *     {@link Content#LARGEST_SIBLING}, because its caller wants the document entire and a prefix presented as whole is
  *     the silently-incomplete answer &sect;5 forbids; the bounded {@link Content#sibling(String, int)} <b>never fails
  *     on size</b>, honours the caller's own limit and reports the overflow through
- *     {@link Content.Bounded#truncated()}. An implementation of {@link Content} must not express either read in terms
- *     of the other.</li>
+ *     {@link Content.Bounded#truncated()}. The <em>forbidden</em> composition is therefore one-directional, and it is
+ *     the one the {@link Content} javadoc argues against: the bounded read must not be expressed over the
+ *     whole-document one - reading the companion whole and trimming afterwards, or letting this seam's ceiling cut the
+ *     caller's larger bound short - because that fails above {@link Content#LARGEST_SIBLING} however large a bound was
+ *     requested, and buffers the whole companion before deciding to discard most of it. The other direction is sound
+ *     and is what {@link Publication} ships: the whole-document read <em>is</em> the bounded read taken at
+ *     {@link Content#LARGEST_SIBLING}, refusing a truncated result, which never materialises more than the ceiling and
+ *     still fails loudly rather than returning a prefix. What an implementation owes is the two behaviours, not a
+ *     particular pair of method bodies.</li>
  * <li><b>Tenant scoping (&sect;6).</b> {@link Content#store()} and the store handed to {@link #committed} and
  *     {@link #withheld} are the same doubly-scoped (tenant/repository) view the publication routed through, and they
  *     are the only storage a screen may touch. A verdict recorded against a store from anywhere else is a verdict
@@ -186,8 +193,14 @@ public interface PublishInterceptor extends PublicationObserver {
      * A caller that asks for a bounded read must get the bound it asked for. Routing a bounded read through the
      * whole-document one - reading it whole and trimming afterwards, or letting the whole-document ceiling cut it short -
      * gives the caller neither: it fails above {@link #LARGEST_SIBLING} however large a bound was requested, and it
-     * buffers the whole companion before deciding to discard most of it. The two reads are therefore separate methods,
-     * each implemented against the store, rather than one expressed in terms of the other.
+     * buffers the whole companion before deciding to discard most of it. The two reads are therefore separate methods
+     * on this interface, and the bounded one is implemented against the store rather than over its neighbour.
+     *
+     * <p>The converse composition is fine and is what {@link Publication} does: the whole-document read is the bounded
+     * read taken at {@link #LARGEST_SIBLING}, answering the buffer when it came back whole and throwing when it came
+     * back {@linkplain Bounded#truncated() truncated}. Nothing beyond the ceiling is ever materialised and an
+     * over-ceiling companion still fails loudly, so both obligations above hold exactly. The rule is about which
+     * bound a caller gets, not about how many times the store is read.
      */
     interface Content {
 
