@@ -256,10 +256,13 @@ class SpiContractPrincipleTest {
         // PublicationObserver burnt down by T-104a, which made the publish commit point singular (Publication.commit)
         // and could therefore state the crash windows and the delivery class exactly: best-effort, repaired by the
         // full walk. T-107 may only strengthen that by proving a pre-commit intent machine at every crash point.
-        allow.put("build.jenesis.repository.store.PublishInterceptor",
-                "T-301a: the pre-commit sub-contract - chain ordering, disposition strength, per-method failure "
-                        + "semantics (verdict legs propagate, inherited observer legs are contained) and withheld "
-                        + "read-side purity; lands with the T-205 interceptor kit");
+        // PublishInterceptor burnt down by T-301a, which wrote the pre-commit sub-contract the waiver deferred: chain
+        // ordering (ascending order(), ties by discovery order) beside an order-independent strongest-verdict route,
+        // the per-method failure split (assess/withheld/committed propagate, the inherited observer legs stay
+        // contained), withheld's read-side purity - it runs inside Publication.located on every serve and every
+        // enumeration - and the one thing the prose never said out loud: committed() fires BEFORE the accepted layout
+        // and before the commit point, so an ACCEPT reported there is not a statement that the artifact became
+        // visible. Written ahead of the T-205 interceptor kit deliberately (plan gate 2: contract before mechanism).
         // RepositoryFormat, ProxyFormat and ArtifactLayout burnt down by T-202a, which built the format contract kit
         // (source/format/testkit + test/format/contract) and could therefore state the clauses it now asserts:
         // HEAD-from-metadata, traversal refusal at the format seam, withhold-on-enumeration, proxy integrity and
