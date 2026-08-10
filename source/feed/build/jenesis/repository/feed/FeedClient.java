@@ -53,7 +53,11 @@ import module org.slf4j;
  * <li><b>Streaming (&sect;1).</b> A response body reaches a {@link Reader} as an {@link java.io.InputStream}, capped
  *     at {@link FeedPolicy#maxResponseBytes()}, so a multi-megabyte catalogue is parsed incrementally and is never
  *     materialised. Only the reduced snapshot a {@link Reader} of {@code byte[]} yields is held whole, and that is
- *     bounded by {@link FeedPolicy#maxSnapshotBytes()}.</li>
+ *     bounded by {@link FeedPolicy#maxSnapshotBytes()}. {@link Reader#document} is the shared reader for the
+ *     single-response feeds, and it hands that same stream to the parse for the same reason: <b>there is no
+ *     whole-body reader here, and its absence is deliberate</b>. A convenience answering the body as a
+ *     {@code String} or a {@code byte[]} would be the one every feed reached for, and every feed would then spend
+ *     heap proportional to what the vendor chose to send, inside the very client that exists to bound it.</li>
  * <li><b>Tenant scoping (&sect;6).</b> The client stores nothing by itself. {@link #refresh} writes only through the
  *     {@link FeedSnapshots} it is handed, whose store is already tenant-scoped; the client never scopes or discovers
  *     a store.</li>
@@ -416,8 +420,69 @@ public final class FeedClient {
      * Folds one feed answer, page by page. A fresh instance is built per attempt, so an implementation may hold the
      * mutable accumulation it needs without ever leaking a partial answer: {@link #complete()} is reached only when
      * every page has been read.
+     *
+     * <p>A feed whose answer is <em>one</em> response - no cursor to follow - implements none of this and takes
+     * {@link #document} instead; that is the majority shape, and it was six near-identical private classes before it
+     * had a home here.
      */
     public interface Reader<T> {
+
+        /**
+         * The reader for a feed whose whole answer is a single response: parse the body, and there is no next page.
+         *
+         * <p>This is the shape a vendor query has when it answers one document - an envelope, a filtered index, a
+         * resolution step, a batch of scores, a stream of records. Every such feed wrote the same twelve lines: hold
+         * a field, parse into it in {@code read}, return {@code Optional.empty()}, hand the field back from
+         * {@code complete}. The twelve lines are the client's to own; what stays the feed's is {@code parse}, which
+         * is the only vendor-specific part of them.
+         *
+         * <p>It answers a {@link Supplier}, not a reader, because the client's fresh-accumulator-per-attempt rule is
+         * the structural half of "bounds fail visibly" (see the class javadoc) - a shared reader that could be reused
+         * across attempts would be a way to smuggle one attempt's state into the next.
+         *
+         * {@snippet :
+         * FeedClient.Answer<JsonNode> answer = client.fetch(FeedRequest.get(uri), FeedClient.Reader.document(JSON::readTree));
+         * }
+         *
+         * @param parse turns the response body into the answer. Deliberately given the {@link InputStream} and not
+         *              the bytes: there is no whole-body convenience here and there will not be one, because a
+         *              catalogue body is megabytes and materialising it would spend the heap the policy's byte cap
+         *              exists to bound (&sect;1, and {@code StreamingPrincipleTest} catches a {@code readAllBytes}
+         *              on this path). A parse reads <em>from</em> the stream - a streaming JSON parse of one
+         *              document, or a record-per-line fold of a newline-delimited one - and must not retain it:
+         *              the response is closed the moment the parse returns.
+         */
+        static <T> Supplier<Reader<T>> document(Body<T> parse) {
+            Objects.requireNonNull(parse, "parse");
+            return () -> new Reader<T>() {
+
+                private T value;
+
+                @Override
+                public Optional<FeedRequest> read(int page, FeedResponse response) throws IOException {
+                    value = parse.read(response.body());
+                    return Optional.empty();        // one response is the whole answer; there is no cursor
+                }
+
+                @Override
+                public T complete() {
+                    return value;                   // null is refused by the client, which is where that rule lives
+                }
+            };
+        }
+
+        /** How one response body becomes an answer - the vendor-specific half of {@link #document}, and the only
+         *  half of it that is not the same for every feed. */
+        @FunctionalInterface
+        interface Body<T> {
+
+            /**
+             * Parse {@code body} - already capped at {@link FeedPolicy#maxResponseBytes()} by the client - into the
+             * answer. Read from the stream rather than materialising it; do not close it and do not retain it beyond
+             * this call.
+             */
+            T read(InputStream body) throws IOException;
+        }
 
         /**
          * Fold one page and say where the next one is.
