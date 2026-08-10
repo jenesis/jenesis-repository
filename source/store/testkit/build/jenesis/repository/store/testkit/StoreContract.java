@@ -56,6 +56,10 @@ public final class StoreContract {
         /** {@code page} streams immediate children in lexicographic order, strictly after {@code startAfter},
          *  bounded by {@code limit}, and repeated pages traverse the whole child set exactly once. */
         PAGING_ORDER_AND_START_AFTER,
+        /** The backend answers {@code page} <em>natively</em> rather than inheriting the SPI's {@code list}-and-sort
+         *  fallback: the fallback emits the right names but materialises the whole container to do it, which is what
+         *  paging exists to avoid, so a real backend declares its own. */
+        NATIVE_PAGING,
         /** {@code writeVersioned} with a {@code null} expectation is create-if-absent: it lands once and is refused
          *  while the object exists, leaving the stored content untouched. */
         VERSIONED_CREATE_IF_ABSENT,
@@ -141,6 +145,9 @@ public final class StoreContract {
         checks.add(new Check(Property.PAGING_ORDER_AND_START_AFTER,
                 "page streams ordered children strictly after the boundary, bounded by the limit",
                 StoreContract::pagingOrderAndStartAfter));
+        checks.add(new Check(Property.NATIVE_PAGING,
+                "the backend answers page natively rather than inheriting the list-and-sort fallback",
+                StoreContract::nativePaging));
         checks.add(new Check(Property.VERSIONED_CREATE_IF_ABSENT,
                 "writeVersioned against a null expectation is create-if-absent",
                 StoreContract::versionedCreateIfAbsent));
@@ -359,6 +366,27 @@ public final class StoreContract {
         store.delete(base + "/beta/nested");
         store.delete(base + "/beta.txt");
         store.delete(base + "/delta");
+    }
+
+    /**
+     * A backend declares {@code page} itself. The SPI's {@code default} is a correctness fallback that sorts a whole
+     * {@link ArtifactStore#list} - it emits the right names, so no behavioural check can tell it from a native
+     * implementation on a small container, which is exactly why every shipped backend already overrode it and nothing
+     * caught the trap. The only observable difference is the declaring class, so that is what is asserted: a backend
+     * whose {@code page} resolves to {@link ArtifactStore}'s own body would materialise a millions-entry namespace to
+     * answer one page, and is refused here rather than at whatever scale first exhausts a production heap.
+     */
+    private static void nativePaging(ArtifactStore store) throws Exception {
+        Class<?> declaring = store.getClass()
+                .getMethod("page", String.class, String.class, int.class, Consumer.class)
+                .getDeclaringClass();
+        if (declaring == ArtifactStore.class) {
+            throw new AssertionError(store.getClass().getName() + " inherits ArtifactStore's list-and-sort page "
+                    + "fallback instead of paging natively: it materialises the container's whole child set to answer "
+                    + "one page, which is the opposite of what paging is for, and it refuses outright past "
+                    + ArtifactStore.MAX_INHERITED_CHILDREN + " children. Implement page(...) over the backend's own "
+                    + "start-after pagination.");
+        }
     }
 
     private static void versionedCreateIfAbsent(ArtifactStore store) throws Exception {
