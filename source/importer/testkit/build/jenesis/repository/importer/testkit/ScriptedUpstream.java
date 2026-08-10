@@ -132,6 +132,17 @@ public final class ScriptedUpstream implements ProxyFormat.Fetcher {
         return Optional.of(new ProxyFormat.Download(response.status(), body, response.headers()));
     }
 
+    @Override
+    public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) {
+        // Answered from the canned table, never by opening the download: a scripted upstream that derived its HEAD
+        // from its own body would serve a GeneratedBody's stream to answer a question about metadata, and a connector
+        // whose real transport did the same would sail through every check here.
+        Response response = record(url, requestHeaders);
+        return response == null
+                ? Optional.empty()
+                : Optional.of(new ProxyFormat.Head(response.status(), response.headers()));
+    }
+
     private Response record(URI url, Map<String, String> requestHeaders) {
         requests.add(new Request(url.toString(), requestHeaders));
         return responses.get(url.toString());

@@ -56,7 +56,7 @@ class NegativeCachingFetcherTest {
     @Test
     void a_transport_failure_is_never_cached() throws IOException {
         AtomicInteger upstream = new AtomicInteger();
-        ProxyFormat.Fetcher empty = new ProxyFormat.Fetcher() {
+        ProxyFormat.Fetcher empty = new ProxyFormat.Fetcher.Buffered() {
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) {
                 upstream.incrementAndGet();
@@ -83,7 +83,7 @@ class NegativeCachingFetcherTest {
 
     /** A fetcher that always answers with the given status, counting how often the upstream is actually reached. */
     private static ProxyFormat.Fetcher counting(AtomicInteger upstream, int status) {
-        return new ProxyFormat.Fetcher() {
+        return new ProxyFormat.Fetcher.Buffered() {
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) {
                 upstream.incrementAndGet();

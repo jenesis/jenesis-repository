@@ -50,7 +50,7 @@ class NegativeCachingHeadTest {
     }
 
     /** A delegate that answers every HEAD with a fixed status and counts how many HEADs actually reached it. */
-    private static final class CountingHeadFetcher implements ProxyFormat.Fetcher {
+    private static final class CountingHeadFetcher implements ProxyFormat.Fetcher.Buffered {
         private final int status;
         private int heads;
 

@@ -129,15 +129,42 @@ public interface ProxyFormat {
      * {@code Authorization} bearer token). An empty result is a transport failure; an HTTP error is a
      * {@link Fetched} carrying its status, so the adapter can act on a {@code 401} challenge or a {@code 404}.
      */
-    @FunctionalInterface
     interface Fetcher {
 
-        /** The shared fetcher standing in when no upstream-fetcher module is installed: every fetch reports a
+        /** The shared fetcher standing in when no upstream-fetcher module is installed: every leg reports a
          *  transport failure. It is a singleton, so a dispatcher can tell "no upstream connectivity" by identity
          *  ({@code fetcher == Fetcher.NONE}) and skip proxying or refuse an import outright rather than failing
-         *  request by request. */
-        Fetcher NONE = (url, requestHeaders) -> Optional.empty();
+         *  request by request. It answers each of the three legs itself rather than deriving one from another: a
+         *  fetcher that has no upstream has nothing to derive from, and a {@code HEAD} against it must not have to
+         *  open a download to learn that. */
+        Fetcher NONE = new Fetcher() {
 
+            @Override
+            public Optional<Fetched> fetch(URI url, Map<String, String> requestHeaders) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<Download> download(URI url, Map<String, String> requestHeaders) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<Head> head(URI url, Map<String, String> requestHeaders) {
+                return Optional.empty();
+            }
+
+            @Override
+            public String toString() {
+                return "Fetcher.NONE";
+            }
+        };
+
+        /**
+         * Fetch a small upstream document <em>whole</em> - an index, a metadata document, a manifest - so a proxy can
+         * inspect or rewrite it. This is the buffered leg, and it is the only one: an artifact body never travels
+         * through it (&sect;1), and a transport caps what it will buffer here.
+         */
         Optional<Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException;
 
         /**
@@ -146,36 +173,68 @@ public interface ProxyFormat {
          * inspect or rewrite). An empty result is a transport failure; otherwise the {@link Download} carries the
          * status and the body stream, so the caller acts on a non-{@code 200} itself - an import fails, a proxy lets
          * the local {@code 404} stand - rather than the fetcher throwing. The caller owns and closes the
-         * {@link Download}. The default materializes from {@link #fetch}; a real HTTP fetcher overrides it to stream
-         * the response body.
+         * {@link Download}.
+         *
+         * <p>This is <em>not</em> a convenience over {@link #fetch}: the difference between the two is the whole
+         * streaming principle, so it is declared, never inherited. A fetcher that has no streaming transport says so
+         * by implementing {@link Buffered} instead.
          */
-        default Optional<Download> download(URI url, Map<String, String> requestHeaders) throws IOException {
-            return fetch(url, requestHeaders).map(response ->
-                    new Download(response.status(), new ByteArrayInputStream(response.body()), response.headers()));
-        }
+        Optional<Download> download(URI url, Map<String, String> requestHeaders) throws IOException;
 
         /**
          * Ask the upstream for a {@code GET}'s status and response headers <em>without</em> its body - the size, content
          * type, {@code ETag} / {@code Last-Modified} and auth challenge a {@code HEAD} is served from, so a repository
          * can answer a client {@code HEAD} (or size-probe a candidate) without pulling the artifact. An empty result is
          * a transport failure and a non-{@code 200} rides in the {@link Head}'s status, mirroring {@link #fetch} /
-         * {@link #download} - the caller acts on the status rather than the fetcher throwing. {@code Fetcher.NONE}
-         * answers empty here as it does for every capability.
+         * {@link #download} - the caller acts on the status rather than the fetcher throwing. {@link #NONE} answers
+         * empty here as it does for every capability.
          *
-         * <p>The default falls back to {@link #download}, reading only the status and headers and then closing the body
-         * stream without draining it - correct, but it still opens the upstream body, so an uncached large artifact's
-         * {@code HEAD} would open (though never read) its download. A real HTTP fetcher <strong>overrides this with an
-         * actual HTTP {@code HEAD} request</strong>, so the body is never opened at all and a huge uncached artifact's
-         * {@code HEAD} costs a header exchange, not a body transfer - the metadata-answered {@code HEAD} the streaming
-         * principle calls for.
+         * <p>A real transport issues an actual HTTP {@code HEAD}, so the body is never opened at all and a huge
+         * uncached artifact's {@code HEAD} costs a header exchange rather than a body transfer - the
+         * metadata-answered {@code HEAD} the streaming principle calls for. Like {@link #download} it is declared
+         * rather than inherited, because the only way to derive it is to open a body to answer a question about
+         * metadata, and a decorator that inherited such a derivation would silently discard the real {@code HEAD} of
+         * the transport it wraps.
          */
-        default Optional<Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
-            Optional<Download> download = download(url, requestHeaders);
-            if (download.isEmpty()) {
-                return Optional.empty();
+        Optional<Head> head(URI url, Map<String, String> requestHeaders) throws IOException;
+
+        /**
+         * A fetcher that answers only the buffered {@link #fetch} and lets the other two legs be <em>derived</em> from
+         * it: {@link #download} is materialised out of the buffered body, and {@link #head} opens that download for
+         * its status and headers. Both derivations violate the streaming clause of the interface they implement,
+         * which is exactly why they live behind a name a class has to write down rather than behind a {@code default}
+         * a class receives for saying nothing.
+         *
+         * <p><strong>What this type is for.</strong> A degenerate or scripted upstream - a test double answering from
+         * a map, a canned-index fetcher, a fixture - whose whole answer is a small in-memory document. There the
+         * derivation costs nothing, because there is no artifact and no network.
+         *
+         * <p><strong>What it is not for.</strong> A transport, and a <em>decorator</em> over one. A transport that
+         * implements this buffers every proxied artifact in heap; a decorator that implements it is worse, because it
+         * throws away the real {@link #download} and {@link #head} of the fetcher it wraps and replaces them with
+         * derivations - a credential wrapper, a screen or a probe that did this would collapse a deployment's
+         * streaming path back onto the buffered one without any of its own code saying so. A decorator delegates all
+         * three legs; that is not boilerplate, it is the declaration that it kept them.
+         */
+        @FunctionalInterface
+        interface Buffered extends Fetcher {
+
+            @Override
+            default Optional<Download> download(URI url, Map<String, String> requestHeaders) throws IOException {
+                return fetch(url, requestHeaders).map(response ->
+                        new Download(response.status(), new ByteArrayInputStream(response.body()),
+                                response.headers()));
             }
-            try (Download response = download.get()) {
-                return Optional.of(new Head(response.status(), response.headers()));
+
+            @Override
+            default Optional<Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
+                Optional<Download> download = download(url, requestHeaders);
+                if (download.isEmpty()) {
+                    return Optional.empty();
+                }
+                try (Download response = download.get()) {
+                    return Optional.of(new Head(response.status(), response.headers()));
+                }
             }
         }
     }

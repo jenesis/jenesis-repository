@@ -58,7 +58,7 @@ class RevalidatingDropTest {
     /** Answers the first fetch with a validated 200 (an {@code ETag} and a body, so the cache remembers it) and
      *  every subsequent fetch of the same URL with a 200 carrying no validator at all - the supersede that forces
      *  the drop-and-subtract path. */
-    private static final class SupersedingFetcher implements ProxyFormat.Fetcher {
+    private static final class SupersedingFetcher implements ProxyFormat.Fetcher.Buffered {
         private final byte[] body;
         private int calls;
 

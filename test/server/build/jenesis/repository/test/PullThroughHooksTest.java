@@ -126,7 +126,7 @@ public class PullThroughHooksTest {
         private final AtomicInteger handles = new AtomicInteger();
         private final AtomicInteger fetches = new AtomicInteger();
 
-        private final ProxyFormat.Fetcher fetcher = (url, headers) -> {
+        private final ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
             fetches.incrementAndGet();
             byte[] body = upstream.get(url.toString());
             return Optional.of(body == null
@@ -192,9 +192,28 @@ public class PullThroughHooksTest {
         @Override
         public ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream) {
             screenFetchPaths.add(path);
-            return (url, headers) -> {
-                decoratedFetches.incrementAndGet();
-                return upstream.fetch(url, headers);
+            // A screen is a DECORATOR, so it delegates all three legs rather than deriving two of them: a hook that
+            // implemented only fetch would replace the wrapped transport's streaming download and real HTTP HEAD with
+            // buffered derivations, collapsing the deployment's streaming path from inside a screen that says nothing
+            // about bodies at all.
+            return new ProxyFormat.Fetcher() {
+
+                @Override
+                public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) throws IOException {
+                    decoratedFetches.incrementAndGet();
+                    return upstream.fetch(url, headers);
+                }
+
+                @Override
+                public Optional<ProxyFormat.Download> download(URI url, Map<String, String> headers)
+                        throws IOException {
+                    return upstream.download(url, headers);
+                }
+
+                @Override
+                public Optional<ProxyFormat.Head> head(URI url, Map<String, String> headers) throws IOException {
+                    return upstream.head(url, headers);
+                }
             };
         }
     }

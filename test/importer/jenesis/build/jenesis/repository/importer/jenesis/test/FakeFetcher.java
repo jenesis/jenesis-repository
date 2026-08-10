@@ -10,7 +10,7 @@ import module java.base;
  * key. The default {@code download} materializes a stream from the same map, so both the listing fetch and the asset
  * download are served without a network.
  */
-final class FakeFetcher implements ProxyFormat.Fetcher {
+final class FakeFetcher implements ProxyFormat.Fetcher.Buffered {
 
     private final Map<String, ProxyFormat.Fetched> responses;
     final List<Map<String, String>> requests = new ArrayList<>();

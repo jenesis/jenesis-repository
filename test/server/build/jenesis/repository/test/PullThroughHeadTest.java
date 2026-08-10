@@ -111,7 +111,7 @@ public class PullThroughHeadTest {
         private final AtomicInteger handles = new AtomicInteger();
         private final AtomicInteger fetches = new AtomicInteger();
 
-        private final ProxyFormat.Fetcher fetcher = (url, headers) -> {
+        private final ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
             fetches.incrementAndGet();
             byte[] body = upstream.get(url.toString());
             return Optional.of(body == null

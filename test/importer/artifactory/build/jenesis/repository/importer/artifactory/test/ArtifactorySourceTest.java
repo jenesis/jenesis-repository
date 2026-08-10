@@ -254,7 +254,7 @@ class ArtifactorySourceTest {
     /** A {@link ProxyFormat.Fetcher} that streams one canned listing URL through a caller-supplied {@link InputStream}
      *  (the download stays lazy, never buffered whole) and refuses every other URL - so a test drives the streaming
      *  deep-list walk without a network and without any asset ever being downloaded. */
-    private static final class StreamingFetcher implements ProxyFormat.Fetcher {
+    private static final class StreamingFetcher implements ProxyFormat.Fetcher.Buffered {
 
         private final String listing;
         private final InputStream body;

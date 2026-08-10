@@ -296,7 +296,7 @@ class MavenFormatTest {
         FakeExchange get = new FakeExchange("GET", "/maven/org/example/lib/maven-metadata.xml");
 
         boolean served = format.proxy(get, store, java.net.URI.create("https://upstream.example/maven2/"),
-                (url, headers) -> Optional.of(new build.jenesis.repository.format.ProxyFormat.Fetched(
+                (build.jenesis.repository.format.ProxyFormat.Fetcher.Buffered) (url, headers) -> Optional.of(new build.jenesis.repository.format.ProxyFormat.Fetched(
                         200, upstreamDocument, java.util.Map.of())));
 
         assertThat(served).isTrue();

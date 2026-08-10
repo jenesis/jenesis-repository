@@ -46,7 +46,7 @@ class RevalidatingFetcherTest {
 
     @Test
     void a_response_without_a_validator_is_not_cached() throws IOException {
-        ProxyFormat.Fetcher noValidator = new ProxyFormat.Fetcher() {
+        ProxyFormat.Fetcher noValidator = new ProxyFormat.Fetcher.Buffered() {
             private Map<String, String> seen;
 
             @Override
@@ -63,7 +63,7 @@ class RevalidatingFetcherTest {
     }
 
     /** A fake upstream that answers a matching If-None-Match with 304, else a 200 carrying the current body + ETag. */
-    private static final class Upstream implements ProxyFormat.Fetcher {
+    private static final class Upstream implements ProxyFormat.Fetcher.Buffered {
 
         private String etag;
         private byte[] body;
