@@ -111,7 +111,9 @@ import module java.base;
  *     a jar manifest, a {@code module-info.class}, a control member, an embedded index - bounds the <b>decompressed</b>
  *     size of each entry it materialises, not merely the stored one, because the ratio is the attacker's to choose: a
  *     kilobyte blob can inflate to gigabytes and the read happens on the publish thread of a shared JVM. Entries the
- *     format is not reading are streamed past, never materialised.
+ *     format is not reading are streamed past, never materialised - <b>but streamed past is not free</b>, so the walk
+ *     that streams them is bounded too (see the walk bound below): the two bounds are separate dimensions, and a
+ *     format that applies only the first is defeated by a one-byte manifest behind a hundred gigabytes of payload.
  *     <ul>
  *       <li><b>The bound is one shared bound, not a constant per format.</b> It is
  *           {@link build.jenesis.repository.store.ArchiveInflation#largestEntry()} - named, documented, and settable by
@@ -129,6 +131,20 @@ import module java.base;
  *           <em>absent</em> guard, which is the fail-open shape. The two outcomes stay distinguishable at the type -
  *           a bound-stopped read answers {@code TRUNCATED} where an empty archive answers {@code EXHAUSTED} - so
  *           "declares nothing" and "we stopped looking" are never the same fact.</li>
+ *       <li><b>The walk that finds the entry is bounded by the same kind of rule.</b> How far a read may run
+ *           <em>through</em> an archive to reach the member it wants is
+ *           {@link build.jenesis.repository.store.ArchiveWalk#largestWalk()}, settable by an operator through
+ *           {@link build.jenesis.repository.store.ArchiveWalk#LARGEST_WALK_KEY}, and the walk that applies it is
+ *           {@link build.jenesis.repository.store.ArchiveWalk#walk(java.io.InputStream,
+ *           build.jenesis.repository.store.ArchiveWalk.Walker)}. A format whose member legitimately sits behind a
+ *           large payload derives a body-relative ceiling with
+ *           {@link build.jenesis.repository.store.ArchiveWalk#largestWalk(long, long)} and states its ratio at that
+ *           call site; what it may not do, here as above, is hold a private constant and a private byte-counting
+ *           stream of its own. The <b>outcome</b> obligation is identical and matters more here than anywhere: a walk
+ *           the bound stopped answers {@code TRUNCATED} and carries <em>nothing</em> - not even the member it passed
+ *           on the way, which a crafted archive may have placed early as a decoy - so "this artifact carries no such
+ *           member" and "we never reached one" stay different answers. A format that lets a bound-stopped walk read
+ *           as an empty archive has the fail-open shape this clause exists to refuse.</li>
  *       <li><b>Ignoring it is visible.</b> {@code ArchiveInflationPrincipleTest} scans the free source tree for a
  *           module that opens a decompressing stream without routing an entry through the shared bound and fails the
  *           build, with a reason-bearing allowlist for the walks that materialise nothing. It catches a <em>new</em>

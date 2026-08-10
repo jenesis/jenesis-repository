@@ -106,6 +106,13 @@ class ConfigPrincipleTest {
         allow.put("jenesis.archive.largest-entry", "archive-member inflation ceiling - deploy-time per-process heap "
                 + "bound, sized with the JVM heap and read on the publish path");
 
+        // --- Archive-walk ceiling (D-068): the sibling bound - how far a read may run THROUGH an archive to reach
+        //     the member that declares it, as opposed to how large that member may inflate. Same deploy-time
+        //     character as its sibling: a per-process work budget spent on the publish thread, deployment-global,
+        //     read where a store round-trip per archive would be absurd. ---
+        allow.put("jenesis.archive.largest-walk", "archive-walk ceiling - deploy-time per-process work bound on how "
+                + "far one read may run through an archive, read on the publish path");
+
         return Map.copyOf(allow);
     }
 

@@ -2,6 +2,7 @@ package build.jenesis.repository.format.java.test;
 
 import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.store.ArchiveInflation;
+import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.Features;
 import module org.junit.jupiter.api;
 
@@ -96,6 +97,42 @@ class JavaLayoutTest {
         assertThat(JavaLayout.moduleName(new ByteArrayInputStream(jar)))
                 .as("the ceiling is read live, not latched at class initialisation")
                 .isEqualTo("com.example.auto");
+    }
+
+    @Test
+    void the_walk_that_looks_for_the_manifest_is_bounded_too_not_only_the_manifest_it_reads() throws IOException {
+        // D-068, the other dimension. The inflation bound above says how big the manifest may be; it says nothing
+        // about how far this read may run to REACH it, so a jar that buries its manifest behind a huge payload
+        // satisfies that bound perfectly while spending as much of the publish thread as its author chose. The walk
+        // now runs under the product's shared, operator-settable walk bound, and a walk the bound stopped declares
+        // nothing rather than being read on to the end.
+        byte[] payload = new byte[256 * 1024];
+        new Random(20260810L).nextBytes(payload);               // incompressible, so the stored bytes are real bytes
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (JarOutputStream jar = new JarOutputStream(bytes)) {
+            jar.putNextEntry(new JarEntry("payload/big.bin"));
+            jar.write(payload);
+            jar.closeEntry();
+            jar.putNextEntry(new JarEntry("META-INF/MANIFEST.MF"));  // written LAST: only a walk reaches it
+            jar.write("Manifest-Version: 1.0\r\nAutomatic-Module-Name: com.example.walked\r\n"
+                    .getBytes(StandardCharsets.UTF_8));
+            jar.closeEntry();
+        }
+        byte[] jar = bytes.toByteArray();
+
+        assertThat(JavaLayout.moduleName(new ByteArrayInputStream(jar)))
+                .as("an ordinary jar is read out and declares what it declares")
+                .isEqualTo("com.example.walked");
+        try {
+            Features.configure(key -> ArchiveWalk.LARGEST_WALK_KEY.equals(key) ? "4096" : null);
+            assertThat(JavaLayout.moduleName(new ByteArrayInputStream(jar)))
+                    .as("the manifest sits past a 4 KiB walk bound, so the walk is cut off and the jar declares "
+                            + "nothing - the degrade this read's role calls for, and never the name of a decoy the "
+                            + "walk happened to pass first")
+                    .isNull();
+        } finally {
+            Features.reset();
+        }
     }
 
     @Test

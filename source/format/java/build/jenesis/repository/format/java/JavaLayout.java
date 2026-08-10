@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.java;
 
 import build.jenesis.repository.store.ArchiveInflation;
+import build.jenesis.repository.store.ArchiveWalk;
 
 import module java.base;
 
@@ -16,13 +17,24 @@ public final class JavaLayout {
 
     /** The module name a jar declares - its {@code module-info} name, or its {@code Automatic-Module-Name} - or null
      *  when it carries neither (a plain jar, not a module). The jar is walked as a stream (typically opened back from
-     *  storage after the blob was streamed in), so the artifact is never buffered whole in memory; the only entries read
-     *  into heap - the manifest and {@code module-info.class} - go through the product's shared
-     *  {@link ArchiveInflation} bound, so a decompression bomb in either cannot inflate unbounded. A module name is an
-     *  optional declaration (a plain jar simply is not a module and publishes fine), so a bomb takes
-     *  {@link ArchiveInflation.Entry#orNull()} and reads as "declares no module" rather than failing the publish.
-     *  Other entries are streamed past, never materialised. */
+     *  storage after the blob was streamed in), so the artifact is never buffered whole in memory, and both of the
+     *  product's archive bounds apply: the walk itself runs under {@link ArchiveWalk}, so a jar cannot be made to
+     *  spend an unbounded amount of this thread's time on entries it streams past, and the only entries read into heap
+     *  - the manifest and {@code module-info.class} - go through {@link ArchiveInflation}, so a decompression bomb in
+     *  either cannot inflate unbounded. A module name is an optional declaration (a plain jar simply is not a module
+     *  and publishes fine), so both bounds take the degrading accessor ({@link ArchiveWalk.Found#orNull()},
+     *  {@link ArchiveInflation.Entry#orNull()}) and read as "declares no module" rather than failing the publish -
+     *  a lost module name can only under-declare, never admit anything unscreened. */
     public static String moduleName(InputStream jar) {
+        try {
+            return ArchiveWalk.walk(jar, JavaLayout::declaredModule).orNull();
+        } catch (IOException | RuntimeException _) {
+            return null;
+        }
+    }
+
+    /** The module name declared inside an already-bounded jar stream, or null when it declares none. */
+    private static String declaredModule(InputStream jar) throws IOException {
         try (ZipInputStream in = new ZipInputStream(jar)) {
             String automatic = null;
             for (ZipEntry entry; (entry = in.getNextEntry()) != null; ) {
@@ -43,8 +55,6 @@ public final class JavaLayout {
             // becomes a /module/<name>/ store key, so validate it is a legal module name first - a crafted value (a
             // '/'- or '..'-laced or empty name) is treated as no module rather than reaching a pointer key.
             return automatic == null ? null : validModuleName(automatic);
-        } catch (IOException | RuntimeException _) {
-            return null;
         }
     }
 
