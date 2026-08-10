@@ -41,6 +41,14 @@ import module java.base;
  *       fields ({@code coordinate}, {@code version}, {@code contentType}) may legitimately be {@code null} for a
  *       coordinate-less path, and {@code hash} is {@code null} only where the removal site could not read one - an
  *       observer must tolerate that rather than assume a coordinate.</li>
+ *   <li><b>Selection failure.</b> There is nothing to select: the policy is additive, every discovered observer is
+ *       notified, and no configuration key names one. Because this family carries no {@code name()}, it does not
+ *       resolve through the shared {@code Providers} primitives - {@link Publication} loads it directly - so it also
+ *       gets none of their packaging guards: an observer module registered twice is notified twice, and nothing
+ *       reports it. An observer that must not act is switched off by its own module, not by this SPI. The one
+ *       discovery site is {@link Publication}'s static list; a second load of this service would be the second
+ *       delivery pipeline the design forbids, which is why the verdict-bearing {@link PublishInterceptor} rides this
+ *       same clause instead of declaring its own.</li>
  *   <li><b>Streaming.</b> The callback receives a descriptor and the scoped store, never the artifact bytes. An
  *       observer that needs content re-opens {@code blobs/<hash>} through the store and streams it; it must never
  *       materialise an artifact (&sect;1), and anything slow belongs in a background worker this callback only leaves

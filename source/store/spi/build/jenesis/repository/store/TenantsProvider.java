@@ -35,7 +35,15 @@ import module java.base;
  * <li><b>Tenant scoping (&sect;6).</b> The directory is deployment-global by construction - it is the thing that
  *     enumerates tenants - and is built over the deployment's <em>root</em> store, before any tenant scope is
  *     applied. It answers which tenants exist and creates them; it never reads a tenant's artifacts, and a caller
- *     scopes the store itself before touching content.</li>
+ *     scopes the store itself before touching content.
+ *     <p>That root-level position is an <em>exception</em> this SPI holds by necessity, and it defines the rule for
+ *     everything downstream of it: all plugin state is per-tenant, written under the tenant scope a caller derives
+ *     from this directory. The only other deployment-global data is authorization and user management under
+ *     {@code auth/} (and superadmin configuration under {@code config/}), because a credential must be resolvable
+ *     before a tenant is known; a plugin that finds itself wanting the root store is almost always a plugin that has
+ *     not scoped itself yet. A console or API view is likewise always a <em>tenant</em> view - implicitly so when
+ *     {@link #installed()} is {@code false} and the fixed directory names the single tenant, which is why a
+ *     single-tenant deployment shows no tenancy chrome rather than a different data model.</li>
  * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Two providers answering to one name, one provider
  *     registered twice, and more than one enabled directory with no selection to disambiguate them are all
  *     configuration errors that throw, naming the candidates and the setting that resolves them - never a

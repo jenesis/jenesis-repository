@@ -71,7 +71,16 @@ import module java.base;
  *   <li><b>Selection failure.</b> There is no selection: the policy is additive, every discovered contributor is
  *       merged, and there is no configuration key that names one. A contributor module the operator put on the path
  *       but that cannot be instantiated fails at {@link ServiceLoader} resolution and is not silently skipped
- *       (&sect;9); a contributor that instantiates but cannot compute is contained and reported (see above).</li>
+ *       (&sect;9); a contributor that instantiates but cannot compute is contained and reported (see above).
+ *       <p>Unlike the named singleton SPIs beside it, this one does <em>not</em> resolve through the shared
+ *       {@code Providers} primitives and cannot: those are keyed by a provider {@code name()} and a contributor
+ *       declares none - the contributed <em>keys</em> are its identity. Two consequences follow and are stated rather
+ *       than assumed. First, the packaging guards {@code Providers} applies to every other family are absent here: a
+ *       contributor registered twice, or two distributions shipping the same contribution, are not refused at
+ *       resolution - they surface instead as this merge's own conflict report, which is the weaker but per-key
+ *       signal. Second, the discovery site is the serving controller's {@code ServiceLoader.load} rather than a
+ *       {@code resolve}/{@code installed} static on this module, so the {@code uses} clause lives with the server that
+ *       loads it; a second load site for this SPI would be a second discovery pipeline and is forbidden.</li>
  *   <li><b>Error visibility.</b> No outcome of a merge is silent. A contribution that loses a key to the base or to an
  *       earlier contributor is reported in {@link Merged#conflicts()} and under {@value #CONFLICTS_KEY}; a contributor
  *       that throws is reported in {@link Merged#failures()} and under {@value #FAILURES_KEY}. Both are additionally
@@ -88,7 +97,11 @@ import module java.base;
  *       appended in discovery order, then the diagnostic keys last. Among contributors the first discovered wins a
  *       key. The reports are deterministic: conflicts appear in contributor discovery order and, within one
  *       contribution, sorted by key, so an unordered contributed map cannot make the report shuffle between
- *       requests.</li>
+ *       requests. That determinism is <em>within one deployment</em> and is deliberately not claimed across module
+ *       paths: nothing name-sorts the contributors (see clause 4), so on a key two contributors both claim, which one
+ *       is served is decided by the order the loader saw their modules. Two distributions must therefore not claim
+ *       one key - and when they do, the conflict report is what makes the collision visible rather than a stable
+ *       winner making it invisible.</li>
  *   <li><b>Bounded work / cancellation.</b> {@link #capabilities()} is on the request path and must be cheap and
  *       bounded - a handful of already-known flags, not an enumeration of stored artifacts. It is given no
  *       cancellation signal, so it must not block.</li>

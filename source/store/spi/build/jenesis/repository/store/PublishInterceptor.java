@@ -59,7 +59,8 @@ import module java.base;
  *     it" - and {@code null} is never a legal return from {@link #assess}. {@link #withheld} answers {@code false} for
  *     "serves". {@link Content#sibling(String)} and {@link Content#sibling(String, int)} answer
  *     {@link Optional#empty()} for "nothing is published there", never a zero-length body a caller would parse as an
- *     empty document.</li>
+ *     empty document. The free product ships no interceptor at all, so the shipped chain is empty: every upload is
+ *     accepted, nothing is diverted, and {@link Publication} reduces the screen to a plain content-addressed store.</li>
  * <li><b>Selection failure.</b> None: the chain is additive - every discovered interceptor participates, there is
  *     nothing to select and so nothing to fail at resolution. A screen that must not run is one whose module is off
  *     the module path.</li>
@@ -83,7 +84,11 @@ import module java.base;
  *     clear. That is the whole point of the sub-interface - a gate that cannot render a verdict must never let an
  *     unscreened artifact through - so a screen must <em>not</em> catch its own store failures into a default
  *     {@code ACCEPT}. The observer legs this type inherits stay <b>contained</b> exactly as for any observer (logged,
- *     and the publish, removal or withhold transition stands). One class, two failure modes, keyed by method.</li>
+ *     and the publish, removal or withhold transition stands). One class, two failure modes, keyed by method.
+ *     Two details a reader only finds in the code: the containment is of {@code Exception}, so an {@link Error}
+ *     escapes on <em>either</em> side; and where the enumeration seam calls {@link #withheld} over a hostile or
+ *     unresolvable request path, {@code ServableNames} catches and treats the path as withheld - the same fail-closed
+ *     direction reached by a different route.</li>
  * <li><b>Read purity (&sect;10).</b> {@link #withheld} is a read-path call: it runs inside {@link Publication#located}
  *     on <em>every</em> serve and, through {@code ServableNames}, on every enumeration surface. It therefore renders
  *     durably stored state only - no upstream fetch, no scanner call, no lazy refresh and no write - it must be cheap
@@ -98,14 +103,18 @@ import module java.base;
  * <li><b>Lifecycle / ownership.</b> Instances are {@link java.util.ServiceLoader}-discovered once at
  *     {@link Publication} class load - through the single {@code uses PublicationObserver} clause - and cached for the
  *     life of the process. There is no close hook, so a screen that owns a thread or a client owns it for the process
- *     lifetime and must size it accordingly.</li>
+ *     lifetime and must size it accordingly. A chain injected through {@code new Publication(store, interceptors)} is
+ *     the embedder's to own instead, and is sorted on every construction exactly like the discovered one.</li>
  * <li><b>Ordering / concurrency.</b> The chain runs sequentially in ascending {@link #order()}, ties keeping discovery
  *     order - which is <em>not</em> stable across module-path arrangements, so ordering may only ever matter to a
  *     screen that reads what an earlier screen recorded. The collective verdict is order-independent: the strongest
  *     {@link Disposition} across the chain routes the publication, and the enum is declared weakest-to-strongest so
  *     "strongest" is its natural order. {@link #committed} is then called over the <em>whole</em> chain in the same
  *     order, including the screens that voted {@code ACCEPT}. No ordering is promised between two concurrent
- *     publications.</li>
+ *     publications. The two chain walks stop differently, and that difference is contractual: {@link #assess} is
+ *     <b>not</b> short-circuited - every screen is asked even after one has answered {@code REJECT}, so a screen that
+ *     records what it saw sees every artifact - while {@link #withheld} <b>is</b>, the first screen answering
+ *     {@code true} winning, so a screen must never rely on being asked.</li>
  * <li><b>Bounded work / cancellation.</b> {@link #assess} runs on the publish thread and {@link #withheld} on the
  *     serve path; neither has a timeout and there is no way to abandon a chain part-way, so each screen owns its own
  *     bound. The reads the seam offers are bounded by construction (clause 5); a screen that needs more than a bounded
