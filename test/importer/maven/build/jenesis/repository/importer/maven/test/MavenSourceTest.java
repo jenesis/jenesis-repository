@@ -350,7 +350,10 @@ class MavenSourceTest {
     @Test
     void a_decompression_bomb_index_field_fails_the_walk_instead_of_ballooning_into_the_heap() {
         // The per-field length prefix bounds only the COMPRESSED bytes; a field gzipping tens of megabytes into a
-        // few kilobytes must be refused at the decompression cap, not inflated into memory.
+        // few kilobytes must be refused at the decompression cap, not inflated into memory. The cap is the product's
+        // shared archive-inflation bound now rather than this reader's private constant, so the refusal names the
+        // bound and the key an operator sets it with - and it fails CLOSED, because an index field carries the
+        // record's own coordinate and a walk that quietly dropped it would import a record nothing described.
         String root = "https://mirror.example/repo/";
         Map<String, ProxyFormat.Fetched> responses = new HashMap<>();
         responses.put(root, status(403));
@@ -361,7 +364,8 @@ class MavenSourceTest {
 
         assertThatThrownBy(() -> source.forEach((format, path, content) -> { }, cursor -> { }))
                 .isInstanceOf(IOException.class)
-                .hasMessageContaining("corrupted");
+                .hasMessageContaining("archive-inflation bound")
+                .hasMessageContaining("jenesis.archive.largest-entry");
     }
 
     @Test

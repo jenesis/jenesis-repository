@@ -1,5 +1,7 @@
 package build.jenesis.repository.format.java;
 
+import build.jenesis.repository.store.ArchiveInflation;
+
 import module java.base;
 
 /**
@@ -12,18 +14,14 @@ public final class JavaLayout {
     private JavaLayout() {
     }
 
-    /** The most decompressed bytes read from a single jar entry the inspection materialises (the manifest and the
-     *  {@code module-info.class}). Both are small metadata - a few KB - so a far larger entry is a decompression bomb:
-     *  a crafted jar whose tiny stored blob inflates a high-ratio {@code MANIFEST.MF} to gigabytes would otherwise be
-     *  buffered whole in heap here (an OOM DoS on the shared JVM on every jar publish). Over the cap the entry is
-     *  ignored (treated as no module) rather than inflated unbounded. */
-    private static final int MAX_METADATA_ENTRY = 1 << 20;
-
     /** The module name a jar declares - its {@code module-info} name, or its {@code Automatic-Module-Name} - or null
      *  when it carries neither (a plain jar, not a module). The jar is walked as a stream (typically opened back from
      *  storage after the blob was streamed in), so the artifact is never buffered whole in memory; the only entries read
-     *  into heap - the manifest and {@code module-info.class} - are each size-capped ({@link #MAX_METADATA_ENTRY}), so a
-     *  decompression bomb in either cannot inflate unbounded. Other entries are streamed past, never materialised. */
+     *  into heap - the manifest and {@code module-info.class} - go through the product's shared
+     *  {@link ArchiveInflation} bound, so a decompression bomb in either cannot inflate unbounded. A module name is an
+     *  optional declaration (a plain jar simply is not a module and publishes fine), so a bomb takes
+     *  {@link ArchiveInflation.Entry#orNull()} and reads as "declares no module" rather than failing the publish.
+     *  Other entries are streamed past, never materialised. */
     public static String moduleName(InputStream jar) {
         try (ZipInputStream in = new ZipInputStream(jar)) {
             String automatic = null;
@@ -50,20 +48,11 @@ public final class JavaLayout {
         }
     }
 
-    /** The current zip entry's decompressed bytes, or null once they exceed {@link #MAX_METADATA_ENTRY} - so a
-     *  high-ratio decompression bomb is abandoned at the cap instead of inflated whole into heap. */
+    /** The current zip entry's decompressed bytes, or null once they exceed the shared archive-inflation bound - so a
+     *  high-ratio decompression bomb is abandoned at the ceiling instead of inflated whole into heap, and a
+     *  bound-stopped entry declares nothing rather than declaring a prefix. */
     private static byte[] bounded(InputStream in) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
-        int total = 0;
-        for (int read; (read = in.read(buffer)) != -1; ) {
-            total += read;
-            if (total > MAX_METADATA_ENTRY) {
-                return null;                                    // over the cap: a bomb, ignore this entry
-            }
-            out.write(buffer, 0, read);
-        }
-        return out.toByteArray();
+        return ArchiveInflation.entry(in).orNull();
     }
 
     /** The name if it is a legal Java module name (dot-separated Java identifiers), else null. Uses the JDK's own
