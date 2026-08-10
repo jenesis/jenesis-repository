@@ -98,6 +98,14 @@ class ConfigPrincipleTest {
         allow.put("jenesis.consistency.node-id", "this node's stable consistency identity (WCON.2) - per-instance "
                 + "deploy-time value, unique to each process, so it cannot be a fleet-shared store setting");
 
+        // --- Archive-inflation ceiling (D-054): the most decompressed bytes of one archive member a format may
+        //     materialise while reading a declaration. A per-PROCESS heap ceiling sized against the JVM's own heap,
+        //     read on the publish thread where a store round-trip per archive member would be absurd, and
+        //     deployment-global where a stored setting would be per tenant - so it is deploy-time shape like the
+        //     read-only flag, not a console dial. ---
+        allow.put("jenesis.archive.largest-entry", "archive-member inflation ceiling - deploy-time per-process heap "
+                + "bound, sized with the JVM heap and read on the publish path");
+
         return Map.copyOf(allow);
     }
 

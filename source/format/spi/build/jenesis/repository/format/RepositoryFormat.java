@@ -26,9 +26,10 @@ import module java.base;
  *       ({@code GENERATED_INDEX_IS_REVALIDATABLE});</li>
  *   <li><b>structurally guarded</b> - clause 4 by {@code StreamingPrincipleTest}, clause 7 by
  *       {@code EnumerationScreenPrincipleTest}, clause 12's bounded-listing half by
- *       {@code UnboundedListingPrincipleTest}, clause 14 by {@code FormatScreeningMonopolyPrincipleTest}. These are
+ *       {@code UnboundedListingPrincipleTest}, clause 14 by {@code FormatScreeningMonopolyPrincipleTest}, clause 15 by
+ *       {@code ArchiveInflationPrincipleTest}. These are
  *       source scans: they catch a <em>new</em> offending call site, not a wrong one;</li>
- *   <li><b>documented only</b> - clauses 1, 5, 8, 9, 10, 11, 13 and 15 are audit items today (T-304's residue). They
+ *   <li><b>documented only</b> - clauses 1, 5, 8, 9, 10, 11 and 13 are audit items today (T-304's residue). They
  *       are stated here in a form a test could be written against, not because one exists.</li>
  * </ul>
  * <ol>
@@ -109,15 +110,31 @@ import module java.base;
  * <li><b>Archive inflation cap (&sect;13).</b> A format that decompresses part of an artifact to read a declaration -
  *     a jar manifest, a {@code module-info.class}, a control member, an embedded index - bounds the <b>decompressed</b>
  *     size of each entry it materialises, not merely the stored one, because the ratio is the attacker's to choose: a
- *     kilobyte blob can inflate to gigabytes and the read happens on the publish thread of a shared JVM. Over the
- *     bound the entry <b>declares nothing</b> - the format degrades to "this artifact carries no such declaration" and
- *     the publish proceeds - rather than inflating on, throwing, or (the fail-open shape) treating an unread entry as
- *     an absent guard. Entries the format is not reading are streamed past, never materialised. Each reading module
- *     holds its own named constant today - the core's is {@code JavaLayout}'s 1 MiB ceiling on the two small
- *     metadata entries a jar declares a module with - and each is private, so the numbers are parallel by convention
- *     rather than keyed to one another: a new format arrives with a bound of its own rather than inheriting the
- *     absence of one. Nothing enforces this across formats, which makes it the clause a peer is most likely to arrive
- *     without, and an audit item rather than a proven one.</li>
+ *     kilobyte blob can inflate to gigabytes and the read happens on the publish thread of a shared JVM. Entries the
+ *     format is not reading are streamed past, never materialised.
+ *     <ul>
+ *       <li><b>The bound is one shared bound, not a constant per format.</b> It is
+ *           {@link build.jenesis.repository.store.ArchiveInflation#largestEntry()} - named, documented, and settable by
+ *           an operator through {@link build.jenesis.repository.store.ArchiveInflation#LARGEST_ENTRY_KEY} - and the
+ *           read that applies it is {@link build.jenesis.repository.store.ArchiveInflation#entry(java.io.InputStream)}.
+ *           A format whose own document is legitimately larger than a manifest passes its ceiling explicitly to the
+ *           two-argument overload and states its reason at that call site; what it may not do is hold a private
+ *           constant, because private constants are parallel by convention only, and a new format then arrives not
+ *           with a different bound but with none.</li>
+ *       <li><b>Over the bound the entry declares nothing</b> - the format degrades to "this artifact carries no such
+ *           declaration" and the publish proceeds ({@code Entry.orNull()}) - rather than inflating on or handing back
+ *           the prefix it did read. A member whose content is the artifact's <em>identity</em>, or a guard's only
+ *           input, takes {@code Entry.required(...)} and fails closed instead, because degrading that one would admit
+ *           an artifact nothing screened. What no format may do is the third thing: treat an unread entry as an
+ *           <em>absent</em> guard, which is the fail-open shape. The two outcomes stay distinguishable at the type -
+ *           a bound-stopped read answers {@code TRUNCATED} where an empty archive answers {@code EXHAUSTED} - so
+ *           "declares nothing" and "we stopped looking" are never the same fact.</li>
+ *       <li><b>Ignoring it is visible.</b> {@code ArchiveInflationPrincipleTest} scans the free source tree for a
+ *           module that opens a decompressing stream without routing an entry through the shared bound and fails the
+ *           build, with a reason-bearing allowlist for the walks that materialise nothing. It catches a <em>new</em>
+ *           unbounded inflation the moment it is written, which is what turns this clause from a rule a format could
+ *           silently arrive without into one it has to answer.</li>
+ *     </ul></li>
  * </ol>
  */
 public interface RepositoryFormat {

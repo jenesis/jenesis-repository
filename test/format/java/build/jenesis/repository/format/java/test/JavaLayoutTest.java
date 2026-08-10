@@ -1,6 +1,8 @@
 package build.jenesis.repository.format.java.test;
 
 import build.jenesis.repository.format.java.JavaLayout;
+import build.jenesis.repository.store.ArchiveInflation;
+import build.jenesis.repository.store.Features;
 import module org.junit.jupiter.api;
 
 import module java.base;
@@ -72,6 +74,28 @@ class JavaLayoutTest {
         }
         assertThat(JavaLayout.moduleName(new ByteArrayInputStream(bytes.toByteArray())))
                 .as("the oversized manifest is ignored, not read for its module name").isNull();
+    }
+
+    @Test
+    void the_metadata_cap_is_the_shared_operator_settable_bound_not_a_constant_private_to_this_module() throws IOException {
+        // D-054: the ceiling used to be this module's own private constant, keyed to nothing an operator could set and
+        // parallel-by-convention with every other format's. It is now the product's one bound, so moving the shared
+        // dial moves what this layout will materialise - which is the whole difference between a rule a format holds
+        // and a rule the product holds.
+        byte[] jar = jar(manifest("com.example.auto"));
+        assertThat(JavaLayout.moduleName(new ByteArrayInputStream(jar))).isEqualTo("com.example.auto");
+        try {
+            Features.configure(key -> ArchiveInflation.LARGEST_ENTRY_KEY.equals(key) ? "8" : null);
+            assertThat(JavaLayout.moduleName(new ByteArrayInputStream(jar)))
+                    .as("an ordinary manifest is past an 8-byte ceiling, so the entry declares nothing - the "
+                            + "degrade this read's role calls for, not a failed publish")
+                    .isNull();
+        } finally {
+            Features.reset();
+        }
+        assertThat(JavaLayout.moduleName(new ByteArrayInputStream(jar)))
+                .as("the ceiling is read live, not latched at class initialisation")
+                .isEqualTo("com.example.auto");
     }
 
     @Test

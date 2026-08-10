@@ -1,5 +1,7 @@
 package build.jenesis.repository.importer.maven;
 
+import build.jenesis.repository.store.ArchiveInflation;
+
 import module java.base;
 
 /**
@@ -69,16 +71,18 @@ final class RepositoryIndex implements Closeable {
         return record;
     }
 
-    /** Inflate a per-field GZIP value, capped at the same length a stored field may carry - the length prefix bounds
-     *  only the compressed bytes, so without the cap a decompression-bomb field would balloon into the heap. */
+    /** Inflate a per-field GZIP value through the product's shared archive-inflation bound, at the same length a
+     *  stored field may carry - the length prefix bounds only the compressed bytes, so without the ceiling a
+     *  decompression-bomb field would balloon into the heap. The index field is the record's own identity (a
+     *  coordinate or description that exists nowhere else in the stream), so a bound-stopped read takes
+     *  {@link ArchiveInflation.Entry#required} and fails the import rather than importing a record with a silently
+     *  missing field. The ceiling is this reader's own, larger than the shared default because an index field is a
+     *  record rather than a manifest, and stated here at the call site that chose it. */
     private static String decompress(String name, byte[] value) throws IOException {
         try (InputStream inflated = new GZIPInputStream(new ByteArrayInputStream(value))) {
-            byte[] expanded = inflated.readNBytes(MAX_FIELD_LENGTH + 1);
-            if (expanded.length > MAX_FIELD_LENGTH) {
-                throw new IOException("Implausible decompressed index field length for '" + name
-                        + "' - the stream is corrupted");
-            }
-            return new String(expanded, StandardCharsets.UTF_8);
+            return new String(ArchiveInflation.entry(inflated, MAX_FIELD_LENGTH)
+                    .required("Maven repository index record", "compressed field '" + name + "'"),
+                    StandardCharsets.UTF_8);
         }
     }
 

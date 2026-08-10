@@ -59,6 +59,13 @@ public final class Features {
         configure(Features::defaults);
     }
 
+    /** The deployment's installed config lookup, for the few core bounds that are read where no lookup is handed in -
+     *  a per-process ceiling read on the publish thread ({@link ArchiveInflation#largestEntry()}), not a feature
+     *  toggle. Read through it live rather than latched, so {@link #configure} and {@link #reset} are honoured. */
+    public static UnaryOperator<String> lookup() {
+        return config;
+    }
+
     /** Whether the named feature is enabled: {@code jenesis.repository.<feature>} unset means enabled, and only an
      *  explicit {@code false} disables - so an image carrying every module runs everything until configured off. */
     public static boolean enabled(String feature) {
