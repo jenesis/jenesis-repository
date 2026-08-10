@@ -6,6 +6,12 @@ import module java.base;
  * The product's one archive-inflation bound, and the screened read that applies it: how many <em>decompressed</em>
  * bytes of a single archive member a format may materialise while it reads a declaration out of a published artifact.
  *
+ * <p>It bounds one of the two dimensions an archive read has. Its sibling {@link ArchiveWalk} bounds the other - how
+ * far the read may run <em>through</em> the archive to reach that member - because a hostile artifact can satisfy this
+ * bound perfectly by putting a one-byte manifest behind a hundred gigabytes of payload. The two are separate numbers
+ * and separate operator keys, and they share this class's {@link Outcome} vocabulary so a caller reads the same two
+ * words whichever bound it met.
+ *
  * <p><strong>Why this is shared rather than per format.</strong> A format that cracks an artifact for its manifest -
  * a jar's {@code MANIFEST.MF} and {@code module-info.class}, a {@code .nuspec}, a gemspec, a {@code control} member, an
  * embedded index - reads it on the publish thread of a shared JVM, and the compression ratio is the attacker's to
