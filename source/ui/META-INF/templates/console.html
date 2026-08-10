@@ -12,8 +12,11 @@
             <li th:insert="~{base :: brand('jenesis-repository', @{/}, 'jenesis-repository')}"></li>
         </ul>
         <ul>
+            <!--/* A panel that failed to render keeps its navigation entry - it must not read as a panel with nothing
+                 to say - and is marked here so the failure is visible without scrolling to its card. */-->
             <li th:each="panel : ${panels}">
-                <a th:href="'#' + ${panel.id}" th:text="${panel.title}">Panel</a>
+                <a th:href="'#' + ${panel.id}"
+                   th:text="${panel.failed} ? ${panel.title} + ' ⚠' : ${panel.title}">Panel</a>
             </li>
             <li th:if="${postureCount > 0}">
                 <a href="#posture" class="secondary" title="Security-posture advisories"
@@ -43,7 +46,12 @@
     </th:block>
     <article th:each="panel : ${panels}" th:id="${panel.id}" class="app-card">
         <header><h2 th:text="${panel.title}">Panel</h2></header>
-        <div th:utext="${panel.body}">panel body</div>
+        <!--/* A contained panel failure renders here in the failed panel's own card: th:text escapes the notice, so
+             a failing panel contributes no markup at all, and the body it never produced is not rendered. */-->
+        <th:block th:if="${panel.failed}">
+            <p th:replace="~{base :: alert(${panel.failure}, 'danger')}"></p>
+        </th:block>
+        <div th:unless="${panel.failed}" th:utext="${panel.body}">panel body</div>
     </article>
 </main>
 </body>

@@ -9,6 +9,13 @@
  * java.util.ServiceLoader}, and a <em>disabled or absent</em> plugin contributes nothing - so the overview never lists
  * a signal for something that is not running.
  *
+ * <p>It also owns {@link build.jenesis.repository.observation.Contributions}, the one containment mechanism every
+ * <em>collected report</em> folds its discovered contributors through - this module's own sources, the console's
+ * panels and the posture report's advisors alike - so a single failing contributor is reported as failed instead of
+ * taking the whole surface down. It lives here because this is the base {@code java.base}-only module the other
+ * report-owning SPIs already sit on top of, and because a contributor failure that reaches nobody is exactly the
+ * observability gap this module exists to close.
+ *
  * <p>The module is deliberately registry-free and {@code java.base}-only, so every format / compliance / storage /
  * maintenance SPI can {@code requires} it without dragging in Micrometer or Spring. The distribution collects the
  * sources into one {@link build.jenesis.repository.observation.ObservabilityReport} and bridges it onto Actuator

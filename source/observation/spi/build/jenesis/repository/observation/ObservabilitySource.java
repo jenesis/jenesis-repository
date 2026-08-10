@@ -22,9 +22,11 @@ import module java.base;
  *       rather than a signal that reads as healthy; the report then simply does not list it.</li>
  *   <li><b>Selection failure.</b> There is nothing to select: the policy is additive, every discovered source is
  *       collected, and no configuration key names one. A source carries no {@code name()}, so it does not resolve
- *       through the shared {@code Providers} primitives and gets none of their packaging guards - a source module
- *       registered twice contributes its signals twice, which the unique-name validation at signal construction turns
- *       into a loud collision rather than a silent doubling. The one discovery site is
+ *       through the shared {@code Providers} primitives and gets none of their packaging guards. Signal construction
+ *       validates the {@link Signals} <em>grammar</em> and nothing else, so a source module registered twice really
+ *       does contribute its signals twice and nothing refuses it - unlike a {@code Panel}, whose id collisions a
+ *       build-time census ratchet catches, this SPI's duplicate-signal case is still open and waits on the naming
+ *       decision an additive SPI needs before it can be guarded. The one discovery site is
  *       {@link ObservabilityReport#discover()}; a consumer that needs to control the set collects through
  *       {@link ObservabilityReport#from} with an explicit list instead of loading the service a second time.</li>
  *   <li><b>Tenant scoping (§6).</b> The report is deployment-global: it is collected once per scrape or render with no
@@ -39,10 +41,20 @@ import module java.base;
  *       empty panel ambiguous between "clean" and "never scanned": a {@link TaskStatus} states {@code lastRun} (null
  *       when it has never run) and {@code outcome}, and a {@link HealthCheck} covering a refreshed source puts the
  *       last-refresh instant in its {@code detail}.</li>
- *   <li><b>Error visibility.</b> A throw propagates to the caller and degrades the whole collected report, so an
- *       implementation that cannot determine a signal reports it as {@link Health#UNKNOWN} (or
- *       {@link TaskStatus.State#UNKNOWN}) with a plain-text detail instead of throwing. Detail text is operator-facing
- *       and never carries a secret, a credential or a tenant's artifact content.</li>
+ *   <li><b>Error visibility.</b> A throw is <b>contained to this source</b> and never reaches the reader as a broken
+ *       report: {@link ObservabilityReport#from} collects through {@code Contributions}, so a source that throws (or
+ *       answers {@code null}) contributes one {@link Health#UNKNOWN} check named
+ *       {@code jenesis.observation.unavailable.<source>} in place of its own signals, every other source is collected,
+ *       and the failure is logged once with this class's name. Containment is not absolution: the substitute check
+ *       names only the failing class and the exception <em>type</em> (the message goes to the log, never to an
+ *       operator-facing detail), it says nothing about what the source was actually reporting, and it drops
+ *       {@link ObservabilityReport#overall} to {@code UNKNOWN} for the whole deployment. An implementation that cannot
+ *       determine a signal therefore still reports it <em>itself</em> as {@link Health#UNKNOWN} (or
+ *       {@link TaskStatus.State#UNKNOWN}) with a plain-text detail rather than throwing, because only the
+ *       implementation knows which signal is affected and why. Detail text is operator-facing and never carries a
+ *       secret, a credential or a tenant's artifact content. An {@link Error} is <em>not</em> contained: a
+ *       {@link LinkageError} from a half-installed plugin is a broken module graph, not a source failing to answer,
+ *       and reporting it as one unknown row on an otherwise healthy page would misreport it.</li>
  *   <li><b>Lifecycle / ownership.</b> The distribution owns the lifecycle: {@link ObservabilityReport#discover()}
  *       loads the sources through {@link ServiceLoader} each time, so instances are created, read and discarded -
  *       never cached, never closed. A source must not own a thread, a client or a scheduler; it observes something
