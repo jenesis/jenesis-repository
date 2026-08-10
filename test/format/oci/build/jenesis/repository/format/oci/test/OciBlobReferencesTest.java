@@ -169,9 +169,113 @@ class OciBlobReferencesTest {
                 "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
 
         assertThatThrownBy(() -> format.references("oci/types/" + hex, store))
+                // The named refusal of clause 3, not a bare IOException: these bytes will never parse, and a consumer
+                // deriving the same set to decide what to WITHHOLD has to be able to degrade on exactly this without
+                // also degrading on a store outage. It stays an IOException, so a collector that catches nothing at
+                // all still fails its pass and deletes nothing.
+                .isInstanceOf(BlobReferences.Unresolvable.class)
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining(hex)
                 .hasMessageContaining("cannot be enumerated");
+    }
+
+    @Test
+    void a_manifest_past_the_parse_bound_refuses_with_the_same_named_subtype() throws IOException {
+        // The second refusal site: present, but larger than the manifest bound this format enforces on ingest, so its
+        // layers cannot be enumerated either. Same fact as an unparseable manifest - the stored bytes refuse to be
+        // read - so it must carry the same name, or a degrading consumer would have to catch one and propagate the
+        // other for no reason it could state.
+        String hex = "a".repeat(64);
+        byte[] oversized = new byte[4 * 1024 * 1024 + 1];
+        Arrays.fill(oversized, (byte) '{');
+        store.write("blobs/" + hex, new ByteArrayInputStream(oversized));
+        store.writeVersioned("oci/types/" + hex,
+                "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
+
+        assertThatThrownBy(() -> format.references("oci/types/" + hex, store))
+                .isInstanceOf(BlobReferences.Unresolvable.class)
+                .hasMessageContaining(hex)
+                .hasMessageContaining("manifest bound");
+    }
+
+    @Test
+    void a_store_failure_stays_a_plain_io_exception_and_is_never_the_named_refusal() throws IOException {
+        // The whole point of naming the refusal. If a store outage arrived as Unresolvable too, a consumer that
+        // degrades on Unresolvable would read every store hiccup as "this image references nothing" - an
+        // under-enforced hold, and on release a lifted marker for a layer another image still holds. The two refusal
+        // sites are the ONLY ones that raise it; everything else is the store failing and says so.
+        byte[] body = manifest(sha256("c".getBytes(StandardCharsets.UTF_8)));
+        String hex = sha256(body);
+        store.writeVersioned("blobs/" + hex, body, null);
+        store.writeVersioned("oci/types/" + hex,
+                "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
+        ArtifactStore failing = new FailingReads(store);
+
+        assertThat(format.references("oci/types/" + hex, store))
+                .as("the same key resolves cleanly while the store answers").isNotEmpty();
+        assertThatThrownBy(() -> format.references("oci/types/" + hex, failing))
+                .isInstanceOf(IOException.class)
+                .isNotInstanceOf(BlobReferences.Unresolvable.class);
+    }
+
+    /** A store whose blob reads fail the way a backend outage fails: {@code exists} still answers, the read does not.
+     *  Everything else is the real store, so the only difference from the passing case is the failure itself. */
+    private record FailingReads(ArtifactStore delegate) implements ArtifactStore {
+
+        @Override
+        public InputStream open(String key) throws IOException {
+            throw new IOException("the store is unreachable: " + key);
+        }
+
+        @Override
+        public void read(String key, OutputStream out) throws IOException {
+            throw new IOException("the store is unreachable: " + key);
+        }
+
+        @Override
+        public ArtifactStore scope(String tenant) {
+            return new FailingReads(delegate.scope(tenant));
+        }
+
+        @Override
+        public boolean exists(String key) {
+            return delegate.exists(key);
+        }
+
+        @Override
+        public void write(String key, InputStream in) throws IOException {
+            delegate.write(key, in);
+        }
+
+        @Override
+        public String writeBlob(InputStream in) throws IOException {
+            return delegate.writeBlob(in);
+        }
+
+        @Override
+        public long size(String key) throws IOException {
+            return delegate.size(key);
+        }
+
+        @Override
+        public void delete(String key) throws IOException {
+            delegate.delete(key);
+        }
+
+        @Override
+        public List<String> list(String prefix) {
+            return delegate.list(prefix);
+        }
+
+        @Override
+        public Optional<Versioned> readVersioned(String key) throws IOException {
+            return delegate.readVersioned(key);
+        }
+
+        @Override
+        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
+            return delegate.writeVersioned(key, content, expected);
+        }
     }
 
     @Test

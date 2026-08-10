@@ -361,14 +361,17 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * The upload staging ({@code oci/uploads/}, {@code oci/upload-sessions/}) names no served blob and answers empty:
      * a never-finalized push is exactly what garbage collection is for, and {@link #reap} already retires it.
      *
-     * <p><b>It refuses rather than under-reports.</b> A root manifest blob that is present but unparseable or past
-     * {@link #MAX_MANIFEST} raises - its layers cannot be enumerated, and answering "just the manifest" would hand a
-     * reference scan a short list, which is a live layer condemned on one pass and DELETED on the next (the fail-open
-     * this seam's contract clause 3 makes illegal). Failing the pass deletes nothing, and the message names the key so
-     * an operator can discard the manifest. The state is unrepresentable for anything pushed since manifest validation
-     * landed; this bites only stored legacy bytes. A <em>sub</em>-manifest of an index degrades silently instead: a
-     * hostile index entry may legitimately point at a layer blob, which has no children to lose, so only the root - the
-     * one blob that is contractually a manifest - is an invariant break.
+     * <p><b>It refuses rather than under-reports, and the refusal has a name.</b> A root manifest blob that is present
+     * but unparseable or past {@link #MAX_MANIFEST} raises {@link BlobReferences.Unresolvable} - its layers cannot be
+     * enumerated, and answering "just the manifest" would hand a reference scan a short list, which is a live layer
+     * condemned on one pass and DELETED on the next (the fail-open this seam's contract clause 3 makes illegal).
+     * Failing the pass deletes nothing, and the message names the key so an operator can discard the manifest. Those
+     * two sites are the ONLY ones that raise it: anything else that fails here is the store failing, and stays a plain
+     * {@link IOException}, so a consumer that must degrade on a corrupt legacy manifest can do so without also
+     * degrading on a store outage (clause 3). The state is unrepresentable for anything pushed since manifest
+     * validation landed; this bites only stored legacy bytes. A <em>sub</em>-manifest of an index degrades silently
+     * instead: a hostile index entry may legitimately point at a layer blob, which has no children to lose, so only the
+     * root - the one blob that is contractually a manifest - is an invariant break.
      */
     @Override
     public List<String> references(String key, ArtifactStore store) throws IOException {
@@ -449,8 +452,10 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     /** Read and parse a manifest blob for the reference scan, bounded by {@link #MAX_MANIFEST} exactly as ingest
      *  bounds it. {@code rootKey} is the visited key when {@code hex} is the ROOT this scan resolved (and so is
      *  contractually a manifest) and {@code null} for a sub-manifest of an index. Absent is {@code null} either way -
-     *  residue of an already-collected blob, nothing to keep alive - but a root that is PRESENT and unreadable raises:
-     *  its layers are unknowable, and a short reference list gets them deleted. */
+     *  residue of an already-collected blob, nothing to keep alive - but a root that is PRESENT and unreadable raises
+     *  {@link BlobReferences.Unresolvable}: its layers are unknowable, and a short reference list gets them deleted.
+     *  A failure of the store itself propagates as the plain {@link IOException} it already is, because "these bytes
+     *  will never parse" and "the store is down" are different facts to a consumer that degrades on one of them. */
     private static JsonNode referencedManifest(String hex, ArtifactStore store, String rootKey) throws IOException {
         if (!store.exists("blobs/" + hex)) {
             return null;
@@ -463,9 +468,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             if (rootKey == null) {
                 return null;                                    // an index entry aimed at a layer blob has no children
             }
-            throw new IOException("the manifest " + hex + " that " + rootKey + " serves is past the " + MAX_MANIFEST
-                    + "-byte manifest bound, so the blobs it references cannot be enumerated; discard it rather than "
-                    + "risk collecting them");
+            throw new BlobReferences.Unresolvable("the manifest " + hex + " that " + rootKey + " serves is past the "
+                    + MAX_MANIFEST + "-byte manifest bound, so the blobs it references cannot be enumerated; discard "
+                    + "it rather than risk collecting them");
         }
         JsonNode node;
         try {
@@ -481,9 +486,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         if (rootKey == null) {
             return null;
         }
-        throw new IOException("the manifest " + hex + " that " + rootKey + " serves is not a parseable JSON manifest "
-                + "document, so the blobs it references cannot be enumerated; discard it rather than risk collecting "
-                + "them");
+        throw new BlobReferences.Unresolvable("the manifest " + hex + " that " + rootKey + " serves is not a parseable "
+                + "JSON manifest document, so the blobs it references cannot be enumerated; discard it rather than "
+                + "risk collecting them");
     }
 
     /** The bare hex of a digest a manifest references, or {@code null} when it is not a real sha256 digest - so a
