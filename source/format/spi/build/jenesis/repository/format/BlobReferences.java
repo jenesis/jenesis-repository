@@ -39,11 +39,27 @@ import module java.base;
  *     its own staging, session and sidecar spaces, or a key under another format's root it was handed anyway - and
  *     {@code null} is never a legal return. Empty means "this key keeps no further blob alive", never "I could not
  *     tell".</li>
- * <li><b>Error visibility (&sect;9) - never degrade to a short list.</b> A key the format recognises but cannot
- *     resolve (a stored document that is absent-but-expected, unparseable, or past the format's own parse bound)
- *     <em>throws</em>. It must never answer a partial set: the caller cannot distinguish a short list from a complete
- *     one, and every hash omitted is a live blob the next sweep deletes. Throwing fails the enumeration, and a
- *     collection pass that did not complete deletes nothing - the safe outcome. This is deliberately the opposite
+ * <li><b>Error visibility (&sect;9) - never degrade to a short list, and say which refusal it is.</b> A key the format
+ *     recognises but cannot resolve (a stored document that is absent-but-expected, unparseable, or past the format's
+ *     own parse bound) <em>throws</em>. It must never answer a partial set: the caller cannot distinguish a short list
+ *     from a complete one, and every hash omitted is a live blob the next sweep deletes. Throwing fails the
+ *     enumeration, and a collection pass that did not complete deletes nothing - the safe outcome.
+ *     <p>The two ways a call can fail are <em>different facts</em> and carry different types, because a consumer
+ *     other than a collector has to tell them apart:
+ *     <ul>
+ *       <li>{@link Unresolvable} - <b>the stored document refuses to be read</b>: it is unparseable, or past the
+ *           bound the format enforces when it ingests one. The store answered; the bytes are the problem, and no
+ *           retry changes that. A format raises exactly this at each of its own refusal sites;</li>
+ *       <li>any other {@link IOException} - <b>the store failed</b>: an outage, a timeout, a permission. Nothing is
+ *           known about the document, and the same call may well succeed a minute later.</li>
+ *     </ul>
+ *     A collector catches <em>neither</em>: both mean "I cannot enumerate", and the only safe reading of that on a
+ *     deletion path is to fail the pass. The distinction exists for the consumers whose blast radius is the other way
+ *     round - a browse, an enforcement sweep, a hold release - which derive the same set to decide what to
+ *     <em>withhold</em>. There, propagating would fail a whole pass over one corrupt legacy document while degrading
+ *     to a shorter set only under-enforces; so such a consumer catches {@link Unresolvable} alone, degrades, and says
+ *     so, and still propagates a store failure rather than turning every store hiccup into an under-enforced hold.
+ *     One derivation, two postures, chosen by the caller and not by the format - this is deliberately the opposite
  *     posture to a retroactive hold's blob-set derivation, where degrading to fewer hashes under-enforces a hold;
  *     here it destroys data.</li>
  * <li><b>Read purity (&sect;10).</b> The methods read the store and nothing else - no network, no write, not even a
@@ -84,10 +100,45 @@ public interface BlobReferences {
      * <p>Answering short is the one failure this seam may not have: a hash omitted here is a live blob the next sweep
      * condemns and the one after that deletes. A key this format recognises but cannot resolve therefore raises an
      * {@link IOException} rather than returning what it managed to collect (clause 3) - the pass fails, and a pass that
-     * did not complete deletes nothing.
+     * did not complete deletes nothing. A document that refuses to be <em>read</em> - unparseable, or past the bound
+     * the format enforces when it ingests one - raises the named {@link Unresolvable}, so a store failure stays a plain
+     * {@link IOException} and the two are never confused by a consumer that must degrade on one of them.
      */
     default List<String> references(String key, ArtifactStore store) throws IOException {
         return List.of();
+    }
+
+    /**
+     * The named refusal of clause 3: this format recognises the key, but the stored document that names the rest of
+     * its blobs <b>cannot be read</b> - it does not parse, or it is past the parse bound the format enforces when it
+     * ingests one. The store answered; the bytes are the problem, so no retry and no failover changes the answer.
+     *
+     * <p>It exists so the one derivation can serve two consumers with opposite blast radii, without either guessing.
+     * A garbage collector treats it exactly as it treats any other {@link IOException} - it cannot enumerate, so it
+     * fails the pass and deletes nothing. A consumer deriving the same set to decide what to <em>withhold</em> (a
+     * console browse, an enforcement sweep, a hold release) catches this one, degrades to what it can name and says
+     * so, and lets a plain {@link IOException} propagate - because degrading on a store hiccup would silently
+     * under-enforce a hold, while propagating on one corrupt legacy document would fail a whole repository's pass.
+     * Catching {@code IOException} to get that behaviour would take both; catching this takes exactly the one that
+     * will never resolve itself.
+     *
+     * <p>It is deliberately <em>not</em> raised for an absent document. An absent one is residue - a blob already
+     * collected - and clause 2's empty answer is the honest one there.
+     */
+    class Unresolvable extends IOException {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        /** @param message names the key and the document, and says which of the two refusals this is, so an operator
+         *                can act on it (discard the document) rather than re-run the pass and see it again. */
+        public Unresolvable(String message) {
+            super(message);
+        }
+
+        public Unresolvable(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     /**
