@@ -71,7 +71,14 @@ public class IngressCensusTest {
         /** A multi-request upload session with no single body to screen; its screened choke point is elsewhere. */
         SESSION,
         /** Local demo/bootstrap data seeding, not a client ingress. */
-        SEEDER
+        SEEDER,
+        /** A contract kit that <em>drives</em> the hosted-publish operation from a test double rather than from a
+         *  request. It reaches no ingress body and adds no publish path - it exercises the one that exists, which is
+         *  the whole reason it may not assemble screen/layout/notify by hand. Classified rather than exempted, for
+         *  the same reason {@code ContractExchange} is: an ingress that is "obviously not a route" is exactly the
+         *  shape a real one would claim. A {@code KIT} entry must keep running {@link Publication#commit}, so a kit
+         *  that quietly grew its own sequence is caught by {@link #the_inventory_has_no_stale_entry()}. */
+        KIT
     }
 
     /** One inventory entry: the source file, what kind of ingress it is, and why. */
@@ -128,7 +135,15 @@ public class IngressCensusTest {
                             + "routes its manifest PUT into OciManifests"),
             new Route("DemoSeeder.java", Kind.SEEDER,
                     "seeds local demonstration artifacts through the plain dispatcher at boot; not a client ingress "
-                            + "surface and not reachable from a request"));
+                            + "surface and not reachable from a request"),
+            new Route("PublicationHookContract.java", Kind.KIT,
+                    "the publication-hook contract kit's shared driver: every check publishes through "
+                            + "Publication.commit rather than assembling screen/gate/lay-out/link/notify itself, "
+                            + "which is precisely the property the kit exists to assert about everyone else"),
+            new Route("InterceptorContract.java", Kind.KIT,
+                    "the interceptor half of that kit: it drives the same operation to exercise the verdict legs, the "
+                            + "chain ordering and the crash windows around the commit point, and reaches Publication "
+                            + "through no other entry point"));
 
     /** The one non-hosted site that may fire the after-commit observers itself, with the reason it may. */
     private static final Map<String, String> POST_COMMIT_NOTIFIERS = Map.of(
@@ -198,6 +213,13 @@ public class IngressCensusTest {
                 if (!runsTheHostedPublish(body)) {
                     stale.add("  - " + route.file() + "  (classified HOSTED, but it no longer runs Publication.commit "
                             + "- either it stopped being a hosted route, or it grew a second publish path)");
+                }
+            } else if (route.kind() == Kind.KIT) {
+                // A kit earns its entry by driving the one operation. If it stopped, either it is no longer an
+                // ingress-census concern at all, or - the case worth catching - it grew a publish sequence of its own.
+                if (!runsTheHostedPublish(body)) {
+                    stale.add("  - " + route.file() + "  (classified KIT, but it no longer runs Publication.commit - "
+                            + "drop the entry, or find out what it publishes through instead)");
                 }
             } else if (!ingress) {
                 stale.add("  - " + route.file() + "  (classified " + route.kind() + ", but it no longer takes an "
