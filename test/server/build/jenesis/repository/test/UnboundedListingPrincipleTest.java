@@ -82,8 +82,19 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class UnboundedListingPrincipleTest {
 
-    /** The pinned size of {@link #ALLOWLIST}: the distinct {@code ClassName#anchor} keys at this tip. Shrink-only. */
-    private static final int ALLOWLIST_SIZE = 16;
+    /**
+     * The pinned size of {@link #ALLOWLIST}: the distinct {@code ClassName#anchor} keys at this tip. Shrink-only.
+     *
+     * <p>It grew once, from 16 to 17, and the reason is recorded here because a growth is otherwise a doctrine breach.
+     * D-053 turned the SPI's {@code page} fallback from an inline {@code list(prefix)} - receiver-free, and therefore
+     * invisible to this matcher - into a named {@code ArtifactStore.pageByListing} that calls {@code store.list(prefix)}.
+     * The listing is the same listing; what changed is that the census can now see it, <em>and</em> that it is bounded:
+     * past {@code MAX_INHERITED_CHILDREN} it throws rather than materialising. So this is not a new unbounded site
+     * masked by a new grant - it is a previously-invisible site becoming visible at the moment it stopped being
+     * unbounded, which is the direction this ratchet exists to push. Every other growth is still forbidden: a new list
+     * site is paged, not granted.
+     */
+    private static final int ALLOWLIST_SIZE = 17;
 
     /** A conservative floor on the number of distinct list call lines the matcher must find, so a broken matcher (or a
      *  source walk that finds nothing) cannot pass the offender leg vacuously. The census has 17 today. */
@@ -146,6 +157,11 @@ class UnboundedListingPrincipleTest {
         a.put("QuotaArtifactStore#list(prefix)", "the quota-metering ArtifactStore wrapper's list pass-through to its delegate");
         a.put("FilesystemArtifactStore#Files.list(dir)",
                 "the filesystem backing primitive: lists ONE on-disk directory's immediate entries (the store.list impl)");
+        a.put("ArtifactStore#store.list(prefix)",
+                "the SPI's own list-and-sort page fallback (pageByListing), the ONLY .list( site whose boundedness is "
+                        + "enforced in the same method: it refuses past MAX_INHERITED_CHILDREN rather than "
+                        + "materialising, so an implementation that inherits paging fails by name instead of "
+                        + "allocating a namespace (D-053)");
 
         return Map.copyOf(a);
     }

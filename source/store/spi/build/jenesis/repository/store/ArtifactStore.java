@@ -24,7 +24,8 @@ import module java.base;
  *       {@code LISTING_IMMEDIATE_CHILDREN}, {@code PAGING_ORDER_AND_START_AFTER}, {@code VERSIONED_CREATE_IF_ABSENT}),
  *       clause 5 ({@code SCOPE_ISOLATION}, {@code SEGMENT_TRAVERSAL_REJECTED}, {@code KEY_TRAVERSAL_REJECTED}),
  *       clause 6 ({@code ABORTED_WRITE_COMMITS_NOTHING}, {@code BATCH_FAILURE_IS_PER_ENTRY}), clause 8
- *       ({@code PAGING_ORDER_AND_START_AFTER}, {@code BATCH_ORDERED_PER_ENTRY_OUTCOMES}), clause 9's key caps
+ *       ({@code PAGING_ORDER_AND_START_AFTER}, {@code BATCH_ORDERED_PER_ENTRY_OUTCOMES}, and the native-paging
+ *       obligation itself as {@code NATIVE_PAGING}), clause 9's key caps
  *       ({@code KEY_SHAPE_REJECTED}) and page limit, and clause 10's compare-and-set and batch halves
  *       ({@code VERSION_TOKEN_OPAQUE}, {@code BATCH_IS_NOT_A_TRANSACTION});</li>
  *   <li><b>structurally guarded</b> - clause 4 by {@code StreamingPrincipleTest} and clause 9's {@link #list} rule by
@@ -88,9 +89,17 @@ import module java.base;
  *     backend pages natively, which is the obligation on an implementation and the reason every shipped backend
  *     overrides {@link #page}: the filesystem scans a directory in bounded strides and the three object stores use
  *     their own start-after pagination, so paging a millions-entry namespace costs O(limit) memory there. The SPI's
- *     own {@code default} is a correctness fallback, not that guarantee - it sorts a whole {@link #list} and filters,
- *     so a backend that inherits it is bounded in what it emits while still materialising the container's entire child
- *     set to do it. A new backend over an attacker-shaped namespace must therefore override rather than inherit.
+ *     own {@code default} is a correctness fallback, not that guarantee - it delegates to {@link #pageByListing},
+ *     which sorts a whole {@link #list} and filters, so an implementation that inherits it is bounded in what it emits
+ *     while still materialising the container's entire child set to do it. That fallback is therefore itself bounded,
+ *     and its bound <em>throws</em>: past {@link #MAX_INHERITED_CHILDREN} children it raises an
+ *     {@link IllegalStateException} naming the inheriting class and the prefix rather than allocating without limit or
+ *     emitting a short page a caller would read as a drained container. Throwing is the right half of the
+ *     truncate-or-throw asymmetry here because {@link #page} hands back names and no outcome, so it has no way to say
+ *     "short, resume here"; only a bound with a continuation may end a read as a value. A backend answers natively
+ *     instead - the kit's {@code NATIVE_PAGING} property fails one that does not - and an implementation whose child
+ *     set genuinely is in memory calls {@link #pageByListing} by name, making the cost a decision rather than an
+ *     inheritance.
  *     {@link #key} caps a new key at {@link #MAX_SEGMENTS} segments and {@link #MAX_KEY_BYTES} bytes, so no descent
  *     over stored keys can be driven arbitrarily deep. {@link #list} is deliberately unbounded and is for small child
  *     sets only - anything attacker-shaped pages.</li>
@@ -274,16 +283,62 @@ public interface ArtifactStore {
      * order, starting strictly after {@code startAfter} (the empty string starts from the beginning). This is the
      * ordered-paging primitive the shared artifact walk enumerates through: repeated pages, each resuming after the
      * last name of the one before, traverse an arbitrarily large child set - the flat, millions-entry {@code blobs/}
-     * namespace - without ever materialising it as one {@code List} the way {@link #list} does. The default sorts
-     * {@link #list} and filters, which is correct on every backend; a backend overrides it to page natively (an
-     * object store's start-after pagination, the filesystem's bounded directory scan) so a resume deep inside a
-     * huge child set is a seek, not a re-list.
+     * namespace - without ever materialising it as one {@code List} the way {@link #list} does.
+     *
+     * <p><strong>A backend pages natively; the inherited body is a small-container fallback and says so out loud.</strong>
+     * The {@code default} delegates to {@link #pageByListing}, which is {@link #list}-and-sort: it emits the right names
+     * in the right order, but it materialises the container's whole child set to do it - the opposite of what paging is
+     * for. So it refuses rather than pretending: past {@link #MAX_INHERITED_CHILDREN} children it throws an
+     * {@link IllegalStateException} naming the inheriting class, the prefix and the remedy, instead of quietly turning
+     * one page request into an unbounded heap allocation (&sect;9, and the "bounds fail visibly" gate). Every shipped
+     * backend therefore overrides this - the filesystem scans a directory in bounded strides, the three object stores
+     * use their own start-after pagination - and the store contract kit's {@code NATIVE_PAGING} property proves it for
+     * each, so a new backend that inherits fails the kit rather than shipping the fallback. An implementation whose
+     * whole child set genuinely <em>is</em> in memory (a map-backed test double, an in-process spool) calls
+     * {@link #pageByListing} by name: the cost is then a decision at the call site rather than an accident of
+     * inheritance.
      */
     default void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
+        pageByListing(this, prefix, startAfter, limit, consumer);
+    }
+
+    /**
+     * The most children {@link #pageByListing} will materialise before it refuses. It is deliberately far above any
+     * container an in-memory or in-process store legitimately holds and far below a namespace that would exhaust the
+     * heap, so it separates "this backend never needed native paging" from "this backend is about to buffer a
+     * millions-entry namespace to answer one page". It is the same order as the shared walk's per-call entry cap, since
+     * both answer the same question: how large may one bounded read's working set get.
+     */
+    int MAX_INHERITED_CHILDREN = 10_000;
+
+    /**
+     * Page {@code store}'s children by sorting and filtering its whole {@link #list} - the explicit, named form of the
+     * fallback {@link #page} inherits, for an implementation whose child set is already materialised (a map-backed
+     * store, an in-process spool) and for which a "native" paging would be this code anyway.
+     *
+     * <p>It is bounded, and the bound throws rather than truncating: a caller of {@link #page} is handed names, not an
+     * outcome, so there is nowhere to report "the page you got is short because the container was too big", and a
+     * silently short page reads to the shared walk as a drained container - it would skip keys while answering in the
+     * vocabulary of completeness. That is the same asymmetry the bounded store traversals draw (an entry cap truncates
+     * with a cursor because it has a continuation; a bound on how pathological the key space is throws because it has
+     * none), and this bound is the second kind. Past {@link #MAX_INHERITED_CHILDREN} children it throws an
+     * {@link IllegalStateException} naming {@code store}'s class, the prefix and the count, and pointing at the fix:
+     * override {@link #page}.
+     *
+     * @throws IllegalStateException when {@code prefix} holds more than {@link #MAX_INHERITED_CHILDREN} children
+     */
+    static void pageByListing(ArtifactStore store, String prefix, String startAfter, int limit,
+                              Consumer<String> consumer) {
         if (limit <= 0) {
             return;
         }
-        List<String> children = new ArrayList<>(list(prefix));
+        List<String> children = new ArrayList<>(store.list(prefix));
+        if (children.size() > MAX_INHERITED_CHILDREN) {
+            throw new IllegalStateException(store.getClass().getName() + " pages '" + prefix + "' by materialising its "
+                    + children.size() + " children, past the " + MAX_INHERITED_CHILDREN + "-child bound on the "
+                    + "inherited ArtifactStore.page fallback. Override page(...) with the backend's own start-after "
+                    + "pagination; a paging primitive that first buffers the whole container is not one.");
+        }
         Collections.sort(children);
         int emitted = 0;
         for (String child : children) {
