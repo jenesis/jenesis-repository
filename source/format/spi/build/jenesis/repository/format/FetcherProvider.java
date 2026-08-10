@@ -36,7 +36,15 @@ import module java.base;
  *     sentinel.</li>
  * <li><b>Streaming (&sect;1).</b> The fetcher is on the artifact download path: a proxied artifact must be streamed
  *     through to the caller and the store, never fully materialised. Only small index/metadata documents may be read
- *     whole.</li>
+ *     whole. The three {@link ProxyFormat.Fetcher} overloads are not interchangeable, and a real transport
+ *     <b>overrides both defaults</b>: {@link ProxyFormat.Fetcher#download} must open the response body as a stream
+ *     rather than materialising it (the SPI default builds one from the buffered {@link ProxyFormat.Fetcher#fetch},
+ *     which is exactly the whole-artifact-in-heap this clause forbids), and {@link ProxyFormat.Fetcher#head} must
+ *     issue a real HTTP {@code HEAD} (the SPI default falls back to {@code download}, so it opens - though never
+ *     reads - the body of an artifact whose size was all the caller wanted). The defaults exist so a test double or a
+ *     degenerate fetcher such as {@link ProxyFormat.Fetcher#NONE} need not implement three methods; a provider that
+ *     ships them to production has not met this clause. The buffered {@code fetch} is the small-document path and
+ *     carries a ceiling of its own (clause 10).</li>
  * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed at resolution: duplicate provider names, one provider
  *     registered twice, and more than one <em>enabled</em> fetcher with no selection to disambiguate them all throw,
  *     naming the candidates and the setting that resolves them - the transport a deployment proxies through is never
@@ -51,10 +59,56 @@ import module java.base;
  *     {@link ServiceLoader}, consulted and discarded, and must hold no state a later call depends on.</li>
  * <li><b>Ordering / determinism.</b> The resolved fetcher is a function of the configuration and the installed
  *     providers only, never of discovery order.</li>
- * <li><b>Bounded work / cancellation.</b> {@link #create} does no I/O and no unbounded work. Connect/read timeouts,
- *     redirect limits, response-size caps and the SSRF posture that keeps an upstream URL off private address space
- *     are the returned fetcher's own bounds, and reaching one surfaces as a named failure rather than a truncated
- *     body presented as complete.</li>
+ * <li><b>Bounded work / cancellation.</b> {@link #create} does no I/O and no unbounded work. The bounds that matter
+ *     are the returned fetcher's, and each has a named outcome rather than a quiet one:
+ *     <ul>
+ *       <li>a <b>connect timeout</b> and a <b>per-request timeout</b>, so an upstream that accepts a connection and
+ *           then says nothing cannot hang a proxy read or an import forever. A timeout is the contract's transport
+ *           failure - an empty {@link Optional} - so the proxy lets the local {@code 404} stand and an import is
+ *           refused, rather than a {@code 5xx} escaping;</li>
+ *       <li>a <b>response-size cap on the buffered {@link ProxyFormat.Fetcher#fetch}</b> only. That leg materialises
+ *           the body, so a hostile or compromised upstream answering a multi-gigabyte "index" would otherwise exhaust
+ *           the heap before anything downstream could cap it; over the cap the read fails by name. The streaming
+ *           {@link ProxyFormat.Fetcher#download} leg is deliberately uncapped - it copies network-to-store without
+ *           buffering, and a size limit there would refuse legitimately large artifacts;</li>
+ *       <li>a <b>bounded redirect chain</b> (clause 11).</li>
+ *     </ul>
+ *     A body that ends short of its declared length surfaces as an {@link java.io.IOException} on the read, so a
+ *     truncated response is never stored as a complete cached artifact.</li>
+ * <li><b>Redirect policy.</b> Redirects are followed by the fetcher <em>by hand</em>, never by an HTTP client's
+ *     automatic policy, because the automatic policies re-send every request header - {@code Authorization} included -
+ *     to the redirect target even across a change of host, and both callers legitimately redirect off-origin (a proxy
+ *     fetch to a CDN, an import download to a presigned object-store URL). The rules are therefore:
+ *     <ul>
+ *       <li><b>the chain is bounded</b>, so a redirect loop cannot spin a fetch forever;</li>
+ *       <li><b>a hop that leaves the original origin drops the credential-bearing headers</b> ({@code Authorization},
+ *           {@code Proxy-Authorization}, {@code Cookie}, and the repository's own key header) the way a browser or a
+ *           container client does; a same-origin hop keeps them. Origin is scheme, host and effective port;</li>
+ *       <li><b>the method is carried unchanged</b> across every hop, so a redirected {@code HEAD} stays a
+ *           {@code HEAD} and never becomes a body transfer;</li>
+ *       <li>an intermediate response's body is closed before the next hop, and only the final response is handed to
+ *           the caller with its body intact.</li>
+ *     </ul></li>
+ * <li><b>SSRF posture.</b> The fetch target is chosen partly by parties that are not the operator, so the screen is
+ *     split by <em>who chose the URL</em>, and the split is the contract:
+ *     <ul>
+ *       <li><b>every redirect target is the fetcher's to screen</b>, because the upstream chose it. Each hop's host is
+ *           re-judged against the shared {@link PrivateHosts} classifier before it is followed, and a hop to a
+ *           private, loopback, link-local, site-local, CGNAT, multicast, IPv6 unique-local or cloud-metadata host is
+ *           refused with an {@link java.io.IOException} - the request never reaches that host and the caller sees a
+ *           visible failure, never a silently proxied internal response. Screening the operator-supplied URL alone
+ *           would be worthless: a public URL that {@code 30x}es onward to {@code 169.254.169.254} is the whole
+ *           attack;</li>
+ *       <li><b>the initial URL is not re-judged here</b>, deliberately. A proxy upstream is operator-configured, and
+ *           an import root is screened at the trigger that accepted it - so re-screening would refuse a deployment's
+ *           own intentionally-internal upstream. A caller that composes an initial URL out of <em>foreign</em> input
+ *           (an absolute download URL taken off an upstream index) owns that screen and applies the same
+ *           {@link PrivateHosts} classifier itself before handing the URL over;</li>
+ *       <li>a host that does not resolve is <b>not</b> refused - it is unreachable, so it is no vector, and masking it
+ *           would turn an honest "no such host" into a security error. DNS rebinding is explicitly out of scope: the
+ *           connection races the record, which is why this screen is one of a deployment's defences and not the
+ *           only one.</li>
+ *     </ul></li>
  * </ol>
  */
 public interface FetcherProvider {
