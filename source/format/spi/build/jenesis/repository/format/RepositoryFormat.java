@@ -95,9 +95,22 @@ import module java.base;
  *       <li>a format <b>runs no screen of its own</b>. It does not invoke the interceptor chain, and a second
  *           format-embedded pass over already-screened bytes is not this model - the core structural guard
  *           {@code FormatScreeningMonopolyPrincipleTest} fails the build on one;</li>
+ *       <li><b>the body the edge gates must be the artifact itself</b>, not a container that carries it. A publish
+ *           whose request body is an <em>envelope</em> - a JSON document with the artifact base64'd inside it, a
+ *           length-prefixed frame, a multipart form - has been screened only if the bytes the chain hashed and
+ *           assessed are the bytes that later serve. Gating the envelope and then writing a <em>second</em>
+ *           content-addressed object under a hash no interceptor ever saw satisfies the letter of "one body was
+ *           gated" and none of its purpose: the artifact a client downloads was never assessed, and the guarantee
+ *           stops being statable - "we screened the request that contained it" is not a claim anyone can act on. A
+ *           format whose protocol wraps its artifact must therefore unwrap first and drive the commit operation over
+ *           the artifact's own bytes, exactly as an unwrapped single-body format does. Screening the envelope
+ *           <em>as well</em> is fine and sometimes useful (a manifest carries the coordinate); screening it
+ *           <em>instead</em> is the fail-open direction, and a format that cannot unwrap at the edge is in the
+ *           {@code screened() == false} case below rather than the {@code true} one;</li>
  *       <li>{@link #screened()} is the declaration of which model this format is in, and it is a statement about the
  *           <em>protocol</em>, never a convenience: {@code true} (the default, and the right answer for every
- *           single-body format) means the edge screened the body before {@link #handle} saw it; {@code false} means
+ *           single-body format whose body <em>is</em> its artifact) means the edge screened the artifact before
+ *           {@link #handle} saw it; {@code false} means
  *           this format's wire protocol has no single body an edge could gate - OCI's {@code /v2/} push splits one
  *           artifact across a blob-upload session and a manifest - so the format screens at its own documented choke
  *           point instead, by driving the shared commit operation there. A format that declares {@code false} and then
