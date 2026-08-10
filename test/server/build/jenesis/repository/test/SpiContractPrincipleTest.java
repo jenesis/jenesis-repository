@@ -244,6 +244,12 @@ class SpiContractPrincipleTest {
      * and the Phase-3 ticket that burns it down. An entry must name a live, core-owned inventory surface whose
      * interface really lacks the block - a stale entry fails
      * {@link #the_contract_allowlist_stays_live_and_shrinking()}, so this list cannot outlive the work.
+     *
+     * <p><b>The list is empty: every core SPI surface now carries its Contract block.</b> That is the state
+     * T-002 seeded this ratchet to reach, and the burn-down record is kept below as comments rather than deleted,
+     * because which ticket could finally state a clause - and why it could not be stated before - is the
+     * documentation of the plan's "contract before mechanism" gate. A new SPI surface therefore arrives with its
+     * block written, or it re-opens this map with a reason and the ticket that closes it again.
      */
     private static final Map<String, String> UNDOCUMENTED = undocumented();
 
@@ -256,13 +262,17 @@ class SpiContractPrincipleTest {
         // PublicationObserver burnt down by T-104a, which made the publish commit point singular (Publication.commit)
         // and could therefore state the crash windows and the delivery class exactly: best-effort, repaired by the
         // full walk. T-107 may only strengthen that by proving a pre-commit intent machine at every crash point.
-        // PublishInterceptor burnt down by T-301a, which wrote the pre-commit sub-contract the waiver deferred: chain
-        // ordering (ascending order(), ties by discovery order) beside an order-independent strongest-verdict route,
-        // the per-method failure split (assess/withheld/committed propagate, the inherited observer legs stay
-        // contained), withheld's read-side purity - it runs inside Publication.located on every serve and every
-        // enumeration - and the one thing the prose never said out loud: committed() fires BEFORE the accepted layout
-        // and before the commit point, so an ACCEPT reported there is not a statement that the artifact became
-        // visible. Written ahead of the T-205 interceptor kit deliberately (plan gate 2: contract before mechanism).
+        // PublishInterceptor burnt down by T-301a and T-301b together - the seeded waiver named T-301a, but the
+        // observer family belongs to T-301b, so both wrote the sub-contract and the block is their union. Neither
+        // waited for the T-205a kit, because the asymmetry the waiver deferred is already decided in code:
+        // Publication.screen wraps no verdict leg in a catch while every observer notification sits in a
+        // catch(Exception) that logs and moves on. The block therefore states chain ordering (ascending order(), ties
+        // by discovery order) beside an order-independent strongest-verdict route, the per-method failure split, that
+        // assess is NOT short-circuited by a REJECT while withheld IS (first true wins), that the containment is of
+        // Exception so an Error escapes either way, withheld's read-side purity - it runs inside Publication.located
+        // on every serve and every enumeration - and the one thing the prose never said out loud: committed() fires
+        // BEFORE the accepted layout and before the commit point, so an ACCEPT reported there is not a statement that
+        // the artifact became visible. T-205a inherits the clauses nothing yet asserts.
         // RepositoryFormat, ProxyFormat and ArtifactLayout burnt down by T-202a, which built the format contract kit
         // (source/format/testkit + test/format/contract) and could therefore state the clauses it now asserts:
         // HEAD-from-metadata, traversal refusal at the format seam, withhold-on-enumeration, proxy integrity and
@@ -273,8 +283,10 @@ class SpiContractPrincipleTest {
         // point inside Publication.commit's accepted-layout callback, and the streaming and replay semantics an
         // import walk depends on.
         // FetcherProvider and WalkProvider burnt down by T-101b together with their migration onto optionalUnique.
-        allow.put("build.jenesis.repository.format.java.bridge.ModuleView",
-                "T-301b: read purity and determinism across discovery order for the Maven bridge's rendering");
+        // ModuleView burnt down by T-301b. The waiver's stated reason was wrong twice over and the block says so: the
+        // bridge renders nothing (it is a pure write seam, so read purity does not apply), and determinism across
+        // discovery order holds not because anything sorts the views but because every write is an idempotent
+        // compare-and-set on the view's own keys, which makes the order unobservable.
         // WalkConsumer burnt down by T-204, which built the walk-consumer contract kit (source/walk/testkit +
         // test/walkconsumer) and could therefore state the clauses it now asserts: the cursor commit as the commit
         // point, the three delivery classes and what a crash-resume converges for each, and the flush hook that makes
@@ -285,10 +297,15 @@ class SpiContractPrincipleTest {
         // ImportSourceProvider burnt down by T-203 together with ImportSource's own block: the behavioural rows the
         // waiver deferred - resumability, streaming transfer, error classification and credential self-skip - are the
         // ImportContract kit's five properties, run over all five connectors.
-        allow.put("build.jenesis.repository.posture.SafetyAdvisor",
-                "T-301b: default-deny semantics and read purity (an advisor renders stored state, never probes)");
-        allow.put("build.jenesis.repository.ui.Panel",
-                "T-301b: read purity, rendering determinism and tenant scoping of a console panel");
+        // SafetyAdvisor burnt down by T-301b. "Default-deny" turned out to be a statement about how a condition is
+        // evaluated rather than about a sentinel: an advisor keys on the value the deployment would actually run with
+        // (the reader's own default), never on key presence, and resolves a parse ambiguity toward raising - which is
+        // why a wildcard hidden in a list still raises the open-console advisory. Read purity is the easier half: an
+        // advisor is handed a Configuration and no store precisely so probing is unreachable rather than forbidden.
+        // Panel burnt down by T-301b, which had to state three things the waiver did not anticipate: the fragment is
+        // dropped into the shell unescaped (so escaping is the panel's obligation, not the console's), a throwing
+        // render is NOT contained and takes the whole console page down, and panel order is raw discovery order with
+        // no id-uniqueness refusal because the SPI declares no name and so cannot ride Providers.all.
         // CapabilityContributor's block landed with D-047: key ownership, the reported (not silent, and deliberately
         // not throwing) outcome of a refused contribution, and the zero-contributor byte-identical guarantee.
         // RateLimiterProvider, TokenExchangeProvider and KeyUsageTrackerProvider burnt down by T-101b together with

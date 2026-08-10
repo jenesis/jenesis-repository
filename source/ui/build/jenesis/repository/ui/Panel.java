@@ -11,6 +11,70 @@ import module java.base;
  * {@link ArtifactStore}, so a panel provider stays free of any Spring dependency while still reading real repository
  * data. The rendered body is a trusted HTML fragment the console drops into its Thymeleaf shell, so an implementation
  * escapes any repository-derived text it includes.
+ *
+ * <h2>Contract</h2>
+ * <ol>
+ *   <li><b>Thread-safety.</b> {@code UiConfig} discovers the panels once and the {@code ConsoleController} bean holds
+ *       the list for the context's life, so one instance serves every console request and {@link #render} may run
+ *       concurrently for several viewers. A panel is effectively immutable - configuration is taken in the constructor
+ *       and frozen ({@code PosturePanel}'s configuration lookup is the worked example) - and keeps no per-render state
+ *       in fields.</li>
+ *   <li><b>Idempotency / replay.</b> {@link #render} is called once per {@code GET /console}, not once per boot, and
+ *       must be side-effect free: two renders over unchanged state produce the same body, and rendering the console any
+ *       number of times changes nothing an operator can observe. {@link #id()} and {@link #title()} are stable
+ *       declarations - {@code id()} is the navigation key and the in-page anchor, so changing it across releases breaks
+ *       a bookmarked deep link.</li>
+ *   <li><b>Absence sentinel.</b> A panel that has nothing to show renders a friendly empty state, never {@code null},
+ *       never a blank body and never an error page - {@link #id()}, {@link #title()} and {@link #render} all answer a
+ *       value. A capability that is not installed contributes no panel at all rather than a panel that renders a
+ *       failure (&sect;3), which is why absence is expressed by the module not being on the graph.</li>
+ *   <li><b>Selection failure.</b> There is nothing to select: the policy is additive, every discovered panel is
+ *       rendered, and no configuration key names one. Discovery is a plain {@code ServiceLoader.load(Panel.class)} in
+ *       {@code UiConfig} rather than the shared {@code Providers.all} primitive - a {@code Panel} declares no
+ *       {@code name()} - so this SPI has <em>no</em> duplicate-id refusal and no {@code jenesis.repository.<name>=false}
+ *       toggle: two panels declaring the same {@link #id()} both render, producing two navigation entries and two
+ *       identically-anchored bodies. Choose an id that names the concept and prefix it where a collision with another
+ *       distribution is plausible.</li>
+ *   <li><b>Tenant scoping (&sect;6).</b> The {@link ArtifactStore} handed to {@link #render} is already scoped, and a
+ *       panel reads the repository <em>only</em> through it - it must never resolve a store of its own, because doing so
+ *       would escape the scope the console selected. A console view is always a tenant view even where the tenancy is
+ *       implicit because there is one tenant, so a panel must not render another tenant's names, and a panel with
+ *       deployment-global content scopes it explicitly (as {@code PosturePanel} does through the advisory
+ *       {@code Scope}).</li>
+ *   <li><b>Error visibility (&sect;9).</b> A throw from {@link #render} is <b>not contained</b>: the
+ *       {@code ConsoleController} renders the panels in one loop and lets the exception propagate, so one failing panel
+ *       takes down the whole console page and every other panel with it. A panel therefore catches its own read and
+ *       parse failures and renders a degraded body naming what it could not read, rather than throwing - the same
+ *       "disabled or absent contributes nothing" rule the observation and posture seams follow. Nothing here may be
+ *       silently swallowed into a body that <em>looks</em> healthy: a degraded panel says so.</li>
+ *   <li><b>Read purity (&sect;10).</b> {@link #render} answers a GET and renders durably stored state only: no external
+ *       fetch, no scan, no store write and no refresh on the read path, so the console still stands when a source a
+ *       panel describes is down. Live data that is not store state is fetched by the <em>browser</em> from the
+ *       key-gated JSON API after the fragment is delivered ({@code LogPanel} and {@code ConsistencyPanel} are the
+ *       pattern), never by {@link #render} itself.</li>
+ *   <li><b>Staleness.</b> A panel over a periodically-refreshed or externally-sourced view shows when that view was
+ *       last refreshed, so an empty panel is never ambiguous between "clean" and "never collected" - a task status
+ *       carries its {@code lastRun}, a report its collection instant. A panel that only reads live process state
+ *       ({@code SpiCatalogPanel} over the module graph) has no staleness to declare.</li>
+ *   <li><b>Lifecycle / ownership.</b> The console owns the lifecycle: instances are {@link java.util.ServiceLoader}-created
+ *       from a public no-arg constructor by {@code UiConfig}'s {@code panels} bean and held for the application
+ *       context's life; there is no close hook, so a panel owns no thread, client or connection. A panel that needs
+ *       deployment configuration or a collaborator is contributed as a bean instead of being discovered, which is how
+ *       {@code PosturePanel} reads the same effective configuration the header badge counts.</li>
+ *   <li><b>Ordering / concurrency.</b> Panels are rendered in {@code ServiceLoader} discovery order, which is
+ *       <em>not</em> stable across module-path arrangements, with the bean-contributed {@code PosturePanel} appended
+ *       last; nothing sorts them. A panel must therefore not depend on appearing before or after another, and must not
+ *       depend on another panel having rendered - each body is self-contained.</li>
+ *   <li><b>Bounded work / cancellation.</b> {@link #render} is on the console request path and is given no cancellation
+ *       signal, so it must not block and must be bounded by construction: a store-reading panel pages and caps its read
+ *       ({@code BrowsePanel} lists at most a fixed number of top-level namespaces and never opens a blob) rather than
+ *       walking the pointer tree, and a bound that is reached is stated in the body rather than silently truncating the
+ *       view.</li>
+ *   <li><b>Output safety.</b> The returned fragment is dropped into the Thymeleaf shell <b>unescaped</b>, so a panel
+ *       escapes every repository-derived, signal-derived or configuration-derived string it interpolates before it
+ *       reaches the body, and escapes API-derived text in JavaScript before it reaches the DOM. An artifact name is
+ *       attacker-controlled input; an unescaped one is stored cross-site scripting on an admin surface.</li>
+ * </ol>
  */
 public interface Panel {
 
