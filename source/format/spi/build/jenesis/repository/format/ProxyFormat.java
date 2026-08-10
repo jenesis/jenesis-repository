@@ -44,10 +44,34 @@ import module java.base;
  *     an empty {@link Optional}. A failure while filling the cache may never be swallowed into a served response.</li>
  * <li><b>Bounded work / cancellation.</b> {@link #enumerate} is lazy - an index page is read only as the stream
  *     advances - and every index the adapter reads to serve or enumerate is bounded, so neither a hostile upstream nor
- *     an enormous one can force an unbounded read out of one request.</li>
+ *     an enormous one can force an unbounded read out of one request. Where an ecosystem's index is <em>compressed</em>
+ *     (a gzipped {@code Packages} file, a {@code repodata} document), the bound is on the <b>decompressed</b> size,
+ *     for the reason {@link RepositoryFormat}'s inflation clause gives: an upstream chooses the ratio, so a bound on
+ *     the transferred bytes is no bound at all. The buffered {@link Fetcher#fetch} carries a response-size ceiling of
+ *     its own beneath that ({@link FetcherProvider}'s bounded-work clause), and reaching it is a named failure rather
+ *     than a short index parsed as complete.</li>
  * <li><b>Durability / delivery.</b> A cache fill commits pointer-last exactly as a hosted publish does: the blob is
  *     content-addressed first and the serving pointer linked only once the bytes are stored and verified, so a crash
  *     mid-fill leaves an unreferenced blob rather than a pointer to nothing.</li>
+ * <li><b>An upstream-supplied name is as untrusted as a client-supplied one.</b> {@link RepositoryFormat}'s traversal
+ *     clause binds unchanged on this leg - a traversal-shaped <em>request</em> path is refused before it becomes a
+ *     proxy target, so it never reaches the upstream and never lays a fetched body out at a key the store refuses -
+ *     and it extends to every name the <em>upstream</em> chooses: a repository name off a catalog, a tag, a filename
+ *     an index lists, a path this adapter splices into a layout key. An adapter screens such a name at the point it
+ *     composes a key, exactly as it screens a request path. {@link #enumerate} is the one place this obligation is
+ *     deliberately <em>not</em> the format's: a {@link Coordinate} carries a path and an absolute URL both derived
+ *     from a foreign index, and the SPI promises <b>no</b> safety for either, so its consumer screens them - the free
+ *     import walk skips a traversal-laced {@code path} and refuses a cross-origin {@code url} that resolves to a
+ *     private, loopback or metadata host. An adapter must therefore not assume its enumerated coordinates were
+ *     sanitised on the way out, and a consumer must not assume they were sanitised on the way in.</li>
+ * <li><b>A cache fill is not a hosted publish, and is not screened like one.</b> {@link #proxy} writes through the
+ *     store directly; it does not run the {@code PublishInterceptor} chain, and it must not - a format runs no screen
+ *     of its own ({@link RepositoryFormat}'s store-then-gate clause). What stands between a proxied body and the
+ *     serving pointer is therefore clause 5's integrity check and nothing else, so an ecosystem that advertises no
+ *     digest caches an unverified body by construction and says so. A deployment that screens proxied bytes installs
+ *     that screen at its own proxy edge, not inside a format; the core ships none, so in the free distribution a
+ *     proxied artifact is verified and cached but not gated. This asymmetry with the hosted path is deliberate and
+ *     stated here because assuming the symmetry is the fail-open mistake.</li>
  * </ol>
  */
 public interface ProxyFormat {

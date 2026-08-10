@@ -15,10 +15,22 @@ import module java.base;
  * tenant-and-repository-scoped store on each call.
  *
  * <h2>Contract</h2>
- * Every clause below is executable: {@code FormatContract} in the format testkit states it once and each format runs
- * it through a {@code FormatFixture}, so a clause is proven for Maven, the Jenesis module layout, OCI and raw alike
- * rather than being re-interpreted per format (&sect;13 - a guard one format applies to a shared concern is applied by
- * every format with that concern).
+ * Most clauses below are executable: {@code FormatContract} in the format testkit states one once and each format runs
+ * it through a {@code FormatFixture}, so it is proven for Maven, the Jenesis module layout, OCI and raw alike rather
+ * than being re-interpreted per format (&sect;13 - a guard one format applies to a shared concern is applied by every
+ * format with that concern). The enforcement is named per clause, because it is not uniform:
+ * <ul>
+ *   <li><b>kit-proven</b> - clauses 2, 3 and 4 ({@code PUBLISH_SERVES_EXACT_BYTES}, {@code HEAD_ANSWERS_FROM_METADATA}),
+ *       6 ({@code REQUEST_PATH_TRAVERSAL_REFUSED}, judged by walking the store afterwards rather than by a status
+ *       code), 7 ({@code WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION}) and 12's determinism half
+ *       ({@code GENERATED_INDEX_IS_REVALIDATABLE});</li>
+ *   <li><b>structurally guarded</b> - clause 4 by {@code StreamingPrincipleTest}, clause 7 by
+ *       {@code EnumerationScreenPrincipleTest}, clause 12's bounded-listing half by
+ *       {@code UnboundedListingPrincipleTest}, clause 14 by {@code FormatScreeningMonopolyPrincipleTest}. These are
+ *       source scans: they catch a <em>new</em> offending call site, not a wrong one;</li>
+ *   <li><b>documented only</b> - clauses 1, 5, 8, 9, 10, 11, 13 and 15 are audit items today (T-304's residue). They
+ *       are stated here in a form a test could be written against, not because one exists.</li>
+ * </ul>
  * <ol>
  * <li><b>Thread-safety.</b> A format is a stateless singleton the server calls concurrently from every request
  *     thread: the dispatcher discovers one instance and hands it the already-scoped store on each call, so a format
@@ -72,6 +84,40 @@ import module java.base;
  * <li><b>Durability / delivery.</b> The commit point of a publish is the moment the serving pointer becomes readable,
  *     and it lands <em>last</em>: bytes are content-addressed first, derived documents and sidecars next, and only then
  *     is the path linked - so a crash at any point leaves an unreferenced blob rather than a pointer to nothing.</li>
+ * <li><b>Store-then-gate, and screening is not the format's.</b> A hosted single-body publish is
+ *     <em>stored before it is judged</em>: the ingress edge streams the body into the content-addressed store
+ *     (hash-on-write, never a {@code byte[]}), runs the discovered {@code PublishInterceptor} chain over the resulting
+ *     descriptor exactly once, and restreams the accepted blob into {@link #handle} - whose job is then pure layout.
+ *     The whole choreography is {@code Publication.commit}'s and is stated once in its own contract; a format's
+ *     obligations against it are these three, and they are what implementations have actually disagreed about:
+ *     <ul>
+ *       <li>a format <b>runs no screen of its own</b>. It does not invoke the interceptor chain, and a second
+ *           format-embedded pass over already-screened bytes is not this model - the core structural guard
+ *           {@code FormatScreeningMonopolyPrincipleTest} fails the build on one;</li>
+ *       <li>{@link #screened()} is the declaration of which model this format is in, and it is a statement about the
+ *           <em>protocol</em>, never a convenience: {@code true} (the default, and the right answer for every
+ *           single-body format) means the edge screened the body before {@link #handle} saw it; {@code false} means
+ *           this format's wire protocol has no single body an edge could gate - OCI's {@code /v2/} push splits one
+ *           artifact across a blob-upload session and a manifest - so the format screens at its own documented choke
+ *           point instead, by driving the shared commit operation there. A format that declares {@code false} and then
+ *           screens nowhere is unscreened, which is the fail-open direction;</li>
+ *       <li>the layout it writes is <b>idempotent and pointer-last</b> (clauses 2 and 13), because the accepted layout
+ *           is exactly what a replayed commit re-runs to repair a crash: same bytes in, byte-identical store out.</li>
+ *     </ul>
+ *     A pull-through cache fill is deliberately <em>outside</em> this: see {@link ProxyFormat}'s own contract for what
+ *     gates a proxied body and what does not.</li>
+ * <li><b>Archive inflation cap (&sect;13).</b> A format that decompresses part of an artifact to read a declaration -
+ *     a jar manifest, a {@code module-info.class}, a control member, an embedded index - bounds the <b>decompressed</b>
+ *     size of each entry it materialises, not merely the stored one, because the ratio is the attacker's to choose: a
+ *     kilobyte blob can inflate to gigabytes and the read happens on the publish thread of a shared JVM. Over the
+ *     bound the entry <b>declares nothing</b> - the format degrades to "this artifact carries no such declaration" and
+ *     the publish proceeds - rather than inflating on, throwing, or (the fail-open shape) treating an unread entry as
+ *     an absent guard. Entries the format is not reading are streamed past, never materialised. Each reading module
+ *     holds its own named constant today - the core's is {@code JavaLayout}'s 1 MiB ceiling on the two small
+ *     metadata entries a jar declares a module with - and each is private, so the numbers are parallel by convention
+ *     rather than keyed to one another: a new format arrives with a bound of its own rather than inheriting the
+ *     absence of one. Nothing enforces this across formats, which makes it the clause a peer is most likely to arrive
+ *     without, and an audit item rather than a proven one.</li>
  * </ol>
  */
 public interface RepositoryFormat {
