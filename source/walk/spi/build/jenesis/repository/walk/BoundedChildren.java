@@ -25,6 +25,16 @@ import module java.base;
  *       holds.</li>
  * </ul>
  *
+ * <p><strong>One cap truncates; two throw.</strong> The three bounds above do not fail the same way, and the
+ * asymmetry is the same one {@link PagedTreeWalk} carries - stated again here because a caller meets this primitive
+ * without necessarily meeting that one. Only {@link #entries()} - the bound on how large <em>one answer</em> may be -
+ * ends the call as a value ({@link Traversal.Outcome#TRUNCATED} plus a cursor to resume from). {@link #steps()} and
+ * the traversal-free segment screen <b>throw</b> {@link TraversalException} and produce no {@link Traversal.Result}
+ * at all: a step budget too small to reach the next name would hand back a cursor that makes no forward progress -
+ * a livelock dressed up as paging - and a stored name carrying a separator or a {@code .}/{@code ..} segment must
+ * never be composed into a key. Truncating either would drop names while answering in the vocabulary of completeness,
+ * so a caller must not catch a {@link TraversalException} into a short list. See {@link Traversal} for the rule.
+ *
  * <p><strong>The scope root is a legal prefix.</strong> Unlike {@link PagedTreeWalk}, which is always aimed at a named
  * subtree (enumerating a whole store is the resumable, segmented {@link ArtifactWalk}'s job, not a request's), this
  * primitive accepts {@code ""} - the store scope's own children, where a child's name already is its key. Several
@@ -70,9 +80,11 @@ import module java.base;
  *       the current page cursor.</li>
  *   <li><b>Ordering / concurrency.</b> Lexicographic child order, exactly {@link ArtifactStore#page}'s, deterministic
  *       and never self-parallelised.</li>
- *   <li><b>Bounded work / cancellation.</b> The three caps bound every call; the visible outcome is
- *       {@link Traversal.Outcome#TRUNCATED} plus a cursor (entries) or a {@link TraversalException} naming the bound
- *       (steps, hostile segment). A caller cancels by throwing from {@link Names#accept}.</li>
+ *   <li><b>Bounded work / cancellation.</b> The three caps bound every call, and the visible outcome at a bound is
+ *       asymmetric by design: {@link Traversal.Outcome#TRUNCATED} plus a cursor for the <em>entry</em> cap, which is a
+ *       bound on one answer's size and therefore resumable, and a thrown {@link TraversalException} naming the bound
+ *       for <em>steps</em> and a hostile segment, which have no continuation that makes progress. A caller may not
+ *       convert the second kind into the first. A caller cancels by throwing from {@link Names#accept}.</li>
  *   <li><b>Durability / delivery.</b> Nothing is committed here; the cursor becomes durable only when the caller
  *       writes it through the store, and must be committed after the page's effects so a crash replays a page rather
  *       than skipping one.</li>
@@ -136,7 +148,9 @@ public record BoundedChildren(int steps, int entries, int page) {
      * strictly after {@code cursor} ({@code null} or empty starts at the beginning), until the container is drained or
      * a cap is reached. The cursor is the full key of the last delivered child - the same "a cursor is a store key"
      * rule {@link PagedTreeWalk} follows - so a caller persists and replays one shape of token whichever primitive it
-     * drove. Returns {@link Traversal.Result#exhausted} only when a short page proved the container drained.
+     * drove. Returns {@link Traversal.Result#exhausted} only when a short page proved the container drained. Only the
+     * entry cap ends the call as a result; the step budget and the traversal-free segment screen raise
+     * {@link TraversalException} rather than shortening the answer.
      */
     public Traversal.Result scan(ArtifactStore store, String prefix, String cursor, Names names) throws IOException {
         String root = Objects.requireNonNull(prefix, "prefix");

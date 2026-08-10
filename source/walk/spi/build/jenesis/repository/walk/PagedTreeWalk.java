@@ -30,6 +30,18 @@ import module java.base;
  *       so one pathologically wide container cannot dominate the heap.</li>
  * </ul>
  *
+ * <p><strong>One cap truncates; three throw.</strong> The four bounds above do not fail the same way, and reading them
+ * as if they did is the single most common mistake against this API. Only {@link #entries()} - the bound on how large
+ * <em>one answer</em> may be - ends the call as a value: {@link Traversal.Outcome#TRUNCATED} plus a cursor, which the
+ * caller feeds back to get the rest. {@link #depth()}, {@link #steps()} and the traversal-free segment screen
+ * <b>throw</b> {@link TraversalException} and produce no {@link Traversal.Result} at all, because they are bounds on
+ * how pathological the key space is and none of them has a safe continuation: no cursor in path order can say "resume
+ * below a subtree I refused to enter", a step budget too small to re-establish a resume position would hand back a
+ * cursor that makes no forward progress, and a name that is not a traversal-free segment must never become a key.
+ * Truncating there would drop keys while answering in the vocabulary of completeness - so a caller must not catch a
+ * {@link TraversalException} into a short list. See {@link Traversal} for the rule and {@link TraversalException} for
+ * each reason's rationale.
+ *
  * <p><strong>Exhausted or truncated.</strong> The call answers a {@link Traversal.Result}. Reaching the entry cap
  * never looks like a complete listing: the outcome is {@link Traversal.Outcome#TRUNCATED} and the cursor is the last
  * delivered leaf key. Feeding that cursor back resumes strictly after it, in the same
@@ -80,10 +92,13 @@ import module java.base;
  *   <li><b>Ordering / concurrency.</b> Leaves arrive in {@linkplain Trees#order path order}, deterministically, and
  *       one call never parallelises itself. Concurrent calls over disjoint cursors of the same subtree are
  *       independent.</li>
- *   <li><b>Bounded work / cancellation.</b> The four caps above bound every call; the visible outcome at a bound is
- *       {@link Traversal.Outcome#TRUNCATED} plus a cursor (entries) or a {@link TraversalException} naming the bound
- *       and the key (depth, steps, hostile segment). A caller cancels by throwing from {@link Leaves#accept}, which
- *       abandons the descent immediately.</li>
+ *   <li><b>Bounded work / cancellation.</b> The four caps above bound every call, and the visible outcome at a bound
+ *       is asymmetric by design: {@link Traversal.Outcome#TRUNCATED} plus a cursor for the <em>entry</em> cap, which
+ *       is a bound on one answer's size and therefore resumable, and a thrown {@link TraversalException} naming the
+ *       bound and the key for <em>depth</em>, <em>steps</em> and a hostile segment, which are bounds on how
+ *       pathological the key space is and have no continuation that makes progress. A caller may not convert the
+ *       second kind into the first. A caller cancels by throwing from {@link Leaves#accept}, which abandons the
+ *       descent immediately.</li>
  *   <li><b>Durability / delivery.</b> The primitive commits nothing; the caller owns the commit point. The cursor is
  *       durable only once the caller has written it through the store, and the crash window is exactly the gap
  *       between committing a page's effects and committing its cursor - a window that costs a replay of one page,

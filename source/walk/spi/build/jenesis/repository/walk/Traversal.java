@@ -14,7 +14,27 @@ import module java.base;
  * {@link Outcome#TRUNCATED}, which <em>always</em> carries a continuation {@link Result#cursor() cursor}. The record's
  * constructor enforces that equivalence, so an incomplete traversal cannot be represented as a complete one by
  * accident: there is no way to build an exhausted result that carries a cursor, and no way to build a truncated one
- * that does not. The bounds with no safe continuation raise {@link TraversalException} instead.
+ * that does not.
+ *
+ * <p><strong>Not every bound answers here - and which bound answers where is the most misread thing in this API.</strong>
+ * A bounded traversal has two kinds of cap and they behave <em>oppositely</em>, deliberately:
+ * <ul>
+ *   <li><b>the entry cap TRUNCATES</b> - "how many entries may one call deliver" ends the call with
+ *       {@link Outcome#TRUNCATED} and a cursor. It is a bound on the <em>size of one answer</em>, and the caller can
+ *       ask for the next answer, so paging it costs nothing but another round;</li>
+ *   <li><b>the step, depth and segment caps THROW</b> {@link TraversalException} - they never appear as an
+ *       {@link Outcome} at all, and no {@link Result} is produced. They are bounds on <em>how pathological the key
+ *       space is</em>, and they have no safe continuation: a cursor cannot express "resume below a subtree I refused
+ *       to enter" in path order (depth), a step budget too small to re-establish a resume position would hand back a
+ *       cursor that makes no forward progress - a livelock dressed up as paging (steps), and a stored name that is not
+ *       a traversal-free segment must not be composed into a key at all (segment). Truncating there would silently
+ *       drop keys while answering in the vocabulary of completeness.</li>
+ * </ul>
+ * So: <b>a {@code Result} never means "I stopped because the tree was hostile"</b>. Catching
+ * {@link TraversalException} and treating it as a truncation re-introduces exactly the silent incompleteness this
+ * type exists to prevent; a caller that must survive a hostile subtree serves what is durably stored and flags the
+ * anomaly by {@link TraversalException#reason()}, but never presents the short answer as a complete listing.
+ * {@link TraversalException} documents each reason's rationale in full.
  *
  * <p><strong>The cursor is a store key.</strong> Both primitives hand back a key under the traversal root, comparable
  * under {@linkplain Trees#order path order}, and both accept it back verbatim to resume. It is the caller's to
