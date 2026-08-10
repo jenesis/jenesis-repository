@@ -16,6 +16,6 @@ public final class StubAlphaFetcherProvider implements FetcherProvider {
 
     @Override
     public Optional<ProxyFormat.Fetcher> create(UnaryOperator<String> config) {
-        return Optional.of((url, headers) -> Optional.of(new ProxyFormat.Fetched(201, new byte[0], Map.of())));
+        return Optional.of((ProxyFormat.Fetcher.Buffered) (url, headers) -> Optional.of(new ProxyFormat.Fetched(201, new byte[0], Map.of())));
     }
 }

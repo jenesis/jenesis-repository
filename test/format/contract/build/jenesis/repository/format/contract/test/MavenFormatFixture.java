@@ -112,7 +112,7 @@ final class MavenFormatFixture implements FormatFixture {
      *  upstream would answer them. */
     private static ProxyFormat.Fetcher fetcher(GeneratedBody body, String sha1) {
         String artifact = ROOT + PROXIED.substring("/maven/".length());
-        return new ProxyFormat.Fetcher() {
+        return new ProxyFormat.Fetcher.Buffered() {
 
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {

@@ -10,7 +10,7 @@ import module java.base;
  * and what headers - credentials, say - each request carried. Downloads materialize through the interface's
  * default, so only {@code fetch} is canned.
  */
-final class FakeFetcher implements ProxyFormat.Fetcher {
+final class FakeFetcher implements ProxyFormat.Fetcher.Buffered {
 
     private final Map<String, ProxyFormat.Fetched> responses = new HashMap<>();
 

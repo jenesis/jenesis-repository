@@ -31,7 +31,7 @@ class RawProxyTest {
                 "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
     }
 
-    private static ProxyFormat.Fetcher serving(int status, byte[] body) {
+    private static ProxyFormat.Fetcher.Buffered serving(int status, byte[] body) {
         return (url, headers) -> Optional.of(new ProxyFormat.Fetched(status, body, Map.of()));
     }
 

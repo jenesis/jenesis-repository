@@ -122,7 +122,7 @@ final class OciFormatFixture implements FormatFixture {
 
     /** An upstream answering one URL with a streamed body and everything else with a miss. */
     private static ProxyFormat.Fetcher blobs(String url, Supplier<InputStream> body) {
-        return new ProxyFormat.Fetcher() {
+        return new ProxyFormat.Fetcher.Buffered() {
 
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI requested, Map<String, String> requestHeaders) {

@@ -96,6 +96,14 @@ public final class IndexSourceProvider implements ImportSourceProvider {
                 return fetcher.download(url, merged(url, requestHeaders));
             }
 
+            @Override
+            public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
+                // Delegated like the other two legs, never derived: a credential wrapper that let head fall back to
+                // download would open (though never read) the body of an artifact whose size was all the caller
+                // wanted, discarding the real HTTP HEAD of the transport it wraps.
+                return fetcher.head(url, merged(url, requestHeaders));
+            }
+
             private Map<String, String> merged(URI url, Map<String, String> requestHeaders) {
                 if (requestHeaders.containsKey("Authorization") || !sameOrigin(url)) {
                     return requestHeaders;

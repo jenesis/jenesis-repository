@@ -80,7 +80,7 @@ final class RawFormatFixture implements FormatFixture {
     @Override
     public Optional<Upstream> upstream(GeneratedBody body) {
         String artifact = ROOT + PROXIED.substring("/raw/".length());
-        return Optional.of(new Upstream(PROXIED, ROOT, new ProxyFormat.Fetcher() {
+        return Optional.of(new Upstream(PROXIED, ROOT, new ProxyFormat.Fetcher.Buffered() {
 
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {

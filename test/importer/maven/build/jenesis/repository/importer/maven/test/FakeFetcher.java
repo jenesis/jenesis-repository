@@ -10,7 +10,7 @@ import module java.base;
  * fetched - and, as important, what a resumed walk did not. The default {@code download} materializes a stream from
  * the same map, so listings, index bytes and asset downloads are all served without a network.
  */
-final class FakeFetcher implements ProxyFormat.Fetcher {
+final class FakeFetcher implements ProxyFormat.Fetcher.Buffered {
 
     private final Map<String, ProxyFormat.Fetched> responses;
     final List<String> urls = new ArrayList<>();

@@ -181,7 +181,7 @@ class ProxyCacheObservabilityTest {
     /** A stub upstream that answers every fetch with a 200 carrying a per-URL {@code ETag} and one shared body, and
      *  records the {@code If-None-Match} it was sent per URL (null when the fetch was unconditional) - so a test can
      *  tell a still-cached entry (conditional re-fetch) from an evicted one (unconditional re-fetch). */
-    private static final class RecordingFetcher implements ProxyFormat.Fetcher {
+    private static final class RecordingFetcher implements ProxyFormat.Fetcher.Buffered {
         private final byte[] body;
         private final Map<URI, String> conditional = new java.util.HashMap<>();
 
@@ -206,7 +206,7 @@ class ProxyCacheObservabilityTest {
 
     /** A fetcher that always answers with the given status and an empty body (no validator, nothing to remember). */
     private static ProxyFormat.Fetcher status(int status) {
-        return new ProxyFormat.Fetcher() {
+        return new ProxyFormat.Fetcher.Buffered() {
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) {
                 return Optional.of(new ProxyFormat.Fetched(status, new byte[0], Map.of()));
@@ -221,7 +221,7 @@ class ProxyCacheObservabilityTest {
 
     /** A fetcher answering a 200 carrying an {@code ETag} and the given body, so the revalidation cache remembers it. */
     private static ProxyFormat.Fetcher validated(String etag, byte[] body) {
-        return new ProxyFormat.Fetcher() {
+        return new ProxyFormat.Fetcher.Buffered() {
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) {
                 return Optional.of(new ProxyFormat.Fetched(200, body, Map.of("ETag", etag)));

@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class JenesisSourceProviderTest {
 
-    private final ProxyFormat.Fetcher fetcher = (url, headers) -> Optional.empty();
+    private final ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> Optional.empty();
 
     @Test
     void it_handles_only_the_jenesis_source() {

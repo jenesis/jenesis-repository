@@ -110,7 +110,7 @@ class OciManifestValidationTest {
                 .getBytes(StandardCharsets.UTF_8);
         String hex = sha256(body);
         List<URI> fetched = new ArrayList<>();
-        ProxyFormat.Fetcher fetcher = (url, headers) -> {
+        ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
             fetched.add(url);
             return Optional.of(new ProxyFormat.Fetched(200, body, Map.of("Content-Type", TYPE)));
         };
@@ -130,7 +130,7 @@ class OciManifestValidationTest {
     void a_proxied_non_json_manifest_is_served_through_without_caching() throws IOException {
         byte[] body = "not-json-from-upstream".getBytes(StandardCharsets.UTF_8);
         String hex = sha256(body);
-        ProxyFormat.Fetcher fetcher = (url, headers) ->
+        ProxyFormat.Fetcher.Buffered fetcher = (url, headers) ->
                 Optional.of(new ProxyFormat.Fetched(200, body, Map.of("Content-Type", TYPE)));
 
         FakeExchange get = new FakeExchange("GET", "/v2/app/manifests/1.0", new byte[0],

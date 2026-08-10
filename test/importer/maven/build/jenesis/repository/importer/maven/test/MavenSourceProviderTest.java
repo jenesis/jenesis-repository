@@ -32,7 +32,7 @@ class MavenSourceProviderTest {
 
     @Test
     void it_builds_a_maven_source_for_a_request_whose_root_answers() {
-        ImportSource source = new MavenSourceProvider().create(request, (url, headers) -> {
+        ImportSource source = new MavenSourceProvider().create(request, (ProxyFormat.Fetcher.Buffered) (url, headers) -> {
             assertThat(url).isEqualTo(URI.create("https://repo.example/releases/"));
             return Optional.of(new ProxyFormat.Fetched(403, new byte[0], Map.of()));
         });
@@ -41,6 +41,6 @@ class MavenSourceProviderTest {
 
     @Test
     void an_unreachable_root_builds_no_source() {
-        assertThat(new MavenSourceProvider().create(request, (url, headers) -> Optional.empty())).isNull();
+        assertThat(new MavenSourceProvider().create(request, (ProxyFormat.Fetcher.Buffered) (url, headers) -> Optional.empty())).isNull();
     }
 }

@@ -74,7 +74,7 @@ class MavenProxyChecksumTest {
 
     /** An upstream that serves {@code artifact} for the jar and {@code sha1Hex} (at {@code sha1Status}) for its
      *  {@code .sha1} sibling. */
-    private static ProxyFormat.Fetcher upstream(byte[] artifact, int sha1Status, String sha1Hex) {
+    private static ProxyFormat.Fetcher.Buffered upstream(byte[] artifact, int sha1Status, String sha1Hex) {
         return (url, headers) -> url.toString().endsWith(".sha1")
                 ? Optional.of(new ProxyFormat.Fetched(sha1Status,
                         sha1Hex == null ? new byte[0] : sha1Hex.getBytes(StandardCharsets.UTF_8), Map.of()))

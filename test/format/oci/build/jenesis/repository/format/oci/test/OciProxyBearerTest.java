@@ -47,7 +47,7 @@ class OciProxyBearerTest {
         String type = "application/vnd.oci.image.manifest.v1+json";
         byte[] manifest = ("{\"mediaType\":\"" + type + "\"}").getBytes(StandardCharsets.UTF_8);
         List<String> presented = new ArrayList<>();
-        ProxyFormat.Fetcher fetcher = (url, headers) -> {
+        ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
             if (url.toString().startsWith("https://auth.example/token")) {
                 return Optional.of(new ProxyFormat.Fetched(200,
                         "{\"token\":\"TKN-123\"}".getBytes(StandardCharsets.UTF_8), Map.of()));
@@ -80,7 +80,7 @@ class OciProxyBearerTest {
         // drive into the internal network, exactly as the fetcher screens a redirect Location.
         String metadataRealm = "Bearer realm=\"http://169.254.169.254/latest/meta-data/\",service=\"x\",scope=\"y\"";
         List<URI> fetched = new ArrayList<>();
-        ProxyFormat.Fetcher fetcher = (url, headers) -> {
+        ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
             fetched.add(url);
             if (headers.containsKey("Authorization")) {
                 return Optional.of(new ProxyFormat.Fetched(200, manifest, Map.of("Content-Type", type)));
@@ -106,7 +106,7 @@ class OciProxyBearerTest {
         String type = "application/vnd.oci.image.manifest.v1+json";
         byte[] manifest = ("{\"mediaType\":\"" + type + "\"}").getBytes(StandardCharsets.UTF_8);
         String sameHostRealm = "Bearer realm=\"http://127.0.0.1/token\",service=\"x\",scope=\"y\"";
-        ProxyFormat.Fetcher fetcher = (url, headers) -> {
+        ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
             if (url.toString().startsWith("http://127.0.0.1/token")) {
                 return Optional.of(new ProxyFormat.Fetched(200,
                         "{\"token\":\"TKN-mirror\"}".getBytes(StandardCharsets.UTF_8), Map.of()));
@@ -130,7 +130,7 @@ class OciProxyBearerTest {
         byte[] layer = "layer-bytes-over-bearer".getBytes(StandardCharsets.UTF_8);
         String hex = sha256(layer);
         List<String> presented = new ArrayList<>();
-        ProxyFormat.Fetcher fetcher = new ProxyFormat.Fetcher() {
+        ProxyFormat.Fetcher fetcher = new ProxyFormat.Fetcher.Buffered() {
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) {
                 // The realm exchange is a buffered fetch even when the blob itself streams.
@@ -166,7 +166,7 @@ class OciProxyBearerTest {
         // `..`-laced name (a/../evil) must not aim an oci/<name>/... key at a neighbouring key space nor drive an
         // upstream fetch. It is refused before the fetcher is ever called - defense in depth behind the servlet firewall.
         List<URI> fetched = new ArrayList<>();
-        ProxyFormat.Fetcher fetcher = (url, headers) -> {
+        ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
             fetched.add(url);
             return Optional.of(new ProxyFormat.Fetched(200, "{}".getBytes(StandardCharsets.UTF_8), Map.of()));
         };
@@ -203,7 +203,7 @@ class OciProxyBearerTest {
             byDigest.put(currentHex, current);
         }
         byte[] top = current;
-        ProxyFormat.Fetcher fetcher = (url, headers) -> {
+        ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
             String u = url.toString();
             if (u.endsWith("/v2/_catalog")) {
                 return Optional.of(new ProxyFormat.Fetched(200,

@@ -153,7 +153,7 @@ class DemoSeederTest {
 
     /** A fixed in-memory fetcher answering each URL from a canned map (an unmapped URL - including any {@code .sha1}
      *  sibling - is a transport miss, so the Maven proxy skips checksum verification) and counting its calls. */
-    private static final class StubFetcher implements ProxyFormat.Fetcher {
+    private static final class StubFetcher implements ProxyFormat.Fetcher.Buffered {
 
         private final Map<String, ProxyFormat.Fetched> responses;
         private final AtomicInteger fetches = new AtomicInteger();

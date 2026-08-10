@@ -36,15 +36,25 @@ import module java.base;
  *     sentinel.</li>
  * <li><b>Streaming (&sect;1).</b> The fetcher is on the artifact download path: a proxied artifact must be streamed
  *     through to the caller and the store, never fully materialised. Only small index/metadata documents may be read
- *     whole. The three {@link ProxyFormat.Fetcher} overloads are not interchangeable, and a real transport
- *     <b>overrides both defaults</b>: {@link ProxyFormat.Fetcher#download} must open the response body as a stream
- *     rather than materialising it (the SPI default builds one from the buffered {@link ProxyFormat.Fetcher#fetch},
- *     which is exactly the whole-artifact-in-heap this clause forbids), and {@link ProxyFormat.Fetcher#head} must
- *     issue a real HTTP {@code HEAD} (the SPI default falls back to {@code download}, so it opens - though never
- *     reads - the body of an artifact whose size was all the caller wanted). The defaults exist so a test double or a
- *     degenerate fetcher such as {@link ProxyFormat.Fetcher#NONE} need not implement three methods; a provider that
- *     ships them to production has not met this clause. The buffered {@code fetch} is the small-document path and
- *     carries a ceiling of its own (clause 10).</li>
+ *     whole. The three {@link ProxyFormat.Fetcher} legs are not interchangeable, and none of them is inherited: all
+ *     three are <b>abstract</b> on the interface, so a transport declares each and the compiler asks the question
+ *     rather than a javadoc paragraph asking it.
+ *     <ul>
+ *       <li>{@link ProxyFormat.Fetcher#download} must open the response body as a stream. Deriving it from the
+ *           buffered {@link ProxyFormat.Fetcher#fetch} is the whole-artifact-in-heap this clause forbids;</li>
+ *       <li>{@link ProxyFormat.Fetcher#head} must issue a real HTTP {@code HEAD}. Deriving it from {@code download}
+ *           opens - though never reads - the body of an artifact whose size was all the caller wanted, which is
+ *           answering a metadata question by starting a body transfer;</li>
+ *       <li>the buffered {@code fetch} is the small-document path and carries a ceiling of its own (clause 10).</li>
+ *     </ul>
+ *     Both derivations still exist, because a scripted upstream or a test double genuinely has nothing but a small
+ *     in-memory document - but they live on a named type, {@link ProxyFormat.Fetcher.Buffered}, which a class has to
+ *     write down. That is the difference this clause turns on: an implementation that buffers is now one that
+ *     <em>said</em> it buffers. A provider whose {@code create} returns a {@code Buffered} to production has not met
+ *     this clause, and its declaration is where a reviewer sees it. A <em>decorator</em> may never be a
+ *     {@code Buffered}: it would discard the real streaming and {@code HEAD} legs of the fetcher it wraps and
+ *     substitute derivations, silently collapsing a deployment's streaming path - so a wrapper delegates all three
+ *     legs.</li>
  * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed at resolution: duplicate provider names, one provider
  *     registered twice, and more than one <em>enabled</em> fetcher with no selection to disambiguate them all throw,
  *     naming the candidates and the setting that resolves them - the transport a deployment proxies through is never

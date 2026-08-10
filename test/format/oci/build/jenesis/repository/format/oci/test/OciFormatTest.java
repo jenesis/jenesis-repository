@@ -455,7 +455,7 @@ class OciFormatTest {
 
     /** A fetcher answering from {@link OciFormat#handle} itself, so the walk consumes exactly what the format
      *  serves - the producer and the consumer of the registry index proven against each other, no server. */
-    private ProxyFormat.Fetcher registry() {
+    private ProxyFormat.Fetcher.Buffered registry() {
         return (url, requestHeaders) -> {
             Map<String, String> query = new LinkedHashMap<>();
             if (url.getQuery() != null) {
@@ -658,7 +658,7 @@ class OciFormatTest {
                 "{\"name\":\"beta\",\"tags\":[]}".getBytes(StandardCharsets.UTF_8), Map.of()));
         canned.put("http://mirror.local/v2/app/manifests/1.0", new ProxyFormat.Fetched(200,
                 "{\"layers\":[{\"digest\":\"sha256:abc\"}]}".getBytes(StandardCharsets.UTF_8), Map.of()));
-        ProxyFormat.Fetcher fetcher = (url, headers) -> Optional.ofNullable(canned.get(url.toString()));
+        ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> Optional.ofNullable(canned.get(url.toString()));
 
         List<String> paths = format.enumerate(fetcher, URI.create("http://mirror.local"))
                 .map(ProxyFormat.Coordinate::path)
@@ -679,7 +679,7 @@ class OciFormatTest {
                 Map.of("Link", "<http://127.0.0.1/v2/_catalog?last=app>; rel=\"next\"")));
         canned.put("http://mirror.local/v2/app/tags/list", new ProxyFormat.Fetched(200,
                 "{\"name\":\"app\",\"tags\":[]}".getBytes(StandardCharsets.UTF_8), Map.of()));
-        ProxyFormat.Fetcher fetcher = (url, headers) -> Optional.ofNullable(canned.get(url.toString()));
+        ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> Optional.ofNullable(canned.get(url.toString()));
 
         assertThatThrownBy(() -> format.enumerate(fetcher, URI.create("http://mirror.local"))
                 .map(ProxyFormat.Coordinate::path).toList())
@@ -689,7 +689,7 @@ class OciFormatTest {
 
     @Test
     void a_catalog_less_registry_fails_enumeration_up_front() {
-        ProxyFormat.Fetcher fetcher = (url, headers) ->
+        ProxyFormat.Fetcher.Buffered fetcher = (url, headers) ->
                 Optional.of(new ProxyFormat.Fetched(404, new byte[0], Map.of()));
         assertThatThrownBy(() -> format.enumerate(fetcher, URI.create("http://hub.local")))
                 .isInstanceOf(IOException.class)
@@ -702,7 +702,7 @@ class OciFormatTest {
 
     /** A fetcher that serves one canned upstream response, counting how many times upstream was hit - so a test can
      *  prove a refused (uncached) pull re-hits upstream on the next attempt while a cached one does not. */
-    private static ProxyFormat.Fetcher counting(String path, ProxyFormat.Fetched response, AtomicInteger hits) {
+    private static ProxyFormat.Fetcher.Buffered counting(String path, ProxyFormat.Fetched response, AtomicInteger hits) {
         String target = UPSTREAM + path;
         return (url, headers) -> {
             if (!url.toString().equals(target)) {

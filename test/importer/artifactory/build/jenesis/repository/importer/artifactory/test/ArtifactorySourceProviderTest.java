@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ArtifactorySourceProviderTest {
 
     private final URI url = URI.create("https://art.example/");
-    private final ProxyFormat.Fetcher fetcher = (uri, headers) -> Optional.empty();
+    private final ProxyFormat.Fetcher.Buffered fetcher = (uri, headers) -> Optional.empty();
 
     @Test
     void it_handles_only_the_artifactory_source() {

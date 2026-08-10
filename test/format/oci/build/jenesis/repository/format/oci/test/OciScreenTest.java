@@ -148,7 +148,7 @@ class OciScreenTest {
     void a_proxied_manifest_routes_through_the_same_choke_point() throws IOException {
         byte[] manifest = ("{\"mediaType\":\"" + TYPE + "\"}").getBytes(StandardCharsets.UTF_8);
         String hex = sha256(manifest);
-        var fetcher = (build.jenesis.repository.format.ProxyFormat.Fetcher) (url, headers) ->
+        var fetcher = (build.jenesis.repository.format.ProxyFormat.Fetcher.Buffered) (url, headers) ->
                 java.util.Optional.of(new build.jenesis.repository.format.ProxyFormat.Fetched(
                         200, manifest, Map.of("Content-Type", TYPE)));
 
