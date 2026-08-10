@@ -91,6 +91,54 @@ class ObservabilityReportTest {
     }
 
     @Test
+    void a_failing_source_is_reported_as_unknown_and_never_takes_the_report_down() {
+        // Before containment this threw out of from(), so one broken plugin cost the reader the whole overview - every
+        // other plugin's health, metrics and task statuses included.
+        ObservabilityReport report = ObservabilityReport.from(List.of(
+                new ThrowingSource(),
+                source(HealthCheck.up("jenesis.alpha.check", "a"),
+                        Metric.gauge("jenesis.alpha.gauge", "a", 1, ""),
+                        TaskStatus.idle("jenesis.alpha.task", "a"))));
+
+        assertThat(report.healthChecks()).as("the healthy source is collected in full")
+                .extracting(HealthCheck::name)
+                .containsExactly("jenesis.alpha.check", "jenesis.observation.unavailable.throwingsource");
+        assertThat(report.metrics()).extracting(Metric::name).containsExactly("jenesis.alpha.gauge");
+        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenesis.alpha.task");
+
+        HealthCheck substitute = report.healthChecks().stream()
+                .filter(check -> check.name().endsWith("throwingsource")).findFirst().orElseThrow();
+        assertThat(substitute.status()).as("'a source could not determine its state' is exactly the truth here")
+                .isEqualTo(Health.UNKNOWN);
+        assertThat(substitute.description()).as("the row names the source that failed")
+                .contains(ThrowingSource.class.getName());
+        assertThat(substitute.detail()).as("and the kind of failure, plus a warning against reading the missing "
+                        + "signals as an all-clear")
+                .contains("IllegalStateException").contains("not an all-clear");
+        assertThat(substitute.detail() + substitute.description())
+                .as("an operator-facing detail never carries the exception message, which is uncontrolled text - the "
+                        + "log has it")
+                .doesNotContain(ThrowingSource.SECRET).doesNotContain("hunter2");
+
+        assertThat(report.overall()).as("a report one of whose sources threw is not UP")
+                .isEqualTo(Health.UNKNOWN);
+    }
+
+    @Test
+    void a_source_answering_null_is_contained_like_a_throw() {
+        // null is never a legal signal list; dropping it would leave the plugin looking like one reporting nothing.
+        ObservabilityReport report = ObservabilityReport.from(List.of(new ObservabilitySource() {
+            @Override
+            public List<Metric> metrics() {
+                return null;
+            }
+        }));
+        assertThat(report.healthChecks()).singleElement()
+                .satisfies(check -> assertThat(check.status()).isEqualTo(Health.UNKNOWN));
+        assertThat(report.overall()).isEqualTo(Health.UNKNOWN);
+    }
+
+    @Test
     void discovers_the_service_loader_installed_source() {
         ObservabilityReport report = ObservabilityReport.discover();
         assertThat(report.healthChecks()).extracting(HealthCheck::name).contains("jenesis.gc.worker");

@@ -1,5 +1,7 @@
 package build.jenesis.repository.posture;
 
+import build.jenesis.repository.observation.Contributions;
+
 import module java.base;
 
 /**
@@ -9,22 +11,100 @@ import module java.base;
  * stable order); {@link #discover} does the same over the {@link ServiceLoader}-installed advisors. A module that raises
  * nothing (a disabled feature, a safe configuration) simply adds nothing - the report degrades gracefully to whatever is
  * actually unsafe, and an empty report is the healthy state.
+ *
+ * <p><strong>Silence is load-bearing here, so a failure is never silent.</strong> An empty report means "checked, and
+ * nothing is unsafe" - which is why an advisor that throws must not simply vanish, and must certainly not take the
+ * report down: every console view renders {@code postureCount} and {@code GET /api/posture} reads the same collection.
+ * {@link #from} therefore collects through {@code Contributions}: an advisor that throws (or answers {@code null}) is
+ * contained to its own rows and replaced by a {@link Severity#WARN} {@code jenesis.posture.unavailable.<advisor>}
+ * advisory saying that whatever it checks is unreported, every other advisor is evaluated, and the failure is logged
+ * once with the advisor's class. The badge count rises rather than falls, because a deployment whose posture is
+ * partially unknown is not a deployment with less to worry about.
+ *
+ * <p>The same rule covers the collision this additive SPI has no {@code name()} to refuse: two advisories sharing an id
+ * (and, for a tenant-scoped row, a tenant) are both kept - dropping one would hide a real advisory - and a
+ * {@code jenesis.posture.collision} advisory reports the duplicated keys, so a packaging accident is visible on the
+ * surface instead of rendering as two identically-anchored rows nobody can tell apart.
  */
 public record PostureReport(List<SecurityAdvisory> advisories) {
+
+    /** How many clashing ids the collision row names before it starts counting - a row an operator can read. */
+    private static final int COLLISIONS_NAMED = 5;
 
     public PostureReport {
         advisories = List.copyOf(advisories);
     }
 
-    /** Evaluate {@code advisors} against {@code config} and sort critical-first (ties broken by id). */
+    /** Evaluate {@code advisors} against {@code config} and sort critical-first (ties broken by id); an advisor that
+     *  throws contributes {@link #unavailable} instead of taking the report down with it. */
     public static PostureReport from(Iterable<? extends SafetyAdvisor> advisors, Configuration config) {
         List<SecurityAdvisory> collected = new ArrayList<>();
-        for (SafetyAdvisor advisor : advisors) {
-            collected.addAll(advisor.advise(config));
+        // List.copyOf inside the contribution is deliberate: a null list, or a null advisory inside one, becomes a
+        // contained failure of that advisor rather than an NPE out of the collection that every console view runs.
+        for (List<SecurityAdvisory> advised : Contributions.collect("safety advisor", advisors,
+                advisor -> List.copyOf(advisor.advise(config)), PostureReport::unavailable)) {
+            collected.addAll(advised);
         }
+        collected.addAll(collisions(collected));
         collected.sort(Comparator.comparing(SecurityAdvisory::severity, Comparator.reverseOrder())
                 .thenComparing(SecurityAdvisory::id));
         return new PostureReport(collected);
+    }
+
+    /**
+     * The row an advisor that threw is reported as. It is filed under the advisor's own implementation class
+     * ({@code jenesis.posture.unavailable.<advisor>}), so two failing advisors are two rows rather than one merged
+     * one, and it names the <em>kind</em> of failure only - an exception message can quote a configured value, and
+     * this surface enumerates a deployment's weaknesses to an operator, so the message goes to the log and never into
+     * an advisory (see {@link Contributions#reason}).
+     */
+    private static List<SecurityAdvisory> unavailable(SafetyAdvisor advisor, Exception failure) {
+        return List.of(SecurityAdvisory.deployment(
+                "jenesis.posture.unavailable." + Contributions.segment(advisor),
+                Severity.WARN,
+                "A safety advisor could not be evaluated",
+                "The " + advisor.getClass().getName() + " advisor threw " + Contributions.reason(failure)
+                        + " instead of answering, so whatever it checks went unchecked in this report: its silence is"
+                        + " NOT an all-clear for those settings. Every other advisor was evaluated and the server log"
+                        + " carries the failure.",
+                "Fix or remove the module that contributes this advisor. An advisor that cannot evaluate a condition"
+                        + " answers with an advisory naming what it could not determine, never by throwing.",
+                "", "", ""));
+    }
+
+    /**
+     * The duplicate refusal this SPI has no {@code name()} to inherit from the shared provider primitives, applied
+     * where it is actually observable: over the collected advisories rather than over the advisors. A row is keyed by
+     * its id, plus its tenant when it is tenant-scoped - the same advisory legitimately raised for two tenants is two
+     * rows, not a collision. Both duplicates stay in the report (an id clash must never cost an operator a real
+     * advisory) and one extra row names the clashing keys, because a duplicate id is a collision between modules
+     * rather than a merge, and it silently ruins the row key the docs anchor and the API consumer use.
+     */
+    private static List<SecurityAdvisory> collisions(List<SecurityAdvisory> advisories) {
+        Set<String> seen = new HashSet<>();
+        SortedSet<String> duplicated = new TreeSet<>();
+        for (SecurityAdvisory advisory : advisories) {
+            String key = advisory.scope() == Scope.TENANT
+                    ? advisory.id() + " (tenant " + advisory.tenant() + ")"
+                    : advisory.id();
+            if (!seen.add(key)) {
+                duplicated.add(key);
+            }
+        }
+        if (duplicated.isEmpty()) {
+            return List.of();
+        }
+        List<String> named = duplicated.stream().limit(COLLISIONS_NAMED).toList();
+        String listed = String.join(", ", named)
+                + (duplicated.size() > named.size() ? " (and " + (duplicated.size() - named.size()) + " more)" : "");
+        return List.of(SecurityAdvisory.deployment("jenesis.posture.collision", Severity.WARN,
+                "Two advisors raised the same advisory id",
+                "More than one discovered advisor raised these advisory ids: " + listed + ". An id is the row key and"
+                        + " the docs anchor, so a clash means two modules are describing different conditions under one"
+                        + " name and an operator cannot tell the rows apart. Both rows are kept - none is dropped.",
+                "Rename one of the colliding advisories, or remove the duplicate module registration that raised it"
+                        + " twice.",
+                "", "", ""));
     }
 
     /** Evaluate every {@link ServiceLoader}-discovered {@link SafetyAdvisor} against {@code config}. */

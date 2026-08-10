@@ -26,27 +26,41 @@ import module java.base;
  *       a bookmarked deep link.</li>
  *   <li><b>Absence sentinel.</b> A panel that has nothing to show renders a friendly empty state, never {@code null},
  *       never a blank body and never an error page - {@link #id()}, {@link #title()} and {@link #render} all answer a
- *       value. A capability that is not installed contributes no panel at all rather than a panel that renders a
+ *       value, and a {@code null} answer is treated as a failure of the panel (clause 6) rather than as an empty card,
+ *       because a hole in the console that reads as "nothing to report" is the one outcome this SPI must never
+ *       produce. A capability that is not installed contributes no panel at all rather than a panel that renders a
  *       failure (&sect;3), which is why absence is expressed by the module not being on the graph.</li>
  *   <li><b>Selection failure.</b> There is nothing to select: the policy is additive, every discovered panel is
  *       rendered, and no configuration key names one. Discovery is a plain {@code ServiceLoader.load(Panel.class)} in
  *       {@code UiConfig} rather than the shared {@code Providers.all} primitive - a {@code Panel} declares no
- *       {@code name()} - so this SPI has <em>no</em> duplicate-id refusal and no {@code jenesis.repository.<name>=false}
- *       toggle: two panels declaring the same {@link #id()} both render, producing two navigation entries and two
- *       identically-anchored bodies. Choose an id that names the concept and prefix it where a collision with another
- *       distribution is plausible.</li>
+ *       {@code name()} - so there is no {@code jenesis.repository.<name>=false} toggle and no <em>runtime</em>
+ *       duplicate-id refusal: two panels declaring the same {@link #id()} would both render, producing two navigation
+ *       entries and two identically-anchored bodies. The refusal is a <b>build-time census</b> instead
+ *       ({@code PanelCensusTest}): it compares the statically declared providers, the panels the runtime graph
+ *       discovers and the set {@code UiConfig} actually renders (the bean-contributed {@code PosturePanel} included),
+ *       and fails the build on a duplicate id. That is deliberate - a packaging mistake must be caught where it is
+ *       introduced, and refusing at render time would let one badly-packaged panel take the console down, which is
+ *       exactly what clause 6 forbids. A census covers the repository it runs in, so a distribution that adds panels
+ *       of its own runs its own census over its own source tree; choose an id that names the concept and prefix it
+ *       where a collision with another distribution is plausible.</li>
  *   <li><b>Tenant scoping (&sect;6).</b> The {@link ArtifactStore} handed to {@link #render} is already scoped, and a
  *       panel reads the repository <em>only</em> through it - it must never resolve a store of its own, because doing so
  *       would escape the scope the console selected. A console view is always a tenant view even where the tenancy is
  *       implicit because there is one tenant, so a panel must not render another tenant's names, and a panel with
  *       deployment-global content scopes it explicitly (as {@code PosturePanel} does through the advisory
  *       {@code Scope}).</li>
- *   <li><b>Error visibility (&sect;9).</b> A throw from {@link #render} is <b>not contained</b>: the
- *       {@code ConsoleController} renders the panels in one loop and lets the exception propagate, so one failing panel
- *       takes down the whole console page and every other panel with it. A panel therefore catches its own read and
- *       parse failures and renders a degraded body naming what it could not read, rather than throwing - the same
- *       "disabled or absent contributes nothing" rule the observation and posture seams follow. Nothing here may be
- *       silently swallowed into a body that <em>looks</em> healthy: a degraded panel says so.</li>
+ *   <li><b>Error visibility (&sect;9).</b> A throw from {@link #render}, {@link #id()} or {@link #title()} is
+ *       <b>contained to this panel</b>: {@code ConsoleController} renders through {@code Contributions}, so a panel
+ *       that throws keeps its navigation entry (marked as failed) and its {@code #id} anchor, its body is replaced by
+ *       a visible failure notice naming this class and the exception <em>type</em>, every other panel renders, and the
+ *       failure is logged once with this class's name. A panel that cannot even declare its {@link #id()} is filed
+ *       under a class-derived anchor rather than dropped. Containment is a floor, not a licence: the notice can say
+ *       only "this panel failed", so a panel still catches its own read and parse failures and renders a degraded body
+ *       naming <em>what</em> it could not read - the same "disabled or absent contributes nothing" rule the
+ *       observation and posture seams follow. Nothing may be silently swallowed into a body that <em>looks</em>
+ *       healthy: a degraded panel says so, and a failed one is never rendered as an empty one. An {@link Error} is
+ *       <em>not</em> contained (a {@link LinkageError} from a half-installed plugin is a broken module graph, not a
+ *       panel failing to render).</li>
  *   <li><b>Read purity (&sect;10).</b> {@link #render} answers a GET and renders durably stored state only: no external
  *       fetch, no scan, no store write and no refresh on the read path, so the console still stands when a source a
  *       panel describes is down. Live data that is not store state is fetched by the <em>browser</em> from the
