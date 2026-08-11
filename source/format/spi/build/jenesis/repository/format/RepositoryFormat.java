@@ -1,7 +1,10 @@
 package build.jenesis.repository.format;
 
+import build.jenesis.repository.icon.IconContributor;
+import build.jenesis.repository.icon.Marks;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Features;
+import build.jenesis.repository.store.Providers;
 
 import module java.base;
 
@@ -13,6 +16,13 @@ import module java.base;
  * storage, multi-tenancy, authorization, retention and console without touching them, and a deployment plugs in
  * whichever layouts it wants. Implementations are stateless: the dispatcher passes the already
  * tenant-and-repository-scoped store on each call.
+ *
+ * <p>It extends {@link IconContributor}, which is where {@link #name()} and the optional console mark come from: a
+ * format is one of two unrelated plug-in families that lend the console a mark of their own, and the interface they
+ * share is what stops the second family from arriving with a second copy of the neutral fallback, the rendering rule
+ * and the generated scheme. A format therefore declares a mark exactly as a findings plug-in does, and the console
+ * resolves both through {@link Marks} - see {@link FormatMarks} for the format family's own mapping from a storage
+ * namespace or an ecosystem to the format that owns it.
  *
  * <h2>Contract</h2>
  * Most clauses below are executable: {@code FormatContract} in the format testkit states one once and each format runs
@@ -29,7 +39,7 @@ import module java.base;
  *       {@code UnboundedListingPrincipleTest}, clause 14 by {@code FormatScreeningMonopolyPrincipleTest}, clause 15 by
  *       {@code ArchiveInflationPrincipleTest}. These are
  *       source scans: they catch a <em>new</em> offending call site, not a wrong one;</li>
- *   <li><b>documented only</b> - clauses 1, 5, 8, 9, 10, 11 and 13 are audit items today (T-304's residue). They
+ *   <li><b>documented only</b> - clauses 1, 5, 8, 9, 10, 11, 13 and 16 are audit items today (T-304's residue). They
  *       are stated here in a form a test could be written against, not because one exists.</li>
  * </ul>
  * <ol>
@@ -164,11 +174,26 @@ import module java.base;
  *           unbounded inflation the moment it is written, which is what turns this clause from a rule a format could
  *           silently arrive without into one it has to answer.</li>
  *     </ul></li>
+ * <li><b>Console mark (the inherited {@link IconContributor} half).</b> A format may lend the console a small SVG
+ *     mark, and {@link #name()} is the identity that mark is attributed to. Both obligations are stated once on
+ *     {@link IconContributor} rather than restated here, because a format is only one of the families that carry
+ *     them; the two that bind hardest on a format are worth naming at this seam anyway. <b>Read purity
+ *     (&sect;10):</b> {@link IconContributor#icon()} performs no I/O at all - it is called once per rendered row on
+ *     a console page, so the document is a constant in the format's own module, never a classpath resource read
+ *     when first asked. <b>The mark stays in the format's module:</b> the core holds no brand mark, and a format
+ *     that declares none does not invent a placeholder - {@link Marks} answers with the generated figure derived
+ *     from {@link #name()}, so "this format declares no mark" is one fact with one rendering rather than as many as
+ *     there are formats. A format's mark is deployment-static and carries no tenant or repository data
+ *     (&sect;6), which is why a serving endpoint may hand it out open, immutable and cached.</li>
  * </ol>
  */
-public interface RepositoryFormat {
+public interface RepositoryFormat extends IconContributor {
 
-    /** A stable identifier for the format, e.g. {@code maven}, {@code oci}, {@code npm}. */
+    /** A stable identifier for the format, e.g. {@code maven}, {@code oci}, {@code npm}. It is the format's feature
+     *  toggle key ({@code jenesis.repository.<name>}), the key {@link #installed(String)} looks one up by, and - as
+     *  the inherited {@link IconContributor#name()} - the identity its console mark is attributed to and generated
+     *  from, so it is chosen once and not renamed. */
+    @Override
     String name();
 
     /** Whether this format owns the given request path (the repository prefix already stripped). */
@@ -194,18 +219,6 @@ public interface RepositoryFormat {
      */
     default boolean screened() {
         return true;
-    }
-
-    /**
-     * The format's mark as a small SVG {@link IconResource} embedded in this module, or empty when it ships none.
-     * The console renders it beside the format's repositories and browse rows, and a server icon endpoint serves it
-     * (immutable, cached) with a neutral fallback for a format that returns empty. A {@code default} so no existing
-     * format is forced to carry one and the core stays icon-agnostic; a format with an icon overrides this to
-     * {@code Optional.of(IconResource.svg(...))}, drawing only from permissively-licensed icon sets (its source and
-     * licence recorded next to the module).
-     */
-    default Optional<IconResource> icon() {
-        return Optional.empty();
     }
 
     /**
@@ -240,5 +253,20 @@ public interface RepositoryFormat {
             }
         }
         return Optional.empty();
+    }
+
+    /** Every installed, switched-on format, discovered via {@link ServiceLoader} from this SPI module and resolved
+     *  through the shared {@link Providers#all} additive policy - the sanctioned lookup for a neutral consumer that
+     *  must see the whole set rather than one by name (the console resolving a namespace's mark, say) without
+     *  carrying a {@code uses} clause of its own. Ordered by name, so a consumer's answer does not depend on the
+     *  module path's discovery order, and a format configured off ({@code jenesis.repository.<name>=false}) or with
+     *  required config unset is absent exactly as a missing module is. Two formats answering to one name is a
+     *  packaging error and throws rather than being settled by discovery order. */
+    static List<RepositoryFormat> installed() {
+        return Providers.all("format",
+                ServiceLoader.load(RepositoryFormat.class),
+                RepositoryFormat::name,
+                format -> Features.active(format.name(), format.requiredConfig()),
+                Optional::of);
     }
 }
