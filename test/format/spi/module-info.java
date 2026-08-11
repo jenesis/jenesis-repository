@@ -4,7 +4,10 @@
  * does not recognise) and the {@link build.jenesis.repository.format.FetcherProvider#resolve} optional-unique SPI seam
  * (explicit selection, ambiguity when more than one fetcher is enabled, a loud failure when the selection names a
  * fetcher nothing answers to, and {@code NONE} only when nothing is enabled), driven through
- * {@link java.util.ServiceLoader}-discovered stub providers registered by this module - no network, no store.
+ * {@link java.util.ServiceLoader}-discovered stub providers registered by this module - no network, no store. It also
+ * covers {@link build.jenesis.repository.format.FormatMarks}, the format family's half of the shared mark resolution
+ * (which installed format owns a storage namespace or declares an ecosystem), driven over stub formats so the
+ * mapping and not discovery is what is asserted.
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.format
