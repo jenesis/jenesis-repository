@@ -8,6 +8,12 @@
  * adding modules to the graph, with no fork of the console. Login mechanisms plug in the same way through the
  * {@code LoginContributor} bean seam.
  *
+ * <p>It requires the format SPI for one reason: the browse panel marks each published namespace with the mark of the
+ * format that owns it, resolved through the shared {@code Marks} every contributing plug-in family renders through,
+ * so a namespace no installed format claims is shown as the orphan it is rather than as an ordinary row. That is an
+ * SPI dependency, not a plugin one - the console still requires no concrete format and discovers them all through
+ * the SPI's own lookup.
+ *
  * @jenesis.release 25
  * @jenesis.main build.jenesis.repository.ui.Application
  *
@@ -111,6 +117,7 @@
  * @jenesis.pin tools.jackson.databind 3.2.0
  */
 open module build.jenesis.repository.ui {
+    requires build.jenesis.repository.format;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.observation;
