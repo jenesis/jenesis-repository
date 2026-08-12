@@ -3,6 +3,7 @@ package build.jenesis.repository.gc.test;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
@@ -57,7 +58,7 @@ class GcRecoveryTest {
 
         FaultInjectingStore store = FaultInjectingStore.wrap(inner)
                 .failEveryOn(FaultInjectingStore.Op.WRITE_VERSIONED, FaultInjectingStore.keyPrefix("gc/1/refs"));
-        assertThatThrownBy(() -> collector().collect(store, List.of("publish"), clock.instant()))
+        assertThatThrownBy(() -> collector().collect(store, Known.known(List.of("publish")), clock.instant()))
                 .isInstanceOf(IOException.class);
         assertThat(new StoreArtifactWalk(2, 1, Duration.ofMinutes(10), clock)
                 .segments(inner, "gc-mark"))
@@ -66,7 +67,7 @@ class GcRecoveryTest {
 
         store.heal();
         clock.advance(Duration.ofMinutes(11)); // the dead worker's claim expires
-        GcPlan resumed = collector().collect(store, List.of("publish"), clock.instant());
+        GcPlan resumed = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(resumed.complete()).isTrue();
         assertThat(inner.exists("blobs/" + kept))
                 .as("the resumed mark re-read the pointer, so the referenced blob survives").isTrue();
@@ -81,19 +82,19 @@ class GcRecoveryTest {
         String kept = publication.storeBlob(bytes("kept"));
         publication.link("/maven/kept.jar", kept);
         String orphan = publication.storeBlob(bytes("orphan"));
-        var _ = collector().collect(inner, List.of("publish"), clock.instant());
+        var _ = collector().collect(inner, Known.known(List.of("publish")), clock.instant());
         assertThat(inner.exists("gc/condemned/" + orphan)).isTrue();
 
         FaultInjectingStore store = FaultInjectingStore.wrap(inner)
                 .failNextOn(FaultInjectingStore.Op.DELETE, key -> key.equals("gc/condemned/" + orphan));
-        assertThatThrownBy(() -> collector().collect(store, List.of("publish"), clock.instant()))
+        assertThatThrownBy(() -> collector().collect(store, Known.known(List.of("publish")), clock.instant()))
                 .isInstanceOf(IOException.class);
         assertThat(inner.exists("blobs/" + orphan)).as("the blob went before the crash").isFalse();
         assertThat(inner.exists("gc/condemned/" + orphan)).as("its marker is the crash residue").isTrue();
 
         store.heal();
         clock.advance(Duration.ofMinutes(11));
-        GcPlan converged = collector().collect(inner, List.of("publish"), clock.instant());
+        GcPlan converged = collector().collect(inner, Known.known(List.of("publish")), clock.instant());
         assertThat(converged.complete()).isTrue();
         assertThat(inner.exists("gc/condemned/" + orphan))
                 .as("a marker whose blob is gone is swept by the convergence leg").isFalse();
@@ -111,14 +112,14 @@ class GcRecoveryTest {
         // The sweep walk dies before it can claim anything: the completed mark stands, nothing was judged.
         FaultInjectingStore store = FaultInjectingStore.wrap(inner)
                 .failEveryOn(FaultInjectingStore.Op.WRITE_VERSIONED, FaultInjectingStore.keyPrefix("walks/gc-sweep"));
-        assertThatThrownBy(() -> collector().collect(store, List.of("publish"), clock.instant()))
+        assertThatThrownBy(() -> collector().collect(store, Known.known(List.of("publish")), clock.instant()))
                 .isInstanceOf(IOException.class);
         assertThat(inner.exists("blobs/" + orphan)).isTrue();
 
         store.heal();
         clock.advance(Duration.ofMinutes(11));
-        var _ = collector().collect(inner, List.of("publish"), clock.instant());
-        var _ = collector().collect(inner, List.of("publish"), clock.instant());
+        var _ = collector().collect(inner, Known.known(List.of("publish")), clock.instant());
+        var _ = collector().collect(inner, Known.known(List.of("publish")), clock.instant());
         assertThat(inner.exists("blobs/" + orphan)).as("the orphan still converges to collected").isFalse();
         assertThat(inner.exists("blobs/" + kept)).isTrue();
         assertThat(inner.list("gc/condemned")).isEmpty();

@@ -3,6 +3,7 @@ package build.jenesis.repository.gc.test;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
@@ -51,18 +52,18 @@ class GcClaimTest {
         // Node A dies on its first reference flush, its mark claim still live.
         FaultInjectingStore dying = FaultInjectingStore.wrap(inner)
                 .failEveryOn(FaultInjectingStore.Op.WRITE_VERSIONED, FaultInjectingStore.keyPrefix("gc/1/refs"));
-        assertThatThrownBy(() -> collector(1).collect(dying, List.of("publish"), clock.instant()))
+        assertThatThrownBy(() -> collector(1).collect(dying, Known.known(List.of("publish")), clock.instant()))
                 .isInstanceOf(IOException.class);
 
         // Node B is refused the live claim: its pass is incomplete and it judged nothing - no double work.
-        GcPlan refused = collector(1).collect(inner, List.of("publish"), clock.instant());
+        GcPlan refused = collector(1).collect(inner, Known.known(List.of("publish")), clock.instant());
         assertThat(refused.complete()).as("a live holder's segment is never taken").isFalse();
         assertThat(refused.isEmpty()).isTrue();
         assertThat(inner.list("gc/condemned")).as("nothing was judged off an incomplete mark").isEmpty();
 
         // Once the lease runs out, node B finishes the same pass and the judgment is whole.
         clock.advance(Duration.ofMinutes(11));
-        GcPlan reclaimed = collector(1).collect(inner, List.of("publish"), clock.instant());
+        GcPlan reclaimed = collector(1).collect(inner, Known.known(List.of("publish")), clock.instant());
         assertThat(reclaimed.complete()).isTrue();
         assertThat(reclaimed.condemned()).isEqualTo(1);
         assertThat(inner.exists("blobs/" + kept)).isTrue();
@@ -90,7 +91,7 @@ class GcClaimTest {
                     MarkSweepGarbageCollector collector = collector(4);
                     results.add(pool.submit(() -> {
                         start.await();
-                        return collector.collect(store, List.of("publish"), clock.instant());
+                        return collector.collect(store, Known.known(List.of("publish")), clock.instant());
                     }));
                 }
                 start.countDown();

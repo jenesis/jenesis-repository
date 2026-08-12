@@ -4,6 +4,7 @@ import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.testkit.StoreInvariants;
@@ -57,14 +58,14 @@ class MarkSweepTest {
         publication.link("/maven/kept.jar", kept);
         String orphan = publication.storeBlob(bytes("orphan"));
 
-        GcPlan first = collector().collect(store, List.of("publish"), clock.instant());
+        GcPlan first = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(first.complete()).isTrue();
         assertThat(first.condemned()).isEqualTo(1);
         assertThat(first.collected()).isZero();
         assertThat(store.exists("blobs/" + orphan)).as("the first judgment condemns, never deletes").isTrue();
         assertThat(store.exists("gc/condemned/" + orphan)).isTrue();
 
-        GcPlan second = collector().collect(store, List.of("publish"), clock.instant());
+        GcPlan second = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(second.complete()).isTrue();
         assertThat(second.collected()).isEqualTo(1);
         assertThat(second.sample()).containsExactly(orphan);
@@ -78,15 +79,15 @@ class MarkSweepTest {
     void a_blob_written_between_passes_gets_a_full_interval_of_grace() throws IOException {
         ArtifactStore store = store();
         Publication publication = new Publication(store);
-        var _ = collector().collect(store, List.of("publish"), clock.instant());
+        var _ = collector().collect(store, Known.known(List.of("publish")), clock.instant());
 
         String late = publication.storeBlob(bytes("in flight"));
-        GcPlan second = collector().collect(store, List.of("publish"), clock.instant());
+        GcPlan second = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(second.condemned()).isEqualTo(1);
         assertThat(store.exists("blobs/" + late))
                 .as("a blob younger than one pass is condemned at most, never deleted").isTrue();
 
-        GcPlan third = collector().collect(store, List.of("publish"), clock.instant());
+        GcPlan third = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(third.collected()).isEqualTo(1);
         assertThat(store.exists("blobs/" + late)).isFalse();
     }
@@ -98,13 +99,13 @@ class MarkSweepTest {
         ArtifactStore store = store();
         Publication publication = new Publication(store);
         String blob = publication.storeBlob(bytes("deduped"));
-        var _ = collector().collect(store, List.of("publish"), clock.instant());
+        var _ = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(store.exists("gc/condemned/" + blob)).isTrue();
 
         publication.link("/maven/back.jar", blob);
         assertThat(store.exists("gc/condemned/" + blob)).as("the link un-condemned the blob").isFalse();
 
-        GcPlan next = collector().collect(store, List.of("publish"), clock.instant());
+        GcPlan next = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(next.collected()).isZero();
         assertThat(store.exists("blobs/" + blob)).isTrue();
     }
@@ -116,11 +117,11 @@ class MarkSweepTest {
         ArtifactStore store = store();
         Publication publication = new Publication(store);
         String blob = publication.storeBlob(bytes("npm tarball"));
-        var _ = collector().collect(store, List.of("publish", "npm"), clock.instant());
+        var _ = collector().collect(store, Known.known(List.of("publish", "npm")), clock.instant());
         assertThat(store.exists("gc/condemned/" + blob)).isTrue();
 
         store.writeVersioned("npm/lodash/4.0.0/pointer", blob.getBytes(StandardCharsets.UTF_8), null);
-        GcPlan next = collector().collect(store, List.of("publish", "npm"), clock.instant());
+        GcPlan next = collector().collect(store, Known.known(List.of("publish", "npm")), clock.instant());
         assertThat(next.collected()).isZero();
         assertThat(next.spared()).isEqualTo(1);
         assertThat(store.exists("blobs/" + blob)).isTrue();
@@ -140,7 +141,7 @@ class MarkSweepTest {
         store.writeVersioned("oci/library/app/tags/1.0",
                 ("sha256:" + blob).getBytes(StandardCharsets.UTF_8), null);
 
-        GcPlan first = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        GcPlan first = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(first.complete()).isTrue();
         assertThat(first.condemned()).as("a referenced blob is never even condemned").isZero();
         assertThat(store.exists("gc/condemned/" + blob)).isFalse();
@@ -151,7 +152,7 @@ class MarkSweepTest {
         assertThat(store.list("gc/1/refs/" + blob.substring(0, 2)))
                 .as("the qualified body's hash lands in the bare-hex shard the sweep reads").isNotEmpty();
 
-        GcPlan second = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        GcPlan second = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(second.complete()).isTrue();
         assertThat(second.collected()).isZero();
         assertThat(store.exists("blobs/" + blob))
@@ -166,12 +167,12 @@ class MarkSweepTest {
         ArtifactStore store = store();
         Publication publication = new Publication(store);
         String blob = publication.storeBlob(bytes("a re-tagged manifest"));
-        var _ = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        var _ = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(store.exists("gc/condemned/" + blob)).isTrue();
 
         store.writeVersioned("oci/library/app/tags/latest",
                 ("sha256:" + blob).getBytes(StandardCharsets.UTF_8), null);
-        GcPlan next = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        GcPlan next = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(next.collected()).isZero();
         assertThat(next.spared()).isEqualTo(1);
         assertThat(store.exists("blobs/" + blob)).isTrue();
@@ -194,10 +195,10 @@ class MarkSweepTest {
                 ("sha256:" + manifest).getBytes(StandardCharsets.UTF_8), null);
         store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
-        GcPlan first = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        GcPlan first = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(first.condemned()).as("the config and the layer are condemned; only the manifest is named").isEqualTo(2);
 
-        GcPlan second = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        GcPlan second = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(second.collected()).isEqualTo(2);
         assertThat(store.exists("blobs/" + manifest)).as("the manifest survives (D-022)").isTrue();
         assertThat(store.exists("blobs/" + config)).as("D-027: the live image's config is DELETED").isFalse();
@@ -219,14 +220,14 @@ class MarkSweepTest {
         store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
         GcPlan first = collector(new DocumentReferences())
-                .collect(store, List.of("publish", "oci"), clock.instant());
+                .collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(first.complete()).isTrue();
         assertThat(first.condemned()).as("every blob a live image serves is referenced, so none is condemned").isZero();
         // The lent hashes land in the BARE-hex leading-byte shards the sweep reads, exactly as a pointer body's does.
         assertThat(store.list("gc/1/refs/" + layer.substring(0, 2))).isNotEmpty();
 
         GcPlan second = collector(new DocumentReferences())
-                .collect(store, List.of("publish", "oci"), clock.instant());
+                .collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(second.complete()).isTrue();
         assertThat(second.collected()).isZero();
         assertThat(store.exists("blobs/" + manifest)).as("the manifest survives (D-022)").isTrue();
@@ -251,7 +252,7 @@ class MarkSweepTest {
         String manifest = publication.storeBlob(bytes(manifest(config, layer)));
         store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
-        GcPlan bare = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        GcPlan bare = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(bare.condemned())
                 .as("the negative control: with no lender the whole untagged image is condemned").isEqualTo(3);
 
@@ -263,11 +264,11 @@ class MarkSweepTest {
         lending.writeVersioned("oci/types/" + manifest2, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
         GcPlan first = collector(new DocumentReferences())
-                .collect(lending, List.of("publish", "oci"), clock.instant());
+                .collect(lending, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(first.condemned()).as("a digest-only image is live content, so nothing is condemned").isZero();
 
         GcPlan second = collector(new DocumentReferences())
-                .collect(lending, List.of("publish", "oci"), clock.instant());
+                .collect(lending, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(second.collected()).isZero();
         assertThat(lending.exists("blobs/" + manifest2)).as("the untagged manifest survives").isTrue();
         assertThat(lending.exists("blobs/" + config2)).isTrue();
@@ -287,7 +288,7 @@ class MarkSweepTest {
         store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
         MarkSweepGarbageCollector collector = collector(new DocumentReferences());
-        assertThatThrownBy(() -> collector.collect(store, List.of("publish", "oci"), clock.instant()))
+        assertThatThrownBy(() -> collector.collect(store, Known.known(List.of("publish", "oci")), clock.instant()))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("cannot be enumerated");
         assertThat(store.exists("gc/condemned/" + layer))
@@ -319,7 +320,7 @@ class MarkSweepTest {
         store.writeVersioned("oci/library/app/tags/1.0", ("sha256:" + "0".repeat(64))
                 .getBytes(StandardCharsets.UTF_8), null);
 
-        var _ = collector(recording).collect(store, List.of("publish", "oci"), clock.instant());
+        var _ = collector(recording).collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(asked).containsExactly("oci/library/app/tags/1.0");
     }
 
@@ -335,7 +336,7 @@ class MarkSweepTest {
         String manifest = publication.storeBlob(bytes(manifest(config, layer)));
         store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
-        GcPlan only = collector(new DocumentReferences()).collect(store, List.of("publish"), clock.instant());
+        GcPlan only = collector(new DocumentReferences()).collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(only.condemned()).as("the lender's own root is walked though the caller named only publish").isZero();
         assertThat(store.exists("blobs/" + layer)).isTrue();
     }
@@ -373,8 +374,8 @@ class MarkSweepTest {
         byte[] large = new byte[2048]; // an oversized "pointer" leaf is other metadata, skipped unread
         store.writeVersioned("publish/maven/metadata.xml", large, null);
 
-        var _ = collector().collect(store, List.of("publish"), clock.instant());
-        var _ = collector().collect(store, List.of("publish"), clock.instant());
+        var _ = collector().collect(store, Known.known(List.of("publish")), clock.instant());
+        var _ = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(store.exists("blobs/not-a-content-hash"))
                 .as("a name that is no SHA-256 is never judged, let alone deleted").isTrue();
         assertThat(store.list("gc/condemned")).isEmpty();
@@ -392,13 +393,13 @@ class MarkSweepTest {
         store.writeVersioned("gc/condemned/" + stale,
                 "pass=1\nsince=2026-07-01T00:00:00Z".getBytes(StandardCharsets.UTF_8), null);
 
-        var _ = collector().collect(store, List.of("publish"), clock.instant());
-        GcPlan second = collector().collect(store, List.of("publish"), clock.instant());
+        var _ = collector().collect(store, Known.known(List.of("publish")), clock.instant());
+        GcPlan second = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(second.collected()).isEqualTo(1);
         assertThat(store.exists("gc/condemned/" + stale)).as("a blob-less marker is swept").isFalse();
         assertThat(store.list("gc/1")).as("pass 1's reference shards were superseded and dropped").isEmpty();
 
-        GcPlan converged = collector().collect(store, List.of("publish"), clock.instant());
+        GcPlan converged = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(converged.complete()).isTrue();
         assertThat(converged.isEmpty()).as("a re-run over a converged store changes nothing").isTrue();
         assertThat(store.exists("blobs/" + kept)).isTrue();
@@ -419,18 +420,18 @@ class MarkSweepTest {
         String orphan = publication.storeBlob(bytes("orphan"));
 
         // Pass 1 condemns the orphan; a normal pass 2 would collect it.
-        assertThat(collector().collect(store, List.of("publish"), clock.instant()).condemned()).isEqualTo(1);
+        assertThat(collector().collect(store, Known.known(List.of("publish")), clock.instant()).condemned()).isEqualTo(1);
 
         ArtifactWalk inflating = new GenerationInflatingMarkWalk(
                 new StoreArtifactWalk(5, 4, Duration.ofMinutes(10), clock));
-        GcPlan fenced = new MarkSweepGarbageCollector(inflating).collect(store, List.of("publish"), clock.instant());
+        GcPlan fenced = new MarkSweepGarbageCollector(inflating).collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(fenced.collected()).as("a superseded reference set fences the delete").isZero();
         assertThat(store.exists("blobs/" + orphan))
                 .as("the orphan is deferred, never deleted against dropped shards").isTrue();
 
         // With the shards standing again (a normal walk) the deferred orphan is reclaimed - the fence only ever
         // delays a delete, never loses one - and the referenced blob is untouched throughout.
-        assertThat(collector().collect(store, List.of("publish"), clock.instant()).collected()).isEqualTo(1);
+        assertThat(collector().collect(store, Known.known(List.of("publish")), clock.instant()).collected()).isEqualTo(1);
         assertThat(store.exists("blobs/" + orphan)).isFalse();
         assertThat(store.exists("blobs/" + kept)).isTrue();
     }
@@ -477,13 +478,13 @@ class MarkSweepTest {
     @Test
     void empty_and_reserved_pointer_roots_are_refused() {
         ArtifactStore store = store();
-        assertThatThrownBy(() -> collector().collect(store, List.of(), clock.instant()))
+        assertThatThrownBy(() -> collector().collect(store, Known.known(List.of()), clock.instant()))
                 .isInstanceOf(IllegalArgumentException.class);
         for (String reserved : List.of("blobs", "gc", "walks")) {
-            assertThatThrownBy(() -> collector().collect(store, List.of("publish", reserved), clock.instant()))
+            assertThatThrownBy(() -> collector().collect(store, Known.known(List.of("publish", reserved)), clock.instant()))
                     .as("marking %s as a pointer root is a caller bug", reserved)
                     .isInstanceOf(IllegalArgumentException.class);
-            assertThatThrownBy(() -> collector().plan(store, List.of(reserved), clock.instant()))
+            assertThatThrownBy(() -> collector().plan(store, Known.known(List.of(reserved)), clock.instant()))
                     .isInstanceOf(IllegalArgumentException.class);
         }
     }
