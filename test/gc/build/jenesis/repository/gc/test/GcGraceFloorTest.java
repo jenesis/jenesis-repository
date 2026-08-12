@@ -3,6 +3,7 @@ package build.jenesis.repository.gc.test;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
@@ -42,20 +43,20 @@ class GcGraceFloorTest {
         String orphan = publication.storeBlob(new ByteArrayInputStream("orphan".getBytes(StandardCharsets.UTF_8)));
 
         // Pass 1 condemns the orphan, stamping the marker with this instant.
-        GcPlan first = collector(Duration.ofHours(1)).collect(store, List.of("publish"), clock.instant());
+        GcPlan first = collector(Duration.ofHours(1)).collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(first.condemned()).isEqualTo(1);
         assertThat(store.exists("gc/condemned/" + orphan)).isTrue();
 
         // Pass 2 is a later generation - the generation gap alone would delete now - but only minutes have passed,
         // short of the one-hour floor, so the blob is held.
         clock.advance(Duration.ofMinutes(10));
-        GcPlan second = collector(Duration.ofHours(1)).collect(store, List.of("publish"), clock.instant());
+        GcPlan second = collector(Duration.ofHours(1)).collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(second.collected()).as("under the wall-clock floor, the blob is not yet due").isZero();
         assertThat(store.exists("blobs/" + orphan)).isTrue();
 
         // Once the wall clock passes the floor, a further pass collects it.
         clock.advance(Duration.ofHours(1));
-        GcPlan third = collector(Duration.ofHours(1)).collect(store, List.of("publish"), clock.instant());
+        GcPlan third = collector(Duration.ofHours(1)).collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(third.collected()).isEqualTo(1);
         assertThat(store.exists("blobs/" + orphan)).isFalse();
     }
@@ -69,21 +70,21 @@ class GcGraceFloorTest {
         String orphan = publication.storeBlob(new ByteArrayInputStream("orphan".getBytes(StandardCharsets.UTF_8)));
 
         // Pass 1 condemns the orphan under a one-hour floor, stamping the marker with this instant.
-        assertThat(collector(Duration.ofHours(1)).collect(store, List.of("publish"), clock.instant()).condemned())
+        assertThat(collector(Duration.ofHours(1)).collect(store, Known.known(List.of("publish")), clock.instant()).condemned())
                 .isEqualTo(1);
 
         // Under the floor: the dry run previews nothing due, and a real collect withholds it too - they agree.
         clock.advance(Duration.ofMinutes(10));
-        assertThat(collector(Duration.ofHours(1)).plan(store, List.of("publish"), clock.instant()).collected())
+        assertThat(collector(Duration.ofHours(1)).plan(store, Known.known(List.of("publish")), clock.instant()).collected())
                 .as("under the wall-clock floor the dry run previews nothing due").isZero();
-        assertThat(collector(Duration.ofHours(1)).collect(store, List.of("publish"), clock.instant()).collected())
+        assertThat(collector(Duration.ofHours(1)).collect(store, Known.known(List.of("publish")), clock.instant()).collected())
                 .as("and the collect withholds it too").isZero();
 
         // Past the floor: the dry run previews the blob due, matching the collect that then reclaims it.
         clock.advance(Duration.ofHours(1));
-        assertThat(collector(Duration.ofHours(1)).plan(store, List.of("publish"), clock.instant()).collected())
+        assertThat(collector(Duration.ofHours(1)).plan(store, Known.known(List.of("publish")), clock.instant()).collected())
                 .as("past the floor the dry run previews the blob due").isEqualTo(1);
-        assertThat(collector(Duration.ofHours(1)).collect(store, List.of("publish"), clock.instant()).collected())
+        assertThat(collector(Duration.ofHours(1)).collect(store, Known.known(List.of("publish")), clock.instant()).collected())
                 .as("and the collect reclaims exactly what the dry run previewed").isEqualTo(1);
         assertThat(store.exists("blobs/" + orphan)).isFalse();
     }
@@ -95,9 +96,9 @@ class GcGraceFloorTest {
         String orphan = publication.storeBlob(new ByteArrayInputStream("orphan".getBytes(StandardCharsets.UTF_8)));
 
         // No clock advance at all: the generation gap alone collects on the second pass, exactly as today.
-        assertThat(collector(Duration.ZERO).collect(store, List.of("publish"), clock.instant()).condemned())
+        assertThat(collector(Duration.ZERO).collect(store, Known.known(List.of("publish")), clock.instant()).condemned())
                 .isEqualTo(1);
-        assertThat(collector(Duration.ZERO).collect(store, List.of("publish"), clock.instant()).collected())
+        assertThat(collector(Duration.ZERO).collect(store, Known.known(List.of("publish")), clock.instant()).collected())
                 .isEqualTo(1);
         assertThat(store.exists("blobs/" + orphan)).isFalse();
     }

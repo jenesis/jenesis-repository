@@ -5,6 +5,7 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilityReport;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
@@ -59,7 +60,7 @@ class GcObservabilityTest {
         var _ = publication.storeBlob(bytes("orphan"));
 
         MarkSweepGarbageCollector collector = collector();
-        collector.collect(store, List.of("publish"), clock.instant());
+        collector.collect(store, Known.known(List.of("publish")), clock.instant());
 
         assertThat(collector.metrics()).satisfiesExactlyInAnyOrder(
                 condemned -> {
@@ -90,8 +91,8 @@ class GcObservabilityTest {
         var _ = publication.storeBlob(bytes("orphan"));
 
         MarkSweepGarbageCollector collector = collector();
-        collector.collect(store, List.of("publish"), clock.instant()); // condemn
-        collector.collect(store, List.of("publish"), clock.instant()); // collect
+        collector.collect(store, Known.known(List.of("publish")), clock.instant()); // condemn
+        collector.collect(store, Known.known(List.of("publish")), clock.instant()); // collect
 
         assertThat(collector.metrics())
                 .filteredOn(metric -> metric.name().equals("jenesis.gc.collected"))
@@ -106,7 +107,7 @@ class GcObservabilityTest {
     void every_signal_name_follows_the_jenesis_gc_grammar() throws IOException {
         ArtifactStore store = store();
         MarkSweepGarbageCollector collector = collector();
-        collector.collect(store, List.of("publish"), clock.instant());
+        collector.collect(store, Known.known(List.of("publish")), clock.instant());
 
         assertThat(collector.metrics()).extracting(Metric::name)
                 .allSatisfy(name -> assertThat(name).matches("jenesis\\.gc\\..+"));
@@ -119,7 +120,7 @@ class GcObservabilityTest {
         ArtifactStore store = store();
         var _ = new Publication(store).storeBlob(bytes("orphan"));
         MarkSweepGarbageCollector collector = collector();
-        collector.collect(store, List.of("publish"), clock.instant());
+        collector.collect(store, Known.known(List.of("publish")), clock.instant());
 
         ObservabilityReport report = ObservabilityReport.from(List.of(collector));
 

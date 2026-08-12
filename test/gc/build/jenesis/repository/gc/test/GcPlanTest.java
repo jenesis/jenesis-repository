@@ -3,6 +3,7 @@ package build.jenesis.repository.gc.test;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
@@ -59,13 +60,13 @@ class GcPlanTest {
         publication.link("/maven/kept.jar", kept);
         String orphan = publication.storeBlob(bytes("orphan"));
 
-        GcPlan before = collector().plan(store, List.of("publish"), clock.instant());
+        GcPlan before = collector().plan(store, Known.known(List.of("publish")), clock.instant());
         assertThat(before.complete()).as("no pass ever ran - there is no earlier judgment to preview").isFalse();
         assertThat(before.isEmpty()).isTrue();
 
-        var _ = collector().collect(store, List.of("publish"), clock.instant());
+        var _ = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         Map<String, String> frozen = snapshot(store, "");
-        GcPlan plan = collector().plan(store, List.of("publish"), clock.instant());
+        GcPlan plan = collector().plan(store, Known.known(List.of("publish")), clock.instant());
         assertThat(plan.complete()).isTrue();
         assertThat(plan.collected()).isEqualTo(1);
         assertThat(plan.sample()).containsExactly(orphan);
@@ -74,11 +75,11 @@ class GcPlanTest {
         assertThat(snapshot(store, "")).as("a dry run writes nothing - not a marker, not a checkpoint")
                 .isEqualTo(frozen);
 
-        GcPlan applied = collector().collect(store, List.of("publish"), clock.instant());
+        GcPlan applied = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(applied.collected()).as("the collection reclaims exactly what the plan previewed")
                 .isEqualTo(plan.collected());
         assertThat(applied.sample()).isEqualTo(plan.sample());
-        assertThat(collector().plan(store, List.of("publish"), clock.instant()).collected())
+        assertThat(collector().plan(store, Known.known(List.of("publish")), clock.instant()).collected())
                 .as("nothing is due once the store converged").isZero();
     }
 
@@ -87,11 +88,11 @@ class GcPlanTest {
         ArtifactStore store = store();
         Publication publication = new Publication(store);
         String blob = publication.storeBlob(bytes("deduped"));
-        var _ = collector().collect(store, List.of("publish"), clock.instant());
-        assertThat(collector().plan(store, List.of("publish"), clock.instant()).collected()).isEqualTo(1);
+        var _ = collector().collect(store, Known.known(List.of("publish")), clock.instant());
+        assertThat(collector().plan(store, Known.known(List.of("publish")), clock.instant()).collected()).isEqualTo(1);
 
         publication.link("/maven/back.jar", blob);
-        assertThat(collector().plan(store, List.of("publish"), clock.instant()).collected())
+        assertThat(collector().plan(store, Known.known(List.of("publish")), clock.instant()).collected())
                 .as("the write path un-condemned the blob, so nothing is due").isZero();
     }
 }

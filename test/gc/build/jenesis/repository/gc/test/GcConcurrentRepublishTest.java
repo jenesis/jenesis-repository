@@ -3,6 +3,7 @@ package build.jenesis.repository.gc.test;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
@@ -45,14 +46,14 @@ class GcConcurrentRepublishTest {
         String orphan = publication.storeBlob(new ByteArrayInputStream("orphan".getBytes(StandardCharsets.UTF_8)));
 
         // Pass one condemns the orphan (writes gc/condemned/<orphan>); it is never deleted by the pass that judged it.
-        assertThat(collector().collect(store, List.of("publish"), clock.instant()).condemned()).isEqualTo(1);
+        assertThat(collector().collect(store, Known.known(List.of("publish")), clock.instant()).condemned()).isEqualTo(1);
         assertThat(store.exists("gc/condemned/" + orphan)).isTrue();
 
         // Pass two would collect it - but a dedup re-publish clears the marker at the exact moment the sweep first
         // reads it (before its lease-fence round-trip and final re-read), the interleaving the write path un-condemns
         // through. The re-read must catch the now-absent marker and spare the re-referenced blob.
         MarkerClearingStore racing = new MarkerClearingStore(store, "gc/condemned/" + orphan);
-        GcPlan second = collector().collect(racing, List.of("publish"), clock.instant());
+        GcPlan second = collector().collect(racing, Known.known(List.of("publish")), clock.instant());
 
         assertThat(second.collected()).as("the mid-sweep re-referenced blob is not collected").isZero();
         assertThat(store.exists("blobs/" + orphan))

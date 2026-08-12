@@ -7,6 +7,7 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.WalkPass;
@@ -150,14 +151,20 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
     }
 
     @Override
-    public GcPlan plan(ArtifactStore store, List<String> pointerRoots, Instant now) throws IOException {
-        roots(pointerRoots);
+    public GcPlan plan(ArtifactStore store, Known<List<String>> pointerRoots, Instant now) throws IOException {
+        switch (pointerRoots) {
+            case Known.Unknown<List<String>> unknown -> {
+                return GcPlan.refused(unknown); // the dry run of a refusal is a refusal, not an empty plan
+            }
+            case Known.Present<List<String>> present -> roots(present.value());
+            case Known.Absent<List<String>> _ -> throw new IllegalArgumentException(NO_ROOTS);
+        }
         Optional<WalkPass> mark = walk.pass(store, MARK);
         long judged = mark.isEmpty() ? 0
                 : mark.get().complete() ? mark.get().generation()
                 : lastCompletedGeneration(store, mark.get().generation());
         if (judged <= 0) {
-            return new GcPlan(false, 0, 0, 0, List.of()); // no completed mark ever ran - nothing is due yet
+            return GcPlan.of(false, 0, 0, 0, List.of()); // no completed mark ever ran - nothing is due yet
         }
         References references = new References(store, judged);
         long[] due = {0};
@@ -182,7 +189,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
                 sample.add(name);
             }
         });
-        return new GcPlan(true, 0, 0, due[0], sample);
+        return GcPlan.of(true, 0, 0, due[0], sample);
     }
 
     /** The generation of the most recent mark whose reference shards still stand - the largest {@code gc/<n>} below
@@ -208,14 +215,26 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
     }
 
     @Override
-    public GcPlan collect(ArtifactStore store, List<String> pointerRoots, Instant now) throws IOException {
-        WalkPass marked = walk.walk(store, MARK, markRoots(pointerRoots), new Mark(store));
+    public GcPlan collect(ArtifactStore store, Known<List<String>> pointerRoots, Instant now) throws IOException {
+        List<String> named;
+        switch (pointerRoots) {
+            case Known.Unknown<List<String>> unknown -> {
+                // The root set could not be named in full, so some namespace's serving pointers are invisible to the
+                // mark and every blob beneath them would read as unreferenced. Refuse before the mark begins:
+                // nothing is walked, nothing is condemned, nothing is deleted, and the reason travels back with the
+                // plan. The refusal is here - at the deletion - rather than left to every caller to remember.
+                return GcPlan.refused(unknown);
+            }
+            case Known.Present<List<String>> present -> named = present.value();
+            case Known.Absent<List<String>> _ -> throw new IllegalArgumentException(NO_ROOTS);
+        }
+        WalkPass marked = walk.walk(store, MARK, markRoots(named), new Mark(store));
         if (!marked.complete()) {
             // Another node still holds mark segments: the reference shards are not yet complete, and judging
             // blobs against an incomplete mark could condemn (though never delete) everything it missed. Report
             // the partial pass and let the next interval - or the node that finishes - do the judging.
             observe(now, false);
-            return new GcPlan(false, 0, 0, 0, List.of());
+            return GcPlan.of(false, 0, 0, 0, List.of());
         }
         Sweep sweep = new Sweep(store, marked.generation(), now);
         WalkPass swept = walk.walk(store, SWEEP, List.of("blobs"), sweep);
@@ -223,11 +242,11 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
         condemnedStanding = sweep.standing;
         if (!swept.complete()) {
             observe(now, false);
-            return new GcPlan(false, sweep.condemned, sweep.spared, sweep.collected, sweep.sample);
+            return GcPlan.of(false, sweep.condemned, sweep.spared, sweep.collected, sweep.sample);
         }
         converge(store, marked.generation());
         observe(now, true);
-        return new GcPlan(true, sweep.condemned, sweep.spared, sweep.collected, sweep.sample);
+        return GcPlan.of(true, sweep.condemned, sweep.spared, sweep.collected, sweep.sample);
     }
 
     /** Stamp the {@code jenesis.gc.*} observability state after a collect pass: the last-run instant the {@code
@@ -305,11 +324,17 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
         }
     }
 
+    /** What an answered-but-empty root set means. {@code publish} always exists, so both {@link Known.Absent} ("the
+     *  question was asked and there are no pointer roots") and a {@link Known.Present} empty list are contradictions
+     *  rather than deployment states - and, unlike an unanswerable set, they are caller bugs, so they fail loudly
+     *  (&sect;9) instead of being absorbed into a refusal an operator would have to go looking for. */
+    private static final String NO_ROOTS = "garbage collection needs at least one pointer root, e.g. publish";
+
     /** Validate and normalise the caller's pointer roots: at least one, and never one of the store namespaces the
      *  collector itself owns or judges - marking {@code blobs} as a pointer root is a caller bug, not a layout. */
     private static List<String> roots(List<String> pointerRoots) {
         if (pointerRoots == null || pointerRoots.isEmpty()) {
-            throw new IllegalArgumentException("garbage collection needs at least one pointer root, e.g. publish");
+            throw new IllegalArgumentException(NO_ROOTS);
         }
         return pointerRoots.stream().distinct().sorted().map(MarkSweepGarbageCollector::root).toList();
     }
@@ -512,7 +537,14 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
          *  safe delete while another node's newer mark is only in flight (its converge has not run) - which the next
          *  pass, marking afresh, re-judges and reclaims. Correctness over a marginal deletion this round. */
         private boolean referencesStillStand() throws IOException {
-            return walk.pass(store, MARK).map(WalkPass::generation).orElse(0L) <= generation;
+            // An unreadable mark manifest is not "no mark has advanced past me". walk.pass answers an empty Optional
+            // both when no pass exists and when its manifest could not be read or parsed, and this is the fence
+            // immediately in front of the delete - so an .orElse(0L) here would read a corrupt or unreachable
+            // manifest as a lease that still stands and delete against reference shards that may already be gone.
+            // Absence of the proof is not proof: with nothing to judge the lease by, the blob is spared and the next
+            // pass re-judges it. We can only be here inside a sweep that followed a completed mark, so an empty
+            // answer is always the unreadable case rather than a genuinely fresh store.
+            return walk.pass(store, MARK).map(pass -> pass.generation() <= generation).orElse(false);
         }
     }
 

@@ -5,6 +5,7 @@ import build.jenesis.repository.format.oci.OciFormat;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
 import module org.junit.jupiter.api;
@@ -308,10 +309,10 @@ class OciBlobReferencesTest {
         String layer = pushBlob("library/app", "e2e layer".getBytes(StandardCharsets.UTF_8));
         String manifest = pushManifest("library/app", "1.0", manifest(config, layer));
 
-        GcPlan first = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        GcPlan first = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(first.complete()).isTrue();
         assertThat(first.condemned()).as("nothing a live image serves is even condemned").isZero();
-        GcPlan second = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        GcPlan second = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(second.complete()).isTrue();
         assertThat(second.collected()).isZero();
 
@@ -333,9 +334,9 @@ class OciBlobReferencesTest {
         // collected exactly as before.
         String orphan = pushBlob("library/app", "an abandoned layer".getBytes(StandardCharsets.UTF_8));
 
-        GcPlan first = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        GcPlan first = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(first.condemned()).isEqualTo(1);
-        GcPlan second = collector().collect(store, List.of("publish", "oci"), clock.instant());
+        GcPlan second = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(second.collected()).isEqualTo(1);
         assertThat(store.exists("blobs/" + orphan)).isFalse();
     }

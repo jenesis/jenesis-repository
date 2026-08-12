@@ -3,6 +3,7 @@ package build.jenesis.repository.gc.test;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
@@ -63,7 +64,7 @@ class GcIncompleteMarkPlanTest {
         String orphan = publication.storeBlob(bytes("orphan"));
 
         // A first full collect: mark generation 1 completes (its reference shards under gc/1), the orphan is condemned.
-        assertThat(collector().collect(store, List.of("publish"), clock.instant()).complete()).isTrue();
+        assertThat(collector().collect(store, Known.known(List.of("publish")), clock.instant()).complete()).isTrue();
         assertThat(store.exists("gc/condemned/" + orphan)).isTrue();
         assertThat(store.list("gc/1")).as("generation 1's reference shards stand").isNotEmpty();
 
@@ -75,7 +76,7 @@ class GcIncompleteMarkPlanTest {
         });
 
         // plan() must fall back to generation 1 (its shards still stand) and preview the orphan condemned by pass 1.
-        GcPlan plan = collector().plan(store, List.of("publish"), clock.instant());
+        GcPlan plan = collector().plan(store, Known.known(List.of("publish")), clock.instant());
         assertThat(plan.complete()).as("a completed earlier mark is available to judge by").isTrue();
         assertThat(plan.collected()).isEqualTo(1);
         assertThat(plan.sample()).containsExactly(orphan);
@@ -90,7 +91,7 @@ class GcIncompleteMarkPlanTest {
         String orphan = publication.storeBlob(bytes("orphan"));
 
         // First full collect: mark generation 1 completes (shards under gc/1 name the kept blob), orphan condemned.
-        assertThat(collector().collect(store, List.of("publish"), clock.instant()).complete()).isTrue();
+        assertThat(collector().collect(store, Known.known(List.of("publish")), clock.instant()).complete()).isTrue();
         assertThat(store.list("gc/1")).isNotEmpty();
 
         // A referenced blob that also carries a stale condemned marker (condemned earlier, re-referenced but its
@@ -110,7 +111,7 @@ class GcIncompleteMarkPlanTest {
         assertThat(clockGen).as("the corrupt manifest re-based the mark generation onto the wall clock")
                 .isEqualTo(clock.instant().toEpochMilli()).isGreaterThan(2);
 
-        GcPlan plan = collector().plan(store, List.of("publish"), clock.instant());
+        GcPlan plan = collector().plan(store, Known.known(List.of("publish")), clock.instant());
         assertThat(plan.complete()).isTrue();
         assertThat(plan.collected()).as("only the orphan is due - not the referenced-but-condemned blob")
                 .isEqualTo(1);
