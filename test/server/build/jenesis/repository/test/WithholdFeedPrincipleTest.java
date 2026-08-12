@@ -79,7 +79,7 @@ class WithholdFeedPrincipleTest {
         String withheld = stripComments(Files.readString(source.resolve(MARKER_OWNER)));
 
         String markBody = methodBody(withheld, "void mark(");
-        String clearBody = methodBody(withheld, "void clear(");
+        String clearBody = methodBody(withheld, "boolean clear(");
 
         assertThat(markBody)
                 .as("Withheld.mark must fire the transition-ON withhold-change signal after the durable write - a mark "
