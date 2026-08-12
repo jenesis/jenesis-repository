@@ -51,20 +51,45 @@ public final class Withheld {
         }
     }
 
-    /** Lift the withhold marker for this hash so blobs-namespace serving resumes. Idempotent. On an actual transition
-     *  (the marker was present) the withhold-change feed's transition-OFF leg fires after the durable delete.
+    /**
+     * Lift the withhold marker for this hash so blobs-namespace serving resumes, <em>unless</em> another live holder
+     * still claims these bytes. Idempotent, and returns whether a marker was actually lifted. On an actual transition
+     * (the marker was present and nothing else holds it) the withhold-change feed's transition-OFF leg fires after
+     * the durable delete.
      *
-     *  <p>Deliberately NOT gated on the marker body: a marker may carry a non-empty disposition body (an OCI/older hold
-     *  writes {@code REJECT} or similar), and any present marker - whatever its body - clears. The clear is a present
-     *  read-then-delete rather than a CAS on the transition edge, so under a rare concurrent double-clear both observers
-     *  could fire {@code onWithholdCleared}; that is bounded and idempotent (the feed consumer re-derives from truth),
-     *  and it is what P3 shipped - the exactly-once discipline the {@link #mark} CAS enforces is only required on the
-     *  transition-ON leg (the actual finding). */
-    public static void clear(ArtifactStore store, String hash) throws IOException {
-        if (store.readVersioned(ROOT + hash).isPresent()) {
-            store.delete(ROOT + hash);
-            Publication.notifyWithholdCleared(ArtifactDescriptor.at(null, null).withBlob(hash, -1L), store);
+     * <p><strong>The proof is a parameter, and it must be an answered one.</strong> The marker is keyed by content
+     * hash, so it is one marker for the bytes wherever they are served: lifting it while a byte-identical sibling
+     * coordinate is still held un-withholds that sibling too. {@code otherHolder} is the answer to "which other live
+     * holder still claims this hash?" - {@link Known.Present} with the holding path (nothing is lifted, and this
+     * answers {@code false}), or {@link Known.Absent} (the marker is lifted). A {@link Known.Unknown} - the review
+     * queue could not be enumerated, the module that would have answered is not installed - is <em>not</em> a
+     * {@link Known.Determined} and therefore does not fit this parameter at all: a release that cannot prove
+     * holderlessness is a compile error at the call site rather than a marker lifted on a guess. That is the whole
+     * mechanism; there is deliberately no overload taking a bare {@code boolean} or no proof at all, because the
+     * guard used to live in each caller and a caller that forgot it discloses held bytes.
+     *
+     * <p>Deliberately NOT gated on the marker body: a marker may carry a non-empty disposition body (an OCI/older hold
+     * writes {@code REJECT} or similar), and any present marker - whatever its body - clears. The clear is a present
+     * read-then-delete rather than a CAS on the transition edge, so under a rare concurrent double-clear both observers
+     * could fire {@code onWithholdCleared}; that is bounded and idempotent (the feed consumer re-derives from truth),
+     * and it is what P3 shipped - the exactly-once discipline the {@link #mark} CAS enforces is only required on the
+     * transition-ON leg (the actual finding).
+     *
+     * <p>The clear is still a read-then-write against a concurrent enforcement sweep, so a caller that must close
+     * that race re-runs its guard against fresh truth afterwards and {@link #mark re-marks} - see the OCI
+     * accept-clear and the downstream hold-clear sites, which both do.
+     */
+    public static boolean clear(ArtifactStore store, String hash, Known.Determined<String> otherHolder)
+            throws IOException {
+        if (otherHolder.answer().isPresent()) {
+            return false;   // a byte-identical sibling coordinate still holds these bytes
         }
+        if (store.readVersioned(ROOT + hash).isEmpty()) {
+            return false;
+        }
+        store.delete(ROOT + hash);
+        Publication.notifyWithholdCleared(ArtifactDescriptor.at(null, null).withBlob(hash, -1L), store);
+        return true;
     }
 
     /** Whether the blob with this hash is withheld - the read a blobs-namespace serve makes before streaming, so a
