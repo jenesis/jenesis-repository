@@ -3,6 +3,7 @@ package build.jenesis.repository.store.test;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.Withheld;
@@ -68,8 +69,12 @@ class WithholdFeedTest {
     @Test
     void clearing_a_present_marker_fires_onWithholdCleared_once_and_a_re_clear_is_silent() throws IOException {
         Withheld.mark(store, HASH);
-        Withheld.clear(store, HASH);
-        Withheld.clear(store, HASH);   // clear of an unmarked hash is a no-op
+
+        assertThat(Withheld.clear(store, HASH, Known.absent())).isTrue();
+        assertThat(Withheld.clear(store, HASH, Known.absent()))
+                .as("clear of an unmarked hash is a no-op").isFalse();
+        assertThat(Withheld.clear(store, HASH, Known.known("/v2/sibling/app/manifests/1.0")))
+                .as("a named live holder refuses the clear at the primitive, not at the caller").isFalse();
 
         assertThat(RecordingWithholdObserver.CLEARED)
                 .as("transition-only: a clear of a present marker fires once, a re-clear is silent").hasSize(1);

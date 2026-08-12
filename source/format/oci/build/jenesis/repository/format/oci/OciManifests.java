@@ -3,6 +3,7 @@ package build.jenesis.repository.format.oci;
 import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.ServableNames;
@@ -42,6 +43,8 @@ import tools.jackson.databind.json.JsonMapper;
  * one screen rather than three raw writes.
  */
 final class OciManifests {
+
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(OciManifests.class);
 
     private static final String OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
 
@@ -141,16 +144,35 @@ final class OciManifests {
      * the clear happens exactly as before, so it is safe either way. The same-path probe reads only THIS path's
      * pointer: a byte-identical sibling image held under a DIFFERENT alias keeps its own {@code /quarantine} pointer
      * body == hex, which the same-path probe never sees, so an accepted re-push under a released alias would
-     * un-withhold the still-held sibling. The cross-alias scan ({@code Publication.quarantineAliasExists} - the
+     * un-withhold the still-held sibling. The cross-alias scan ({@code Publication.quarantineAlias} - the
      * downstream release paths' {@code withheldByAnotherAlias} proof, homed in the free store that owns the
      * {@code /quarantine} convention) closes that: clear only when no OTHER live quarantine pointer outside this
      * manifest's own served path still holds the hash. Fail-closed - it only ever NARROWS the clear, so worst case a
      * marker that should clear waits for the review flow.
+     *
+     * <p>The scan answers three ways and each one is written out here, because the third used to be the second. A
+     * review queue that did not enumerate whole cannot claim "no other alias holds these bytes", and that claim is
+     * exactly what lifts a content-addressed hold - so an unenumerable queue leaves the marker and says so. The two
+     * unknown arms below are deliberately <em>opposite</em>: before the clear it means do not clear, after the clear
+     * it means re-mark. Both are the fail-closed reading of the same uncertainty, which is why neither can be a
+     * default.
      */
     private static void clearStaleHold(ArtifactStore store, String path, String hex) throws IOException {
-        if (new ServableNames(store).disclosable(path, ServableNames.Policy.HIDE_WITHHELD)
-                && !new Publication(store).quarantineAliasExists(hex, Set.of(path))) {
-            Withheld.clear(store, hex);
+        if (!new ServableNames(store).disclosable(path, ServableNames.Policy.HIDE_WITHHELD)) {
+            return;
+        }
+        Known.Determined<String> otherAlias;
+        switch (new Publication(store).quarantineAlias(hex, Set.of(path))) {
+            case Known.Unknown<String> unknown -> {
+                // Not a courtesy arm: an Unknown does not fit Withheld.clear's parameter, so this is the only thing
+                // that compiles. Leaving a marker that should have cleared is the recoverable direction - the review
+                // flow releases it - where clearing one that should have stayed discloses held bytes.
+                LOG.warn("oci accept-clear: leaving withheld/{} in place for {} - {}", hex, path, unknown.detail());
+                return;
+            }
+            case Known.Determined<String> determined -> otherAlias = determined;
+        }
+        if (Withheld.clear(store, hex, otherAlias)) {
             // The guard above is a read-then-clear: a concurrent enforce sweep (KEV/license/reachability) that
             // links a /quarantine pointer for this hash AFTER the guard read but before this clear would leave
             // that hold's still-live claim with its content-addressed marker gone - and the OCI serve gate keys
@@ -172,9 +194,11 @@ final class OciManifests {
             // re-established. The no-hold case (the free-standing rule-change re-push that clears a stale REJECT
             // marker) finds neither face and the marker stays cleared. Per-entry hostile pointers are contained
             // inside the seam faces; a genuine store IOException propagates (fail-closed, exactly as the guard
-            // read does) rather than re-marking on an error.
+            // read does) rather than re-marking on an error. A re-verify that cannot enumerate the queue re-marks
+            // too - after the marker is already gone, "I cannot prove nothing holds it" and "something holds it"
+            // have the same safe answer, which is the mirror image of the arm above.
             if (!new ServableNames(store).disclosable(path, ServableNames.Policy.HIDE_WITHHELD)
-                    || new Publication(store).quarantineAliasExists(hex, Set.of())) {
+                    || !(new Publication(store).quarantineAlias(hex, Set.of()) instanceof Known.Absent<String>)) {
                 Withheld.mark(store, hex);
             }
         }
