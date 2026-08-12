@@ -46,7 +46,41 @@ public final class FilesystemArtifactStore implements ArtifactStore {
 
     @Override
     public boolean exists(String key) {
-        return Files.isRegularFile(resolve(key));
+        Path path = resolve(key);
+        try {
+            return regularFile(path);
+        } catch (IOException failure) {
+            // The signature carries no checked exception - and widening it would not help, since the object-store
+            // backends fail with their SDK's own unchecked types - so unchecked is how this backend reaches the same
+            // visibility the other three already have.
+            throw new UncheckedIOException("Cannot tell whether an object is stored at " + path, failure);
+        }
+    }
+
+    /**
+     * Whether a regular file is stored at this path, telling <em>"there is nothing here"</em> apart from <em>"I could
+     * not look"</em> - the discrimination {@link Files#isRegularFile} does not make and cannot be asked to make.
+     *
+     * <p>{@code Files.isRegularFile} answers {@code false} for a permission refusal, an I/O error and a stale or
+     * disconnected mount exactly as it does for an absent object, because it swallows every {@link IOException}
+     * internally. That fusion is the whole defect class this store's contract clause 6 forbids: the object stores
+     * already re-throw everything that is not a 404, and a screen that fails closed on a store failure cannot do so
+     * if the store answers a confident {@code false} instead. It matters most where an absent answer <em>destroys</em>
+     * or <em>discloses</em>: the un-condemn probe a re-publish makes before linking a blob the collector condemned,
+     * the reference lending an image's manifest does for its layers, and the withhold and blob-present probes every
+     * serve screen runs.
+     *
+     * <p>Both {@code ENOENT} and {@code ENOTDIR} - nothing at the key, and an ancestor of the key is itself a stored
+     * object, which is ordinary in the {@code publish/} namespace where a pointer and a path below it coexist - arrive
+     * as {@link NoSuchFileException} and are genuinely absent. Everything else is a failure to look and is raised,
+     * checked here and mapped by each caller to whatever its own signature can carry.
+     */
+    private static boolean regularFile(Path path) throws IOException {
+        try {
+            return Files.readAttributes(path, BasicFileAttributes.class).isRegularFile();
+        } catch (NoSuchFileException | NotDirectoryException _) {
+            return false;
+        }
     }
 
     @Override
@@ -157,27 +191,30 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         }
     }
 
+    /** An empty child set and an unreadable container are different facts, and the difference decides deletions: the
+     *  collector loads a whole reference shard through {@link #list}, and a shard that reads empty because the
+     *  directory could not be opened marks every blob under that leading byte unreferenced. A container that is
+     *  absent or is itself a stored object genuinely has no children; anything else surfaces. */
     @Override
     public List<String> list(String prefix) {
         Path dir = resolve(prefix);
-        if (!Files.isDirectory(dir)) {
-            return List.of();
-        }
         try (Stream<Path> entries = Files.list(dir)) {
             return entries.map(path -> path.getFileName().toString())
                     // Skip an atomic write's in-flight .upload*.tmp file, a sibling here until it is renamed
                     // into place, so a concurrent listing never returns it as if it were a stored entry.
                     .filter(name -> !(name.startsWith(".upload") && name.endsWith(".tmp")))
                     .sorted().toList();
-        } catch (IOException _) {
+        } catch (NoSuchFileException | NotDirectoryException _) {
             return List.of();
+        } catch (IOException failure) {
+            throw new UncheckedIOException("Cannot enumerate the children of " + dir, failure);
         }
     }
 
     @Override
     public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
         Path dir = resolve(prefix);
-        if (limit <= 0 || !Files.isDirectory(dir)) {
+        if (limit <= 0) {
             return;
         }
         // A directory listing is unordered and a filesystem has no start-at seek, so select the page in one
@@ -198,8 +235,12 @@ public final class FilesystemArtifactStore implements ArtifactStore {
                     smallest.pollLast();
                 }
             }
-        } catch (IOException _) {
-            return; // mirror list(): a vanished or unreadable container pages as empty
+        } catch (NoSuchFileException | NotDirectoryException _) {
+            return; // mirror list(): a vanished container, or one that is itself a stored object, pages as empty
+        } catch (IOException failure) {
+            // NOT mirrored from the old list(): a short page is how the shared walk learns a container is drained,
+            // so an unreadable directory paging as empty ends a traversal early and reports it as exhausted.
+            throw new UncheckedIOException("Cannot page the children of " + dir, failure);
         }
         smallest.forEach(consumer);
     }
@@ -207,10 +248,13 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     @Override
     public Optional<Versioned> readVersioned(String key) throws IOException {
         Path path = resolve(key);
-        if (!Files.isRegularFile(path)) {
+        // Through the same discrimination exists() makes, and for the same reason: an unreadable pointer answering
+        // Optional.empty() is how "the marker is not there, serve it" and "no other alias holds these bytes, lift the
+        // hold" get decided on a store that could not be read. Absence is a value; a failure to look is not.
+        if (!regularFile(path)) {
             return Optional.empty();
         }
-        // The isRegularFile probe and the token/content reads are not one atomic operation: a concurrent delete can
+        // The regular-file probe and the token/content reads are not one atomic operation: a concurrent delete can
         // vanish the file in the window between the probe and the reads (or between reading the token and the bytes),
         // which throws NoSuchFileException (or, on some providers, FileNotFoundException) where the contract - and the
         // object-store backends' 404 -> empty behaviour - is Optional.empty(). Map that race to absent, so a reader

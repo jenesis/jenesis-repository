@@ -55,7 +55,13 @@ import module java.base;
  *     and {@link #readVersioned} is {@link Optional#empty()} - including when a concurrent delete vanishes the object
  *     mid-read. Reading the <em>body</em> of an absent key is the one exception: {@link #read} and {@link #open}
  *     throw {@link IOException} rather than serving an empty stream, because a caller streaming a missing artifact
- *     must not silently transfer zero bytes as if they were the artifact.</li>
+ *     must not silently transfer zero bytes as if they were the artifact.
+ *     <b>Inability to answer is not absence</b> and shares none of these sentinels - see clause 6. The three
+ *     signatures that carry no checked exception ({@link #exists}, {@link #list}, {@link #page}) are exactly the ones
+ *     where the two would otherwise be indistinguishable, so a backend that cannot look raises an unchecked
+ *     exception there: {@link UncheckedIOException} on the filesystem, the SDK's own type on the object stores.
+ *     Widening those signatures would not help, because the object stores fail with unchecked SDK types either
+ *     way.</li>
  * <li><b>Streaming (&sect;1).</b> {@link #write}, {@link #writeBlob}, {@link #read} and {@link #open} are the
  *     artifact-sized paths and must not materialise a body: a backend that needs a length or a hash before it can
  *     upload spools to disk, never to the heap, so the JVM stays bounded under a multi-gigabyte publish.
@@ -68,11 +74,23 @@ import module java.base;
  *     screened through {@link #segment}, and a key through {@link #key}, so neither a traversal-shaped scope name nor
  *     a traversal-shaped key can address storage outside the subspace it was handed.</li>
  * <li><b>Error visibility (&sect;9).</b> Nothing on a correctness-bearing path is swallowed. Only a genuine
- *     object-level miss reads as absent: a throttle, an authorization failure or a missing bucket/container must
- *     surface, never degrade {@link #exists} to {@code false}, {@link #size} to {@code -1} or {@link #writeVersioned}
+ *     object-level miss reads as absent: a throttle, an authorization failure, a permission refusal, a missing
+ *     bucket/container or a stale mount must surface, never degrade {@link #exists} to {@code false}, {@link #size}
+ *     to {@code -1}, {@link #list} or {@link #page} to an empty child set, {@link #readVersioned} to
+ *     {@link Optional#empty()}, or {@link #writeVersioned}
  *     to a {@code false} the caller would retry into exhaustion. A write that fails commits nothing at the key: an
  *     aborted upload leaves it absent, never a truncated body a later content-addressed probe would accept as
- *     already stored.</li>
+ *     already stored.
+ *     <b>What "genuine miss" means on each read is exact, because everything above it is built on it.</b> An absent
+ *     object and an object below a key that is itself an object (ordinary in the {@code publish/} namespace, where a
+ *     pointer and a path beneath it coexist) are misses; a container that is absent or is itself an object has no
+ *     children. Nothing else is. A degraded answer here is not a degraded read: an empty listing is how a bounded
+ *     traversal learns a container is drained and how a reference scan learns a blob is unreferenced, a {@code false}
+ *     from {@link #exists} is how a serve screen learns nothing is withheld and how a re-publish learns its blob was
+ *     never condemned - so a swallowed failure on any of them deletes artifact bytes or serves held ones. This is
+ *     stated per-read rather than as a platitude because the default backend once read every one of these failures as
+ *     an absence, through {@code Files.isRegularFile} and a {@code catch (IOException) -> empty}, and every
+ *     fail-closed screen above it was therefore fiction on a filesystem deployment.</li>
  * <li><b>Lifecycle / ownership.</b> The composition builds one store through {@link ArtifactStoreProvider} and keeps
  *     it for the life of the process; a store may own the client, pool or threads its backend needs. A
  *     {@link #scope}d view is a cheap derived value, not a resource: callers create them freely and close nothing.
