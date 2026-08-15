@@ -9,7 +9,7 @@
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.proxy
- * @jenesis.alias wiremock.standalone org.wiremock/wiremock-standalone 4.0.0-beta.38
+ * @jenesis.alias wiremock.standalone org.wiremock/wiremock-standalone
  * @jenesis.pin net.bytebuddy/byte-buddy 1.18.3 SHA-256/d78396e3c5bce3f2865c9186647481e5589d34cacc632484715b686108d17c66
  * @jenesis.pin org.apiguardian/apiguardian-api 1.1.2 SHA-256/b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38
  * @jenesis.pin org.assertj.core 3.27.7
