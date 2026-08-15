@@ -31,7 +31,8 @@
  * @jenesis.pin org.apache.httpcomponents.core5/httpcore5 5.4.2 SHA-256/7c34a25506e7207b6748cef9e91163ed03081bee805cef930d82e1d8761d62f1
  * @jenesis.pin org.apache.httpcomponents.core5/httpcore5-h2 5.4 SHA-256/2e0f4ace15db2d1609c2b06eca6012e7582afe4a99ad8d15073f62dd8edb3460
  * @jenesis.pin org.apiguardian/apiguardian-api 1.1.2 SHA-256/b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38
- * @jenesis.pin org.javassist/javassist 3.28.0-GA SHA-256/57d0a9e9286f82f4eaa851125186997f811befce0e2060ff0a15a77f5a9dd9a7
+ * @jenesis.pin org.javassist 3.32.0-GA
+ * @jenesis.pin org.javassist/javassist 3.32.0-GA SHA-256/712ef75bc3406782bb4529b0408cce8155b53f2124c6ae03d2c5fbfa13d62c1c
  * @jenesis.pin org.junit.jupiter/junit-jupiter-api 5.8.2 SHA-256/1808ee87e0f718cd6e25f3b75afc17956ac8a3edc48c7e9bab9f19f9a79e3801
  * @jenesis.pin org.junit.platform/junit-platform-commons 1.8.2 SHA-256/d2e015fca7130e79af2f4608dc54415e4b10b592d77333decb4b1a274c185050
  * @jenesis.pin org.mockito/mockito-core 4.6.0 SHA-256/125899de3dad49e375ad9ed34004d2ed582fa60b1f070a5b344bd928f9eac876
