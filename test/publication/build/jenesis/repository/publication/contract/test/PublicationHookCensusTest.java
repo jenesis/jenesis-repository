@@ -9,6 +9,9 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.PublishInterceptor;
+import build.jenesis.repository.store.testkit.Falsification;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
+import build.jenesis.repository.store.testkit.Mutant;
 import build.jenesis.repository.store.testkit.PublicationHookContract;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.Delivery;
@@ -19,6 +22,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -291,6 +295,316 @@ class PublicationHookCensusTest {
                 .as("and the unsupported class stays unsupported until T-107 proves a pre-commit intent machine at "
                         + "every crash point - writing an outbox inside an after-commit callback is not that")
                 .isFalse();
+    }
+
+    // --- the falsification declaration (D-135) ---------------------------------------------------------------------
+
+    /**
+     * The contract properties no substitution for a <em>hook</em> can falsify, each with what makes it unfalsifiable
+     * rather than merely un-mutated. It is a literal, so shrinking it - or growing it - is a deliberate edit in front
+     * of whoever reviews the kit.
+     *
+     * <p><b>Every entry is one claim, and they are all the same claim:</b> the property is about
+     * {@link Publication}'s own commit choreography rather than about the hook. {@code Publication} is a
+     * {@code final} core class the kit constructs and cannot substitute; the checks assert it with kit-owned
+     * probe screens while the fixture's hook rides along in the chain as a bystander, which is exactly why a mutation
+     * of that hook leaves them green. Falsifying these would mean mutating the product, not the provider - a
+     * different mechanism from this one, and one this kit does not have.
+     *
+     * <p>The shape of the list is itself the finding: the after-commit and release halves are almost entirely the
+     * hook's, and the interceptor half is almost entirely {@code Publication}'s.
+     */
+    private static final Map<PublicationHookContract.Property, String> UNFALSIFIABLE = Map.ofEntries(
+            Map.entry(PublicationHookContract.Property.AN_ERROR_ESCAPES_THE_OBSERVER_CONTAINMENT,
+                    "the containment is Publication's `catch (Exception)`, and the probe that throws the Error is the "
+                            + "kit's. The fixture's observer is never even reached - the Error escapes before it - so "
+                            + "no substitution for it can change the outcome"),
+            Map.entry(PublicationHookContract.Property.THE_WITHHOLD_FEED_FIRES_ONLY_ON_A_DURABLE_TRANSITION,
+                    "the feed is Publication's: it decides that a re-link over a present pointer is a converge rather "
+                            + "than a transition. The kit's own recording observer counts the transitions, so the "
+                            + "fixture's hook contributes nothing the assertions read"),
+            Map.entry(PublicationHookContract.Property.EVERY_SCREEN_IN_THE_CHAIN_PARTICIPATES,
+                    "additivity is Publication's - it asks every discovered screen and de-duplicates none - and it is "
+                            + "counted on the kit's own probes. A mutation of the fixture's screen could only make "
+                            + "the publish fail, which is a different claim"),
+            Map.entry(PublicationHookContract.Property.THE_CONTENT_VIEW_RESTREAMS_THE_BLOB_UNDER_TWO_DIFFERENT_BOUNDS,
+                    "the Content view is Publication's, and every one of clause 5's assertions is made inside the "
+                            + "kit's own reader probe. The fixture's screen is in the chain to prove the view is the "
+                            + "one a real chain gets, not to be measured"),
+            Map.entry(PublicationHookContract.Property.A_THROWING_ASSESS_FAILS_THE_PUBLISH_WITH_NO_POINTER_LINKED,
+                    "the reversal is Publication's, and the throw is the kit's poison probe. A screen cannot make "
+                            + "its own throw contained"),
+            Map.entry(PublicationHookContract.Property.A_THROWING_COMMITTED_FAILS_THE_PUBLISH,
+                    "same seam, other leg: whether a throw out of committed propagates is decided by Publication, and "
+                            + "the throw comes from the kit's probe"),
+            Map.entry(PublicationHookContract.Property.A_THROWING_WITHHELD_FAILS_THE_READ_CLOSED,
+                    "both routes - the checked failure that propagates and the runtime one ServableNames reads as "
+                            + "WITHHELD - are the product's. The throwing screen is the kit's"),
+            Map.entry(PublicationHookContract.Property.AN_ERROR_ESCAPES_BOTH_SIDES_OF_THE_CONTAINMENT,
+                    "the Exception/Throwable line is Publication's, on both sides. The fixture's screen is a "
+                            + "bystander in all three chains this check builds"),
+            Map.entry(PublicationHookContract.Property.THE_INHERITED_OBSERVER_LEGS_STAY_CONTAINED,
+                    "containment of the inherited leg is Publication's, and the failing leg belongs to a kit probe. "
+                            + "The one assertion that reads the fixture's screen only reads its overridden-leg set, "
+                            + "which is a fact about the class rather than a behaviour a wrapper can remove"),
+            Map.entry(PublicationHookContract.Property
+                            .THE_DISCOVERED_CHAIN_IS_CACHED_AND_AN_INJECTED_ONE_IS_SORTED_PER_CONSTRUCTION,
+                    "clause 10 is about Publication's own constructor and its class-load-time discovery; the ordering "
+                            + "is read off kit probes with declared order() values"),
+            Map.entry(PublicationHookContract.Property.THE_CHAIN_RUNS_IN_ASCENDING_ORDER_AND_THE_STRONGEST_DISPOSITION_ROUTES,
+                    "the sort and the strongest-wins fold are Publication's, and both are observed on kit probes "
+                            + "whose order() and verdict the kit chose"),
+            Map.entry(PublicationHookContract.Property.ASSESS_IS_NOT_SHORT_CIRCUITED_BY_A_REJECT,
+                    "the counter-intuitive half of clause 11, and entirely Publication's: whether the screens behind "
+                            + "a REJECT are still asked is not something a screen can decide about itself"),
+            Map.entry(PublicationHookContract.Property.WITHHELD_IS_SHORT_CIRCUITED_ON_THE_FIRST_TRUE,
+                    "the mirror, same owner. The screen that answers true and the one that counts being asked are "
+                            + "both the kit's, because the claim is that a screen must NOT rely on being asked"),
+            Map.entry(PublicationHookContract.Property.COMMITTED_FIRES_FOR_EVERY_DISPOSITION_OVER_THE_WHOLE_CHAIN,
+                    "who is notified of what is Publication's fan-out, counted on kit probes across all three "
+                            + "dispositions"),
+            Map.entry(PublicationHookContract.Property.THE_CHAIN_IS_AWAITED_IN_FULL_AND_NEVER_ABANDONED_PART_WAY,
+                    "clause 12 is the absence of a timeout in Publication. The slow screen is the kit's, and a "
+                            + "mutation of the fixture's screen cannot make the chain abandon anything"),
+            Map.entry(PublicationHookContract.Property.STORE_THEN_GATE_LINKS_NO_POINTER_BEFORE_THE_CHAIN_VOTED,
+                    "clause 13's ordering, asserted from inside a kit witness's assess. What a screen sees when it is "
+                            + "called is decided before it is called"),
+            Map.entry(PublicationHookContract.Property.A_QUARANTINE_REVIEW_POINTER_IS_WRITTEN_BEFORE_COMMITTED_FIRES,
+                    "the same ordering one step later, witnessed from inside a kit probe's committed"),
+            Map.entry(PublicationHookContract.Property.COMMITTED_FIRES_BEFORE_THE_COMMIT_POINT_SO_ACCEPT_IS_NOT_VISIBILITY,
+                    "the trap is where committed sits in Publication's sequence, and both routes into it (a declining "
+                            + "layout, a refused republish) are the caller's rather than the screen's"),
+            Map.entry(PublicationHookContract.Property.THE_BLOB_TO_CHAIN_CRASH_WINDOW_LEAVES_ONLY_AN_UNREFERENCED_BLOB,
+                    "the chain never runs in this window, so the fixture's screen is not called at all - there is "
+                            + "nothing of it left to remove. What the window leaves is Publication's and the store's"),
+            Map.entry(PublicationHookContract.Property.THE_QUARANTINE_POINTER_TO_COMMITTED_CRASH_WINDOW_REPLAYS_CLEAN,
+                    "the hold, the replay's verdict and the feed's silence are all Publication's; the quarantining "
+                            + "screen and the feed observer are both the kit's"));
+
+    /**
+     * The (hook, property) pairs where the property IS falsifiable in general but this hook's own shape puts the
+     * mutation out of reach - the honest edge of the leg's per-fixture coverage, and a shorter list than it looks
+     * because the three interceptor archetypes deliberately divide the clauses between them.
+     */
+    private static final Map<String, String> NOT_THIS_HOOKS_TO_FALSIFY = Map.of(
+            "kit-recording-screen / A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
+            "this screen votes at publish time and has no read side, so the check drives the kit's own withholding "
+                    + "probe and the fixture's screen is a bystander in the retraction. WithholdingScreen is the "
+                    + "archetype that owns this clause and is falsified on it.",
+            "kit-auditing-screen / A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
+            "the same, and more so: this screen renders no verdict of its own at all.",
+            "kit-auditing-screen / A_SCREEN_DOES_NOT_CATCH_ITS_OWN_STORE_FAILURE_INTO_AN_ACCEPT",
+            "it declares no verdict-bearing read, so there is no read to fault and the check asserts the shape "
+                    + "(no read implies no non-ACCEPT verdict) rather than a behaviour. RecordingScreen and "
+                    + "WithholdingScreen both declare reads and are falsified on this clause.",
+            "kit-withholding-screen / ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS",
+            "it can reach exactly one verdict, so per-call state in a field would answer the same thing whatever it "
+                    + "remembered - there is nothing for a concurrent publish to be confused with. RecordingScreen "
+                    + "reaches all three and is falsified on it.",
+            "kit-auditing-screen / ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS",
+            "the same one-verdict shape.");
+
+    @Test
+    void every_property_a_hook_owns_declares_the_mutation_that_must_break_it() {
+        Set<PublicationHookContract.Property> declaring = PublicationHookContract.mutations().entrySet().stream()
+                .filter(entry -> !entry.getValue().isEmpty())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toCollection(() -> EnumSet.noneOf(PublicationHookContract.Property.class)));
+        Set<PublicationHookContract.Property> undeclared =
+                EnumSet.allOf(PublicationHookContract.Property.class);
+        undeclared.removeAll(declaring);
+
+        assertThat(undeclared)
+                .as("a property that names no mutation is a property nothing proves could have said otherwise - the "
+                        + "vacuity D-135 exists to close. It may only be left undeclared on the reviewed "
+                        + "UNFALSIFIABLE list, with the reason, and every reason there says the same thing: the "
+                        + "clause is about Publication rather than about the hook.")
+                .isEqualTo(EnumSet.copyOf(UNFALSIFIABLE.keySet()));
+        UNFALSIFIABLE.values().forEach(reason -> assertThat(reason).isNotBlank());
+    }
+
+    @Test
+    void every_mutant_in_the_vocabulary_is_declared_by_some_property() {
+        Set<Mutant> declared = PublicationHookContract.mutations().values().stream()
+                .flatMap(List::stream)
+                .map(PublicationHookContract.Mutation::mutant)
+                .collect(Collectors.toCollection(() -> EnumSet.noneOf(Mutant.class)));
+
+        Set<Mutant> vocabulary = EnumSet.allOf(Mutant.class);
+        vocabulary.remove(Mutant.NONE);                       // the identity: the unmutated leg every fixture runs
+        assertThat(declared)
+                .as("a mutant no property declares is never applied, so it proves nothing and cannot rot honestly - "
+                        + "the mirror of the property leg above, and the reason the vocabulary may not grow a "
+                        + "constant somebody meant to use")
+                .containsExactlyInAnyOrderElementsOf(vocabulary);
+    }
+
+    @Test
+    void every_declared_mutation_is_applied_to_some_fixture_on_this_graph() {
+        // A mutation is declared with a predicate over the fixture, so one whose predicate no landed fixture satisfies
+        // is a declaration that never runs - the same blind spot as an exemption naming a hook that no longer exists.
+        Map<PublicationHookContract.Property, List<Mutant>> unapplied =
+                new EnumMap<>(PublicationHookContract.Property.class);
+        PublicationHookContract.mutations().forEach((property, mutations) -> {
+            List<Mutant> never = mutations.stream()
+                    .map(PublicationHookContract.Mutation::mutant)
+                    .filter(mutant -> FIXTURES.stream().noneMatch(fixture ->
+                            PublicationHookContract.checks(fixture).stream()
+                                    .anyMatch(check -> check.property() == property)
+                            && PublicationHookContract.mutations(fixture, property).stream()
+                                    .anyMatch(applicable -> applicable.mutant() == mutant)))
+                    .toList();
+            if (!never.isEmpty()) {
+                unapplied.put(property, never);
+            }
+        });
+        assertThat(unapplied)
+                .as("every declared mutation must really be run against at least one fixture here: a mutation whose "
+                        + "predicate no landed hook satisfies is a falsification leg that exists only on paper")
+                .isEmpty();
+    }
+
+    @Test
+    void the_legs_no_mutation_reaches_for_a_given_hook_are_a_reviewed_list() {
+        List<String> unreached = new ArrayList<>();
+        for (PublicationHookFixture fixture : FIXTURES) {
+            for (PublicationHookContract.Check check : PublicationHookContract.checks(fixture)) {
+                if (UNFALSIFIABLE.containsKey(check.property())) {
+                    continue;                       // already argued, once, for every hook
+                }
+                if (PublicationHookContract.mutations(fixture, check.property()).isEmpty()) {
+                    unreached.add(fixture.hook() + " / " + check.property());
+                }
+            }
+        }
+        Collections.sort(unreached);
+        assertThat(unreached)
+                .as("these legs run as ordinary checks but carry no falsification for THIS hook, because a "
+                        + "mutation's predicate excluded it. That is legitimate - the three screen archetypes divide "
+                        + "the interceptor clauses between them on purpose - but it is the kind of gap that grows "
+                        + "silently, so each pair is argued here and a new one has to be argued too.")
+                .containsExactlyElementsOf(NOT_THIS_HOOKS_TO_FALSIFY.keySet().stream().sorted().toList());
+        NOT_THIS_HOOKS_TO_FALSIFY.values().forEach(reason -> assertThat(reason).isNotBlank());
+    }
+
+    /**
+     * <b>The kit's own T-205b lens, executed rather than declared.</b> Every check of every fixture is run once more
+     * against a hook that is a no-op from end to end - the shape every hand-run mutation pass in this plan has found -
+     * and the survivors are required to be covered some other way: by a <em>targeted</em> mutation this fixture runs,
+     * or by one of the two reviewed lists above.
+     *
+     * <p>It is derived rather than pinned to a literal, because the honest answer is large and moves with the kit:
+     * on this graph a hook that does nothing at all passes <b>101 of the 114 checks</b>, and almost all of them for
+     * the same reason the {@link #UNFALSIFIABLE} list gives - the clause is Publication's, and the hook is a
+     * bystander in it. What must never happen is a check that an inert hook survives AND that nothing else falsifies,
+     * because that check is proven over nothing at all; that is what this leg refuses.
+     */
+    @Test
+    void every_check_an_inert_hook_survives_is_falsified_some_other_way() throws Exception {
+        List<String> unguarded = new ArrayList<>();
+        for (PublicationHookFixture fixture : FIXTURES) {
+            for (PublicationHookContract.Check check : PublicationHookContract.checks(fixture)) {
+                if (!survivesAnInertHook(fixture, check)) {
+                    continue;                                   // the general probe already catches this one
+                }
+                if (UNFALSIFIABLE.containsKey(check.property())
+                        || NOT_THIS_HOOKS_TO_FALSIFY.containsKey(fixture.hook() + " / " + check.property())) {
+                    continue;                                   // argued above, with the reason
+                }
+                boolean targeted = PublicationHookContract.mutations(fixture, check.property()).stream()
+                        .anyMatch(mutation -> mutation.mutant() != Mutant.NO_WORK_AT_ALL);
+                if (!targeted) {
+                    unguarded.add(fixture.hook() + " / " + check.property());
+                }
+            }
+        }
+        Collections.sort(unguarded);
+        assertThat(unguarded)
+                .as("a hook that does nothing at all passes these checks, and no targeted mutation catches them "
+                        + "either - so nothing in the kit distinguishes a compliant hook from one that never ran. "
+                        + "That is exactly the shape T-205b hit by hand. Give the property a mutation that removes "
+                        + "the behaviour it is really about, or argue the pair onto UNFALSIFIABLE / "
+                        + "NOT_THIS_HOOKS_TO_FALSIFY.%n%s", String.join(System.lineSeparator(), unguarded))
+                .isEmpty();
+    }
+
+    @Test
+    void the_inert_hook_probe_really_bites_on_every_role() throws Exception {
+        // The mirror, and the reason the leg above is not vacuous: if NOTHING anywhere caught an inert hook, the
+        // survivor set would be every check and the leg above would be reduced to reading the reviewed lists back to
+        // itself. Each role must have at least one check that an inert hook demonstrably fails.
+        Set<Role> biting = EnumSet.noneOf(Role.class);
+        for (PublicationHookFixture fixture : FIXTURES) {
+            for (PublicationHookContract.Check check : PublicationHookContract.checks(fixture)) {
+                if (!survivesAnInertHook(fixture, check)) {
+                    biting.add(fixture.role());
+                }
+            }
+        }
+        assertThat(biting)
+                .as("every role must have at least one check a hook that is a no-op throughout demonstrably fails, "
+                        + "or that role's whole contract can be satisfied by a hook that never ran")
+                .containsExactlyInAnyOrderElementsOf(EnumSet.allOf(Role.class));
+    }
+
+    /** Whether {@code check} passes against a hook that does nothing at all - run, not inferred. A mutant that broke
+     *  the check's machinery counts as caught rather than survived, because a check that cannot even be driven over
+     *  an inert hook is not one an inert hook silently passes. */
+    private boolean survivesAnInertHook(PublicationHookFixture fixture, PublicationHookContract.Check check)
+            throws Exception {
+        try {
+            Falsification.run(fixture, check, Mutant.NO_WORK_AT_ALL, this::faulting);
+            return true;
+        } catch (AssertionError | RuntimeException | IOException caught) {
+            return false;
+        }
+    }
+
+    @Test
+    void the_falsification_leg_trips_when_a_check_survives_its_mutation() throws IOException {
+        // The mechanism's own leg, held the way the_census_trips_when_a_leg_is_broken holds the census (and for the
+        // same reason): a runner that only ever ran the real checks would be the one part of the kit nothing
+        // falsifies. Three synthetic bodies, three outcomes. Which mutant carries them does not matter - the bodies
+        // ignore the hook entirely, because what is under test is the runner's verdict rather than a property.
+        PublicationHookFixture fixture = FIXTURES.getFirst();
+        PublicationHookContract.Mutation mutation = new PublicationHookContract.Mutation(Mutant.NO_WORK_AT_ALL,
+                "the synthetic mutation this leg is written against");
+        Falsification.Deployment deployment = this::faulting;
+
+        assertThatThrownBy(() -> Falsification.requireBroken(fixture,
+                check("a check that asserts nothing", (_, _) -> { }), mutation, deployment))
+                .as("a check that asserts nothing survives every mutation, and that is exactly what must be reported "
+                        + "- the whole point of the leg")
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("PASSED against NO_WORK_AT_ALL");
+
+        assertThatCode(() -> Falsification.requireBroken(fixture,
+                check("a check that says otherwise", (_, _) -> {
+                    throw new AssertionError("the mutated hook did not record the publish");
+                }), mutation, deployment))
+                .as("and a check that does say otherwise is accepted, so the leg cannot be satisfied by failing "
+                        + "everything")
+                .doesNotThrowAnyException();
+
+        assertThatThrownBy(() -> Falsification.requireBroken(fixture,
+                check("a check the mutant breaks rather than falsifies", (_, _) -> {
+                    throw new IOException("the store went away");
+                }), mutation, deployment))
+                .as("a mutant that takes the harness out from under a check proves nothing about whether the check "
+                        + "measures its property, so it may not be banked as a red")
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("it broke");
+    }
+
+    /** A synthetic check for the leg above. Its property is arbitrary - nothing here reads it - because what is under
+     *  test is the runner's verdict on a body, not the contract's declarations. */
+    private static PublicationHookContract.Check check(String name, PublicationHookContract.Body body) {
+        return new PublicationHookContract.Check(
+                PublicationHookContract.Property.THE_HOOK_STAYS_INSIDE_ITS_DECLARED_NAMESPACES, name, body);
+    }
+
+    private FaultInjectingStore faulting(String name) throws IOException {
+        return FaultInjectingStore.wrap(store(name.replaceAll("[^A-Za-z0-9]", "_")));
     }
 
     // --- the out-of-graph inventory T-205b inherits ----------------------------------------------------------------
