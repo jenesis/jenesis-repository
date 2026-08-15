@@ -39,10 +39,12 @@ public final class Falsification {
      * The falsification leg: run {@code check} against the deliberately broken deployment object {@code mutation}
      * names, and require it to say otherwise.
      *
-     * <p>Only an {@link AssertionError} counts. Anything else means the mutant broke the check's <em>machinery</em>
-     * rather than its claim - a store that could not be read, a hook that could not be built - which says nothing
-     * about whether the check measures the property, and is reported as its own failure rather than quietly banked as
-     * a red.
+     * <p>Only an {@link AssertionError} counts. Anything <em>else</em> - exception or error alike - means the mutant
+     * broke the check's <em>machinery</em> rather than its claim: a store that could not be read, a hook that could
+     * not be built. That says nothing about whether the check measures the property, and is reported as its own
+     * failure rather than quietly banked as a red. The catch is deliberately wide on both sides of the
+     * {@code Exception}/{@code Error} line, because a mutant that has to survive a check body's own
+     * {@code catch (RuntimeException)} has nowhere else to go.
      */
     public static void requireBroken(PublicationHookFixture fixture, PublicationHookContract.Check check,
                                      PublicationHookContract.Mutation mutation, Deployment deployment)
@@ -51,7 +53,7 @@ public final class Falsification {
             run(fixture, check, mutation.mutant(), deployment);
         } catch (AssertionError expected) {
             return;
-        } catch (Exception | StackOverflowError broken) {
+        } catch (Exception | Error broken) {
             throw new AssertionError(fixture.hook() + ": '" + check.name() + "' did not fail against "
                     + mutation.mutant() + " - it broke. The mutation removes " + mutation.mutant().removes()
                     + ", and a check may only answer that with an AssertionError; anything else means the mutant "
