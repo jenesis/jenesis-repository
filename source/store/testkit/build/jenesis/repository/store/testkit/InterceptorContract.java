@@ -302,6 +302,23 @@ final class InterceptorContract {
                             + "doubly-scoped view the publication routed through. A verdict recorded against any "
                             + "other store is a verdict recorded for the wrong repository.");
         }
+
+        // ... and the screen USED it. The witness above proves what the three legs are handed; until D-135's
+        // falsification leg went looking, nothing proved the fixture's own screen wrote through it - this check drove
+        // a real screen under a real scope and then only ever read the kit's probe. A screen that recorded its
+        // verdict against the deployment root instead puts one repository's quarantine decision in another
+        // repository's key space (§6), reads as a perfectly correct row from everywhere but the scope it belongs in,
+        // and passed every leg of this kit. It is the interceptor half's counterpart of the observer's
+        // THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE, and it belongs on the clause that already had the scope
+        // in its hands.
+        isTrue(!fixtureScreen.projection(scoped).isEmpty(), fixture,
+                "the screen recorded something inside the publication's own scope - without that the comparison "
+                        + "below is true of a screen that recorded nothing at all, which is exactly the vacuity that "
+                        + "hid this gap");
+        equal(fixtureScreen.projection(store), Map.of(), fixture,
+                "and nothing at all was recorded against the store one scope up. A verdict, an audit row or a seen "
+                        + "marker written through the deployment root rather than through the store the leg was "
+                        + "handed is another repository's data (§6)");
     }
 
     // --- clause 7: the reversal ---------------------------------------------------------------------------------
