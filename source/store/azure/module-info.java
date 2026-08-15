@@ -53,7 +53,8 @@
  * @jenesis.pin main/maven/io.netty/netty-transport-native-kqueue/jar/osx-x86_64 4.1.135.Final SHA-256/412e10daef5aa4647984397fa6728acf88dffd0d4c53ad91f486ea6492f8f08f
  * @jenesis.pin net.bytebuddy/byte-buddy 1.12.19 SHA-256/030704139e46f32c38d27060edee9e0676b0a0fff8a8be53461515154ba8a7be
  * @jenesis.pin net.bytebuddy/byte-buddy-agent 1.12.19 SHA-256/3a70240de7cdcde04e7c504c2327d7035b9c25ae0206881e3bf4e6798a273ed8
- * @jenesis.pin org.javassist/javassist 3.28.0-GA SHA-256/57d0a9e9286f82f4eaa851125186997f811befce0e2060ff0a15a77f5a9dd9a7
+ * @jenesis.pin org.javassist 3.32.0-GA
+ * @jenesis.pin org.javassist/javassist 3.32.0-GA SHA-256/712ef75bc3406782bb4529b0408cce8155b53f2124c6ae03d2c5fbfa13d62c1c
  * @jenesis.pin org.mockito/mockito-core 4.11.0 SHA-256/4b909690cab288c761eb94c0bf0e814496cf3921d8affac84cd87774530351e5
  * @jenesis.pin org.objenesis/objenesis 3.3 SHA-256/02dfd0b0439a5591e35b708ed2f5474eb0948f53abf74637e959b8e4ef69bfeb
  * @jenesis.pin org.reactivestreams/reactive-streams 1.0.4 SHA-256/f75ca597789b3dac58f61857b9ac2e1034a68fa672db35055a8fb4509e325f28
