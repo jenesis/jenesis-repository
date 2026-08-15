@@ -6,7 +6,7 @@ import module java.base;
  * A reusable incremental-derived-index primitive: the small change-feed a module builds a derived index on so its
  * steady state is O(&Delta;) - proportional to what changed - instead of O(N) over the whole coordinate set every
  * pass. This is the <b>dirty-set</b> form (the minimal one): each touched coordinate is recorded as a marker under a
- * {@code &hellip;/dirty/} store prefix; a sweep reads the marked coordinates ({@link #applySince}), the caller applies
+ * {@code &hellip;/dirty/} store prefix; a sweep reads the marked coordinates ({@link #pending}), the caller applies
  * each to its own derived index idempotently, and the applied markers are cleared ({@link #clear}) so the next sweep
  * sees only what changed since. A periodic {@link #compactThrough full reconcile} rebuilds the index from durable
  * truth and garbage-collects the feed, healing anything the events missed. Built on {@link ArtifactStore} and
@@ -29,14 +29,16 @@ import module java.base;
  * <ul>
  *   <li><b>Out-of-order guard.</b> Apply an event only if its {@link Entry#version version} &ge; the version already
  *       recorded for that coordinate in the index, so a stale marker (a slow event overtaken by a newer publish)
- *       never regresses a newer document. The applier returns {@code false} to skip such an entry; a skipped marker is
- *       left in the feed, not cleared. The feed itself also keeps only the newest version when a coordinate is
- *       re-marked ({@link #touched} / {@link #removed} coalesce to the higher version).</li>
+ *       never regresses a newer document. The caller simply leaves such an entry out of the collection it hands
+ *       {@link #clear}, so its marker stays in the feed for a later sweep. The feed itself also keeps only the newest
+ *       version when a coordinate is re-marked ({@link #touched} / {@link #removed} coalesce to the higher
+ *       version).</li>
  *   <li><b>Idempotent upsert-by-coordinate.</b> Applying a marker re-derives that one coordinate's document (an
  *       upsert, or a delete for a {@link Entry#removed removed} marker), so replaying a marker is a no-op - which is
  *       what makes the next rule safe.</li>
  *   <li><b>Crash-safe advance.</b> Clear a marker only <em>after</em> the derived index's new snapshot has committed
- *       ({@link #applySince} returns the applied entries; the caller commits its snapshot, then calls {@link #clear}).
+ *       ({@link #pending} hands out the entries; the caller applies them, commits its snapshot, then calls
+ *       {@link #clear} with the ones it applied).
  *       A crash between commit and clear only replays already-applied markers next sweep, absorbed by the idempotent
  *       upsert; a crash before commit leaves the markers, so nothing is lost.</li>
  * </ul>
@@ -82,16 +84,6 @@ public final class DirtyIndexFeed {
     public record Entry(String coordinate, long version, boolean removed, Object token) {
     }
 
-    /** The caller's per-coordinate apply step, run once per pending marker by {@link #applySince}. It applies the
-     *  entry to the derived index idempotently - an upsert-by-coordinate, or a delete when {@link Entry#removed} - and
-     *  returns whether the entry was applied: {@code true} to have {@link #applySince} report it for clearing,
-     *  {@code false} to skip it (the out-of-order guard: {@link Entry#version} is older than the version already
-     *  indexed for the coordinate), leaving its marker in the feed rather than clearing it. */
-    @FunctionalInterface
-    public interface Applier {
-        boolean apply(Entry entry) throws IOException;
-    }
-
     /** Mark a coordinate upserted (published or updated) at {@code version}. Coalesces onto the coordinate's single
      *  marker, keeping the newest version, so repeated touches never grow the feed. */
     public void touched(String coordinate, long version) throws IOException {
@@ -133,19 +125,6 @@ public final class DirtyIndexFeed {
             }
         }
         return entries;
-    }
-
-    /** Read the dirty set and run {@code applier} over each entry, returning the entries the applier reported applied -
-     *  which the caller {@link #clear}s only <em>after</em> committing the derived index's new snapshot (the crash-safe
-     *  advance). Entries the applier skips (the out-of-order guard) are left in the feed for a later sweep. */
-    public List<Entry> applySince(Applier applier) throws IOException {
-        List<Entry> applied = new ArrayList<>();
-        for (Entry entry : pending()) {
-            if (applier.apply(entry)) {
-                applied.add(entry);
-            }
-        }
-        return applied;
     }
 
     /** Compact the feed by removing the markers just applied, each deleted only while its token is unchanged since it

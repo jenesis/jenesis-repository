@@ -44,26 +44,37 @@ class DirtyIndexFeedTest {
      *  document. Records every invocation so a test can prove O(&Delta;). */
     private final AtomicInteger applierCalls = new AtomicInteger();
 
-    private DirtyIndexFeed.Applier upsert() {
-        return entry -> {
-            Long indexed = index.get(entry.coordinate());
-            if (indexed != null && entry.version() < indexed) {
-                return false; // out-of-order guard: do not regress a newer document, leave the marker for later
+    private boolean upsert(DirtyIndexFeed.Entry entry) {
+        Long indexed = index.get(entry.coordinate());
+        if (indexed != null && entry.version() < indexed) {
+            return false; // out-of-order guard: do not regress a newer document, leave the marker for later
+        }
+        applierCalls.incrementAndGet();
+        if (entry.removed()) {
+            index.remove(entry.coordinate());
+        } else {
+            index.put(entry.coordinate(), entry.version());
+        }
+        return true;
+    }
+
+    /** The caller's half of the sweep: read the dirty set, apply each entry, and collect the ones that applied - the
+     *  entries {@link DirtyIndexFeed#clear} may then delete once the derived snapshot has committed. This is the same
+     *  read-apply-collect loop the real consumers (the search index, the dependents graph) run inside their own
+     *  writer transaction. */
+    private List<DirtyIndexFeed.Entry> applyPending() throws IOException {
+        List<DirtyIndexFeed.Entry> applied = new ArrayList<>();
+        for (DirtyIndexFeed.Entry entry : feed.pending()) {
+            if (upsert(entry)) {
+                applied.add(entry);
             }
-            applierCalls.incrementAndGet();
-            if (entry.removed()) {
-                index.remove(entry.coordinate());
-            } else {
-                index.put(entry.coordinate(), entry.version());
-            }
-            return true;
-        };
+        }
+        return applied;
     }
 
     /** One full incremental sweep: apply the dirty set into the index, then (snapshot "committed") clear what applied. */
     private void sweep() throws IOException {
-        List<DirtyIndexFeed.Entry> applied = feed.applySince(upsert());
-        feed.clear(applied);
+        feed.clear(applyPending());
     }
 
     @Test
@@ -130,7 +141,7 @@ class DirtyIndexFeedTest {
 
         // A stale event for x at an older version arrives late (e.g. a slow observer overtaken by a newer publish).
         feed.touched("x", 100);
-        List<DirtyIndexFeed.Entry> applied = feed.applySince(upsert());
+        List<DirtyIndexFeed.Entry> applied = applyPending();
 
         assertThat(applied).as("the applier skipped the stale marker, so nothing is cleared for it").isEmpty();
         assertThat(index).as("the newer document is not regressed").containsEntry("x", 200L);
@@ -142,7 +153,7 @@ class DirtyIndexFeedTest {
         feed.touched("c", 50);
 
         // Sweep 1: apply into the index (the snapshot "commits") but crash before clearing the markers.
-        List<DirtyIndexFeed.Entry> applied = feed.applySince(upsert());
+        List<DirtyIndexFeed.Entry> applied = applyPending();
         assertThat(index).containsEntry("c", 50L);
         assertThat(applied).hasSize(1);
         // ... crash here: feed.clear(applied) never runs, so the marker is still pending.
@@ -160,7 +171,7 @@ class DirtyIndexFeedTest {
     @Test
     void clear_leaves_a_marker_re_touched_during_the_sweep() throws IOException {
         feed.touched("d", 10);
-        List<DirtyIndexFeed.Entry> applied = feed.applySince(upsert()); // read + apply the v10 marker
+        List<DirtyIndexFeed.Entry> applied = applyPending(); // read + apply the v10 marker
 
         // A concurrent write re-touches d at a newer version after it was read but before it is cleared.
         feed.touched("d", 20);
