@@ -55,6 +55,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  * not deliver, and a METADATA default over a BOUNDED sibling is the <em>fix</em> (the bounded one-child probe), not
  * the defect.
  *
+ * <p><b>Leg (a) follows one {@code static} hop</b> (D-137). The idiom D-053 settled {@code ArtifactStore.page} on -
+ * and that downstream's eight SPIs then copied - is a {@code default} that delegates to a named {@code static} on its
+ * own interface ({@code page(prefix, startAfter, limit, consumer)} &rarr; {@code pageByListing(store, ...)}), so the
+ * whole-collection call happens inside the helper rather than in the default. Judged by its signature alone that
+ * helper is BOUNDED and the leg saw nothing; judged one hop further it is the materialising body an implementation
+ * inherits by saying nothing. So the leg now resolves the helper's own sibling calls - a bare call, and a call on the
+ * parameter that carries the interface itself, which is the receiver the default would have called on - and applies
+ * the same forbidden transitions from the <em>default's</em> cost class, because that is the promise the caller was
+ * given.
+ *
+ * <p>The rule is not "no static helpers": it is that a helper a bounded default materialises through must name the
+ * shared {@link #SHARED_CEILING} ceiling, which is where D-053 put the visible refusal. A helper that names it is
+ * <em>cleared</em>, and {@link #the_static_hop_leg_names_the_helpers_the_shared_ceiling_clears} pins the cleared set
+ * by name, so a helper that quietly stops naming the ceiling both leaves that pin and arrives in leg (a).
+ *
  * <h2>Leg (b) - a whole-collection method standing beside a paged sibling</h2>
  * An <b>exported</b> method (its package is named in some {@code module-info.java} {@code exports} clause) that answers
  * a whole {@code List}/{@code Set}/{@code Map}/{@code Collection} with no bound of its own, while a <em>related</em>
@@ -96,12 +111,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Like every token-scanning ratchet here (&sect;6 caveat) this is heuristic, and it is deliberately biased toward
  * false negatives so that a green build means something. It parses declarations with a regex over comment-stripped
  * source rather than with a compiler, so it sees the idioms this codebase writes and not the ones it does not: leg (a)
- * follows only <em>sibling</em> calls (a default that routes through a static helper in another class escapes, which
- * is exactly how the current {@code ArtifactStore.page} default legitimately passes - it delegates to
- * {@code pageByListing}, whose own bound throws past {@code MAX_INHERITED_CHILDREN}); leg (b) reads relatedness off
- * names; and leg (c) counts callers by bare method name, so a name shared with an unrelated method hides a genuinely
- * dead one. The value is that a <b>new</b> instance of a shape this plan has already paid for five times fails the
- * build the moment it is written.
+ * follows sibling calls and <em>one</em> {@code static} hop out of them (D-137), so a default that routes through two
+ * helpers, or through a static on another type, still escapes. The hop reads a helper's receiver by name - the
+ * parameter whose type is the interface itself - which is the one idiom D-053 wrote; a helper that took its receiver
+ * some other way would be followed into and found to call nothing. Leg (b) reads relatedness off names; and leg (c)
+ * counts callers by bare method name, so a name shared with an unrelated method hides a genuinely dead one. The value
+ * is that a <b>new</b> instance of a shape this plan has already paid for five times fails the build the moment it is
+ * written.
  */
 class UnsafeApiPrincipleTest {
 
@@ -134,6 +150,29 @@ class UnsafeApiPrincipleTest {
                             + "closes it immediately, writing no body and reading none. The STREAMED sibling it "
                             + "reaches transfers nothing, so there is no body opened to answer a metadata question - "
                             + "the D-055 shape this transition exists to catch"));
+
+    /**
+     * The shared ceiling a {@code static} helper must name for leg (a)'s one hop to clear it.
+     * {@code ArtifactStore.MAX_INHERITED_CHILDREN} is where D-053 put the visible refusal, and downstream's
+     * {@code InheritedBound} reads the same constant rather than declaring a second one - so "the helper
+     * materialises" and "the materialisation fails visibly" are one question with one answer in one place. A helper
+     * that hand-rolled its own size check would be a second ceiling free to drift from this one, so it is not
+     * accepted here either.
+     */
+    private static final String SHARED_CEILING = "MAX_INHERITED_CHILDREN";
+
+    /**
+     * The {@code default} &rarr; {@code static} helper hops on this graph that materialise, and that
+     * {@link #SHARED_CEILING} therefore has to clear - the positive half of leg (a)'s D-137 hop, pinned by
+     * <b>name</b> rather than by a count (gate 6). One, and it is D-053's own: {@code ArtifactStore.page}'s inherited
+     * fallback, which lists and sorts a whole container to answer one page and refuses past the ceiling instead of
+     * doing it quietly.
+     *
+     * <p>A helper that stops naming the ceiling leaves this list <em>and</em> arrives in leg (a), so the two legs
+     * fail together and neither can be satisfied by editing the other.
+     */
+    private static final List<String> CEILINGED_HOPS = List.of(
+            "ArtifactStore#page/4 -> pageByListing/5");
 
     // --- leg (b): whole-collection answers beside a paged sibling ---------------------------------------------------
 
@@ -246,6 +285,30 @@ class UnsafeApiPrincipleTest {
                         + "UNCALLED_SIZE.%n%s",
                         String.join(System.lineSeparator(), offenders))
                 .isEmpty();
+    }
+
+    /**
+     * The positive half of D-137's hop: the {@code default} &rarr; {@code static} helper paths that really do
+     * materialise, and that the shared ceiling therefore has to clear. Without this the leg could go quiet in the
+     * worst possible way - a scan that stopped resolving helpers at all would report zero offenders and read exactly
+     * like a clean graph, which is the vacuity the whole ratchet is against.
+     */
+    @Test
+    void the_static_hop_leg_names_the_helpers_the_shared_ceiling_clears() throws IOException {
+        List<String> cleared = staticHops(scan(sourceRoot())).stream()
+                .filter(Hop::ceilinged)
+                .map(Hop::key)
+                .distinct()
+                .sorted()
+                .toList();
+        assertThat(cleared)
+                .as("this is D-053's own retrofit seen through the new hop: a BOUNDED default whose static helper "
+                        + "materialises a whole-list sibling and refuses past %s. The set is pinned by name rather "
+                        + "than counted - a helper that stops naming the ceiling leaves this list AND arrives in "
+                        + "leg (a), so the two cannot be satisfied by editing one; a hop that vanishes without its "
+                        + "default vanishing is a default that stopped materialising, which is the better fix and a "
+                        + "deliberate edit.", SHARED_CEILING)
+                .containsExactlyElementsOf(CEILINGED_HOPS.stream().sorted().toList());
     }
 
     // --- the ratchet's own hygiene ----------------------------------------------------------------------------------
@@ -408,6 +471,28 @@ class UnsafeApiPrincipleTest {
                         default List<String> firstRows(String prefix, int limit) {
                             return rows(prefix).subList(0, limit);
                         }
+
+                        /** Leg (a), D-137: the same drop, hidden one static hop away and naming no ceiling. */
+                        default List<String> firstRowsVia(String prefix, int limit) {
+                            return sliceByListing(this, prefix, limit);
+                        }
+
+                        static List<String> sliceByListing(Probe probe, String prefix, int limit) {
+                            return probe.rows(prefix).subList(0, limit);
+                        }
+
+                        /** ... and the D-053 shape the ceiling clears, so the hop is not "no static helpers". */
+                        default List<String> firstRowsBounded(String prefix, int limit) {
+                            return boundedSliceByListing(this, prefix, limit);
+                        }
+
+                        static List<String> boundedSliceByListing(Probe probe, String prefix, int limit) {
+                            List<String> all = probe.rows(prefix);
+                            if (all.size() > MAX_INHERITED_CHILDREN) {
+                                throw new IllegalStateException("past the bound");
+                            }
+                            return all.subList(0, limit);
+                        }
                     }
                     """);
             Files.writeString(pkg.resolve("ProbeScan.java"), """
@@ -433,8 +518,18 @@ class UnsafeApiPrincipleTest {
             Scan planted = scan(root);
 
             assertThat(boundDrops(planted).stream().map(Offender::key))
-                    .as("a BOUNDED default implemented over its MATERIALISED sibling must trip leg (a)")
-                    .containsExactly("Probe#firstRows/2 -> rows/1");
+                    .as("a BOUNDED default implemented over its MATERIALISED sibling must trip leg (a) - directly, "
+                            + "and one static hop away (D-137). The third default reaches the same MATERIALISED "
+                            + "sibling through a helper that names %s, and must NOT be here: the rule is that a "
+                            + "materialising helper carries the shared ceiling, not that a default may have no "
+                            + "static helper at all.", SHARED_CEILING)
+                    .containsExactlyInAnyOrder(
+                            "Probe#firstRows/2 -> rows/1",
+                            "Probe#firstRowsVia/2 -> sliceByListing/3 -> rows/1");
+            assertThat(staticHops(planted).stream().filter(Hop::ceilinged).map(Hop::key))
+                    .as("and the ceilinged hop is SEEN and cleared rather than unseen - the distinction the whole "
+                            + "leg turns on, since an unseen hop and a cleared one are the same green")
+                    .containsExactly("Probe#firstRowsBounded/2 -> boundedSliceByListing/3");
             assertThat(wholeCollections(planted).stream().map(Offender::key))
                     .as("a whole-collection answer beside a paged sibling must trip leg (b)")
                     .containsExactly("Probe#rows/1");
@@ -445,6 +540,8 @@ class UnsafeApiPrincipleTest {
             // ... and each is cleared by a justified allowlist entry, so the grant mechanism is proven too.
             List<Allow> grants = List.of(
                     new Allow("Probe#firstRows/2 -> rows/1", "synthetic - negative control only, never a real grant"),
+                    new Allow("Probe#firstRowsVia/2 -> sliceByListing/3 -> rows/1",
+                            "synthetic - negative control only, never a real grant"),
                     new Allow("Probe#rows/1", "synthetic - negative control only, never a real grant"),
                     new Allow("ProbeScan#everything/0", "synthetic - negative control only, never a real grant"));
             assertThat(render(boundDrops(planted), grants)).isEmpty();
@@ -457,7 +554,8 @@ class UnsafeApiPrincipleTest {
 
     // --- the three legs, over a parsed scan ---------------------------------------------------------------------------
 
-    /** Leg (a): interface {@code default}s calling an arity-resolved sibling of a weaker cost class. */
+    /** Leg (a): interface {@code default}s calling an arity-resolved sibling of a weaker cost class, directly or
+     *  through one {@code static} helper on the same interface that names no shared ceiling (D-137). */
     private static List<Offender> boundDrops(Scan scan) {
         List<Offender> offenders = new ArrayList<>();
         for (Decl decl : scan.decls()) {
@@ -485,7 +583,77 @@ class UnsafeApiPrincipleTest {
                                 + "/" + call.arity()));
             }
         }
+        for (Hop hop : staticHops(scan)) {
+            if (hop.ceilinged()) {
+                continue;
+            }
+            offenders.add(new Offender(hop.key() + " -> " + hop.reached(), hop.relativePath(),
+                    "a " + hop.from() + " default materialises its " + hop.to() + " sibling " + hop.reached()
+                            + " inside the static helper " + hop.helper() + ", which names no " + SHARED_CEILING
+                            + " ceiling - so an implementation that inherits the default buffers the deployment's "
+                            + "data and is never told"));
+        }
         return distinct(offenders);
+    }
+
+    /**
+     * Leg (a)'s one {@code static} hop (D-137): every {@code default} &rarr; {@code static} helper &rarr; sibling
+     * path on one interface whose two ends are a forbidden transition, with whether the helper names the shared
+     * ceiling. The transition is judged from the <b>default's</b> cost class rather than the helper's, because the
+     * default is what an implementation inherits and therefore what was promised; the helper's own signature is
+     * BOUNDED for every one of these, which is exactly why judging it was not enough.
+     */
+    private static List<Hop> staticHops(Scan scan) {
+        List<Hop> hops = new ArrayList<>();
+        for (Decl decl : scan.decls()) {
+            if (!decl.kind().equals("interface") || !decl.modifiers().contains("default") || !decl.hasBody()) {
+                continue;
+            }
+            Cost mine = scan.cost(decl);
+            for (Call call : calls(decl.body())) {
+                Optional<Decl> helper = scan.sibling(decl.owner(), call.name(), call.arity())
+                        .filter(sibling -> sibling.modifiers().contains("static") && sibling.hasBody());
+                if (helper.isEmpty()) {
+                    continue;
+                }
+                Decl through = helper.get();
+                boolean ceilinged = through.body().contains(SHARED_CEILING);
+                for (Call onward : calls(through.body(), receivers(through))) {
+                    if (onward.name().equals(through.name()) && onward.arity() == through.parameters().size()) {
+                        continue;
+                    }
+                    Optional<Decl> reached = scan.sibling(through.owner(), onward.name(), onward.arity());
+                    if (reached.isEmpty() || !forbidden(mine, scan.cost(reached.get()))) {
+                        continue;
+                    }
+                    hops.add(new Hop(
+                            decl.owner() + "#" + decl.name() + "/" + decl.parameters().size()
+                                    + " -> " + through.name() + "/" + through.parameters().size(),
+                            onward.name() + "/" + onward.arity(),
+                            through.name() + "/" + through.parameters().size(),
+                            decl.relativePath(), mine, scan.cost(reached.get()), ceilinged));
+                }
+            }
+        }
+        Map<String, Hop> byKey = new LinkedHashMap<>();
+        hops.forEach(hop -> byKey.putIfAbsent(hop.key() + " -> " + hop.reached(), hop));
+        return List.copyOf(byKey.values());
+    }
+
+    /**
+     * The receivers that are the interface itself inside a {@code static} helper: the parameters whose type is the
+     * owning type. {@code static void pageByListing(ArtifactStore store, ...)} then makes {@code store.list(prefix)}
+     * a sibling call, because {@code store} is precisely the receiver the {@code default} would have called
+     * {@code list()} on - the helper is the default's body with the receiver passed in by hand.
+     */
+    private static Set<String> receivers(Decl helper) {
+        Set<String> self = new LinkedHashSet<>();
+        for (Parameter parameter : helper.parameters()) {
+            if (raw(parameter.type()).equals(helper.owner())) {
+                self.add(parameter.name());
+            }
+        }
+        return self;
     }
 
     /** Leg (b): exported whole-collection answers with a related BOUNDED sibling on the same type. */
@@ -582,6 +750,13 @@ class UnsafeApiPrincipleTest {
 
     /** One allowlist grant: the offender key it clears and the reason that clearing it is the right answer. */
     private record Allow(String key, String reason) {
+    }
+
+    /** One {@code default} &rarr; {@code static} helper &rarr; sibling path (D-137): the hop's
+     *  {@code Owner#default/arity -> helper/arity} key, the sibling it reached, the two cost classes at its ends, and
+     *  whether the helper names {@link #SHARED_CEILING}, which is the only thing that clears it. */
+    private record Hop(String key, String reached, String helper, String relativePath, Cost from, Cost to,
+                       boolean ceilinged) {
     }
 
     private static List<Offender> distinct(List<Offender> offenders) {
@@ -1040,6 +1215,12 @@ class UnsafeApiPrincipleTest {
      * bound; only a sibling call is the interface promising one thing and doing another.
      */
     private static Set<Call> calls(String body) {
+        return calls(body, Set.of());
+    }
+
+    /** The same, with {@code self} naming further receivers that are the interface itself - the parameter a
+     *  {@code static} helper takes its subject through (D-137). */
+    private static Set<Call> calls(String body, Set<String> self) {
         Set<Call> out = new LinkedHashSet<>();
         Matcher invocation = Pattern.compile("(\\w+)\\s*\\(").matcher(body);
         while (invocation.find()) {
@@ -1048,7 +1229,7 @@ class UnsafeApiPrincipleTest {
                 before--;
             }
             if (before >= 0 && body.charAt(before) == '.') {
-                if (!receiverIsSelf(body, before)) {
+                if (!receiverIsSelf(body, before) && !self.contains(identifierEndingAt(body, before - 1))) {
                     continue;
                 }
             } else if (before >= 1 && body.charAt(before) == ':' && body.charAt(before - 1) == ':') {
