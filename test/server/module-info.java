@@ -47,7 +47,8 @@
  * @jenesis.pin org.assertj.core 3.27.7
  * @jenesis.pin org.assertj/assertj-core 3.27.7 SHA-256/c4a445426c3c2861666863b842cc4ec7bbb1c4226fefd370b6d2fe83d6c4ff0f
  * @jenesis.pin org.hdrhistogram/HdrHistogram 2.2.2 SHA-256/22d1d4316c4ec13a68b559e98c8256d69071593731da96136640f864fa14fad8
- * @jenesis.pin org.jetbrains/annotations 17.0.0 SHA-256/195fb0da046d55bb042e91543484cf1da68b02bb7afbfe031f229e45ac84b3f2
+ * @jenesis.pin org.jetbrains.annotations 26.1.0
+ * @jenesis.pin org.jetbrains/annotations 26.1.0 SHA-256/ebc7aec252ed0c7d2d04c039d7f00e69f7b86b1f493c741d67b3ef31b986b054
  * @jenesis.pin org.jspecify/jspecify 1.0.0 SHA-256/1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab
  * @jenesis.pin org.junit.jupiter 6.1.0
  * @jenesis.pin org.junit.jupiter/junit-jupiter 6.1.0 SHA-256/a4e420b5c6e8170323b4c5c97ae35bca0d620be9f9cfe37006820f53931f27a3
