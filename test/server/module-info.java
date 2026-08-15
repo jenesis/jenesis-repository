@@ -9,8 +9,8 @@
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.server
- * @jenesis.alias org.containers org.containers/containers 2.0.5
- * @jenesis.alias wiremock.standalone org.wiremock/wiremock-standalone 4.0.0-beta.38
+ * @jenesis.alias org.containers org.containers/containers
+ * @jenesis.alias wiremock.standalone org.wiremock/wiremock-standalone
  * @jenesis.attach org.mockito
  * @jenesis.pin build.jenesis 0.8.1
  * @jenesis.pin build.jenesis/build.jenesis 0.8.1 SHA-256/b824ecde8b7337fe2ef42194f8a8a98f2eab942313a198db9a369df0f99f18c0

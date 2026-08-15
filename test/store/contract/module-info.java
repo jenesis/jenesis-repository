@@ -18,7 +18,7 @@
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.store.testkit
- * @jenesis.alias org.containers org.containers/containers 2.0.5
+ * @jenesis.alias org.containers org.containers/containers
  * @jenesis.pin com.azure.storage.blob 12.35.0
  * @jenesis.pin com.azure/azure-core 1.58.1 SHA-256/7b339126e92af79b07fcf96fe16fa5ba2a2854bb8ce7e03ac4776b9474fe7df5
  * @jenesis.pin com.azure/azure-core-http-netty 1.16.5 SHA-256/61091ba5634e711e396721edfcca5c6782be1c1e86f2ecf856eb57aa20260c0c

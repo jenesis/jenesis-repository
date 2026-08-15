@@ -11,8 +11,8 @@
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.store.s3
- * @jenesis.alias org.containers org.containers/containers 2.0.5
- * @jenesis.alias wiremock.standalone org.wiremock/wiremock-standalone 4.0.0-beta.38
+ * @jenesis.alias org.containers org.containers/containers
+ * @jenesis.alias wiremock.standalone org.wiremock/wiremock-standalone
  * @jenesis.pin com.fasterxml.jackson.core/jackson-annotations 2.20 SHA-256/959a2ffb2d591436f51f183c6a521fc89347912f711bf0cae008cdf045d95319
  * @jenesis.pin com.github.docker-java/docker-java-api 3.7.1 SHA-256/dad153d484b1f4ef009e2fdbad27e07aeb3191122da52b8985507ac504300081
  * @jenesis.pin com.github.docker-java/docker-java-transport 3.7.1 SHA-256/d15eec8034bf0f92c2a48ca9172691804048115c96dc853272f9486fa2695c3c
