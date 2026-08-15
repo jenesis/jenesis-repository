@@ -9,6 +9,7 @@ import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.Delivery;
+import build.jenesis.repository.store.testkit.PublicationHookFixture.Interceptor;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
 
 /**
@@ -35,6 +36,15 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
  * {@link PublishInterceptor#committed} and the commit point was until now untested - and every crash check re-derives
  * from durable state that the crash landed where it says. A point that stopped biting fails rather than passing
  * vacuously.
+ *
+ * <p><b>Every falsifiable property also declares what must break it</b> (D-135, carrying D-114's mechanism here).
+ * A check states what a hook must do; nothing in a check states that it <em>could have said otherwise</em>, and
+ * T-205b's hold-release legs would have passed against a hook that was a no-op from end to end. So each
+ * {@link Property} the hook actually owns names one or more {@link Mutation}s - a {@link Mutant} that removes exactly
+ * the behaviour the property is about - and the JUnit driver runs the same check body a second time against each,
+ * requiring an {@link AssertionError}. A check that survives its property's mutation does not measure that property
+ * <em>for that hook</em>, and fails. The declarations are the contract's, never a fixture's: a fixture cannot opt out
+ * of falsification, only out of a whole property, and that opt-out is already a reviewed list on the census.
  *
  * <p>Assertion-library-free on purpose: a check throws {@link AssertionError} naming the hook, the property and the
  * expectation, so this stays {@code java.base} + the store SPI and the downstream distribution can require it for its
@@ -107,8 +117,11 @@ public final class PublicationHookContract {
          *  sibling read throws past its ceiling while the bounded one honours the caller's own limit and reports the
          *  overflow instead of failing on it. */
         THE_CONTENT_VIEW_RESTREAMS_THE_BLOB_UNDER_TWO_DIFFERENT_BOUNDS(Role.PUBLISH_INTERCEPTOR),
-        /** Clause 6. {@code Content.store()} and the stores handed to {@code committed} and {@code withheld} are the
-         *  one doubly-scoped view the publication routed through. */
+        /** Clause 6, in both directions. {@code Content.store()} and the stores handed to {@code committed} and
+         *  {@code withheld} are the one doubly-scoped view the publication routed through - <em>and</em> the screen's
+         *  own derived rows land inside it, never one scope up. The second half was added by D-135: this check drove
+         *  a real screen under a real scope and read only the kit's probe, so a screen recording its verdict against
+         *  the deployment root passed the whole kit. */
         THE_VERDICT_LEGS_RECEIVE_THE_PUBLICATIONS_OWN_SCOPED_STORE(Role.PUBLISH_INTERCEPTOR),
         /** Clause 7, the headline. A throwing {@code assess} fails the publish and links no pointer of any kind. */
         A_THROWING_ASSESS_FAILS_THE_PUBLISH_WITH_NO_POINTER_LINKED(Role.PUBLISH_INTERCEPTOR),
@@ -273,6 +286,29 @@ public final class PublicationHookContract {
         }
     }
 
+    /**
+     * One deliberately broken deployment object a property's check <em>must</em> fail against, and why (D-135). The
+     * predicate is the contract's, not the fixture's: a mutation whose removed behaviour a hook's shape genuinely
+     * does not have (a read side on a screen that votes only at publish time) is declared inapplicable here, in front
+     * of whoever reviews the kit, rather than waived inside the fixture it would excuse.
+     */
+    public record Mutation(Mutant mutant, Predicate<PublicationHookFixture> appliesTo, String why) {
+
+        public Mutation {
+            Objects.requireNonNull(mutant, "mutant");
+            Objects.requireNonNull(appliesTo, "appliesTo");
+            if (why == null || why.isBlank()) {
+                throw new AssertionError("a mutation must say which claim of the property it removes, or a later "
+                        + "reader cannot tell a targeted mutation from one that merely happens to fail");
+            }
+        }
+
+        /** A mutation every fixture's leg of this property must break. */
+        public Mutation(Mutant mutant, String why) {
+            this(mutant, _ -> true, why);
+        }
+    }
+
     /** The body of a {@link Check}, run against a fixture and a fresh, empty, fault-armable store. */
     @FunctionalInterface
     public interface Body {
@@ -295,6 +331,243 @@ public final class PublicationHookContract {
         InterceptorContract.checks(checks);
         HoldReleaseContract.checks(checks);
         return List.copyOf(checks);
+    }
+
+    /**
+     * What must break each property, keyed by property - the kit's falsification declaration (D-135). Read as a
+     * table: <em>this</em> property is about <em>that</em> behaviour of the hook, so removing it must turn the check
+     * red. A property whose entry is empty is a property no substitution for a hook can falsify, and the census holds
+     * that set to a reviewed, reason-bearing list rather than letting an entry quietly shrink to nothing.
+     *
+     * <p>The mutations are chosen to be the <em>weakest</em> break the property forbids rather than the most
+     * destructive one available: {@link Mutant#NO_WORK_AT_ALL} would fail a great many of these, and a table full of
+     * it would be a table of trivial mutations satisfying a count while proving nothing. Where a property's check has
+     * two independent halves - "the surface converged" and "the replay upserted onto it" - each half carries its own
+     * mutation, so a fixture that only exercises one is still falsified on the one it exercises.
+     *
+     * <p><b>The interceptor half is mostly empty, and that is the finding rather than an oversight.</b> Eighteen of
+     * the twenty-five {@link Role#PUBLISH_INTERCEPTOR} clauses are claims about {@link Publication}'s own commit
+     * choreography - the chain's ordering, its short-circuiting, where a review pointer lands relative to
+     * {@code committed}, what escapes the containment - and the kit asserts them with its own probe screens while the
+     * fixture's screen rides along in the chain. No substitution for a <em>provider's</em> hook can falsify a claim
+     * about the core's own final class, so those carry no mutation and appear on the census's reviewed
+     * {@code UNFALSIFIABLE} list with that reason. The seven that remain are the clauses a provider actually owns.
+     */
+    public static Map<Property, List<Mutation>> mutations() {
+        Map<Property, List<Mutation>> mutations = new EnumMap<>(Property.class);
+
+        // --- every role ---------------------------------------------------------------------------------------------
+        mutations.put(Property.THE_ROLE_IS_DERIVED_FROM_THE_INSTANCE, List.of(
+                new Mutation(Mutant.A_MISDERIVED_ROLE,
+                        fixture -> fixture.role() != Role.PUBLISH_INTERCEPTOR,
+                        "the derivation half. A hook that also answers a neighbouring role's sub-interface is tested "
+                                + "under the opposite failure semantics and passes, which is the one outcome this "
+                                + "property exists to make impossible - so the derivation has to be read off the "
+                                + "instance and compared, not assumed. It is not declared for a screen because "
+                                + "Interceptor.create() is typed PublishInterceptor: there is no wrapper that could "
+                                + "hand one out as anything else, which is a property of the fixture SPI"),
+                new Mutation(Mutant.A_SHARED_INSTANCE,
+                        "the freshness half, which is a separate claim and the one every crash leg leans on: create() "
+                                + "must answer a fresh instance per simulated process, or an in-memory accumulation "
+                                + "survives a restart and a crash check measures the surviving object instead of the "
+                                + "durable store")));
+        mutations.put(Property.THE_HOOK_STAYS_INSIDE_ITS_DECLARED_NAMESPACES, List.of(
+                new Mutation(Mutant.A_KEY_OUTSIDE_THE_NAMESPACES,
+                        "the property is judged by walking the store, so the walk has to be able to see a key that "
+                                + "escaped. One planted key per leg, outside every declared space and outside every "
+                                + "key Publication itself owns, is exactly the 'one namespace over' this forbids")));
+
+        // --- the after-commit observer -------------------------------------------------------------------------------
+        mutations.put(Property.A_THROWING_OBSERVER_IS_CONTAINED_AFTER_THE_OBSERVED_MUTATION, List.of(
+                new Mutation(Mutant.NO_WORK_AT_ALL,
+                        "containment is a claim about an observer that RAN: the fixture's own hook sits behind the "
+                                + "throwing probe and must be shown to have recorded the publish, or 'the failure was "
+                                + "contained' is indistinguishable from 'nothing happened at all'"),
+                new Mutation(Mutant.A_REPAIR_THAT_DOES_NOTHING,
+                        "and the second half is gate 4's: a contained failure must leave a trace AND a route back. "
+                                + "The route back is the fixture's repair leg, and this check RUNS it - so a repair "
+                                + "that does nothing must fail here rather than leaving the claim in a comment")));
+        mutations.put(Property.A_DUPLICATE_DELIVERY_CONVERGES, List.of(
+                new Mutation(Mutant.NO_WORK_AT_ALL,
+                        "the preamble is that the first delivery converged; an observer that records nothing must "
+                                + "fail it rather than sailing into a comparison of two empty surfaces"),
+                new Mutation(Mutant.A_ROW_PER_DELIVERY,
+                        "and the repeat must be able to notice an append. One extra row from the second delivery on "
+                                + "is the smallest divergence this property exists to catch - a surface that grows "
+                                + "once per notification of bytes that never changed")));
+        mutations.put(Property.THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE, List.of(
+                new Mutation(Mutant.A_ROOT_SCOPED_RECORD,
+                        "the whole property is WHERE the row lands, so the mutation moves the row and changes nothing "
+                                + "else: a derived row written one scope up is a row recorded for the wrong "
+                                + "repository, and it reads as a correct row from anywhere but the scope it belongs "
+                                + "in (§6)")));
+        mutations.put(Property.A_LOST_CALL_NEVER_HIDES_A_SERVED_ARTIFACT_OR_A_HOLD, List.of(
+                new Mutation(Mutant.A_CONVERGENCE_THE_SEEDED_STORE_ALREADY_HAS,
+                        "the observer-facing half of the blast radius is that the surface is demonstrably STALE after "
+                                + "a lost call. A fixture whose declared converged view the untouched store already "
+                                + "satisfies makes that unprovable while the check still passes - the "
+                                + "converged-over-an-empty-answer shape T-209b hit by hand")));
+        mutations.put(Property.THE_COMMIT_TO_CALLBACK_WINDOW_LOSES_THE_CALL, List.of(
+                new Mutation(Mutant.A_CONVERGENCE_THE_SEEDED_STORE_ALREADY_HAS,
+                        "same shape, and it matters more here: this leg is what refuses a fixture the "
+                                + "commit-coupled-at-least-once class, so a declared convergence that is true of an "
+                                + "empty surface would let the refusal be reached without observing anything")));
+        mutations.put(Property.A_DROPPED_CALL_IS_HEALED_BY_AN_EXECUTABLE_REPAIR, List.of(
+                new Mutation(Mutant.A_REPAIR_THAT_DOES_NOTHING,
+                        "the property IS that the repair leg is executable and converges, so the mutation is the "
+                                + "repair reduced to what a comment would have been")));
+        mutations.put(Property.AN_ENQUEUED_NOTE_IS_DURABLE_WHEN_THE_CALLBACK_RETURNS, List.of(
+                new Mutation(Mutant.NO_WORK_AT_ALL,
+                        "the durable-after-enqueue class is exactly the claim that a note EXISTS the moment the "
+                                + "callback returned; a callback that enqueues nothing must fail here, which is what "
+                                + "keeps the class from being a label")));
+        mutations.put(Property.A_REPEATED_DRAIN_LEAVES_THE_SAME_SURFACE, List.of(
+                new Mutation(Mutant.A_DRAIN_THAT_IS_NOT_REPLAYABLE,
+                        "the property is about the SECOND drain, so the mutation is one extra row from the second "
+                                + "drain on - a note redelivered after a crashed drain compounding rather than "
+                                + "converging, which is the only thing this leg is for"),
+                new Mutation(Mutant.NO_WORK_AT_ALL,
+                        "and the drained surface must be the converged one, or the two drains are being compared over "
+                                + "a surface nothing delivered to")));
+        mutations.put(Property.A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED, List.of(
+                new Mutation(Mutant.A_PUBLISH_ROW_FROM_THE_WITHHOLD_LEG,
+                        "a QUARANTINE legitimately fires the withhold-change feed, so the honest way for a held "
+                                + "artifact to acquire a PUBLISH row is an observer that treats the two feeds as one. "
+                                + "That is the smallest thing this check forbids, and it is invisible to any "
+                                + "assertion that only counted rows")));
+
+        // --- the publish interceptor ---------------------------------------------------------------------------------
+        mutations.put(Property.THE_VERDICT_LEGS_RECEIVE_THE_PUBLICATIONS_OWN_SCOPED_STORE, List.of(
+                new Mutation(Mutant.A_ROOT_SCOPED_RECORD,
+                        "the half a provider owns: which store the three legs are HANDED is Publication's routing and "
+                                + "no hook can change it, but whether the screen writes through the one it was handed "
+                                + "is entirely the screen's. The mutation moves the row and nothing else - it is "
+                                + "still written, still correct, still keyed the same way, one repository up (§6)")));
+        mutations.put(Property.ACCEPT_IS_THE_NEUTRAL_ANSWER_AND_AN_EMPTY_CHAIN_ACCEPTS, List.of(
+                new Mutation(Mutant.A_NON_NEUTRAL_DEFAULT,
+                        "the clause's hook-facing half is that an UN-ARRANGED screen has nothing against the artifact "
+                                + "and says so. QUARANTINE is the weakest answer that is not the neutral one, and a "
+                                + "screen giving it holds every upload for a reason nobody stated")));
+        mutations.put(Property.A_SCREEN_DOES_NOT_CATCH_ITS_OWN_STORE_FAILURE_INTO_AN_ACCEPT, List.of(
+                new Mutation(Mutant.NO_WORK_AT_ALL,
+                        fixture -> fixture instanceof Interceptor screen && !screen.reads().isEmpty(),
+                        "the check's own preamble is that the screen really consults the keys it declares: the outage "
+                                + "is armed on exactly those, so a screen that reads nothing has nothing to fail and "
+                                + "satisfies the clause for free. This is the interceptor half's general vacuity "
+                                + "probe, and it is the only place on this role where an inert screen is caught"),
+                new Mutation(Mutant.A_BLIND_ACCEPT,
+                        fixture -> fixture instanceof Interceptor screen && !screen.reads().isEmpty(),
+                        "this is the one verdict-leg obligation that is genuinely per-implementation, so it is the "
+                                + "one an implementation can quietly lose: a try/catch around its own read, "
+                                + "answering the neutral value. The mutation is that catch, and nothing else. It is "
+                                + "declared only for a screen that names a verdict-bearing read, because a screen "
+                                + "that consults no state has no read to fail")));
+        mutations.put(Property.WITHHELD_IS_A_PURE_READ_ON_EVERY_SERVE_AND_ENUMERATION, List.of(
+                new Mutation(Mutant.A_WRITING_WITHHELD,
+                        "the purity half is judged by comparing the store's keys either side of three serves and an "
+                                + "enumeration, so the mutation is one key written on that path - a lazy refresh, an "
+                                + "access counter, a memo persisted 'just this once' - which is what §10 forbids on a "
+                                + "GET and what the comparison exists to see")));
+        mutations.put(Property.A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE, List.of(
+                new Mutation(Mutant.A_LATCHED_WITHHELD,
+                        PublicationHookContract::holdsOnTheReadSide,
+                        "the retraction only works because the read side is RE-CONSULTED rather than latched at "
+                                + "publish time, and the check proves it on the publication that has already been "
+                                + "serving. A screen that memoised its first answer keeps serving what it served, "
+                                + "which is the defect clause 9 names - and it is declared only for the screen whose "
+                                + "verdict lives on the read side, since for the others the check drives the kit's "
+                                + "own probe and the fixture's screen is a bystander")));
+        mutations.put(Property.A_BYTE_IDENTICAL_REPLAY_REACHES_THE_SAME_VERDICT_AND_UPSERTS, List.of(
+                new Mutation(Mutant.A_ROW_PER_DELIVERY,
+                        "the upsert half: committed is called again on every replay, so a screen that appends grows "
+                                + "its record once per attempt. One extra row from the second commit on is the "
+                                + "smallest form of that, and it is precisely what a crashed-and-replayed publish "
+                                + "produces in production")));
+        mutations.put(Property.ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS, List.of(
+                new Mutation(Mutant.A_VERDICT_REMEMBERED_IN_A_FIELD,
+                        fixture -> fixture instanceof Interceptor screen && screen.verdicts().size() > 1,
+                        "clause 1's defect is a screen keeping per-call state in a field, which answers for whichever "
+                                + "artifact wrote the field last. The mutation is that, made deterministic - every "
+                                + "publish gets the first one's verdict - because a check that only fails when the "
+                                + "interleaving cooperates is not a check. Declared only for a screen that can reach "
+                                + "more than one verdict, since otherwise every answer is the same answer and there "
+                                + "is nothing to confuse")));
+        mutations.put(Property.THE_COMMITTED_TO_VISIBILITY_CRASH_WINDOW_REPLAYS_CLEAN, List.of(
+                new Mutation(Mutant.A_ROW_PER_DELIVERY,
+                        "the hook-facing half of this window is that the replay REPAIRS it, and it only does so "
+                                + "because committed upserts - the check says so out loud and then compares the "
+                                + "record across the replay. A screen that appends turns the repair into an "
+                                + "accumulation, one row per crashed attempt")));
+
+        // --- the pre-commit release hook ------------------------------------------------------------------------------
+        mutations.put(Property.A_RELEASE_HOOK_IS_NOT_A_CONTAINED_PUBLICATION_OBSERVER, List.of(
+                new Mutation(Mutant.A_MISDERIVED_ROLE,
+                        "the property is the structural claim itself, so the mutation is the registration accident it "
+                                + "forbids: a hook that also answers PublicationObserver, which one `uses` clause "
+                                + "would then discover into the contained after-commit path")));
+        mutations.put(Property.A_THROWING_HOOK_PROPAGATES_AND_LEAVES_THE_HOLD_SAFE, List.of(
+                new Mutation(Mutant.A_RELEASE_SURFACE_THAT_SWALLOWS,
+                        "the propagation half: a surface that catches a hook's failure tells the reviewer the release "
+                                + "landed, which is the fail-open direction the whole role exists to prevent"),
+                new Mutation(Mutant.A_RELEASE_SURFACE_THAT_MUTATES_FIRST,
+                        "and the safe-state half, which is a different claim and the weaker break: the failure still "
+                                + "propagates, but the hold is already gone, so only a check that re-reads durable "
+                                + "state afterwards can tell this surface from a correct one")));
+        mutations.put(Property.HOOKS_THAT_RAN_BEFORE_THE_FAILURE_ARE_IDEMPOTENT_ON_RETRY, List.of(
+                new Mutation(Mutant.NO_WORK_AT_ALL,
+                        "THE instance this kit was carried here for: a hook that is a no-op throughout satisfies "
+                                + "every step of this check - the poisoned fan-out still fails, the retry still "
+                                + "completes, the third run still changes nothing - and the only assertion that can "
+                                + "tell it apart is that the override was actually promoted")));
+        mutations.put(Property.THE_RELEASE_IS_VISIBLE_ONLY_AFTER_EVERY_HOOK_SUCCEEDED, List.of(
+                new Mutation(Mutant.A_RELEASE_SURFACE_THAT_MUTATES_FIRST,
+                        "the property is an ORDERING, so the mutation is the ordering reversed and nothing else: "
+                                + "every hook still runs, the failure still propagates, and the only difference is a "
+                                + "half-released artifact serving while a remaining hold kind was never cleared")));
+        mutations.put(Property.A_STORE_FAULT_MID_FAN_OUT_LEAVES_THE_HOLD_SAFE, List.of(
+                new Mutation(Mutant.NO_WORK_AT_ALL,
+                        "the same instance from the other side, and the sharper one: the outage is armed on exactly "
+                                + "the namespaces the fixture declares, so a hook that writes nothing there cannot be "
+                                + "made to fail and the leg observes a clean release it calls a safe hold")));
+        mutations.put(Property.A_DISCARD_DROPS_THE_RECORD_WITHOUT_PROMOTING_AN_OVERRIDE, List.of(
+                new Mutation(Mutant.NO_WORK_AT_ALL,
+                        "the drop half: a discard that leaves the per-version record behind strands a thrown-away "
+                                + "version's row forever, since no sweep will ever reach a version with no published "
+                                + "sidecar"),
+                new Mutation(Mutant.A_DISCARD_THAT_PROMOTES,
+                        "and the asymmetry half, which is the whole point of the clause: a discard that promotes an "
+                                + "override records that a human cleared a finding nobody looked at, and suppresses "
+                                + "every future legitimate hold on those bytes")));
+        mutations.put(Property.A_HOOK_IS_A_NO_OP_FOR_A_PATH_IT_NEVER_HELD, List.of(
+                new Mutation(Mutant.A_HOOK_THAT_RAISES_FOR_AN_UNHELD_PATH,
+                        "the property is what makes registering an unused hold kind harmless, so the mutation is the "
+                                + "hook refusing a path it never held - which turns an installed-but-idle plugin into "
+                                + "a deployment where no review can ever be released")));
+        return Collections.unmodifiableMap(mutations);
+    }
+
+    /** The mutations {@code fixture}'s leg of {@code property} must fail against - every declared one whose shape
+     *  this hook has. An empty answer means the property carries no falsification at all, which the census holds to a
+     *  reviewed list. */
+    public static List<Mutation> mutations(PublicationHookFixture fixture, Property property) {
+        Objects.requireNonNull(fixture, "fixture");
+        return mutations().getOrDefault(property, List.of()).stream()
+                .filter(mutation -> mutation.appliesTo().test(fixture))
+                .toList();
+    }
+
+    /**
+     * Whether this screen expresses its verdict on the <em>read</em> side - a retroactive hold that lets the publish
+     * through and retracts it later - derived from the two declarations a fixture already makes rather than from a
+     * third one invented for the falsification leg: it consults stored state ({@link Interceptor#reads()} is
+     * non-empty) yet can reach no verdict but the neutral one at publish time ({@link Interceptor#verdicts()} is
+     * exactly {@code ACCEPT}). A screen that votes at publish time reaches a non-neutral verdict; a screen that
+     * consults nothing has no side to hold on.
+     */
+    public static boolean holdsOnTheReadSide(PublicationHookFixture fixture) {
+        return fixture instanceof Interceptor screen
+                && !screen.reads().isEmpty()
+                && screen.verdicts().equals(Set.of(PublishInterceptor.Disposition.ACCEPT));
     }
 
     /**
