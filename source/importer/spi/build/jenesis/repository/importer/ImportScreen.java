@@ -20,9 +20,11 @@ import module java.base;
  * walk) and neither judged the transport - so an {@code https} base whose listing answered
  * {@code http://same-host/...} was <em>cross-origin</em> by scheme and passed. A third (the Maven tree walk) fetches
  * listing-derived URLs too and is safe only because its HTML listing parser happens to constrain every entry to the
- * walked directory's scheme and authority: the right property, reached independently, never generalised. Credentials were correctly withheld cross-origin, so nothing leaked; the artifact bytes were fetched in
- * cleartext and written into the hosted store with no integrity check behind them, which is a supply-chain
- * substitution rather than a disclosure.
+ * walked directory's scheme and authority: the right property, reached independently, never generalised.
+ *
+ * <p>Credentials were correctly withheld cross-origin, so nothing leaked. What happened instead is worse: the artifact
+ * bytes were fetched in cleartext and written into the hosted store with no integrity check behind them, which is a
+ * supply-chain substitution rather than a disclosure.
  *
  * <p>So the screen sits at the fetch. {@link ProxyFormat.Fetcher} is the only transport a connector is allowed
  * ({@link ImportSourceProvider}'s contract clause 10: it "is handed the shared {@code Fetcher} and must use it -
