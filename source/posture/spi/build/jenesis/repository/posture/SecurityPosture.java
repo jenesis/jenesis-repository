@@ -34,16 +34,19 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "jenesis.repository.auth", "true", DOCS + "#jenesis.auth.open"));
         }
 
-        // 2. Private-host import SSRF screen disabled: an import URL can then reach internal addresses (link-local,
-        //    RFC1918, loopback) and turn the importer into a request proxy into the deployment's own network.
+        // 2. Import screen disabled: the one dial covers both halves, so turning it off lets an import URL reach
+        //    internal addresses (link-local, RFC1918, loopback) AND travel in cleartext with the upstream credentials
+        //    attached. The advisory names both, because an operator who took the dial for the host half alone has
+        //    opted out of the transport half without being told.
         if (!config.flag("jenesis.repository.block-private-import-hosts", true)) {
             advisories.add(SecurityAdvisory.deployment("jenesis.importer.ssrf", Severity.WARN,
-                    "Import SSRF screen is disabled",
+                    "Import screen is disabled",
                     "jenesis.repository.block-private-import-hosts=false lets an import fetch from private/loopback "
-                            + "addresses, so a caller can use the importer to reach internal services (an SSRF pivot) - "
+                            + "addresses, so a caller can use the importer to reach internal services (an SSRF pivot), "
+                            + "and lets a migration run over plaintext http with the upstream credentials attached - "
                             + "especially dangerous on a multi-tenant or anonymous instance.",
-                    "Keep the private-host screen on; open it only for a controlled internal-host migration and close "
-                            + "it again afterwards.",
+                    "Keep the screen on; open it only for a controlled internal or plaintext on-premises migration "
+                            + "and close it again afterwards.",
                     "jenesis.repository.block-private-import-hosts", "true", DOCS + "#jenesis.importer.ssrf"));
         }
 

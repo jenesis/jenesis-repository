@@ -2,6 +2,7 @@ package build.jenesis.repository.importer.index.test;
 
 import build.jenesis.repository.importer.ImportRequest;
 import build.jenesis.repository.importer.ImportSource;
+import build.jenesis.repository.importer.ImportSourceProvider;
 import build.jenesis.repository.importer.index.IndexSourceProvider;
 import module org.junit.jupiter.api;
 
@@ -25,15 +26,20 @@ class IndexSourceTest {
         if (cursor != null) {
             request = request.withCursor(cursor);
         }
-        ImportSource source = provider.create(request, fetcher);
-        assertThat(source).isNotNull();
-        return source;
+        return open(request, fetcher);
     }
 
     private ImportSource authenticatedSource(FakeFetcher fetcher) {
         ImportRequest request = new ImportRequest(URI.create("http://source.local"), ".")
                 .withFormat("fake").withCredentials("operator", "s3cr3t");
-        ImportSource source = provider.create(request, fetcher);
+        return open(request, fetcher);
+    }
+
+    /** Built the way an import edge builds one - through {@link ImportSourceProvider#open}, which screens the fetcher
+     *  against the URL the operator submitted. The absolute URLs the index enumerates are judged there, not in the
+     *  connector. */
+    private ImportSource open(ImportRequest request, FakeFetcher fetcher) {
+        ImportSource source = ImportSourceProvider.open(provider, request, fetcher);
         assertThat(source).isNotNull();
         return source;
     }
@@ -145,17 +151,39 @@ class IndexSourceTest {
     @Test
     void a_cross_origin_download_to_a_private_host_is_refused() {
         // The download URL derives from the foreign index and is fetched as an INITIAL request, which HttpFetcher's
-        // redirect-only SSRF screen never inspects. A cross-origin URL the index aims at a loopback/metadata host must
-        // be refused here (the same guard NexusSource applies to its listing-derived downloads) - never proxied.
+        // redirect-only SSRF screen never inspects. A cross-origin URL the index aims at a loopback/metadata host is
+        // refused at the fetch, by the one screen every connector's fetcher carries - never proxied.
         FakeFetcher fetcher = reachable()
                 .on("http://source.local/index", 200,
                         "evil/x.bin http://127.0.0.1/x.bin\n".getBytes(StandardCharsets.UTF_8));
         assertThatThrownBy(() -> source(fetcher, null).forEach(
                 (format, path, content) -> content.open().close(), cursor -> { }))
                 .isInstanceOf(IOException.class)
-                .hasMessageContaining("cross-origin download to a private/loopback host");
+                .hasMessageContaining("cross-origin URL to a private, loopback or cloud-metadata host");
         assertThat(fetcher.urls).as("the internal target was never actually fetched")
                 .doesNotContain("http://127.0.0.1/x.bin");
+    }
+
+    @Test
+    void an_index_url_that_downgrades_an_https_migration_to_cleartext_is_refused() {
+        // The other half of the same miss (D-152): the operator submitted https, and the foreign index enumerates a
+        // plaintext URL on a perfectly public host - which the private-host half has nothing to say about. Nothing
+        // leaks (the credential wrapper is same-origin only); what happens is that the artifact bytes arrive over a
+        // channel an active intermediary can rewrite, and an imported artifact carries no independent integrity check
+        // to catch the substitution.
+        FakeFetcher fetcher = new FakeFetcher()
+                .on("https://source.local/", 200, new byte[0])
+                .on("https://source.local/index", 200,
+                        "alpha/a.bin http://source.local/a.bin\n".getBytes(StandardCharsets.UTF_8))
+                .on("http://source.local/a.bin", 200, "substituted".getBytes(StandardCharsets.UTF_8));
+        ImportRequest request = new ImportRequest(URI.create("https://source.local"), ".").withFormat("fake");
+
+        assertThatThrownBy(() -> open(request, fetcher).forEach(
+                (format, path, content) -> content.open().close(), cursor -> { }))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("downgrades an https migration to cleartext");
+        assertThat(fetcher.urls).as("the plaintext download was never actually fetched")
+                .doesNotContain("http://source.local/a.bin");
     }
 
     @Test
