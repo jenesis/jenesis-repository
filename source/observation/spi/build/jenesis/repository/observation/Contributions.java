@@ -33,7 +33,11 @@ import module java.base;
  * <p><strong>What it deliberately does not contain.</strong> Only {@link Exception} is contained. An {@link Error} - a
  * {@link LinkageError} from a half-installed plugin, an {@link OutOfMemoryError} - propagates: that is a broken module
  * graph or a dying JVM rather than a contributor failing to answer, and reporting it as one degraded row on an
- * otherwise healthy-looking page would misreport it. Nor is this class for a <em>verdict-bearing</em> seam: a gate,
+ * otherwise healthy-looking page would misreport it. It is nonetheless <b>attributed on its way out</b>, at
+ * {@code ERROR}, with the contributor's class (D-206): D-094's ruling is that an {@code Error} is attributed
+ * <em>and</em> escalated, and this class used to do the second half only - so an operator whose console 500ed learned
+ * that something on the page had given way and nothing about which of N plugins it was. Nor is this class for a
+ * <em>verdict-bearing</em> seam: a gate,
  * screen or interceptor that decides whether an artifact is accepted must fail closed and propagate. Containment is for
  * observers and report contributors, never for a gate.
  *
@@ -127,6 +131,25 @@ public final class Contributions {
                     throw new IllegalStateException("The " + surface + " " + contributor.getClass().getName()
                             + " answered null; null is never a legal contribution.");
                 }
+            } catch (Error broken) {
+                // NOT contained - see the class note - but named on its way out (D-206). The propagation is right: a
+                // LinkageError from a half-installed plugin is a broken module graph rather than a contributor
+                // declining to answer, and one degraded row on an otherwise healthy-looking page would misreport it.
+                // What was missing is D-094's other half. An Error left here with no log line at all, so an operator
+                // whose console 500ed learned that something on the page raised a NoClassDefFoundError and nothing
+                // about which of N plugins it was. Attributed and rethrown, exactly as EventSink.emit does: the
+                // escalation is unchanged, the diagnosis is not.
+                try {
+                    LOGGER.log(System.Logger.Level.ERROR, "The " + surface + " " + contributor.getClass().getName()
+                            + " raised an Error; it is NOT contained - an Error is the runtime or the module graph "
+                            + "giving way rather than a contributor failing to answer, so it reaches the caller "
+                            + "instead of becoming one degraded row on a page that would then look healthy.", broken);
+                } catch (Throwable diagnostic) {
+                    // Rendering the diagnostic can itself fail on the very runtime that just gave way. The
+                    // attribution is worth having but never worth REPLACING the Error it attributes.
+                    broken.addSuppressed(diagnostic);
+                }
+                throw broken;
             } catch (Exception exception) {
                 LOGGER.log(System.Logger.Level.WARNING, "The " + surface + " " + contributor.getClass().getName()
                         + " failed; it is reported as failed on the surface and every other " + surface
