@@ -152,8 +152,8 @@ class ScanTriggerPrincipleTest {
 
         assertThat(declared).as("the source/ walk found the repository's module descriptors")
                 .hasSizeGreaterThan(20).contains("build.jenesis.repository.store", "build.jenesis.repository.server");
-        assertThat(testModules).as("the test/ walk found the repository's test modules")
-                .hasSizeGreaterThan(10).contains("test/server", "test/store");
+        assertThat(testModules).as("the test/ walk found the repository's test modules, nested ones included")
+                .hasSizeGreaterThan(10).contains("test/server", "test/gc", "test/store/contract");
         assertThat(scanners)
                 .as("a detector matching nothing, or everything, would make the two legs above vacuous")
                 .isNotEmpty().hasSizeLessThan(testModules.size()).contains("test/server");
