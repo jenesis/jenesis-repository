@@ -146,7 +146,7 @@ class SpiContractPrincipleTest {
      * {@link #every_declared_service_carries_inventory_metadata()}; an entry no clause names any more fails
      * {@link #every_inventory_surface_is_live()}.
      */
-    private static final List<Surface> INVENTORY = inventory();
+    static final List<Surface> INVENTORY = inventory();
 
     private static List<Surface> inventory() {
         List<Surface> surfaces = new ArrayList<>();
@@ -589,7 +589,7 @@ class SpiContractPrincipleTest {
     }
 
     /** The services whose providers are keyed by a role interface rather than by the clause alone. */
-    private static Set<String> roleSplitBases() {
+    static Set<String> roleSplitBases() {
         return INVENTORY.stream().map(Surface::base).filter(Objects::nonNull)
                 .collect(Collectors.toCollection(TreeSet::new));
     }
@@ -600,7 +600,7 @@ class SpiContractPrincipleTest {
      * capability-declaring {@code signals()} method - the two shapes by which a provider states which role it
      * answers without a separate {@code provides} clause.
      */
-    private static Map<String, Set<String>> rolesByProvider(Graph graph, Map<String, Path> sources)
+    static Map<String, Set<String>> rolesByProvider(Graph graph, Map<String, Path> sources)
             throws IOException {
         Map<String, Set<String>> keyed = new TreeMap<>();
         for (Surface surface : INVENTORY) {
@@ -669,7 +669,7 @@ class SpiContractPrincipleTest {
 
     /** Parses every source {@code module-info.java} into the {@code uses} / {@code provides} graph. Multiline
      *  provider lists are handled, and comments are stripped so a clause quoted in javadoc never counts. */
-    private static Graph graph(Path sourceRoot) throws IOException {
+    static Graph graph(Path sourceRoot) throws IOException {
         Map<String, Set<String>> consumers = new TreeMap<>();
         Map<String, List<Declaration>> declarations = new TreeMap<>();
         try (Stream<Path> files = Files.walk(sourceRoot)) {
@@ -697,7 +697,7 @@ class SpiContractPrincipleTest {
 
     /** Every top-level type under {@code source/}, keyed by its fully qualified name, so a service or provider name
      *  resolves to the file that declares it. */
-    private static Map<String, Path> interfaceSources(Path sourceRoot) throws IOException {
+    static Map<String, Path> interfaceSources(Path sourceRoot) throws IOException {
         Map<String, Path> sources = new TreeMap<>();
         try (Stream<Path> files = Files.walk(sourceRoot)) {
             for (Path file : (Iterable<Path>) files.filter(SpiContractPrincipleTest::isJava)::iterator) {
@@ -730,7 +730,7 @@ class SpiContractPrincipleTest {
         return javadoc.contains("<h2>Contract</h2>") || javadoc.contains("Contract:");
     }
 
-    private static boolean isJava(Path path) {
+    static boolean isJava(Path path) {
         return Files.isRegularFile(path) && path.getFileName().toString().endsWith(".java")
                 && !path.getFileName().toString().equals("module-info.java");
     }
@@ -738,7 +738,7 @@ class SpiContractPrincipleTest {
     /** The module sources directory ({@code <repo>/source}). The build runs the test JVM from the repository root,
      *  so this walks up from the working directory to the first ancestor holding {@code source/} beside
      *  {@code build/jenesis}. Fails loudly if the tree is not reachable, so the check never passes vacuously. */
-    private static Path sourceRoot() {
+    static Path sourceRoot() {
         Path start = Path.of("").toAbsolutePath();
         for (Path dir = start; dir != null; dir = dir.getParent()) {
             if (Files.isDirectory(dir.resolve("source")) && Files.isDirectory(dir.resolve("build/jenesis"))) {

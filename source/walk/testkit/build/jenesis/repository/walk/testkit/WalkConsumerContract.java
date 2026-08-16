@@ -40,6 +40,15 @@ import build.jenesis.repository.walk.testkit.WalkConsumerFixture.Corpus;
  * the expectation, so this module stays {@code java.base} + the walk SPI + the store testkit and the downstream
  * distribution can require it for its own fixtures exactly as it already requires the store testkit. The JUnit driver
  * lives under {@code test/**} and turns each check into one dynamic test.
+ *
+ * <h2>Clauses this kit discharges (T-304)</h2>
+ * Read by {@code AuditChecklistPrincipleTest} and subtracted from the parsed {@code Contract} block, restating the
+ * clause numbers the {@link Property} javadocs already cite: 2 and 5
+ * ({@code FULL_PASS_REBUILDS_THE_DECLARED_PROJECTION}, {@code SECOND_PASS_OVER_UNCHANGED_STATE_IS_A_NO_OP},
+ * {@code CRASH_MID_STRIDE_CONVERGES}), 6 ({@code A_FAILED_PASS_IS_RESUMABLE_NEVER_SILENTLY_COMPLETE}), 10
+ * ({@code PASS_HOOKS_BRACKET_EVERY_DELIVERY}) and 12 ({@code CRASH_BEFORE_THE_FIRST_DELIVERY_CONVERGES}).
+ *
+ * @jenesis.covers build.jenesis.repository.walk.WalkConsumer 2, 5, 6, 10, 12
  */
 public final class WalkConsumerContract {
 

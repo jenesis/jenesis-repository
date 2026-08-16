@@ -20,6 +20,16 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
  * {@link Property#BATCH_FAILURE_IS_PER_ENTRY} arms a {@link FaultInjectingStore} over the real backend to prove a
  * thrown write becomes one {@code FAILED} entry instead of aborting the batch, and {@link Property#STORE_INVARIANTS}
  * runs {@link StoreInvariants} against a freshly scoped subspace of the live backend.
+ *
+ * <h2>Clauses this kit discharges (T-304)</h2>
+ * Read by {@code AuditChecklistPrincipleTest} and subtracted from the parsed {@code Contract} blocks. Almost all of
+ * this kit's properties are about {@link build.jenesis.repository.store.ArtifactStore}, which is not an inventoried
+ * surface - no {@code uses}/{@code provides} clause names it - so they are claimed nowhere and the clause-to-property
+ * mapping stays where it already is, in that interface's own enforcement preamble. What this kit proves about the
+ * discovered <em>provider</em> is its transport-security clause, through {@link Property#PLAINTEXT_ENDPOINT_REFUSED}
+ * against a real backend.
+ *
+ * @jenesis.covers build.jenesis.repository.store.ArtifactStoreProvider 8
  */
 public final class StoreContract {
 
