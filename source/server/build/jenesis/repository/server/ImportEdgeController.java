@@ -173,9 +173,11 @@ public class ImportEdgeController {
         return Boolean.parseBoolean(settings.apply("read-only"));
     }
 
-    /** The import SSRF screen is on by default (the secure default); an internal-host migration opts out with
-     *  {@code jenesis.repository.block-private-import-hosts=false}. Read off the same settings the read-only flag
-     *  reads, so no extra dependency is threaded in - unset (or any value other than {@code false}) blocks. */
+    /** The import screen is on by default (the secure default) and this one dial governs <em>both</em> its halves -
+     *  the transport and the host - so an internal <em>or</em> plaintext on-premises migration opts out with
+     *  {@code jenesis.repository.block-private-import-hosts=false} and nothing can be opted out of alone. Read off the
+     *  same settings the read-only flag reads, so no extra dependency is threaded in - unset (or any value other than
+     *  {@code false}) blocks. */
     private boolean blockPrivateImportHosts() {
         String value = settings.apply("block-private-import-hosts");
         return value == null || value.isBlank() || Boolean.parseBoolean(value);

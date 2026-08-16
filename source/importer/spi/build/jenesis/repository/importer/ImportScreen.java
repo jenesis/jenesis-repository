@@ -74,11 +74,19 @@ public final class ImportScreen implements ProxyFormat.Fetcher {
      * Wrap {@code fetcher} so every URL a source fetches through it is screened against {@code authorised} - the URL
      * the operator submitted and the edge already screened. This is what {@link ImportSourceProvider#open} hands a
      * connector, and the reason a connector needs no screen of its own.
+     *
+     * <p>A missing {@code authorised} URL throws rather than passing the transport through unscreened: there is no
+     * level to judge against, and a screen that quietly becomes a no-op is the failure mode this whole class is about
+     * (&sect;9). {@link ProxyFormat.Fetcher#NONE} is the one thing not wrapped, because it reaches no network at all.
      */
     public static ProxyFormat.Fetcher around(ProxyFormat.Fetcher fetcher, URI authorised) {
-        return fetcher == ProxyFormat.Fetcher.NONE || authorised == null
-                ? fetcher                     // nothing to screen: NONE fetches nothing, and a source with no
-                : new ImportScreen(fetcher, authorised);        // authorised URL never reaches a provider at all
+        if (fetcher == ProxyFormat.Fetcher.NONE) {
+            return fetcher;                              // answers every leg empty; there is nothing to screen
+        }
+        if (authorised == null) {
+            throw new IllegalArgumentException("An import cannot be screened without the URL the operator submitted");
+        }
+        return new ImportScreen(fetcher, authorised);
     }
 
     /**

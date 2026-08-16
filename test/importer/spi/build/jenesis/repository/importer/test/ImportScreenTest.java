@@ -140,6 +140,15 @@ class ImportScreenTest {
     }
 
     @Test
+    void a_screen_with_nothing_to_judge_against_throws_rather_than_passing_the_transport_through() {
+        // The failure mode this class exists to prevent is a screen that quietly becomes a no-op, so the one input it
+        // cannot do without is refused loudly rather than defaulted away (§9).
+        assertThatThrownBy(() -> ImportScreen.around(new Recording(), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("the URL the operator submitted");
+    }
+
+    @Test
     void a_source_is_built_with_the_screened_fetcher_when_an_edge_opens_it() {
         // ImportSourceProvider.open is the seam: the provider sees a screened fetcher without asking for one, which is
         // why a connector added tomorrow arrives screened without knowing this class exists.
