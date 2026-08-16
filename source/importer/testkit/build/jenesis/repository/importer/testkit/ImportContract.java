@@ -40,6 +40,14 @@ import build.jenesis.repository.store.Features;
  * expectation, so this module stays {@code java.base} + the importer SPI and a downstream distribution can require it
  * for its own connector fixtures exactly as it already requires the store testkit. The JUnit driver lives under
  * {@code test/**} and turns each check into one dynamic test.
+ *
+ * <h2>Clauses this kit discharges (T-304)</h2>
+ * Read by {@code AuditChecklistPrincipleTest} and subtracted from the parsed {@code Contract} block.
+ * {@code SELF_SKIPS_WITHOUT_CREDENTIALS} is {@code ImportSourceProvider}'s absence-sentinel and selection-failure
+ * pair, which its own javadoc already cites. The kit's four other properties are about {@code ImportSource}, which
+ * is not an inventoried surface (no {@code uses}/{@code provides} clause names it), so they are claimed nowhere.
+ *
+ * @jenesis.covers build.jenesis.repository.importer.ImportSourceProvider 3, 4
  */
 public final class ImportContract {
 
