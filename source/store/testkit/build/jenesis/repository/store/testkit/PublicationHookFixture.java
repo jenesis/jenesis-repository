@@ -72,6 +72,24 @@ public interface PublicationHookFixture {
      *  kit compares. */
     Map<String, String> projection(ArtifactStore store) throws IOException;
 
+    /** Whether this hook records durable state for the artifact <em>the kit itself publishes</em> - a plain accepted
+     *  publish of a generic path. Most hooks do, and for those the kit demands proof that the record landed inside
+     *  the publication's own scope. Two kinds legitimately do not, and the difference between them does not matter
+     *  here because the observable is the same: a screen that holds no state at all (its only say is a verdict
+     *  computed from the request path), and a recorder whose preconditions a generic accepted publish does not meet
+     *  (it writes only for its own ecosystem, or only under a quarantine disposition). Both are the case
+     *  {@link #projection} already allows for - "Empty when the hook has recorded nothing".
+     *
+     *  <p>The kit needs the declaration because from the outside "recorded nothing" and "recorded against the store
+     *  one scope up" are the same observation of the scoped store, and only the first is correct behaviour. Both
+     *  answers are falsifiable, so neither buys a pass: {@code true} must prove a write inside the scope it was
+     *  handed, and {@code false} must prove a write nowhere at all - so a hook that quietly starts recording fails
+     *  here rather than sliding through. Answer {@code false} only from the hook's own declared preconditions, and
+     *  say which ones at the override; never to quiet the check for a hook that was merely not driven far enough. */
+    default boolean recordsWhatTheKitPublishes() {
+        return true;
+    }
+
     /** The contract properties this hook's shape genuinely does not have, each with a mandatory reason naming where
      *  the property is proven instead. Empty by default: an exclusion is a deliberate, reviewable statement. */
     default Map<PublicationHookContract.Property, String> unsupported() {
