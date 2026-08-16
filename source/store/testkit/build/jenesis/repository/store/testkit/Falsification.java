@@ -36,6 +36,48 @@ public final class Falsification {
     }
 
     /**
+     * Run {@code check} over a fresh store whose publications all run under {@code mutant}'s arranged choreography -
+     * the D-148 leg. The fixture's hook is <em>not</em> substituted here: the subject of these clauses is the commit
+     * sequence, and the hook rides along exactly as it does on the ordinary leg.
+     */
+    public static void run(PublicationHookFixture fixture, PublicationHookContract.Check check,
+                           ChoreographyMutant mutant, Deployment deployment) throws Exception {
+        FaultInjectingStore store = deployment.store(fixture.hook() + "-" + check.property() + "-" + mutant);
+        check.body().run(fixture, store.simulating(mutant));
+    }
+
+    /**
+     * The choreography falsification leg (D-148): run {@code check} under an arranged commit sequence that produces
+     * exactly the observable a mutated {@link build.jenesis.repository.store.Publication} would produce, and require
+     * the check to say otherwise.
+     *
+     * <p>The same {@code AssertionError}-only rule as {@link #requireBroken} applies, and it matters more here: these
+     * mutants arrange the chain rather than one hook, so a mutant that took the harness out from under a check would
+     * be very easy to mistake for a bite.
+     */
+    public static void requireBrokenByChoreography(PublicationHookFixture fixture,
+                                                   PublicationHookContract.Check check, ChoreographyMutant mutant,
+                                                   Deployment deployment) throws Exception {
+        try {
+            run(fixture, check, mutant, deployment);
+        } catch (AssertionError expected) {
+            return;
+        } catch (Exception | Error broken) {
+            throw new AssertionError(fixture.hook() + ": '" + check.name() + "' did not fail under " + mutant
+                    + " - it broke. That choreography removes " + mutant.removes() + ", and a check may only answer "
+                    + "that with an AssertionError; anything else means the arrangement took the harness out from "
+                    + "under the check rather than falsifying it, and says nothing about whether the check measures "
+                    + "the clause.", broken);
+        }
+        throw new AssertionError(fixture.hook() + ": '" + check.name() + "' PASSED under " + mutant + ", which "
+                + "removes " + mutant.removes() + ". This clause is about Publication's own commit choreography, and "
+                + "the arrangement produces exactly the observable a Publication that had lost that behaviour would "
+                + "produce - so a check that survives it is not measuring the clause at all. Either the check has "
+                + "stopped reading the probe it asserts on, or the arrangement is the wrong one for this clause and "
+                + "the pairing in the census is what needs the argument.");
+    }
+
+    /**
      * The falsification leg: run {@code check} against the deliberately broken deployment object {@code mutation}
      * names, and require it to say otherwise.
      *

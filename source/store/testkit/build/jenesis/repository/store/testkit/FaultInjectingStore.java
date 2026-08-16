@@ -61,6 +61,12 @@ public final class FaultInjectingStore implements ArtifactStore {
     private final List<Rule> rules = new ArrayList<>();
     private final Map<Op, Integer> counts = new EnumMap<>(Op.class);
 
+    /** Which commit choreography this deployment simulates (D-148). It rides the store rather than the check's
+     *  signature because every check reaches its {@code Publication} through
+     *  {@link PublicationHookContract#publication}, and the store is the one deployment object every check body is
+     *  already handed - so the arrangement follows the deployment instead of forty-six signatures. */
+    private volatile ChoreographyMutant choreography = ChoreographyMutant.NONE;
+
     private FaultInjectingStore(ArtifactStore delegate) {
         this.delegate = delegate;
     }
@@ -68,6 +74,31 @@ public final class FaultInjectingStore implements ArtifactStore {
     /** Wrap a delegate store; with no fault armed this is a transparent pass-through. */
     public static FaultInjectingStore wrap(ArtifactStore delegate) {
         return new FaultInjectingStore(delegate);
+    }
+
+    /** Run every publication built over this store - or over a scope of it - under {@code mutant}'s arranged
+     *  choreography (D-148). Armed like a fault, and for the same reason: it is a property of the deployment a check
+     *  is driving rather than of the check. */
+    public FaultInjectingStore simulating(ChoreographyMutant mutant) {
+        this.choreography = Objects.requireNonNull(mutant, "mutant");
+        return this;
+    }
+
+    /** The arranged choreography publications over this store run under; {@link ChoreographyMutant#NONE} unless
+     *  {@link #simulating} armed one. */
+    public ChoreographyMutant choreography() {
+        return choreography;
+    }
+
+    /** The arranged choreography of {@code store}, following a scoped view back to the store it was scoped from -
+     *  the seam {@link PublicationHookContract#publication} reads, so a check that scopes its store before building a
+     *  publication is arranged exactly like one that does not. */
+    static ChoreographyMutant choreographyOf(ArtifactStore store) {
+        return switch (store) {
+            case FaultInjectingStore faulting -> faulting.choreography;
+            case FaultInjectingStore.Scoped scoped -> scoped.choreography();
+            default -> ChoreographyMutant.NONE;
+        };
     }
 
     // --- fault arming (fluent; every method returns this) --------------------------------------------------------
@@ -297,12 +328,17 @@ public final class FaultInjectingStore implements ArtifactStore {
 
     /** A scoped view that routes every call back through the parent's fault decision, so an armed fault fires on the
      *  scoped keys the sweeps use ({@code publish/...}, {@code published/...}) exactly as it would unscoped. */
-    private final class Scoped implements ArtifactStore {
+    final class Scoped implements ArtifactStore {
 
         private final ArtifactStore scoped;
 
         private Scoped(ArtifactStore scoped) {
             this.scoped = scoped;
+        }
+
+        /** The arranged choreography is the store's, not the view's: scoping narrows keys, never the deployment. */
+        ChoreographyMutant choreography() {
+            return FaultInjectingStore.this.choreography;
         }
 
         @Override

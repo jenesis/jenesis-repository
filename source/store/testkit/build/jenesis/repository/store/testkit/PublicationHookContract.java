@@ -696,10 +696,17 @@ public final class PublicationHookContract {
 
     // --- shared drivers, so every check runs the one choreography ---------------------------------------------------
 
-    /** A publication over {@code hooks}, split into interceptors and observers exactly as {@link Publication} splits
-     *  its own discovered list - the kit never keeps a second opinion about which hook is which. */
+    /**
+     * A publication over {@code hooks}, split into interceptors and observers exactly as {@link Publication} splits
+     * its own discovered list - the kit never keeps a second opinion about which hook is which.
+     *
+     * <p>It is also where a {@link ChoreographyMutant} lands (D-148). Every check builds its publication here, and the
+     * store it hands over is the one deployment object every check body already holds, so a choreography arranged on
+     * the store reaches every publication without forty-six signatures learning about it. With no mutant armed - which
+     * is every ordinary run - {@link ChoreographyMutant#NONE} hands the hooks straight through.
+     */
     static Publication publication(ArtifactStore store, List<? extends PublicationObserver> hooks) {
-        List<PublicationObserver> observers = List.copyOf(hooks);
+        List<PublicationObserver> observers = FaultInjectingStore.choreographyOf(store).arrange(hooks);
         return new Publication(store, observers.stream()
                 .filter(hook -> hook instanceof PublishInterceptor)
                 .map(hook -> (PublishInterceptor) hook)
