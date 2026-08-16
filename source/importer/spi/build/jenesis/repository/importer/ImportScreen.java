@@ -15,10 +15,12 @@ import module java.base;
  * per-asset {@code downloadUrl}; a format's own index enumerates absolute coordinate URLs. Those URLs are
  * operator-supplied only at one remove, and a compromised or hostile incumbent controls them completely - so screening
  * only what the operator typed screens the one URL that was never the interesting one. Screening inside each connector
- * instead was the shape D-152 found: three connectors fetch listing-supplied URLs, two of them carried a screen, the
- * screens disagreed with each other (one skipped the asset, one failed the walk) and neither judged the transport, so
- * an {@code https} base whose listing answered {@code http://same-host/...} was <em>cross-origin</em> by scheme and
- * passed. Credentials were correctly withheld cross-origin, so nothing leaked; the artifact bytes were fetched in
+ * instead was the shape D-152 found: two connectors handed the fetcher a URL a remote party had chosen freely, both
+ * carried a screen of their own, the two screens disagreed with each other (one skipped the asset, one failed the
+ * walk) and neither judged the transport - so an {@code https} base whose listing answered
+ * {@code http://same-host/...} was <em>cross-origin</em> by scheme and passed. A third (the Maven tree walk) fetches
+ * listing-derived URLs too and is safe only because its HTML listing parser happens to constrain every entry to the
+ * walked directory's scheme and authority: the right property, reached independently, never generalised. Credentials were correctly withheld cross-origin, so nothing leaked; the artifact bytes were fetched in
  * cleartext and written into the hosted store with no integrity check behind them, which is a supply-chain
  * substitution rather than a disclosure.
  *
