@@ -96,6 +96,11 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
      * return rows for more than one tenant (PRINCIPLES &sect;6). Keying without the tenant instead would have kept one
      * row at the price of the diagnosis: an id that legitimately holds for several tenants would report a clash with
      * no way to tell which tenant's rows actually duplicated it.
+     *
+     * <p>The work stays bounded (clause 12), which one row per scope is worth arguing rather than assuming: a scope
+     * only enters the map by contributing <em>at least two</em> rows of its own, so the rows added here are at most
+     * half the duplicates the fan-out already returned - the report grows in proportion to its own input, never faster
+     * - and each row's message still names at most {@link #COLLISIONS_NAMED} ids and counts the rest.
      */
     private static List<SecurityAdvisory> collisions(List<SecurityAdvisory> advisories) {
         // The row key is the (scope, id) pair rather than a concatenation of the two, so no tenant name or id can be
