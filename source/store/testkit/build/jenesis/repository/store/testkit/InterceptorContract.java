@@ -311,10 +311,24 @@ final class InterceptorContract {
         // and passed every leg of this kit. It is the interceptor half's counterpart of the observer's
         // THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE, and it belongs on the clause that already had the scope
         // in its hands.
-        isTrue(!fixtureScreen.projection(scoped).isEmpty(), fixture,
-                "the screen recorded something inside the publication's own scope - without that the comparison "
-                        + "below is true of a screen that recorded nothing at all, which is exactly the vacuity that "
-                        + "hid this gap");
+        // A hook that records nothing for what the kit publishes - it holds no state at all, or its own preconditions
+        // (its ecosystem, a quarantine disposition) are not met by a generic accepted publish - has nothing to write
+        // here, and demanding a write would be demanding state it exists without. For those the claim inverts and
+        // stays falsifiable: it must have written NOWHERE, so a hook that quietly starts recording fails on this leg
+        // rather than sliding through it.
+        if (fixtureScreen.recordsWhatTheKitPublishes()) {
+            isTrue(!fixtureScreen.projection(scoped).isEmpty(), fixture,
+                    "the screen recorded something inside the publication's own scope - without that the comparison "
+                            + "below is true of a screen that recorded nothing at all, which is exactly the vacuity "
+                            + "that hid this gap. A hook that records nothing for a generic accepted publish declares "
+                            + "recordsWhatTheKitPublishes() = false and is held to the stricter claim that it wrote "
+                            + "nowhere at all");
+        } else {
+            equal(fixtureScreen.projection(scoped), Map.of(), fixture,
+                    "this hook declares recordsWhatTheKitPublishes() = false, so it must have recorded nothing inside "
+                            + "the publication's scope either - the declaration is that nothing it holds applies to "
+                            + "what the kit published, and a hook that has started recording has changed its contract");
+        }
         equal(fixtureScreen.projection(store), Map.of(), fixture,
                 "and nothing at all was recorded against the store one scope up. A verdict, an audit row or a seen "
                         + "marker written through the deployment root rather than through the store the leg was "
