@@ -107,6 +107,17 @@ public class ImportHostGuardTest {
         assertThat(accepted.statusCode()).as("the opt-out lets the same loopback plaintext import run").isEqualTo(202);
     }
 
+    @Test
+    public void a_malformed_url_is_a_bad_request_even_with_the_screen_opted_out() throws Exception {
+        // With the dial off the screen returns without parsing, so this URL reached URI.create unguarded and escaped
+        // as an unmapped 500 with no body - an operator learned only that something went wrong.
+        System.setProperty(GUARD, "false");
+        HttpResponse<String> refused = post("{\"source\":\"nexus\",\"url\":\"ht tp://incumbent.example\","
+                + "\"repository\":\"releases\"}");
+        assertThat(refused.statusCode()).isEqualTo(400);
+        assertThat(refused.body()).contains("malformed");
+    }
+
     private HttpResponse<String> post(String body) throws Exception {
         return client.send(HttpRequest.newBuilder(URI.create(base + "/admin/import"))
                 .POST(BodyPublishers.ofString(body)).build(), BodyHandlers.ofString());

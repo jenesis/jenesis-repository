@@ -124,11 +124,20 @@ public class ImportEdgeController {
                     + "mirror)");
             return;
         }
+        URI target;
+        try {
+            target = URI.create(url);
+        } catch (IllegalArgumentException _) {
+            // Reachable only with the dial off, where the screen above returns without parsing: a malformed URL is a
+            // bad request, not the unmapped 500 an escaping IllegalArgumentException would have been.
+            respond(response, 400, "import url is refused: the URL is malformed");
+            return;
+        }
         String resume = spec.path("resume").asString(null);
         ImportJobs.Snapshot prior = resume == null ? null : jobs.snapshot(store, resume).orElse(null);
         String cursor = prior == null ? null : prior.cursor();
         String sourceName = spec.path("source").asString(null);
-        ImportRequest importRequest = new ImportRequest(URI.create(url), repository)
+        ImportRequest importRequest = new ImportRequest(target, repository)
                 .withFormat(spec.path("format").asString(null))
                 .withCredentials(spec.path("username").asString(null), spec.path("password").asString(null))
                 .withCursor(cursor);
