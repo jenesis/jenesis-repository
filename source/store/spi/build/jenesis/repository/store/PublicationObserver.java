@@ -65,7 +65,15 @@ import module java.base;
  *   <li><b>Read purity.</b> Not a read path: these fire on a write, and an observer may write its own derived store
  *       objects. It must not perform external I/O inline (a webhook, a replication push) - it records a durable note
  *       and a background drain performs the call, so a remote target's latency or outage never couples into a
- *       publish.</li>
+ *       publish. <b>An effect performed inline has no delivery class</b>, and "external" here means outside the
+ *       scoped store handed to the callback rather than outside this JVM. A derived write into that store is
+ *       re-derivable, so the full walk repairs it; a note left for a drain is durable the moment the callback
+ *       returns; but an effect handed straight to anything else - a remote target, another repository in this same
+ *       process, a queue in another service - is neither of those. Nothing re-derives it, because the store never
+ *       recorded that it was owed, and nothing redelivers it, because no note was left: the leg is at-most-once and
+ *       sits outside every delivery class an implementation can honestly declare. An observer that keeps such a leg
+ *       anyway says so on a surface an operator reads, rather than leaving the asymmetry to be discovered from an
+ *       effect that never arrived.</li>
  *   <li><b>Lifecycle / ownership.</b> Instances are {@link java.util.ServiceLoader}-discovered once at
  *       {@code Publication} class load and cached for the life of the process; there is no close hook, so an observer
  *       that owns a thread or client owns it for the process lifetime and must size it accordingly.</li>
@@ -74,7 +82,16 @@ import module java.base;
  *       after another observer. Ordering between the callbacks of one publication is fixed
  *       ({@code onWithheld}/{@code onWithholdCleared} fire at their own durable transitions,
  *       {@code onPublished}/{@code onDeleted} after theirs), but no ordering is promised <em>between</em> two
- *       concurrent publications.</li>
+ *       concurrent publications. <b>A transition fires once, and no replay fires it again.</b> Because the two
+ *       withhold legs fire only on an actual state transition, a retry that re-marks a marker already present or
+ *       re-links a review pointer already linked is an idempotent converge rather than a transition and raises
+ *       nothing - so a signal lost in the durable-write-to-notify window is never re-emitted, by that replay or by
+ *       any later one. This is where the two halves of the family part company: a re-published artifact notifies
+ *       again (clause 2), a re-held one does not, and clause 13's heal-all is weaker here than it reads - the walk
+ *       re-presents a <em>state</em> the store still holds, never a <em>transition</em> that happened while nobody
+ *       was listening. A subscriber whose surface must be complete therefore cannot wait for the signal to come
+ *       back: its own periodic rebuild-from-truth is the only route back, and a deployment free to stretch that
+ *       rebuild's cadence without bound has no route at all.</li>
  *   <li><b>Durability / delivery.</b> The declared delivery class is <b>best-effort, repaired by the full walk</b> -
  *       explicitly <em>not</em> at-least-once. {@link Publication#commit} makes the artifact visible at its declared
  *       serving pointer and only then calls {@code onPublished}, so a crash in that window leaves an artifact that
