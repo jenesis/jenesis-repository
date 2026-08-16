@@ -95,6 +95,25 @@ import static org.assertj.core.api.Assertions.assertThat;
  * entry therefore has to say <em>where</em> the caller is, and an entry that cannot name one is a deletion the entry is
  * deferring, not a grant.
  *
+ * <h2>Leg (d) - a bounded promise answered by an unbounded body (D-108)</h2>
+ * The three legs above all read <em>declarations</em>. D-108's inventory of the SPI methods that are dangerous
+ * <em>at scale</em> found that the productive half is the other one: a method whose signature promises a bound -
+ * a row cap, a {@code Consumer}/{@code Sink}/{@code Visitor} the answer is pushed to one row at a time, or a
+ * {@code Traversal.Result}/{@code *Page}/{@code Ranking} answer - and whose <b>body</b> materialises a whole
+ * {@code list(prefix)} namespace to produce it. D-053 was that shape on an interface {@code default} (which leg (a)
+ * now catches); D-136 was the same shape in an <em>implementation</em>, where no signature scan can reach it, and
+ * D-108 found six more. So this leg reads bodies, including private ones - a public bounded entry point that
+ * materialises one hop inside a private helper has broken exactly the same promise.
+ *
+ * <p>Two distinctions carry the leg's precision, and both are pinned by the negative control. A body naming the
+ * shared {@link #SHARED_CEILING} ceiling (or downstream's {@code InheritedBound}, which reads it) is cleared, for
+ * the same reason leg (a) clears one: the materialisation is deliberate and it fails visibly. And an invocation of
+ * {@code list} with <b>two or more</b> arguments is somebody's own paged accessor ({@code BuildScanStore.list
+ * (offset, limit)}), not the whole-namespace primitive, so it is not an offence. The row-cap vocabulary is
+ * deliberately narrower than leg (a)'s {@link #numericBound}: {@code setQuota(long maxBytes)} caps <em>bytes</em>
+ * and promises nothing about how many objects it visits, and reading it as a paging promise would put a false
+ * offender in the leg and teach its allowlist to absorb noise.
+ *
  * <h2>Non-vacuity, the pins, and the negative control</h2>
  * {@link #the_scan_sees_the_shapes_it_is_built_to_judge} pins <b>named</b> classifications rather than a count - gate 6
  * of this plan is that counts are diagnostics and never acceptance criteria, so nothing here asserts "at least N".
@@ -242,7 +261,67 @@ class UnsafeApiPrincipleTest {
                             + "raises a TENANT-scoped advisory), which is an owner's decision about a documented "
                             + "multi-tenant extension point, not a scan's"));
 
+    // --- leg (d): a bounded promise answered by an unbounded body (D-108) -------------------------------------------
+
+    /** The pinned size of {@link #UNBOUNDED_BODIES}. Shrink-only. */
+    private static final int UNBOUNDED_BODIES_SIZE = 1;
+
+    /**
+     * Methods that <em>promise</em> a bound and answer it by materialising a whole {@link #WHOLE_NAMESPACE_LISTING}
+     * namespace listing, keyed {@code Owner#name/arity}, each with the reason the materialisation is the honest
+     * answer here. An entry states what bounds the listing when the signature does not - a namespace whose breadth
+     * is the operator's configuration rather than the deployment's data, or a bound that fails visibly.
+     */
+    private static final List<Allow> UNBOUNDED_BODIES = List.of(
+            new Allow("PublishedAssets#collect/4",
+                    "D-180, recorded rather than fixed here. The core's ONE publish/ pointer walk - the "
+                            + "/api/assets catalogue and the console's NDJSON export are both this walk with a "
+                            + "different Visitor - carries a cap and a Visitor and honours them BETWEEN nodes, but "
+                            + "materialises each container's whole child list at every level, so a single high-fanout "
+                            + "container (a coordinate with a large version space, or a flat publish/ root) is read "
+                            + "entire before one row is emitted. PagedTreeWalk is the helper T-102 built for exactly "
+                            + "this and this descent never moved onto it; the migration is a behaviour change to a "
+                            + "shipped cursor order (the walk's '/' -sorts-below-everything comparison is what the "
+                            + "paging cursor assumes), so it is its own ticket rather than a line in this one"));
+
+    /**
+     * The store primitive leg (d) judges a bounded body by reaching: {@code list(prefix)} / {@code list()}, the
+     * whole-namespace answer whose bound is on its call sites rather than on its signature. An invocation of
+     * {@code list} with <b>two or more</b> arguments is somebody's own paged accessor ({@code BuildScanStore.list
+     * (offset, limit)}) and is deliberately not this.
+     */
+    private static final String WHOLE_NAMESPACE_LISTING = "list";
+
+    /** The ceilings that clear a materialisation: the shared store bound, and the downstream helper that reads it. */
+    private static final List<String> CEILINGS = List.of(SHARED_CEILING, "InheritedBound");
+
+    /** The numeric parameter names that cap a number of <em>rows</em>. Deliberately narrower than
+     *  {@link #numericBound}, which also accepts byte and depth budgets: {@code setQuota(long maxBytes)} caps bytes
+     *  and promises nothing at all about how many objects it visits, so reading it as a paging promise would put a
+     *  false offender in this leg and teach the allowlist to absorb noise. */
+    private static final Set<String> ROW_CAPS = Set.of("limit", "max", "maxcount", "top", "n", "k", "stride", "page",
+            "pagesize", "count", "take");
+
     // --- the legs ---------------------------------------------------------------------------------------------------
+
+    @Test
+    void no_bounded_promise_is_answered_by_an_unbounded_listing() throws IOException {
+        List<String> offenders = render(unboundedBodies(scan(sourceRoot())), UNBOUNDED_BODIES);
+        assertThat(offenders)
+                .as("these methods PROMISE a bound - a row cap, a Consumer/Sink/Visitor the answer is pushed to one "
+                        + "row at a time, or a Traversal.Result/Page/Ranking answer - and then materialise a whole "
+                        + "%s(prefix) namespace to produce it, so the caller is handed a page while the deployment "
+                        + "pays for the container. That is D-053 (the paged default over the whole list) and D-136 "
+                        + "(the ledger buffered and sorted for every page) seen from the IMPLEMENTATION rather than "
+                        + "from the signature, which is the half legs (a)-(c) cannot read. Page the listing "
+                        + "(%s.page(prefix, after, stride, sink), or the shared walk), or - if the materialisation "
+                        + "is genuinely right - name the ceiling that makes it fail visibly (%s), or add an "
+                        + "UNBOUNDED_BODIES entry stating what bounds that namespace and bump "
+                        + "UNBOUNDED_BODIES_SIZE.%n%s",
+                        WHOLE_NAMESPACE_LISTING, "ArtifactStore", SHARED_CEILING,
+                        String.join(System.lineSeparator(), offenders))
+                .isEmpty();
+    }
 
     @Test
     void no_interface_default_reaches_a_less_bounded_path_than_the_sibling_it_stands_in_for() throws IOException {
@@ -319,11 +398,12 @@ class UnsafeApiPrincipleTest {
                 + "new bound-dropping default").hasSize(BOUND_DROPS_SIZE);
         assertThat(WHOLE_COLLECTIONS).as("WHOLE_COLLECTIONS is pinned shrink-only").hasSize(WHOLE_COLLECTIONS_SIZE);
         assertThat(UNCALLED).as("UNCALLED is pinned shrink-only").hasSize(UNCALLED_SIZE);
+        assertThat(UNBOUNDED_BODIES).as("UNBOUNDED_BODIES is pinned shrink-only").hasSize(UNBOUNDED_BODIES_SIZE);
     }
 
     @Test
     void every_allowlist_entry_carries_a_reason() {
-        List<String> bare = Stream.of(BOUND_DROPS, WHOLE_COLLECTIONS, UNCALLED)
+        List<String> bare = Stream.of(BOUND_DROPS, WHOLE_COLLECTIONS, UNCALLED, UNBOUNDED_BODIES)
                 .flatMap(List::stream)
                 .filter(allow -> allow.reason().length() < 40)
                 .map(allow -> "  - " + allow.key())
@@ -341,6 +421,7 @@ class UnsafeApiPrincipleTest {
         dead.addAll(stale(BOUND_DROPS, boundDrops(scan), "BOUND_DROPS"));
         dead.addAll(stale(WHOLE_COLLECTIONS, wholeCollections(scan), "WHOLE_COLLECTIONS"));
         dead.addAll(stale(UNCALLED, uncalled(scan), "UNCALLED"));
+        dead.addAll(stale(UNBOUNDED_BODIES, unboundedBodies(scan), "UNBOUNDED_BODIES"));
         Collections.sort(dead);
         assertThat(dead)
                 .as("these allowlist entries no longer match a real offender (the method was deleted, made abstract, "
@@ -504,13 +585,41 @@ class UnsafeApiPrincipleTest {
 
                         private final Probe probe;
 
-                        public ProbeScan(Probe probe) {
+                        private final Store store;
+
+                        public ProbeScan(Probe probe, Store store) {
                             this.probe = probe;
+                            this.store = store;
                         }
 
                         /** Leg (c): exported, enumerates, and nothing under source/ calls it. */
                         public List<String> everything() {
+                            pageRows("", 10, _ -> { });
+                            pageRowsBounded("", 10, _ -> { });
+                            pageRowsVia("", 10, _ -> { });
                             return probe.rows("");
+                        }
+
+                        /** Leg (d): promises a bound (a cap AND a sink) and materialises the whole namespace. */
+                        public void pageRows(String prefix, int limit, Consumer<String> sink) {
+                            for (String row : store.list(prefix)) {
+                                sink.accept(row);
+                            }
+                        }
+
+                        /** ... and the same reach behind the shared ceiling, which is NOT a leg (d) offender. */
+                        public void pageRowsBounded(String prefix, int limit, Consumer<String> sink) {
+                            List<String> rows = store.list(prefix);
+                            if (rows.size() > MAX_INHERITED_CHILDREN) {
+                                throw new IllegalStateException("past the bound");
+                            }
+                            rows.forEach(sink);
+                        }
+
+                        /** ... and a paged accessor of somebody else's, which leg (d) must not read as the
+                         *  whole-namespace primitive just because it is spelled the same. */
+                        public void pageRowsVia(String prefix, int limit, Consumer<String> sink) {
+                            store.list(0, limit).forEach(sink);
                         }
                     }
                     """);
@@ -536,6 +645,14 @@ class UnsafeApiPrincipleTest {
             assertThat(uncalled(planted).stream().map(Offender::key))
                     .as("an exported enumerating method with no caller must trip leg (c)")
                     .containsExactly("ProbeScan#everything/0");
+            assertThat(unboundedBodies(planted).stream().map(Offender::key))
+                    .as("a bounded promise answered by a whole-namespace listing must trip leg (d) - and the two "
+                            + "methods beside it must NOT: one names %s so its materialisation fails visibly, the "
+                            + "other calls a two-argument list(offset, limit), which is somebody's own paged "
+                            + "accessor rather than the whole-namespace primitive. Both distinctions are the leg's "
+                            + "whole precision, so a scan that lost either would read exactly like this one.",
+                            SHARED_CEILING)
+                    .containsExactly("ProbeScan#pageRows/3");
 
             // ... and each is cleared by a justified allowlist entry, so the grant mechanism is proven too.
             List<Allow> grants = List.of(
@@ -543,10 +660,12 @@ class UnsafeApiPrincipleTest {
                     new Allow("Probe#firstRowsVia/2 -> sliceByListing/3 -> rows/1",
                             "synthetic - negative control only, never a real grant"),
                     new Allow("Probe#rows/1", "synthetic - negative control only, never a real grant"),
-                    new Allow("ProbeScan#everything/0", "synthetic - negative control only, never a real grant"));
+                    new Allow("ProbeScan#everything/0", "synthetic - negative control only, never a real grant"),
+                    new Allow("ProbeScan#pageRows/3", "synthetic - negative control only, never a real grant"));
             assertThat(render(boundDrops(planted), grants)).isEmpty();
             assertThat(render(wholeCollections(planted), grants)).isEmpty();
             assertThat(render(uncalled(planted), grants)).isEmpty();
+            assertThat(render(unboundedBodies(planted), grants)).isEmpty();
         } finally {
             delete(root);
         }
@@ -706,6 +825,62 @@ class UnsafeApiPrincipleTest {
                     "enumerates or answers a whole " + decl.returns() + " and no source/ call site reaches it"));
         }
         return distinct(offenders);
+    }
+
+    /**
+     * Leg (d): a method whose signature promises a bound and whose body reaches the whole-namespace listing anyway.
+     * Unlike legs (a)-(c) this reads <b>implementations</b>, not declarations - the promise is made on the interface
+     * and broken in the class that overrides it, which is why a signature scan reports the seam clean. Private
+     * methods count: a public bounded entry point that materialises one hop inside a private helper has broken the
+     * same promise, and that is exactly the shape of the one entry this leg's allowlist carries.
+     */
+    private static List<Offender> unboundedBodies(Scan scan) {
+        List<Offender> offenders = new ArrayList<>();
+        for (Decl decl : scan.decls()) {
+            if (!decl.hasBody() || decl.relativePath().contains("/testkit/")) {
+                continue;                       // test support: its callers live in test/ and bound it there
+            }
+            if (!promisesRowBound(decl) || CEILINGS.stream().anyMatch(decl.body()::contains)) {
+                continue;
+            }
+            if (!reachesWholeNamespaceListing(decl.body())) {
+                continue;
+            }
+            offenders.add(new Offender(
+                    decl.owner() + "#" + decl.name() + "/" + decl.parameters().size(),
+                    decl.relativePath(),
+                    "promises a bound and answers it by materialising a whole " + WHOLE_NAMESPACE_LISTING
+                            + "(...) namespace, naming no " + SHARED_CEILING + " ceiling"));
+        }
+        return distinct(offenders);
+    }
+
+    /** What makes a signature a <em>promise</em>: a row cap, a sink the answer is pushed to, or a paged answer. */
+    private static boolean promisesRowBound(Decl decl) {
+        for (Parameter parameter : decl.parameters()) {
+            String type = raw(parameter.type());
+            boolean numeric = type.equals("int") || type.equals("long") || type.equals("Integer")
+                    || type.equals("Long");
+            if (numeric && ROW_CAPS.contains(parameter.name().toLowerCase(Locale.ROOT)) || sink(parameter)) {
+                return true;
+            }
+        }
+        String returns = raw(decl.returns());
+        return returns.equals("Result") || decl.returns().trim().startsWith("Traversal.Result")
+                || returns.equals("Ranking") || returns.endsWith("Page");
+    }
+
+    /** Whether a body invokes the whole-namespace listing - {@code x.list()} or {@code x.list(prefix)}. Two or more
+     *  arguments is a caller's own paged accessor and deliberately not this. */
+    private static boolean reachesWholeNamespaceListing(String body) {
+        Matcher invocation = Pattern.compile("\\.\\s*" + WHOLE_NAMESPACE_LISTING + "\\s*\\(").matcher(body);
+        while (invocation.find()) {
+            int arity = arity(body, body.indexOf('(', invocation.start()));
+            if (arity >= 0 && arity <= 1) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The store enumerations and whole-body reads that make a body "enumerating or materialising" for leg (c). */
