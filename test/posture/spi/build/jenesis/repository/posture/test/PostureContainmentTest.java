@@ -24,6 +24,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       {@code jenesis.posture.unavailable.<advisor>} advisory saying that whatever it checks went unchecked.</li>
  *   <li>Two advisors raising one id are both kept and the clash is reported, because an id is the row key and the docs
  *       anchor; a tenant-scoped advisory raised for two tenants is not a clash.</li>
+ *   <li>And the clash is reported <em>at the scope of the rows that collided</em> (D-150), so saying that two rows
+ *       collided never tells a viewer something about a tenant that is not theirs.</li>
  * </ul>
  */
 class PostureContainmentTest {
@@ -111,6 +113,105 @@ class PostureContainmentTest {
         assertThat(report.advisories()).extracting(SecurityAdvisory::id)
                 .containsExactly("jenesis.tenant.open", "jenesis.tenant.open");
         assertThat(report.advisories()).extracting(SecurityAdvisory::tenant).containsExactly("acme", "globex");
+    }
+
+    /**
+     * D-150: a clash between one tenant's rows is that tenant's row, not a deployment-wide row carrying its name.
+     * Before this landed, {@code collisions} keyed a tenant row as {@code "<id> (tenant <name>)"} and interpolated
+     * that key into a {@code SecurityAdvisory.deployment(...)} message - so a fan-out raising rows for two tenants
+     * put one tenant's name and one advisory id into the deployment-wide row that {@code ScopedPosture} and
+     * {@code GET /api/admin/posture} hand to <em>every</em> viewer. Every assertion below fails on that shape.
+     */
+    @Test
+    void a_clash_between_one_tenants_rows_is_that_tenants_row_and_names_no_tenant_to_anyone_else() {
+        PostureReport report = PostureReport.from(List.of(
+                advisor(SecurityAdvisory.tenant("jenesis.tenant.open", Severity.WARN, "acme",
+                                "t", "w", "f", "k", "v", "d"),
+                        SecurityAdvisory.tenant("jenesis.tenant.open", Severity.INFO, "acme",
+                                "t", "w", "f", "k", "v", "d"),
+                        SecurityAdvisory.tenant("jenesis.tenant.open", Severity.WARN, "globex",
+                                "t", "w", "f", "k", "v", "d"))), EMPTY);
+
+        SecurityAdvisory collision = report.advisories().stream()
+                .filter(advisory -> advisory.id().equals("jenesis.posture.collision")).findFirst().orElseThrow();
+        assertThat(collision.scope()).as("the clash is between acme's rows, so it is filed at acme's scope")
+                .isEqualTo(Scope.TENANT);
+        assertThat(collision.tenant()).isEqualTo("acme");
+        assertThat(collision.why()).as("and it still says WHAT collided - a collision report that cannot name the "
+                + "clashing id is not a report").contains("jenesis.tenant.open");
+        assertThat(collision.why()).as("the tenant rides the row's scope, never its text").doesNotContain("acme");
+
+        assertThat(report.scoped(Scope.DEPLOYMENT)).extracting(SecurityAdvisory::id)
+                .as("no collision row reaches the deployment-wide read - which is the read a headless operator and "
+                        + "every other tenant's console view are served")
+                .doesNotContain("jenesis.posture.collision");
+        assertThat(report.forTenant("acme")).extracting(SecurityAdvisory::id)
+                .as("acme, whose rows collided, is told").contains("jenesis.posture.collision");
+        assertThat(report.forTenant("globex")).extracting(SecurityAdvisory::id)
+                .as("globex, whose one row is legitimate, is not")
+                .doesNotContain("jenesis.posture.collision");
+        // The leak in one line: nothing another tenant or the deployment-wide reader is handed mentions acme at all.
+        assertThat(Stream.concat(report.scoped(Scope.DEPLOYMENT).stream(), report.forTenant("globex").stream())
+                .flatMap(advisory -> Stream.of(advisory.title(), advisory.why(), advisory.fix(), advisory.tenant())))
+                .as("a tenant name never reaches a viewer who is not that tenant")
+                .noneMatch(text -> text.contains("acme"));
+    }
+
+    @Test
+    void two_tenants_that_each_have_a_clash_get_one_row_each_and_neither_names_the_other() {
+        PostureReport report = PostureReport.from(List.of(
+                advisor(SecurityAdvisory.tenant("jenesis.tenant.open", Severity.WARN, "acme",
+                                "t", "w", "f", "k", "v", "d"),
+                        SecurityAdvisory.tenant("jenesis.tenant.open", Severity.INFO, "acme",
+                                "t", "w", "f", "k", "v", "d"),
+                        SecurityAdvisory.tenant("jenesis.tenant.gate", Severity.WARN, "globex",
+                                "t", "w", "f", "k", "v", "d"),
+                        SecurityAdvisory.tenant("jenesis.tenant.gate", Severity.INFO, "globex",
+                                "t", "w", "f", "k", "v", "d"))), EMPTY);
+
+        assertThat(report.advisories()).extracting(SecurityAdvisory::id)
+                .as("both tenants' clashes are reported - filing at tenant scope loses no diagnosis")
+                .filteredOn("jenesis.posture.collision"::equals).hasSize(2);
+        assertThat(report.forTenant("acme")).filteredOn(advisory ->
+                        advisory.id().equals("jenesis.posture.collision"))
+                .singleElement()
+                .satisfies(advisory -> {
+                    assertThat(advisory.why()).contains("jenesis.tenant.open");
+                    assertThat(advisory.why()).as("acme is not told which id globex duplicated")
+                            .doesNotContain("jenesis.tenant.gate").doesNotContain("globex");
+                });
+        assertThat(report.forTenant("globex")).filteredOn(advisory ->
+                        advisory.id().equals("jenesis.posture.collision"))
+                .singleElement()
+                .satisfies(advisory -> {
+                    assertThat(advisory.why()).contains("jenesis.tenant.gate");
+                    assertThat(advisory.why()).doesNotContain("jenesis.tenant.open").doesNotContain("acme");
+                });
+    }
+
+    @Test
+    void a_deployment_clash_and_a_tenant_clash_are_two_rows_at_two_scopes() {
+        PostureReport report = PostureReport.from(List.of(
+                advisor(advisory("jenesis.auth.open", Severity.CRITICAL),
+                        advisory("jenesis.auth.open", Severity.INFO),
+                        SecurityAdvisory.tenant("jenesis.tenant.open", Severity.WARN, "acme",
+                                "t", "w", "f", "k", "v", "d"),
+                        SecurityAdvisory.tenant("jenesis.tenant.open", Severity.INFO, "acme",
+                                "t", "w", "f", "k", "v", "d"))), EMPTY);
+
+        assertThat(report.scoped(Scope.DEPLOYMENT)).filteredOn(advisory ->
+                        advisory.id().equals("jenesis.posture.collision"))
+                .singleElement()
+                .satisfies(advisory -> {
+                    assertThat(advisory.why()).as("the deployment-wide clash is named deployment-wide")
+                            .contains("jenesis.auth.open");
+                    assertThat(advisory.why()).as("and carries nothing of the tenant clash")
+                            .doesNotContain("jenesis.tenant.open").doesNotContain("acme");
+                });
+        assertThat(report.forTenant("acme")).filteredOn(advisory ->
+                        advisory.id().equals("jenesis.posture.collision"))
+                .singleElement()
+                .satisfies(advisory -> assertThat(advisory.why()).contains("jenesis.tenant.open"));
     }
 
     @Test
