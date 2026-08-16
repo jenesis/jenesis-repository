@@ -28,10 +28,13 @@ import module java.base;
  * the scope it is about</b> (D-150): ids that clashed deployment-wide become one {@link Scope#DEPLOYMENT} row, and ids
  * that clashed <em>for a tenant</em> become one {@link Scope#TENANT} row per tenant, carrying that tenant in
  * {@link SecurityAdvisory#tenant()} and naming no tenant in its text. A report is a fan-out that may carry rows for
- * several tenants at once, and every consumer routes a row by its scope - {@link #forTenant} and {@link #scoped} here,
- * the console's {@code ScopedPosture} and {@code GET /api/admin/posture} downstream - so a deployment-wide row
- * interpolating one tenant's name is a row every other tenant's viewer would be shown (PRINCIPLES &sect;6). Filing it at
- * tenant scope keeps it diagnosable where it can be acted on and inert everywhere else.
+ * several tenants at once, which is why a row's scope is the only thing a tenant-facing consumer may route on -
+ * {@link #forTenant} and {@link #scoped} here, the console's {@code ScopedPosture} and {@code GET /api/admin/posture}
+ * downstream - and a deployment-wide row that interpolates one tenant's name defeats every one of them at once
+ * (PRINCIPLES &sect;6). Filing it at tenant scope keeps it diagnosable where it can be acted on and routable everywhere
+ * else. (The deployment-wide {@code GET /api/posture} renders whatever the report holds without scoping it, so it
+ * shows a {@code TENANT} row to any {@code repository:read} caller - true of every tenant-scoped advisory, not of this
+ * one in particular, and a property of that endpoint rather than of the collection.)
  */
 public record PostureReport(List<SecurityAdvisory> advisories) {
 
