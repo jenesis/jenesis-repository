@@ -21,6 +21,26 @@ import module java.base;
  * an edge re-assembling the sequence by hand: {@code commit} is the one hosted-publish choreography, and the ingress
  * census asserts every hosted route runs through it.
  *
+ * <h2>Why this class is {@code final}, and what that costs</h2>
+ * The {@code final} is deliberate and load-bearing, not a habit. This class exists to be the product's <em>one</em>
+ * hosted-publish choreography - the plan's third design gate ("extend the existing choke point; never add a parallel
+ * one") and &sect;2's single-edge rule are both statements about it - and an interface seam, or a subclass, is exactly
+ * how a second commit sequence enters a codebase. An embedder that needs different behaviour injects a different
+ * {@link PublishInterceptor} chain or a different {@link AcceptedLayout}; it does not get to reorder store, screen,
+ * gate, lay out, link and notify. Those two constructor seams are the sanctioned variation, and they are enough for
+ * every caller in either edition.
+ *
+ * <p>The cost is paid by the tests, and it is worth naming rather than leaving to be rediscovered. The publication-hook
+ * contract kit ({@code build.jenesis.repository.store.testkit}) can substitute a hook but not this class, so twenty of
+ * its forty-six clauses - the chain's ordering and short-circuiting, where a review pointer lands relative to
+ * {@link PublishInterceptor#committed}, what escapes the containment, the three crash windows above - are claims about
+ * this choreography that no substitution for a <em>provider</em> could ever falsify. The kit closes nineteen of them by
+ * arranging the hooks it does control so the choreography produces the same observable a mutated {@code Publication}
+ * would produce (its {@code ChoreographyMutant}), which proves the checks discriminate; it is a faithful simulation of
+ * the defect rather than the defect itself, and the twentieth - a crash before the chain runs at all - is out of reach
+ * even so. <b>So a change to the sequence below is not covered by a mutation of the product, and the checks that guard
+ * it are only as good as the probes they read.</b> Edit the ordering here with that in mind.
+ *
  * <h2>Contract</h2>
  * <ol>
  *   <li><b>Thread-safety.</b> An instance is a stateless view over one scoped {@link ArtifactStore} and its two hook
