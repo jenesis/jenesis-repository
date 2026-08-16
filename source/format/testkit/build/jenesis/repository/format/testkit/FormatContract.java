@@ -32,6 +32,23 @@ import build.jenesis.repository.store.ArtifactStore;
  *       requiring every key to lie inside the fixture's declared namespaces, so "refused" is a statement about what
  *       was stored rather than about a status code a format could answer while still having written somewhere.</li>
  * </ul>
+ *
+ * <h2>Clauses this kit discharges (T-304)</h2>
+ * The markers below are read by {@code AuditChecklistPrincipleTest} and subtracted from the parsed {@code Contract}
+ * blocks, so a clause named here leaves the principle-checkup checklist. They restate, in machine-readable form,
+ * exactly the clause numbers each {@link Property}'s javadoc already cites - no more: {@code RepositoryFormat} 2 and
+ * 4 ({@code PUBLISH_SERVES_EXACT_BYTES}, {@code HEAD_ANSWERS_FROM_METADATA}), 6
+ * ({@code REQUEST_PATH_TRAVERSAL_REFUSED}), 7 ({@code WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION}) and 12
+ * ({@code GENERATED_INDEX_IS_REVALIDATABLE}); {@code ArtifactLayout} 3; {@code ProxyFormat} 3 and 5.
+ *
+ * <p>What it deliberately does <b>not</b> claim is {@code ProxyFormat} clause 9 - an upstream-supplied name is as
+ * untrusted as a client-supplied one. This kit drives a scripted upstream it controls, so it can prove a leg refuses
+ * a hostile <em>name</em>; it holds no reference for whether a leg's outbound <em>URL</em> handling is right, which
+ * is a per-format question against that ecosystem's protocol and is T-304's first checkup theme.
+ *
+ * @jenesis.covers build.jenesis.repository.format.RepositoryFormat 2, 4, 6, 7, 12
+ * @jenesis.covers build.jenesis.repository.format.ArtifactLayout 3
+ * @jenesis.covers build.jenesis.repository.format.ProxyFormat 3, 5
  */
 public final class FormatContract {
 
