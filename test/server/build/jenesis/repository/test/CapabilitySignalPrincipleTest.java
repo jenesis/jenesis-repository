@@ -93,8 +93,9 @@ class CapabilitySignalPrincipleTest {
                     "the console's browse panel renders each installed format's marks",
                     "BrowsePanel"),
             "RepositoryFormat", Signal.read(
-                    "the format marks, the index importer and the format fixture enumerate the installed formats",
-                    "FormatMarks", "IndexSourceProvider", "FormatFixture"),
+                    "the format marks and the index importer enumerate the installed formats; the format kit's "
+                            + "FormatFixture reads it too, but a source/** testkit is not a production reader",
+                    "FormatMarks", "IndexSourceProvider"),
             "ImportEdgeProvider", Signal.read(
                     "the server's auto-configuration gates the import edge on it",
                     "RepositoryAutoConfiguration"),
@@ -247,7 +248,7 @@ class CapabilitySignalPrincipleTest {
 
     @Test
     void the_scan_is_alive() {
-        assertThat(SOURCES).as("the source tree really was read").hasSizeGreaterThan(300);
+        assertThat(SOURCES).as("the source tree really was read").hasSizeGreaterThan(200);
         assertThat(declared()).as("and installed() declarations really were found in it").hasSizeGreaterThan(5);
         assertThat(callers()).as("and call sites really were found for the signals that have them").isNotEmpty();
         assertThat(installedJavadoc("WalkProvider"))
