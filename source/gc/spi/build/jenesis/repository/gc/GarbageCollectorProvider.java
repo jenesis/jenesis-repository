@@ -12,9 +12,10 @@ import module java.base;
  * by name when a deployment installs more than one (the {@code mark-sweep} reference implementation is the one the
  * free distribution ships). Each provider reads its own settings through the {@code config} lookup (a property
  * accessor returning {@code null} when unset - {@code jenesis.gc.*}). With no module installed {@link #resolve} is
- * empty and {@link #installed()} is the capability signal: <b>nothing is ever reclaimed</b> and the capability
- * surfaces say garbage collection is off - the no-op default, because deleting data is never something a deployment
- * gets without opting in.
+ * empty: <b>nothing is ever reclaimed</b> and the capability surfaces say garbage collection is off - the no-op
+ * default, because deleting data is never something a deployment gets without opting in. Those surfaces report
+ * {@link #resolve resolve(config).isPresent()} and not {@link #installed()}, which answers a weaker, packaging
+ * question and is read by no production surface at all (D-164; see the method).
  *
  * <h2>Contract</h2>
  * <ol>
@@ -69,8 +70,21 @@ public interface GarbageCollectorProvider {
         return Set.of();
     }
 
-    /** Whether an enabled garbage collector is installed - the capability signal a console or a maintenance
-     *  surface gates on; without one nothing is ever reclaimed. */
+    /**
+     * Whether a garbage collector is installed and not switched off.
+     *
+     * <p><b>No production surface reads this</b>, and this javadoc asserted that a console and a maintenance surface
+     * gated on it for as long as neither did - D-164. The reader that exists is the reclamation module's
+     * {@code CapabilityContributor}, which reports the {@code gc} flag from
+     * {@link #resolve resolve(config).isPresent()}.
+     *
+     * <p><b>It is also not the same question, which is why it must not be adopted as one.</b> This answers
+     * {@link Features#enabled}: a collector whose {@link #requiredConfig} keys are unset counts as installed here
+     * while {@link #resolve} - which asks {@link Features#active} - reports it absent, and two enabled collectors
+     * count here while {@link #resolve} refuses them as ambiguous. A surface gated on this would promise reclamation
+     * that is not going to happen. {@code resolve(config).isPresent()} is the capability question; this static answers
+     * a packaging one, and its reader is {@code test/gc}.
+     */
     static boolean installed() {
         return !Providers.installedNames("gc",
                 ServiceLoader.load(GarbageCollectorProvider.class),
