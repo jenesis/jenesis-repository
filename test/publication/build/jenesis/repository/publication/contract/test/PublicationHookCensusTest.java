@@ -450,9 +450,12 @@ class PublicationHookCensusTest {
         assertThat(survived)
                 .as("""
                         these clauses are about Publication's own choreography, and the arrangement each one names \
-                        produces exactly the observable a Publication that had lost that behaviour would produce - so \
-                        a check that stays green under it is not measuring the clause at all. Either the pairing is \
-                        wrong, or the check has stopped reading the probe it asserts on.%n%s""",
+                        produces exactly the observable a Publication that had lost that behaviour would produce. \
+                        Each line below is one of two outcomes, and the message says which: 'PASSED under' means the \
+                        check stayed green and is therefore not measuring the clause at all (the pairing is wrong, or \
+                        the check has stopped reading the probe it asserts on), while 'it broke' means the \
+                        arrangement took the harness out from under the check - which proves nothing either way and \
+                        may not be banked as a red.%n%s""",
                         String.join(System.lineSeparator(), survived))
                 .isEmpty();
     }
@@ -548,9 +551,14 @@ class PublicationHookCensusTest {
      *
      * <p>It is derived rather than pinned to a literal, because the honest answer is large and moves with the kit:
      * on this graph a hook that does nothing at all passes <b>101 of the 114 checks</b>, and almost all of them for
-     * the same reason the {@link #UNFALSIFIABLE} list gives - the clause is Publication's, and the hook is a
-     * bystander in it. What must never happen is a check that an inert hook survives AND that nothing else falsifies,
-     * because that check is proven over nothing at all; that is what this leg refuses.
+     * the same reason {@link #CHOREOGRAPHY} gives - the clause is Publication's, and the hook is a bystander in it.
+     * What must never happen is a check that an inert hook survives AND that nothing else falsifies, because that
+     * check is proven over nothing at all; that is what this leg refuses.
+     *
+     * <p><b>The population this figure is measured over is worth naming</b>, because it is not the product's. The free
+     * core ships no hook at all, so every fixture here is a synthetic archetype the kit invented. The number that says
+     * what this contract proves about the <em>shipped</em> hooks would have to be measured in the edition that has
+     * them, and today is not - which is a recorded defect rather than a gap in this file.
      */
     @Test
     void every_check_an_inert_hook_survives_is_falsified_some_other_way() throws Exception {

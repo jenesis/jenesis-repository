@@ -46,6 +46,15 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
  * <em>for that hook</em>, and fails. The declarations are the contract's, never a fixture's: a fixture cannot opt out
  * of falsification, only out of a whole property, and that opt-out is already a reviewed list on the census.
  *
+ * <p><b>And the clauses that are about the choreography rather than the hook declare an arrangement instead</b>
+ * (D-148). Twenty of the forty-six are claims about {@link Publication}'s commit sequence, asserted with kit-owned
+ * probes while the fixture's hook is a bystander, so a {@link Mutant} could never falsify them - which meant the
+ * falsification leg proved things about implementations and said nothing about the choreography they plug into.
+ * {@link ChoreographyMutant} closes nineteen of them by arranging the hooks this kit hands {@code Publication} so the
+ * sequence produces the observable a mutated {@code Publication} would; the twentieth crashes before the chain runs at
+ * all and stays on the census's reviewed list. What that proves, and what it does not, is stated on
+ * {@code ChoreographyMutant} itself rather than left implicit.
+ *
  * <p>Assertion-library-free on purpose: a check throws {@link AssertionError} naming the hook, the property and the
  * expectation, so this stays {@code java.base} + the store SPI and the downstream distribution can require it for its
  * own fixtures exactly as it already requires the rest of this module. The JUnit driver lives under {@code test/**}
@@ -350,8 +359,16 @@ public final class PublicationHookContract {
      * choreography - the chain's ordering, its short-circuiting, where a review pointer lands relative to
      * {@code committed}, what escapes the containment - and the kit asserts them with its own probe screens while the
      * fixture's screen rides along in the chain. No substitution for a <em>provider's</em> hook can falsify a claim
-     * about the core's own final class, so those carry no mutation and appear on the census's reviewed
-     * {@code UNFALSIFIABLE} list with that reason. The seven that remain are the clauses a provider actually owns.
+     * about the core's own final class, so those carry no mutation <em>here</em>. The seven that remain are the
+     * clauses a provider actually owns.
+     *
+     * <p><b>The choreography half is falsified elsewhere, by a different subject</b> (D-148). Those clauses are not
+     * unfalsifiable, they are un-falsifiable-<em>by-a-hook</em>: {@link ChoreographyMutant} arranges the hooks this
+     * kit hands {@link Publication} so the commit sequence produces exactly the observable a mutated
+     * {@code Publication} would produce, and the census pairs nineteen of the twenty clauses with the arrangement each
+     * must fail under. Read {@code ChoreographyMutant} for the honest limit of that: it is a faithful simulation of
+     * the defect rather than the defect itself. Exactly one clause - the crash before the chain runs at all - is
+     * reachable by neither table, and it is the whole of the census's reviewed {@code UNFALSIFIABLE} list.
      */
     public static Map<Property, List<Mutation>> mutations() {
         Map<Property, List<Mutation>> mutations = new EnumMap<>(Property.class);
