@@ -1,7 +1,11 @@
 package build.jenesis.repository.importer.nexus.test;
 
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.importer.ImportRequest;
+import build.jenesis.repository.importer.ImportSource;
+import build.jenesis.repository.importer.ImportSourceProvider;
 import build.jenesis.repository.importer.nexus.NexusSource;
+import build.jenesis.repository.importer.nexus.NexusSourceProvider;
 import module org.junit.jupiter.api;
 
 import module java.base;
@@ -15,6 +19,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * page (and a terminal null), sends basic credentials as an {@code Authorization} header, and raises an
  * {@code IOException} on a failed listing. The credentials never travel to a cross-origin download URL, and a
  * traversal-laced asset path is skipped before it can reach a store write.
+ *
+ * <p>The listing-supplied {@code downloadUrl} is no longer screened by this connector: the screen rides on the fetcher
+ * the source is handed, so the cases that exercise it build the source the way an edge does - through
+ * {@link ImportSourceProvider#open}, which wraps the fetcher in {@code ImportScreen}.
  */
 class NexusSourceTest {
 
@@ -26,6 +34,22 @@ class NexusSourceTest {
 
     private static ProxyFormat.Fetched ok(String body) {
         return new ProxyFormat.Fetched(200, body.getBytes(StandardCharsets.UTF_8), Map.of());
+    }
+
+    /** The source built the way an import edge builds one: through {@link ImportSourceProvider#open}, so the fetcher
+     *  the connector walks with is screened against the URL the operator submitted. */
+    private ImportSource screened(ProxyFormat.Fetcher fetcher, URI submitted) {
+        return ImportSourceProvider.open(new NexusSourceProvider(), new ImportRequest(submitted, repository), fetcher);
+    }
+
+    /** Walk the whole source, opening every asset - the screen refuses at the fetch, so a refusal only surfaces once
+     *  the content is actually opened. */
+    private static void drain(ImportSource source) throws IOException {
+        source.forEach((format, path, content) -> {
+            try (InputStream in = content.open()) {
+                in.readAllBytes();
+            }
+        }, cursor -> { });
     }
 
     @Test
@@ -145,47 +169,52 @@ class NexusSourceTest {
     }
 
     @Test
-    void a_listing_download_url_at_a_private_or_metadata_host_is_refused_before_it_is_fetched() throws IOException {
+    void a_listing_download_url_at_a_private_or_metadata_host_is_refused_before_it_is_fetched() {
         // The downloadUrl comes straight off the (semi-trusted) listing and is fetched as an INITIAL request: the
         // fetcher's SSRF screen only re-judges redirect hops, and the import trigger only vetted the operator's base
         // URL - so a compromised or misconfigured Nexus that points a download at the cloud metadata service or a
-        // loopback control plane would otherwise be fetched. Such an asset is dropped before it reaches the consumer;
-        // a same-listing asset at an ordinary public host is still imported, so the screen refuses the vector without
-        // failing the whole walk. (The reserved .example hosts do not resolve, so they read as public here.)
+        // loopback control plane would otherwise be fetched. The screen refuses it at the fetch and FAILS the walk:
+        // dropping the asset counted it nowhere - not imported, not skipped - so a migration whose every download was
+        // aimed at a metadata service reported "completed" over an import that had silently taken nothing.
         String page = "{\"items\":[{\"format\":\"maven2\",\"assets\":["
-                + "{\"path\":\"org/example/meta.jar\",\"downloadUrl\":\"http://169.254.169.254/latest/meta-data/\"},"
-                + "{\"path\":\"org/example/loop.jar\",\"downloadUrl\":\"http://127.0.0.1:8081/repository/x.jar\"},"
-                + "{\"path\":\"org/example/ok.jar\",\"downloadUrl\":\"https://nexus.example/download/ok\"}]}],"
+                + "{\"path\":\"org/example/meta.jar\",\"downloadUrl\":\"http://169.254.169.254/latest/meta-data/\"}]}],"
                 + "\"continuationToken\":null}";
-        byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
         FakeFetcher fetcher = new FakeFetcher(Map.of(
                 listUrl, ok(page),
-                "http://169.254.169.254/latest/meta-data/", new ProxyFormat.Fetched(200, new byte[]{9}, Map.of()),
-                "http://127.0.0.1:8081/repository/x.jar", new ProxyFormat.Fetched(200, new byte[]{9}, Map.of()),
-                "https://nexus.example/download/ok", new ProxyFormat.Fetched(200, jar, Map.of())));
+                "http://169.254.169.254/latest/meta-data/", new ProxyFormat.Fetched(200, new byte[]{9}, Map.of())));
 
-        List<String> paths = new ArrayList<>();
-        List<byte[]> downloaded = new ArrayList<>();
-        new NexusSource(base, repository, fetcher).forEach((format, path, content) -> {
-            paths.add(path);
-            try (InputStream in = content.open()) {
-                downloaded.add(in.readAllBytes());
-            }
-        }, cursor -> { });
-
-        assertThat(paths).as("only the public-host asset is imported; the metadata and loopback targets are refused")
-                .containsExactly("org/example/ok.jar");
-        assertThat(downloaded).containsExactly(jar);
-        assertThat(fetcher.urls).as("neither SSRF download URL is ever fetched")
-                .doesNotContain("http://169.254.169.254/latest/meta-data/", "http://127.0.0.1:8081/repository/x.jar");
+        assertThatThrownBy(() -> drain(screened(fetcher, base)))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("169.254.169.254");
+        assertThat(fetcher.urls).as("the SSRF download URL is never fetched").containsExactly(listUrl);
     }
 
     @Test
-    void a_same_origin_download_at_a_private_base_is_still_fetched() throws IOException {
-        // The internal-Nexus migration: the operator points the importer at an on-premises host (opted in at the edge
-        // with block-private-import-hosts=false) and the listing serves same-origin download URLs on that same private
-        // host. Those are not the SSRF vector - they go exactly where the operator already authorised - so the screen
-        // is scoped to CROSS-origin private hosts and the same-origin private download is imported normally.
+    void a_listing_download_url_that_downgrades_an_https_migration_to_cleartext_is_refused() {
+        // D-152, and the sharp one: the base is https and the listing answers http:// on the SAME host. That is
+        // cross-origin (the scheme is part of the origin), so credentials were correctly withheld and nothing leaked -
+        // but the artifact BYTES were pulled in cleartext and written into the hosted store with no integrity check
+        // behind them, so an active intermediary substitutes what the migration imports. The host half is silent here
+        // by design: nexus.example is a perfectly ordinary public host.
+        String plaintext = "http://nexus.example/download/lib-1.0.jar";
+        String page = "{\"items\":[{\"format\":\"maven2\",\"assets\":[{\"path\":\"org/example/lib/1.0/lib-1.0.jar\","
+                + "\"downloadUrl\":\"" + plaintext + "\"}]}],\"continuationToken\":null}";
+        FakeFetcher fetcher = new FakeFetcher(Map.of(
+                listUrl, ok(page),
+                plaintext, new ProxyFormat.Fetched(200, "substituted".getBytes(StandardCharsets.UTF_8), Map.of())));
+
+        assertThatThrownBy(() -> drain(screened(fetcher, base)))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("downgrades an https migration to cleartext");
+        assertThat(fetcher.urls).as("the plaintext download URL is never fetched").containsExactly(listUrl);
+    }
+
+    @Test
+    void a_same_origin_download_at_a_private_plaintext_base_is_still_fetched() throws IOException {
+        // The internal-Nexus migration: the operator points the importer at an on-premises host over plain HTTP (opted
+        // in at the edge with block-private-import-hosts=false) and the listing serves same-origin download URLs on
+        // that same private host. Neither half bites - the URL goes exactly where the operator already authorised, at
+        // the transport they authorised - so the screen leaves the whole walk alone.
         URI internal = URI.create("http://10.0.0.5:8081/");
         String internalList = "http://10.0.0.5:8081/service/rest/v1/components?repository=maven-releases";
         String internalDownload = "http://10.0.0.5:8081/download/lib-1.0.jar";
@@ -198,7 +227,7 @@ class NexusSourceTest {
 
         List<String> paths = new ArrayList<>();
         List<byte[]> downloaded = new ArrayList<>();
-        new NexusSource(internal, repository, fetcher).forEach((format, path, content) -> {
+        screened(fetcher, internal).forEach((format, path, content) -> {
             paths.add(path);
             try (InputStream in = content.open()) {
                 downloaded.add(in.readAllBytes());
