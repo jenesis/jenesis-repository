@@ -70,38 +70,112 @@ public final class PublishedAssets {
         collect(after, cap, new int[]{0}, visitor);
     }
 
+    /** The sibling-page width one open container buffers. The only listing this walk ever holds, so the resident cost
+     *  is O(depth x this) rather than O(one container's child set) - see {@link Frame}. */
+    private static final int PAGE = 1_000;
+
     private void collect(String after, int cap, int[] emitted, Visitor visitor) throws IOException {
         // Iterative work-list, not recursion: a published request-path's depth is client-controlled (the deploy
         // controller only rejects '..', not depth), so a deeply nested deploy would otherwise overflow the stack on
         // every catalogue / export walk - a durable StackOverflowError that slips past the IOException/RuntimeException
-        // handlers. Pushing a node's eligible children in reverse pops them in store-list (emission) order, so the walk
+        // handlers. The stack holds one open container per level, each paging its own children in order, so the walk
         // yields the exact pre-order DFS the paging cursor (skip/compare) assumes. Mirrors StoreStaging.collect.
-        Deque<String> pending = new ArrayDeque<>();
-        pending.push("");
+        Deque<Frame> pending = new ArrayDeque<>();
+        Frame root = open("");
+        if (root == null) {
+            return;                                     // nothing is published here; the root is never a leaf
+        }
+        pending.push(root);
         while (!pending.isEmpty()) {
+            // D-189: checked per CHILD, not per node. This walk honoured its cap only BETWEEN nodes and called
+            // store.list(...) at every one, so one high-fan-out container - a flat publish/ root, or a coordinate with
+            // a large version space - was read entire before a single row was emitted and the cap never got a chance
+            // to stop it. Now the container is paged, and the cap ends the walk inside it.
             if (emitted[0] >= cap) {
                 return;
             }
-            String relative = pending.pop();
-            List<String> children = store.list(relative.isEmpty() ? ROOT : ROOT + "/" + relative);
-            if (children.isEmpty()) {
-                if (!relative.isEmpty()) {
-                    emit(relative, after, emitted, visitor);
-                }
+            Frame frame = pending.peek();
+            String child = frame.next();
+            if (child == null) {
+                pending.pop();                          // this container is drained; ascend
                 continue;
             }
-            for (int index = children.size() - 1; index >= 0; index--) {
-                String child = children.get(index);
-                if (relative.isEmpty() && ServableNames.reviewSubtree(child)) {
-                    // The quarantine review subtree is stored but never served; it is not an enumerable asset.
-                    continue;
-                }
-                String childRelative = relative.isEmpty() ? child : relative + "/" + child;
-                if (skip(childRelative, after)) {
-                    continue;
-                }
-                pending.push(childRelative);
+            if (frame.relative.isEmpty() && ServableNames.reviewSubtree(child)) {
+                // The quarantine review subtree is stored but never served; it is not an enumerable asset. Screened
+                // here, before the node is opened, so it is never descended - not merely never emitted.
+                continue;
             }
+            String childRelative = frame.relative.isEmpty() ? child : frame.relative + "/" + child;
+            if (skip(childRelative, after)) {
+                continue;
+            }
+            Frame descended = open(childRelative);
+            if (descended == null) {
+                emit(childRelative, after, emitted, visitor);
+            } else {
+                pending.push(descended);
+            }
+        }
+    }
+
+    /** Open a node: a {@link Frame} when it holds at least one child (a container to descend), {@code null} when it
+     *  holds none (a leaf to emit). Costs exactly one page read, which is also the frame's first page - so deciding
+     *  container-versus-leaf never lists the container. */
+    private Frame open(String relative) throws IOException {
+        Frame frame = new Frame(relative);
+        return frame.opened() ? frame : null;
+    }
+
+    /**
+     * One open container's ordered child cursor: it pages its children through {@link ArtifactStore#page} in
+     * {@link #PAGE}-wide strides and hands them out one at a time, so the walk's stack holds a page per level rather
+     * than a whole child set per node. This is what the walk's own javadoc always claimed - "a bounded page is a slice
+     * of pointer metadata, the only full materialization the streaming principle allows" - and what the body did not
+     * do (D-189).
+     *
+     * <p><b>Why not {@code PagedTreeWalk}, the shared primitive T-102 built for exactly this?</b> It cannot be
+     * reached from here: {@code build.jenesis.repository.walk} <em>requires</em> this module, so a dependency the
+     * other way is a module cycle. The one enumeration of the {@code publish/} tree therefore has to page itself,
+     * which is why this frame exists rather than a call. Moving {@code PublishedAssets} into the walk module is the
+     * durable fix and is deliberately not this change: it moves a published type between packages.
+     */
+    private final class Frame {
+
+        private final String relative;
+        private List<String> buffer;
+        private int position;
+        private boolean drained;
+
+        private Frame(String relative) {
+            this.relative = relative;
+        }
+
+        /** Read the first page and report whether this node has any children at all - the container-or-leaf question,
+         *  answered by one child rather than by a listing. */
+        private boolean opened() {
+            fill("");
+            return !buffer.isEmpty();
+        }
+
+        /** The next child name in store order, or {@code null} once this container is drained. */
+        private String next() {
+            while (true) {
+                if (position < buffer.size()) {
+                    return buffer.get(position++);
+                }
+                if (drained) {
+                    return null;
+                }
+                fill(buffer.getLast());
+            }
+        }
+
+        private void fill(String startAfter) {
+            List<String> page = new ArrayList<>(PAGE);
+            store.page(relative.isEmpty() ? ROOT : ROOT + "/" + relative, startAfter, PAGE, page::add);
+            buffer = page;
+            position = 0;
+            drained = page.size() < PAGE;               // a short page proves the container is drained
         }
     }
 
