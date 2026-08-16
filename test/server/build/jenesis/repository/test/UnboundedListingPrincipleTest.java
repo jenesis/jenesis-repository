@@ -93,12 +93,16 @@ class UnboundedListingPrincipleTest {
      * masked by a new grant - it is a previously-invisible site becoming visible at the moment it stopped being
      * unbounded, which is the direction this ratchet exists to push. Every other growth is still forbidden: a new list
      * site is paged, not granted.
+     *
+     * <p>It then shrank back to 16: D-189 paged the published-asset {@code publish/} descent, so the one grant that
+     * walk held is gone rather than renewed.
      */
-    private static final int ALLOWLIST_SIZE = 17;
+    private static final int ALLOWLIST_SIZE = 16;
 
     /** A conservative floor on the number of distinct list call lines the matcher must find, so a broken matcher (or a
-     *  source walk that finds nothing) cannot pass the offender leg vacuously. The census has 17 today. */
-    private static final int LIST_SITE_FLOOR = 16;
+     *  source walk that finds nothing) cannot pass the offender leg vacuously. The census has 16 today (17 before
+     *  D-189 paged the published-asset descent). */
+    private static final int LIST_SITE_FLOOR = 15;
 
     /** Every censused {@code .list(prefix)} call site in free {@code source/}, keyed {@code SimpleClassName#list(anchor)},
      *  with a one-line boundedness justification READ at the call site. An argument-bearing {@code .list(} site whose
@@ -111,8 +115,6 @@ class UnboundedListingPrincipleTest {
 
         // --- one node's immediate children in an iterative walk: the store contract is "immediate child names", so each
         //     of these lists ONE node's children (O(children), never the whole subtree) on a walk/GC/browse path --------
-        a.put("PublishedAssets#list(relative.isEmpty() ? ROOT : ROOT + \"/\" + relative)",
-                "one node's immediate children in the published-asset publish/ walk");
         a.put("Publication#list(prefix)", "one node's immediate children in the alias-hold publish-tree walk");
         a.put("MarkSweepGarbageCollector#list(prefix)",
                 "one node's immediate children in the GC condemned-subtree drop / reference-batch walk");
@@ -168,7 +170,7 @@ class UnboundedListingPrincipleTest {
 
     // --- non-vacuity pins --------------------------------------------------------------------------------------------
 
-    private static final String ASSETS = "store/spi/build/jenesis/repository/store/PublishedAssets.java";
+    private static final String PUBLICATION = "store/spi/build/jenesis/repository/store/Publication.java";
     private static final String OCI = "format/oci/build/jenesis/repository/format/oci/OciFormat.java";
 
     @Test
@@ -219,9 +221,11 @@ class UnboundedListingPrincipleTest {
                 .isEmpty();
 
         // Two known sites must be found, so a matcher that silently stops matching cannot pass.
+        // The published-asset walk used to be pinned here; D-189 paged it, so the pin moved to its sibling descent
+        // over the same pointer tree rather than being dropped - a named pin, never a count.
         assertThat(scan.sites())
-                .as("PublishedAssets.list(...) (the shared publish/ pointer-tree walk) must be a scanned list site")
-                .anyMatch(s -> s.relPath().equals(ASSETS) && s.line().contains("list("));
+                .as("Publication.list(prefix) (the alias-hold publish/ pointer-tree walk) must be a scanned list site")
+                .anyMatch(s -> s.relPath().equals(PUBLICATION) && s.line().contains("list("));
         assertThat(scan.sites())
                 .as("OciFormat.list(\"oci/uploads/\" + id) (one chunked-upload session's chunks) must be a scanned list site")
                 .anyMatch(s -> s.relPath().equals(OCI) && s.line().contains("list(\"oci/uploads/\" + id)"));

@@ -263,26 +263,22 @@ class UnsafeApiPrincipleTest {
 
     // --- leg (d): a bounded promise answered by an unbounded body (D-108) -------------------------------------------
 
-    /** The pinned size of {@link #UNBOUNDED_BODIES}. Shrink-only. */
-    private static final int UNBOUNDED_BODIES_SIZE = 1;
+    /** The pinned size of {@link #UNBOUNDED_BODIES}. Shrink-only, <b>and it has reached zero</b>: its one seeded
+     *  entry was D-189's unpaged {@code publish/} descent, which now pages every container it opens. */
+    private static final int UNBOUNDED_BODIES_SIZE = 0;
 
     /**
      * Methods that <em>promise</em> a bound and answer it by materialising a whole {@link #WHOLE_NAMESPACE_LISTING}
      * namespace listing, keyed {@code Owner#name/arity}, each with the reason the materialisation is the honest
      * answer here. An entry states what bounds the listing when the signature does not - a namespace whose breadth
      * is the operator's configuration rather than the deployment's data, or a bound that fails visibly.
+     *
+     * <p><b>Empty, and it stays empty.</b> It was seeded with one entry - D-189's {@code publish/} descent, the one
+     * shared walk behind {@code /api/assets} and the console export, which honoured its cap between nodes and listed
+     * every container it opened. That descent now pages each container in bounded strides and stops inside one, so
+     * the grant is gone rather than renewed. A new offender is fixed the way that one was, not masked here.
      */
-    private static final List<Allow> UNBOUNDED_BODIES = List.of(
-            new Allow("PublishedAssets#collect/4",
-                    "D-180, recorded rather than fixed here. The core's ONE publish/ pointer walk - the "
-                            + "/api/assets catalogue and the console's NDJSON export are both this walk with a "
-                            + "different Visitor - carries a cap and a Visitor and honours them BETWEEN nodes, but "
-                            + "materialises each container's whole child list at every level, so a single high-fanout "
-                            + "container (a coordinate with a large version space, or a flat publish/ root) is read "
-                            + "entire before one row is emitted. PagedTreeWalk is the helper T-102 built for exactly "
-                            + "this and this descent never moved onto it; the migration is a behaviour change to a "
-                            + "shipped cursor order (the walk's '/' -sorts-below-everything comparison is what the "
-                            + "paging cursor assumes), so it is its own ticket rather than a line in this one"));
+    private static final List<Allow> UNBOUNDED_BODIES = List.of();
 
     /**
      * The store primitive leg (d) judges a bounded body by reaching: {@code list(prefix)} / {@code list()}, the
