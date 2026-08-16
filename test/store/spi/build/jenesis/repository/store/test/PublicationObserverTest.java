@@ -11,6 +11,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The after-commit hook class on the {@link Publication#published} seam the ingress edges fire: a
@@ -263,6 +264,37 @@ class PublicationObserverTest {
 
         assertThat(reached).as("a failing observer never blocks the seam; later observers still run")
                 .containsExactly("/raw/edge-laid-out");
+    }
+
+    /**
+     * The host promise the leg above stops one shape short of (D-198, found by D-195's census). The containment is
+     * for a notification that could not be filed; an {@link Error} is not that. It is the runtime or the module
+     * graph giving way - a {@link NoClassDefFoundError} out of an observer whose optional dependency is missing is
+     * the everyday instance - and filing it as one observer's contained failure would leave a deployment serving
+     * artifacts on a broken runtime with a WARNING to show for it.
+     *
+     * <p>What the caller receives must be the {@code Error} the observer raised, unchanged: the fan-out now names
+     * the observer's class on its way past, and an attribution that <em>replaced</em> the failure it attributes
+     * would be worse than the silence it fixes. That is what {@code isSameAs} pins here.
+     */
+    @Test
+    void an_error_from_an_after_commit_observer_is_not_filed_as_its_answer() {
+        Error planted = new NoClassDefFoundError("planted: an observer plugin's class is missing from the graph");
+        List<String> reached = new ArrayList<>();
+        Publication publication = new Publication(store, List.of(), List.of(
+                (artifact, store) -> {
+                    throw planted;
+                },
+                (artifact, store) -> reached.add(artifact.path())));
+
+        assertThatThrownBy(() -> publication.published(ArtifactDescriptor.at("raw", "/raw/edge-laid-out")))
+                .as("the caller gets the Error the observer raised - naming it must never cost the caller the "
+                        + "failure itself")
+                .isSameAs(planted);
+        assertThat(reached)
+                .as("and it is genuinely not contained: the fan-out stops, which is the difference between this and "
+                        + "the ordinary-failure leg above")
+                .isEmpty();
     }
 
     @Test
