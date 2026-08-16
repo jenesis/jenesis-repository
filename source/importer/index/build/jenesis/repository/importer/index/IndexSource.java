@@ -2,7 +2,6 @@ package build.jenesis.repository.importer.index;
 
 import module java.base;
 
-import build.jenesis.repository.format.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.importer.ImportFailure;
@@ -16,6 +15,8 @@ import build.jenesis.repository.importer.ImportSource;
  * foreign index (a name or tag the upstream controls, spliced into the layout path by the format), so it is
  * {@link ImportSource#safePath semi-trusted} exactly like a listing path: a traversal-laced one is skipped rather
  * than aimed at a store write outside the import's scope, the same guard every other import source applies. The
+ * absolute URL an enumerated coordinate carries is semi-trusted for the same reason, and is screened at the fetch by
+ * {@link build.jenesis.repository.importer.ImportScreen} rather than here. The
  * resume cursor is the last
  * fully-consumed layout path, reported every {@value #CHECKPOINT_INTERVAL} assets; a resumed walk re-enumerates
  * and skips to just past the cursor, and when the cursor no longer appears (the source's index changed) the walk
@@ -95,15 +96,11 @@ public final class IndexSource implements ImportSource {
 
     private InputStream open(ProxyFormat.Coordinate coordinate) throws IOException {
         URI url = coordinate.url();
-        // The download URL derives from a foreign index (a name/tag the upstream controls, spliced into an absolute URL
-        // by the format's enumerate), and it is fetched as an INITIAL request - not a redirect - so HttpFetcher's
-        // redirect-only SSRF screen never inspects it. A CROSS-ORIGIN download aimed at a private/loopback/metadata host
-        // is refused here through the shared PrivateHosts guard the redirect chain uses, exactly as NexusSource guards
-        // its listing-derived downloads. A SAME-ORIGIN download is not screened: it goes where the operator already
-        // pointed the importer (and the credential wrapper only authenticates same-origin reads for the same reason).
-        if (!sameOrigin(url) && PrivateHosts.resolvesToPrivate(url.getHost())) {
-            throw ImportFailure.protocol("Refusing a cross-origin download to a private/loopback host: " + url);
-        }
+        // The download URL is not screened here. It derives from a foreign index (a name/tag the upstream controls,
+        // spliced into an absolute URL by the format's enumerate) and is fetched as an INITIAL request - not a redirect
+        // - so the fetcher's redirect-only SSRF screen never inspects it. ImportScreen, wrapped around the fetcher this
+        // source was handed (ImportSourceProvider.open), is the screen: one rule for every connector, so this leg and
+        // the Nexus one cannot answer the same question differently - which they did until D-152.
         ProxyFormat.Download download = fetcher.download(url, coordinate.headers())
                 .orElseThrow(() -> ImportFailure.unreachable(url));
         if (download.status() != 200) {
@@ -111,12 +108,5 @@ public final class IndexSource implements ImportSource {
             throw ImportFailure.status(download.status(), url, "Download");
         }
         return download.body();
-    }
-
-    /** Whether {@code url} shares {@code root}'s scheme and authority - the same origin the operator pointed the
-     *  importer at. A cross-origin download URL is one the foreign index redirected the bytes to. */
-    private boolean sameOrigin(URI url) {
-        return Objects.equals(root.getScheme(), url.getScheme())
-                && Objects.equals(root.getRawAuthority(), url.getRawAuthority());
     }
 }

@@ -1,9 +1,9 @@
 package build.jenesis.repository.importer.nexus;
 
 import module java.base;
-import build.jenesis.repository.format.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.importer.ImportFailure;
+import build.jenesis.repository.importer.ImportScreen;
 import build.jenesis.repository.importer.ImportSource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -18,11 +18,11 @@ import tools.jackson.databind.json.JsonMapper;
  * pass and each asset reaches the importer for its ecosystem. The network sits behind the same
  * {@link ProxyFormat.Fetcher} the proxy uses, so the walk is tested without a Nexus.
  *
- * <p>Each {@code downloadUrl} is a semi-trusted absolute URL the listing chooses, fetched as an initial request the
- * fetcher's redirect-only SSRF screen never inspects, so a listing that aims a <em>cross-origin</em> download at a
- * private, loopback or cloud-metadata host is refused through the shared {@link PrivateHosts} screen before it is
- * fetched - the same guard the fetcher's redirect chain uses. A same-origin download goes exactly where the operator
- * already pointed the importer, so an on-premises Nexus's own private download URLs still resolve.
+ * <p>Each {@code downloadUrl} is a semi-trusted absolute URL the listing chooses - a remote party describing where to
+ * fetch from - so it is screened before it is fetched. That screen is not here: it is {@link ImportScreen}, wrapped
+ * around the {@link ProxyFormat.Fetcher} this source is handed, so the rule is stated once for every connector instead
+ * of once per connector. What <em>is</em> here is the credential decision, which is this source's own: the operator's
+ * basic credentials travel only to the base origin, so a cross-origin download goes out unauthenticated.
  */
 public final class NexusSource implements ImportSource {
 
@@ -93,19 +93,12 @@ public final class NexusSource implements ImportSource {
                     } catch (IllegalArgumentException malformed) {
                         continue;   // a download URL that is not even a URI is a broken listing entry, not an asset
                     }
-                    // The download URL comes straight off the (semi-trusted) listing an incumbent Nexus serves, and is
-                    // fetched as an INITIAL request - not a redirect - so HttpFetcher's redirect-only SSRF screen never
-                    // sees it, and the import trigger only vetted the operator's base URL, not this per-asset URL. The
-                    // SSRF vector is a listing that redirects the fetch to a DIFFERENT origin than the one the operator
-                    // authorised - a compromised or misconfigured Nexus naming a cloud metadata service (169.254.169.254)
-                    // or a foreign internal control plane. A CROSS-ORIGIN download at a private/loopback/metadata host is
-                    // refused here through the shared PrivateHosts guard the redirect chain uses. A SAME-ORIGIN download
-                    // is not screened: it goes exactly where the operator already pointed the importer, so an on-premises
-                    // Nexus migration (base and assets both on an internal host, opted in at the edge with
-                    // block-private-import-hosts=false) still resolves its own private download URLs.
-                    if (!sameOrigin(download) && PrivateHosts.resolvesToPrivate(download.getHost())) {
-                        continue;
-                    }
+                    // The download URL is not screened here. It comes straight off the (semi-trusted) listing and is
+                    // fetched as an INITIAL request - not a redirect - so the fetcher's redirect-only SSRF screen never
+                    // sees it, and the import trigger only vetted the operator's base URL. That screen is ImportScreen,
+                    // riding on the fetcher this source was handed (ImportSourceProvider.open), so it judges the URL
+                    // for every connector in one place and in one order rather than once per connector - which is how
+                    // this leg came to screen the host but never the transport (D-152).
                     consumer.accept(format, path, () -> open(download));
                 }
             }
