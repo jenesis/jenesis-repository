@@ -48,8 +48,10 @@ import module java.base;
  *     is how far it got, not how fresh it is.</li>
  * <li><b>Lifecycle / ownership.</b> The server discovers providers once with {@code ServiceLoader} and keeps them; a
  *     provider owns no threads and no HTTP client - it is handed the shared {@link ProxyFormat.Fetcher} and must use
- *     it (wrapping it to add credentials is allowed, replacing it is not). The {@link ImportSource} is owned by the
- *     migration that requested it and is not reused across migrations.</li>
+ *     it (wrapping it to add credentials is allowed, replacing it is not). That fetcher is <em>already screened</em>
+ *     ({@link ImportScreen}, applied by {@link #open}), which is why a connector carries no URL screen of its own: the
+ *     URLs a listing hands back are judged at the fetch, once, for every connector. The {@link ImportSource} is owned
+ *     by the migration that requested it and is not reused across migrations.</li>
  * <li><b>Ordering / concurrency.</b> {@link #name} is unique across installed providers and stable across releases (it
  *     is what an operator writes and what a cursor was issued under); discovery order must not decide which provider
  *     answers a source name.</li>
@@ -89,6 +91,18 @@ public interface ImportSourceProvider {
 
     /** Build the source from the request, streaming through {@code fetcher}, or null when the request is missing
      *  something this source needs (an Artifactory source without an ecosystem format, say) - which the caller reports
-     *  as a bad request. */
+     *  as a bad request. An <em>edge</em> calls {@link #open} rather than this, so the fetcher a connector receives is
+     *  screened; this is the seam a connector implements, not the one a caller reaches for. */
     ImportSource create(ImportRequest request, ProxyFormat.Fetcher fetcher);
+
+    /**
+     * Build the source an edge will walk: {@link #create}, with the fetcher screened against the URL the operator
+     * submitted ({@link ImportScreen#around}). Every import edge builds its source through here, so a URL a source
+     * hands back - a Nexus listing's per-asset {@code downloadUrl}, an index's absolute coordinate URL - is judged
+     * before it is fetched, whichever connector answered and whether or not that connector knows the screen exists.
+     * Calling {@link #create} directly hands out an unscreened transport and is not how an edge builds a source.
+     */
+    static ImportSource open(ImportSourceProvider provider, ImportRequest request, ProxyFormat.Fetcher fetcher) {
+        return provider.create(request, ImportScreen.around(fetcher, request.url()));
+    }
 }
