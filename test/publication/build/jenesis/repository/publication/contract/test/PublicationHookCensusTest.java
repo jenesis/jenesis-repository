@@ -9,6 +9,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.PublishInterceptor;
+import build.jenesis.repository.store.testkit.ChoreographyMutant;
 import build.jenesis.repository.store.testkit.Falsification;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.store.testkit.Mutant;
@@ -300,86 +301,80 @@ class PublicationHookCensusTest {
     // --- the falsification declaration (D-135) ---------------------------------------------------------------------
 
     /**
-     * The contract properties no substitution for a <em>hook</em> can falsify, each with what makes it unfalsifiable
-     * rather than merely un-mutated. It is a literal, so shrinking it - or growing it - is a deliberate edit in front
-     * of whoever reviews the kit.
+     * Which arranged commit choreography falsifies each clause that is about {@link Publication} rather than about a
+     * hook (D-148). This map is the answer to the finding D-135 recorded and D-148 was raised to close: twenty of the
+     * kit's forty-six clauses are the choreography's, the fixture's hook is a bystander in them, and until now
+     * <b>the falsification leg proved things about implementations and said nothing about the choreography they plug
+     * into</b> - which is where several of this plan's crash-window claims live.
      *
-     * <p><b>Every entry is one claim, and they are all the same claim:</b> the property is about
-     * {@link Publication}'s own commit choreography rather than about the hook. {@code Publication} is a
-     * {@code final} core class the kit constructs and cannot substitute; the checks assert it with kit-owned
-     * probe screens while the fixture's hook rides along in the chain as a bystander, which is exactly why a mutation
-     * of that hook leaves them green. Falsifying these would mean mutating the product, not the provider - a
-     * different mechanism from this one, and one this kit does not have.
-     *
-     * <p>The shape of the list is itself the finding: the after-commit and release halves are almost entirely the
-     * hook's, and the interceptor half is almost entirely {@code Publication}'s.
+     * <p>Nineteen of the twenty now carry a {@link ChoreographyMutant}, and
+     * {@link #every_choreography_clause_is_falsified_by_the_arrangement_it_names()} runs each pairing and requires the
+     * check to say otherwise. Read {@link ChoreographyMutant}'s own documentation for what that proves and what it
+     * does not: the arrangement produces the observable a mutated {@code Publication} would produce, which makes the
+     * check demonstrably discriminating on the clause, but it is a faithful simulation of the defect rather than the
+     * defect itself. {@code Publication} is {@code final} on purpose and stays that way - the argument is in its
+     * javadoc, where a reader who wonders why they cannot substitute it meets it.
      */
-    private static final Map<PublicationHookContract.Property, String> UNFALSIFIABLE = Map.ofEntries(
+    private static final Map<PublicationHookContract.Property, ChoreographyMutant> CHOREOGRAPHY = Map.ofEntries(
             Map.entry(PublicationHookContract.Property.AN_ERROR_ESCAPES_THE_OBSERVER_CONTAINMENT,
-                    "the containment is Publication's `catch (Exception)`, and the probe that throws the Error is the "
-                            + "kit's. The fixture's observer is never even reached - the Error escapes before it - so "
-                            + "no substitution for it can change the outcome"),
+                    ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
             Map.entry(PublicationHookContract.Property.THE_WITHHOLD_FEED_FIRES_ONLY_ON_A_DURABLE_TRANSITION,
-                    "the feed is Publication's: it decides that a re-link over a present pointer is a converge rather "
-                            + "than a transition. The kit's own recording observer counts the transitions, so the "
-                            + "fixture's hook contributes nothing the assertions read"),
+                    ChoreographyMutant.A_WITHHOLD_FEED_THAT_FIRES_TWICE),
             Map.entry(PublicationHookContract.Property.EVERY_SCREEN_IN_THE_CHAIN_PARTICIPATES,
-                    "additivity is Publication's - it asks every discovered screen and de-duplicates none - and it is "
-                            + "counted on the kit's own probes. A mutation of the fixture's screen could only make "
-                            + "the publish fail, which is a different claim"),
+                    ChoreographyMutant.A_CHAIN_THAT_ASKS_A_REPEATED_SCREEN_ONCE),
             Map.entry(PublicationHookContract.Property.THE_CONTENT_VIEW_RESTREAMS_THE_BLOB_UNDER_TWO_DIFFERENT_BOUNDS,
-                    "the Content view is Publication's, and every one of clause 5's assertions is made inside the "
-                            + "kit's own reader probe. The fixture's screen is in the chain to prove the view is the "
-                            + "one a real chain gets, not to be measured"),
+                    ChoreographyMutant.A_CONTENT_VIEW_THAT_IGNORES_THE_CALLERS_BOUND),
             Map.entry(PublicationHookContract.Property.A_THROWING_ASSESS_FAILS_THE_PUBLISH_WITH_NO_POINTER_LINKED,
-                    "the reversal is Publication's, and the throw is the kit's poison probe. A screen cannot make "
-                            + "its own throw contained"),
+                    ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
             Map.entry(PublicationHookContract.Property.A_THROWING_COMMITTED_FAILS_THE_PUBLISH,
-                    "same seam, other leg: whether a throw out of committed propagates is decided by Publication, and "
-                            + "the throw comes from the kit's probe"),
+                    ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
             Map.entry(PublicationHookContract.Property.A_THROWING_WITHHELD_FAILS_THE_READ_CLOSED,
-                    "both routes - the checked failure that propagates and the runtime one ServableNames reads as "
-                            + "WITHHELD - are the product's. The throwing screen is the kit's"),
+                    ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
             Map.entry(PublicationHookContract.Property.AN_ERROR_ESCAPES_BOTH_SIDES_OF_THE_CONTAINMENT,
-                    "the Exception/Throwable line is Publication's, on both sides. The fixture's screen is a "
-                            + "bystander in all three chains this check builds"),
+                    ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
             Map.entry(PublicationHookContract.Property.THE_INHERITED_OBSERVER_LEGS_STAY_CONTAINED,
-                    "containment of the inherited leg is Publication's, and the failing leg belongs to a kit probe. "
-                            + "The one assertion that reads the fixture's screen only reads its overridden-leg set, "
-                            + "which is a fact about the class rather than a behaviour a wrapper can remove"),
+                    ChoreographyMutant.AN_OBSERVER_FAILURE_THAT_STOPS_THE_FAN_OUT),
             Map.entry(PublicationHookContract.Property
                             .THE_DISCOVERED_CHAIN_IS_CACHED_AND_AN_INJECTED_ONE_IS_SORTED_PER_CONSTRUCTION,
-                    "clause 10 is about Publication's own constructor and its class-load-time discovery; the ordering "
-                            + "is read off kit probes with declared order() values"),
+                    ChoreographyMutant.A_CHAIN_IN_THE_ORDER_IT_WAS_GIVEN),
             Map.entry(PublicationHookContract.Property.THE_CHAIN_RUNS_IN_ASCENDING_ORDER_AND_THE_STRONGEST_DISPOSITION_ROUTES,
-                    "the sort and the strongest-wins fold are Publication's, and both are observed on kit probes "
-                            + "whose order() and verdict the kit chose"),
+                    ChoreographyMutant.A_CHAIN_IN_THE_ORDER_IT_WAS_GIVEN),
             Map.entry(PublicationHookContract.Property.ASSESS_IS_NOT_SHORT_CIRCUITED_BY_A_REJECT,
-                    "the counter-intuitive half of clause 11, and entirely Publication's: whether the screens behind "
-                            + "a REJECT are still asked is not something a screen can decide about itself"),
+                    ChoreographyMutant.A_CHAIN_THAT_STOPS_AT_THE_FIRST_REJECT),
             Map.entry(PublicationHookContract.Property.WITHHELD_IS_SHORT_CIRCUITED_ON_THE_FIRST_TRUE,
-                    "the mirror, same owner. The screen that answers true and the one that counts being asked are "
-                            + "both the kit's, because the claim is that a screen must NOT rely on being asked"),
+                    ChoreographyMutant.A_WITHHELD_THAT_ASKS_EVERY_SCREEN),
             Map.entry(PublicationHookContract.Property.COMMITTED_FIRES_FOR_EVERY_DISPOSITION_OVER_THE_WHOLE_CHAIN,
-                    "who is notified of what is Publication's fan-out, counted on kit probes across all three "
-                            + "dispositions"),
+                    ChoreographyMutant.A_COMMITTED_THAT_SKIPS_THE_NEUTRAL_VERDICT),
             Map.entry(PublicationHookContract.Property.THE_CHAIN_IS_AWAITED_IN_FULL_AND_NEVER_ABANDONED_PART_WAY,
-                    "clause 12 is the absence of a timeout in Publication. The slow screen is the kit's, and a "
-                            + "mutation of the fixture's screen cannot make the chain abandon anything"),
+                    ChoreographyMutant.A_CHAIN_ABANDONED_AFTER_THE_FIRST_SCREEN),
             Map.entry(PublicationHookContract.Property.STORE_THEN_GATE_LINKS_NO_POINTER_BEFORE_THE_CHAIN_VOTED,
-                    "clause 13's ordering, asserted from inside a kit witness's assess. What a screen sees when it is "
-                            + "called is decided before it is called"),
-            Map.entry(PublicationHookContract.Property.A_QUARANTINE_REVIEW_POINTER_IS_WRITTEN_BEFORE_COMMITTED_FIRES,
-                    "the same ordering one step later, witnessed from inside a kit probe's committed"),
+                    ChoreographyMutant.A_POINTER_LINKED_BEFORE_THE_CHAIN_VOTES),
             Map.entry(PublicationHookContract.Property.COMMITTED_FIRES_BEFORE_THE_COMMIT_POINT_SO_ACCEPT_IS_NOT_VISIBILITY,
-                    "the trap is where committed sits in Publication's sequence, and both routes into it (a declining "
-                            + "layout, a refused republish) are the caller's rather than the screen's"),
-            Map.entry(PublicationHookContract.Property.THE_BLOB_TO_CHAIN_CRASH_WINDOW_LEAVES_ONLY_AN_UNREFERENCED_BLOB,
-                    "the chain never runs in this window, so the fixture's screen is not called at all - there is "
-                            + "nothing of it left to remove. What the window leaves is Publication's and the store's"),
+                    ChoreographyMutant.A_POINTER_LINKED_BEFORE_THE_CHAIN_VOTES),
+            Map.entry(PublicationHookContract.Property.A_QUARANTINE_REVIEW_POINTER_IS_WRITTEN_BEFORE_COMMITTED_FIRES,
+                    ChoreographyMutant.A_REVIEW_POINTER_REMOVED_BEFORE_COMMITTED),
             Map.entry(PublicationHookContract.Property.THE_QUARANTINE_POINTER_TO_COMMITTED_CRASH_WINDOW_REPLAYS_CLEAN,
-                    "the hold, the replay's verdict and the feed's silence are all Publication's; the quarantining "
-                            + "screen and the feed observer are both the kit's"));
+                    ChoreographyMutant.A_REVIEW_POINTER_REMOVED_BEFORE_COMMITTED));
+
+    /**
+     * The contract properties nothing this kit can substitute falsifies - <b>one, since D-148</b>, and it is the one
+     * where there is no observable to arrange because nothing the kit hands {@code Publication} is ever invoked.
+     *
+     * <p>The list used to hold twenty, all with the same reason: the clause is about {@link Publication}'s own commit
+     * choreography, {@code Publication} is a {@code final} core class the kit constructs and cannot substitute,
+     * and the checks assert it with kit-owned probe screens while the fixture's hook rides along as a bystander.
+     * That reason was true and it stayed true - what changed is that {@link ChoreographyMutant} arranges the hooks the
+     * kit <em>does</em> control so the choreography produces the observable a mutated {@code Publication} would, which
+     * reaches nineteen of them. This one it cannot reach: the crash lands before the chain runs at all, so there is no
+     * hook call to arrange and what the window leaves is the store's and {@code Publication}'s alone.
+     */
+    private static final Map<PublicationHookContract.Property, String> UNFALSIFIABLE = Map.of(
+            PublicationHookContract.Property.THE_BLOB_TO_CHAIN_CRASH_WINDOW_LEAVES_ONLY_AN_UNREFERENCED_BLOB,
+            "the chain never runs in this window - the crash is armed on the blob's own size read, before the first "
+                    + "screen is asked - so the fixture's hook is not called and neither is any arrangement of the "
+                    + "kit's own probes. There is nothing of the choreography left to remove: what the window leaves "
+                    + "is Publication's and the store's, and falsifying it would mean mutating the product itself, "
+                    + "which is a mechanism this kit deliberately does not own (see ChoreographyMutant).");
 
     /**
      * The (hook, property) pairs where the property IS falsifiable in general but this hook's own shape puts the
@@ -414,13 +409,74 @@ class PublicationHookCensusTest {
                 EnumSet.allOf(PublicationHookContract.Property.class);
         undeclared.removeAll(declaring);
 
+        Set<PublicationHookContract.Property> choreography = EnumSet.copyOf(CHOREOGRAPHY.keySet());
+        choreography.addAll(UNFALSIFIABLE.keySet());
         assertThat(undeclared)
                 .as("a property that names no mutation is a property nothing proves could have said otherwise - the "
-                        + "vacuity D-135 exists to close. It may only be left undeclared on the reviewed "
-                        + "UNFALSIFIABLE list, with the reason, and every reason there says the same thing: the "
-                        + "clause is about Publication rather than about the hook.")
-                .isEqualTo(EnumSet.copyOf(UNFALSIFIABLE.keySet()));
+                        + "vacuity D-135 exists to close. It may only be left undeclared when the clause is about "
+                        + "Publication rather than about the hook, and then it owes either an arranged choreography "
+                        + "that falsifies it (CHOREOGRAPHY, D-148) or a reason on the reviewed UNFALSIFIABLE list.")
+                .isEqualTo(choreography);
+        assertThat(CHOREOGRAPHY.keySet())
+                .as("a clause cannot be both arranged and unfalsifiable: the two lists are a partition of the "
+                        + "choreography half, so an entry that gained an arrangement must lose its exemption")
+                .doesNotContainAnyElementsOf(UNFALSIFIABLE.keySet());
         UNFALSIFIABLE.values().forEach(reason -> assertThat(reason).isNotBlank());
+    }
+
+    @Test
+    void every_choreography_clause_is_falsified_by_the_arrangement_it_names() throws Exception {
+        // D-148's leg. Each clause about Publication's own commit sequence is re-run under the arranged choreography
+        // it names - a chain that stops at the first REJECT, a committed that skips the neutral verdict, a review
+        // pointer that is gone when committed fires - and must say otherwise. It is run for EVERY fixture the clause
+        // binds to, not for one representative, because the checks divide the interceptor clauses between three screen
+        // archetypes and a pairing that only bites for one of them is a pairing that covers one third of the kit.
+        List<String> survived = new ArrayList<>();
+        for (PublicationHookFixture fixture : FIXTURES) {
+            for (PublicationHookContract.Check check : PublicationHookContract.checks(fixture)) {
+                ChoreographyMutant arrangement = CHOREOGRAPHY.get(check.property());
+                if (arrangement == null) {
+                    continue;
+                }
+                try {
+                    Falsification.requireBrokenByChoreography(fixture, check, arrangement, this::faulting);
+                } catch (AssertionError unfalsified) {
+                    survived.add(fixture.hook() + " / " + check.property() + " under " + arrangement + ": "
+                            + String.valueOf(unfalsified.getMessage()).lines().findFirst().orElse(""));
+                }
+            }
+        }
+        Collections.sort(survived);
+        assertThat(survived)
+                .as("""
+                        these clauses are about Publication's own choreography, and the arrangement each one names \
+                        produces exactly the observable a Publication that had lost that behaviour would produce. \
+                        Each line below is one of two outcomes, and the message says which: 'PASSED under' means the \
+                        check stayed green and is therefore not measuring the clause at all (the pairing is wrong, or \
+                        the check has stopped reading the probe it asserts on), while 'it broke' means the \
+                        arrangement took the harness out from under the check - which proves nothing either way and \
+                        may not be banked as a red.%n%s""",
+                        String.join(System.lineSeparator(), survived))
+                .isEmpty();
+    }
+
+    @Test
+    void the_arranged_choreographies_are_all_used_and_the_ordinary_leg_runs_under_none() throws Exception {
+        // Two mirrors, and both are needed. An arrangement no clause names is a defect nothing applies - the same
+        // blind spot as a mutant no property declares. And the ordinary leg must run under NONE, or every green in
+        // this kit would be a green about an arranged choreography rather than about the product's.
+        Set<ChoreographyMutant> arranged = EnumSet.copyOf(CHOREOGRAPHY.values());
+        Set<ChoreographyMutant> vocabulary = EnumSet.allOf(ChoreographyMutant.class);
+        vocabulary.remove(ChoreographyMutant.NONE);
+        assertThat(arranged)
+                .as("an arranged choreography no clause names is never driven, so it proves nothing and cannot rot "
+                        + "honestly - the mirror of the leg above")
+                .containsExactlyInAnyOrderElementsOf(vocabulary);
+
+        assertThat(faulting("choreography-default").choreography())
+                .as("a store built the way every ordinary check gets one must run the product's own choreography, or "
+                        + "the whole kit would be measuring an arrangement")
+                .isEqualTo(ChoreographyMutant.NONE);
     }
 
     @Test
@@ -469,8 +525,8 @@ class PublicationHookCensusTest {
         List<String> unreached = new ArrayList<>();
         for (PublicationHookFixture fixture : FIXTURES) {
             for (PublicationHookContract.Check check : PublicationHookContract.checks(fixture)) {
-                if (UNFALSIFIABLE.containsKey(check.property())) {
-                    continue;                       // already argued, once, for every hook
+                if (UNFALSIFIABLE.containsKey(check.property()) || CHOREOGRAPHY.containsKey(check.property())) {
+                    continue;                       // the choreography half - argued or arranged, once for every hook
                 }
                 if (PublicationHookContract.mutations(fixture, check.property()).isEmpty()) {
                     unreached.add(fixture.hook() + " / " + check.property());
@@ -495,9 +551,14 @@ class PublicationHookCensusTest {
      *
      * <p>It is derived rather than pinned to a literal, because the honest answer is large and moves with the kit:
      * on this graph a hook that does nothing at all passes <b>101 of the 114 checks</b>, and almost all of them for
-     * the same reason the {@link #UNFALSIFIABLE} list gives - the clause is Publication's, and the hook is a
-     * bystander in it. What must never happen is a check that an inert hook survives AND that nothing else falsifies,
-     * because that check is proven over nothing at all; that is what this leg refuses.
+     * the same reason {@link #CHOREOGRAPHY} gives - the clause is Publication's, and the hook is a bystander in it.
+     * What must never happen is a check that an inert hook survives AND that nothing else falsifies, because that
+     * check is proven over nothing at all; that is what this leg refuses.
+     *
+     * <p><b>The population this figure is measured over is worth naming</b>, because it is not the product's. The free
+     * core ships no hook at all, so every fixture here is a synthetic archetype the kit invented. The number that says
+     * what this contract proves about the <em>shipped</em> hooks would have to be measured in the edition that has
+     * them, and today is not - which is a recorded defect rather than a gap in this file.
      */
     @Test
     void every_check_an_inert_hook_survives_is_falsified_some_other_way() throws Exception {
@@ -507,9 +568,9 @@ class PublicationHookCensusTest {
                 if (!survivesAnInertHook(fixture, check)) {
                     continue;                                   // the general probe already catches this one
                 }
-                if (UNFALSIFIABLE.containsKey(check.property())
+                if (UNFALSIFIABLE.containsKey(check.property()) || CHOREOGRAPHY.containsKey(check.property())
                         || NOT_THIS_HOOKS_TO_FALSIFY.containsKey(fixture.hook() + " / " + check.property())) {
-                    continue;                                   // argued above, with the reason
+                    continue;                                   // argued above, or falsified by an arrangement
                 }
                 boolean targeted = PublicationHookContract.mutations(fixture, check.property()).stream()
                         .anyMatch(mutation -> mutation.mutant() != Mutant.NO_WORK_AT_ALL);
@@ -592,6 +653,38 @@ class PublicationHookCensusTest {
                 }), mutation, deployment))
                 .as("a mutant that takes the harness out from under a check proves nothing about whether the check "
                         + "measures its property, so it may not be banked as a red")
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("it broke");
+    }
+
+    @Test
+    void the_choreography_leg_trips_when_a_check_survives_its_arrangement() throws IOException {
+        // The same three outcomes for the D-148 runner, and for the same reason: the arranged-choreography leg is
+        // otherwise the one part of the kit nothing falsifies, which is exactly the shape this whole family is about.
+        PublicationHookFixture fixture = FIXTURES.getFirst();
+        ChoreographyMutant arrangement = ChoreographyMutant.A_CHAIN_THAT_STOPS_AT_THE_FIRST_REJECT;
+        Falsification.Deployment deployment = this::faulting;
+
+        assertThatThrownBy(() -> Falsification.requireBrokenByChoreography(fixture,
+                check("a check that asserts nothing", (_, _) -> { }), arrangement, deployment))
+                .as("a check that asserts nothing survives every arrangement, and that is what must be reported")
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("PASSED under A_CHAIN_THAT_STOPS_AT_THE_FIRST_REJECT");
+
+        assertThatCode(() -> Falsification.requireBrokenByChoreography(fixture,
+                check("a check that says otherwise", (_, _) -> {
+                    throw new AssertionError("every screen behind the rejection was still asked");
+                }), arrangement, deployment))
+                .as("and a check that does say otherwise is accepted, so the leg cannot be satisfied by failing "
+                        + "everything")
+                .doesNotThrowAnyException();
+
+        assertThatThrownBy(() -> Falsification.requireBrokenByChoreography(fixture,
+                check("a check the arrangement breaks rather than falsifies", (_, _) -> {
+                    throw new IOException("the store went away");
+                }), arrangement, deployment))
+                .as("an arrangement that takes the harness out from under a check proves nothing about whether the "
+                        + "check measures the clause, and may not be banked as a red")
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("it broke");
     }
