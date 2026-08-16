@@ -12,9 +12,10 @@ import module java.base;
  * by name when a deployment installs more than one (the {@code store} reference implementation is the one the free
  * distribution ships). Each provider reads its own settings through the {@code config} lookup (a property accessor
  * returning {@code null} when unset - {@code jenesis.walk.checkpoint}, {@code jenesis.walk.segments}, ... for the
- * reference implementation). With no module installed {@link #resolve} is empty and {@link #installed()} is the
- * capability signal: every walk-riding surface then degrades gracefully - nothing enumerates, and the console /
- * capabilities say so - exactly like retention with no retention provider.
+ * reference implementation). With no module installed {@link #resolve} is empty: every walk-riding surface then
+ * degrades gracefully - nothing enumerates, and the console / capabilities say so - exactly like retention with no
+ * retention provider. They say so from {@link #resolve resolve(config).isPresent()}, not from {@link #installed()},
+ * which answers a weaker, packaging question and is read by no production surface at all (D-164; see the method).
  *
  * <h2>Contract</h2>
  * <ol>
@@ -67,8 +68,22 @@ public interface WalkProvider {
         return Set.of();
     }
 
-    /** Whether an enabled walk implementation is installed - the capability signal a console or a walk-riding
-     *  maintenance surface gates on; without one nothing ever enumerates. */
+    /**
+     * Whether a walk implementation is installed and not switched off.
+     *
+     * <p><b>No production surface reads this</b>, and this javadoc asserted that a console and a walk-riding
+     * maintenance surface gated on it for as long as neither did - D-164. The reader that exists is the reclamation
+     * module's {@code CapabilityContributor}, which reports the {@code walk} flag from
+     * {@link #resolve resolve(config).isPresent()}, and every walk-riding pass resolves the walk itself.
+     *
+     * <p><b>It is also not the same question, which is why it must not be adopted as one.</b> This answers
+     * {@link Features#enabled}: a provider whose {@link #requiredConfig} keys are unset counts as installed here while
+     * {@link #resolve} - which asks {@link Features#active} - reports it absent, and two enabled providers count here
+     * while {@link #resolve} refuses them as ambiguous. A surface gated on this would therefore open for a walk that
+     * self-disabled, and open just before {@link #resolve} throws. {@code resolve(config).isPresent()} is the
+     * capability question; this static answers a packaging one, and its readers are {@code test/walk} and the
+     * walk-consumer census.
+     */
     static boolean installed() {
         return !Providers.installedNames("walk",
                 ServiceLoader.load(WalkProvider.class),

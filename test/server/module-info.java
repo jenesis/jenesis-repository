@@ -124,6 +124,10 @@ open module build.jenesis.repository.test {
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
+    // The capability-signal census reads GarbageCollectorProvider.installed() and WalkProvider.installed() off the
+    // linked types, not just off their sources: a rename a text scan stops matching reads exactly like a pass (D-164).
+    requires build.jenesis.repository.gc;
+    requires build.jenesis.repository.walk;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.proxy;
     requires build.jenesis.repository.oidc;

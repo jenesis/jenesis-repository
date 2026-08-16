@@ -50,10 +50,12 @@ class ScanTriggerPrincipleTest {
      * banked silently.
      */
     private static final Map<String, Trigger> SCANNERS = Map.ofEntries(
-            Map.entry("test/server", new Trigger(23,
+            Map.entry("test/server", new Trigger(25,
                     "the structural ratchets - unsafe API, unbounded listing, streaming, config, immutability, the "
-                            + "SPI contract inventory and the legibility scan - all of which read source/** as text "
-                            + "and none of which is about the modules it happens to require")),
+                            + "SPI contract inventory, the legibility scan and the capability-signal census - all of "
+                            + "which read source/** as text and none of which is about the modules it happens to "
+                            + "require. The census took the floor from 23 to 25: it reads the gc and walk SPIs off "
+                            + "the linked types as well as off their sources (D-164)")),
             Map.entry("test/importer/contract", new Trigger(12,
                     "the importer census parses every source `provides RepositoryImporter`; its finding is 'an "
                             + "importer exists with no fixture', so an importer in an untriggered module is exactly "
