@@ -169,6 +169,13 @@ public interface PublicationHookFixture {
      * callback fires after a durable mutation, so what a crash in that window costs is a property of the hook, not of
      * {@link Publication}.
      *
+     * <p><b>A leg that performs its effect inline has no constant here, and that is not an oversight.</b>
+     * {@link PublicationObserver}'s clause 8 rule is that an effect handed straight to anything outside the scoped
+     * store - a remote target, another repository in this same process - is neither re-derivable by a walk nor
+     * durably enqueued, so it is at-most-once and no class describes it. A fixture for a hook that keeps such a leg
+     * declares the class its <em>other</em> legs ride and excludes, with a reason naming the leg, whatever the inline
+     * one cannot honour; that exclusion is then the record that the hook is wider than its declared class.
+     *
      * <p>The third constant exists so that claiming it is a <em>named refusal</em> rather than an absent idea:
      * {@link PublicationHookContract} rejects a fixture that declares it, naming T-107, because writing an outbox
      * <em>inside</em> an after-commit callback buys durable-after-enqueue and not at-least-once observation - the
