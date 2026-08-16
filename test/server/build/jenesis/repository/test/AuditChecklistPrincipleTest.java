@@ -332,8 +332,10 @@ class AuditChecklistPrincipleTest {
         if (cached == null) {
             try {
                 cached = derivation.call();
-            } catch (IOException | RuntimeException direct) {
-                throw direct instanceof IOException reading ? reading : (RuntimeException) direct;
+            } catch (IOException reading) {
+                throw reading;
+            } catch (RuntimeException unchecked) {
+                throw unchecked;
             } catch (Exception impossible) {
                 throw new IllegalStateException(impossible);
             }
