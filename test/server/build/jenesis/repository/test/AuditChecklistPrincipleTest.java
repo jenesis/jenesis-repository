@@ -83,9 +83,13 @@ class AuditChecklistPrincipleTest {
         checks.put("Streaming", new Check(Answer.MECHANICAL, "StreamingPrincipleTest",
                 "the whole-blob-read census over every upload, download and proxy path answers 'does this "
                         + "implementation materialise an artifact' by scanning it, per implementation."));
-        checks.put("Read purity", new Check(Answer.MECHANICAL, "ReadRenderPrincipleTest",
-                "the GET-performs-no-external-fetch census answers this per read path. What it cannot answer - "
-                        + "whether the rendered state is the right state - is a rendering clause, not this one."));
+        checks.put("Read purity", new Check(Answer.HUMAN, null,
+                "and it should not be. The downstream edition answers this row mechanically with a "
+                        + "`ReadRenderPrincipleTest` census over its GET paths; this repository has no counterpart, "
+                        + "although §10 is a shared principle and the ingress edge, every format's serve leg and the "
+                        + "console all live here. Classifying it MECHANICAL and naming that guard is what this "
+                        + "suite's own `every_mechanical_row_names_a_guard_that_exists` leg refused, which is how "
+                        + "the gap was found; porting the census is the fix and D-218 carries it."));
         checks.put("Bounded work", new Check(Answer.MECHANICAL, "UnboundedListingPrincipleTest",
                 "the unpaged-listing census, plus the PagedTreeWalk / BoundedChildren adoption it measures, answers "
                         + "'does this implementation enumerate without a cap' - the observable half of the clause."));
@@ -314,8 +318,36 @@ class AuditChecklistPrincipleTest {
 
     // --- the derivation -------------------------------------------------------------------------------------------
 
+    /**
+     * The tree is read once per JVM, not once per question. Every derivation below is a full walk of {@code source/}
+     * reading several thousand files, and {@link #render()} alone asks five of them - so without this the suite spends
+     * minutes re-reading an unchanged tree. A test JVM is forked per module and the sources cannot change under it, so
+     * the cache is safe as well as necessary.
+     */
+    private static final Map<String, Object> MEMO = new ConcurrentHashMap<>();
+
+    @SuppressWarnings("unchecked")
+    private static <T> T memoised(String key, Callable<T> derivation) throws IOException {
+        Object cached = MEMO.get(key);
+        if (cached == null) {
+            try {
+                cached = derivation.call();
+            } catch (IOException | RuntimeException direct) {
+                throw direct instanceof IOException reading ? reading : (RuntimeException) direct;
+            } catch (Exception impossible) {
+                throw new IllegalStateException(impossible);
+            }
+            MEMO.put(key, cached);
+        }
+        return (T) cached;
+    }
+
     /** Every numbered clause of every inventoried surface, in inventory then clause order. */
     private static List<Clause> clauses() throws IOException {
+        return memoised("clauses", AuditChecklistPrincipleTest::readClauses);
+    }
+
+    private static List<Clause> readClauses() throws IOException {
         Path sourceRoot = SpiContractPrincipleTest.sourceRoot();
         Map<String, Path> sources = SpiContractPrincipleTest.interfaceSources(sourceRoot);
         List<Clause> clauses = new ArrayList<>();
@@ -334,6 +366,10 @@ class AuditChecklistPrincipleTest {
 
     /** The clauses no {@code @jenesis.covers} marker claims - the checkup's checklist. */
     private static List<Clause> residue() throws IOException {
+        return memoised("residue", AuditChecklistPrincipleTest::readResidue);
+    }
+
+    private static List<Clause> readResidue() throws IOException {
         Map<String, Set<Integer>> covered = new TreeMap<>();
         for (Coverage coverage : coverage()) {
             covered.computeIfAbsent(coverage.service(), _ -> new TreeSet<>()).addAll(coverage.clauses());
@@ -345,6 +381,10 @@ class AuditChecklistPrincipleTest {
 
     /** Every coverage claim under {@code source/}, in file order. */
     private static List<Coverage> coverage() throws IOException {
+        return memoised("coverage", AuditChecklistPrincipleTest::readCoverage);
+    }
+
+    private static List<Coverage> readCoverage() throws IOException {
         Path sourceRoot = SpiContractPrincipleTest.sourceRoot();
         List<Coverage> claims = new ArrayList<>();
         try (Stream<Path> files = Files.walk(sourceRoot)) {
@@ -368,6 +408,10 @@ class AuditChecklistPrincipleTest {
 
     /** The provider classes of every inventoried surface - the per-implementation axis. */
     private static Map<String, Set<String>> implementations() throws IOException {
+        return memoised("implementations", AuditChecklistPrincipleTest::readImplementations);
+    }
+
+    private static Map<String, Set<String>> readImplementations() throws IOException {
         Path sourceRoot = SpiContractPrincipleTest.sourceRoot();
         SpiContractPrincipleTest.Graph graph = SpiContractPrincipleTest.graph(sourceRoot);
         Map<String, Path> sources = SpiContractPrincipleTest.interfaceSources(sourceRoot);
@@ -389,6 +433,10 @@ class AuditChecklistPrincipleTest {
 
     /** Types under {@code source/} carrying a Contract block that no inventory surface names - visible, not waived. */
     private static List<String> documentedButNotInventoried() throws IOException {
+        return memoised("outside", AuditChecklistPrincipleTest::readDocumentedButNotInventoried);
+    }
+
+    private static List<String> readDocumentedButNotInventoried() throws IOException {
         Path sourceRoot = SpiContractPrincipleTest.sourceRoot();
         Set<String> inventoried = SpiContractPrincipleTest.INVENTORY.stream()
                 .map(SpiContractPrincipleTest.Surface::service)
