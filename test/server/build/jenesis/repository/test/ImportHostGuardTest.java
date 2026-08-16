@@ -16,12 +16,21 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The import trigger's SSRF screen: with the anonymous-possible default an unguarded import URL would let an
- * unauthenticated caller aim the server at its own network - a cloud metadata service (169.254.169.254), the loopback
- * control plane (127.0.0.1) or an internal host. The screen is on by default, so a loopback upstream is refused with a
- * {@code 400}; an internal-host migration is an explicit opt-out
- * ({@code jenesis.repository.block-private-import-hosts=false}), and the same loopback import then runs. A fake Nexus
- * on localhost stands in for the private host both cases target.
+ * The import trigger's screen, both halves under the one {@code block-private-import-hosts} dial.
+ *
+ * <p><b>The host half:</b> with the anonymous-possible default an unguarded import URL would let an unauthenticated
+ * caller aim the server at its own network - a cloud metadata service (169.254.169.254), the loopback control plane
+ * (127.0.0.1) or an internal host - so a loopback upstream is refused with a {@code 400}.
+ *
+ * <p><b>The transport half (D-153):</b> a migration is walked server-side with the operator's upstream username and
+ * password attached, so a plaintext source hands that credential to every observer on the path - and it bites exactly
+ * where the host half is silent, on a perfectly public host, which is why it was invisible. It is refused with the
+ * same {@code 400}, naming the transport rather than sending the operator to look at a host that was never the
+ * problem.
+ *
+ * <p><b>One opt-out:</b> an internal-host migration - typically both private-addressed <em>and</em> plaintext -
+ * already sets {@code jenesis.repository.block-private-import-hosts=false}, and the same loopback plaintext import
+ * then runs. A fake Nexus on localhost stands in for the private host these cases target.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ImportHostGuardTest {
@@ -67,18 +76,46 @@ public class ImportHostGuardTest {
     @Test
     public void a_loopback_import_is_refused_by_default() throws Exception {
         System.setProperty(GUARD, "true");                     // the shipped default; pinned to be explicit
-        HttpResponse<String> refused = post("{\"source\":\"nexus\",\"url\":\"" + upstream
+        // https, so this cell still exercises the HOST half: the transport is judged first, and a plaintext URL would
+        // be refused before the loopback address was ever resolved. Nothing connects - the screen refuses at the edge.
+        HttpResponse<String> refused = post("{\"source\":\"nexus\",\"url\":\"https://localhost:" + nexus.port()
                 + "\",\"repository\":\"releases\"}");
         assertThat(refused.statusCode()).as("a loopback upstream is an SSRF vector, refused up front").isEqualTo(400);
-        assertThat(refused.body()).contains("public host");
+        assertThat(refused.body()).contains("private, loopback").contains("public host");
     }
 
     @Test
-    public void the_opt_out_allows_an_internal_host_migration() throws Exception {
+    public void a_plaintext_import_url_is_refused_by_default_even_to_a_public_host() throws Exception {
+        // D-153. The host half has nothing to say about incumbent.example, and the request below would have carried
+        // the operator's upstream password to it in the clear. The refusal names the transport, so an operator whose
+        // source is plaintext on a public host is not sent to go and look at its host.
+        System.setProperty(GUARD, "true");
+        HttpResponse<String> refused = post("{\"source\":\"nexus\",\"url\":\"http://incumbent.example\","
+                + "\"repository\":\"releases\",\"username\":\"operator\",\"password\":\"s3cr3t\"}");
+        assertThat(refused.statusCode()).as("a plaintext migration leaks the upstream credential").isEqualTo(400);
+        assertThat(refused.body()).contains("not https").doesNotContain("private, loopback");
+    }
+
+    @Test
+    public void the_opt_out_allows_an_internal_plaintext_host_migration() throws Exception {
+        // The one dial covers both halves: the on-prem migration this exists for is private-addressed AND plaintext,
+        // and an operator able to permit one and not the other is an operator who can end up sending a credential in
+        // the clear while the guard still reads as on.
         System.setProperty(GUARD, "false");                    // explicit internal-host opt-out
         HttpResponse<String> accepted = post("{\"source\":\"nexus\",\"url\":\"" + upstream
                 + "\",\"repository\":\"releases\"}");
-        assertThat(accepted.statusCode()).as("the opt-out lets the same loopback import run").isEqualTo(202);
+        assertThat(accepted.statusCode()).as("the opt-out lets the same loopback plaintext import run").isEqualTo(202);
+    }
+
+    @Test
+    public void a_malformed_url_is_a_bad_request_even_with_the_screen_opted_out() throws Exception {
+        // With the dial off the screen returns without parsing, so this URL reached URI.create unguarded and escaped
+        // as an unmapped 500 with no body - an operator learned only that something went wrong.
+        System.setProperty(GUARD, "false");
+        HttpResponse<String> refused = post("{\"source\":\"nexus\",\"url\":\"ht tp://incumbent.example\","
+                + "\"repository\":\"releases\"}");
+        assertThat(refused.statusCode()).isEqualTo(400);
+        assertThat(refused.body()).contains("malformed");
     }
 
     private HttpResponse<String> post(String body) throws Exception {

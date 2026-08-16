@@ -23,8 +23,18 @@ import module java.base;
  *
  * <p>The same rule covers the collision this additive SPI has no {@code name()} to refuse: two advisories sharing an id
  * (and, for a tenant-scoped row, a tenant) are both kept - dropping one would hide a real advisory - and a
- * {@code jenesis.posture.collision} advisory reports the duplicated keys, so a packaging accident is visible on the
- * surface instead of rendering as two identically-anchored rows nobody can tell apart.
+ * {@code jenesis.posture.collision} advisory reports the duplicated ids, so a packaging accident is visible on the
+ * surface instead of rendering as two identically-anchored rows nobody can tell apart. <b>The collision row is filed at
+ * the scope it is about</b> (D-150): ids that clashed deployment-wide become one {@link Scope#DEPLOYMENT} row, and ids
+ * that clashed <em>for a tenant</em> become one {@link Scope#TENANT} row per tenant, carrying that tenant in
+ * {@link SecurityAdvisory#tenant()} and naming no tenant in its text. A report is a fan-out that may carry rows for
+ * several tenants at once, which is why a row's scope is the only thing a tenant-facing consumer may route on -
+ * {@link #forTenant} and {@link #scoped} here, the console's {@code ScopedPosture} and {@code GET /api/admin/posture}
+ * downstream - and a deployment-wide row that interpolates one tenant's name defeats every one of them at once
+ * (PRINCIPLES &sect;6). Filing it at tenant scope keeps it diagnosable where it can be acted on and routable everywhere
+ * else. (The deployment-wide {@code GET /api/posture} renders whatever the report holds without scoping it, so it
+ * shows a {@code TENANT} row to any {@code repository:read} caller - true of every tenant-scoped advisory, not of this
+ * one in particular, and a property of that endpoint rather than of the collection.)
  */
 public record PostureReport(List<SecurityAdvisory> advisories) {
 
@@ -77,34 +87,61 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
      * where it is actually observable: over the collected advisories rather than over the advisors. A row is keyed by
      * its id, plus its tenant when it is tenant-scoped - the same advisory legitimately raised for two tenants is two
      * rows, not a collision. Both duplicates stay in the report (an id clash must never cost an operator a real
-     * advisory) and one extra row names the clashing keys, because a duplicate id is a collision between modules
+     * advisory) and one extra row names the clashing ids, because a duplicate id is a collision between modules
      * rather than a merge, and it silently ruins the row key the docs anchor and the API consumer use.
+     *
+     * <p><strong>Each collision row is filed at the scope of the rows that collided</strong> (D-150), so reporting the
+     * clash never widens who can see it. A clash between deployment-wide rows is one {@link Scope#DEPLOYMENT} row
+     * naming the ids; a clash between one tenant's rows is a {@link Scope#TENANT} row for <em>that</em> tenant, which
+     * carries the tenant in {@link SecurityAdvisory#tenant()} and names it nowhere in its text. The alternative - the
+     * single deployment-wide row this used to emit, whose message interpolated {@code "<id> (tenant <name>)"} - is a
+     * tenant name and an advisory id handed to every other tenant's viewer by a fan-out that is explicitly allowed to
+     * return rows for more than one tenant (PRINCIPLES &sect;6). Keying without the tenant instead would have kept one
+     * row at the price of the diagnosis: an id that legitimately holds for several tenants would report a clash with
+     * no way to tell which tenant's rows actually duplicated it.
+     *
+     * <p>The work stays bounded (clause 12), which one row per scope is worth arguing rather than assuming: a scope
+     * only enters the map by contributing <em>at least two</em> rows of its own, so the rows added here are at most
+     * half the duplicates the fan-out already returned - the report grows in proportion to its own input, never faster
+     * - and each row's message still names at most {@link #COLLISIONS_NAMED} ids and counts the rest.
      */
     private static List<SecurityAdvisory> collisions(List<SecurityAdvisory> advisories) {
-        Set<String> seen = new HashSet<>();
-        SortedSet<String> duplicated = new TreeSet<>();
+        // The row key is the (scope, id) pair rather than a concatenation of the two, so no tenant name or id can be
+        // spelled to forge another's key.
+        Set<Map.Entry<String, String>> seen = new HashSet<>();
+        // Keyed by the scope the clash belongs to: "" is the deployment-wide bucket, a tenant name its own bucket.
+        // A SortedMap of SortedSets so both the rows emitted and the ids each names are in a stable, readable order.
+        SortedMap<String, SortedSet<String>> duplicated = new TreeMap<>();
         for (SecurityAdvisory advisory : advisories) {
-            String key = advisory.scope() == Scope.TENANT
-                    ? advisory.id() + " (tenant " + advisory.tenant() + ")"
-                    : advisory.id();
-            if (!seen.add(key)) {
-                duplicated.add(key);
+            String scope = advisory.scope() == Scope.TENANT ? advisory.tenant() : "";
+            if (!seen.add(Map.entry(scope, advisory.id()))) {
+                duplicated.computeIfAbsent(scope, _ -> new TreeSet<>()).add(advisory.id());
             }
         }
-        if (duplicated.isEmpty()) {
-            return List.of();
-        }
-        List<String> named = duplicated.stream().limit(COLLISIONS_NAMED).toList();
+        List<SecurityAdvisory> rows = new ArrayList<>();
+        duplicated.forEach((scope, ids) -> rows.add(collision(scope, ids)));
+        return List.copyOf(rows);
+    }
+
+    /** One collision row for one scope: deployment-wide when {@code tenant} is blank, otherwise that tenant's own row.
+     *  The ids are named in the message (bounded to {@link #COLLISIONS_NAMED}, the rest counted) because a collision
+     *  report that cannot say what collided is not a report; the tenant is carried by the row's scope rather than by
+     *  its text, so the diagnosis reaches the viewer who can act on it and nobody else. */
+    private static SecurityAdvisory collision(String tenant, SortedSet<String> ids) {
+        List<String> named = ids.stream().limit(COLLISIONS_NAMED).toList();
         String listed = String.join(", ", named)
-                + (duplicated.size() > named.size() ? " (and " + (duplicated.size() - named.size()) + " more)" : "");
-        return List.of(SecurityAdvisory.deployment("jenesis.posture.collision", Severity.WARN,
-                "Two advisors raised the same advisory id",
-                "More than one discovered advisor raised these advisory ids: " + listed + ". An id is the row key and"
-                        + " the docs anchor, so a clash means two modules are describing different conditions under one"
-                        + " name and an operator cannot tell the rows apart. Both rows are kept - none is dropped.",
-                "Rename one of the colliding advisories, or remove the duplicate module registration that raised it"
-                        + " twice.",
-                "", "", ""));
+                + (ids.size() > named.size() ? " (and " + (ids.size() - named.size()) + " more)" : "");
+        String title = "Two advisors raised the same advisory id";
+        String why = "More than one discovered advisor raised these advisory ids"
+                + (tenant.isEmpty() ? "" : " for this tenant") + ": " + listed + ". An id is the row key and the docs"
+                + " anchor, so a clash means two modules are describing different conditions under one name and an"
+                + " operator cannot tell the rows apart. Both rows are kept - none is dropped.";
+        String fix = "Rename one of the colliding advisories, or remove the duplicate module registration that raised"
+                + " it twice.";
+        return tenant.isEmpty()
+                ? SecurityAdvisory.deployment("jenesis.posture.collision", Severity.WARN, title, why, fix, "", "", "")
+                : SecurityAdvisory.tenant("jenesis.posture.collision", Severity.WARN, tenant, title, why, fix,
+                        "", "", "");
     }
 
     /** Evaluate every {@link ServiceLoader}-discovered {@link SafetyAdvisor} against {@code config}. */

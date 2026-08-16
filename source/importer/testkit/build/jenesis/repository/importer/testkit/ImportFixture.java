@@ -110,9 +110,11 @@ public interface ImportFixture {
 
     /** Build a source over {@code upstream} from {@code request} through the discovered provider, failing with a
      *  fixture-named message when the provider declines - the checks all start here, so every leg exercises the
-     *  provider rather than a hand-built source. */
+     *  provider rather than a hand-built source. Built the way an import edge builds one
+     *  ({@link ImportSourceProvider#open}), so every check in the kit runs against a connector walking a screened
+     *  fetcher, for every connector, rather than against a transport no deployment ever hands one. */
     default ImportSource build(ScriptedUpstream upstream, ImportRequest request) {
-        ImportSource source = provider().create(request, upstream);
+        ImportSource source = ImportSourceProvider.open(provider(), request, upstream);
         if (source == null) {
             throw new AssertionError(source() + ": the provider declined to build a source from the fixture's own "
                     + "request. A fixture's request must be one this provider accepts, or every check below tests "

@@ -2,9 +2,9 @@ package build.jenesis.repository.server;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.ImportEdgeProvider;
 
-import build.jenesis.repository.format.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.importer.ImportRequest;
+import build.jenesis.repository.importer.ImportScreen;
 import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.importer.ImportSourceProvider;
 import build.jenesis.repository.store.ArtifactStore;
@@ -108,29 +108,46 @@ public class ImportEdgeController {
             respond(response, 400, "url and repository are required");
             return;
         }
-        // SSRF screen: with the anonymous-possible default, an unguarded import URL turns this endpoint into a proxy
-        // for the deployment's own network - a cloud metadata service (169.254.169.254), a loopback control plane
-        // (127.0.0.1) or an internal host. Refuse a non-http(s) URL or one whose host resolves to a private, loopback,
-        // link-local, site-local, multicast, CGNAT or unique-local address. On by default; an internal-host migration
-        // opts out with jenesis.repository.block-private-import-hosts=false.
-        if (blockPrivateImportHosts() && !isPublicImportUrl(url)) {
-            respond(response, 400, "import url must be an http(s) URL to a public host; a private, loopback, "
-                    + "link-local or cloud-metadata host is refused to prevent SSRF (set "
-                    + "jenesis.repository.block-private-import-hosts=false to allow an internal-host migration)");
+        // The import screen, both halves under the one block-private-import-hosts dial (ImportScreen.refusalReason):
+        // the transport must be https, because the request below attaches the operator's upstream username and
+        // password and a plaintext migration hands them to every observer on the path; and the host must not resolve
+        // internally, because with the anonymous-possible default an unguarded import URL otherwise turns this
+        // endpoint into a proxy for the deployment's own network (169.254.169.254, a loopback control plane, an
+        // internal host). The reason is carried through rather than flattened, so an operator whose source is
+        // plaintext on a perfectly public host is not told to go and look at its host. On by default; an
+        // internal or plaintext on-prem migration opts out with jenesis.repository.block-private-import-hosts=false.
+        String refusal = ImportScreen.refusalReason(url, blockPrivateImportHosts());
+        if (refusal != null) {
+            respond(response, 400, "import url is refused: " + refusal + "; a migration is walked server-side with "
+                    + "the upstream credentials attached, so it must be an https URL to a public host (set "
+                    + "jenesis.repository.block-private-import-hosts=false to migrate from an internal or plaintext "
+                    + "mirror)");
+            return;
+        }
+        URI target;
+        try {
+            target = URI.create(url);
+        } catch (IllegalArgumentException _) {
+            // Reachable only with the dial off, where the screen above returns without parsing: a malformed URL is a
+            // bad request, not the unmapped 500 an escaping IllegalArgumentException would have been.
+            respond(response, 400, "import url is refused: the URL is malformed");
             return;
         }
         String resume = spec.path("resume").asString(null);
         ImportJobs.Snapshot prior = resume == null ? null : jobs.snapshot(store, resume).orElse(null);
         String cursor = prior == null ? null : prior.cursor();
         String sourceName = spec.path("source").asString(null);
-        ImportRequest importRequest = new ImportRequest(URI.create(url), repository)
+        ImportRequest importRequest = new ImportRequest(target, repository)
                 .withFormat(spec.path("format").asString(null))
                 .withCredentials(spec.path("username").asString(null), spec.path("password").asString(null))
                 .withCursor(cursor);
         ImportSource source = importSources.stream()
                 .filter(provider -> provider.handles(sourceName))
                 .findFirst()
-                .map(provider -> provider.create(importRequest, fetcher))
+                // open(), not create(): the fetcher a connector walks with is screened against the URL the operator
+                // submitted, so every per-asset URL a listing hands back is judged before it is fetched. A connector
+                // carries no screen of its own, and one added tomorrow arrives screened (D-152).
+                .map(provider -> ImportSourceProvider.open(provider, importRequest, fetcher))
                 .orElse(null);
         if (source == null) {
             respond(response, 400, "unknown import source, or its configuration is incomplete");
@@ -165,35 +182,14 @@ public class ImportEdgeController {
         return Boolean.parseBoolean(settings.apply("read-only"));
     }
 
-    /** The import SSRF screen is on by default (the secure default); an internal-host migration opts out with
-     *  {@code jenesis.repository.block-private-import-hosts=false}. Read off the same settings the read-only flag
-     *  reads, so no extra dependency is threaded in - unset (or any value other than {@code false}) blocks. */
+    /** The import screen is on by default (the secure default) and this one dial governs <em>both</em> its halves -
+     *  the transport and the host - so an internal <em>or</em> plaintext on-premises migration opts out with
+     *  {@code jenesis.repository.block-private-import-hosts=false} and nothing can be opted out of alone. Read off the
+     *  same settings the read-only flag reads, so no extra dependency is threaded in - unset (or any value other than
+     *  {@code false}) blocks. */
     private boolean blockPrivateImportHosts() {
         String value = settings.apply("block-private-import-hosts");
         return value == null || value.isBlank() || Boolean.parseBoolean(value);
-    }
-
-    /** Whether an import URL is an {@code http(s)} URL to a host that is safe to reach: a public host, or one that
-     *  does not resolve at all (unreachable, so not an SSRF vector - the import source's own probe then rejects it).
-     *  A URL that is malformed, non-http(s), hostless, or resolves to any private/loopback/link-local/site-local/
-     *  multicast/CGNAT/unique-local address is refused. The private-range test is the shared {@link PrivateHosts}
-     *  screen the fetcher's redirect chain applies too, so the initial URL and any 30x target are judged alike. */
-    private static boolean isPublicImportUrl(String url) {
-        URI uri;
-        try {
-            uri = URI.create(url);
-        } catch (IllegalArgumentException _) {
-            return false;
-        }
-        String scheme = uri.getScheme();
-        if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
-            return false;
-        }
-        String host = uri.getHost();
-        if (host == null || host.isBlank()) {
-            return false;
-        }
-        return !PrivateHosts.resolvesToPrivate(host);
     }
 
     private static void respond(HttpServletResponse response, int status, String body) throws IOException {

@@ -53,9 +53,11 @@ public final class SettingsCatalogue {
             new Setting("track-key-usage",
                     "Whether the batching key-usage tracker records each credential's last use and running count"),
 
-            // --- Import-edge SSRF guard (ImportEdgeController). ---
+            // --- Import-edge screen, both halves (ImportEdgeController / ImportScreen). ---
             new Setting("block-private-import-hosts",
-                    "Whether the free import edge refuses import targets that resolve to private/loopback hosts"),
+                    "Whether the import edge refuses a migration URL that is plaintext http, or whose host resolves "
+                            + "to a private/loopback address - one dial covering both, since a migration is walked "
+                            + "with the upstream credentials attached"),
 
             // --- Strictly-opt-in anonymous role (WANON.1). ---
             new Setting("anonymous-rights",
