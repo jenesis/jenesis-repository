@@ -432,51 +432,78 @@ public final class Publication {
         return true;
     }
 
-    private void notifyDeleted(ArtifactDescriptor removed) {
+    /** One notification, so the six after-commit faces reach their observers through one containment rather than six
+     *  copies of it. Declares {@code Exception} because the SPI's methods declare {@code IOException} and containing
+     *  it is the point. */
+    @FunctionalInterface
+    private interface Notification {
+        void to(PublicationObserver observer) throws Exception;
+    }
+
+    /**
+     * <b>The one containment behind every after-commit observer notify (D-198).</b> Six faces - published, deleted,
+     * and the two withhold transitions in their instance and static forms - used to carry six copies of this loop,
+     * and a copy is a place where one of them quietly stops matching the others; this is the same
+     * one-choke-point move {@code EventSink.emit} makes for its own fan-out.
+     *
+     * <p>Three properties, and the middle one is what D-195's census found missing.
+     * <ol>
+     *   <li><b>An ordinary failure is contained and named, and the next observer still runs.</b> These fire after the
+     *       publish has committed, so a notification that could not be filed must never retract an artifact that is
+     *       already linked and serving - but it must not vanish either, so the observer's class and the subject are
+     *       logged at {@code WARNING} (PRINCIPLES &sect;9: a fail-soft still emits a diagnostic).</li>
+     *   <li><b>An {@link Error} is attributed and then propagates.</b> It is the runtime or the module graph giving
+     *       way rather than a notification failing to file, and filing it as one observer's contained failure would
+     *       leave a deployment serving artifacts on a broken runtime with a WARNING to show for it. It used to
+     *       propagate with <em>no</em> line at all, which is D-094's ruling half-applied: an operator learned that
+     *       the publish 500ed and nothing about which of N installed observers had given way. The propagation
+     *       direction is deliberately unchanged - it is arguable, because the publish HAS committed and the client
+     *       is told it failed, and that argument is a separate decision from this diagnosis.</li>
+     *   <li><b>The identity is the observer's class, read before the call.</b> This SPI carries no {@code name()},
+     *       so there is nothing to re-enter - but reading it up front is what keeps it that way, and it is the same
+     *       rule D-094 and D-162 landed one host each.</li>
+     * </ol>
+     */
+    private static void notify(List<PublicationObserver> observers, String subject, Notification notification) {
         for (PublicationObserver observer : observers) {
+            String identity = observer.getClass().getName();
             try {
-                observer.onDeleted(removed, store);
+                notification.to(observer);
+            } catch (Error broken) {
+                try {
+                    LOGGER.error("publication observer " + identity + " raised an Error for " + subject
+                            + " - not contained: an Error is the runtime or the module graph giving way, not a "
+                            + "notification failing to file", broken);
+                } catch (Throwable diagnostic) {
+                    // Rendering the diagnostic can itself fail on the runtime that just gave way. The attribution is
+                    // worth having but never worth REPLACING the Error it attributes.
+                    broken.addSuppressed(diagnostic);
+                }
+                throw broken;
             } catch (Exception exception) {
-                LOGGER.warn("publication observer "
-                        + observer.getClass().getName() + " failed for removal of " + removed.path(), exception);
+                LOGGER.warn("publication observer " + identity + " failed for " + subject, exception);
             }
         }
     }
 
+    private void notifyDeleted(ArtifactDescriptor removed) {
+        notify(observers, "removal of " + removed.path(), observer -> observer.onDeleted(removed, store));
+    }
+
     private void notifyPublished(ArtifactDescriptor published) {
-        for (PublicationObserver observer : observers) {
-            try {
-                observer.onPublished(published, store);
-            } catch (Exception exception) {
-                LOGGER.warn("publication observer "
-                        + observer.getClass().getName() + " failed for " + published.path(), exception);
-            }
-        }
+        notify(observers, published.path(), observer -> observer.onPublished(published, store));
     }
 
     /** The withhold-change feed's transition-ON notify - the pointer face {@link #link} fires over this publication's
      *  observer list, contained exactly like {@link #notifyDeleted}. */
     private void notifyWithheld(ArtifactDescriptor subject) {
-        for (PublicationObserver observer : observers) {
-            try {
-                observer.onWithheld(subject, store);
-            } catch (Exception exception) {
-                LOGGER.warn("publication observer "
-                        + observer.getClass().getName() + " failed for withhold of " + subject.path(), exception);
-            }
-        }
+        notify(observers, "withhold of " + subject.path(), observer -> observer.onWithheld(subject, store));
     }
 
     /** The transition-OFF mirror {@link #unpublish} fires when a {@code /quarantine} review pointer is removed. */
     private void notifyWithholdCleared(ArtifactDescriptor subject) {
-        for (PublicationObserver observer : observers) {
-            try {
-                observer.onWithholdCleared(subject, store);
-            } catch (Exception exception) {
-                LOGGER.warn("publication observer " + observer.getClass().getName()
-                        + " failed for withhold-clear of " + subject.path(), exception);
-            }
-        }
+        notify(observers, "withhold-clear of " + subject.path(),
+                observer -> observer.onWithholdCleared(subject, store));
     }
 
     /** The withhold-change feed's transition-ON notify over the ServiceLoader-discovered {@link #OBSERVERS} - the
@@ -485,26 +512,13 @@ public final class Publication {
      *  Failures are logged and contained exactly as on the instance notify paths, so a hold's marker write never fails
      *  open because a downstream consumer is down. */
     static void notifyWithheld(ArtifactDescriptor subject, ArtifactStore store) {
-        for (PublicationObserver observer : OBSERVERS) {
-            try {
-                observer.onWithheld(subject, store);
-            } catch (Exception exception) {
-                LOGGER.warn("publication observer " + observer.getClass().getName()
-                        + " failed for withhold of hash " + subject.hash(), exception);
-            }
-        }
+        notify(OBSERVERS, "withhold of hash " + subject.hash(), observer -> observer.onWithheld(subject, store));
     }
 
     /** The transition-OFF mirror the same-package {@link Withheld#clear} fires through - the marker-cleared face. */
     static void notifyWithholdCleared(ArtifactDescriptor subject, ArtifactStore store) {
-        for (PublicationObserver observer : OBSERVERS) {
-            try {
-                observer.onWithholdCleared(subject, store);
-            } catch (Exception exception) {
-                LOGGER.warn("publication observer " + observer.getClass().getName()
-                        + " failed for withhold-clear of hash " + subject.hash(), exception);
-            }
-        }
+        notify(OBSERVERS, "withhold-clear of hash " + subject.hash(),
+                observer -> observer.onWithholdCleared(subject, store));
     }
 
     /** The outcome of a screened upload: the disposition the interceptor chain reached and the SHA-256 the blob was
