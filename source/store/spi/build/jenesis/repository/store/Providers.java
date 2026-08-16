@@ -31,7 +31,8 @@ import module java.base;
  *     an unselected deployment gets the named default, and the chosen implementation's configuration is validated
  *     by caller-supplied policy before it is built (the {@code ArtifactStoreProvider} shape).</li>
  * </ul>
- * plus {@link #installedNames}, the capability signal a console or {@code /api/capabilities} surface reads.
+ * plus {@link #installedNames}, the shared enumeration every SPI's {@code installed()} static is built from (which
+ * of them a surface actually reads is per-SPI, and is censused rather than assumed - D-164).
  *
  * <p><strong>Discovery stays with the SPI.</strong> No method here calls {@link ServiceLoader#load}: the {@code uses}
  * clause belongs in the module that owns the service interface, so the SPI's own {@code resolve}/{@code installed}
@@ -277,11 +278,18 @@ public final class Providers {
     }
 
     /**
-     * The installed implementation names - the capability signal a console, {@code /api/capabilities} surface or
-     * feature gate reads. The {@code enabled} predicate decides what "installed" means for this SPI: {@code p -> true}
-     * reports every implementation on the module path regardless of configuration, while
-     * {@code p -> Features.active(p.name(), p.requiredConfig())} reports only the ones a deployment can actually use.
-     * A boolean {@code installed()} is {@code !installedNames(...).isEmpty()}.
+     * The installed implementation names, as every SPI's {@code installed()} static reports them. The
+     * {@code enabled} predicate decides what "installed" means for this SPI: {@code p -> true} reports every
+     * implementation on the module path regardless of configuration, {@code p -> Features.enabled(p.name())} reports
+     * the ones not switched off, and {@code p -> Features.active(p.name(), p.requiredConfig())} reports only the ones
+     * a deployment can actually use. A boolean {@code installed()} is {@code !installedNames(...).isEmpty()}.
+     *
+     * <p><b>Which predicate a caller passes decides whether its answer is a capability signal at all</b>, and the
+     * weaker two are not: only {@code Features.active} agrees with what {@code resolve} will do, so a surface gated on
+     * an {@code enabled}-predicated {@code installed()} opens for an implementation that self-disabled on a missing
+     * required key, and opens just before an ambiguous or unanswered selection throws. That divergence is why the
+     * capability-signal census (D-164) asks per SPI who reads {@code installed()}, rather than treating the shape as
+     * self-evidently a capability.
      *
      * @return the matching names in a stable sorted order; never {@code null}, never modifiable.
      */

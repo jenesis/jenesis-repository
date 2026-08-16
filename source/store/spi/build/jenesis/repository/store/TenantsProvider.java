@@ -9,7 +9,8 @@ import module java.base;
  * (a property accessor returning {@code null} when unset); the deployment's root store is passed for a store-backed
  * directory, whose tenants are the top-level scopes of the shared {@code <tenant>/<repository>/...} layout. With no
  * module installed, {@link #resolve} answers the {@link Tenants#fixed fixed} directory over the configured tenant,
- * and {@link #installed()} is the capability signal a console or API gates its tenant management on.
+ * so the console's tenancy chrome follows the resolved directory. It does not gate on {@link #installed()}, which
+ * answers a weaker, packaging question and is read by no production surface at all (D-164; see the method).
  *
  * <h2>Contract</h2>
  * <ol>
@@ -21,8 +22,9 @@ import module java.base;
  *     itself idempotent - re-creating an existing tenant converges rather than failing or duplicating state.</li>
  * <li><b>Absence sentinel.</b> The unselected absence of a tenants module is <em>not</em> an error: {@link #resolve}
  *     answers the {@link Tenants#fixed fixed} directory over the configured tenant, which lists exactly that one
- *     tenant and refuses to grow. {@link #installed()} is {@code false} in the same situation - the capability signal
- *     a console gates tenant management on. {@link #create} declares "I decline" with an empty {@link Optional};
+ *     tenant and refuses to grow. {@link #installed()} is {@code false} in the same situation, but it is not the
+ *     signal anything gates on and answers a weaker question than {@code resolve} (D-164; see the method).
+ *     {@link #create} declares "I decline" with an empty {@link Optional};
  *     {@code null} is never a legal return from it, from {@link #name()} or from {@link #requiredConfig()}.</li>
  * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenesis.repository.tenants=<name>}
  *     that no installed provider answers to, or whose provider declines, throws {@link IllegalStateException} at
@@ -72,9 +74,21 @@ public interface TenantsProvider {
         return Set.of();
     }
 
-    /** Whether an enabled tenants module is installed - the capability signal a console gates its tenant management
-     *  on; without one (or with every provider configured off, {@link Features}) the directory is the fixed single
-     *  tenant and never grows. */
+    /**
+     * Whether a tenants module is installed and not switched off.
+     *
+     * <p><b>No production surface reads this</b>, and this javadoc asserted that a console gated its tenant management
+     * on it for as long as none did - D-164. The tenant kernel resolves a directory through
+     * {@link #resolve(ArtifactStore, UnaryOperator, String) resolve}, and the console's tenancy chrome follows the
+     * resolved directory: with none resolved the directory is the fixed single tenant and the chrome is hidden,
+     * which is the same decision taken one layer lower and against the stronger question.
+     *
+     * <p><b>It is also not the same question, which is why it must not be adopted as one.</b> This answers
+     * {@link Features#enabled}: a provider whose {@link #requiredConfig} keys are unset counts as installed here while
+     * {@code resolve} - which asks {@link Features#active} - falls back to the fixed directory, and two enabled
+     * providers count here while {@code resolve} refuses them as ambiguous. A console gated on this would offer tenant
+     * management over a directory that never grows. Its reader is {@code test/store/spi}.
+     */
     static boolean installed() {
         return !Providers.installedNames("tenants",
                 ServiceLoader.load(TenantsProvider.class),
