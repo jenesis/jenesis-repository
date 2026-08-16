@@ -1111,16 +1111,26 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * page each image's {@code /v2/<name>/tags/list}, and expand each tagged manifest - an image index's
      * per-platform manifests first, then a manifest's config and layer blobs, then the manifest itself - so an
      * import stores every blob before the manifest and tag pointer that reference it. Blob and by-digest manifest
-     * coordinates are deduplicated across the walk (tags share layers); the manifest fetch itself rides the same
-     * bearer-challenge flow the proxy path uses. A registry that disables the catalog (Docker Hub does) answers
-     * {@code 404} there, which surfaces as the initial index failure - enumeration honestly needs the catalog.
+     * coordinates are deduplicated across the walk (tags share layers) through a <em>bounded</em>
+     * {@link BoundedDigests} memory; the manifest fetch itself rides the same bearer-challenge flow the proxy path
+     * uses. A registry that disables the catalog (Docker Hub does) answers {@code 404} there, which surfaces as the
+     * initial index failure - enumeration honestly needs the catalog.
+     *
+     * <p><b>The stream is lazy; the dedup used not to be (D-188).</b> The {@code Stream} is a chain of paged
+     * {@code _catalog} and {@code tags/list} iterators, so no repository or tag list is ever materialised - but the
+     * dedup set beside it retained one entry per distinct blob and by-digest manifest for the <em>whole</em>
+     * enumeration. That is the right dedup semantics and the wrong lifetime: importing a large registry ended with a
+     * heap set proportional to the <em>source registry's</em> digest count, on the import worker, for a set whose only
+     * job is to save a re-fetch. {@link BoundedDigests} caps it, and the trade is free in the direction that matters:
+     * an evicted digest is re-emitted, which costs an idempotent content-addressed re-store, where running out of heap
+     * costs the import.
      */
     @Override
     public Stream<Coordinate> enumerate(ProxyFormat.Fetcher fetcher, URI upstream) throws IOException {
         String root = upstream.toString();
         URI base = URI.create(root.endsWith("/") ? root : root + "/");
         Iterator<String> repositories = paged(base, URI.create(base + "v2/_catalog"), "repositories", fetcher);
-        Set<String> emitted = new HashSet<>();
+        BoundedDigests emitted = new BoundedDigests();
         return StreamSupport.stream(Spliterators.spliteratorUnknownSize(repositories, Spliterator.ORDERED), false)
                 .flatMap(name -> {
                     try {
@@ -1157,7 +1167,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * post-order exactly: every blob and every nested manifest is emitted before the manifest that references it, so an
      * import still stores a referent before its referrer.
      */
-    private void expand(URI base, String name, byte[] manifest, List<Coordinate> coordinates, Set<String> emitted,
+    private void expand(URI base, String name, byte[] manifest, List<Coordinate> coordinates, BoundedDigests emitted,
                         ProxyFormat.Fetcher fetcher) throws IOException {
         Deque<Step> pending = new ArrayDeque<>();
         pending.push(new Step(manifest, null, null));
@@ -1202,6 +1212,43 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                     coordinates.add(blob(base, name, digest));
                 }
             }
+        }
+    }
+
+    /**
+     * The bounded dedup an upstream enumeration remembers digests in (D-188): a fixed-capacity, least-recently-used
+     * set of the blob and by-digest-manifest digests already emitted, so the walk still skips the layers tags share
+     * without retaining one entry per digest of the <em>source registry</em> for the whole import.
+     *
+     * <p><b>Eviction is safe, and that is the point.</b> A digest evicted from the memory is simply emitted a second
+     * time: the coordinate is fetched again and re-stored, which is an idempotent write of content-addressed bytes -
+     * the same bytes under the same hash. Over-emitting therefore costs a re-fetch and nothing else, where an
+     * unbounded memory costs the import worker's heap. The bound is on <em>recall</em>, never on correctness: the
+     * import is still complete, because every referent is emitted before its referrer whether or not it was deduped.
+     *
+     * <p>Least-recently-used rather than least-recently-added, because sharing is what the memory is for: a base
+     * layer referenced by a thousand tags is touched constantly and stays resident, while a one-off layer ages out.
+     */
+    private static final class BoundedDigests {
+
+        /** How many digests one enumeration remembers. A digest is a ~71-character string, so the memory is a few
+         *  tens of megabytes at this capacity - large enough that a realistic registry's shared layers never age out
+         *  between the tags that share them, small enough that the import worker's heap does not scale with the
+         *  upstream. */
+        private static final int CAPACITY = 50_000;
+
+        private final Map<String, Boolean> seen = new LinkedHashMap<>(1024, 0.75f, true) {
+
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+                return size() > CAPACITY;
+            }
+        };
+
+        /** Remember {@code digest} and report whether it is new to this enumeration - the {@code Set#add} contract,
+         *  with the one difference that an evicted digest reads as new again (see the class note). */
+        private boolean add(String digest) {
+            return seen.put(digest, Boolean.TRUE) == null;
         }
     }
 
