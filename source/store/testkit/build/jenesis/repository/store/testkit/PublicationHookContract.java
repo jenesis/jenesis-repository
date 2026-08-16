@@ -59,6 +59,21 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
  * expectation, so this stays {@code java.base} + the store SPI and the downstream distribution can require it for its
  * own fixtures exactly as it already requires the rest of this module. The JUnit driver lives under {@code test/**}
  * and turns each check into one dynamic test.
+ *
+ * <h2>Clauses this kit discharges (T-304)</h2>
+ * Read by {@code AuditChecklistPrincipleTest} and subtracted from the parsed {@code Contract} blocks, restating the
+ * clause numbers each {@link Property}'s javadoc already opens with. The interceptor half reaches <b>all thirteen</b>
+ * {@code PublishInterceptor} clauses - which is the burn-down T-301b predicted, since it recorded all thirteen as
+ * residue while nothing yet drove that chain. The after-commit half reaches four of {@code PublicationObserver}'s
+ * eleven (2, 6, 7, 11); the remaining seven - thread-safety, the absence sentinel, selection, streaming, read purity,
+ * lifecycle and ordering - carry no property here and stay checkup rows.
+ *
+ * <p>The pre-commit hold-release half drives an <b>downstream-owned</b> SPI through a {@code ReleaseHook} adapter, so
+ * its clauses are claimed in that repository's own half rather than here: a marker may only name a surface this
+ * repository's inventory knows.
+ *
+ * @jenesis.covers build.jenesis.repository.store.PublishInterceptor 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+ * @jenesis.covers build.jenesis.repository.store.PublicationObserver 2, 6, 7, 11
  */
 public final class PublicationHookContract {
 
