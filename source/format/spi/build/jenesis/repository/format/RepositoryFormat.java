@@ -63,7 +63,9 @@ import module java.base;
  *     tenant and repository, and it is the only storage a format may touch: every key a format composes stays under
  *     its own namespace within that scope, so no request path can address another format's or another tenant's keys.</li>
  * <li><b>Traversal refusal.</b> A request path is client-supplied and is refused before it becomes a store key. A path
- *     carrying a {@code .} or {@code ..} segment - exactly the shapes {@link ArtifactStore#traversalFree} names -
+ *     carrying a {@code .} or {@code ..} segment, or a {@code \} anywhere - exactly the shapes
+ *     {@link ArtifactStore#traversalFree} names, the backslash among them because it is a separator on a
+ *     Windows-hosted filesystem backend and a literal on the object stores (D-003) -
  *     addresses nothing in this format's namespace and is answered {@code 404}, storing and serving nothing; the same
  *     screen applies to every client-supplied name a format splices into a key (an image name, a tag, a digest). A
  *     format never percent-decodes its own path, so an encoded {@code %2e%2e} stays a literal name rather than

@@ -57,8 +57,9 @@ public final class StoreContract {
         /** Write paths reject a key past {@link ArtifactStore#MAX_SEGMENTS} or {@link ArtifactStore#MAX_KEY_BYTES}
          *  through {@link ArtifactStore#key}, storing nothing; a key at the cap is accepted. */
         KEY_SHAPE_REJECTED,
-        /** Write paths reject a key carrying a {@code .} or {@code ..} segment, storing nothing - the same screen
-         *  {@code scope} applies to a segment, applied to the key. */
+        /** Write paths reject a key carrying a {@code .} or {@code ..} segment, or a {@code \} anywhere, storing
+         *  nothing - the same screen {@code scope} applies to a segment, applied to the key, separator half
+         *  included. */
         KEY_TRAVERSAL_REJECTED,
         /** {@code list} returns the immediate children of a prefix and nothing deeper; a leaf and an absent prefix
          *  both list empty. */
@@ -79,6 +80,10 @@ public final class StoreContract {
         /** The version token is opaque and per-version: never {@code null}, never interpreted by the caller, changed
          *  by every successful write, and refused once superseded. Absence reads as {@code Optional.empty()}. */
         VERSION_TOKEN_OPAQUE,
+        /** The version token identifies the stored <em>incarnation</em>, not the instant of the write: a key deleted
+         *  and re-created with different content never re-issues a token a reader of the previous incarnation holds,
+         *  so a compare-and-set from before the delete is refused. */
+        VERSION_TOKEN_PER_INCARNATION,
         /** {@code writeBatch} answers exactly one outcome per write, in input order, keyed to that write; two writes
          *  to one key apply in input order rather than racing. */
         BATCH_ORDERED_PER_ENTRY_OUTCOMES,
@@ -147,7 +152,7 @@ public final class StoreContract {
                 "a write past the segment or byte cap is rejected and stores nothing",
                 StoreContract::keyShapeRejected));
         checks.add(new Check(Property.KEY_TRAVERSAL_REJECTED,
-                "a write whose key carries a . or .. segment is rejected and stores nothing",
+                "a write whose key carries a . or .. segment, or a backslash, is rejected and stores nothing",
                 StoreContract::keyTraversalRejected));
         checks.add(new Check(Property.LISTING_IMMEDIATE_CHILDREN,
                 "list returns the immediate children of a prefix and nothing deeper",
@@ -167,6 +172,9 @@ public final class StoreContract {
         checks.add(new Check(Property.VERSION_TOKEN_OPAQUE,
                 "the version token is opaque, per-version and refused once superseded",
                 StoreContract::versionTokenOpaque));
+        checks.add(new Check(Property.VERSION_TOKEN_PER_INCARNATION,
+                "a token from a deleted-and-re-created incarnation of a key no longer passes",
+                StoreContract::versionTokenPerIncarnation));
         checks.add(new Check(Property.BATCH_ORDERED_PER_ENTRY_OUTCOMES,
                 "writeBatch answers one outcome per write, in input order",
                 StoreContract::batchOrderedPerEntryOutcomes));
@@ -312,7 +320,14 @@ public final class StoreContract {
         // own key screen. No backend suite tested a traversal-shaped key on the write path, so nothing saw it. The
         // screen sits at the one choke point every backend already calls, before any I/O, so all four now refuse the
         // same publish the same way and a store migration cannot relocate or lose an object.
-        for (String key : new String[]{"kit/../escape", "../escape", "kit/./here", "..", "."}) {
+        // The backslash rows are the same divergence one alphabet over, and they are here because the screen once read
+        // only '/' (D-003): "kit\..\escape" carries no '/'-delimited traversal segment at all, so it passed the screen
+        // and reached the backends - where a Windows-hosted filesystem store resolves it as a REAL traversal and lands
+        // the body a level up, while S3, GCS and Azure store it as one literal key with a backslash in the name. The
+        // bare "kit\escape" row is the same fact without the traversal: one key, two placements, so a store migration
+        // would relocate it. Both are refused at the shared screen, so all four backends stay interchangeable.
+        for (String key : new String[]{"kit/../escape", "../escape", "kit/./here", "..", ".",
+                "kit\\..\\escape", "..\\escape", "kit\\.\\here", "kit\\escape", "\\"}) {
             throwsIae(() -> store.write(key, new ByteArrayInputStream(ramp(4))),
                     "writing the traversal-shaped key '" + key + "'");
             throwsIae(() -> store.writeVersioned(key, ramp(4), null),
@@ -442,6 +457,37 @@ public final class StoreContract {
 
         store.delete(key);
         equal(store.readVersioned(key).isPresent(), false, "a deleted object reads as Optional.empty() again");
+    }
+
+    /**
+     * How many delete-and-re-create cycles {@link #versionTokenPerIncarnation} runs. The property it asserts is
+     * unconditional - a token from a previous incarnation must never pass, whenever the two incarnations happened -
+     * but the shape that breaks it on a wall-clock-stamped backend only appears when both land inside one stamp tick
+     * (D-006), and a single cycle straddles the tick boundary as often as not. A cycle is four small operations, so a
+     * few dozen of them sweep across the boundary in well under a second on any backend while staying a bounded,
+     * fixed amount of work. The deterministic form of the same probe - the two incarnations forced onto one stamp -
+     * is the filesystem backend's own suite, where the stamp is reachable.
+     */
+    private static final int INCARNATIONS = 32;
+
+    private static void versionTokenPerIncarnation(ArtifactStore store) throws Exception {
+        String key = "kit/versioned/incarnation";
+        for (int cycle = 0; cycle < INCARNATIONS; cycle++) {
+            String before = "before-" + cycle, after = "after-" + cycle;
+            isTrue(store.writeVersioned(key, utf8(before), null), "the first incarnation is created");
+            Object stale = store.readVersioned(key).orElseThrow().token();
+            store.delete(key);
+            isTrue(store.writeVersioned(key, utf8(after), null),
+                    "the key is re-created as a second, unrelated incarnation");
+            isFalse(store.writeVersioned(key, utf8("stale-" + cycle), stale),
+                    "a token read from an incarnation that has since been deleted no longer passes: the object it "
+                            + "named is gone, so a compare-and-set holding it would land over content it never read. "
+                            + "A backend whose token is a bare wall-clock stamp re-issues the same value when the "
+                            + "re-creation lands inside the same tick, which is what makes this a property of the "
+                            + "incarnation rather than of the instant");
+            equal(content(store, key), after, "the refused write left the second incarnation untouched");
+            store.delete(key);
+        }
     }
 
     private static void batchOrderedPerEntryOutcomes(ArtifactStore store) throws Exception {

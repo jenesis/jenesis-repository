@@ -97,6 +97,26 @@ public class GcsConditionalWriteTest {
     }
 
     @Test
+    public void a_token_from_a_deleted_incarnation_no_longer_passes() throws IOException {
+        // The store contract's VERSION_TOKEN_PER_INCARNATION property, proven here because the MinIO leg cannot
+        // speak the generation protocol at all. A generation is a per-write counter the bucket never re-issues, so a
+        // key deleted and re-created carries one no reader of the dead incarnation holds - the property a
+        // wall-clock-stamped backend has to construct rather than inherit (D-006).
+        String key = "config/incarnation";
+        assertThat(store.writeVersioned(key, "first".getBytes(StandardCharsets.UTF_8), null)).isTrue();
+        Object stale = store.readVersioned(key).orElseThrow().token();
+
+        store.delete(key);
+        assertThat(store.readVersioned(key)).as("the delete really removed the object").isEmpty();
+        assertThat(store.writeVersioned(key, "second".getBytes(StandardCharsets.UTF_8), null)).isTrue();
+
+        assertThat(store.writeVersioned(key, "stale".getBytes(StandardCharsets.UTF_8), stale))
+                .as("a token naming the deleted incarnation is refused against its replacement").isFalse();
+        assertThat(new String(store.readVersioned(key).orElseThrow().content(), StandardCharsets.UTF_8))
+                .isEqualTo("second");
+    }
+
+    @Test
     public void read_versioned_fails_fast_when_the_endpoint_omits_the_generation_header() {
         // The version token is the object generation, carried in the x-goog-generation response header; an endpoint
         // that omits it (a generic S3-compatible store mistakenly pointed at the gcs backend) must surface a clear
@@ -245,6 +265,12 @@ public class GcsConditionalWriteTest {
                         .withHeader("x-goog-generation", Long.toString(existing.generation()))
                         .withHeader("ETag", "\"stub-" + existing.generation() + "\"")
                         .withBody(existing.content()).build();
+            }
+            if (RequestMethod.DELETE.equals(method)) {
+                // A deleted object's generation is never re-issued: the counter only ever advances, which is what
+                // makes a token from a deleted incarnation unusable rather than accidentally current (D-006).
+                objects.remove(key);
+                return status(204);
             }
             if (RequestMethod.HEAD.equals(method)) {
                 // exists()/size() issue a HEAD; only a 404 means absent, a non-404 (here a 403) must fail loud.

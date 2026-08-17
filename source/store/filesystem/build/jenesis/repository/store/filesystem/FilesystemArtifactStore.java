@@ -6,8 +6,9 @@ import module java.base;
 
 /**
  * The default {@link ArtifactStore}: blobs under a mounted root directory, keyed by their object path.
- * Version tokens are the file's last-modified time, so {@link #writeVersioned} is a last-modified
- * compare-and-set, adequate for a single node; a clustered deployment uses an object-store backend whose
+ * Version tokens pair the file's last-modified stamp with a digest of its bytes (see {@link #token}), so
+ * {@link #writeVersioned} is a compare-and-set on the stored <em>incarnation</em> rather than on the tick it was
+ * written in - adequate for a single node; a clustered deployment uses an object-store backend whose
  * ETag / generation gives true cross-node compare-and-set.
  */
 public final class FilesystemArtifactStore implements ArtifactStore {
@@ -260,13 +261,43 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         // object-store backends' 404 -> empty behaviour - is Optional.empty(). Map that race to absent, so a reader
         // that lost to a delete simply sees no object, never an escaping exception.
         try {
-            // Token before content: a write landing in between then pairs OLD token with NEW content, so a
+            // Stamp before content: a write landing in between then pairs the OLD stamp with NEW content, so a
             // compare-and-set from this read loses and retries - the safe direction. The reverse order would pair
-            // a fresh token with stale content and let a stale update pass as current.
-            long token = Files.getLastModifiedTime(path).toMillis();
-            return Optional.of(new Versioned(Files.readAllBytes(path), token));
+            // a fresh stamp with stale content and let a stale update pass as current.
+            long modified = Files.getLastModifiedTime(path).toMillis();
+            byte[] content = Files.readAllBytes(path);
+            return Optional.of(new Versioned(content, token(modified, content)));
         } catch (NoSuchFileException | FileNotFoundException e) {
             return Optional.empty();
+        }
+    }
+
+    /**
+     * The opaque version token: the last-modified stamp <em>and</em> a digest of the stored bytes, so it identifies
+     * the object incarnation rather than the tick it was written in.
+     *
+     * <p>The stamp alone was not enough, and the gap is D-006. A stamp is a property of a <em>moment</em>, not of an
+     * object: delete a key and re-create it inside the same millisecond and the new incarnation carries the same
+     * stamp, so a token read from the object that is now gone still passes the compare-and-set and a stale write lands
+     * over content it never saw. The window is not the filesystem's - ext4 timestamps are nanosecond-resolution - it is
+     * this token's, because {@code toMillis()} truncates to it; and it is reachable through the plain SPI, where
+     * {@link #delete} plus a create-if-absent {@link #writeVersioned} on the same key is how a revoked credential's
+     * metadata, a swept garbage-collection marker and a feed snapshot pointer are all re-created. Two writes inside one
+     * tick were already handled (the stamp is nudged forward below); the deleted-and-re-created incarnation was the
+     * case that hack could not see, because there is no earlier stamp left to compare against.
+     *
+     * <p>Folding the content in closes it without inventing a rule: an S3 or Azure ETag <em>is</em> a content
+     * identity, and a GCS generation is a per-incarnation counter, so this is the filesystem reaching the identity its
+     * three peer backends already have rather than a fourth semantics (&sect;13). What remains identical across an
+     * incarnation boundary is a key deleted and re-created with byte-identical content at the same stamp - where the
+     * stored state a stale token still passes against is the state its holder read, so the compare-and-set concedes
+     * nothing.
+     */
+    private static Object token(long modified, byte[] content) {
+        try {
+            return modified + ":" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 
@@ -274,7 +305,9 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
         Path path = resolve(ArtifactStore.key(key));
         synchronized (LOCKS[Math.floorMod(path.hashCode(), LOCKS.length)]) {
-            Object current = Files.isRegularFile(path) ? Files.getLastModifiedTime(path).toMillis() : null;
+            boolean present = Files.isRegularFile(path);
+            long modified = present ? Files.getLastModifiedTime(path).toMillis() : -1L;
+            Object current = present ? token(modified, Files.readAllBytes(path)) : null;
             if (!Objects.equals(current, expected)) {
                 return false;
             }
@@ -285,11 +318,12 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             try {
                 Files.write(temp, content);
                 Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                // The token must advance on every successful update: two writes inside one clock tick would
+                // The token must advance on every successful update, including a re-write of byte-identical content
+                // (which the digest half of the token cannot distinguish): two writes inside one clock tick would
                 // otherwise leave it unchanged, and a third writer holding the pre-update token would still pass
                 // the compare - a stale write disguised as a fresh one.
-                if (current != null && Files.getLastModifiedTime(path).toMillis() <= (long) current) {
-                    Files.setLastModifiedTime(path, FileTime.fromMillis((long) current + 1));
+                if (present && Files.getLastModifiedTime(path).toMillis() <= modified) {
+                    Files.setLastModifiedTime(path, FileTime.fromMillis(modified + 1));
                 }
             } catch (IOException e) {
                 Files.deleteIfExists(temp);

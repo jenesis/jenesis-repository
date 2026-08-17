@@ -50,8 +50,8 @@ public interface ArtifactLayout {
      * it composes a request path out of a coordinate and a version, so a hostile or malformed coordinate maps to
      * nothing instead of to a traversal-shaped path an eviction would then delete under.
      *
-     * <p>It is deliberately the same {@code .}/{@code ..} rule the store screens a key on
-     * ({@link ArtifactStore#traversalFree}) plus the separator rule the store screens a <em>scope segment</em> on
+     * <p>It is deliberately the same {@code .}/{@code ..}-and-{@code \} rule the store screens a key on
+     * ({@link ArtifactStore#traversalFree}) plus the {@code /} rule the store screens a <em>scope segment</em> on
      * ({@link ArtifactStore#segment}), stated once here for every layout rather than re-derived per format: a Maven
      * artifactId, an OCI tag and a module name are all single segments, and a Maven groupId is checked component by
      * component because its dots become separators. Shared so a new layout inherits the guard instead of being the

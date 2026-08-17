@@ -18,7 +18,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p>What stays is what only a filesystem can express or only this backend implements: deletion tidies the empty
  * container directories it leaves behind, listing hides an atomic write's in-flight {@code .upload*.tmp} sibling, the
- * last-modified token advances strictly even for updates inside one clock tick, concurrent compare-and-set increments
+ * stamp behind the version token advances strictly even for updates inside one clock tick and the token still refuses
+ * a stale write when a re-created key is forced back onto the old stamp, concurrent compare-and-set increments
  * never lose one another, an aborted write leaks no spool file, a blob and its containers are created owner-only
  * rather than at the process umask, {@code readVersioned} reads a racing delete as empty instead of throwing, and a
  * key that escapes the store root is rejected on the <em>read</em> path too (the object stores have no such path to
@@ -92,15 +93,47 @@ class FilesystemArtifactStoreTest {
     void write_versioned_tokens_strictly_advance_so_a_stale_token_never_passes() throws IOException {
         assertThat(store.writeVersioned("m/x", "0".getBytes(StandardCharsets.UTF_8), null)).isTrue();
         Object token = store.readVersioned("m/x").orElseThrow().token();
+        long stamp = Files.getLastModifiedTime(root.resolve("m/x")).toMillis();
         for (int update = 1; update <= 100; update++) {
             assertThat(store.writeVersioned("m/x", Integer.toString(update).getBytes(StandardCharsets.UTF_8), token))
                     .isTrue();
             Object next = store.readVersioned("m/x").orElseThrow().token();
-            assertThat((long) next)
-                    .as("the token advances on every update, even for updates inside one clock tick")
-                    .isGreaterThan((long) token);
+            assertThat(next)
+                    .as("the token changes on every update, even for updates inside one clock tick")
+                    .isNotEqualTo(token);
+            // The stamp is read off the file rather than parsed back out of the token: this suite may know that this
+            // backend stamps its files (that is what "strictly advance" means here), but the token itself is opaque
+            // even to the backend's own tests, and reading it as a number is what tied this assertion to the token
+            // being one.
+            long advanced = Files.getLastModifiedTime(root.resolve("m/x")).toMillis();
+            assertThat(advanced).as("the stamp behind the token is nudged past a same-tick rewrite").isGreaterThan(stamp);
             token = next;
+            stamp = advanced;
         }
+    }
+
+    @Test
+    void a_token_from_a_deleted_incarnation_is_refused_even_when_the_replacement_lands_on_the_same_stamp()
+            throws IOException {
+        // D-006, deterministic: the shared kit runs this shape often enough to catch a same-tick re-creation by
+        // chance, but only here can the tick be forced. The replacement's stamp is set back to the previous
+        // incarnation's, which is exactly the state a delete-and-re-create inside one millisecond leaves - and the
+        // state in which a bare last-modified token re-issues a value a reader of the dead incarnation still holds.
+        assertThat(store.writeVersioned("m/incarnation", "first".getBytes(StandardCharsets.UTF_8), null)).isTrue();
+        Object stale = store.readVersioned("m/incarnation").orElseThrow().token();
+        FileTime stamp = Files.getLastModifiedTime(root.resolve("m/incarnation"));
+
+        store.delete("m/incarnation");
+        assertThat(store.writeVersioned("m/incarnation", "second".getBytes(StandardCharsets.UTF_8), null)).isTrue();
+        Files.setLastModifiedTime(root.resolve("m/incarnation"), stamp);
+
+        assertThat(store.writeVersioned("m/incarnation", "stale".getBytes(StandardCharsets.UTF_8), stale))
+                .as("a token naming an incarnation that has since been deleted is refused, even where the replacement "
+                        + "carries the same last-modified stamp - the object the token named is gone, so the write "
+                        + "holding it would land over content it never read")
+                .isFalse();
+        assertThat(new String(store.readVersioned("m/incarnation").orElseThrow().content(), StandardCharsets.UTF_8))
+                .as("the refused write left the second incarnation untouched").isEqualTo("second");
     }
 
     @Test
