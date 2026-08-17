@@ -8,6 +8,7 @@
  * read here. Discovered through {@code provides}, so the layout plugs in like any other format.
  *
  * @jenesis.release 25
+ * @jenesis.pin org.slf4j 2.0.18
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
  */
 module build.jenesis.repository.format.maven {
@@ -16,6 +17,9 @@ module build.jenesis.repository.format.maven {
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.format.java;
     requires java.xml;
+    // The metadata leg's clause-2 refusal says in the log which upstream target could not be asked and how,
+    // beside the 502 it answers the resolver - the operator-visible half a status code alone cannot carry.
+    requires org.slf4j;
     exports build.jenesis.repository.format.maven;
     uses build.jenesis.repository.format.java.bridge.ModuleView;
     provides build.jenesis.repository.format.RepositoryFormat

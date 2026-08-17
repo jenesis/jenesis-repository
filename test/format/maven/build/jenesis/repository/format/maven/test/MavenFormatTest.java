@@ -305,6 +305,63 @@ class MavenFormatTest {
                 .as("a proxied metadata document is not cached").isEmpty();
     }
 
+    @Test
+    void an_upstream_that_never_answered_is_not_an_empty_version_list() throws IOException {
+        // ProxyFormat clause 2's split. maven-metadata.xml IS the <versions> list a range or a LATEST/RELEASE marker
+        // resolves against, so a 404 here is not "not cached, re-pull" - it is the answer that the coordinate has no
+        // versions, and a resolver acts on it (or, under a mirror list, moves on as though this repository had really
+        // answered). A fetch that never landed must therefore not wear that answer's clothes. This is D-231's defect,
+        // found on the Go leg's @v/list and retrofitted here for parity.
+        for (Optional<build.jenesis.repository.format.ProxyFormat.Fetched> answer : List.of(
+                Optional.<build.jenesis.repository.format.ProxyFormat.Fetched>empty(),   // a transport failure
+                Optional.of(fetched(503)), Optional.of(fetched(429)), Optional.of(fetched(401)))) {
+            FakeExchange get = new FakeExchange("GET", "/maven/org/example/lib/maven-metadata.xml");
+
+            boolean served = format.proxy(get, store, java.net.URI.create("https://upstream.example/maven2/"),
+                    (build.jenesis.repository.format.ProxyFormat.Fetcher.Buffered) (url, headers) -> answer);
+
+            assertThat(served).as("the 502 IS a serve - false would let the local 404 stand, which is the lie").isTrue();
+            assertThat(get.status()).as("an upstream that did not answer is a bad gateway, not an empty version list")
+                    .isEqualTo(502);
+            assertThat(get.responseBytes()).as("and no upstream error body is relayed as the metadata").isEmpty();
+        }
+    }
+
+    @Test
+    void an_upstream_that_carries_no_such_coordinate_still_lets_the_local_404_stand() throws IOException {
+        // The other half of the split, and the reason it is a split: an origin ANSWERED, and its answer is that it
+        // carries no such coordinate. That is the one shape of "no versions" a resolver may act on.
+        for (int status : List.of(404, 410)) {
+            FakeExchange get = new FakeExchange("GET", "/maven/org/example/lib/maven-metadata.xml");
+
+            boolean served = format.proxy(get, store, java.net.URI.create("https://upstream.example/maven2/"),
+                    (build.jenesis.repository.format.ProxyFormat.Fetcher.Buffered) (url, headers) ->
+                            Optional.of(fetched(status)));
+
+            assertThat(served).as("an upstream %s is a real miss, so the leg declines", status).isFalse();
+            assertThat(get.status()).as("nothing is written on a real miss").isEqualTo(-1);
+        }
+    }
+
+    @Test
+    void a_metadata_checksum_sibling_keeps_the_plain_decline() throws IOException {
+        // Deliberately NOT split: a .sha1 answers "what digest", not "what exists", nothing resolves against its
+        // absence, and Maven already treats an unavailable checksum as a warning rather than as a fact about the
+        // repository. Pinned here so the classification is a decision rather than an oversight.
+        FakeExchange get = new FakeExchange("GET", "/maven/org/example/lib/maven-metadata.xml.sha1");
+
+        boolean served = format.proxy(get, store, java.net.URI.create("https://upstream.example/maven2/"),
+                (build.jenesis.repository.format.ProxyFormat.Fetcher.Buffered) (url, headers) -> Optional.empty());
+
+        assertThat(served).as("a checksum sibling keeps clause 2's plain decline").isFalse();
+        assertThat(get.status()).as("nothing is written").isEqualTo(-1);
+    }
+
+    private static build.jenesis.repository.format.ProxyFormat.Fetched fetched(int status) {
+        return new build.jenesis.repository.format.ProxyFormat.Fetched(status,
+                "upstream boom".getBytes(StandardCharsets.UTF_8), java.util.Map.of());
+    }
+
     private static String sha1Hex(byte[] content) {
         try {
             return java.util.HexFormat.of().formatHex(
