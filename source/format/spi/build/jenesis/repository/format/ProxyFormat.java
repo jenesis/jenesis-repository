@@ -22,9 +22,35 @@ import module java.base;
  *     converges on the same stored blob and serves identical bytes; a mutable index is never cached, so a repeat
  *     re-reads the upstream rather than serving something a previous request happened to keep.</li>
  * <li><b>Absence sentinel.</b> {@code false} means "this leg served nothing - let the local {@code 404} stand". It is
- *     the answer for an unproxyable path, an upstream miss, a transport failure <em>and</em> a refused body (clause 5);
- *     the adapter never invents a {@code 200}, and never leaves a partially written cache entry behind when it
- *     declines.</li>
+ *     the answer for an unproxyable path, an upstream miss and a refused body (clause 5); the adapter never invents a
+ *     {@code 200}, and never leaves a partially written cache entry behind when it declines.
+ *     <p><b>A transport failure is not among them on an enumeration document, and this clause used to say it was.</b>
+ *     Reading the sentinel as "one answer for every way a fetch can end" is how the adapter's caller comes to render
+ *     an unreachable upstream as a plain {@code 404}, and whether that is harmless depends on <em>what the request
+ *     addressed</em>:
+ *     <ul>
+ *     <li>A <b>version-pinned or content-addressed</b> document - an artifact, a per-version manifest or metadata file
+ *         the client already resolved to a fixed identity. Here the {@code 404} says "not cached here", the client
+ *         re-pulls or falls through to its next configured source, and nothing about a build's resolution is decided
+ *         by the absence. {@code false} for every failure is right, and stays right.</li>
+ *     <li>An <b>enumeration</b> - a version list, a packument, a PEP 503 simple index, a {@code repodata} or
+ *         {@code Packages} index, a {@code maven-metadata.xml}. Here the {@code 404} <em>is</em> an answer: an empty
+ *         enumeration a build resolves against, which the client records as a fact about the world ("this package has
+ *         no versions") rather than as a reason to retry. Rendering a fetch that never landed as that answer hands the
+ *         client a wrong answer it cannot tell from the truth. So on such a document an adapter splits the sentinel by
+ *         <em>who said what</em>: an upstream that answered {@code 404}/{@code 410} is a genuine miss and keeps
+ *         {@code false}, because an origin said so; a transport failure (clause 6's empty {@link Optional}) or any
+ *         other non-{@code 200} - a {@code 429} under a shared egress IP, a {@code 5xx}, an auth challenge - is a
+ *         question this repository could not put to its upstream, and it answers {@code 502} and is logged rather
+ *         than being answered "none".</li>
+ *     </ul>
+ *     The classification is the adapter's, because which of a format's paths is a version list is protocol knowledge
+ *     only that format has; the rule above is not. It is what {@code versions()}-style local enumerations already do
+ *     one layer down, where a scan that stopped at its bound refuses rather than serving a prefix of the versions
+ *     (&sect;5, &sect;9) - a list incomplete because the store could not be walked and one empty because the upstream
+ *     could not be reached are the same failure wearing different clothes. D-231 is what it costs when they are not:
+ *     a five-second connect timeout served {@code github.com/pkg/errors} as a module with no versions, and the
+ *     {@code 404} was investigated for a day as an enumeration regression in this core's paged asset walk.</li>
  * <li><b>Streaming (&sect;1).</b> An artifact is copied from the network into the content-addressed store through
  *     {@link Fetcher#download} without ever being materialised - the store is handed the still-unread upstream stream,
  *     never a buffer the adapter filled first - so a multi-gigabyte pull stays bounded in heap. Only a small mutable
