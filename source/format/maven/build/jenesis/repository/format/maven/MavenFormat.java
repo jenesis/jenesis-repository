@@ -12,6 +12,9 @@ import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.format.java.bridge.ModuleView;
 import build.jenesis.repository.store.ArtifactStore;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * The Maven layout ({@code /maven/...}): a {@code PUT} stores the blob content-addressed through the shared
  * {@link Publication} store - including a {@code maven-metadata.xml} and its checksum siblings, stored verbatim like
@@ -291,6 +294,24 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             // A mutable index: fetch it fresh (the small buffered fetch, not a cached download) and stream it straight
             // to the client, leaving nothing cached, so the repository never serves a stale metadata document.
             Optional<ProxyFormat.Fetched> index = fetcher.fetch(URI.create(prefix + rest), Map.of());
+            // Clause 2's split. The maven-metadata.xml document itself is an ENUMERATION - it IS the <versions> list a
+            // range or a LATEST/RELEASE marker resolves against, and a SNAPSHOT document is the timestamped build a
+            // resolver picks - so a 404 here is not "not cached here, re-pull", it is the answer that the coordinate
+            // has no versions. Serving a fetch that never landed as that answer breaks a build with a wrong fact it
+            // cannot tell from the truth (D-231, on the Go leg's @v/list). Only an upstream that ANSWERED 404/410 may
+            // reach the client as one; a transport failure or any other status refuses visibly instead.
+            //
+            // Its .sha1/.md5 siblings deliberately keep the plain decline: a checksum answers "what digest", not "what
+            // exists", nothing resolves against its absence, and Maven already treats an unavailable checksum as a
+            // warning rather than as a fact about the repository.
+            if (rest.endsWith("/maven-metadata.xml")) {
+                if (index.isEmpty()) {
+                    return unanswered(prefix + rest, exchange, "the upstream could not be reached");
+                }
+                if (index.get().status() != 200 && index.get().status() != 404 && index.get().status() != 410) {
+                    return unanswered(prefix + rest, exchange, "the upstream answered " + index.get().status());
+                }
+            }
             if (index.isEmpty() || index.get().status() != 200) {
                 return false;
             }
@@ -326,6 +347,26 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         handle(exchange, store);
         return true;
     }
+
+    /**
+     * Answer a {@code maven-metadata.xml} request this repository could not put to its upstream - a transport failure,
+     * or an upstream that answered something other than the document - with a {@code 502} rather than the local
+     * {@code 404}, and say in the log which target failed and how.
+     *
+     * <p>It returns {@code true} because the leg <em>did</em> serve a response: {@link ProxyFormat}'s {@code false}
+     * means "let the local {@code 404} stand", and on this one document the local {@code 404} is a lie. A resolver
+     * reads a {@code 502} as a repository error and stops; it reads a {@code 404} as "this coordinate has no versions"
+     * and fails the build with a wrong reason, or - worse, under a mirror list - moves on to the next repository as
+     * though this one had genuinely answered. Clause 2 states the rule and why it is only this shape.
+     */
+    private static boolean unanswered(String target, FormatExchange exchange, String reason) throws IOException {
+        LOG.warn("Refusing to answer the Maven metadata request {} as an empty version list: {}. Nothing was served; "
+                + "the local 404 would have been read by the resolver as the upstream's own answer.", target, reason);
+        exchange.respond(502);
+        return true;
+    }
+
+    private static final Logger LOG = LoggerFactory.getLogger(MavenFormat.class);
 
     /** A Maven checksum or signature sibling - itself the integrity token, so it is proxied as-is, not re-verified. */
     private static boolean isChecksum(String rest) {
