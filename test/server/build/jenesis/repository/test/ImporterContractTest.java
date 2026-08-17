@@ -13,6 +13,7 @@ import build.jenesis.repository.store.ArtifactStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -128,19 +129,22 @@ class ImporterContractTest {
                     String probe = label + " (" + vector.id() + ": " + path + ")";
                     switch (vector.kind()) {
                         case DECODED -> {
-                            assertThatThrownBy(() -> importer.importTarget(path))
+                            // assertThatExceptionOfType, not assertThatThrownBy: the description of a
+                            // `.as(...)` chained after assertThatThrownBy is lost in exactly the case that matters -
+                            // nothing was thrown - so the failure would name no vector and no importer.
+                            assertThatExceptionOfType(IllegalArgumentException.class)
                                     .as("%s: a source path carrying a '.' or '..' segment addresses nothing this "
                                             + "format can lay out, so it is refused by name - never echoed into the "
                                             + "descriptor the edge screens and records, and never demoted to the "
                                             + "empty answer that means 'lay it out unscreened'", probe)
-                                    .isInstanceOf(IllegalArgumentException.class);
+                                    .isThrownBy(() -> importer.importTarget(path));
                             // The write half refuses the same shapes before it touches the store, so an importer
                             // reached by another edge cannot compose the key either. The screen runs first, so the
                             // arguments below are never used.
-                            assertThatThrownBy(() -> importer.importArtifact(path, InputStream.nullInputStream(),
-                                    (ArtifactStore) null))
+                            assertThatExceptionOfType(IllegalArgumentException.class)
                                     .as("%s: the layout half refuses the same shape", probe)
-                                    .isInstanceOf(IllegalArgumentException.class);
+                                    .isThrownBy(() -> importer.importArtifact(path, InputStream.nullInputStream(),
+                                            (ArtifactStore) null));
                         }
                         case ENCODED, SHAPE_CAP -> {
                             // A percent-encoded traversal is a literal name here (no importer decodes its own paths),
