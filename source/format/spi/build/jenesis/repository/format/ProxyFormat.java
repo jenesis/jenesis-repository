@@ -64,7 +64,32 @@ import module java.base;
  *     is <em>refused</em>: nothing is linked, nothing is served, every view the fill had already laid out is retracted,
  *     and the caller lets the local {@code 404} stand so a later pull re-hits the upstream. A body is never cached
  *     under a digest it does not hash to. An ecosystem that advertises no digest (a plain file mirror) proxies
- *     unverified rather than fabricating a check, and says so.</li>
+ *     unverified rather than fabricating a check, and says so.
+ *     <p><b>"We could not read the digest" is not "the upstream publishes none", and this clause used to leave that
+ *     open.</b> The unverified fall-back above is written for the upstream having <em>published nothing</em> - Maven
+ *     serves jars whose {@code .sha1} sibling is missing, Packagist leaves {@code shasum} blank for a VCS-sourced dist
+ *     - and every adapter whose digest comes out of a <em>second</em> document was applying it to a case this clause
+ *     never covered. A packument fetch that timed out, a compact index behind a shared-egress {@code 429}, a
+ *     registration leaf whose advertised URL an outbound screen refuses, a checksum sibling answered by a captive
+ *     portal: each of those returned "this ecosystem declares no digest for this artifact", and the artifact was then
+ *     cached with no point check at all. That is a silent fail-open, not a wrong answer - anyone able to drop one
+ *     sidecar fetch turns this clause's "held to it and a mismatch is refused" off for that pull - and it is the
+ *     integrity-surface twin of the split clause 2 makes on the discovery surface. So an adapter splits the same way,
+ *     by <em>who said what</em>:
+ *     <ul>
+ *     <li>the declaring document <b>answered</b> - a {@code 404}/{@code 410}, or a {@code 200} carrying no entry, no
+ *         digest field or an unparseable one - and the fall-back above applies unchanged;</li>
+ *     <li>the declaring document <b>could not be read</b> - a transport failure (clause 6's empty {@link Optional}),
+ *         any other non-{@code 200}, a body that is not the document, a bound the read ran past, or a target an
+ *         outbound screen refuses - and the fill is <b>declined</b>: nothing cached, nothing served, every view the
+ *         fill had laid out retracted, the local {@code 404} left standing so a later pull re-hits the upstream, and
+ *         the refusal logged. An unverifiable artifact is not served on the strength of not having been checked
+ *         (&sect;5, &sect;9).</li>
+ *     </ul>
+ *     As with clause 2, the rule is general and the classification is the adapter's, because which fetch declares a
+ *     digest is protocol knowledge only that adapter has. An adapter whose digest rides on the artifact's own response,
+ *     or whose declaring document is the same one that resolves the download URL, has nothing to split and says
+ *     so.</li>
  * <li><b>Error visibility (&sect;9).</b> An upstream error status rides in the {@link Fetched} / {@link Download} /
  *     {@link Head} so the adapter acts on it (a {@code 401} challenge, a {@code 404} miss); only a transport failure is
  *     an empty {@link Optional}. A failure while filling the cache may never be swallowed into a served response.</li>

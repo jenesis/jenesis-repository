@@ -69,6 +69,55 @@ class MavenProxyChecksumRetractionTest {
                 .as("retracted from its latest module view too").isEmpty();
     }
 
+    @Test
+    void a_checksum_sibling_this_repository_could_not_read_retracts_the_fill() throws IOException {
+        // Clause 5's split (D-236). "The upstream publishes no .sha1 for this artifact" is a documented fact about
+        // Maven repositories and is the one thing that may downgrade a fill to unverified. A sibling fetch that never
+        // landed, or one answered by a 429 under a shared egress IP or a 5xx, is not that fact - it is this repository
+        // failing to read what the upstream published - and reading it as that fact means anyone who can drop one
+        // sidecar request turns verification off for that pull. The artifact is already laid out by the time the
+        // sibling is read, so the refusal has to RETRACT rather than merely decline, exactly as a mismatch does, and
+        // from both coordinates for the same reason the mismatch case gives.
+        for (Optional<ProxyFormat.Fetched> sibling : List.of(
+                Optional.<ProxyFormat.Fetched>empty(),                                   // a transport failure
+                Optional.of(new ProxyFormat.Fetched(429, new byte[0], Map.of())),
+                Optional.of(new ProxyFormat.Fetched(503, new byte[0], Map.of())),
+                Optional.of(new ProxyFormat.Fetched(401, new byte[0], Map.of())))) {
+            byte[] jar = automaticModuleJar("test.unverifiable");
+            ProxyFormat.Fetcher.Buffered upstream = (url, headers) -> url.toString().endsWith(".sha1")
+                    ? sibling
+                    : Optional.of(new ProxyFormat.Fetched(200, jar, Map.of()));
+
+            boolean served = format.proxy(new CaptureExchange(PATH), store, UPSTREAM, upstream);
+
+            assertThat(served).as("an artifact whose declaring checksum could not be read is refused, not cached "
+                    + "unverified (the sibling answered %s)", sibling.map(ProxyFormat.Fetched::status).orElse(null))
+                    .isFalse();
+            assertThat(publication.located(PATH)).as("retracted from its Maven coordinate").isEmpty();
+            assertThat(publication.located("/module/test.unverifiable/1.0/test.unverifiable.jar"))
+                    .as("retracted from its versioned module view too").isEmpty();
+            assertThat(publication.located("/module/test.unverifiable/test.unverifiable.jar"))
+                    .as("retracted from its latest module view too").isEmpty();
+        }
+    }
+
+    @Test
+    void an_upstream_that_answers_it_publishes_no_checksum_still_caches_unverified() throws IOException {
+        // The half that must NOT change, and the reason D-236 is a split rather than a blanket refusal: the upstream
+        // ANSWERED that it carries no .sha1 beside this artifact, and clause 5 says such a repository is proxied
+        // unverified rather than having a check fabricated for it. A leg that refused here would stop serving every
+        // Maven repository that publishes no checksums at all.
+        byte[] jar = automaticModuleJar("test.unchecksummed");
+
+        boolean served = format.proxy(new CaptureExchange(PATH), store, UPSTREAM, upstream(jar, 404, ""));
+
+        assertThat(served).as("an upstream with no .sha1 sibling is proxied unverified, as clause 5 documents")
+                .isTrue();
+        assertThat(publication.located(PATH)).as("cached under its Maven coordinate").isPresent();
+        assertThat(publication.located("/module/test.unchecksummed/1.0/test.unchecksummed.jar"))
+                .as("and cross-published, so this is a real fill rather than a vacuous pass").isPresent();
+    }
+
     /** An upstream that serves {@code artifact} for the jar and {@code sha1Hex} (at {@code sha1Status}) for its
      *  {@code .sha1} sibling. */
     private static ProxyFormat.Fetcher.Buffered upstream(byte[] artifact, int sha1Status, String sha1Hex) {
