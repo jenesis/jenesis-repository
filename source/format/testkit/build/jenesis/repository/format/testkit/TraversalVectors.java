@@ -15,9 +15,9 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>Each row also declares what a refusal <em>means</em> for its shape, because the three shapes are refused by three
  * different, deliberately chosen seams:
  * <ul>
- *   <li>{@link Kind#DECODED} - a {@code .} or {@code ..} segment as the format really receives it. Refused by the
- *       format itself with a {@code 404} ({@code RepositoryFormat} contract clause 6): it addresses nothing, and it
- *       must never reach {@link ArtifactStore#key}, which throws.</li>
+ *   <li>{@link Kind#DECODED} - a {@code .} or {@code ..} segment, or a {@code \}, as the format really receives it.
+ *       Refused by the format itself with a {@code 404} ({@code RepositoryFormat} contract clause 6): it addresses
+ *       nothing, and it must never reach {@link ArtifactStore#key}, which throws.</li>
  *   <li>{@link Kind#ENCODED} - the percent-encoded form of the same traversal. A format never decodes its own path, so
  *       this stays a literal name: it may legitimately be stored under that literal key, and the assertion is only
  *       that it never lands at the <em>decoded</em> target. A format that re-decoded would turn a dispatcher's
@@ -71,6 +71,15 @@ public final class TraversalVectors {
             // A doubly-nested escape: two levels above the format prefix, so a screen that only refused a LEADING ".."
             // (or only compared the first segment) still lets this one through.
             new Vector("deep-parent", "kit/nested/../../../" + ESCAPE, Kind.DECODED),
+            // The same traversal one alphabet over: '\' is a real path separator on a Windows-hosted filesystem
+            // backend and a literal character on the three object stores, so a screen that split on '/' alone read
+            // this as one long, harmless leaf name (D-003). It is a DECODED row, not an ENCODED one - nothing has to
+            // decode anything for it to escape; the platform below simply reads a separator the screen did not.
+            new Vector("backslash-parent", "kit\\..\\" + ESCAPE, Kind.DECODED),
+            // ... and the same fact without a traversal in it: one key, two placements (a nested object on Windows, a
+            // flat one with a backslash in its name everywhere else), which is the divergence the store's key screen
+            // exists to keep out rather than a shape any of the fourteen ecosystems publishes.
+            new Vector("backslash-separator", "kit\\" + ESCAPE, Kind.DECODED),
             new Vector("encoded-parent", "%2e%2e/" + ESCAPE, Kind.ENCODED),
             new Vector("encoded-separator", "..%2f" + ESCAPE, Kind.ENCODED),
             new Vector("over-deep", String.join("/", Collections.nCopies(ArtifactStore.MAX_SEGMENTS + 4, "kit")),

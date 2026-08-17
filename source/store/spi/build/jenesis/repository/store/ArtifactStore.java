@@ -10,8 +10,9 @@ import module java.base;
  *
  * Large blobs (jars) stream through {@link #read} / {@link #write}. Small objects (POMs and
  * {@code maven-metadata.xml}) use {@link #readVersioned} / {@link #writeVersioned}: a compare-and-set
- * keyed on an opaque token, so concurrent metadata edits never lose one another. On a filesystem the
- * token is the last-modified stamp; an object-store backend maps it to the blob's ETag or generation.
+ * keyed on an opaque token, so concurrent metadata edits never lose one another. An object-store backend maps the
+ * token to the blob's ETag or generation; the filesystem pairs the last-modified stamp with a digest of the bytes,
+ * because a stamp alone names a moment and the token has to name an incarnation (clause 10).
  *
  * <h2>Contract</h2>
  * Most clauses below are executable: {@code StoreContract} in the store testkit states one once and each backend runs
@@ -27,7 +28,7 @@ import module java.base;
  *       ({@code PAGING_ORDER_AND_START_AFTER}, {@code BATCH_ORDERED_PER_ENTRY_OUTCOMES}, and the native-paging
  *       obligation itself as {@code NATIVE_PAGING}), clause 9's key caps
  *       ({@code KEY_SHAPE_REJECTED}) and page limit, and clause 10's compare-and-set and batch halves
- *       ({@code VERSION_TOKEN_OPAQUE}, {@code BATCH_IS_NOT_A_TRANSACTION});</li>
+ *       ({@code VERSION_TOKEN_OPAQUE}, {@code VERSION_TOKEN_PER_INCARNATION}, {@code BATCH_IS_NOT_A_TRANSACTION});</li>
  *   <li><b>structurally guarded</b> - clause 4 by {@code StreamingPrincipleTest} and clause 9's {@link #list} rule by
  *       {@code UnboundedListingPrincipleTest}: source scans over the free tree's call sites, which catch a
  *       <em>new</em> whole-blob read or unbounded listing, not a backend that buffers internally;</li>
@@ -72,7 +73,10 @@ import module java.base;
  * <li><b>Tenant scoping (&sect;6).</b> {@link #scope} is the only tenancy seam: the returned view confines every key
  *     to that subspace, a sibling scope can neither read nor enumerate across it, and scopes nest. The segment is
  *     screened through {@link #segment}, and a key through {@link #key}, so neither a traversal-shaped scope name nor
- *     a traversal-shaped key can address storage outside the subspace it was handed.</li>
+ *     a traversal-shaped key can address storage outside the subspace it was handed. <b>Both screens count {@code \}
+ *     as a path separator</b>, because it is one on a Windows-hosted filesystem backend and a literal on the object
+ *     stores: a screen that read only {@code /} would call {@code a\..\b} traversal-free and let it walk a level up on
+ *     the one backend where it can (D-003).</li>
  * <li><b>Error visibility (&sect;9).</b> Nothing on a correctness-bearing path is swallowed. Only a genuine
  *     object-level miss reads as absent: a throttle, an authorization failure, a permission refusal, a missing
  *     bucket/container or a stale mount must surface, never degrade {@link #exists} to {@code false}, {@link #size}
@@ -126,7 +130,13 @@ import module java.base;
  *     partial write. {@link #writeVersioned} commits only while the stored version still matches the token it was
  *     given, which is what lets many nodes edit one pointer with no lock or database; the token is <em>opaque</em> -
  *     a caller may only hand back a value the store gave it - and changes on every successful write, so a superseded
- *     token can never pass. {@link #writeBatch} is explicitly <b>not</b> a transaction: there is no atomicity across
+ *     token can never pass. <b>It identifies the stored incarnation, not the instant of the write</b>: a key that is
+ *     deleted and re-created carries a token no reader of the previous incarnation holds, so a compare-and-set from
+ *     before the delete is refused rather than landing over content it never saw. A backend whose token is a
+ *     wall-clock stamp therefore has to add something the re-creation cannot repeat - the filesystem folds in a digest
+ *     of the bytes, the object stores already have an ETag or a generation (D-006). The one collision this permits is
+ *     a re-creation that is byte-identical at the same stamp, where the state a stale token passes against is
+ *     precisely the state its holder read. {@link #writeBatch} is explicitly <b>not</b> a transaction: there is no atomicity across
  *     keys and no rollback, each entry commits, conflicts or fails on its own, and a caller must read the per-entry
  *     outcomes rather than assume the batch succeeded or failed as a unit.</li>
  * </ol>
@@ -178,10 +188,10 @@ public interface ArtifactStore {
      * attacker-controlled coordinate can never plant a key deep or long enough to drive an unbounded recursive
      * descent, or an outsized per-key cost, anywhere downstream.
      *
-     * <p>A key carrying a {@code .} or {@code ..} segment is rejected here too, for the same reason
-     * {@link #segment(String)} refuses one: on a filesystem such a key walks out of the subspace it was addressed in,
-     * and on an object store it lands a literal key that no other backend can then address - so the same publish
-     * would be refused on one backend and silently accepted on another (&sect;13). Screening it at the one write
+     * <p>A key carrying a {@code .} or {@code ..} segment, or a {@code \} anywhere, is rejected here too, for the same
+     * reason {@link #segment(String)} refuses one: on a filesystem such a key walks out of the subspace it was
+     * addressed in, and on an object store it lands a literal key that no other backend can then address - so the same
+     * publish would be refused on one backend and silently accepted on another (&sect;13). Screening it at the one write
      * choke point every backend already calls keeps the four backends interchangeable, which is what makes a store
      * migration a configuration change. Enforced on new writes only: any key already stored predates the screen and
      * stays readable, deletable and walkable (the iterative store walk bounds traversal regardless of a legacy key's
@@ -213,9 +223,9 @@ public interface ArtifactStore {
     }
 
     /**
-     * Whether a {@code '/'}-separated path carries no {@code .} or {@code ..} segment - the traversal half of the
-     * {@link #key(String)} screen, exposed as a predicate so a caller that must <em>decline</em> rather than throw
-     * asks the same question at the same choke point instead of re-deriving the rule.
+     * Whether a {@code '/'}-separated path carries no {@code .} or {@code ..} segment <em>and</em> no {@code \} - the
+     * traversal half of the {@link #key(String)} screen, exposed as a predicate so a caller that must <em>decline</em>
+     * rather than throw asks the same question at the same choke point instead of re-deriving the rule.
      *
      * <p>{@link #key(String)} is the write-path screen and throws, because a caller that has already decided to store
      * something at a traversal-shaped key has a bug. A {@code RepositoryFormat} screening an
@@ -226,12 +236,25 @@ public interface ArtifactStore {
      * legitimate publish or hand the store a key it refuses at a point the client cannot understand - so this
      * predicate is the single definition and {@link #key(String)} is stated in terms of it.
      *
-     * <p>Only {@code .} and {@code ..} segments are refused. An empty segment is not a traversal (a trailing slash on
-     * a directory listing request, a doubled separator) and a percent-encoded {@code %2e%2e} is not one either: it is
-     * a literal name until something decodes it, and nothing below this line ever does.
+     * <p>{@code .} and {@code ..} segments are refused, and so is a {@code \} anywhere - the separator half
+     * {@link #segment(String)} has always applied to a scope name, applied here to a key. It is not a stylistic
+     * restriction: {@code \} <em>is</em> a path separator on a Windows-hosted filesystem backend and a literal
+     * character on the three object stores, so {@code a\..\b} walks a level up on one backend and names a single
+     * literal object on the others, and {@code a\b} is a nested key on one and a flat one on the others. Judging that
+     * shape "traversal-free" would let the very publish this screen exists to refuse through on the one backend where
+     * it escapes, and would break the interchangeability {@link #key(String)} is here to keep (&sect;13). Nothing below
+     * this line re-screens it: the {@code segment}/{@code ArtifactLayout.addressable}/{@code RepositoryImporter}
+     * seams above all refuse a backslash already, and this was the one place that did not (D-003).
+     *
+     * <p>An empty segment is not a traversal (a trailing slash on a directory listing request, a doubled separator)
+     * and a percent-encoded {@code %2e%2e} is not one either: it is a literal name until something decodes it, and
+     * nothing below this line ever does.
      */
     static boolean traversalFree(String path) {
         if (path == null) {
+            return false;
+        }
+        if (path.indexOf('\\') >= 0) {
             return false;
         }
         for (int index = 0, start = 0; index <= path.length(); index++) {
