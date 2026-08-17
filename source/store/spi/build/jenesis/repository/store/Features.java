@@ -20,6 +20,13 @@ import module java.base;
  *     implementation. Resolution runs through the {@link Providers} primitives, so an explicitly selected
  *     implementation that is absent, switched off or unconfigured fails loudly (&sect;9) and two enabled
  *     implementations are ambiguous - discovery order never picks a winner.</li>
+ * <li><em>One key, one meaning:</em> because both shapes live in the one {@code jenesis.repository.*} namespace, an
+ *     implementation's {@code name()} may never be the name of an <em>SPI</em>. The two readings of such a key
+ *     collide silently in the benign direction and destructively in the other: the walk implementation was called
+ *     {@code store}, so its documented off-switch {@code jenesis.repository.store=false} was also the artifact
+ *     store's selection key, and using it selected a storage backend named {@code false} and refused to boot -
+ *     while every deployment's ordinary {@code jenesis.repository.store=filesystem} was silently doubling as that
+ *     walk's toggle (D-005). A build guard scans for the collision rather than trusting the convention.</li>
  * <li>An implementation's own settings live under {@code jenesis.<feature>.<property>=<value>} or its documented
  *     settings keys; they are never consulted here.</li>
  * <li><em>Required-config self-disable:</em> a provider declares the config keys it cannot run without (a
