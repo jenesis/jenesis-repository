@@ -114,8 +114,9 @@ class DemoSeederTest {
     }
 
     /** Canned upstream responses for every Maven demo suggestion, so a stub fetcher serves them all without a
-     *  network (each mapped by its Maven Central URL; a {@code .sha1} sibling is deliberately unmapped so the proxy
-     *  skips checksum verification). */
+     *  network (each mapped by its Maven Central URL; a {@code .sha1} sibling is deliberately unmapped, which the stub
+     *  answers {@code 404} - an upstream saying it publishes no checksum, so the proxy caches unverified as
+     *  {@code ProxyFormat} clause 5 documents). */
     private static Map<String, ProxyFormat.Fetched> centralArtifacts() {
         return Map.of(
                 CENTRAL + "org/apache/logging/log4j/log4j-core/2.14.1/log4j-core-2.14.1.jar",
@@ -151,8 +152,12 @@ class DemoSeederTest {
         }
     }
 
-    /** A fixed in-memory fetcher answering each URL from a canned map (an unmapped URL - including any {@code .sha1}
-     *  sibling - is a transport miss, so the Maven proxy skips checksum verification) and counting its calls. */
+    /** A fixed in-memory fetcher answering each URL from a canned map and counting its calls. An unmapped URL is a
+     *  {@code 404} - the upstream <em>answering</em> that it carries no such thing - and not the empty
+     *  {@link Optional} that means the transport never reached it. Since D-236 the Maven proxy tells those two apart:
+     *  a {@code 404} on a {@code .sha1} sibling is "this repository publishes no checksum here" and the artifact is
+     *  proxied unverified, while a transport failure declines the fill outright. This stub means the former, and used
+     *  to say the latter because the leg could not tell the difference. */
     private static final class StubFetcher implements ProxyFormat.Fetcher.Buffered {
 
         private final Map<String, ProxyFormat.Fetched> responses;
@@ -165,7 +170,8 @@ class DemoSeederTest {
         @Override
         public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
             fetches.incrementAndGet();
-            return Optional.ofNullable(responses.get(url.toString()));
+            return Optional.of(responses.getOrDefault(url.toString(),
+                    new ProxyFormat.Fetched(404, new byte[0], Map.of())));
         }
 
         private int fetches() {

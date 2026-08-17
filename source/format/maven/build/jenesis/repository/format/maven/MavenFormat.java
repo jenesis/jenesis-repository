@@ -334,8 +334,24 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 // streams to storage; the tiny checksum sibling is fetched afterwards, so it never delays the artifact.
                 MessageDigest sha1 = sha1();
                 String hash = layout(store, path, new DigestInputStream(download.body(), sha1));
-                String expected = upstreamSha1(fetcher, URI.create(prefix + rest + ".sha1"));
-                if (expected != null && !expected.equalsIgnoreCase(HexFormat.of().formatHex(sha1.digest()))) {
+                URI sibling = URI.create(prefix + rest + ".sha1");
+                Sha1 expected = upstreamSha1(fetcher, sibling);
+                if (expected.unreadable() != null) {
+                    // Clause 5's split (D-236). "The upstream publishes no .sha1 for this artifact" is a fact about
+                    // Maven repositories that is true often enough to be documented, and it is the ONLY thing that may
+                    // downgrade a fill to unverified. A .sha1 fetch that never landed, or one answered by a 429 under a
+                    // shared egress IP, is not that fact - it is this repository having failed to read what the
+                    // upstream published, and treating it as the fact means anyone who can drop one sidecar request
+                    // turns verification off for that pull. So the fill is refused exactly as a mismatch is: retracted
+                    // from both coordinates, nothing served, the local 404 standing so a later pull re-hits the
+                    // upstream and reads the sibling again.
+                    LOG.warn("Refusing to cache the proxied artifact {} unverified: {}. Nothing was cached or served; "
+                            + "the local 404 stands so a later pull re-hits the upstream.", prefix + rest,
+                            expected.unreadable());
+                    retract(store, path, hash);
+                    return false;
+                }
+                if (expected.hex() != null && !expected.hex().equalsIgnoreCase(HexFormat.of().formatHex(sha1.digest()))) {
                     // Retract from BOTH coordinates: the /maven/ pointer and the /module/ view(s) the layout above
                     // cross-linked for a modular jar - otherwise a tampered modular jar, retracted from its Maven
                     // coordinate, would still serve by module name.
@@ -382,18 +398,40 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         }
     }
 
+    /**
+     * What the upstream's {@code .sha1} sibling says about an artifact this leg is caching - three states, because
+     * clause 5 licenses the fall-back for exactly one of them.
+     *
+     * @param hex        the 40-hex digest the sibling publishes, or {@code null} when the upstream <em>answered</em>
+     *                   that it publishes none for this artifact; that artifact is then proxied unverified, which is
+     *                   the documented behaviour for a repository that carries no checksums
+     * @param unreadable why the sibling could not be read at all, or {@code null} when it was read. Never a fall-back:
+     *                   the fill is refused, because "we could not ask" is not "the upstream publishes nothing"
+     */
+    private record Sha1(String hex, String unreadable) {
+    }
+
     /** The upstream SHA-1 for an artifact, read from its {@code .sha1} sibling (the 40-hex digest, optionally followed
-     *  by a filename); {@code null} when the upstream publishes none, so an artifact without a checksum is proxied
-     *  unverified rather than refused. */
-    private static String upstreamSha1(ProxyFormat.Fetcher fetcher, URI sha1) throws IOException {
+     *  by a filename). The upstream <em>answering</em> {@code 404}/{@code 410}, or answering with a body that is not a
+     *  40-hex digest, publishes none - the artifact is proxied unverified rather than refused. A transport failure or
+     *  any other status could not be read, and is refused instead (D-236). */
+    private static Sha1 upstreamSha1(ProxyFormat.Fetcher fetcher, URI sha1) throws IOException {
         Optional<ProxyFormat.Fetched> response = fetcher.fetch(sha1, Map.of());
-        if (response.isEmpty() || response.get().status() != 200) {
-            return null;
+        if (response.isEmpty()) {
+            return new Sha1(null, "the checksum sibling " + sha1 + " could not be reached");
+        }
+        int status = response.get().status();
+        if (status == 404 || status == 410) {
+            return new Sha1(null, null);   // the upstream answered: it publishes no checksum for this artifact
+        }
+        if (status != 200) {
+            return new Sha1(null, "the checksum sibling " + sha1 + " answered " + status);
         }
         String body = new String(response.get().body(), StandardCharsets.UTF_8).trim();
         int space = body.indexOf(' ');
         String hex = space > 0 ? body.substring(0, space) : body;
-        return hex.length() == 40 && hex.chars().allMatch(c -> Character.digit(c, 16) >= 0) ? hex : null;
+        return new Sha1(hex.length() == 40 && hex.chars().allMatch(c -> Character.digit(c, 16) >= 0) ? hex : null,
+                null);
     }
 
     // --- RepositoryImporter capability (WSPI.2 (c)): delegated to MavenImporter. importTarget avoids the erasure
