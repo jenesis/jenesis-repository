@@ -9,8 +9,8 @@ import module java.base;
  * A named factory for the shared {@link ArtifactWalk}, discovered at runtime with {@link ServiceLoader} - the API is
  * an SPI kept separate from its implementation, so the enumeration strategy can change without breaking a consumer.
  * An optional-unique SPI: at most one walk is enabled at a time, and {@code jenesis.repository.walk=<name>} selects it
- * by name when a deployment installs more than one (the {@code store} reference implementation is the one the free
- * distribution ships). Each provider reads its own settings through the {@code config} lookup (a property accessor
+ * by name when a deployment installs more than one (the {@code paged-descent} reference implementation is the one the
+ * free distribution ships). Each provider reads its own settings through the {@code config} lookup (a property accessor
  * returning {@code null} when unset - {@code jenesis.walk.checkpoint}, {@code jenesis.walk.segments}, ... for the
  * reference implementation). With no module installed {@link #resolve} is empty: every walk-riding surface then
  * degrades gracefully - nothing enumerates, and the console / capabilities say so - exactly like retention with no
@@ -56,7 +56,10 @@ import module java.base;
  */
 public interface WalkProvider {
 
-    /** The implementation name this provider answers to, e.g. {@code store}. */
+    /** The implementation name this provider answers to, e.g. {@code paged-descent} - and, because
+     *  {@link Features} spends one namespace on both shapes, the key {@code jenesis.repository.<name>=false}
+     *  switches it off by. It may therefore not be the name of any SPI <em>family</em>: a walk called {@code store}
+     *  keyed its toggle to the artifact store's selection key (D-005). */
     String name();
 
     /** Build the walk, reading settings through {@code config}; empty when configured off. */

@@ -135,7 +135,7 @@ class StoreWalkTest {
                     .hasMessageContaining("'other'")
                     .hasMessageContaining("no installed provider answers to it")
                     .hasMessageContaining("refusing to degrade silently")
-                    .hasMessageContaining("[store]");
+                    .hasMessageContaining("[paged-descent]");
         } finally {
             Features.reset();
         }
@@ -144,7 +144,7 @@ class StoreWalkTest {
     @Test
     void a_walk_switched_off_resolves_to_the_empty_sentinel() {
         // Unselected absence is the one outcome that still degrades: nothing enumerates and the caller says so.
-        Features.configure(key -> "jenesis.repository.store".equals(key) ? "false" : null);
+        Features.configure(key -> "jenesis.repository.paged-descent".equals(key) ? "false" : null);
         try {
             assertThat(WalkProvider.resolve(key -> null)).isEmpty();
             assertThat(WalkProvider.installed()).isFalse();

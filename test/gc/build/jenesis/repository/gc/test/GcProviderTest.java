@@ -65,8 +65,10 @@ class GcProviderTest {
     void without_a_walk_nothing_ever_collects() {
         // The collector rides the shared walk; with the walk implementation switched off there is no enumeration to
         // ride, and the deployment degrades to no garbage collection rather than a hand-rolled listing loop. The
-        // reference walk's feature name is `store` (StoreWalkProvider), so that is the toggle that removes it.
-        Features.configure(key -> "jenesis.repository.store".equals(key) ? "false" : null);
+        // reference walk's feature name is `paged-descent` (StoreWalkProvider), so that is the toggle that removes
+        // it - it used to be `store`, which is the artifact store's own selection key, so this line was configuring
+        // two things at once and the operator following it would not have booted (D-005).
+        Features.configure(key -> "jenesis.repository.paged-descent".equals(key) ? "false" : null);
         assertThat(GarbageCollectorProvider.resolve(key -> null)).isEmpty();
     }
 
