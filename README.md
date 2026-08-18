@@ -423,7 +423,8 @@ form-field-with-help, empty state, badge), with an accessibility baseline (seman
 link, a visible focus ring, colour never the sole signal, WCAG-AA contrast in both themes). It is
 the shared base a downstream distribution's console extends rather than re-vendoring: the resources live
 under `META-INF` (never a JPMS package, so never a split package), which lets a downstream console
-`requires` this module and `th:replace` the fragments directly — see [`DESIGN.md`](DESIGN.md).
+`requires` this module and `th:replace` the fragments directly; `base.html` documents each fragment at its
+declaration.
 
 A repository-wide storage cap is optional: `-Djenesis.repository.quota=10GB` (a byte count or a `K`/`M`/`G`/`T`
 suffix) refuses a new artifact once stored content reaches the limit, with `507 Insufficient Storage`. Only

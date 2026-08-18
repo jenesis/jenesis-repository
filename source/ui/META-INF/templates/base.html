@@ -18,7 +18,7 @@
     alert(message, kind)            — a flash/outcome banner; kind ∈ {pass,warn,danger} or null for info.
     themeSelect                     — the light/dark/auto switch (wired by /js/theme.js, persisted per browser).
 
-  Kept in sync with DESIGN.md (the component catalogue) and app.css (the tokens/styles).
+  Kept in sync with app.css (the tokens/styles); each fragment documents itself below.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 
@@ -45,7 +45,7 @@
 </a>
 
 <!-- Page header: just a title. A page needing the primary-action slot renders the .app-page-header markup
-     directly (see DESIGN.md) or uses pageHeaderCrumbs; this fragment stays presentation-only. -->
+     directly or uses pageHeaderCrumbs; this fragment stays presentation-only. -->
 <header th:fragment="pageHeader(title)" class="app-page-header">
     <hgroup class="app-page-header__heading">
         <h1 class="app-page-header__title" th:text="${title}">Title</h1>
