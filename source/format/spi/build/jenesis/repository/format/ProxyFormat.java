@@ -61,10 +61,18 @@ import module java.base;
  *     the upstream.</li>
  * <li><b>Upstream integrity.</b> Where the ecosystem's own protocol advertises a digest for the bytes - a
  *     content-addressed reference, a checksum sibling, a digest header - the fetched body is held to it and a mismatch
- *     is <em>refused</em>: nothing is linked, nothing is served, every view the fill had already laid out is retracted,
- *     and the caller lets the local {@code 404} stand so a later pull re-hits the upstream. A body is never cached
- *     under a digest it does not hash to. An ecosystem that advertises no digest (a plain file mirror) proxies
- *     unverified rather than fabricating a check, and says so.
+ *     is <em>refused</em>: nothing is linked, nothing is served, and the caller lets the local {@code 404} stand so a
+ *     later pull re-hits the upstream. A body is never cached under a digest it does not hash to. An ecosystem that
+ *     advertises no digest (a plain file mirror) proxies unverified rather than fabricating a check, and says so.
+ *     <p><b>The check runs before anything is linked, never as a retraction afterwards</b> (D-059). An adapter may
+ *     have to <em>store</em> the body first - that is how a digest is computed while the bytes stream instead of
+ *     buffering them - but a stored blob is inert until a pointer references it, so every adapter can verify before
+ *     the layout and none has to undo one. The difference is not stylistic: a fill that links first is briefly
+ *     serving bytes it has not verified, a failure part-way through the undoing leaves them served for good, and
+ *     there is no repair route on this leg at all, because the pointer it failed to remove is exactly what stops the
+ *     next pull from being a miss (clause "Read purity": a local hit never touches the upstream). Every leg in this
+ *     repository is in that order - OCI always was, Maven since D-059 - and an adapter in another edition that still
+ *     links first and undoes it is a defect against this clause rather than a variation of it.
  *     <p><b>"We could not read the digest" is not "the upstream publishes none", and this clause used to leave that
  *     open.</b> The unverified fall-back above is written for the upstream having <em>published nothing</em> - Maven
  *     serves jars whose {@code .sha1} sibling is missing, Packagist leaves {@code shasum} blank for a VCS-sourced dist
@@ -81,10 +89,9 @@ import module java.base;
  *         digest field or an unparseable one - and the fall-back above applies unchanged;</li>
  *     <li>the declaring document <b>could not be read</b> - a transport failure (clause 6's empty {@link Optional}),
  *         any other non-{@code 200}, a body that is not the document, a bound the read ran past, or a target an
- *         outbound screen refuses - and the fill is <b>declined</b>: nothing cached, nothing served, every view the
- *         fill had laid out retracted, the local {@code 404} left standing so a later pull re-hits the upstream, and
- *         the refusal logged. An unverifiable artifact is not served on the strength of not having been checked
- *         (&sect;5, &sect;9).</li>
+ *         outbound screen refuses - and the fill is <b>declined</b> exactly as a mismatch is: nothing linked, nothing
+ *         served, the local {@code 404} left standing so a later pull re-hits the upstream, and the refusal logged.
+ *         An unverifiable artifact is not served on the strength of not having been checked (&sect;5, &sect;9).</li>
  *     </ul>
  *     As with clause 2, the rule is general and the classification is the adapter's, because which fetch declares a
  *     digest is protocol knowledge only that adapter has. An adapter whose digest rides on the artifact's own response,
