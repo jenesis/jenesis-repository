@@ -40,10 +40,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       {@code ;}; a method's name is followed by {@code (} (its parameter list), so {@code static <T> T foo(&hellip;)}
  *       never matches.</li>
  *   <li><b>static nested CLASS / INTERFACE / ENUM / RECORD declarations are not flagged</b> &mdash; their "name" is
- *       followed by {@code {} / {@code extends} / {@code implements} / {@code (} (a record header), not {@code =}/{@code ;};
+ *       followed by {@code &#123;} / {@code extends} / {@code implements} / {@code (} (a record header), not {@code =}/{@code ;};
  *       and as belt-and-braces the captured "type" token is rejected when it is one of those keywords.</li>
  *   <li><b>{@code static &#123;&hellip;&#125;} initializer blocks are not flagged</b> &mdash; {@code static} is followed
- *       by {@code {}, not a type-and-name, so no field is matched.</li>
+ *       by {@code &#123;}, not a type-and-name, so no field is matched.</li>
  *   <li><b>local variables are not flagged</b> &mdash; {@code static} is illegal on a Java local, so a {@code static}
  *       modifier run only ever appears on a member; the check need not (and does not) reason about method bodies. The
  *       {@code import static} form starts the line with {@code import} (not a modifier), so it is not a field either.</li>
@@ -110,7 +110,7 @@ class ImmutabilityPrincipleTest {
 
     /** A member field declaration carrying a modifier run: group 1 the modifiers, group 2 the declared type, group 3
      *  the field name. The name is anchored to a following {@code =} or {@code ;} so a method (name followed by
-     *  {@code (}) and a nested type (name followed by {@code {}/{@code extends}/{@code implements}/{@code (}) never
+     *  {@code (}) and a nested type (name followed by {@code &#123;}/{@code extends}/{@code implements}/{@code (}) never
      *  match; a {@code static &#123;&#125;} block matches no type-and-name at all. Since {@code static} is illegal on a
      *  local, any {@code static} in the modifier run is necessarily a member. */
     private static final Pattern STATIC_FIELD = Pattern.compile(

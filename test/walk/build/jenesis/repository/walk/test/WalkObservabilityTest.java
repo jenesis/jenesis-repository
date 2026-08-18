@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * driven a pass it reports {@code jenesis.walk.segments} (a bounded gauge of the pass's done segments against its
  * segment count), {@code jenesis.walk.resumes} (a counter of segments this node reclaimed from an expired holder)
  * and a {@code jenesis.walk.pass} task status; a never-run walk reports nothing at all. Exercised against a real
- * {@link build.jenesis.repository.store.filesystem.FilesystemArtifactStore}, without the server or Micrometer.
+ * {@code FilesystemArtifactStore}, without the server or Micrometer.
  */
 class WalkObservabilityTest {
 

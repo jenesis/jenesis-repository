@@ -206,7 +206,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      *  below over the stored blob. Screening no longer happens here (EPIC 26): the ingress edge screens the body to
      *  ACCEPT and restreams the stored blob into this layout, so a body reaching {@code layout} is already accepted and
      *  there is no verdict to map - the redundant format-embedded screen pass is dropped, the essential link (what
-     *  {@link #located} serves over) is kept. The restreamed body dedupes to the same {@code blobs/<hash>}, so reading
+     *  {@link Publication#located} serves over) is kept. The restreamed body dedupes to the same {@code blobs/<hash>}, so reading
      *  the module name back is identical to before. Returns the content-addressed blob hash. */
     public static String layout(ArtifactStore store, String path, InputStream body) throws IOException {
         return layout(store, path, new Publication(store).storeBlob(body));

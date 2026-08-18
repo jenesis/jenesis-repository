@@ -1,6 +1,6 @@
 # AGENTS.md
 
-The core: the repository / build-cache server modules consumed by downstream editions. This file is the authoritative contributor and agent guidance for the repository.
+The core: the repository / build-cache server modules consumed by downstream editions. This file is the authoritative contributor and agent guidance for the repository, and the canonical statement of the SPI `Contract` clauses and the engineering principles — a downstream edition references these sections rather than keeping its own copy, so a rule stated here is the rule everywhere.
 
 ## Build & test
 
@@ -41,7 +41,7 @@ Every SPI interface documents its contract in a **dedicated final javadoc block 
 
 Where an SPI's clauses are observable but not generifiable, they are asserted by **one parameterized suite over every implementation**, driven by a per-implementation **fixture** and guarded by a `ContractCensus` completeness ratchet — never by a per-implementation hand-written suite, which is how implementations drift apart. The store is the reference shape:
 
-- the contract body lives JUnit-free beside the SPI's other test support (`source/store/testkit`: `StoreContract` names each clause as a `Property`; `StoreFixture` is how a backend registers), so the downstream distribution can require it;
+- the contract body lives JUnit-free beside the SPI's other test support (`source/store/testkit`: `StoreContract` names each clause as a `Property`; `StoreFixture` is how a backend registers), so a downstream distribution can require it;
 - the JUnit driver, the fixtures and the census live under `test/**` (`test/store/contract`), and that module `requires` **every** provider module, so it doubles as the bundle-backed runtime-discovery graph;
 - the census asserts the **static** `provides` scan and the **runtime** `ServiceLoader` graph *separately* — neither substitutes for the other, because `ServiceLoader` cannot see a provider module the test forgot to `requires`;
 - a fixture may exclude a property only with a reason naming where the property is proven instead, and a property every fixture excludes fails the census;

@@ -438,7 +438,7 @@ public final class MavenMetadata {
         }
     }
 
-    /** A Maven-style version order: numeric runs compared as numbers, qualifiers ranked (alpha < ... < snapshot < release < sp). */
+    /** A Maven-style version order: numeric runs compared as numbers, qualifiers ranked (alpha &lt; ... &lt; snapshot &lt; release &lt; sp). */
     static int compareVersions(String left, String right) {
         List<String> a = tokenize(left);
         List<String> b = tokenize(right);

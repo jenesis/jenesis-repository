@@ -123,7 +123,7 @@ public interface RepositoryImporter {
 
     /** Lay one <em>already-screened</em> asset out - its path within the source repository and its content stream -
      *  into the content-addressed store. The content reaching here has already passed the import edge's screen (or is
-     *  explicitly unscreenable, when {@link #describe} returned empty), so this only lays the bytes out in the format's
+     *  explicitly unscreenable, when {@link #importTarget} returned empty), so this only lays the bytes out in the format's
      *  namespace: it no longer screens or renders a verdict. On an edge {@code ACCEPT} the stream is the restreamed
      *  {@code blobs/<hash>} the screen stored, not the raw source download. The stream copies straight to storage; an
      *  importer that must inspect the content (to parse a manifest or a coordinate) may read it into a buffer, but a
