@@ -29,13 +29,18 @@ import module java.base;
  *       obligation itself as {@code NATIVE_PAGING}), clause 9's key caps
  *       ({@code KEY_SHAPE_REJECTED}) and page limit, and clause 10's compare-and-set and batch halves
  *       ({@code VERSION_TOKEN_OPAQUE}, {@code VERSION_TOKEN_PER_INCARNATION}, {@code BATCH_IS_NOT_A_TRANSACTION});</li>
- *   <li><b>structurally guarded</b> - clause 4 by {@code StreamingPrincipleTest} and clause 9's {@link #list} rule by
- *       {@code UnboundedListingPrincipleTest}: source scans over the free tree's call sites, which catch a
- *       <em>new</em> whole-blob read or unbounded listing, not a backend that buffers internally;</li>
- *   <li><b>documented only</b> - clause 1 in full, clause 3's concurrent-delete-mid-read leg, clause 6's
- *       throttle/authorization leg, clause 7, clause 9's resident-memory claim and clause 10's write-atomicity claim.
+ *   <li><b>documented only</b> - clause 1 in full, clause 3's concurrent-delete-mid-read leg, clause 4, clause 6's
+ *       throttle/authorization leg, clause 7, clause 9's {@link #list} rule and resident-memory claim, and clause
+ *       10's write-atomicity claim.
  *       Each needs a concurrent or fault-injecting driver the kit does not have; every one of them is stated below in
- *       a form such a driver could assert.</li>
+ *       a form such a driver could assert.
+ *
+ *       <p>Clause 4 and clause 9's listing rule were once approximated by scans over the free tree's call sites.
+ *       They are not any more, and the reason is worth stating: such a scan sees a call site, never a backend, so it
+ *       reported a store that read a whole blob into memory internally as compliant while failing a caller that
+ *       named a method it disliked. It answered a question about this repository's text rather than about an
+ *       implementation of this interface, which is what the clause is about. An implementer owes the clause; the
+ *       driver that could hold them to it is a memory-bounded fixture, not a regular expression.</li>
  * </ul>
  * Two of the kit's properties are deliberately <em>not</em> clauses of this interface, and the mismatch is recorded
  * rather than papered over: {@code PLAINTEXT_ENDPOINT_REFUSED} is a resolution-time rule and belongs to

@@ -61,7 +61,7 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
  * and turns each check into one dynamic test.
  *
  * <h2>Clauses this kit discharges (T-304)</h2>
- * Read by {@code AuditChecklistPrincipleTest} and subtracted from the parsed {@code Contract} blocks, restating the
+ * restating the
  * clause numbers each {@link Property}'s javadoc already opens with. The interceptor half reaches <b>all thirteen</b>
  * {@code PublishInterceptor} clauses - which is the burn-down T-301b predicted, since it recorded all thirteen as
  * residue while nothing yet drove that chain. The after-commit half reaches four of {@code PublicationObserver}'s

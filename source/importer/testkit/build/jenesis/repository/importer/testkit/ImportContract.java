@@ -42,7 +42,7 @@ import build.jenesis.repository.store.Features;
  * {@code test/**} and turns each check into one dynamic test.
  *
  * <h2>Clauses this kit discharges (T-304)</h2>
- * Read by {@code AuditChecklistPrincipleTest} and subtracted from the parsed {@code Contract} block.
+ *
  * {@code SELF_SKIPS_WITHOUT_CREDENTIALS} is {@code ImportSourceProvider}'s absence-sentinel and selection-failure
  * pair, which its own javadoc already cites. The kit's four other properties are about {@code ImportSource}, which
  * is not an inventoried surface (no {@code uses}/{@code provides} clause names it), so they are claimed nowhere.

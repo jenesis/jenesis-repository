@@ -22,7 +22,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
  * runs {@link StoreInvariants} against a freshly scoped subspace of the live backend.
  *
  * <h2>Clauses this kit discharges (T-304)</h2>
- * Read by {@code AuditChecklistPrincipleTest} and subtracted from the parsed {@code Contract} blocks. Almost all of
+ * Almost all of
  * this kit's properties are about {@link build.jenesis.repository.store.ArtifactStore}, which is not an inventoried
  * surface - no {@code uses}/{@code provides} clause names it - so they are claimed nowhere and the clause-to-property
  * mapping stays where it already is, in that interface's own enforcement preamble. What this kit proves about the

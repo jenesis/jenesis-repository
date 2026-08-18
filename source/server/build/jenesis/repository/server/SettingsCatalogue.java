@@ -9,11 +9,9 @@ import module java.base;
  * (a heavier, {@code ServiceLoader}-discovered, per-module contributor catalogue): the free product has one built-in
  * catalogue and no plugin-contributed settings, so a single {@link #ALL} list is the whole surface.
  *
- * <p>The structural {@code ConfigPrincipleTest} reads this catalogue - both by scanning the {@code new Setting("...")}
- * declarations (the same idiom the downstream guard scans) and by unioning {@link #keys()} at runtime - to prove every
- * config key the code reads is either a declared runtime setting here or an allowlisted deploy-time bootstrap key. So a
- * key added the ordinary way with no home is caught at build time rather than silently stranded, unreachable without
- * hand-editing a store object.
+ * <p>This catalogue is the declaration: a config key the code reads is either a runtime setting declared here or a
+ * deploy-time bootstrap key, and {@link #keys()} is how a caller asks which. A key added with no home is stranded -
+ * unreachable without hand-editing a store object - so adding one here is part of adding the read.
  *
  * <p>Deploy-time / bootstrap keys are deliberately NOT here: the store backend and its credentials (the
  * {@code JENESIS_*} env), the fixed-tenant routing ({@code jenesis.repository.tenant}), the auth and read-only
@@ -80,7 +78,7 @@ public final class SettingsCatalogue {
     private SettingsCatalogue() {
     }
 
-    /** The declared setting keys, for a caller that only needs the key set (the {@code ConfigPrincipleTest} union). */
+    /** The declared setting keys, for a caller that only needs the key set (the union of every declared key). */
     public static Set<String> keys() {
         Set<String> keys = new TreeSet<>();
         for (Setting setting : ALL) {

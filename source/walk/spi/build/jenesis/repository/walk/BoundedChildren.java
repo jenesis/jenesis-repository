@@ -42,7 +42,7 @@ import module java.base;
  * an accidentally empty prefix variable enumerates the whole scope.
  *
  * <p><strong>Why {@code scan} and not {@code list}.</strong> The name is load-bearing, not taste: the
- * unbounded-listing ratchet ({@code UnboundedListingPrincipleTest}) censuses every {@code .list(} call site in the
+ * bounded-listing clause binds every {@code .list(} call site in the
  * source tree and demands a boundedness justification for each. Naming this method {@code list} would make every
  * migrated - and therefore now provably bounded - call site look like a fresh offender and force a per-site allowlist
  * grant, drowning the ratchet's signal in the very migration that fixes it. Migrating a hand-rolled loop onto this
