@@ -18,7 +18,7 @@ import module java.base;
  * <p>From there it reports every {@code sha256:<hex>} the document mentions - the manifest's own digest plus the
  * config and layer digests a real manifest JSON carries - by scanning rather than parsing, since what is under test is
  * that the mark phase unions a lent set into the reference shards the sweep reads, not how a format spells its
- * documents. {@link build.jenesis.repository.format.oci.OciFormat} owns the real derivation and its own tests.
+ * documents. {@code OciFormat} owns the real derivation and its own tests.
  *
  * <p>It also implements the contract's fail-closed clause: a document that is present but unreadable ({@code !!}, the
  * stand-in for an unparseable manifest) throws rather than answering a short list.

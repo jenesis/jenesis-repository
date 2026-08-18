@@ -879,7 +879,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
 
         /** Refill the buffer from the next store page(s), skipping the reserved sidecar / {@code tags} names, until it
-         *  holds a child or the level is drained - so {@link #peek} always sees the next real child if one remains. */
+         *  holds a child or the level is drained - so {@link #peekFull} always sees the next real child if one remains. */
         private void fill() {
             while (buffer.isEmpty() && !exhausted) {
                 List<String> batch = new ArrayList<>();

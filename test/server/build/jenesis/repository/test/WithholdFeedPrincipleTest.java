@@ -172,7 +172,7 @@ class WithholdFeedPrincipleTest {
     // --- helpers ------------------------------------------------------------------------------------------------------
 
     /** The body of the first method whose signature contains {@code signatureToken}, brace-matched from the method's
-     *  opening {@code {} to its close (quote-aware, so a brace inside a string literal never mis-balances it). Fails
+     *  opening {@code &#123;} to its close (quote-aware, so a brace inside a string literal never mis-balances it). Fails
      *  loudly if the token or a balanced body is not found, so a rename can never make an assertion pass vacuously. */
     private static String methodBody(String source, String signatureToken) {
         int at = source.indexOf(signatureToken);

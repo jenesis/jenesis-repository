@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The traversal-free scope backstop {@link ArtifactStore#segment}: the defence-in-depth check every backend's
  * {@code scope} runs its argument through, so a store can never silently escape or misplace its subspace on a bad
- * segment. {@link FilesystemArtifactStoreTest} covers the {@code ..} / {@code a/b} / empty rejections through the
+ * segment. {@code FilesystemArtifactStoreTest} covers the {@code ..} / {@code a/b} / empty rejections through the
  * filesystem store; this pins the three the store suites never reach - the single dot {@code .}, the Windows-style
  * backslash separator {@code \}, and a {@code null} segment - and confirms a plain hidden-subspace name is still
  * allowed, both directly on the static method and through a real {@code scope(...)} call so the backstop is exercised

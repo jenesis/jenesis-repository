@@ -11,7 +11,9 @@ import module java.base;
  *
  * <p>Start from {@link #closed()} or {@link #soft()} - the two fail modes the signal families actually divide into -
  * and narrow with the withers, each named exactly like its accessor:
- * {@snippet : FeedPolicy.closed().maxPages(10).requestTimeout(Duration.ofSeconds(15)) }
+ * {@snippet :
+ * FeedPolicy.closed().maxPages(10).requestTimeout(Duration.ofSeconds(15))
+ * }
  *
  * <p><strong>Why the deadline exists.</strong> A per-request timeout does not bound a paginated fetch: fifty pages
  * at thirty seconds each is a twenty-five-minute call that still looks bounded on every individual request. The

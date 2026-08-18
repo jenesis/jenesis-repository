@@ -12,7 +12,7 @@ import io.micrometer.observation.ObservationRegistry;
 
 /**
  * The format-agnostic pull-through loop shared by every dispatcher. A {@code GET} of a path the format handles is
- * served locally first through a {@link Buffered} exchange that captures the response in memory; if that is a 404
+ * served locally first through a {@link ProxyFormat.Fetcher.Buffered} exchange that captures the response in memory; if that is a 404
  * the format's {@link ProxyFormat#proxy} adapter is given control to fetch from upstream, cache and serve - so a
  * later read is a local hit. A non-{@code GET} request, a local hit, or an adapter that declines passes straight
  * through (the 404 stands). The single network call sits behind {@link ProxyFormat.Fetcher} so the cache behaviour
