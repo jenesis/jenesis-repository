@@ -25,21 +25,24 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * sees a consumer the runtime graph is blind to. {@link #the_census_trips_when_a_leg_is_broken()} keeps both honest by
  * breaking each on purpose.
  *
- * <p><b>The finding this census records.</b> The static leg over {@code source/} is <em>empty</em>: neither repository
- * ships a production {@code WalkConsumer} at these tips. The SPI, the shared {@code RebuildPass} and the downstream
- * {@code RebuildTask} that drives it are all in place, but nothing is plugged into them - so the walk half of the
- * two-route derived-metadata contract has no adopters, and every derived surface that needs a back-fill hand-rolls its
- * own sweep instead ({@code OciInventoryBackfillTask}, {@code FindingsMigrationTask}, {@code MetadataMigrationTask};
- * see {@link #the_shipped_consumer_inventory_is_still_empty()}). The kit's fixtures are therefore the three delivery
- * archetypes the SPI documents rather than shipped consumers - which is what makes the crash checks assert the SPI's
- * promise instead of one implementation's habits - and this test is the ratchet that turns the first shipped consumer
- * into a demand for a fixture rather than a silent gap.
+ * <p><b>The finding this census recorded, and what moved it.</b> The static leg over {@code source/} used to be
+ * <em>empty</em>: neither repository shipped a production {@code WalkConsumer}. The SPI, the shared
+ * {@code RebuildPass} and the downstream {@code RebuildTask} that drives it were all in place with nothing plugged
+ * into them, so the walk half of the two-route derived-metadata contract had no adopters and every derived surface
+ * needing a back-fill hand-rolled its own sweep. D-059 landed the first one: the Maven format's module-view repair,
+ * which is what lets that format link its {@code /maven/} coordinate before deriving the {@code /module/} views from
+ * it and still promise the residue converges. The three archetype fixtures stay - they are what make the crash checks
+ * assert the SPI's promise rather than one implementation's habits - and
+ * {@link #every_shipped_consumer_is_covered_by_a_fixture()} is now the ratchet in the direction it was written for:
+ * a shipped consumer arrives with a fixture or the build fails.
  */
 class WalkConsumerCensusTest {
 
-    /** Every fixture the kit registers - one per delivery class the walk's commit protocol supports. */
+    /** Every fixture the kit registers - one per delivery class the walk's commit protocol supports, plus one per
+     *  shipped consumer. */
     private static final List<WalkConsumerFixture> FIXTURES = List.of(
-            new StreamingIndexFixture(), new StrideBufferedFixture(), new PassSnapshotFixture());
+            new StreamingIndexFixture(), new StrideBufferedFixture(), new PassSnapshotFixture(),
+            new ModuleViewFixture());
 
     /** No consumer in this graph is exempt: all three archetypes are declared here and all three have a fixture. The
      *  argument stays wired so an exemption is a visible, reason-bearing edit rather than a new mechanism. */
@@ -96,16 +99,20 @@ class WalkConsumerCensusTest {
     }
 
     @Test
-    void the_shipped_consumer_inventory_is_still_empty() throws IOException {
-        // The static leg over source/, alone. Today it is empty, and that emptiness is the finding: the walk half of
-        // the two-route derived-metadata contract has no adopters in this repository. When it stops being empty this
-        // fails, and the fix is to add the new consumer's fixture to FIXTURES (and its module to this module-info),
-        // not to relax the assertion - a shipped consumer with no crash-resume fixture is exactly the gap this kit
-        // exists to close.
+    void every_shipped_consumer_is_covered_by_a_fixture() throws IOException {
+        // The static leg over source/, alone. It used to assert this list was EMPTY, and that emptiness was the
+        // finding: the walk half of the two-route derived-metadata contract had no adopters in this repository, so
+        // every derived surface that needed a back-fill hand-rolled its own sweep. D-059 landed the first adopter -
+        // the Maven format's module-view repair, which is what makes a cross-publish interrupted after its commit
+        // point a repairable state instead of a documented one - so the assertion is now the ratchet the old one was
+        // written to become: a shipped consumer is named here and has a fixture, or the build fails.
         assertThat(shipped()).extracting(Provider::implementation)
-                .as("a source module now provides a WalkConsumer. Give it a WalkConsumerFixture declaring its "
-                        + "projection and its delivery class, require its module here, and add it to FIXTURES.")
-                .isEmpty();
+                .as("a source module provides a WalkConsumer with no fixture. Give it a WalkConsumerFixture declaring "
+                        + "its projection and its delivery class, require its module here, and add it to FIXTURES.")
+                .isSubsetOf(fixtures());
+        assertThat(shipped()).extracting(Provider::implementation)
+                .as("the shipped inventory is the adoption measure this census was written to move")
+                .containsExactly("build.jenesis.repository.format.maven.ModuleViewRebuild");
     }
 
     @Test
@@ -117,7 +124,7 @@ class WalkConsumerCensusTest {
                         + "test/walkconsumer/module-info.java - the census graph must root every consumer module")
                 .containsExactlyInAnyOrderElementsOf(declared().stream().map(Provider::implementation).toList());
         assertThat(discovered()).extracting(Provider::name)
-                .containsExactlyInAnyOrder("walkkit-streaming", "walkkit-buffered", "walkkit-snapshot");
+                .containsExactlyInAnyOrder("walkkit-streaming", "walkkit-buffered", "walkkit-snapshot", "module-view");
 
         // ... and the SPI's own discovery static agrees, toggles included - that is what the scheduled pass calls, so
         // a consumer discoverable only through a raw ServiceLoader would never actually be driven.
@@ -150,11 +157,14 @@ class WalkConsumerCensusTest {
     void every_delivery_class_is_represented_by_a_fixture() {
         // The kit's post-crash assertion is chosen by delivery class, so a class with no fixture means one of the two
         // claims - "converged" and "converged or visibly degraded, never partial" - is asserted nowhere at all.
+        // Every class is represented; two fixtures may share one. It was an exact match while the only fixtures were
+        // the three archetypes, and the first shipped consumer (per-item durable, like the streaming archetype) is
+        // what made that spelling wrong - a shipped consumer never adds a class, so demanding a bijection would have
+        // meant refusing the adopter this kit was built for.
         assertThat(FIXTURES).extracting(WalkConsumerFixture::delivery)
                 .as("every delivery class the walk's commit protocol supports needs an archetype, or the kit stops "
                         + "distinguishing between them and silently holds one class to another's guarantee")
-                .containsExactlyInAnyOrderElementsOf(
-                        EnumSet.allOf(WalkConsumerFixture.Delivery.class));
+                .containsAll(EnumSet.allOf(WalkConsumerFixture.Delivery.class));
     }
 
     @Test

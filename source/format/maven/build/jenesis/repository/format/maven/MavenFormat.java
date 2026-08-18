@@ -193,19 +193,45 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     /** Lay an already-screened body out into the Maven namespace: store it content-addressed ({@link
-     *  Publication#storeBlob}, streamed straight to storage, never buffered whole) and point its {@code /maven/} path
-     *  at the blob ({@link Publication#link}) - and, only when it is a modular jar, cross-publish its module view
-     *  through the Jenesis layout, reading the module name back from the just-stored blob rather than holding the jar
-     *  in memory. Screening no longer happens here (EPIC 26): the ingress edge screens the body to ACCEPT and restreams
-     *  the stored blob into this layout, so a body reaching {@code layout} is already accepted and there is no verdict
-     *  to map - the redundant format-embedded screen pass is dropped, the essential link (what {@link #located} serves
-     *  over) is kept. The restreamed body dedupes to the same {@code blobs/<hash>}, so reading the module name back is
-     *  identical to before. Returns the content-addressed blob hash so a caller that must undo the layout (a proxy
-     *  fetch whose bytes fail the upstream checksum, T4.2) can retract the exact views this linked. */
+     *  Publication#storeBlob}, streamed straight to storage, never buffered whole) and then run the layout sequence
+     *  below over the stored blob. Screening no longer happens here (EPIC 26): the ingress edge screens the body to
+     *  ACCEPT and restreams the stored blob into this layout, so a body reaching {@code layout} is already accepted and
+     *  there is no verdict to map - the redundant format-embedded screen pass is dropped, the essential link (what
+     *  {@link #located} serves over) is kept. The restreamed body dedupes to the same {@code blobs/<hash>}, so reading
+     *  the module name back is identical to before. Returns the content-addressed blob hash. */
     public static String layout(ArtifactStore store, String path, InputStream body) throws IOException {
-        Publication publication = new Publication(store);
-        String hash = publication.storeBlob(body);
-        publication.link(path, hash);
+        return layout(store, path, new Publication(store).storeBlob(body));
+    }
+
+    /**
+     * The layout sequence over an <em>already-stored</em> blob, and the one place this format makes an artifact
+     * reachable. It is stated here because it is the format's only multi-step visibility write, and because a caller
+     * that has a reason to store the bytes before deciding to serve them (the proxy leg, which must hold the fetched
+     * bytes to their upstream checksum first) links through this overload rather than re-deriving the sequence.
+     *
+     * <p><b>The sequence, and what is true after a failure at each step.</b>
+     * <ol>
+     *   <li><b>The {@code /maven/} pointer is linked.</b> This is the commit point: before it nothing serves and the
+     *       stored blob is an unreferenced object a garbage collection reclaims; after it the artifact serves under
+     *       its coordinate. A failure here fails the caller with nothing servable.</li>
+     *   <li><b>The module name is read back from the stored blob.</b> A failure here (a store read that could not be
+     *       served) leaves the artifact serving under its coordinate with no {@code /module/} view.</li>
+     *   <li><b>Each discovered {@link ModuleView} links the module's views.</b> A failure at the n-th view leaves the
+     *       coordinate serving, the first n-1 views linked and the rest absent.</li>
+     * </ol>
+     *
+     * <p><b>Why the coordinate goes first, given that it is the step that exposes the artifact.</b> Because it is the
+     * only order whose residue converges. The {@code /module/} view is <em>derived</em> from the Maven coordinate -
+     * the module name is read out of the very blob the coordinate points at - so every partial state above is one a
+     * later pass can finish from what survived: {@code ModuleViewRebuild} re-derives the version-addressed view for
+     * every published Maven jar on each rebuild pass, and a byte-identical republish re-runs the whole sequence. The
+     * reverse order (views first, coordinate last) leaves a residue nothing can repair: a {@code /module/} view names
+     * a module and a version and no Maven coordinate, so no pass can re-derive the coordinate from it, and deleting
+     * the stray view instead would be an orphan purge over a namespace the Jenesis format also publishes into
+     * first-hand. The exposure the first step buys is the exposure a successful publish buys anyway, one moment later.
+     */
+    public static String layout(ArtifactStore store, String path, String hash) throws IOException {
+        new Publication(store).link(path, hash);
         String[] coordinate = JavaLayout.mavenCoordinate(path);
         if (!path.endsWith(".jar") || coordinate == null) {
             return hash;
@@ -220,31 +246,9 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return hash;
     }
 
-    /**
-     * Retract a proxied artifact whose fetched bytes failed the upstream SHA-1 check from every coordinate it was
-     * linked under: the {@code /maven/} pointer and - reusing the very cross-view seam the layout path linked - the
-     * {@code /module/} view(s) a modular jar gained, so a tampered jar is unreachable by module name as well as by its
-     * Maven coordinate (a retracted-for-tampering artifact must not resolve under any coordinate). The module name is
-     * read back from the just-stored blob exactly as the layout cross-link read it, so the retraction acts on exactly
-     * the views the layout created rather than deriving a parallel {@code /module/} path. The orphaned blob is left
-     * for a later garbage collection once no pointer references it.
-     */
-    private static void retract(ArtifactStore store, String path, String hash) throws IOException {
-        String[] coordinate = JavaLayout.mavenCoordinate(path);
-        if (path.endsWith(".jar") && coordinate != null) {
-            String module = moduleName(store, hash);
-            if (module != null) {
-                for (ModuleView view : MODULE_VIEWS) {
-                    view.unpublish(module, coordinate[2], store);
-                }
-            }
-        }
-        new Publication(store).unpublish(path);
-    }
-
     /** The module name the content-addressed blob {@code hash} declares, or null when the blob is gone or the jar is
-     *  non-modular - the single read the layout cross-link and its retraction share, so both act on the same module. */
-    private static String moduleName(ArtifactStore store, String hash) throws IOException {
+     *  non-modular - the single read the layout cross-link and its rebuild share, so both act on the same module. */
+    static String moduleName(ArtifactStore store, String hash) throws IOException {
         try (InputStream in = store.open("blobs/" + hash)) {
             return JavaLayout.moduleName(in);
         }
@@ -277,6 +281,12 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      * checksums) are immutable and cached, and a cached modular jar is cross-published like a local one;
      * {@code maven-metadata.xml} is a mutable index, so it is proxied fresh from upstream on each miss (W5.12) - never
      * derived locally or cached - the way every other format's index is, so a later upstream publish shows through.
+     *
+     * <p>A cached artifact is held to the upstream's {@code .sha1} <em>before</em> it is laid out, so a fill this leg
+     * refuses (a mismatch, or a sibling this repository could not read - D-236) never becomes reachable under any
+     * coordinate: the fetched bytes are stored content-addressed as they stream, and the {@link #layout(ArtifactStore,
+     * String, String) layout sequence} runs only once the bytes have been held to the checksum. Nothing is retracted
+     * because nothing was linked.
      */
     @Override
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
@@ -332,8 +342,15 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 // Verify a proxied artifact against the upstream-published SHA-1, so a body corrupted or tampered
                 // between the upstream and here is never left cached and served. The digest is computed as the blob
                 // streams to storage; the tiny checksum sibling is fetched afterwards, so it never delays the artifact.
+                //
+                // The bytes are STORED here and laid out only below, once they have been held to the checksum: the
+                // blob is inert until a pointer references it, so a fill that fails verification links nothing and
+                // needs no retraction - the same order the OCI leg holds a mismatched digest to (a layer lands only
+                // under its own true hash, so the requested key is never created). Storing first is what lets the
+                // digest be computed while the body streams, without buffering it (§1); the unreferenced blob a
+                // refused fill leaves behind is exactly the object garbage collection exists to reclaim.
                 MessageDigest sha1 = sha1();
-                String hash = layout(store, path, new DigestInputStream(download.body(), sha1));
+                String hash = new Publication(store).storeBlob(new DigestInputStream(download.body(), sha1));
                 URI sibling = URI.create(prefix + rest + ".sha1");
                 Sha1 expected = upstreamSha1(fetcher, sibling);
                 if (expected.unreadable() != null) {
@@ -342,22 +359,25 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                     // downgrade a fill to unverified. A .sha1 fetch that never landed, or one answered by a 429 under a
                     // shared egress IP, is not that fact - it is this repository having failed to read what the
                     // upstream published, and treating it as the fact means anyone who can drop one sidecar request
-                    // turns verification off for that pull. So the fill is refused exactly as a mismatch is: retracted
-                    // from both coordinates, nothing served, the local 404 standing so a later pull re-hits the
-                    // upstream and reads the sibling again.
+                    // turns verification off for that pull. So the fill is refused exactly as a mismatch is: nothing
+                    // linked, nothing served, the local 404 standing so a later pull re-hits the upstream and reads
+                    // the sibling again.
                     LOG.warn("Refusing to cache the proxied artifact {} unverified: {}. Nothing was cached or served; "
                             + "the local 404 stands so a later pull re-hits the upstream.", prefix + rest,
                             expected.unreadable());
-                    retract(store, path, hash);
                     return false;
                 }
                 if (expected.hex() != null && !expected.hex().equalsIgnoreCase(HexFormat.of().formatHex(sha1.digest()))) {
-                    // Retract from BOTH coordinates: the /maven/ pointer and the /module/ view(s) the layout above
-                    // cross-linked for a modular jar - otherwise a tampered modular jar, retracted from its Maven
-                    // coordinate, would still serve by module name.
-                    retract(store, path, hash);
+                    // A body that does not hash to what the upstream published for it. Refused with a line of its own:
+                    // this is the one outcome on this leg that says something happened to the bytes between the
+                    // upstream and here, and a silent `false` (which is all a resolver sees - the local 404) would
+                    // leave an operator with no way to tell a tampered mirror from an artifact nobody published.
+                    LOG.warn("Refusing to cache the proxied artifact {}: it does not match the SHA-1 {} the upstream "
+                            + "publishes for it. Nothing was cached or served; the local 404 stands.", prefix + rest,
+                            expected.hex());
                     return false;
                 }
+                layout(store, path, hash);
             }
         }
         handle(exchange, store);

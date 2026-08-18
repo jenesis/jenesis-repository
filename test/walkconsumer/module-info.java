@@ -54,6 +54,11 @@ open module build.jenesis.repository.walk.contract.test {
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.contract.testkit;
     requires build.jenesis.repository.observation;
+    // The first SHIPPED consumer and the module that provides what it repairs: the Maven format declares
+    // ModuleViewRebuild, and the Jenesis format provides the ModuleView it writes through. Both are on this graph
+    // because the census demands that every declared consumer really resolve here (D-059).
+    requires build.jenesis.repository.format.maven;
+    requires build.jenesis.repository.format.jenesis;
     requires org.junit.jupiter;
     requires org.assertj.core;
 

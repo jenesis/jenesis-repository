@@ -13,15 +13,25 @@ import module java.base;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The Maven proxy's checksum-mismatch retraction, proven with <em>both</em> layout formats on the module path so the
- * one required cross-publish actually runs (the focused Maven unit test carries no module-view provider, so its
- * {@code MODULE_VIEWS} is empty). When a proxied modular jar fails its upstream SHA-1, it must be retracted from every
- * coordinate it was linked under: the {@code /maven/} pointer <em>and</em> the {@code /module/} views the accept path
- * cross-published - otherwise a tampered modular jar, retracted from its Maven coordinate, would still serve by module
- * name. The matching case is the control: it shows the cross-publish really happened, so the mismatch case retracts a
- * pointer that existed rather than passing vacuously. Answered from a fixed in-memory upstream, no network.
+ * The Maven proxy's checksum refusal, proven with <em>both</em> layout formats on the module path so the one required
+ * cross-publish actually runs (the focused Maven unit test carries no module-view provider, so its
+ * {@code MODULE_VIEWS} is empty). A proxied jar whose bytes cannot be held to the upstream's own {@code .sha1} must be
+ * reachable under no coordinate at all - not the {@code /maven/} pointer and not the {@code /module/} views a modular
+ * jar would gain - because a tampered modular jar refused only at its Maven coordinate would still serve by module
+ * name. The matching case is the control: it shows the cross-publish really happens, so the refusal cases are refusing
+ * something that would otherwise have been linked rather than passing vacuously. Answered from a fixed in-memory
+ * upstream, no network.
+ *
+ * <p><b>This used to be a retraction, and D-059 is why it no longer is.</b> The leg laid the fetched bytes out first
+ * and un-linked them again when the checksum did not hold, which meant the tampered jar was briefly reachable by
+ * coordinate and - if any step of the un-linking failed - stayed reachable, with nothing to repair it (a local hit
+ * never re-enters the proxy leg, so the retraction had no second chance). The verification now happens before the
+ * commit point, exactly as the OCI leg has always held a mismatched digest: the bytes are stored content-addressed as
+ * they stream, nothing is linked until they have been held to the checksum, and a refused fill leaves only an
+ * unreferenced blob for garbage collection. The assertions below are unchanged in what they demand - nothing serves -
+ * and their <em>reason</em> is now "never linked" rather than "linked, then retracted".
  */
-class MavenProxyChecksumRetractionTest {
+class MavenProxyChecksumRefusalTest {
 
     private static final URI UPSTREAM = URI.create("https://upstream.example/maven2/");
     private static final String PATH = "/maven/org/example/widget/1.0/widget-1.0.jar";
@@ -62,22 +72,25 @@ class MavenProxyChecksumRetractionTest {
                 upstream(jar, 200, "0000000000000000000000000000000000000000"));
 
         assertThat(served).as("a body that does not match its upstream checksum is refused").isFalse();
-        assertThat(publication.located(PATH)).as("retracted from its Maven coordinate").isEmpty();
+        assertThat(publication.located(PATH)).as("never linked under its Maven coordinate").isEmpty();
         assertThat(publication.located("/module/test.tampered/1.0/test.tampered.jar"))
-                .as("retracted from its versioned module view too").isEmpty();
+                .as("and so never cross-published to its versioned module view").isEmpty();
         assertThat(publication.located("/module/test.tampered/test.tampered.jar"))
-                .as("retracted from its latest module view too").isEmpty();
+                .as("nor to its latest module view").isEmpty();
+        assertThat(store.list("publish/maven/org/example/widget/1.0"))
+                .as("no pointer was linked and un-linked either: the refusal happens before the commit point, so the "
+                        + "coordinate's key space was never written at all").isEmpty();
     }
 
     @Test
-    void a_checksum_sibling_this_repository_could_not_read_retracts_the_fill() throws IOException {
+    void a_checksum_sibling_this_repository_could_not_read_refuses_the_fill() throws IOException {
         // Clause 5's split (D-236). "The upstream publishes no .sha1 for this artifact" is a documented fact about
         // Maven repositories and is the one thing that may downgrade a fill to unverified. A sibling fetch that never
         // landed, or one answered by a 429 under a shared egress IP or a 5xx, is not that fact - it is this repository
         // failing to read what the upstream published - and reading it as that fact means anyone who can drop one
-        // sidecar request turns verification off for that pull. The artifact is already laid out by the time the
-        // sibling is read, so the refusal has to RETRACT rather than merely decline, exactly as a mismatch does, and
-        // from both coordinates for the same reason the mismatch case gives.
+        // sidecar request turns verification off for that pull. The sibling is read while the fetched bytes are stored
+        // but not yet laid out, so this refusal declines the layout entirely, exactly as a mismatch does, and the jar
+        // is reachable under neither coordinate for the same reason the mismatch case gives.
         for (Optional<ProxyFormat.Fetched> sibling : List.of(
                 Optional.<ProxyFormat.Fetched>empty(),                                   // a transport failure
                 Optional.of(new ProxyFormat.Fetched(429, new byte[0], Map.of())),
@@ -93,11 +106,11 @@ class MavenProxyChecksumRetractionTest {
             assertThat(served).as("an artifact whose declaring checksum could not be read is refused, not cached "
                     + "unverified (the sibling answered %s)", sibling.map(ProxyFormat.Fetched::status).orElse(null))
                     .isFalse();
-            assertThat(publication.located(PATH)).as("retracted from its Maven coordinate").isEmpty();
+            assertThat(publication.located(PATH)).as("never linked under its Maven coordinate").isEmpty();
             assertThat(publication.located("/module/test.unverifiable/1.0/test.unverifiable.jar"))
-                    .as("retracted from its versioned module view too").isEmpty();
+                    .as("and so never cross-published to its versioned module view").isEmpty();
             assertThat(publication.located("/module/test.unverifiable/test.unverifiable.jar"))
-                    .as("retracted from its latest module view too").isEmpty();
+                    .as("nor to its latest module view").isEmpty();
         }
     }
 

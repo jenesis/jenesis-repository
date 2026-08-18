@@ -124,10 +124,17 @@ open module build.jenesis.repository.test {
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
+    // The shared fault fixture: MavenCrossPublishSequenceTest drives a real store failure at each step of the Maven
+    // cross-publish rather than substituting a throwing ModuleView, so the crash windows it asserts are the ones a
+    // backend outage really produces (D-059).
+    requires build.jenesis.repository.store.testkit;
     // The capability-signal census reads GarbageCollectorProvider.installed() and WalkProvider.installed() off the
     // linked types, not just off their sources: a rename a text scan stops matching reads exactly like a pass (D-164).
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.walk;
+    // ... and its shipped implementation, so the same suite can run a real rebuild pass over the residue a crashed
+    // cross-publish leaves and prove the repair converges.
+    requires build.jenesis.repository.walk.store;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.proxy;
     requires build.jenesis.repository.oidc;

@@ -4,8 +4,11 @@
  * ({@code JavaLayout}) and the store module's format-neutral {@code Publication}. When a modular jar is published, it
  * cross-publishes the jar's module view into the Jenesis layout over the bridge the shared module exports to just these
  * two: it {@code uses} the {@code ModuleView} the Jenesis format provides. This is the one required cross-publish, and
- * it goes one way - Maven into the module layout, never a module back to Maven. {@code MavenMetadata} is generated on
- * read here. Discovered through {@code provides}, so the layout plugs in like any other format.
+ * it goes one way - Maven into the module layout, never a module back to Maven. Because the cross-view is derived from
+ * the Maven coordinate rather than published beside it, this module also {@code provides} the {@code WalkConsumer}
+ * ({@code ModuleViewRebuild}) that re-derives it from the durable store, which is what makes a cross-publish
+ * interrupted half way a repairable state rather than a permanent one. {@code MavenMetadata} is generated on read
+ * here. Discovered through {@code provides}, so the layout plugs in like any other format.
  *
  * @jenesis.release 25
  * @jenesis.pin org.slf4j 2.0.18
@@ -24,4 +27,6 @@ module build.jenesis.repository.format.maven {
     uses build.jenesis.repository.format.java.bridge.ModuleView;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.maven.MavenFormat;
+    provides build.jenesis.repository.walk.WalkConsumer
+            with build.jenesis.repository.format.maven.ModuleViewRebuild;
 }
