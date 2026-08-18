@@ -88,11 +88,7 @@ public final class ArchiveWalk {
      *         operator who raised a cap and got the spelling wrong must not be left believing they raised it (&sect;9)
      */
     public static long largestWalk() {
-        // The key is spelled out here as well as in LARGEST_WALK_KEY on purpose: ConfigPrincipleTest enumerates config
-        // reads by matching a literal key at its read site, and a key reached only through a constant would escape
-        // that scan - a stranded key is exactly what it exists to catch. The two spellings are pinned equal by
-        // ArchiveWalkTest, so they cannot drift.
-        String configured = Features.lookup().apply("jenesis.archive.largest-walk");
+        String configured = Features.lookup().apply(LARGEST_WALK_KEY);
         if (configured == null || configured.isBlank()) {
             return LARGEST_WALK;
         }

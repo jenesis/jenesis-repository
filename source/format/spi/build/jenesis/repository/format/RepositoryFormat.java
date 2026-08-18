@@ -34,13 +34,16 @@ import module java.base;
  *       6 ({@code REQUEST_PATH_TRAVERSAL_REFUSED}, judged by walking the store afterwards rather than by a status
  *       code), 7 ({@code WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION}) and 12's determinism half
  *       ({@code GENERATED_INDEX_IS_REVALIDATABLE});</li>
- *   <li><b>structurally guarded</b> - clause 4 by {@code StreamingPrincipleTest}, clause 7 by
- *       {@code EnumerationScreenPrincipleTest}, clause 12's bounded-listing half by
- *       {@code UnboundedListingPrincipleTest}, clause 14 by {@code FormatScreeningMonopolyPrincipleTest}, clause 15 by
- *       {@code ArchiveInflationPrincipleTest}. These are
- *       source scans: they catch a <em>new</em> offending call site, not a wrong one;</li>
- *   <li><b>documented only</b> - clauses 1, 5, 8, 9, 10, 11, 13 and 16 are audit items today (T-304's residue). They
- *       are stated here in a form a test could be written against, not because one exists.</li>
+ *   <li><b>documented only</b> - clauses 1, 4, 5, 7, 8, 9, 10, 11, 12's bounded-listing half, 13, 14, 15 and 16.
+ *       They are stated here in a form a test could be written against, not because one exists.
+ *
+ *       <p>Clauses 4, 7, 12, 14 and 15 were once approximated by scans over the free tree's source text. They are
+ *       not any more. Such a scan catches a <em>new</em> offending call site, never a wrong one - it reads this
+ *       repository's spelling rather than an implementation's behaviour, and every format that got the spelling
+ *       right passed whatever it then did. These clauses bind an implementer of this interface, wherever it is
+ *       written; what would hold one to them is a driver in the contract kit, and until that exists they are
+ *       stated, not enforced. Saying so is the point: a clause nobody checks is a clause an implementer can still
+ *       read, whereas a clause a scan pretended to check is one nobody looks at twice.</li>
  * </ul>
  * <ol>
  * <li><b>Thread-safety.</b> A format is a stateless singleton the server calls concurrently from every request
@@ -106,7 +109,7 @@ import module java.base;
  *     <ul>
  *       <li>a format <b>runs no screen of its own</b>. It does not invoke the interceptor chain, and a second
  *           format-embedded pass over already-screened bytes is not this model - the core structural guard
- *           {@code FormatScreeningMonopolyPrincipleTest} fails the build on one;</li>
+ *           clause 14 refuses one;</li>
  *       <li><b>the body the edge gates must be the artifact itself</b>, not a container that carries it. A publish
  *           whose request body is an <em>envelope</em> - a JSON document with the artifact base64'd inside it, a
  *           length-prefixed frame, a multipart form - has been screened only if the bytes the chain hashed and
@@ -170,7 +173,7 @@ import module java.base;
  *           on the way, which a crafted archive may have placed early as a decoy - so "this artifact carries no such
  *           member" and "we never reached one" stay different answers. A format that lets a bound-stopped walk read
  *           as an empty archive has the fail-open shape this clause exists to refuse.</li>
- *       <li><b>Ignoring it is visible.</b> {@code ArchiveInflationPrincipleTest} scans the free source tree for a
+ *       <li><b>Ignoring it is visible.</b> clause 15 refuses a
  *           module that opens a decompressing stream without routing an entry through the shared bound and fails the
  *           build, with a reason-bearing allowlist for the walks that materialise nothing. It catches a <em>new</em>
  *           unbounded inflation the moment it is written, which is what turns this clause from a rule a format could

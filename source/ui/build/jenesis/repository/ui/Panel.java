@@ -36,7 +36,7 @@ import module java.base;
  *       {@code name()} - so there is no {@code jenesis.repository.<name>=false} toggle and no <em>runtime</em>
  *       duplicate-id refusal: two panels declaring the same {@link #id()} would both render, producing two navigation
  *       entries and two identically-anchored bodies. The refusal is a <b>build-time census</b> instead
- *       ({@code PanelCensusTest}): it compares the statically declared providers, the panels the runtime graph
+ *       (the panel contract): it compares the statically declared providers, the panels the runtime graph
  *       discovers and the set {@code UiConfig} actually renders (the bean-contributed {@code PosturePanel} included),
  *       and fails the build on a duplicate id. That is deliberate - a packaging mistake must be caught where it is
  *       introduced, and refusing at render time would let one badly-packaged panel take the console down, which is

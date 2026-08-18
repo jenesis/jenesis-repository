@@ -42,7 +42,7 @@ import build.jenesis.repository.walk.testkit.WalkConsumerFixture.Corpus;
  * lives under {@code test/**} and turns each check into one dynamic test.
  *
  * <h2>Clauses this kit discharges (T-304)</h2>
- * Read by {@code AuditChecklistPrincipleTest} and subtracted from the parsed {@code Contract} block, restating the
+ * restating the
  * clause numbers the {@link Property} javadocs already cite: 2 and 5
  * ({@code FULL_PASS_REBUILDS_THE_DECLARED_PROJECTION}, {@code SECOND_PASS_OVER_UNCHANGED_STATE_IS_A_NO_OP},
  * {@code CRASH_MID_STRIDE_CONVERGES}), 6 ({@code A_FAILED_PASS_IS_RESUMABLE_NEVER_SILENTLY_COMPLETE}), 10

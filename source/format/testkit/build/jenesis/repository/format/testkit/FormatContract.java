@@ -34,8 +34,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * </ul>
  *
  * <h2>Clauses this kit discharges (T-304)</h2>
- * The markers below are read by {@code AuditChecklistPrincipleTest} and subtracted from the parsed {@code Contract}
- * blocks, so a clause named here leaves the principle-checkup checklist. They restate, in machine-readable form,
+ * so a clause named here leaves the principle-checkup checklist. They restate, in machine-readable form,
  * exactly the clause numbers each {@link Property}'s javadoc already cites - no more: {@code RepositoryFormat} 2 and
  * 4 ({@code PUBLISH_SERVES_EXACT_BYTES}, {@code HEAD_ANSWERS_FROM_METADATA}), 6
  * ({@code REQUEST_PATH_TRAVERSAL_REFUSED}), 7 ({@code WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION}) and 12

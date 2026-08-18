@@ -20,7 +20,7 @@ import module java.base;
  * concern is applied by every format with that concern). Before this existed each reading module held its own private
  * constant, so the numbers were parallel by convention and a new format arrived not with a different bound but with
  * <em>none</em>: there was nothing to inherit. The bound now has a name, a home, an operator key and a build guard
- * ({@code ArchiveInflationPrincipleTest}), so a format that ignores it is visibly wrong rather than silently unbounded.
+ * - a format that ignores it is wrong against this clause rather than silently unbounded.
  *
  * <p><strong>Reaching the bound is a fact, not a silence.</strong> {@link Entry} answers in the same two words the
  * bounded store traversals answer in - {@link Outcome#EXHAUSTED} (the member ended) and {@link Outcome#TRUNCATED} (the
@@ -81,11 +81,7 @@ public final class ArchiveInflation {
      *         (&sect;9)
      */
     public static int largestEntry() {
-        // The key is spelled out here as well as in LARGEST_ENTRY_KEY on purpose: ConfigPrincipleTest enumerates
-        // config reads by matching a literal key at its read site, and a key reached only through a constant would
-        // escape that scan - a stranded key is exactly what it exists to catch. The two spellings are pinned equal by
-        // ArchiveInflationTest, so they cannot drift.
-        String configured = Features.lookup().apply("jenesis.archive.largest-entry");
+        String configured = Features.lookup().apply(LARGEST_ENTRY_KEY);
         if (configured == null || configured.isBlank()) {
             return LARGEST_ENTRY;
         }

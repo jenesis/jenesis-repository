@@ -447,7 +447,7 @@ public final class FeedClient {
          * @param parse turns the response body into the answer. Deliberately given the {@link InputStream} and not
          *              the bytes: there is no whole-body convenience here and there will not be one, because a
          *              catalogue body is megabytes and materialising it would spend the heap the policy's byte cap
-         *              exists to bound (&sect;1, and {@code StreamingPrincipleTest} catches a {@code readAllBytes}
+         *              exists to bound (&sect;1, which refuses a {@code readAllBytes}
          *              on this path). A parse reads <em>from</em> the stream - a streaming JSON parse of one
          *              document, or a record-per-line fold of a newline-delimited one - and must not retain it:
          *              the response is closed the moment the parse returns.

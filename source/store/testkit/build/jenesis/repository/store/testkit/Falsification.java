@@ -8,7 +8,7 @@ import module java.base;
  *
  * <p>Both legs live here rather than in the JUnit driver for the same reason the checks live in
  * {@link PublicationHookContract}: a runner inside the suite could only ever be exercised by running the whole kit,
- * which would make the falsification leg the one part of the kit nothing falsifies. {@code PublicationHookCensusTest}
+ * which would make the falsification leg the one part of the kit nothing falsifies. the publication-hook contract
  * calls {@link #requireBroken} with synthetic checks instead, and holds all three of its outcomes.
  */
 public final class Falsification {
