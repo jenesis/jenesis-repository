@@ -193,29 +193,38 @@ class ConfigPrincipleTest {
         return keys;
     }
 
-    /** Every config-key literal read across the module sources, mapped to a representative read site
-     *  ({@code <relative-path>:<line>}). Captures both the direct {@code .apply("<key>")} lookup and the
-     *  {@code <helper>(config, "<key>", ...)} reader idiom; the single literal-{@code config} false positive from
-     *  {@code Objects.requireNonNull(config, "config")} is skipped. Over-approximates safely: a false positive that
-     *  happens to be a declared setting simply passes. */
+    /** Every config key read across the module sources, mapped to a representative read site
+     *  ({@code <relative-path>:<line>}). Captures both the direct {@code .apply(<key>)} lookup and the
+     *  {@code <helper>(config, <key>, ...)} reader idiom, with the key written either as a literal or as a
+     *  {@code SCREAMING_CASE} {@code String} constant the same file declares (see {@link #stringConstants}); the
+     *  single literal-{@code config} false positive from {@code Objects.requireNonNull(config, "config")} is skipped.
+     *  Over-approximates safely: a false positive that happens to be a declared setting simply passes. */
     private static Map<String, String> readConfigKeys(Path sourceRoot) throws IOException {
-        Pattern apply = Pattern.compile("\\.apply\\(\"([^\"]+)\"");
-        Pattern helper = Pattern.compile("\\(config,\\s*\"([^\"]+)\"");
+        Pattern apply = Pattern.compile("\\.apply\\((\"[^\"]+\"|[A-Z][A-Z0-9_]*)[,)]");
+        Pattern helper = Pattern.compile("\\(config,\\s*(\"[^\"]+\"|[A-Z][A-Z0-9_]*)[,)]");
         Map<String, String> keys = new TreeMap<>();
         try (Stream<Path> files = Files.walk(sourceRoot)) {
             for (Path file : (Iterable<Path>) files.filter(ConfigPrincipleTest::isJava)::iterator) {
                 // Strip comments (preserving newlines and string literals) so a `.apply("...")` written inside a
                 // javadoc {@code ...} example is never mistaken for a real read - the same guard the sibling
                 // ImmutabilityPrincipleTest applies. Line numbers survive because stripping keeps every newline.
-                List<String> lines = List.of(stripComments(Files.readString(file)).split("\n", -1));
+                String body = stripComments(Files.readString(file));
+                Map<String, String> constants = stringConstants(body);
+                List<String> lines = List.of(body.split("\n", -1));
                 for (int i = 0; i < lines.size(); i++) {
                     record Read(Pattern pattern, String line) {}
                     for (Read read : List.of(new Read(apply, lines.get(i)), new Read(helper, lines.get(i)))) {
                         Matcher matcher = read.pattern().matcher(read.line());
                         while (matcher.find()) {
-                            String key = matcher.group(1);
-                            if (key.equals("config")) {
-                                continue;             // Objects.requireNonNull(config, "config") - a field name, not a key
+                            String argument = matcher.group(1);
+                            String key = argument.startsWith("\"")
+                                    ? argument.substring(1, argument.length() - 1)
+                                    : constants.get(argument);
+                            if (key == null || key.equals("config")) {
+                                // Either a constant this file does not declare (a local, a parameter, or one lifted to
+                                // another class - the scan's own long-standing blind spot, unchanged), or
+                                // Objects.requireNonNull(config, "config"), which is a field name and not a key.
+                                continue;
                             }
                             keys.putIfAbsent(key, sourceRoot.relativize(file) + ":" + (i + 1));
                         }
@@ -224,6 +233,33 @@ class ConfigPrincipleTest {
             }
         }
         return keys;
+    }
+
+    /**
+     * The {@code static final String NAME = "literal";} constants a file declares, so a read written as
+     * {@code config.apply(ENDPOINT_KEY)} is seen as the read it is.
+     *
+     * <p>Naming the key once and reading it through the constant is the better code - it is what stops a provider's
+     * refusal message and the config lookup it screens from naming different keys - and this scan used to be blind to
+     * exactly that shape, which is the wrong incentive for a guard to create. It bit for real when the free store
+     * backends' three copies of the https-only endpoint screen were collapsed onto one shared helper (D-023): the six
+     * {@code JENESIS_AWS_*}/{@code JENESIS_GCS_*}/{@code JENESIS_AZURE_*} keys moved into constants and every one of
+     * them read, to this scan, as no longer read anywhere. The allowlist-liveness leg is what caught it, which is the
+     * good direction - but the answer is to follow the constant, not to write the literal twice.
+     *
+     * <p>Same-file only, and deliberately: resolving a constant across files needs a symbol table this scan has no
+     * business growing, and a key lifted to another class is the same blind spot the scan has always had for a local
+     * variable. What it buys is the shape a reader is most likely to write next.
+     */
+    private static Map<String, String> stringConstants(String body) {
+        Pattern declaration = Pattern.compile(
+                "static\\s+final\\s+String\\s+([A-Z][A-Z0-9_]*)\\s*=\\s*\"([^\"]*)\"\\s*;");
+        Map<String, String> constants = new HashMap<>();
+        Matcher matcher = declaration.matcher(body);
+        while (matcher.find()) {
+            constants.put(matcher.group(1), matcher.group(2));
+        }
+        return Map.copyOf(constants);
     }
 
     private static boolean isJava(Path path) {
