@@ -213,8 +213,8 @@ class TestBoundPrincipleTest {
         for (Path dir = start; dir != null; dir = dir.getParent()) {
             if (Files.isDirectory(dir.resolve("build/jenesis"))) {
                 // Standalone the tree is test/ beside build/jenesis; inside an enclosing project it is
-                // free/test/ beside the enclosing one. Nested first: only the outer build has both.
-                Path nested = dir.resolve("free").resolve("test");
+                // core/test/ beside the enclosing one. Nested first: only the outer build has both.
+                Path nested = dir.resolve("core").resolve("test");
                 if (Files.isDirectory(nested)) {
                     return nested;
                 }
