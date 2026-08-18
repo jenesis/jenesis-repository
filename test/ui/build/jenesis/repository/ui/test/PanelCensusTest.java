@@ -141,6 +141,10 @@ class PanelCensusTest {
     private static Path repositoryRoot() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {
+            // Standalone the tree is source/; inside an enclosing project it is free/source/.
+            if (Files.isDirectory(candidate.resolve("free").resolve("source").resolve("ui"))) {
+                return candidate.resolve("free");
+            }
             if (Files.isDirectory(candidate.resolve("source").resolve("ui"))) {
                 return candidate;
             }

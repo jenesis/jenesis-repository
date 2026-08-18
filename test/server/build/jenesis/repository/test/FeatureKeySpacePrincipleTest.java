@@ -101,6 +101,10 @@ class FeatureKeySpacePrincipleTest {
 
     private static Path root() {
         for (Path directory = Path.of("").toAbsolutePath(); directory != null; directory = directory.getParent()) {
+            // Standalone the tree is source/; inside an enclosing project it is free/source/.
+            if (Files.isDirectory(directory.resolve("free").resolve("source").resolve("store").resolve("spi"))) {
+                return directory.resolve("free");
+            }
             if (Files.isDirectory(directory.resolve("source").resolve("store").resolve("spi"))) {
                 return directory;
             }

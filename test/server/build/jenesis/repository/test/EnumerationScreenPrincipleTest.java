@@ -391,11 +391,19 @@ class EnumerationScreenPrincipleTest {
     private static Path sourceRoot() {
         Path start = Path.of("").toAbsolutePath();
         for (Path dir = start; dir != null; dir = dir.getParent()) {
-            if (Files.isDirectory(dir.resolve("source")) && Files.isDirectory(dir.resolve("build/jenesis"))) {
-                return dir.resolve("source");
+            if (Files.isDirectory(dir.resolve("build/jenesis"))) {
+                // Standalone the tree is source/ beside build/jenesis; inside an enclosing project it is
+                // free/source/ beside the enclosing one. Nested first: only the outer build has both.
+                Path nested = dir.resolve("free").resolve("source");
+                if (Files.isDirectory(nested)) {
+                    return nested;
+                }
+                if (Files.isDirectory(dir.resolve("source"))) {
+                    return dir.resolve("source");
+                }
             }
         }
-        throw new AssertionError("could not locate the core repo root (an ancestor holding source/ beside "
+        throw new AssertionError("could not locate the core repo root (an ancestor holding source/ or free/source beside "
                 + "build/jenesis) from working directory " + start + " - this structural check must run from the "
                 + "repository tree so it can read the module sources");
     }

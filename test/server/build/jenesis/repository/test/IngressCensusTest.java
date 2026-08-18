@@ -540,11 +540,19 @@ public class IngressCensusTest {
     private static Path sourceRoot() {
         Path start = Path.of("").toAbsolutePath();
         for (Path directory = start; directory != null; directory = directory.getParent()) {
-            if (Files.isDirectory(directory.resolve("source")) && Files.isDirectory(directory.resolve("build/jenesis"))) {
-                return directory.resolve("source");
+            if (Files.isDirectory(directory.resolve("build/jenesis"))) {
+                // Standalone the tree is source/ beside build/jenesis; inside an enclosing project it is
+                // free/source/ beside the enclosing one. Nested first: only the outer build has both.
+                Path nested = directory.resolve("free").resolve("source");
+                if (Files.isDirectory(nested)) {
+                    return nested;
+                }
+                if (Files.isDirectory(directory.resolve("source"))) {
+                    return directory.resolve("source");
+                }
             }
         }
-        throw new AssertionError("could not locate the free repo root (an ancestor holding source/ beside "
+        throw new AssertionError("could not locate the free repo root (an ancestor holding source/ or free/source beside "
                 + "build/jenesis) from working directory " + start + " - the ingress census must run against the "
                 + "module sources so it can never pass vacuously");
     }
