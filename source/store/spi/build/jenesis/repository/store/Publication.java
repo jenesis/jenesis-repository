@@ -171,9 +171,11 @@ public final class Publication {
     /** The blob key ({@code blobs/<hash>}) a path resolves to when it is published and the blob is present - what a
      *  streaming {@code GET} sets its {@code Content-Length} from (through {@link ArtifactStore#size}) and then copies
      *  to the response (through {@link ArtifactStore#read}), instead of buffering the blob to learn its length. Empty
-     *  when nothing is published there, the blob is gone, or a screen {@link PublishInterceptor#withheld withholds}
-     *  the path - the quarantine read side, so a verdict that changes after the fact retracts a linked artifact from
-     *  every serving surface without touching its pointer. */
+     *  when nothing is published there, the blob is gone, a screen {@link PublishInterceptor#withheld withholds} the
+     *  path, or a {@link Withheld withheld/&lt;hash&gt;} marker retracts the bytes the path names - the quarantine read
+     *  side, so a verdict that changes after the fact retracts a linked artifact from every serving surface without
+     *  touching its pointer, and a content-addressed hold retracts it under every alias it is served by rather than
+     *  only the ones the hold writer enumerated. */
     public Optional<String> located(String requestPath) throws IOException {
         // Delegate the servable-vs-not discrimination to the one enumeration seam so serve and enumeration can never
         // disagree (located empty iff state != SERVABLE); the seam composes this same publication's interceptor chain

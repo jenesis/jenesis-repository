@@ -5,6 +5,7 @@ import build.jenesis.repository.format.maven.MavenMetadata;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.Withheld;
 import module org.junit.jupiter.api;
 
 import module java.base;
@@ -128,6 +129,24 @@ class MavenFormatTest {
                 automaticModuleJar("org.example.lib")), store);
 
         assertThat(format.paths("org.example:lib", "1.0", store))
+                .containsExactlyInAnyOrder("/maven/org/example/lib/1.0", "/module/org.example.lib/1.0");
+    }
+
+    @Test
+    void paths_still_reports_the_module_mirror_once_the_jar_is_held() throws IOException {
+        // This overload answers where a version LIVES, not what a GET would serve, and the difference is load-bearing
+        // for a held version (D-251). It used to resolve the jar through Publication.located, so a hold made the
+        // mirror vanish from the very callers a hold needs - the retroactive sweeps' converge pass, eviction,
+        // reconciliation, and the release path's cross-alias exclusion set, which then read the version's own mirror
+        // as a foreign alias still holding those bytes and refused to lift the content-addressed marker.
+        format.handle(new FakeExchange("PUT", "/maven/org/example/lib/1.0/lib-1.0.jar",
+                automaticModuleJar("org.example.lib")), store);
+        Withheld.mark(store, publication.blob("/maven/org/example/lib/1.0/lib-1.0.jar").orElseThrow());
+
+        assertThat(publication.located("/maven/org/example/lib/1.0/lib-1.0.jar"))
+                .as("the marker retracts serving").isEmpty();
+        assertThat(format.paths("org.example:lib", "1.0", store))
+                .as("but the version still occupies both folders")
                 .containsExactlyInAnyOrder("/maven/org/example/lib/1.0", "/module/org.example.lib/1.0");
     }
 

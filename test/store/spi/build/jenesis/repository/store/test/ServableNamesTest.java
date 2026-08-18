@@ -75,6 +75,59 @@ class ServableNamesTest {
         assertThat(publication.located("/maven/g/a/1/served.jar")).contains("blobs/" + HASH_A);
     }
 
+    @Test
+    void a_marker_on_the_hash_a_publish_pointer_names_withholds_it_with_no_quarantine_pointer_anywhere()
+            throws IOException {
+        // D-251. The publish/ face used to consult only the interceptor chain, so the content half of a hold - the
+        // withheld/<hash> marker, keyed by content precisely so ONE hold retracts the bytes wherever served - reached
+        // only the blobs/ face. Any publish/-namespace alias the hold writer's path enumeration did not name therefore
+        // kept serving held bytes; the Maven cross-publish's /module/<name>/<name>.jar "latest" view is the driven
+        // case, since it belongs to no single version and no ArtifactLayout.paths overload reports it.
+        MapStore store = new MapStore();
+        store.pointer("publish/module/test.widget/test.widget.jar", HASH_A);   // no /quarantine pointer at this alias
+        store.blob(HASH_A);
+        Withheld.mark(store, HASH_A);
+        ServableNames names = new ServableNames(store);   // and no interceptor: the marker is the whole hold here
+
+        assertThat(names.state("/module/test.widget/test.widget.jar")).isEqualTo(State.WITHHELD);
+        assertThat(names.disclosable("/module/test.widget/test.widget.jar", Policy.HIDE_WITHHELD))
+                .as("the listing must agree with the download").isFalse();
+        assertThat(names.disclosable("/module/test.widget/test.widget.jar", Policy.HIDE_WITHHELD_AND_GONE)).isFalse();
+        assertThat(new Publication(store).located("/module/test.widget/test.widget.jar")).isEmpty();
+    }
+
+    @Test
+    void a_withheld_publish_path_whose_blob_was_reclaimed_reads_withheld_not_blob_gone() throws IOException {
+        // The marker probe sits BEFORE the blob stat on this face for the same reason it does on the blobs face: a
+        // path that is both held and whose blob a collector has since reclaimed must not read as a merely torn
+        // pointer, or a reconcile consumer repairs it back into a served one.
+        MapStore store = new MapStore();
+        store.pointer("publish/module/test.widget/test.widget.jar", HASH_GONE);   // marker, and no blob
+        Withheld.mark(store, HASH_GONE);
+        ServableNames names = new ServableNames(store);
+
+        assertThat(names.state("/module/test.widget/test.widget.jar")).isEqualTo(State.WITHHELD);
+    }
+
+    @Test
+    void an_unmarked_publish_path_is_untouched_by_the_marker_probe() throws IOException {
+        // The control: the probe can only ever hide more. A pointer naming a hash no marker covers - and a membership
+        // row whose recorded hash names no stored blob at all - answer exactly as they did before.
+        MapStore store = new MapStore();
+        store.pointer("publish/maven/g/a/1/a-1.jar", HASH_A);
+        store.blob(HASH_A);
+        Withheld.mark(store, HASH_B);                                      // a hold on OTHER bytes
+        store.pointer("publish/maven/g/a/1/fake.jar", HASH_GONE);          // recorded with a hash no blob backs
+        ServableNames names = new ServableNames(store);
+
+        assertThat(names.state("/maven/g/a/1/a-1.jar")).isEqualTo(State.SERVABLE);
+        assertThat(names.disclosable("/maven/g/a/1/a-1.jar", Policy.HIDE_WITHHELD)).isTrue();
+        assertThat(names.disclosable("/maven/g/a/1/fake.jar", Policy.HIDE_WITHHELD))
+                .as("a fake-hash membership row still lists - no marker is keyed by it").isTrue();
+        assertThat(names.disclosable("/maven/g/a/1/never.jar", Policy.HIDE_WITHHELD))
+                .as("and an unpublished name has nothing held to hide").isTrue();
+    }
+
     // ---- blobs/-namespace tri-state (keyState) and Blobs.read parity -------------------------------------------
 
     @Test
@@ -141,7 +194,8 @@ class ServableNamesTest {
         Withholding chain = new Withholding("/maven/g/a/1/withheld.jar");
         ServableNames names = new ServableNames(store, new Publication(store, List.of(chain)));
 
-        // publish-namespace membership: chain probe only, no pointer read and no blob stat.
+        // publish-namespace membership: chain probe plus the pointer/marker read (D-251 made this face read the
+        // content half of a hold too, exactly as the blobs-namespace face below always has) - and still no blob stat.
         store.blobStats = 0;
         assertThat(names.disclosable("/maven/g/a/1/served.jar", Policy.HIDE_WITHHELD)).isTrue();
         assertThat(names.disclosable("/maven/g/a/1/withheld.jar", Policy.HIDE_WITHHELD)).isFalse();
