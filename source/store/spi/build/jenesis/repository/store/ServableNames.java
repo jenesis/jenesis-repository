@@ -10,6 +10,21 @@ import module java.base;
  * and a download can never disagree on what is held. {@link Publication#located} is itself a thin wrapper over
  * {@link #state}, so serve and enumeration share the one discrimination.
  *
+ * <p><b>Both namespaces read both halves of the hold.</b> The two faces below differ only in how they compose the
+ * pointer key - {@code publish<request-path>} for {@link #state}, the format's own key for {@link #keyState} - and
+ * then run the identical probe order: chain, pointer, {@link Withheld withheld/&lt;hash&gt;} marker, blob stat. That
+ * symmetry is the point rather than an implementation detail, because the two halves of a hold cover different
+ * things: a {@code /quarantine<path>} pointer holds ONE alias, and the marker holds the BYTES wherever they are
+ * served. A {@code publish/} face that read only the chain therefore let a content-addressed hold be escaped by any
+ * alias the hold writer's path enumeration did not name - the Maven cross-publish's {@code /module/<name>/<name>.jar}
+ * "latest" view being the driven case (D-251): it belongs to no single version, so neither {@code paths} overload of
+ * the Maven layout that placed the jar reports it - both are version-addressed - and so no hold writer ever links a
+ * review pointer at it, yet it points straight at the held blob. (The Jenesis layout does name that pointer, for every
+ * version of a module <em>it</em> published first-hand; a jar cross-published from a Maven coordinate is recorded
+ * under the Maven ecosystem and is never placed through it.) Reading the marker here retracts the view for exactly as
+ * long as it names those bytes, and re-serves it the moment a republish re-aims it at an unheld version - which is
+ * what "latest" means and what a path-keyed hold could not express.
+ *
  * <p><b>Fail-closed by construction.</b> Every store probe this type makes is wrapped so that a name whose probe
  * throws a {@link RuntimeException} - a hostile / non-ASCII key a store backend cannot even
  * {@code resolve} ({@code FilesystemArtifactStore.resolve} does {@code root.resolve(key)} and throws
@@ -19,9 +34,10 @@ import module java.base;
  * propagate exactly as they do through {@link Publication#located} today.
  *
  * <p>The {@link Policy} split is what keeps a membership surface (search, generated version indexes) from paying - or
- * being broken by - a blob stat: {@link Policy#HIDE_WITHHELD} runs only the withhold read and stats no blob, so a
- * coordinate recorded with a fake hash and no stored blob still lists, while {@link Policy#HIDE_WITHHELD_AND_GONE} is
- * bit-for-bit the serve-parity screen the browse / assets surfaces already pay for their size column.
+ * being broken by - a blob stat: {@link Policy#HIDE_WITHHELD} runs the withhold reads and stats no blob, so a
+ * coordinate recorded with a fake hash and no stored blob still lists (its fake hash matches no marker), while
+ * {@link Policy#HIDE_WITHHELD_AND_GONE} is bit-for-bit the serve-parity screen the browse / assets surfaces already
+ * pay for their size column.
  *
  * <p><b>Deciding is here; enumerating is not.</b> This type answers "may this ONE name be disclosed?". A surface that
  * must enumerate names drives {@code build.jenesis.repository.walk.ScreenedNames}, the screened-enumeration face that
@@ -137,11 +153,21 @@ public final class ServableNames {
 
     // ---- publish/-namespace face (Maven, raw, quarantine-pointer holds) ----
 
-    /** Full discrimination of one request path ({@code "/maven/g/a/1/a-1.jar"}). Probe order matches
-     *  {@link Publication#located}: (1) interceptor chain withheld -&gt; {@link State#WITHHELD}; (2) {@code publish<path>}
-     *  pointer absent -&gt; {@link State#UNPUBLISHED}; (3) {@code blobs/<hash>} stat -&gt; {@link State#SERVABLE} :
-     *  {@link State#BLOB_GONE}. A probe that throws a {@link RuntimeException} (a hostile name) fails closed to
-     *  {@link State#WITHHELD} - never disclosed, never thrown. */
+    /** Full discrimination of one request path ({@code "/maven/g/a/1/a-1.jar"}), and the decision
+     *  {@link Publication#located} is a wrapper over: (1) interceptor chain withheld -&gt; {@link State#WITHHELD};
+     *  (2) {@code publish<path>} pointer absent -&gt; {@link State#UNPUBLISHED}; (3) a {@link Withheld withheld/<hash>}
+     *  marker on the hash the pointer names -&gt; {@link State#WITHHELD}; (4) {@code blobs/<hash>} stat -&gt;
+     *  {@link State#SERVABLE} : {@link State#BLOB_GONE}. A probe that throws a {@link RuntimeException} (a hostile
+     *  name) fails closed to {@link State#WITHHELD} - never disclosed, never thrown.
+     *
+     *  <p>Step (3) is the same probe {@link #keyState} makes in the same position, and it is what makes
+     *  {@link State#WITHHELD}'s own definition true of this face: a hold has a path half (the
+     *  {@code /quarantine<path>} pointer an interceptor reads) and a content half (the marker), and only the second
+     *  reaches an alias no hold writer enumerated. It sits BEFORE the blob stat deliberately - a path that is both
+     *  withheld and whose blob a collector has since reclaimed must read {@code WITHHELD}, not {@code BLOB_GONE},
+     *  or a reconcile consumer repairs a torn pointer back into a served one. The cost is one extra existence probe
+     *  on a path that already reads its pointer, and it can only ever hide more: a pointer naming a hash no marker
+     *  covers answers exactly as before. */
     public State state(String requestPath) throws IOException {
         try {
             if (publication.withheld(requestPath)) {
@@ -151,6 +177,9 @@ public final class ServableNames {
             if (hash.isEmpty()) {
                 return State.UNPUBLISHED;
             }
+            if (Withheld.is(store, hash.get())) {
+                return State.WITHHELD;
+            }
             return store.exists("blobs/" + hash.get()) ? State.SERVABLE : State.BLOB_GONE;
         } catch (RuntimeException hostile) {
             LOGGER.warn("servable-name probe of {} failed; treating as withheld (fail-closed)", requestPath, hostile);
@@ -158,13 +187,20 @@ public final class ServableNames {
         }
     }
 
-    /** The policy check, doing only the probes the policy needs: {@link Policy#HIDE_WITHHELD} runs ONLY the withheld
-     *  chain (no pointer read, no blob stat - zero blob I/O), {@link Policy#HIDE_WITHHELD_AND_GONE} is
-     *  {@code state() == SERVABLE}. Fail-closed on a hostile name. */
+    /** The policy check, doing only the probes the policy needs: {@link Policy#HIDE_WITHHELD} runs the two withhold
+     *  reads - the interceptor chain, then the {@link Withheld withheld/<hash>} marker on the hash the pointer names -
+     *  and stats no blob, exactly as {@link #disclosableKey} does for the blobs namespace; an absent pointer discloses
+     *  (nothing is published, so there is nothing held to hide, and a membership row recorded with a fake hash keeps
+     *  listing because no marker is keyed by it). {@link Policy#HIDE_WITHHELD_AND_GONE} is {@code state() == SERVABLE}.
+     *  Fail-closed on a hostile name. */
     public boolean disclosable(String requestPath, Policy policy) throws IOException {
         if (policy == Policy.HIDE_WITHHELD) {
             try {
-                return !publication.withheld(requestPath);
+                if (publication.withheld(requestPath)) {
+                    return false;
+                }
+                Optional<String> hash = publication.blob(requestPath);
+                return hash.isEmpty() || !Withheld.is(store, hash.get());
             } catch (RuntimeException hostile) {
                 LOGGER.warn("withheld-chain probe of {} failed; hiding (fail-closed)", requestPath, hostile);
                 return false;
@@ -180,7 +216,17 @@ public final class ServableNames {
      *  folder's leaves, up to the {@value #PROBE_CAP}-leaf bound past which it fails CLOSED (a folder wider than the
      *  bound is screened, since its unprobed leaves cannot be proven un-held). It never stats a blob, so a fake-hash /
      *  no-blob / non-jar version keeps listing; with the free (empty) chain and no quarantine pointer a folder within
-     *  the bound always lists. Fail-closed on a hostile folder name. */
+     *  the bound always lists. Fail-closed on a hostile folder name.
+     *
+     *  <p><b>The one place this seam does not read the marker.</b> Leg (b) probes the chain per leaf and deliberately
+     *  does NOT add the per-leaf pointer read plus {@link Withheld withheld/&lt;hash&gt;} probe {@link #state} and
+     *  {@link #disclosable} now make, because this is the only fan-out face: it would turn one generated
+     *  {@code maven-metadata.xml} into two extra store round-trips per leaf per version, on a read path (&sect;7). It
+     *  is not a gap for any hold a writer places today - every retroactive sweep links a {@code /quarantine<path>}
+     *  pointer beside the marker for a path that carries a {@code publish/} pointer, so leg (a) already screens the
+     *  folder - but it is a genuine residual disagreement for a byte-identical SIBLING coordinate, whose version name
+     *  keeps listing while its download now 404s on the marker. Filed as D-262 with the cost that decides it, rather
+     *  than paid here unmeasured. */
     public boolean disclosableVersionFolder(String folder) throws IOException {
         try {
             // (a) The review-pointer convention: a held version has >=1 /quarantine<servedPath> pointer under it, so

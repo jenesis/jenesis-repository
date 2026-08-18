@@ -11,10 +11,11 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * The {@code publish/} walk must be race-tolerant: a pointer is read twice per emitted leaf - once by the servable
- * screen ({@code ServableNames.state}, one {@code readVersioned} plus a {@code blobs/<hash>} stat) and once by the
- * follow-up read that turns the screened leaf into an {@link PublishedAssets.Entry}. On an object store (S3 / GCS /
- * Azure) each of those is a network round trip, so a concurrent unpublish / evict / {@code DELETE} can remove the
- * pointer in the window <em>between</em> the screen and the follow-up read.
+ * screen ({@code ServableNames.state}: a {@code readVersioned} of the pointer, a {@code withheld/<hash>} marker probe
+ * and a {@code blobs/<hash>} stat) and once by the follow-up read that turns the screened leaf into an
+ * {@link PublishedAssets.Entry}. On an object store (S3 / GCS / Azure) each of those is a network round trip, so a
+ * concurrent unpublish / evict / {@code DELETE} can remove the pointer in the window <em>between</em> the screen and
+ * the follow-up read.
  *
  * <p>A pointer that vanished in that window must be SKIPPED and the walk must CONTINUE, exactly the pre-seam
  * "skip and continue": aborting the whole enumeration would truncate the console's in-flight {@code /assets} NDJSON
@@ -69,6 +70,11 @@ class PublishedAssetsRaceTest {
 
         @Override
         public Optional<Versioned> readVersioned(String key) {
+            if (!key.startsWith("publish/")) {
+                // Nothing here is held: the screen also probes the withheld/<hash> marker (D-251), and a stub that
+                // answered every key as a pointer would report every leaf as withheld and emit nothing.
+                return Optional.empty();
+            }
             String leaf = key.substring("publish/".length());
             if (leaf.equals(vanishing) && vanishingReads++ >= 1) {
                 return Optional.empty(); // unpublished after the screen read - gone on every read that follows

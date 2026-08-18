@@ -94,14 +94,23 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         // stored jar (the same read publish did), so a cleanup that unpublishes this version removes its /module/
         // mirror too and the shared blob becomes unreferenced. Best-effort: no jar, no module, no mirror. This is the
         // one store read, and it is why a read path (a console search) must call the store-free overload instead.
+        //
+        // The pointer is resolved through blob(), NOT located(): this method answers "which request paths does this
+        // version OCCUPY", which is a fact about stored state, and located() answers "which of them would a GET
+        // serve", which is a fact about the current hold. Asking the serving question here made the mirror vanish
+        // from every caller the moment the jar was held - and the callers are the retroactive holds' own converge
+        // pass, eviction, reconciliation and the release path's cross-alias exclusion set. Driven consequences
+        // (D-251): a hold that crashed between the coordinate pointer and the mirror pointer could never converge,
+        // because the re-run no longer saw the path it had not yet held; an eviction of a held version left the
+        // mirror pointing at a blob it had just reclaimed; and a release of the coordinate could not lift the
+        // content-addressed marker, because the version's OWN mirror - missing from the exclusion set - read as a
+        // foreign alias still holding those bytes. The blob stat keeps the old "no jar, no mirror" degrade for a
+        // torn pointer, since a module name cannot be read out of content the store does not hold.
         try {
             Publication publication = new Publication(store);
-            Optional<String> key = publication.located(mavenDir + "/" + artifact + "-" + version + ".jar");
-            if (key.isPresent()) {
-                String module;
-                try (InputStream in = store.open(key.get())) {
-                    module = JavaLayout.moduleName(in);
-                }
+            Optional<String> hash = publication.blob(mavenDir + "/" + artifact + "-" + version + ".jar");
+            if (hash.isPresent() && store.exists("blobs/" + hash.get())) {
+                String module = moduleName(store, hash.get());
                 if (module != null) {
                     paths.add("/module/" + module + "/" + version);
                 }
