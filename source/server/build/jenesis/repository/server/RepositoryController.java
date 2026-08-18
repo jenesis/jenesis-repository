@@ -7,6 +7,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.importer.ImportSourceProvider;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.QuotaExceededException;
 import build.jenesis.repository.store.ReadOnlyException;
 import tools.jackson.databind.json.JsonMapper;
@@ -363,6 +364,16 @@ public class RepositoryController {
     @ExceptionHandler(QuotaExceededException.class)
     public void quotaExceeded(QuotaExceededException exception, HttpServletResponse response) throws IOException {
         respond(response, 507, exception.getMessage());
+    }
+
+    /** A write refused because the coordinate is already published maps to {@code 409 Conflict} - the registry
+     *  vocabulary every client already understands, and what npm, crates.io and NuGet all answer for a duplicate
+     *  version. Without this the refusal surfaced as an unhandled {@code IOException} and a client was told the
+     *  server had broken, when in fact it had held a released version immutable exactly as documented. */
+    @ExceptionHandler(Publication.RepublishConflict.class)
+    public void republishConflict(Publication.RepublishConflict exception, HttpServletResponse response)
+            throws IOException {
+        respond(response, 409, exception.getMessage());
     }
 
     /** A write refused because the deployment is read-only maps to {@code 403 Forbidden} - the store choke point

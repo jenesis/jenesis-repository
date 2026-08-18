@@ -202,6 +202,27 @@ public final class PullThroughCache {
             return delegate.respond(status, contentLength);
         }
 
+        /**
+         * A buffered answer is handed to the delegate whole, rather than left to the interface default that would
+         * stream it through {@link #respond(int, long)}.
+         *
+         * <p>The default is what a wrapper silently inherits, and it costs the response its conditional
+         * revalidation: only the servlet exchange's own buffered override computes the {@code ETag} and answers a
+         * matching {@code If-None-Match} with {@code 304}. Every generated index a format serves - a packument, a
+         * {@code maven-metadata.xml}, a PyPI index - travels this way, so in a proxy-capable repository each of them
+         * was re-downloaded in full on every resolve while the same index in a hosted-only repository revalidated.
+         * The 404 probe above still has to see the miss, which is why only the buffered path is forwarded here.
+         */
+        @Override
+        public void respond(int status, byte[] content) throws IOException {
+            if (status == 404) {
+                missed = true;
+                return;
+            }
+            headers.forEach(delegate::setResponseHeader);
+            delegate.respond(status, content);
+        }
+
         private boolean missed() {
             return missed;
         }
