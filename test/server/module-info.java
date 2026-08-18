@@ -8,10 +8,12 @@
  * the in-test fake Nexus and Artifactory upstreams the import tests drive, not the repository server itself.
  *
  * @jenesis.release 25
+ * @jenesis.exclude wiremock.core commons-fileupload/commons-fileupload
  * @jenesis.test build.jenesis.repository.server
  * @jenesis.alias org.containers org.containers/containers
  * @jenesis.alias wiremock.core org.wiremock/wiremock-core
  * @jenesis.alias wiremock.jetty org.wiremock/wiremock-jetty
+ * @jenesis.alias wiremock.httpclient org.wiremock/wiremock-httpclient-apache5
  * @jenesis.attach org.mockito
  * @jenesis.pin build.jenesis 0.8.1
  * @jenesis.pin build.jenesis/build.jenesis 0.8.1 SHA-256/b824ecde8b7337fe2ef42194f8a8a98f2eab942313a198db9a369df0f99f18c0
@@ -185,6 +187,7 @@
  * @jenesis.pin org.containers/containers 2.0.5 SHA-256/0466f481343d5f350a91274cd7bf984308cbaf90d706247fd1cf4b1a8010c2e1
  * @jenesis.pin org.wiremock/certificate-generator 4.0.0-beta.38 SHA-256/09b7af9b1c6cb9669504c3b318f94db7e48c69f42eb7091f659e3f7c65d84ee5
  * @jenesis.pin org.wiremock/wiremock-core 4.0.0-beta.38 SHA-256/b1611d85ca6f5a2b5d2929a8244a4807b3f843704f2bc0225992cea59e1fe419
+ * @jenesis.pin org.wiremock/wiremock-httpclient-apache5 4.0.0-beta.38
  * @jenesis.pin org.wiremock/wiremock-jetty 4.0.0-beta.38 SHA-256/9d68dc73977fb7969a37262e77c520b678c5ba48fed71b2bc03155a71fc9ab8b
  * @jenesis.pin org.wiremock/wiremock-string-parser 4.0.0-beta.38 SHA-256/f2188d759b4ec3d27ba93974df1024e12a7c6e79a77bcbcdfb2b72b98e78d576
  * @jenesis.pin org.wiremock/wiremock-string-parser-jackson2 4.0.0-beta.38 SHA-256/de828408fb522fa46f632a9274f4a48d93bdb8aa77b076a442a251fe83b77566
@@ -254,6 +257,7 @@ open module build.jenesis.repository.test {
 
     requires wiremock.core;
     requires wiremock.jetty;
+    requires wiremock.httpclient;
     requires org.containers;
     requires org.mockito;
     // ImporterContractTest discovers every RepositoryImporter the way the server does - ServiceLoader over the

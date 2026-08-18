@@ -8,9 +8,11 @@
  * network through a stub upstream fetcher. The caches' proxying behaviour itself is covered by the server test module.
  *
  * @jenesis.release 25
+ * @jenesis.exclude wiremock.core commons-fileupload/commons-fileupload
  * @jenesis.test build.jenesis.repository.proxy
  * @jenesis.alias wiremock.core org.wiremock/wiremock-core
  * @jenesis.alias wiremock.jetty org.wiremock/wiremock-jetty
+ * @jenesis.alias wiremock.httpclient org.wiremock/wiremock-httpclient-apache5
  * @jenesis.pin com.ethlo.time/itu 1.14.0 SHA-256/5cf40ab0cc77828ab2b875b1f3ecd71c8295d7721933476abc2e08fddcea164a
  * @jenesis.pin com.fasterxml.jackson.core/jackson-annotations 2.21 SHA-256/53ca085f4a150f703f49e1aabd935bd03b43e1ea3d55d135438292af22cef56b
  * @jenesis.pin com.fasterxml.jackson.core/jackson-core 2.21.3 SHA-256/baf8b739e9d9b93bcdb33f25046bfdb8dbd74c97de2a8698539fbe0c7eeac0bb
@@ -116,6 +118,7 @@
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
  * @jenesis.pin org.wiremock/certificate-generator 4.0.0-beta.38 SHA-256/09b7af9b1c6cb9669504c3b318f94db7e48c69f42eb7091f659e3f7c65d84ee5
  * @jenesis.pin org.wiremock/wiremock-core 4.0.0-beta.38 SHA-256/b1611d85ca6f5a2b5d2929a8244a4807b3f843704f2bc0225992cea59e1fe419
+ * @jenesis.pin org.wiremock/wiremock-httpclient-apache5 4.0.0-beta.38
  * @jenesis.pin org.wiremock/wiremock-jetty 4.0.0-beta.38 SHA-256/9d68dc73977fb7969a37262e77c520b678c5ba48fed71b2bc03155a71fc9ab8b
  * @jenesis.pin org.wiremock/wiremock-string-parser 4.0.0-beta.38 SHA-256/f2188d759b4ec3d27ba93974df1024e12a7c6e79a77bcbcdfb2b72b98e78d576
  * @jenesis.pin org.wiremock/wiremock-string-parser-jackson2 4.0.0-beta.38 SHA-256/de828408fb522fa46f632a9274f4a48d93bdb8aa77b076a442a251fe83b77566
@@ -135,4 +138,5 @@ open module build.jenesis.repository.proxy.test {
 
     requires wiremock.core;
     requires wiremock.jetty;
+    requires wiremock.httpclient;
 }
