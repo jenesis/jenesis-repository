@@ -50,21 +50,25 @@ class ScanTriggerPrincipleTest {
      * banked silently.
      */
     private static final Map<String, Trigger> SCANNERS = Map.ofEntries(
-            Map.entry("test/server", new Trigger(25,
+            Map.entry("test/server", new Trigger(27,
                     "the structural ratchets - unsafe API, unbounded listing, streaming, config, immutability, the "
                             + "SPI contract inventory, the legibility scan and the capability-signal census - all of "
                             + "which read source/** as text and none of which is about the modules it happens to "
                             + "require. The census took the floor from 23 to 25: it reads the gc and walk SPIs off "
-                            + "the linked types as well as off their sources (D-164)")),
+                            + "the linked types as well as off their sources (D-164). D-059 took it to 27, for the "
+                            + "same reason one level on: the Maven cross-publish sequence suite drives the shipped "
+                            + "walk implementation and the store fault fixture, so both are named now")),
             Map.entry("test/importer/contract", new Trigger(12,
                     "the importer census parses every source `provides RepositoryImporter`; its finding is 'an "
                             + "importer exists with no fixture', so an importer in an untriggered module is exactly "
                             + "what it cannot see")),
             Map.entry("test/format/contract", new Trigger(9,
                     "the format census parses every source `provides RepositoryFormat`")),
-            Map.entry("test/walkconsumer", new Trigger(8,
+            Map.entry("test/walkconsumer", new Trigger(10,
                     "the walk-consumer census parses every source `provides WalkConsumer` and compares it with the "
-                            + "runtime ServiceLoader graph")),
+                            + "runtime ServiceLoader graph. D-059 took it from 8 to 10: the first shipped consumer "
+                            + "lives in the Maven format, so that module and the Jenesis format providing the view it "
+                            + "writes both have to be on the graph the runtime leg reads")),
             Map.entry("test/store/contract", new Trigger(7,
                     "the store census parses every source `provides ArtifactStoreProvider`")),
             Map.entry("test/ui", new Trigger(7,
