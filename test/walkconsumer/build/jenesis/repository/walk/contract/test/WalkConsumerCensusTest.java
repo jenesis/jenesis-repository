@@ -250,9 +250,9 @@ class WalkConsumerCensusTest {
     private static Path repositoryRoot() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {
-            // Standalone the tree is source/; inside an enclosing project it is free/source/.
-            if (Files.isDirectory(candidate.resolve("free").resolve("source").resolve("walk").resolve("spi"))) {
-                return candidate.resolve("free");
+            // Standalone the tree is source/; inside an enclosing project it is core/source/.
+            if (Files.isDirectory(candidate.resolve("core").resolve("source").resolve("walk").resolve("spi"))) {
+                return candidate.resolve("core");
             }
             if (Files.isDirectory(candidate.resolve("source").resolve("walk").resolve("spi"))) {
                 return candidate;

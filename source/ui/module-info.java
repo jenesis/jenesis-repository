@@ -15,6 +15,7 @@
  * the SPI's own lookup.
  *
  * @jenesis.release 25
+ * @jenesis.exclude spring.boot.starter.jetty org.apache.tomcat.embed/tomcat-embed-el
  * @jenesis.main build.jenesis.repository.ui.Application
  *
  * @jenesis.pin ch.qos.logback/logback-classic 1.5.34 SHA-256/b65e05076a5c1aadb659b4fe4bc5fee31cb26cd70390292eb03e4a7a24cff10f
