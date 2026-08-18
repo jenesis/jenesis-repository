@@ -9,10 +9,12 @@
  * a checkout without Docker still builds green.
  *
  * @jenesis.release 25
+ * @jenesis.exclude wiremock.core commons-fileupload/commons-fileupload
  * @jenesis.test build.jenesis.repository.store.azure
  * @jenesis.alias org.containers org.containers/containers
  * @jenesis.alias wiremock.core org.wiremock/wiremock-core
  * @jenesis.alias wiremock.jetty org.wiremock/wiremock-jetty
+ * @jenesis.alias wiremock.httpclient org.wiremock/wiremock-httpclient-apache5
  * @jenesis.pin com.azure.storage.blob 12.35.0
  * @jenesis.pin com.azure/azure-core 1.58.1 SHA-256/7b339126e92af79b07fcf96fe16fa5ba2a2854bb8ce7e03ac4776b9474fe7df5
  * @jenesis.pin com.azure/azure-core-http-netty 1.16.5 SHA-256/61091ba5634e711e396721edfcca5c6782be1c1e86f2ecf856eb57aa20260c0c
@@ -174,6 +176,7 @@
  * @jenesis.pin org.containers/containers 2.0.5 SHA-256/0466f481343d5f350a91274cd7bf984308cbaf90d706247fd1cf4b1a8010c2e1
  * @jenesis.pin org.wiremock/certificate-generator 4.0.0-beta.38 SHA-256/09b7af9b1c6cb9669504c3b318f94db7e48c69f42eb7091f659e3f7c65d84ee5
  * @jenesis.pin org.wiremock/wiremock-core 4.0.0-beta.38 SHA-256/b1611d85ca6f5a2b5d2929a8244a4807b3f843704f2bc0225992cea59e1fe419
+ * @jenesis.pin org.wiremock/wiremock-httpclient-apache5 4.0.0-beta.38
  * @jenesis.pin org.wiremock/wiremock-jetty 4.0.0-beta.38 SHA-256/9d68dc73977fb7969a37262e77c520b678c5ba48fed71b2bc03155a71fc9ab8b
  * @jenesis.pin org.wiremock/wiremock-string-parser 4.0.0-beta.38 SHA-256/f2188d759b4ec3d27ba93974df1024e12a7c6e79a77bcbcdfb2b72b98e78d576
  * @jenesis.pin org.wiremock/wiremock-string-parser-jackson2 4.0.0-beta.38 SHA-256/de828408fb522fa46f632a9274f4a48d93bdb8aa77b076a442a251fe83b77566
@@ -194,4 +197,5 @@ open module build.jenesis.repository.store.azure.test {
 
     requires wiremock.core;
     requires wiremock.jetty;
+    requires wiremock.httpclient;
 }
