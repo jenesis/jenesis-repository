@@ -211,8 +211,16 @@ class TestBoundPrincipleTest {
     private static Path testRoot() {
         Path start = Path.of("").toAbsolutePath();
         for (Path dir = start; dir != null; dir = dir.getParent()) {
-            if (Files.isDirectory(dir.resolve("test")) && Files.isDirectory(dir.resolve("build/jenesis"))) {
-                return dir.resolve("test");
+            if (Files.isDirectory(dir.resolve("build/jenesis"))) {
+                // Standalone the tree is test/ beside build/jenesis; inside an enclosing project it is
+                // free/test/ beside the enclosing one. Nested first: only the outer build has both.
+                Path nested = dir.resolve("free").resolve("test");
+                if (Files.isDirectory(nested)) {
+                    return nested;
+                }
+                if (Files.isDirectory(dir.resolve("test"))) {
+                    return dir.resolve("test");
+                }
             }
         }
         throw new AssertionError("could not locate the downstream repo root (an ancestor holding test/ beside "
