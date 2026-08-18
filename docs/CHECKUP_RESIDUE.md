@@ -336,7 +336,7 @@ Answer each row for: BrowsePanel, ConsistencyPanel, LogPanel, ObservabilityPanel
 
 ### `build.jenesis.repository.walk.WalkConsumer`
 
-Answer each row for: _no implementation declared in this tree_ (plus the downstream edition's, listed in its own half)
+Answer each row for: ModuleViewRebuild (plus the downstream edition's, listed in its own half)
 
 - [ ] clause 1 **Thread-safety** - HUMAN
 - [ ] clause 3 **Absence sentinel** - MECHANICAL, report `ProvidersTest`
