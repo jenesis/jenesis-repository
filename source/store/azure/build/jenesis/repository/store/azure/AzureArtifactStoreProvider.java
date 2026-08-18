@@ -2,6 +2,7 @@ package build.jenesis.repository.store.azure;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Endpoints;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
@@ -25,6 +26,14 @@ import module java.base;
  */
 public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
 
+    /** The config key an {@code azure-blob} connection string - and with it the blob endpoint's scheme - is read
+     *  from, named here so the screen's refusal and the resolution that applies it cannot drift apart. */
+    public static final String CONNECTION_STRING_KEY = "JENESIS_AZURE_CONNECTION_STRING";
+
+    /** The config key that opts the endpoint {@link #CONNECTION_STRING_KEY} resolves to out of the https-only
+     *  transport screen. */
+    public static final String ALLOW_INSECURE_KEY = "JENESIS_AZURE_ALLOW_INSECURE_ENDPOINT";
+
     @Override
     public String name() {
         return "azure-blob";
@@ -32,17 +41,17 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
 
     @Override
     public Set<String> requiredConfig() {
-        return Set.of("JENESIS_AZURE_CONNECTION_STRING");
+        return Set.of(CONNECTION_STRING_KEY);
     }
 
     @Override
     public ArtifactStore create(UnaryOperator<String> config) {
-        String connectionString = config.apply("JENESIS_AZURE_CONNECTION_STRING");
+        String connectionString = config.apply(CONNECTION_STRING_KEY);
         if (connectionString == null || connectionString.isBlank()) {
             throw new IllegalStateException(
                     "JENESIS_AZURE_CONNECTION_STRING is required for the azure-blob artifact store backend.");
         }
-        secureEndpoint(blobEndpoint(connectionString), config.apply("JENESIS_AZURE_ALLOW_INSECURE_ENDPOINT"));
+        secureEndpoint(blobEndpoint(connectionString), config.apply(ALLOW_INSECURE_KEY));
         String containerName = config.apply("JENESIS_AZURE_CONTAINER");
         if (containerName == null || containerName.isBlank()) {
             containerName = "jenesis-repository";
@@ -73,22 +82,15 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
      * reachable, whether its certificate validates and whether the container exists are the client's business and
      * surface as its own errors.
      *
+     * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code s3} and {@code gcs} backends (D-023);
+     * what is this backend's own is the pair of config keys it names - and the fact that the endpoint is
+     * <em>extracted</em> from one of them rather than read from it - so this method is where the two are bound to the
+     * screen.
+     *
      * @throws IllegalStateException at resolution, before any client is built or any key is signed with (&sect;9).
      */
     public static URI secureEndpoint(String endpoint, String allowInsecure) {
-        if (endpoint == null) {
-            return null;
-        }
-        URI override = URI.create(endpoint);
-        String scheme = override.getScheme();
-        boolean https = scheme != null && scheme.equalsIgnoreCase("https");
-        if (!https && !Boolean.parseBoolean(allowInsecure)) {
-            throw new IllegalStateException("JENESIS_AZURE_CONNECTION_STRING must resolve to an https:// blob endpoint"
-                    + " (got '" + endpoint + "'), or the account key and every artifact byte travel in clear; set"
-                    + " JENESIS_AZURE_ALLOW_INSECURE_ENDPOINT=true to allow a plaintext endpoint, e.g. a local Azurite"
-                    + " container.");
-        }
-        return override;
+        return Endpoints.secure(CONNECTION_STRING_KEY, endpoint, ALLOW_INSECURE_KEY, allowInsecure);
     }
 
     /**

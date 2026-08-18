@@ -2,6 +2,7 @@ package build.jenesis.repository.store.gcs;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Endpoints;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
@@ -36,6 +37,13 @@ import module java.base;
  */
 public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
 
+    /** The config key a {@code gcs} endpoint is read from - named here so the screen's refusal and the resolution
+     *  that applies it cannot drift into naming different keys. */
+    public static final String ENDPOINT_KEY = "JENESIS_GCS_ENDPOINT";
+
+    /** The config key that opts {@link #ENDPOINT_KEY} out of the https-only transport screen. */
+    public static final String ALLOW_INSECURE_KEY = "JENESIS_GCS_ALLOW_INSECURE_ENDPOINT";
+
     @Override
     public String name() {
         return "gcs";
@@ -57,11 +65,11 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
         if (region == null || region.isBlank()) {
             region = "auto";
         }
-        String endpoint = config.apply("JENESIS_GCS_ENDPOINT");
+        String endpoint = config.apply(ENDPOINT_KEY);
         if (endpoint == null || endpoint.isBlank()) {
             endpoint = "https://storage.googleapis.com";
         }
-        URI override = secureEndpoint(endpoint, config.apply("JENESIS_GCS_ALLOW_INSECURE_ENDPOINT"));
+        URI override = secureEndpoint(endpoint, config.apply(ALLOW_INSECURE_KEY));
         S3Client s3 = S3Client.builder()
                 .region(Region.of(region))
                 .httpClient(UrlConnectionHttpClient.create())
@@ -96,17 +104,13 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
      * by default so the HMAC secret and artifact bytes are not sent over a plaintext transport a MITM can read or
      * tamper with. A plaintext {@code http} emulator endpoint is an explicit opt-out: set
      * {@code JENESIS_GCS_ALLOW_INSECURE_ENDPOINT=true}.
+     *
+     * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code s3} and {@code azure-blob} backends
+     * (D-023); what is this backend's own is the pair of config keys it names, and this method is where they are
+     * bound to the screen.
      */
     public static URI secureEndpoint(String endpoint, String allowInsecure) {
-        URI override = URI.create(endpoint);
-        String scheme = override.getScheme();
-        boolean https = scheme != null && scheme.equalsIgnoreCase("https");
-        if (!https && !Boolean.parseBoolean(allowInsecure)) {
-            throw new IllegalStateException("JENESIS_GCS_ENDPOINT must be an https:// endpoint (got '" + endpoint
-                    + "'); set JENESIS_GCS_ALLOW_INSECURE_ENDPOINT=true to allow a plaintext endpoint, e.g. a local "
-                    + "storage emulator.");
-        }
-        return override;
+        return Endpoints.secure(ENDPOINT_KEY, endpoint, ALLOW_INSECURE_KEY, allowInsecure);
     }
 
     /**
