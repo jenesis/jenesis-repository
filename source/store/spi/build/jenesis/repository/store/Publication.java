@@ -552,7 +552,7 @@ public final class Publication {
     private Published route(ArtifactDescriptor artifact, InputStream content) throws IOException {
         String hash = storeBlob(content);
         ArtifactDescriptor stored = artifact.withBlob(hash, store.size("blobs/" + hash));
-        PublishInterceptor.Content access = access(hash);
+        PublishInterceptor.Content access = contentOf(hash);
         PublishInterceptor.Disposition disposition = PublishInterceptor.Disposition.ACCEPT;
         for (PublishInterceptor interceptor : interceptors) {
             PublishInterceptor.Disposition verdict = interceptor.assess(stored, access);
@@ -980,9 +980,21 @@ public final class Publication {
         return key;
     }
 
-    /** A read view over the just-stored blob and its published siblings, handed to each interceptor so a gate reads
-     *  the artifact back from storage rather than the store holding the upload in memory to show it. */
-    private PublishInterceptor.Content access(String hash) {
+    /**
+     * A read view over one stored blob and the paths already published beside it, so a gate reads an artifact back
+     * from storage rather than the store holding it in memory to show it. This is what each interceptor is handed
+     * during a publish, over the blob just stored.
+     *
+     * <p>It is public because a publish is not the only moment a gate has to assess stored bytes against their
+     * published siblings. A held artifact whose sibling declaration arrives <em>later</em> - a Maven jar, screened
+     * before the POM the client sends one request afterwards - is re-assessed from exactly this view, over the held
+     * blob's hash, and the sibling reads then resolve the document that has since landed. Building a second view for
+     * that would mean restating {@link PublishInterceptor.Content#sibling(String, int)}'s bounded-read contract, and
+     * two statements of one bound are two chances to disagree about it.
+     *
+     * @param hash the content hash of the blob to read through {@link PublishInterceptor.Content#open()}
+     */
+    public PublishInterceptor.Content contentOf(String hash) {
         return new PublishInterceptor.Content() {
             @Override
             public ArtifactStore store() {
