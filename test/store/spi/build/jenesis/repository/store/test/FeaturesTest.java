@@ -52,9 +52,26 @@ class FeaturesTest {
 
     @Test
     void a_feature_missing_required_config_self_disables() {
-        Features.configure(Map.of("some-credential", "value")::get);
+        // Prefixed, like every other key this API reads: a required key is a bare name to the caller and
+        // jenesis.repository.<name> to the deployment, exactly as the feature toggle beside it is.
+        Features.configure(Map.of("jenesis.repository.some-credential", "value")::get);
         assertThat(Features.active("fed", Set.of("some-credential"))).isTrue();
         assertThat(Features.active("starved", Set.of("some-credential", "other-credential"))).isFalse();
+    }
+
+    @Test
+    void the_namespaced_view_is_the_one_place_the_prefix_is_spelled() {
+        // The view is exactly the lambda thirty-five call sites used to write out, so a consumer never spells the
+        // product's own namespace - and settings() is that view over whatever configure() installed, so which
+        // property source answers (a Spring Environment, the persistent settings layered into it, a test's map) is
+        // not a consumer's business.
+        Map<String, String> properties = Map.of("jenesis.repository.scheduled-scan", "false");
+
+        assertThat(Features.namespaced(properties::get).apply("scheduled-scan")).isEqualTo("false");
+        assertThat(Features.key("scheduled-scan")).isEqualTo("jenesis.repository.scheduled-scan");
+
+        Features.configure(properties::get);
+        assertThat(Features.settings().apply("scheduled-scan")).isEqualTo("false");
     }
 
     @Test

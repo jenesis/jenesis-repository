@@ -21,7 +21,8 @@ public class TestImportEdgeProvider implements ImportEdgeProvider {
 
     /** The property this provider requires to become active - unset by default, so the provider is inert; the yield
      *  test sets it to prove the free import edge yields when a distribution owns the edge. */
-    public static final String ACTIVATION_KEY = "jenesis.import-edge.test-active";
+    /** Bare, like every name this API takes: the deployment key is jenesis.repository.<this>, applied by Features. */
+    public static final String ACTIVATION_KEY = "import-edge-test-active";
 
     @Override
     public String name() {

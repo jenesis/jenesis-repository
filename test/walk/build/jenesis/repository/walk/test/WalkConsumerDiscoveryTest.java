@@ -33,7 +33,7 @@ class WalkConsumerDiscoveryTest {
 
     @Test
     void a_disabled_consumer_is_skipped_at_discovery() {
-        Features.configure(key -> ("jenesis.repository." + DiscoverableWalkConsumer.NAME).equals(key) ? "false" : null);
+        Features.configure(key -> (Features.key(DiscoverableWalkConsumer.NAME)).equals(key) ? "false" : null);
 
         assertThat(WalkConsumer.discovered())
                 .as("an explicit jenesis.repository.<name>=false drops the consumer from the enumeration")
