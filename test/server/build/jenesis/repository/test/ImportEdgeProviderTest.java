@@ -21,7 +21,7 @@ class ImportEdgeProviderTest {
     void no_provider_is_installed_by_default_so_the_free_import_edge_is_served() {
         // The default lookup (system properties / environment) with the activation key unset: the discovered test
         // provider self-disables on its missing required config, so no import edge is claimed.
-        System.clearProperty(TestImportEdgeProvider.ACTIVATION_KEY);
+        System.clearProperty(Features.key(TestImportEdgeProvider.ACTIVATION_KEY));
         Features.reset();
         try {
             assertThat(ImportEdgeProvider.installed())
@@ -34,14 +34,14 @@ class ImportEdgeProviderTest {
 
     @Test
     void a_provider_is_installed_once_its_required_config_is_set() {
-        System.setProperty(TestImportEdgeProvider.ACTIVATION_KEY, "true");
+        System.setProperty(Features.key(TestImportEdgeProvider.ACTIVATION_KEY), "true");
         Features.reset();
         try {
             assertThat(ImportEdgeProvider.installed())
                     .as("an active provider claims the import edge, so the free controller yields")
                     .isTrue();
         } finally {
-            System.clearProperty(TestImportEdgeProvider.ACTIVATION_KEY);
+            System.clearProperty(Features.key(TestImportEdgeProvider.ACTIVATION_KEY));
             Features.reset();
         }
     }
@@ -58,13 +58,13 @@ class ImportEdgeProviderTest {
             assertThat(ImportEdgeProvider.installed())
                     .as("an inert provider still yields the free edge, selection key or not")
                     .isFalse();
-            System.setProperty(TestImportEdgeProvider.ACTIVATION_KEY, "true");
+            System.setProperty(Features.key(TestImportEdgeProvider.ACTIVATION_KEY), "true");
             Features.reset();
             assertThat(ImportEdgeProvider.installed())
                     .as("an active provider still claims the edge, selection key or not")
                     .isTrue();
         } finally {
-            System.clearProperty(TestImportEdgeProvider.ACTIVATION_KEY);
+            System.clearProperty(Features.key(TestImportEdgeProvider.ACTIVATION_KEY));
             System.clearProperty("jenesis.repository.import-edge");
             Features.reset();
         }
@@ -74,7 +74,7 @@ class ImportEdgeProviderTest {
     void an_explicit_feature_off_switch_falls_back_to_the_free_import_edge() {
         // Even with the required config present, jenesis.repository.<name>=false disables the provider (the shared
         // Features switch), so a deployment can fall back to the free import edge without removing the module.
-        System.setProperty(TestImportEdgeProvider.ACTIVATION_KEY, "true");
+        System.setProperty(Features.key(TestImportEdgeProvider.ACTIVATION_KEY), "true");
         System.setProperty("jenesis.repository.test-import-edge", "false");
         Features.reset();
         try {
@@ -82,7 +82,7 @@ class ImportEdgeProviderTest {
                     .as("an explicitly-disabled provider does not claim the edge")
                     .isFalse();
         } finally {
-            System.clearProperty(TestImportEdgeProvider.ACTIVATION_KEY);
+            System.clearProperty(Features.key(TestImportEdgeProvider.ACTIVATION_KEY));
             System.clearProperty("jenesis.repository.test-import-edge");
             Features.reset();
         }

@@ -73,10 +73,32 @@ public final class Features {
         return config;
     }
 
-    /** Whether the named feature is enabled: {@code jenesis.repository.<feature>} unset means enabled, and only an
-     *  explicit {@code false} disables - so an image carrying every module runs everything until configured off. */
+    /**
+     * Whether the named feature is enabled: unset means enabled, and only an explicit {@code false} disables - so an
+     * image carrying every module runs everything until configured off.
+     *
+     * <p><b>The one rule of this API: a name is bare, and every key is prefixed here.</b> Callers pass
+     * {@code scheduled-scan}, never {@code jenesis.repository.scheduled-scan} - the namespace is applied by
+     * {@link #settings()} (or {@link #namespaced(UnaryOperator)} over some other source), which is the only place it
+     * is spelled. Which property source answers is {@link #configure}'s business: the shell installs the Spring
+     * {@code Environment}, with the persistent settings layered into it, and a consumer module neither knows nor
+     * asks.
+     */
     public static boolean enabled(String feature) {
-        return !"false".equalsIgnoreCase(config.apply(NAMESPACE + feature));
+        return enabled(settings(), feature);
+    }
+
+    /**
+     * Whether {@code feature} is enabled in a lookup the CALLER supplies, keyed by the bare feature name.
+     *
+     * <p>The same question as {@link #enabled(String)}, asked of a key space this class does not own: a maintenance
+     * task's per-run settings context, a tenant's overrides, a test's map. The no-arg form above is exactly this one
+     * against the installed lookup with {@code jenesis.repository.} applied, which is the whole difference between
+     * them and the reason both live here - the namespace is spelled once, in {@link #NAMESPACE}, rather than at
+     * every caller that happens to read a toggle.
+     */
+    public static boolean enabled(UnaryOperator<String> config, String feature) {
+        return !"false".equalsIgnoreCase(config.apply(feature));
     }
 
     /** The implementation name a singleton SPI is configured to ({@code jenesis.repository.<spi>=<feature>}), or
@@ -84,7 +106,13 @@ public final class Features {
      *  implementation through {@link Providers}. A <em>present</em> value is an explicit operator decision, so the
      *  resolution primitives fail rather than degrade when nothing answers to it (&sect;9). */
     public static Optional<String> selection(String spi) {
-        String value = config.apply(NAMESPACE + spi);
+        return selection(settings(), spi);
+    }
+
+    /** The implementation name a singleton SPI is configured to, read from a lookup the CALLER supplies and keyed by
+     *  the bare SPI name - see {@link #enabled(UnaryOperator, String)} for why both forms live here. */
+    public static Optional<String> selection(UnaryOperator<String> config, String spi) {
+        String value = config.apply(spi);
         return value == null || value.isBlank() ? Optional.empty() : Optional.of(value.trim());
     }
 
@@ -92,7 +120,13 @@ public final class Features {
      *  that is enabled but missing a required key (a credential, a bucket) disables itself and logs one line -
      *  naming the missing keys and the {@code jenesis.repository.<feature>=false} switch that silences it. */
     public static boolean active(String feature, Collection<String> requiredConfig) {
-        if (!enabled(feature)) {
+        return active(settings(), feature, requiredConfig);
+    }
+
+    /** Whether {@code feature} is enabled and fully configured in a lookup the CALLER supplies, keyed by the bare
+     *  feature name and the bare required-config keys - see {@link #enabled(UnaryOperator, String)}. */
+    public static boolean active(UnaryOperator<String> config, String feature, Collection<String> requiredConfig) {
+        if (!enabled(config, feature)) {
             return false;
         }
         List<String> missing = missing(requiredConfig, config);
@@ -104,6 +138,42 @@ public final class Features {
                     + "; set " + NAMESPACE + feature + "=false to disable it and silence this.");
         }
         return false;
+    }
+
+    /**
+     * A bare-name view of a namespaced property source - {@code Features.namespaced(environment::getProperty)}.
+     *
+     * <p><b>This is the one place {@code jenesis.repository.} is spelled.</b> Every seam that takes a config lookup
+     * in this product reads it with BARE names ({@code socket-token}, {@code scheduled-scan}, {@code read-only}) -
+     * some hundred and thirty call sites do - while a deployment configures those under the shared namespace. The
+     * adapter between the two used to be a lambda written out at each entry point, thirty-five times, which is a
+     * spelling of the product's own namespace that a typo makes silently unfindable. It is written once here.
+     *
+     */
+    public static UnaryOperator<String> namespaced(UnaryOperator<String> properties) {
+        Objects.requireNonNull(properties, "properties");
+        return name -> properties.apply(key(name));
+    }
+
+    /**
+     * The deployment's settings, keyed by bare name - the view every seam that takes a config lookup expects.
+     *
+     * <p>What sits behind it is {@link #configure}'s business and no caller's: the application shell hands in the
+     * Spring {@code Environment} at boot, a test hands in a map, and outside a shell it is system properties and the
+     * environment. A caller that wants to ask the deployment something asks for this, rather than reaching for the
+     * {@code Environment} and re-deriving the namespace on the way - which is how the same prefix came to be spelled
+     * in thirty-five places.
+     *
+     * <p>Read live, like {@link #lookup()}: a later {@code configure}/{@code reset} is honoured by a view handed out
+     * before it.
+     */
+    public static UnaryOperator<String> settings() {
+        return name -> lookup().apply(key(name));
+    }
+
+    /** The configuration key a bare feature or setting name resolves to - the one definition of the namespace. */
+    public static String key(String name) {
+        return NAMESPACE + name;
     }
 
     /** The keys of {@code requiredConfig} that are unset or blank in {@code lookup} - the shared check behind
