@@ -81,22 +81,7 @@ public final class ArchiveInflation {
      *         (&sect;9)
      */
     public static int largestEntry() {
-        String configured = Features.lookup().apply(LARGEST_ENTRY_KEY);
-        if (configured == null || configured.isBlank()) {
-            return LARGEST_ENTRY;
-        }
-        int bytes;
-        try {
-            bytes = Integer.parseInt(configured.trim());
-        } catch (NumberFormatException cause) {
-            throw new IllegalArgumentException(LARGEST_ENTRY_KEY + " must be a positive number of bytes, not '"
-                    + configured + "'", cause);
-        }
-        if (bytes <= 0) {
-            throw new IllegalArgumentException(LARGEST_ENTRY_KEY + " must be a positive number of bytes, not "
-                    + bytes);
-        }
-        return bytes;
+        return Limits.positive(LARGEST_ENTRY_KEY, LARGEST_ENTRY);
     }
 
     /** Read one archive member whole under the configured {@link #largestEntry()} ceiling - the call a format makes

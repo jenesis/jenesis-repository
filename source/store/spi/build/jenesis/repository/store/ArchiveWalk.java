@@ -88,21 +88,7 @@ public final class ArchiveWalk {
      *         operator who raised a cap and got the spelling wrong must not be left believing they raised it (&sect;9)
      */
     public static long largestWalk() {
-        String configured = Features.lookup().apply(LARGEST_WALK_KEY);
-        if (configured == null || configured.isBlank()) {
-            return LARGEST_WALK;
-        }
-        long bytes;
-        try {
-            bytes = Long.parseLong(configured.trim());
-        } catch (NumberFormatException cause) {
-            throw new IllegalArgumentException(LARGEST_WALK_KEY + " must be a positive number of bytes, not '"
-                    + configured + "'", cause);
-        }
-        if (bytes <= 0) {
-            throw new IllegalArgumentException(LARGEST_WALK_KEY + " must be a positive number of bytes, not " + bytes);
-        }
-        return bytes;
+        return Limits.positive(LARGEST_WALK_KEY, LARGEST_WALK);
     }
 
     /**

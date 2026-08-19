@@ -219,6 +219,27 @@ public interface PublishInterceptor extends PublicationObserver {
          */
         int LARGEST_SIBLING = 8 * 1024 * 1024;
 
+        /**
+         * The key an operator raises or lowers {@link #largestSibling()} with.
+         *
+         * <p>Deployment-global and read live, exactly as {@code jenesis.archive.largest-walk} is. The default suits
+         * every ecosystem's own conventions - a POM, a packument, a nuspec are all far inside it - but a registry
+         * whose companion documents are genuinely larger should be able to say so rather than have a gate fail its
+         * whole-document read on a metadata file the ecosystem considers ordinary.
+         */
+        String LARGEST_SIBLING_KEY = "jenesis.publish.largest-sibling";
+
+        /**
+         * The configured whole-sibling ceiling - {@link #LARGEST_SIBLING} unless an operator set
+         * {@link #LARGEST_SIBLING_KEY}.
+         *
+         * @throws IllegalArgumentException when the key is set to something that is not a positive number of bytes -
+         *         an operator who raised a cap and got the spelling wrong must not be left believing they raised it
+         */
+        static int largestSibling() {
+            return Limits.positive(LARGEST_SIBLING_KEY, LARGEST_SIBLING);
+        }
+
         /** Open the blob this artifact was stored under ({@code blobs/<hash>}); the caller closes the stream. */
         InputStream open() throws IOException;
 
