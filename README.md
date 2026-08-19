@@ -1,618 +1,103 @@
 jenesis-repository
 ==================
 
-A dual-layout artifact repository: it serves the same artifacts under both the
-**Maven layout** (so any Maven, Gradle, or Jenesis Maven-mode build resolves them)
-and the **Jenesis module layout** (so a `modular`/`modular_to_maven` build resolves
-them by module name). Publish a module once and the server **computes its POM** so both
-ecosystems can consume it from a single upload; a published `maven-metadata.xml` is stored
-and served **verbatim** by default, with on-read computation an opt-in. It is
-**also an OCI / Docker registry**, so `docker push` and `docker pull` work against the
-very same store.
+[![release](https://img.shields.io/github/v/release/raphw/jenesis-repository?label=release)](https://github.com/raphw/jenesis-repository/releases/latest)
+![build](https://github.com/raphw/jenesis-repository/actions/workflows/build.yml/badge.svg)
 
-It is **free and open**, and **extensible by design**: every layout it speaks - the
-Maven layout, the module layout, OCI/Docker, the raw layout - and every storage backend,
-importer and console panel is a `ServiceLoader` plug-in over one content-addressed store,
-with no core to fork (see *Extensible by design*, below).
+> ### [Jenesis](https://jenesis.build) - a modern Java build tool
+> _Java-native config, plugin-free, with `module-info.java` treated as a feature, not an afterthought._
 
-A container registry, too
--------------------------
+**A dual-layout artifact repository.** It serves the same artifacts under the Maven layout, so any Maven,
+Gradle or Jenesis build resolves them, and under the Jenesis module layout, so a modular build resolves them
+by module name - publish once, and the server computes the POM both ecosystems need. It is also a
+standards-compliant OCI registry over the same store, so `docker push` works against it too. Every layout,
+storage backend, importer and console panel is a `ServiceLoader` plug-in over one content-addressed store.
 
-The same server is a standards-compliant **OCI registry** (the `/v2/` Distribution
-API), so the Docker and OCI tooling talks to it directly, with no plugin or sidecar:
+📖 **The user documentation lives at [jenesis.build/repository](https://jenesis.build/repository/)** -
+deploying it, the formats, storage backends, proxying, authentication, maintenance and the console. What
+follows is for people working *on* this repository.
 
-    docker tag my-app repo.example.com/my-app:1.0
-    docker push repo.example.com/my-app:1.0
-    docker pull repo.example.com/my-app:1.0
+## Building and running
 
-It implements the registry protocol end to end: monolithic **and** chunked blob
-uploads, manifests addressed by tag or by digest (the media type kept in a sidecar so a
-pull returns it verbatim), `tags/list`, the paged `_catalog` repository list, and `HEAD`
-existence checks. It can also run as
-a **pull-through mirror**: a manifest or blob miss is fetched from an upstream registry
-(Docker Hub by default), verified by digest, stored, and re-served, following the
-Distribution bearer-token flow and resolving multi-arch image indexes.
+The build tool is a git submodule (`build/jenesis` symlinks into `.jenesis/upstream`), so populate it once
+after cloning:
 
-The fit is unusually clean because an OCI blob is addressed by its `sha256:<hex>`
-digest, which is **exactly the content-addressed `blobs/<hex>` key the repository
-already uses for everything else**. So image layers, configs and manifests dedupe
-against each other and share storage with the rest of the repository (identical bytes
-are stored once), and a container image inherits the same multi-tenancy, authorization,
-storage and console as a Maven artifact, for free.
+```bash
+git submodule update --init                          # the pinned build tool
+java build/jenesis/Project.java build                # build everything
+java build/jenesis/Project.java +source+store+s3 build   # one module and its dependencies
+```
 
-Extensible by design
---------------------
+Run the server against the filesystem backend:
 
-Everything the server speaks is a plug-in over one content-addressed store, discovered
-with `ServiceLoader`. There is no central table of formats to edit and no core to fork;
-a deployment simply runs whichever plug-ins are on its module path:
+```bash
+JENESIS_STORE_ROOT=/var/lib/jenesis-repository \
+  java -Djenesis.execute.module=source+server build/jenesis/Execute.java
+```
 
- - **Repository formats** (`RepositoryFormat`) - the wire protocol of one client
-   ecosystem. The Maven layout, the Jenesis module layout, OCI/Docker and a raw/generic
-   layout ship as modules; another ecosystem (npm, PyPI, NuGet, ...) is one more.
- - **Storage backends** (`ArtifactStoreProvider`, returning an `ArtifactStore`) -
-   filesystem, S3 / MinIO, Google Cloud Storage and Azure Blob ship in the core; a
-   new backend is a single provider.
- - **Importers** (`RepositoryImporter`, an opt-in capability a format adds) - migrate one
-   ecosystem off an incumbent manager (see *Importing from another repository*, below).
- - **Import sources** (`ImportSourceProvider`) - connect to an incumbent manager and
-   walk its assets; Nexus and Artifactory ship as modules, another incumbent is one more.
- - **Console panels** (`Panel`) - contribute a page to the web console.
- - **Pull-through proxying** (`ProxyFormat`) - an opt-in capability a format adds to
-   mirror an upstream; the OCI format uses it to mirror Docker Hub.
- - **Upstream connectivity** (`FetcherProvider`) - the HTTP fetcher behind pull-through proxying and
-   repository imports is a discovered module (`source/proxy`, providing `http` with index revalidation and
-   negative caching); without it a deployment serves local content only and refuses imports.
- - **Workload token exchange** (`TokenExchangeProvider`) - exchanging a CI job's identity token for a
-   short-lived credential is a discovered module (`source/oidc`, validating against the tenant's trust
-   policy); the OAuth2/JOSE dependency stack lives there, not in the server.
- - **Credential usage tracking** (`KeyUsageTrackerProvider`) - stamping a credential's last use and count
-   is a discovered module (`source/usage`, a batching off-request worker); without it nothing records and
-   the worker reports as off.
- - **Rate limiting** (`RateLimiterProvider`) - the metering strategy behind the 429 filter is a discovered
-   module (`source/ratelimit`, an in-memory token bucket); a coordinated limiter for a replicated deployment
-   would be another module, and without one nothing is limited.
- - **Publication screening** (`PublishInterceptor`, a `PublicationObserver` sub-interface) - the
-   verdict-bearing hook run when an upload commits, after the blob is stored content-addressed but
-   *before* its pointer is linked: an ordered chain reads the neutral `ArtifactDescriptor` the format
-   emits and returns `ACCEPT` / `QUARANTINE` / `REJECT`, and the same screen can *withhold* an
-   already-published path on read (the quarantine read side, for a verdict that changes after the
-   fact) - so a compliance gate, scanner or audit plugs in without any format knowing it. Because a
-   screen *is* an observer, one `uses PublicationObserver` clause discovers both hook classes and
-   `Publication` splits the discovered list by `instanceof` - driving the interceptor chain, then
-   notifying every observer after commit. The verdict methods propagate on failure (a gate that
-   cannot decide fails the write); the inherited observe methods are contained like any observer's.
- - **After-commit observation** (`PublicationObserver`) - the general publication hook class, with
-   no say in any verdict: notified only once an accepted artifact's pointer is linked and serving
-   (never for a quarantined or rejected publish) and once a serving pointer is removed
-   (`onDeleted`, once per pointer, with the path and the blob hash the pointer named), with a
-   failure logged and contained so it can never fail the upload or block the removal - the seam
-   forwarding, webhooks, replication or a scan hand-off ride, leaving at most a small store object
-   for a background worker to drain. The events are the steady-state half of the two-route
-   derived-metadata contract; the walk SPI's `WalkConsumer` is the back-fill / self-heal half.
-   The core ships no screen and no observer, so every upload is accepted and served exactly as
-   before; a commercial edition plugs its compliance gate and forwarders in here.
- - **Incremental derived indexes** (`DirtyIndexFeed`) - a small reusable change-feed primitive so a
-   module that derives an index from what is published (a search index, a dependents graph, a size
-   roll-up) keeps its steady state O(&Delta;) - proportional to what changed - instead of a full
-   O(N) rebuild every pass. This is the minimal **dirty-set** form: the write / delete paths mark
-   each touched coordinate under a `.../dirty/` store prefix (fed from the same `onPublished` /
-   `onDeleted` events), a sweep reads only the marked coordinates and upserts each into its index
-   by coordinate, then clears the applied markers so the next sweep sees only the new changes. A
-   monotonic version on each marker gives the out-of-order guard (a stale event never regresses a
-   newer document), the upsert-by-coordinate is idempotent (replay-safe), and markers are cleared
-   only after the index snapshot commits (crash-safe). A periodic full **reconcile** rebuilds from
-   durable truth and garbage-collects the feed, healing any change the events missed (an import or a
-   manual store edit that bypassed the observer); a derived index therefore lags a write by at most
-   one sweep interval - explicit and acceptable. `java.base` + the store SPI only, no ServiceLoader
-   or config. The richer append-only-journal-with-durable-cursor form (for a consumer that needs the
-   actual ordered event stream, not just "this coordinate changed") is documented on the type as the
-   next step, deliberately not built. The Lucene search index rides this feed as its O(&Delta;)
-   steady state, keeping the full rebuild only for bootstrap, a format-version bump, and the
-   reconcile.
- - **The tenant directory** (`TenantsProvider`, returning a `Tenants`) - which tenants exist in the
-   shared `<tenant>/<repository>/...` layout, with the lifecycle to add one, is a discovered module;
-   without one the directory is exactly the configured fixed tenant, and a console or API offers
-   tenant management only when `TenantsProvider.installed()` says the capability is there. A
-   multi-tenant edition backs it with the store, its tenants the top-level scopes.
+The server `requires` no layout, backend or importer of its own: it discovers whatever is on its module path
+at startup, so what you put beside `source+server` is what the deployment speaks. For local work the `dev`
+profile (`SPRING_PROFILES_ACTIVE=dev`) swaps the OIDC sign-in for a built-in `admin`/`admin` form login.
 
-A whole format is three methods over the already tenant-and-repository-scoped store:
+`Dockerfile` builds the all-in-one image: `source/bundle` requires every implementation, and its
+`bundle=true` packaging emits the resolved runtime closure that the image consumes, so a deployment is
+trimmed by configuration rather than rebuilt.
 
-    public interface RepositoryFormat {
-        String name();                                              // "maven", "oci", "npm"
-        boolean handles(String path);                               // does it own this request path?
-        void handle(FormatExchange exchange, ArtifactStore store);  // serve or accept the request
-    }
+## Module layout
 
-So a new ecosystem is a module that depends only on this SPI and the store, declares
-`provides RepositoryFormat with ...`, and is discovered at startup - it inherits the
-content-addressed storage, multi-tenancy, authorization and console without
-touching any of them. The OCI/Docker registry is itself the proof: a single
-self-contained module that needs nothing but the SPI and the store.
+Every module is a JPMS module under `source/`, and the split into `spi` and implementations is the extension
+seam: a plug-in implements an SPI and is discovered by `ServiceLoader`, never by the core naming it.
 
-Two conventions keep this honest:
+| Path | Module |
+|------|--------|
+| `source/server`, `source/server-spi` | The format-neutral dispatcher: routing, auth, the publish edge, the pull-through serve loop, and the `/api` surface. Knows no layout. |
+| `source/store/{spi,filesystem,s3,gcs,azure}` | The content-addressed store and its backends. |
+| `source/format/{spi,maven,java,oci,raw}` | The layouts, each a plug-in: Maven, the Jenesis module layout, OCI/Docker, and raw. |
+| `source/importer/{spi,maven,nexus,artifactory,index}` | Migration connectors that walk another repository and pull its artifacts in. |
+| `source/proxy` | The upstream fetcher behind pull-through caching, with revalidation and a negative cache. |
+| `source/walk/{spi,store}`, `source/gc/{spi,store}` | The resumable artifact walk, and mark-sweep garbage collection over it. |
+| `source/ui` | The web console (`/console`, `/browse`) and its design system. |
+| `source/oidc`, `source/ratelimit`, `source/usage` | Sign-in, the request-rate ceiling, and credential-usage tracking. |
+| `source/observation/spi`, `source/posture/spi`, `source/icon/spi` | Observation hooks, security-posture advisories, and console iconography. |
+| `source/feed`, `source/bundle`, `source/contract/testkit` | The advisory feed, the all-in-one launchable module, and the shared contract test kit. |
 
- - **The server names no plug-in.** The server module only `uses` the SPIs; it never
-   `requires` a concrete format, backend or inspector. So a deployment runs a **plain
-   server with exactly the layouts and backends on its module path** - nothing more.
-   Adding one is dropping a jar on the path; removing one is leaving it off. The
-   distribution (the image's module set) chooses; the core stays generic.
- - **An implementation lives under its SPI's package.** A format is
-   `build.jenesis.repository.format.<name>` under the `build.jenesis.repository.format`
-   SPI; a storage backend is `build.jenesis.repository.store.<name>` under the store SPI.
-   The module name states which extension point it plugs into.
+Each family's `testkit` module carries the contract tests an implementation must pass, so a new backend or
+format is validated against the same suite the built-in ones are.
 
-Writing a plug-in
------------------
+## Writing a plug-in
 
-A plug-in is an ordinary module: implement the SPI, declare it with `provides ... with
-...`, and put the module on the server's path. Nothing in the core changes - the server
-already `uses` each SPI, so `ServiceLoader` finds the implementation at startup.
+A plug-in is a module that `provides` one of the SPIs above. Two rules make the seam work:
 
-As a worked example, here is a tiny format ("file handler") that stores a file on `PUT`
-and serves it back on `GET`, straight over the shared content-addressed store:
+- **Implement the contract, then run its test kit.** `source/*/testkit` exists so an implementation proves it
+  behaves like the ones already shipping - a store backend that passes the store contract is one the server
+  can drive without knowing which it got.
+- **A publish screen is a `PublishInterceptor`.** It sees the artifact once it is stored content-addressed but
+  before any pointer is linked, returns a verdict, and can withhold an already-linked path on read. No
+  provider ships by default, so the chain is empty and every upload is accepted.
 
-    // com/acme/files/FilesFormat.java
-    package com.acme.files;
+`AGENTS.md` carries the working conventions for this repository, and `docs/` holds the design notes that
+outlive a single change.
 
-    import build.jenesis.repository.format.FormatExchange;
-    import build.jenesis.repository.format.RepositoryFormat;
-    import build.jenesis.repository.store.ArtifactStore;
-    import java.io.IOException;
-    import java.io.OutputStream;
+## Tests
 
-    public final class FilesFormat implements RepositoryFormat {
+```bash
+java build/jenesis/Project.java build     # compile and run the suite
+```
 
-        public String name() {
-            return "files";
-        }
+Contract suites are tagged, and CI decides which tagged suites to run from what a change touches. A change to
+an SPI is expected to arrive with the test-kit clause that pins the new behaviour, so every implementation
+inherits it.
 
-        public boolean handles(String path) {        // the repository prefix is already stripped
-            return path.startsWith("/files/");
-        }
+## Continuous integration and releases
 
-        public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
-            String key = "files/" + exchange.path().substring("/files/".length());
-            switch (exchange.method()) {
-                case "PUT" -> {                                  // request body streams straight into the store
-                    store.write(key, exchange.requestStream());
-                    exchange.respond(201);
-                }
-                case "GET" -> {
-                    if (!store.exists(key)) {
-                        exchange.respond(404);
-                    } else {                                     // and streams straight back out, never buffered
-                        try (OutputStream out = exchange.respond(200, store.size(key))) {
-                            store.read(key, out);
-                        }
-                    }
-                }
-                default -> exchange.respond(405);
-            }
-        }
-    }
+`.github/workflows/build.yml` builds and tests on push and pull request, on JDK 25, and uploads `target/` on
+failure. It logs in to Docker Hub when credentials are configured, only to avoid anonymous pull rate limits
+for the container-backed tests.
 
-Register it as a service in the module descriptor. The module depends only on the
-format SPI and the store, never on the server:
+`.github/workflows/release.yml` runs after a successful build on `main` whose head commit starts with
+`[release]` - `[release X.Y.Z]` for an exact version, `[release]` alone for the next minor of the latest tag.
+JReleaser then signs, publishes and tags. `project.properties` carries the POM metadata.
 
-    // module-info.java
-    module com.acme.files {
-        requires build.jenesis.repository.format;
-        requires build.jenesis.repository.store;
-        provides build.jenesis.repository.format.RepositoryFormat
-                with com.acme.files.FilesFormat;
-    }
+## License
 
-Then put the module on the server's module path (in a Jenesis build, register it as a
-module and select it alongside `source+server`). On the next start the dispatcher
-loads it, routes every `/files/...` request to it, and it inherits multi-tenancy,
-authorization and the console untouched.
-
-Every extension point works the same way - implement the interface, then `provides ...
-with ...` it from a module on the path:
-
-| Plug-in | Implement | `provides` service |
-|---------|-----------|--------------------|
-| A repository format / file handler | `RepositoryFormat`      | `build.jenesis.repository.format.RepositoryFormat`   |
-| A storage backend                  | `ArtifactStoreProvider` | `build.jenesis.repository.store.ArtifactStoreProvider` |
-| An import source (incumbent connector) | `ImportSourceProvider` | `build.jenesis.repository.importer.ImportSourceProvider` |
-| A console panel                    | `Panel`                 | `build.jenesis.repository.ui.Panel`                  |
-| An after-commit publish / removal observer | `PublicationObserver` | `build.jenesis.repository.store.PublicationObserver` |
-| An upload screen (gate/quarantine) | `PublishInterceptor` (a `PublicationObserver` sub-interface) | `build.jenesis.repository.store.PublicationObserver` |
-| An extra entry on `/api/capabilities` | `CapabilityContributor` | `build.jenesis.repository.server.CapabilityContributor` |
-
-**Extending `/api/capabilities` without a client change.** The capabilities endpoint
-advertises the deployment-wide flags a console or client reads to adapt (`readOnly`,
-`auth`, `anonymousRights`). A richer distribution adds to that map by shipping a
-`CapabilityContributor` - the server builds its base map, then merges every
-`ServiceLoader`-discovered contributor onto it, so an edition contributes its extra
-capabilities (supported formats, import sources, module flags) onto the *one*
-free-served `/api/capabilities` with **no bean override and no client change**. The
-merge rule is fixed and safe: contributors *extend* the base map, a **base key always
-wins** a conflict (so a contributor can never shadow the free product's own flags), and
-among contributors the first discovered wins; new keys are appended after the base keys.
-With no contributor installed - the free product - the served map is the base map,
-byte-for-byte unchanged. This replaces the earlier stopgap where a downstream edition
-dropped the free mapping to serve its own richer `/api/capabilities` controller.
-
-A format may additionally implement any of three optional capabilities, detected
-by `instanceof` so a format that has no use for them is unaffected: `ProxyFormat` to gain
-pull-through mirroring (the OCI format does exactly that to mirror Docker Hub),
-`ArtifactLayout` to expose the neutral coordinate behind a request path - its
-`{ecosystem, coordinate, version}` and prerelease flag, and the paths a version occupies -
-so post-processing, inventory and cleanup key on the coordinate a format supplies rather
-than parsing its layout, and `RepositoryImporter` to absorb one ecosystem's artifacts from
-an incumbent manager during a migration (its `imports(sourceFormat)` / `importTarget` /
-`importArtifact` named off the format's own `handles` / `describe` so one object carries
-both). The import orchestrator filters the discovered formats by this capability rather
-than running a second discovery pass.
-
-Sits on cloud infra by design
------------------------------
-
-The server is **stateless**. Every byte it owns - artifacts, generated POMs,
-checksums, and the `maven-metadata.xml` / module index - lives in **cloud object
-storage** (S3, GCS, or Azure Blob), whose durability (eleven nines) and
-availability (multi-AZ) are the managed cloud's job, not yours. So:
-
- - an instance dying loses nothing; the cloud restarts or replaces it;
- - it scales horizontally behind a load balancer or runs serverless (Cloud Run /
-   ECS Fargate / Container Apps) with no sticky state;
- - you run it in your own cloud account, so durability and uptime are the managed
-   cloud's, not an operations burden.
-
-Streams end to end, never buffering a blob
-------------------------------------------
-
-An artifact moves **from the network straight to storage and back** - it is never held
-whole in memory. An upload streams from the request body through the digest into the
-store; a download streams from the store to the response. The heap cost of a transfer is
-one fixed-size buffer, not the artifact, so a 4 KB POM and a 4 GB image layer cost the
-same memory and a small, fixed heap serves arbitrarily large artifacts under arbitrary
-concurrency. This is a structural property, not an optimization - it holds on every path:
-
- - **The store speaks streams.** `write(key, InputStream)` and `read(key, OutputStream)`
-   copy through; `writeBlob(InputStream)` content-addresses a blob *as it streams*,
-   digesting on the way to `blobs/<sha256>`. A backend that needs the length up front
-   (S3 `PutObject`) spills to a temp file, never to the heap.
- - **Formats never see a `byte[]` body.** `FormatExchange` hands the request out as an
-   `InputStream` and the response as an `OutputStream` - there is no "give me the whole
-   body" call to reach for, so a plug-in streams by default.
- - **Even inspection streams.** Cross-publishing a modular jar into the module layout
-   needs the jar's module name, so the Maven layout stores the blob first and reads the
-   name back *from storage* rather than buffering the jar to look inside it.
- - **Chunked `docker push` streams.** Each uploaded chunk lands in storage as it
-   arrives; finalizing concatenates the chunks as one stream into `writeBlob`, so a
-   multi-hundred-megabyte layer never accumulates in memory.
- - **The pull-through mirror and the importers stream too.** An upstream miss or a
-   migrated asset is copied from upstream to the store as a stream, digest and all.
-
-The only bytes ever fully in memory are **small, bounded metadata** - a generated
-`maven-metadata.xml`, a checksum, a manifest's media type, a compare-and-set pointer -
-never an artifact, a layer or an image. Together with the statelessness above, this is
-what lets the server run serverless in a tiny, fixed footprint.
-
-Modules
--------
-
-    source/                   all module sources (not a module itself)
-      format/                 repository formats
-        spi/                  the RepositoryFormat SPI + its instanceof capabilities (Proxy/Layout/Importer)
-        java/ maven/ ...      the built-in layouts (java, maven, jenesis, oci, raw)
-      store/                  storage backends
-        spi/                  the ArtifactStore SPI + content-addressed Publication
-        filesystem/           the default filesystem backend
-        s3/                   S3-compatible backend (AWS S3, MinIO)
-        gcs/                  Google Cloud Storage backend (XML API, HMAC keys)
-        azure/                Azure Blob backend
-      importer/               import connectors (the read half of a migration)
-        spi/                  the ImportSource SPI
-        nexus/ artifactory/   the built-in vendor connectors
-        maven/ jenesis/       the vendor-neutral Maven tree walk and the jenesis-to-jenesis connector
-      server/                 the dual-layout repository server (RepositoryApplication)
-      ui/                     a simple, extendable web console (browse, SPI catalog, metrics overview)
-    test/                     tests, mirroring source/ (server/, store/s3, store/gcs, store/azure)
-
-The console is an open shell with a **panel-registration SPI**, so additional panels
-plug in through the console's extension points without forking the core. The bundled panels are
-the artifact **browse** and an **SPI catalog** - a read-only view of the whole plug-in surface
-grouped by SPI, discovered from the module graph's `provides` declarations (the free counterpart of
-the downstream console's SPI catalogue and its `/api/admin/spi` admin API).
-
-A **metrics overview** panel (WO.2) surfaces all of the instance's observability in one plain,
-no-graphs page for operators who are not staring at Grafana: every self-describing signal collected
-through `ObservabilityReport.discover()` - current values, health states and background-task status,
-each shown with the **description from its registration** and, for a metric that declares a `limit`,
-its used-vs-available and how close to the ceiling it is (a plain number and bar, never a
-time-series graph). The listing is **searchable** and degrades gracefully - a disabled or absent
-source contributes nothing, so it is simply not listed, and an instance with no source installed
-shows a friendly empty state rather than an error. It is the free counterpart of the downstream
-console's metrics-overview page and its `/api/admin/observability` admin API.
-
-The engine adopters self-describe their signals through the same `ObservabilitySource` seam: the
-rate limiter (`jenesis.ratelimit.*`), the key-usage tracker (`jenesis.usage.*`), the storage quota
-(`jenesis.quota.*`), the proxy caches (`jenesis.proxy.*`) and now the two whole-store sweep engines -
-the shared-walk engine (`StoreArtifactWalk`, reporting `jenesis.walk.segments` a bounded convergence
-gauge, `jenesis.walk.resumes` a takeover counter, and a `jenesis.walk.pass` task status) and the
-mark-sweep garbage collector (`MarkSweepGarbageCollector`, reporting `jenesis.gc.condemned` the
-in-flight condemned gauge, `jenesis.gc.collected` a reclaimed counter, and a `jenesis.gc.lastrun`
-task status; a deployment with no collector installed or selected contributes nothing, so GC-off is
-visible on the capabilities surface rather than as a silent signal). A never-run walk and a never-run
-collector each report nothing until their first pass. The downstream `OBSERVABILITY.md` §11 Adopters
-catalogue renders these rows automatically once the republished modules are re-pinned in the operator
-§9 batch.
-
-| Module | Folder | What it is |
-|--------|--------|------------|
-| `build.jenesis.repository.store`    | `source/store/spi` | The `ArtifactStore` SPI (streaming `read`/`open`/`write` and the content-addressing `writeBlob` that digests a blob as it streams, plus `exists`/`size`/`list`/`delete`, the ordered child paging `page` - start-after + limit, overridden natively per backend so a flat millions-entry namespace never materialises as one list - and `writeVersioned` for cross-node compare-and-set, over an object namespace), the `QuotaArtifactStore` decorator that caps a scope's stored content bytes, and the format-neutral content-addressed store (`Publication`) that every format publishes through - including its gated `publish(descriptor, stream)`, which stores the blob, runs the ordered `ServiceLoader`-discovered `PublishInterceptor` chain over the neutral `ArtifactDescriptor`, routes the pointer by the strongest disposition (accept / quarantine / reject), and only then notifies the `PublicationObserver` after-commit hooks (contained, accepted publishes only); its `unpublish` notifies the same observers of the removal (`onDeleted`, once per removed pointer, path + blob hash - contained the same way, never blocking the removal; a layout-aware eviction enriches the event through `unpublish(descriptor)`, or reports a pointer it deleted in a format's own namespace through `deleted(descriptor)`); its serving lookup (`located`) asks the same screens whether a path is withheld - the quarantine read side. Also the reusable `DirtyIndexFeed` incremental-derived-index primitive (dirty-set form): `touched`/`removed` mark a coordinate under a `.../dirty/` prefix, `applySince` sweeps only the marked coordinates for an idempotent upsert-by-coordinate (with a monotonic-version out-of-order guard), `clear` compacts the applied markers after the snapshot commits (crash-safe), and `compactThrough` GCs the feed behind a periodic full reconcile - so a search / dependents / roll-up index runs O(&Delta;) in steady state, with the append-only-journal-with-cursor form left documented as the richer option. `java.base` only, so a format plugin builds on it without pulling in the server. |
-| `build.jenesis.repository.store.filesystem` | `source/store/filesystem` | The default filesystem backend: blobs under a mounted root (`JENESIS_STORE_ROOT`), the provider `ArtifactStoreProvider.resolve` falls back to when no other backend is named. `provides` its `ArtifactStoreProvider`, discovered with `ServiceLoader`; the store SPI + `java.base` only. |
-| `build.jenesis.repository.store.s3`       | `source/store/s3`         | S3-compatible backend (AWS SDK v2). Selected with `jenesis.repository.store=s3` and `JENESIS_AWS_BUCKET`; also MinIO / Ceph via `JENESIS_AWS_ENDPOINT`. Credentials come from the standard AWS chain (environment, profile, instance role), or from `JENESIS_AWS_ACCESS_KEY_ID` + `JENESIS_AWS_SECRET_ACCESS_KEY` when both are set (the path a self-hosted MinIO / Ceph takes). The version token is the object ETag, so `writeVersioned` is a true cross-node compare-and-set over S3's `If-None-Match` / `If-Match` conditional writes (no lock service). |
-| `build.jenesis.repository.store.gcs`      | `source/store/gcs`        | Google Cloud Storage backend over GCS's S3-compatible XML API, reusing the same modular AWS SDK v2 client - no Google SDK in the closure (the native `google-cloud-storage` client's dependency graph carries jars without a stable module name). Selected with `jenesis.repository.store=gcs` and `JENESIS_GCS_BUCKET`, authenticated with an HMAC key pair `JENESIS_GCS_ACCESS_KEY_ID` + `JENESIS_GCS_SECRET_ACCESS_KEY` (a secret; Cloud Storage > Settings > Interoperability); optional `JENESIS_GCS_ENDPOINT` / `JENESIS_GCS_REGION`. GCS honours `If-Match` only on reads, so the version token is the object *generation* and `writeVersioned` is a cross-node compare-and-set over GCS's `x-goog-if-generation-match` precondition; uploads disable aws-chunked signing and trailing checksums, which GCS does not decode. |
-| `build.jenesis.repository.store.azure`    | `source/store/azure`      | Azure Blob backend (azure-storage-blob SDK). Selected with `jenesis.repository.store=azure-blob`; `JENESIS_AZURE_CONNECTION_STRING` (+ optional `JENESIS_AZURE_CONTAINER`). The blob endpoint the connection string resolves to (`BlobEndpoint`, else `DefaultEndpointsProtocol`, else the `UseDevelopmentStorage` shorthand) must be `https` unless `JENESIS_AZURE_ALLOW_INSECURE_ENDPOINT=true` opts out - the same rule `JENESIS_AWS_ENDPOINT` / `JENESIS_GCS_ENDPOINT` carry, reached through the connection string because that is where this SDK carries the scheme, and where the account key travels beside it. The version token is the blob ETag, so `writeVersioned` is a cross-node compare-and-set over Azure's `If-None-Match` / `If-Match` conditional writes. |
-| `build.jenesis.repository.walk`     | `source/walk/spi`     | The shared artifact-walk SPI: `ArtifactWalk`, one totally ordered (name-sorted siblings, `'/'` below every other character), resumable (per-segment cursor, checkpointed by compare-and-set every `jenesis.walk.checkpoint` items), range-segmented (`jenesis.walk.segments` target, static plan per pass) and multi-node-aware (the claim lives inside the per-segment CAS object - checkpoint doubles as lease renewal, claim = CAS on pending-or-expired, refuse-don't-steal, a dead node's segment resumes from its last cursor) key-stream under root prefixes - what garbage collection, retention eviction and every derived-metadata rebuild enumerate through instead of private `list()` loops. Delivery is exactly-once per pass, at-least-once for the uncommitted stride after a crash-resume, so consumers are idempotent; a consumer that buffers derived writes flushes them in `KeyVisitor.beforeCheckpoint`, which runs before every durable cursor commit, so a resume never skips an item whose derived write died in a buffer. `WalkProvider` (optional-unique selection `jenesis.repository.walk=<name>`; nothing installed → walk-riding surfaces degrade gracefully, while a selection nothing answers to fails loudly rather than turning every sweep into a silent no-op), `WalkConsumer` (the walk half of the two-route contract: events for steady state, the walk for back-fill / refresh / self-heal - `name()`, idempotent `onRetained(descriptor, store)`, `onPassStarted`/`onPassCompleted` hooks) and the shared `RebuildPass` that a scheduled surface runs on a cadence: one enumeration of the pointer roots feeding every discovered consumer - each serving pointer delivered as a descriptor (request path under `publish/`, raw store key under a format's own roots, hash always, blob size or `-1` for a torn pointer), a consumer failure stopping the segment loudly (resumed from the last cursor, never a silently-truncated rebuild), so a plugin enabled late rebuilds its whole view from one pass. Store SPI + `java.base` only. |
-| `build.jenesis.repository.walk.store` | `source/walk/store` | The default walk implementation (`paged-descent`, `provides WalkProvider`): the ordered depth-first descent over the store's own key layout, consuming only `ArtifactStore.page` so a resume deep inside a huge flat namespace is a seek; pass state (`walks/<consumer>/manifest` + per-segment claim objects) persisted only through the store, so a pass survives process death on any node sharing it; the flat content-addressed `blobs/` namespace is cut by leading hex byte without listing it. |
-| `build.jenesis.repository.gc`       | `source/gc/spi`       | The garbage-collection SPI: `GarbageCollector` reclaims content blobs no live pointer references, in the retention sweeper's shape - `plan` is the dry run a maintenance console previews (writes nothing), `collect` computes and applies - handed its pointer roots by the caller (always `publish`; a blobs-namespace format's declared roots are added by the caller that knows them). `GarbageCollectorProvider` (optional-unique selection `jenesis.repository.gc=<name>`) is **no-op by absence**: nothing installed reclaims nothing, ever (an explicitly selected collector that cannot be honoured fails loudly instead of pretending to be that no-op) - deletion is the one unrecoverable act, so it is strictly opt-in, and the write path cooperates by clearing the collector's `gc/condemned/<hash>` marker whenever `Publication.link` lands a pointer. Store SPI + `java.base` only. |
-| `build.jenesis.repository.gc.store` | `source/gc/store`     | The reference collector (`mark-sweep`, `provides GarbageCollectorProvider`), riding the shared walk - never its own listing loop. Sharded mark: references land as append-only batch objects `gc/<pass>/refs/<hh>/...`, flushed before every walk checkpoint (`KeyVisitor.beforeCheckpoint`) so a committed cursor never lies about a lost reference; sweep memory is one leading-byte shard at a time, O(N/256), never an O(N) set. Condemn-then-collect across two consecutive passes: an unreferenced blob is first condemned (`gc/condemned/<hash>` - the marker is the clock) and deleted only when a later pass confirms it still unreferenced, at least one full interval of grace, with the marker re-read immediately before deletion - so a referenced, re-linked (dedup re-publish) or in-flight blob is never deleted. Settings: `jenesis.gc.stride` (default 20000). |
-| `build.jenesis.repository.format`   | `source/format/spi`          | The `RepositoryFormat` SPI + the framework-neutral `FormatExchange`. A layout is a module that depends only on this and `provides RepositoryFormat`; the dispatcher discovers them with `ServiceLoader`, so formats plug in without the core knowing them. `java.base` + the store SPI only. |
-| `build.jenesis.repository.format.java`     | `source/format/java`         | The shared Java repository-layout primitives the Maven and Jenesis layouts build on: reading a jar's module name and parsing a Maven request path (`JavaLayout`). It also carries the cross-publish bridge (`ModuleView`) - exported *only* to those two modules, so cross-publishing stays off the public SPI. |
-| `build.jenesis.repository.format.maven`    | `source/format/maven`        | The Maven layout (`/repository/maven/...`): stores the blob, stores and serves a published `maven-metadata.xml` verbatim (computing it on read only under the `maven-metadata-compute` opt-in), proxies Maven Central (its `maven-metadata.xml` proxied fresh as a mutable index). When a modular jar is published, it cross-publishes the jar's module view into the Jenesis layout over the bridge (it `uses` the `ModuleView` the Jenesis layout provides) - the one required cross-publish, and it goes one way. |
-| `build.jenesis.repository.format.jenesis`  | `source/format/jenesis`      | The Jenesis module layout (`/repository/module/...`, `/repository/artifact/...`): stores and serves modules over the same content-addressed blob. It `provides` the `ModuleView` the Maven layout uses to mirror a published modular jar in by module name; a module published here stays in the module layout (it is not mirrored back to Maven). |
-| `build.jenesis.repository.format.oci`      | `source/format/oci`          | The OCI / Docker registry format (`/v2/` Distribution API), so `docker push` / `docker pull` work over the same store. Self-contained (SPI + store only): an OCI `sha256:` digest *is* the content-addressed `blobs/<hex>` key, so layers, configs and manifests dedupe with everything else. |
-| `build.jenesis.repository.format.raw`      | `source/format/raw`          | The generic (raw) layout (`/repository/raw/...`): a plain content-addressed file store over the same `Publication` primitives - `PUT` stores a file, `GET` serves it back. It also carries the `RepositoryImporter` capability, so raw/generic assets migrate in alongside Maven and OCI. |
-| `build.jenesis.repository.importer`   | `source/importer/spi`          | The import-source SPI - the read half of a migration. An `ImportSource` walks a foreign repository's assets; an `ImportSourceProvider` builds one for a named incumbent from an `ImportRequest`. A connector is a module that `provides` a provider, discovered with `ServiceLoader`, so the server supports another incumbent without knowing it. A connector reads and writes its own JSON with Jackson. |
-| `build.jenesis.repository.importer.nexus`    | `source/importer/nexus`        | The Sonatype Nexus 3 connector: `provides` an `ImportSourceProvider` that pages the components REST API by continuation token (format reported per asset, so mixed repositories migrate in one pass). Import SPI + format SPI only. |
-| `build.jenesis.repository.importer.artifactory` | `source/importer/artifactory` | The JFrog Artifactory connector: `provides` an `ImportSourceProvider` that reads the storage listing (a repository has one package type, supplied up front). Import SPI + format SPI only. |
-| `build.jenesis.repository.importer.jenesis` | `source/importer/jenesis` | The jenesis-to-jenesis connector - the read half of the exit story, symmetric with Nexus/Artifactory: `provides` an `ImportSourceProvider` that walks another instance's `GET /api/assets` enumeration by its opaque cursor (format reported per asset), so a jenesis repository migrates into another jenesis with no lock-in. Import SPI + format SPI only. |
-| `build.jenesis.repository.importer.maven` | `source/importer/maven` | The vendor-neutral Maven connector: `provides` an `ImportSourceProvider` that walks *any* repository serving the Maven layout over plain HTTP - no vendor API. A recursive directory-listing walk where the server exposes an autoindex; where listing is disabled, the published Nexus repository index (a pure-JDK reader of the legacy chunk format) supplies the coordinates, each refreshed through its `maven-metadata.xml` for versions the index lags behind. Covers Nexus, Artifactory, plain httpd/nginx, static buckets - anything serving the Maven layout with a browsable listing or a published index (registry formats still need their vendor API or format protocol). Import SPI + format SPI + `java.xml` only. |
-| `build.jenesis.repository.importer.index` | `source/importer/index` | The format-native enumeration connector: `provides` an `ImportSourceProvider` (`index`) that resolves the requested format among the installed `RepositoryFormat`s and walks the upstream through the format's own `ProxyFormat.enumerate` - the format module's reading of its ecosystem's mirror-style index pointed at "list everything" - so every enumerable format's repositories (including another jenesis, which serves those same indexes) migrate through one connector. Import SPI + format SPI only. |
-| `build.jenesis.repository.server`   | `source/server`       | The dispatcher, format-neutral: it `uses RepositoryFormat`, loads every format via `ServiceLoader`, scopes the store, and enforces auth - with no knowledge of any layout, so it serves a fully capable repository even with no format on the module path (every request 404s until one is). The pull-through serve loop lives here (its HTTP fetcher is the discovered `source/proxy` module); the content-addressed store (`Publication`) sits in the store module, the Maven and Jenesis layouts and their cross-publishing are plugin modules, and the import connectors are discovered the same way - so the server names no layout and no incumbent. It also serves the export surface `GET /api/assets?repo=…&cursor=…` (the free product's first `/api`): a flat, stably-ordered, cursor-paged walk of a repository's publication pointers - each entry's path, size and SHA-256 straight from the pointer (no blob opened) and its format/coordinate from the owning layout - so a jenesis instance can be enumerated and drained by another tool (getting your data out is never the paid feature), read-authorised like the rest of the wire. Optional batch archive ingestion (`BatchIngestion`, off by default via `jenesis.repository.batch-upload`) explodes a single `PUT` carrying `X-Jenesis-Explode: zip` into one synthesized publish per entry through the same format loop - each member streamed on its format's own publish path, so the publication-screen chain applies per entry - entry-count capped, traversal-guarded, and answered with a per-entry manifest. Optional demo seeding (`DemoSeeder`, off by default via `jenesis.repository.demo`) seeds a fresh, completely empty repository with real artifacts on a post-boot background thread: it collects every format's `RepositoryFormat.demoArtifacts()` suggestions and pulls each through that format's own upstream (the normal pipeline, so a gate screens the proxy leg), refuses a non-empty space so a seeded or in-use repository is never re-seeded, and tolerates a per-artifact fetch failure. It also exposes the **recent-logs viewer** `GET /api/logs` (WO.4): the instance's last N log entries from a **bounded in-memory ring** a Logback appender feeds (never re-reading a file, never unbounded), with a `level` filter, a `q` text search and a `since` cursor for tailing, read-authorised like the rest of the wire and surfaced as a console **Logs** panel (`source/ui`); its ring size is the `jenesis.repository.logs.buffer` dial (default 1000). The downstream edition mirrors this independently as an operator-gated `/api/admin/logs`. It also runs the **multi-node consistency check** `GET /api/consistency` (WCON.2): a deployment of N nodes over one shared store is eventually consistent by design, so each node publishes a lightweight **fingerprint** of its derived state to `consistency/nodes/<id>` on a heartbeat (its node id + two timestamps — a liveness heartbeat and a cursor-advance time — its derived-index cursor/snapshot version, config generation, quota/inventory counters and a sampled pointer→hash set — never a scan), and the check compares fingerprints across **live** nodes to tell **benign lag** (a node a little behind but still advancing within the staleness window) from a node **stuck diverged** (alive but its cursor frozen past `N` sweep intervals, or disagreeing on what must be identical — the config generation or a pointer's resolution). It **detects and reports, never blocks**, and **degrades cleanly to single-node** (one node, no divergence — no false positive). A stuck/split node surfaces as a WO.5 **node-divergence** security-posture advisory (`jenesis.consistency.stuck` WARN, `jenesis.consistency.config`/`jenesis.consistency.pointer` CRITICAL) with the *why* and the fix, and as WO.4 per-node numbers (`jenesis.consistency.nodes`/`.diverged` gauges + a `jenesis.consistency.divergence` health check) — which is what makes the WO.4 "these numbers are instance-specific; warn when multiple nodes" caveat trustworthy. Off by default (a single node writes nothing into an otherwise-clean store); a multi-node deployment sets `jenesis.consistency.enabled=true`, with `jenesis.consistency.node-id`, `jenesis.consistency.staleness-window`, `jenesis.consistency.sweep-interval`, `jenesis.consistency.sweep-intervals` and `jenesis.consistency.dead-after` (ms) as the dials, surfaced as a console **Consistency** panel (`source/ui`). The downstream edition mirrors this independently as an operator-gated `/api/admin/consistency`. |
-| `build.jenesis.repository.ui`       | `source/ui`           | A simple, extendable web console: browse artifacts, view repositories and their config. An open console shell with a panel-extension SPI, so additional panels plug in without a fork. Bundled panels include Browse, the SPI catalog, the Metrics overview (WO.2), the Logs tail (WO.4) and the **Consistency** panel (WCON.2): a thin, key-gated live read of `GET /api/consistency` that shows the fleet's per-node fingerprints and any divergence, degrading cleanly to single-node. |
-
-Build & run
------------
-
-The jenesis build tool lives in the `.jenesis/upstream` git submodule (`build/jenesis` is a symlink
-into it; the committed `.jenesis/.jenesis.skip` marker keeps the tool's own project out of this
-build's module scan), so populate it once after cloning:
-
-    git submodule update --init                                 # fetch the pinned build tool
-    java build/jenesis/Project.java build                       # build everything
-    java build/jenesis/Project.java +source+store+s3 build          # one module (+ deps)
-
-    # the repository on the filesystem backend
-    JENESIS_STORE_ROOT=/var/lib/jenesis-repository \
-      java -Djenesis.execute.module=source+server build/jenesis/Execute.java
-
-The server `requires` no layout, backend or importer of its own (see *Extensible by design*):
-it discovers whatever layout modules, store backends, importers and the `ui` console are on its
-module path at startup, so a deployment selects the ones it wants alongside `source+server`.
-
-Inside the store, every artifact space lives under `<tenant>/<repository>/...` - one layout shared by
-this fixed-tenant server and a multi-tenant distribution, so switching a deployment either way is a
-configuration change and the data is found where it was left. The free server resolves every request
-to the configured space:
-
-    -Djenesis.repository.tenant=default -Djenesis.repository.repository=default
-
-(both default to `default`, so a fresh deployment stores under `default/default/`). **Upgrading a
-deployment whose data predates this layout** - its `blobs/`, `publish/` and `oci/` trees (plus
-`imports/` job state, if kept) sit directly under the store root - is a one-time move of those trees
-into the default space; on the filesystem backend:
-
-    cd "$JENESIS_STORE_ROOT" && mkdir -p default/default && mv blobs publish oci imports default/default/
-
-(move the trees that exist; on S3 / Azure the equivalent per-prefix server-side move, e.g.
-`aws s3 mv --recursive` per prefix). Credentials under `auth/` are deployment-wide, not artifact data,
-and stay at the store root. There is no runtime shim: the server reads only the scoped layout.
-
-The web console is served at `/console` - browse artifacts, view repositories and their
-configuration. The generic artifact browse is at `/browse`: a breadcrumbed, lazy tree over any
-repository's published namespace, read one prefix level at a time through the store's listing seam
-(folder vs artifact, with sizes) and generic across every format - a folder's children are fetched on
-demand (`/browse/children`), so a browse never scans or buffers a whole tree. The browse page also offers a
-**Download asset listing** action (`/assets`): the console face of the `GET /api/assets` walk, streamed as
-NDJSON of every published pointer (path, size, SHA-256) straight from the store - so getting your data out is
-a one-click export, never the paid feature. Sign-in is OAuth2 / OIDC;
-the `dev` profile (`SPRING_PROFILES_ACTIVE=dev`) swaps in a built-in `admin`/`admin` form login for
-local runs.
-
-The console has a small **design system** layered over the vendored Pico.css - a design-token layer
-(`META-INF/resources/css/app.css`: a type scale, spacing, radii and a light/dark status palette) and a documented
-component set as Thymeleaf fragments (`META-INF/templates/base.html`: page header, list/table, card,
-form-field-with-help, empty state, badge), with an accessibility baseline (semantic landmarks, a skip
-link, a visible focus ring, colour never the sole signal, WCAG-AA contrast in both themes). It is
-the shared base a downstream distribution's console extends rather than re-vendoring: the resources live
-under `META-INF` (never a JPMS package, so never a split package), which lets a downstream console
-`requires` this module and `th:replace` the fragments directly; `base.html` documents each fragment at its
-declaration.
-
-A repository-wide storage cap is optional: `-Djenesis.repository.quota=10GB` (a byte count or a `K`/`M`/`G`/`T`
-suffix) refuses a new artifact once stored content reaches the limit, with `507 Insufficient Storage`. Only
-content blobs count; a deduped re-deploy of bytes already stored needs no new space.
-
-A request rate ceiling is optional too: `-Djenesis.repository.rate-limit=600` (permits per minute) sheds excess
-load with `429 Too Many Requests` and a `Retry-After`. It is metered per tenant (the key's tenant, or a shared
-anonymous bucket), and the Actuator probes are never throttled.
-
-**Read-only mode** for a browsable-but-immutable demo or a public mirror: `-Djenesis.repository.read-only=true`
-(env `JENESIS_REPOSITORY_READ_ONLY`, default off) refuses *every* write - a hosted publish, an import, every
-mutating admin action - with `403`, while browse, download, search and all read APIs work normally. It is enforced
-at one low-level choke point, a `ReadOnlyArtifactStore` wrapping the store SPI, so internal writes (write-through
-proxy caching, import replay) are refused too, and the write-producing background jobs are disabled. The mode is
-advertised on `/api/capabilities` and shown as a console banner. Pair it with a firewalled writer that updates the
-shared store while public read-only pods serve reads from it.
-
-**Anonymous-role access** - a strictly-opt-in, granular anonymous role for an *enforcing* deployment
-(`jenesis.repository.auth=true`): `-Djenesis.repository.anonymous-rights=repository:read` (env
-`JENESIS_REPOSITORY_ANONYMOUS_RIGHTS`, **default empty**). Empty - the default - means *no* anonymous access at
-all: a keyless caller is rejected `401`/`403` exactly as an enforcing deployment does today. A non-empty value is a
-comma-list in the **existing grant grammar** - a bare `<surface>:<verb>` token (`repository:read`,
-`repository:write`, `manage:read`, `manage:write`, a per-surface `<surface>:*`, or the all-privileges `*`) is
-granted on *every* repository, and a `<repository>=<token>` entry scopes a token to one named repository (e.g.
-`releases=repository:read`) - the same `<scope>/<surface>:<verb>` vocabulary a minted credential carries, so there
-is *no new right vocabulary*. It is decided at the **one** authorization choke point (`Authorization` /
-`RepositoryAuthorizationManager`): a request with no credential is matched against the anonymous grant set with the
-*same* logic a minted credential uses - allowed iff the grant covers the required `<scope>:<verb>`, else rejected as
-today. There is no second code path and no per-endpoint opt-in. Strictly-opt-in guardrails: it takes an explicit,
-non-empty config to grant anything; enabling it logs a **loud startup `SECURITY:` WARN** naming exactly what the
-anonymous caller may do, escalated to a governance-level advisory (the `jenesis.anonymous.*` security posture, on
-the console and `GET /api/posture`) when the grant includes `write` or any `manage`/admin right; it is advertised on
-`/api/capabilities` (`anonymousRights`) and shown as an explicit "Anonymous access" console banner; and an
-anonymous-authorized request is audited as principal `anonymous`, never an unattributed blank. A non-empty value
-under `auth=false` is redundant (already fully open) and warns. **Public-mirror synergy (WRO.1):** read-only mode +
-`anonymous-rights=repository:read` is exactly the public mirror - reads served anonymously while writes and admin
-stay key-gated *and* the store write-gate refuses internal writes.
-
-**Config-driven feature enable/disable.** One image can carry *every* discovered module and be trimmed by
-configuration instead of rebuilt - the convention is defined once in the store SPI
-(`build.jenesis.repository.store.Features`) and shared verbatim by every distribution, so a feature keeps the
-same key wherever it ships:
-
-- A **parallel** SPI implementation (a format, an import source) toggles by its provider name:
-  `jenesis.repository.<feature>=true|false`. Nothing set means **enabled**; only an explicit `false` disables,
-  and a disabled implementation simply is not activated at `ServiceLoader` discovery - it degrades exactly like
-  a missing module (`jenesis.repository.maven=false` removes the Maven layout; its importer skips too).
-- A **singleton** SPI resolves to exactly one implementation, selected by name:
-  `jenesis.repository.store=filesystem|s3|gcs|azure-blob` (default `filesystem`, the most universally applicable
-  backend), `jenesis.repository.fetcher`, `jenesis.repository.walk`, `jenesis.repository.gc`,
-  `jenesis.repository.tenants`, `jenesis.repository.rate-limiter`, `jenesis.repository.token-exchange`,
-  `jenesis.repository.key-usage`. A provider **name** never repeats one of those SPI names, because the two shapes
-  share one namespace and the key would then mean both at once (the walk implementation was called `store`, so its
-  documented `jenesis.repository.store=false` off-switch was also the storage backend's selection - D-005). Unset,
-  the *store* takes its `filesystem` default and every other one takes the
-  single enabled implementation - **never** "the first in discovery order": two enabled implementations of the same
-  singleton SPI is ambiguous configuration and fails at resolution naming both and the key that disambiguates them,
-  because which module a loader happens to see first is not a configuration decision. An implementation is also
-  skippable by its own toggle (`jenesis.repository.oidc=false` turns the token exchange off), which then leaves the
-  SPI at its documented sentinel.
-- An implementation's own settings keep their documented keys (`JENESIS_AWS_BUCKET`, `jenesis.<feature>.<property>`).
-- **Required-config self-disable:** a provider declares the keys it cannot run without (`requiredConfig()`, default
-  empty - a credential, a bucket); a feature whose required keys are unset disables itself and logs one line naming
-  them and the `jenesis.repository.<feature>=false` switch that silences it.
-- **An explicit selection never degrades (§9).** Self-disabling and sentinel fallback apply only to what an operator
-  did *not* select. `jenesis.repository.<spi>=<name>` naming an implementation that is absent, misspelled, switched
-  off or missing its required configuration **fails at resolution**, naming the selection, what is missing and every
-  installed provider - it does not silently fall back to the default or to the SPI's `NONE` sentinel. The store
-  backend is the exemplar (`store=s3` with the s3 module off must not boot against the local disk), and since the
-  T-101 hardening every singleton SPI answers the same way, so a deployment that configured rate limiting,
-  workload-identity exchange, a tenants directory or garbage collection can never come up looking configured while
-  the capability is quietly absent.
-
-The Spring shell hands its `Environment` to the convention at boot, so relaxed binding makes every key settable
-as a Docker environment variable - `JENESIS_REPOSITORY_MAVEN=false`, `JENESIS_REPOSITORY_STORE=s3` - and an image
-is configured purely with `docker run -e`; outside a shell the same keys answer from system properties and the
-environment.
-
-**The all-in-one image.** That one image exists: `source/bundle` (`build.jenesis.repository.bundle`) is a
-launchable carrier module whose `requires` closure is every free SPI implementation - all four layouts, all four
-store backends, all five import connectors, the HTTP fetcher, the OIDC token exchange, the rate limiter, the
-usage tracker and the web console - so the build's `bundle` packaging emits the complete product as one zip and
-
-    docker build -t jenesis-repository:free .
-
-turns it into the all-in-one image. It boots the repository server on port 8080
-(`build.jenesis.repository.bundle.AllInOne`, reading the bundle's `allinone.properties` - with the server and the
-console both on one module path, naming the config file keeps two root `application.properties` unambiguous), with
-everything on and nothing consulted until configured: the store defaults to `filesystem` under `/data` (mount a
-volume), cloud backends and the token exchange self-disable until their keys arrive, and every capability is
-trimmed with `docker run -e JENESIS_REPOSITORY_<FEATURE>=false` / selected with
-`JENESIS_REPOSITORY_<SPI>=<feature>` - never rebuilt. The same image runs the web console as a second container
-(`docker run -e MAINCLASS=build.jenesis.repository.bundle.Console -e PORT=8081` against the same store). The
-`test/bundle` suite boots this exact composition through the same launcher and proves the trim over HTTP - a
-disabled layout's path unclaims, a disabled or mis-selected fetcher answers the documented `501` - with the same
-key spellings the downstream all-in-one image honours.
-
-A Jenesis build points at it with the existing knobs - no new client:
-
-    -Djenesis.module.uri=https://repo.example.com/repository/ -Djenesis.module.token=jenk_<tenant>.<secret>
-    -Djenesis.maven.uri=https://repo.example.com/repository/maven/
-
-Releasing
----------
-
-A release rides a commit-message marker: a push to `main` whose head commit message starts with
-`[release]` (next minor of the latest tag) or `[release <version>]` (explicit) publishes, once the
-test workflow is green for that commit, every module to Maven Central under the `build.jenesis`
-group id - each with sources and javadoc, staged under strict dependency pinning with the POM
-metadata from [`project.properties`](project.properties) - and cuts the matching GitHub release and
-`v<version>` tag. See [`.github/workflows/release.yml`](.github/workflows/release.yml) and
-[`jreleaser.yml`](jreleaser.yml).
-
-Importing from another repository
----------------------------------
-
-To migrate off an incumbent manager, two SPIs meet in the content-addressed store. The read half is
-an `ImportSource`, built by an `ImportSourceProvider` that a connector module ships and the server
-discovers with `ServiceLoader`: the built-in ones page the Nexus components REST API by continuation
-token, read the Artifactory storage listing, walk any Maven-layout tree vendor-neutrally (the `maven`
-source, below), walk any format's own published index through the format module itself (the `index`
-source, below) and drain another jenesis over `/api/assets`, and another incumbent is one more module -
-the server names none of them. The write half is the `RepositoryImporter` capability a format opts into
-(in `build.jenesis.repository.format`, an `instanceof` capability on the one discovered `RepositoryFormat`
-seam - not a second discovered service). `RepositoryImport` walks a source and routes each asset to the
-format that `imports` its source format, writing it through the format's own publish
-path so the imported repository serves its own indexes rather than copying the source's (a source
-`maven-metadata.xml` is dropped; under the `maven-metadata-compute` opt-in the Maven layout derives one
-from the imported version folders). The core imports **Maven** (with the module-layout bridge), **OCI / Docker** and
-**raw / generic**; an asset whose format has no importer on the path is reported skipped and, because
-content is read lazily, never downloaded.
-
-The Artifactory source reads its listing with the deep File List API (`GET /api/storage/<repo>?list&deep=1`),
-which JFrog gates behind Artifactory Pro - a self-hosted OSS instance answers `400` ("available only in
-Artifactory Pro"). When it does, the connector falls back **seamlessly** to the OSS-available per-item Folder
-Info API (`GET /api/storage/<repo>/<path>`, its `children` one level deep), recursed for the same file set -
-N requests instead of one, checkpointing after each top-level subtree so an interrupted crawl resumes from
-where it stopped (coarser than the paged Nexus walk, but the imports are content-addressed and idempotent, so
-a re-run is safe regardless). So the same `artifactory` migration works unchanged against both a Pro and a
-free Artifactory (the fallback is tested against a real `artifactory-oss` instance), and only a non-Pro error
-surfaces.
-
-When the incumbent is none of those - a plain httpd/nginx autoindex, an S3 static bucket, or anything else
-serving the Maven layout with a browsable listing or a published index - the vendor-neutral **`maven`**
-source migrates it with no API at all. Its strategies stack by availability: it walks the server's directory listing recursively (deterministic
-depth-first order, a `tree:` checkpoint per completed subtree, so an interrupted walk resumes without
-re-listing what it finished; a Nexus repository root that answers a landing page instead of a listing is
-followed one hop to the HTML index the page itself advertises, and an index row linking its file at a
-canonical download URL under another root is walked as that file - both read off the pages, never assumed
-at a vendor path); where listing is disabled it falls back to the Nexus repository index many
-servers publish (`.index/nexus-maven-repository-index.gz`, streamed record by record with a pure-JDK reader
-of the legacy chunk format) and refreshes every coordinate through its `maven-metadata.xml`, importing a
-version the index lags behind as its pom plus the primary artifact the pom's packaging names (classifier
-sidecars are unknowable without a listing - honestly scoped, as is the walk itself: registry formats such as
-npm or pypi still need their vendor API or format protocol). A source's `maven-metadata.xml` and checksum
-sidecars are left behind - the target regenerates and derives its own - and a URL whose host does not answer
-at all is rejected up front as a `400` rather than failing asynchronously. The same `maven` migration is
-proven against a plain JDK `HttpServer` serving a Maven tree and against real Nexus and Artifactory
-instances over nothing but their directory listings.
-
-The same idea generalizes past Maven through the **`index`** source: package ecosystems publish
-mirror-style indexes (an OCI registry's `/v2/_catalog` and `tags/list`, PyPI's PEP 503 project list, a
-`repodata.json`), and the format modules already parse them to serve pull-through - so
-`ProxyFormat.enumerate(fetcher, upstream)` points that same reading at "list everything" instead of
-"resolve one", streaming each artifact's layout path and download URL lazily. The `index` source names a
-format up front, resolves it among the installed formats, and imports whatever the format enumerates
-through that format's own importer; a format whose ecosystem publishes no walkable index returns an empty
-enumeration (the honest answer - Conan exposes only a search API), and the job completes empty rather than
-guessing. The core's OCI format enumerates (catalog pages followed, multi-arch indexes expanded, an
-image's blobs imported before the manifest and tag that reference them); the cursor is the last consumed
-path, checkpointed in batches, and a resume re-enumerates and skips past it (a cursor the index no longer
-carries restarts the walk - imports are content-addressed and idempotent, so re-importing is safe where
-losing assets is not). **The symmetry is the point**: jenesis emits these same standard indexes to serve
-native clients, so a jenesis repository is walkable by jenesis's own `index` importer - proven by a test
-that migrates one booted instance into another through nothing but the OCI protocol - and migration *off*
-jenesis works over plain format protocols too, alongside `/api/assets`.
-
-    RepositoryImport.Result result = new RepositoryImport().run(
-            new NexusSource(URI.create("https://nexus.example.com"), "maven-releases", PullThroughCache.http()),
-            store);
-
-A migration is also launched on a running server and runs in the background: `POST /repository/admin/import`
-(a `repository:write` operation) starts a job and returns its id; `GET /repository/admin/import/<id>` reports its
-state and running counts. The job persists a resume cursor, so a `resume` naming a prior job continues the
-walk from where it stopped:
-
-    curl -X POST http://repo.example.com/repository/admin/import -d \
-      '{"source":"nexus","url":"https://nexus.example.com","repository":"maven-releases"}'
-    # {"job":"a1b2...","state":"running"}
-    curl http://repo.example.com/repository/admin/import/a1b2...
-    # {"state":"completed","imported":128,"skipped":0,"skippedFormats":[],"cursor":null}
+Apache License 2.0 - see [LICENSE](LICENSE). Copyright Rafael Winterhalter.
