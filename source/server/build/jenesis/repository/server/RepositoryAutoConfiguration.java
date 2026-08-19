@@ -270,7 +270,7 @@ public class RepositoryAutoConfiguration {
     }
 
     /** The recent-logs ring (WO.4): a bounded in-memory store of the most recent entries, sized from
-     *  {@code jenesis.repository.logs.buffer} at startup - the bound behind {@code GET /api/logs}. */
+     *  {@code jenesis.repository.logs-buffer} at startup - the bound behind {@code GET /api/logs}. */
     @Bean
     @ConditionalOnMissingBean
     public LogRingBuffer logRingBuffer(RepositoryProperties properties) {
