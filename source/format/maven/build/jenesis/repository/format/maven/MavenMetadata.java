@@ -5,6 +5,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.BoundedChildren;
+import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.walk.ScreenedNames;
 import build.jenesis.repository.walk.Traversal;
 import javax.xml.stream.XMLOutputFactory;
@@ -151,10 +152,19 @@ public final class MavenMetadata {
         // folder. The screen stats no blob (HIDE_WITHHELD), so a fake-hash / no-blob / non-jar version the publisher
         // listed is kept exactly as before; only a held one is dropped.
         ServableNames servableNames = new ServableNames(store);
+        // An operator's YANKED mark drops a version from <versions> as well, for a different reason than a hold. A
+        // Maven release is immutable and never disappears, so the ecosystem has no yank of its own - but this
+        // document is what a range, a LATEST and a dependency-update scan resolve against, so a version gone from it
+        // is one no new resolution picks while a build that pins it still fetches the jar by exact path. The hold
+        // above 404s the bytes too; a yank deliberately does not. Only YANKED: Maven has no deprecation signal, and
+        // rendering one as a retraction would overstate the operator.
+        SortedMap<String, Lifecycle.Flag> marks = Lifecycle.versions(store, mavenCoordinate(coordinatePath));
         SequencedSet<String> union = new LinkedHashSet<>();
         boolean withheldAny = false;
         for (String version : listed) {
-            if (servableNames.disclosableVersionFolder("/maven/" + coordinatePath + "/" + version)) {
+            if (yanked(marks, version)) {
+                withheldAny = true;
+            } else if (servableNames.disclosableVersionFolder("/maven/" + coordinatePath + "/" + version)) {
                 union.add(version);
             } else {
                 // A version the publisher's stored document lists has since been withheld: it drops from the
@@ -163,7 +173,11 @@ public final class MavenMetadata {
                 withheldAny = true;
             }
         }
-        union.addAll(folders);
+        for (String folder : folders) {
+            if (!yanked(marks, folder)) {
+                union.add(folder);
+            }
+        }
         // Screen the currently-named <latest>/<release> value DIRECTLY (disclosure Finding 2): a version named there but
         // ABSENT from <versions> is never seen by the loop above, so a hold on it would otherwise survive verbatim in
         // the served document (the loop's withheldAny stays false, the document is returned untouched, and the held
@@ -173,9 +187,11 @@ public final class MavenMetadata {
         String latestNamed = element(xml, "latest");
         String releaseNamed = element(xml, "release");
         boolean latestWithheld = latestNamed != null && !latestNamed.isEmpty()
-                && !servableNames.disclosableVersionFolder("/maven/" + coordinatePath + "/" + latestNamed);
+                && (yanked(marks, latestNamed)
+                        || !servableNames.disclosableVersionFolder("/maven/" + coordinatePath + "/" + latestNamed));
         boolean releaseWithheld = releaseNamed != null && !releaseNamed.isEmpty()
-                && !servableNames.disclosableVersionFolder("/maven/" + coordinatePath + "/" + releaseNamed);
+                && (yanked(marks, releaseNamed)
+                        || !servableNames.disclosableVersionFolder("/maven/" + coordinatePath + "/" + releaseNamed));
         boolean namedWithheld = latestWithheld || releaseWithheld;
         boolean versionsChanged = !union.equals(new LinkedHashSet<>(listed));
         if (!versionsChanged && !namedWithheld) {
@@ -285,6 +301,21 @@ public final class MavenMetadata {
      *  ({@code &amp;amp;}) on re-emit. {@code &amp;} is decoded last so an escaped entity never decodes twice. */
     private static String xmlUnescape(String text) {
         return text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
+    }
+
+    /** Whether an operator has yanked {@code version} - a retraction from resolution, not a hold on the bytes. */
+    private static boolean yanked(SortedMap<String, Lifecycle.Flag> marks, String version) {
+        Lifecycle.Flag flag = marks.get(version);
+        return flag != null && flag.state() == Lifecycle.State.YANKED;
+    }
+
+    /** The {@code group:artifact} coordinate a {@code group/path/artifact} folder names - what {@code describe}
+     *  reports, and therefore the coordinate an operator marks through the API. */
+    private static String mavenCoordinate(String coordinatePath) {
+        int slash = coordinatePath.lastIndexOf('/');
+        return slash < 0
+                ? coordinatePath
+                : coordinatePath.substring(0, slash).replace('/', '.') + ":" + coordinatePath.substring(slash + 1);
     }
 
     /** The {@code <version>} texts a {@code <versions>} block already lists, in document order, decoded to their raw

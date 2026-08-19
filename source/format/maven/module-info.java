@@ -16,6 +16,7 @@
  */
 module build.jenesis.repository.format.maven {
     requires build.jenesis.repository.format;
+    requires build.jenesis.repository.format.lifecycle;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.format.java;
