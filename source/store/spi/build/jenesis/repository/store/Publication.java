@@ -1013,13 +1013,13 @@ public final class Publication {
                 // fed a prefix it would mistake for the document. The bounded read never buffers past the ceiling, so
                 // the over-limit blob never lands whole in memory before we notice.
                 Optional<PublishInterceptor.Content.Bounded> bounded =
-                        sibling(path, PublishInterceptor.Content.LARGEST_SIBLING);
+                        sibling(path, PublishInterceptor.Content.largestSibling());
                 if (bounded.isEmpty()) {
                     return Optional.empty();
                 }
                 if (bounded.get().truncated()) {
                     throw new IOException("sibling " + path + " exceeds the "
-                            + PublishInterceptor.Content.LARGEST_SIBLING + "-byte cap for a whole-sibling metadata "
+                            + PublishInterceptor.Content.largestSibling() + "-byte cap for a whole-sibling metadata "
                             + "read; a caller that can work from a prefix reads it through sibling(path, limit), "
                             + "which honours its own bound and reports the overflow instead of failing on it");
                 }
