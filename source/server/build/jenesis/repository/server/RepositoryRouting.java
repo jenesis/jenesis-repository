@@ -15,9 +15,17 @@ import module java.base;
  * left. By default the {@link FixedTenantRouting} binds: every request resolves to the configured
  * {@code jenreg.tenant} / {@code jenreg.repository} space (each {@code default} by
  * default) with the request path unchanged beyond the {@code /repository} prefix strip. A multi-tenant deployment
- * contributes its own {@code RepositoryRouting} bean (overriding the {@code @ConditionalOnMissingBean} default)
- * that reads the tenant from the {@code Jenesis-Repository-Key} header and the repository from the first path
- * segment, and strips the {@code /<repo>} prefix from the path a format sees.
+ * contributes its own {@code RepositoryRouting} bean (overriding the {@code @ConditionalOnMissingBean} default).
+ *
+ * <p><strong>Where the tenant comes from is the implementation's business, not this seam's.</strong> A downstream
+ * routing may read it from the {@code Jenesis-Repository-Key} header (taking the repository from the first path
+ * segment), from the first path segment itself (the repository then being the second), or from the request's
+ * {@code Host}. The last two matter because they let a request <em>name</em> a tenant without carrying a
+ * credential, which is what separates addressing a tenant from authenticating as one - a keyless request names the
+ * tenant and the deployment's anonymous rights decide what it may do, while a request that carries both a key and
+ * a routing path is confined to the key's tenant. This interface deliberately says none of that: it hands back a
+ * {@link Route} and every caller above it is blind to how the tenant was resolved, which is what lets one
+ * {@code RepositoryController} serve all of those deployments.
  */
 public interface RepositoryRouting {
 
