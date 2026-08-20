@@ -60,7 +60,7 @@ public final class ArchiveInflation {
 
     /**
      * The key an operator raises or lowers {@link #largestEntry()} with, in the shared {@code jenreg.} namespace and
-     * so also settable as {@code JENESIS_ARCHIVE_LARGEST_ENTRY} in a plain {@code docker run -e}. It is deploy-time
+     * so also settable as {@code JENREG_ARCHIVE_LARGEST_ENTRY} in a plain {@code docker run -e}. It is deploy-time
      * configuration rather than a console dial on purpose: it is a per-process heap ceiling sized against the JVM's
      * own heap, read on the publish thread where a store round-trip per archive member would be absurd, and it is
      * deployment-global where a stored setting would be per tenant.

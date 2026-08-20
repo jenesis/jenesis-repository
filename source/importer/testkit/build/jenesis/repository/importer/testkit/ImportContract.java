@@ -66,7 +66,7 @@ public final class ImportContract {
     private static final String USERNAME = "t203-operator", PASSWORD = "t203-secret";
 
     /** A config key no deployment sets, used to prove the required-config self-disable really bites. */
-    private static final String ABSENT_CONFIG = "JENESIS_T203_REQUIRED_KEY_THAT_IS_NEVER_SET";
+    private static final String ABSENT_CONFIG = "JENREG_T203_REQUIRED_KEY_THAT_IS_NEVER_SET";
 
     /**
      * One documented contract clause. The enum is the kit's vocabulary: a fixture excludes a property by name and

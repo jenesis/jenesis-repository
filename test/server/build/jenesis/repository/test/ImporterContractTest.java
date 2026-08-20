@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class ImporterContractTest {
 
-    private static final String JENESIS_FORMAT =
+    private static final String JENREG_FORMAT =
             "build.jenesis.repository.format.jenesis.JenesisFormat";
 
     record Case(String format, String deepPath, String nonDistributionPath) {
@@ -200,7 +200,7 @@ class ImporterContractTest {
                 ContractCensus.declaredProviders(repositoryRoot().resolve("source"), RepositoryFormat.class),
                 runtime,
                 fixtures,
-                List.of(new Exemption(JENESIS_FORMAT,
+                List.of(new Exemption(JENREG_FORMAT,
                         "the Jenesis module layout does not implement the migration-import capability")));
     }
 

@@ -23,9 +23,9 @@ import module java.base;
  *
  * <p>Keys live in the shared {@code jenreg.} namespace, so every one of them is also settable as an environment
  * variable in a plain {@code docker run -e}: upper-case it and write an underscore for each dot AND each dash, so
- * {@code jenreg.archive.largest-entry} is {@code JENESIS_ARCHIVE_LARGEST_ENTRY}. That is the spelling
+ * {@code jenreg.archive.largest-entry} is {@code JENREG_ARCHIVE_LARGEST_ENTRY}. That is the spelling
  * {@link Features#lookup()} resolves with no shell installed (see its default), and Spring's relaxed binding accepts
- * it too - the dash-dropped {@code JENESIS_ARCHIVE_LARGESTENTRY} works only under Spring, so it is the wrong one to
+ * it too - the dash-dropped {@code JENREG_ARCHIVE_LARGESTENTRY} works only under Spring, so it is the wrong one to
  * document.
  */
 public final class Limits {
