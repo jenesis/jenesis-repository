@@ -52,6 +52,72 @@ class ServableNamesTest {
     }
 
     @Test
+    void a_checksum_sidecar_is_held_by_the_hold_on_the_artifact_it_describes() throws IOException {
+        // Found by the ecosystem matrix's maven ADMIN_VIEW row. A gate quarantines the artifact it can screen - the
+        // jar and the POM - and the checksums the publisher uploaded beside them are unclaimed content no inspector
+        // has an opinion about, so they were accepted, pointed at, and served while their subject answered 404. What
+        // leaked is not a hint: jenesisdemo-2.0.jar.sha1 IS the digest of the withheld bytes, and the folder listing
+        // that carries it publishes the held version's existence.
+        MapStore store = new MapStore();
+        store.pointer("publish/maven/g/a/2/held.jar", HASH_B);
+        store.blob(HASH_B);
+        store.pointer("publish/maven/g/a/2/held.jar.sha1", HASH_A);
+        store.blob(HASH_A);
+
+        ServableNames names = new ServableNames(store,
+                new Publication(store, List.of(new Withholding("/maven/g/a/2/held.jar"))));
+
+        assertThat(names.state("/maven/g/a/2/held.jar")).isEqualTo(State.WITHHELD);
+        assertThat(names.state("/maven/g/a/2/held.jar.sha1"))
+                .as("the sidecar of a held artifact is withheld, not servable")
+                .isEqualTo(State.WITHHELD);
+        assertThat(names.disclosable("/maven/g/a/2/held.jar.sha1", Policy.HIDE_WITHHELD))
+                .as("and it is hidden from enumeration by the same rule, so a listing cannot disagree with a GET")
+                .isFalse();
+    }
+
+    @Test
+    void a_sidecar_is_held_by_a_marker_on_its_subject_too_not_only_by_the_chain() throws IOException {
+        // The retroactive half: a KEV sweep marks the CONTENT of a published jar. The sidecar's own bytes carry no
+        // marker - the marker is content-addressed and the checksum is different content - so without the subject
+        // read the sweep would hold the jar and leave its digest served.
+        MapStore store = new MapStore();
+        store.pointer("publish/maven/g/a/2/swept.jar", HASH_B);
+        store.blob(HASH_B);
+        Withheld.mark(store, HASH_B);
+        store.pointer("publish/maven/g/a/2/swept.jar.md5", HASH_A);
+        store.blob(HASH_A);
+
+        ServableNames names = new ServableNames(store);
+
+        assertThat(names.state("/maven/g/a/2/swept.jar")).isEqualTo(State.WITHHELD);
+        assertThat(names.state("/maven/g/a/2/swept.jar.md5")).isEqualTo(State.WITHHELD);
+        assertThat(names.disclosable("/maven/g/a/2/swept.jar.md5", Policy.HIDE_WITHHELD)).isFalse();
+    }
+
+    @Test
+    void a_sidecar_whose_subject_is_servable_serves_and_one_with_no_subject_is_untouched() throws IOException {
+        // The falsification leg: without it every assertion above would also hold for a seam that simply refused
+        // every path ending in a checksum suffix.
+        MapStore store = new MapStore();
+        store.pointer("publish/maven/g/a/1/fine.jar", HASH_A);
+        store.blob(HASH_A);
+        store.pointer("publish/maven/g/a/1/fine.jar.sha1", HASH_B);
+        store.blob(HASH_B);
+        // A sidecar name whose subject was never published - a detached checksum, which is a servable file in its
+        // own right and must not be hidden by a subject that does not exist.
+        store.pointer("publish/raw/notes.txt.md5", HASH_B);
+
+        ServableNames names = new ServableNames(store);
+
+        assertThat(names.state("/maven/g/a/1/fine.jar.sha1")).isEqualTo(State.SERVABLE);
+        assertThat(names.disclosable("/maven/g/a/1/fine.jar.sha1", Policy.HIDE_WITHHELD)).isTrue();
+        assertThat(names.disclosable("/raw/notes.txt.md5", Policy.HIDE_WITHHELD)).isTrue();
+        // A bare suffix is a filename, not a sidecar of the empty path.
+        assertThat(names.disclosable("/raw/.sha1", Policy.HIDE_WITHHELD)).isTrue();
+    }
+
+    @Test
     void located_is_empty_exactly_when_state_is_not_servable_so_serve_and_enumeration_share_one_truth()
             throws IOException {
         MapStore store = new MapStore();

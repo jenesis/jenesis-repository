@@ -102,6 +102,47 @@ public final class ServableNames {
      *  or a request path into a key, means exactly this prefix. */
     public static final String PUBLISHED = "publish";
 
+    /** The checksum and signature suffixes that make a served path a SIDECAR of the artifact beside it - a document
+     *  whose whole content is a statement about another path's bytes. Owned here beside {@link #PUBLISHED} because
+     *  the two are the same kind of fact: a convention about served paths that every surface must read the same way.
+     *
+     *  <p>They exist because a hold has to cover them. A gate quarantines the artifact it can screen - a jar, a POM -
+     *  and the checksum a publisher uploaded beside it is unclaimed content no inspector has an opinion about, so it
+     *  was accepted, pointed at, and served while its subject 404s. That is a disclosure the hold was meant to
+     *  prevent, and a specific one: {@code jenesisdemo-2.0.jar.sha1} publishes the exact digest of bytes the operator
+     *  withheld, which is enough to confirm a suspected build or to find the artifact somewhere else. It also
+     *  publishes the version's existence to any client that lists the folder.
+     *
+     *  <p>Deliberately not a format question. Every path-addressed ecosystem spells its sidecars this way, the rule
+     *  is the same for all of them, and a format that had to remember to hold its own checksums is a format that will
+     *  forget. */
+    private static final List<String> SIDECAR_SUFFIXES =
+            List.of(".md5", ".sha1", ".sha256", ".sha512", ".asc", ".sig");
+
+    /** The path a sidecar describes, or {@code null} when this path is not one. Strips exactly one suffix and never
+     *  recurses: {@code x.jar.sha1.md5} names {@code x.jar.sha1}, whose own hold is then read directly, so a chain of
+     *  sidecars terminates in one step per read rather than walking. */
+    private static String subject(String requestPath) {
+        for (String suffix : SIDECAR_SUFFIXES) {
+            if (requestPath.length() > suffix.length() && requestPath.endsWith(suffix)) {
+                return requestPath.substring(0, requestPath.length() - suffix.length());
+            }
+        }
+        return null;
+    }
+
+    /** Whether the path itself is held - the interceptor chain, then the {@link Withheld withheld/<hash>} marker on
+     *  the hash its pointer names. The half of the withhold decision that does not consider the subject a sidecar
+     *  describes, so {@link #state} and {@link #disclosable} can ask it about both and stay one statement of the rule.
+     *  Stats no blob. */
+    private boolean held(String requestPath) throws IOException {
+        if (publication.withheld(requestPath)) {
+            return true;
+        }
+        Optional<String> hash = publication.blob(requestPath);
+        return hash.isPresent() && Withheld.is(store, hash.get());
+    }
+
     /** The number of a version folder's leaves the interceptor chain is probed against in
      *  {@link #disclosableVersionFolder}: a bound so a pathologically wide folder cannot turn one folder's disclosure
      *  decision into an unbounded chain fan-out. The quarantine-pointer probe (a) is a single listing and is not
@@ -156,7 +197,8 @@ public final class ServableNames {
     /** Full discrimination of one request path ({@code "/maven/g/a/1/a-1.jar"}), and the decision
      *  {@link Publication#located} is a wrapper over: (1) interceptor chain withheld -&gt; {@link State#WITHHELD};
      *  (2) {@code publish<path>} pointer absent -&gt; {@link State#UNPUBLISHED}; (3) a {@link Withheld withheld/<hash>}
-     *  marker on the hash the pointer names -&gt; {@link State#WITHHELD}; (4) {@code blobs/<hash>} stat -&gt;
+     *  marker on the hash the pointer names -&gt; {@link State#WITHHELD}; (4) the path is a checksum/signature
+     *  {@linkplain #subject sidecar} of a held path -&gt; {@link State#WITHHELD}; (5) {@code blobs/<hash>} stat -&gt;
      *  {@link State#SERVABLE} : {@link State#BLOB_GONE}. A probe that throws a {@link RuntimeException} (a hostile
      *  name) fails closed to {@link State#WITHHELD} - never disclosed, never thrown.
      *
@@ -180,6 +222,13 @@ public final class ServableNames {
             if (Withheld.is(store, hash.get())) {
                 return State.WITHHELD;
             }
+            // A sidecar is held by its subject's hold. Read AFTER the pointer, so a path that is not published pays
+            // nothing and still answers UNPUBLISHED - the sidecar question is only ever asked about a path that is
+            // otherwise servable.
+            String subject = subject(requestPath);
+            if (subject != null && held(subject)) {
+                return State.WITHHELD;
+            }
             return store.exists("blobs/" + hash.get()) ? State.SERVABLE : State.BLOB_GONE;
         } catch (RuntimeException hostile) {
             LOGGER.warn("servable-name probe of {} failed; treating as withheld (fail-closed)", requestPath, hostile);
@@ -189,7 +238,8 @@ public final class ServableNames {
 
     /** The policy check, doing only the probes the policy needs: {@link Policy#HIDE_WITHHELD} runs the two withhold
      *  reads - the interceptor chain, then the {@link Withheld withheld/<hash>} marker on the hash the pointer names -
-     *  and stats no blob, exactly as {@link #disclosableKey} does for the blobs namespace; an absent pointer discloses
+     *  plus, for a {@linkplain #subject sidecar} path only, the same two reads against the subject it describes, and
+     *  stats no blob, exactly as {@link #disclosableKey} does for the blobs namespace; an absent pointer discloses
      *  (nothing is published, so there is nothing held to hide, and a membership row recorded with a fake hash keeps
      *  listing because no marker is keyed by it). {@link Policy#HIDE_WITHHELD_AND_GONE} is {@code state() == SERVABLE}.
      *  Fail-closed on a hostile name. */
@@ -200,7 +250,14 @@ public final class ServableNames {
                     return false;
                 }
                 Optional<String> hash = publication.blob(requestPath);
-                return hash.isEmpty() || !Withheld.is(store, hash.get());
+                if (hash.isEmpty()) {
+                    return true;
+                }
+                if (Withheld.is(store, hash.get())) {
+                    return false;
+                }
+                String subject = subject(requestPath);
+                return subject == null || !held(subject);
             } catch (RuntimeException hostile) {
                 LOGGER.warn("withheld-chain probe of {} failed; hiding (fail-closed)", requestPath, hostile);
                 return false;
