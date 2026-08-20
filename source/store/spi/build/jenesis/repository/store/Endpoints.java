@@ -56,8 +56,10 @@ public final class Endpoints {
         String scheme = override.getScheme();
         boolean https = scheme != null && scheme.equalsIgnoreCase("https");
         if (!https && !Boolean.parseBoolean(allowInsecure)) {
-            throw new IllegalStateException(endpointKey + " must resolve to an https:// endpoint (got '" + endpoint
-                    + "'), or the backend's credentials and every artifact byte travel in clear; set " + allowKey
+            throw new IllegalStateException(endpointKey
+                    + " must resolve to an https:// endpoint (got '" + endpoint
+                    + "'), or the backend's credentials and every artifact byte travel in clear; set "
+                    + allowKey
                     + "=true to allow a plaintext endpoint, e.g. a local MinIO, LocalStack, storage-emulator or "
                     + "Azurite container.");
         }

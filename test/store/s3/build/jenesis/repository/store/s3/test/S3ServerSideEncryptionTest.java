@@ -11,8 +11,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Every object the {@code s3} backend writes must carry server-side encryption - the store never relies on a
  * bucket/account default that an operator may not have set. {@link S3ArtifactStore#encrypt} is the single point every
  * {@code PutObject} (plain, content-addressed and conditional) is built through, so asserting over it proves the write
- * request the store would send. SSE-S3 (AES256) is the default; an operator-supplied {@code JENESIS_AWS_SSE_KMS_KEY_ID}
- * upgrades to {@code aws:kms}; and there is no input that turns encryption off. Needs no Docker, so it always runs.
+ * request the store would send. SSE-S3 (AES256) is the default; an operator-supplied
+ * {@code jenesis.repository.s3.sse-kms-key-id} upgrades to {@code aws:kms}; and there is no input that turns encryption off.
+ * Needs no Docker, so it always runs.
  */
 class S3ServerSideEncryptionTest {
 

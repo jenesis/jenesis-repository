@@ -81,7 +81,8 @@ public interface ArtifactStoreProvider {
      *  {@code filesystem} backend answers an <em>unselected</em> deployment, an explicitly named backend no provider
      *  answers to fails loudly rather than silently serving and persisting against the local disk, and the chosen
      *  backend's {@link #requiredConfig() required configuration} is validated before it is ever built. Discovery
-     *  stays here, with the {@code uses} clause: the primitive resolves over the loader it is handed. */
+     *  stays here, with the {@code uses} clause: the primitive resolves over the loader it is handed.
+ */
     static ArtifactStore resolve(String name, UnaryOperator<String> config) {
         return Providers.exclusiveWithDefault("store",
                 ServiceLoader.load(ArtifactStoreProvider.class),
@@ -90,5 +91,24 @@ public interface ArtifactStoreProvider {
                 "filesystem",
                 provider -> Features.missing(provider.requiredConfig(), config),
                 provider -> provider.create(config));
+    }
+
+    /**
+     * The value of a required setting, or a failure naming the key an operator has to set.
+     *
+     * <p>{@code setting} is the deployment key, which is what {@link #requiredConfig()} declares and what the
+     * message must name: the person reading it has to go and set exactly that. Backends share this rather than each
+     * writing the null-or-blank check and its own spelling of the same sentence.
+     *
+     * <p>{@link #resolve} validates {@link #requiredConfig()} before a backend is ever built, so this fires only for
+     * a {@code create} called directly - a fixture, an embedder - which is the one path that skips that check.
+     */
+    static String required(UnaryOperator<String> config, String setting, String backend) {
+        String value = config.apply(setting);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(setting
+                    + " is required for the " + backend + " artifact store backend.");
+        }
+        return value;
     }
 }
