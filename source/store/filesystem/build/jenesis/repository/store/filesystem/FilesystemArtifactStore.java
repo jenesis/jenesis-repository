@@ -247,6 +247,88 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("A scan limit must be positive: " + limit);
+        }
+        Path base = resolve(prefix);
+        Path rootPath = root.normalize();
+        // The same capped-TreeMap selection page() uses, for the same reason: a file tree is walked in whatever order
+        // the directories hand it over, and the page owed is the lexicographically smallest keys past startAfter.
+        // Holding limit + 1 of them costs O(limit) however many millions the prefix contains. The extra one is what
+        // distinguishes "the page exactly drained the prefix" from "there is more" without a second pass.
+        TreeMap<String, Listed> smallest = new TreeMap<>();
+        String after = startAfter == null ? "" : startAfter;
+        if (!Files.isDirectory(base)) {
+            return Scan.exhausted(0, 1);
+        }
+        Files.walkFileTree(base, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path path, BasicFileAttributes attributes) {
+                String name = path.getFileName().toString();
+                // The same in-flight .upload*.tmp filter as list() and page(), so a concurrent atomic write is never
+                // scanned out as a stored object.
+                if (name.startsWith(".upload") && name.endsWith(".tmp")) {
+                    return FileVisitResult.CONTINUE;
+                }
+                String key = rootPath.relativize(path.normalize()).toString().replace(File.separatorChar, '/');
+                if (key.compareTo(after) <= 0) {
+                    return FileVisitResult.CONTINUE;
+                }
+                if (smallest.size() < limit + 1) {
+                    smallest.put(key, listed(key, attributes));
+                } else if (key.compareTo(smallest.lastKey()) < 0) {
+                    smallest.put(key, listed(key, attributes));
+                    smallest.pollLastEntry();
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path path, IOException failure) throws IOException {
+                // NOT skipped: a short scan is how a sweep learns a prefix is drained, so a file that cannot be
+                // examined must fail the call rather than silently shorten it into a claim of completeness.
+                throw failure;
+            }
+        });
+        boolean more = smallest.size() > limit;
+        if (more) {
+            smallest.pollLastEntry();
+        }
+        String last = null;
+        for (Listed entry : smallest.values()) {
+            consumer.accept(entry);
+            last = entry.key();
+        }
+        return more ? Scan.truncated(last, smallest.size(), 1) : Scan.exhausted(smallest.size(), 1);
+    }
+
+    /** Both halves of the metadata come from the attributes the visitor was handed, so a scan stats nothing. */
+    private static Listed listed(String key, BasicFileAttributes attributes) {
+        return Listed.of(key, attributes.size(), attributes.lastModifiedTime().toInstant());
+    }
+
+    @Override
+    public Optional<Capacity> capacity() throws IOException {
+        // A real volume, so a real answer - and a failure to measure one throws rather than reporting empty, which
+        // would read as "this backend has no volume" and silently disable a free-space policy.
+        FileStore store = Files.getFileStore(root);
+        return Optional.of(new Capacity(store.getUsableSpace(), store.getTotalSpace()));
+    }
+
+    @Override
+    public void touch(String key) throws IOException {
+        Path path = resolve(key);
+        if (regularFile(path)) {
+            try {
+                Files.setLastModifiedTime(path, FileTime.from(Instant.now()));
+            } catch (NoSuchFileException _) {
+                // Raced with a delete: there is nothing left to mark, and recency-on-read is advisory anyway.
+            }
+        }
+    }
+
+    @Override
     public Optional<Versioned> readVersioned(String key) throws IOException {
         Path path = resolve(key);
         // Through the same discrimination exists() makes, and for the same reason: an unreadable pointer answering

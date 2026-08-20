@@ -71,6 +71,15 @@ public final class StoreContract {
          *  fallback: the fallback emits the right names but materialises the whole container to do it, which is what
          *  paging exists to avoid, so a real backend declares its own. */
         NATIVE_PAGING,
+        /** {@code scan} enumerates a prefix RECURSIVELY in key order, resumes strictly after its cursor, and reports
+         *  truncation with one - so a sweep sees every object under the prefix exactly once across pages. */
+        SCAN_IS_RECURSIVE_AND_RESUMES,
+        /** {@code scan} delivers each entry's size and modification time out of the backend's own listing, so a sweep
+         *  costs its listings and nothing per object. A names-only scan turns every sweep into an N+1. */
+        SCAN_CARRIES_LISTING_METADATA,
+        /** {@code version} answers the token without downloading the body - the backend overrides the inherited
+         *  read-the-object default, except where its token genuinely needs the bytes. */
+        VERSION_WITHOUT_BODY,
         /** {@code writeVersioned} with a {@code null} expectation is create-if-absent: it lands once and is refused
          *  while the object exists, leaving the stored content untouched. */
         VERSIONED_CREATE_IF_ABSENT,
@@ -163,6 +172,15 @@ public final class StoreContract {
         checks.add(new Check(Property.NATIVE_PAGING,
                 "the backend answers page natively rather than inheriting the list-and-sort fallback",
                 StoreContract::nativePaging));
+        checks.add(new Check(Property.SCAN_IS_RECURSIVE_AND_RESUMES,
+                "scan enumerates a prefix recursively in key order and resumes strictly after its cursor",
+                StoreContract::scanRecursiveAndResumes));
+        checks.add(new Check(Property.SCAN_CARRIES_LISTING_METADATA,
+                "scan carries each entry's size and modification time from the backend's own listing",
+                StoreContract::scanCarriesListingMetadata));
+        checks.add(new Check(Property.VERSION_WITHOUT_BODY,
+                "version answers a token without downloading the body",
+                StoreContract::versionWithoutBody));
         checks.add(new Check(Property.VERSIONED_CREATE_IF_ABSENT,
                 "writeVersioned against a null expectation is create-if-absent",
                 StoreContract::versionedCreateIfAbsent));
@@ -412,6 +430,71 @@ public final class StoreContract {
                     + ArtifactStore.MAX_INHERITED_CHILDREN + " children. Implement page(...) over the backend's own "
                     + "start-after pagination.");
         }
+    }
+
+    /** The keys one scan check plants: two levels deep, so a NON-recursive implementation misses the deep ones, and
+     *  lexicographically interleaved so a page boundary lands in the middle of a directory. */
+    private static final List<String> SCAN_KEYS = List.of(
+            "kit/scan/a/one", "kit/scan/a/two", "kit/scan/b/three", "kit/scan/b/four", "kit/scan/c/five");
+
+    private static void scanRecursiveAndResumes(ArtifactStore store) throws Exception {
+        for (String key : SCAN_KEYS) {
+            store.write(key, new ByteArrayInputStream(utf8(key)));
+        }
+        List<String> all = new ArrayList<>();
+        ArtifactStore.Scan whole = store.scan("kit/scan", "", 100, listed -> all.add(listed.key()));
+        isFalse(whole.truncated(), "a scan inside its limit is not truncated");
+        equal(new TreeSet<>(all), new TreeSet<>(SCAN_KEYS),
+                "scan is recursive: it delivers the keys two levels below the prefix, not the directory names above "
+                        + "them");
+        equal(all, all.stream().sorted().toList(), "scan delivers in key order");
+
+        // Resume: two pages of two must cover the same set, once each, with nothing skipped between them.
+        List<String> paged = new ArrayList<>();
+        String cursor = "";
+        int rounds = 0;
+        while (rounds++ < 10) {
+            ArtifactStore.Scan page = store.scan("kit/scan", cursor, 2, listed -> paged.add(listed.key()));
+            if (!page.truncated()) {
+                break;
+            }
+            cursor = page.cursor().orElseThrow();
+        }
+        equal(paged, all, "paged scanning delivers exactly the keys one unbounded scan does, in the same order");
+        for (String key : SCAN_KEYS) {
+            store.delete(key);
+        }
+    }
+
+    private static void scanCarriesListingMetadata(ArtifactStore store) throws Exception {
+        String key = "kit/scan-meta/object";
+        byte[] body = utf8("twenty-four characters!!");
+        Instant before = Instant.now().minusSeconds(60);
+        store.write(key, new ByteArrayInputStream(body));
+        List<ArtifactStore.Listed> listed = new ArrayList<>();
+        store.scan("kit/scan-meta", "", 10, listed::add);
+        equal(listed.size(), 1, "the planted object is scanned");
+        ArtifactStore.Listed entry = listed.getFirst();
+        isTrue(entry.size().isPresent(),
+                "scan carries the size from the backend's listing - without it every sweep stats once per object, "
+                        + "which is the N+1 scan exists to avoid");
+        equal(entry.size().getAsLong(), (long) body.length, "the carried size is the object's size");
+        isTrue(entry.modified().isPresent(), "scan carries the modification time from the backend's listing");
+        isTrue(entry.modified().orElseThrow().isAfter(before),
+                "the carried modification time is the object's, not a placeholder");
+        store.delete(key);
+    }
+
+    private static void versionWithoutBody(ArtifactStore store) throws Exception {
+        String key = "kit/version/object";
+        equal(store.version(key).isPresent(), false, "an absent object has no version");
+        store.writeVersioned(key, utf8("one"), null);
+        Object token = store.version(key).orElseThrow();
+        equal(token, store.readVersioned(key).orElseThrow().token(),
+                "version reports the same token readVersioned pairs with the body - one incarnation, one token");
+        store.writeVersioned(key, utf8("two"), token);
+        isFalse(store.version(key).orElseThrow().equals(token), "a write moves the version on");
+        store.delete(key);
     }
 
     private static void versionedCreateIfAbsent(ArtifactStore store) throws Exception {

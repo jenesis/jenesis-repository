@@ -338,6 +338,58 @@ public final class S3ArtifactStore implements ArtifactStore {
     }
 
     @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("A scan limit must be positive: " + limit);
+        }
+        String base = keyPrefix + (prefix.isEmpty() ? "" : prefix + "/");
+        // No delimiter, and therefore none of page()'s name-order repair: a recursive scan wants every object under
+        // the prefix, and without grouped prefixes the listing arrives in exactly the key order this method owes.
+        // maxKeys is limit + 1 so the page after the last delivered key is what proves whether more remains, rather
+        // than a second request asking.
+        long steps = 0;
+        long delivered = 0;
+        String last = null;
+        for (ListObjectsV2Response page : s3.listObjectsV2Paginator(b -> {
+            b.bucket(bucket).prefix(base).maxKeys(Math.min(limit + 1, 1000));
+            if (startAfter != null && !startAfter.isEmpty()) {
+                b.startAfter(keyPrefix + startAfter);
+            }
+        })) {
+            steps++;
+            for (S3Object object : page.contents()) {
+                if (delivered == limit) {
+                    return Scan.truncated(last, delivered, steps);
+                }
+                String key = object.key().substring(keyPrefix.length());
+                // Both halves come out of the listing response, so a scanned page costs exactly its listing calls.
+                consumer.accept(Listed.of(key,
+                        object.size() == null ? 0L : object.size(),
+                        object.lastModified() == null ? Instant.EPOCH : object.lastModified()));
+                delivered++;
+                last = key;
+            }
+        }
+        return Scan.exhausted(delivered, steps);
+    }
+
+    @Override
+    public Optional<Object> version(String key) throws IOException {
+        // A metadata request, where the inherited default would download the object to read its ETag.
+        try {
+            return Optional.of(s3.headObject(b -> b.bucket(bucket).key(keyPrefix + key)).eTag());
+        } catch (NoSuchKeyException _) {
+            return Optional.empty();
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return Optional.empty();
+            }
+            // Only a 404 is absence. A throttle or an auth failure must surface, not read as "unchanged".
+            throw new IOException("Could not read the version of " + key, e);
+        }
+    }
+
+    @Override
     public Optional<Versioned> readVersioned(String key) throws IOException {
         try (ResponseInputStream<GetObjectResponse> in = s3.getObject(b -> b.bucket(bucket).key(keyPrefix + key))) {
             byte[] content = in.readAllBytes();

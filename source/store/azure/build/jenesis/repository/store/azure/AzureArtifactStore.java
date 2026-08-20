@@ -10,6 +10,8 @@ import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.models.BlobDownloadContentResponse;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobItem;
+import com.azure.storage.blob.models.BlobItemProperties;
+import com.azure.storage.blob.models.BlobListDetails;
 import com.azure.storage.blob.models.BlobRange;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
@@ -289,6 +291,71 @@ public final class AzureArtifactStore implements ArtifactStore {
             }
         }
         return false;
+    }
+
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("A scan limit must be positive: " + limit);
+        }
+        String base = keyPrefix + (prefix.isEmpty() ? "" : prefix + "/");
+        // listBlobs, not listBlobsByHierarchy: a recursive scan wants every blob under the prefix, so there are no
+        // grouped prefixes to merge and none of page()'s name-order repair to do - the flat listing already arrives
+        // in the key order this method owes.
+        ListBlobsOptions options = new ListBlobsOptions()
+                .setPrefix(base)
+                .setMaxResultsPerPage(Math.min(limit + 1, 5000))
+                .setDetails(new BlobListDetails().setRetrieveMetadata(false));
+        if (startAfter != null && !startAfter.isEmpty()) {
+            options.setStartFrom(keyPrefix + startAfter);
+        }
+        long steps = 0;
+        long delivered = 0;
+        String last = null;
+        for (PagedResponse<BlobItem> page : container.listBlobs(options, null).iterableByPage()) {
+            steps++;
+            for (BlobItem item : page.getValue()) {
+                if (Boolean.TRUE.equals(item.isPrefix())) {
+                    continue;
+                }
+                String key = item.getName().substring(keyPrefix.length());
+                // startFrom seeks to a key INCLUSIVELY, where this method's cursor is exclusive, so the boundary
+                // itself comes back on the resuming page. Dropping it here is what keeps two pages from delivering
+                // one key twice - the same correction page() makes against the same option.
+                if (startAfter != null && !startAfter.isEmpty() && key.compareTo(startAfter) <= 0) {
+                    continue;
+                }
+                if (delivered == limit) {
+                    return Scan.truncated(last, delivered, steps);
+                }
+                BlobItemProperties properties = item.getProperties();
+                // Both halves ride along in the listing; nothing here issues a per-blob request.
+                consumer.accept(properties == null
+                        ? Listed.of(key)
+                        : Listed.of(key,
+                                properties.getContentLength() == null ? 0L : properties.getContentLength(),
+                                properties.getLastModified() == null
+                                        ? Instant.EPOCH : properties.getLastModified().toInstant()));
+                delivered++;
+                last = key;
+            }
+        }
+        return Scan.exhausted(delivered, steps);
+    }
+
+    @Override
+    public Optional<Object> version(String key) throws IOException {
+        // Blob properties, where the inherited default would download the blob to read its ETag.
+        try {
+            return Optional.of(container.getBlobClient(keyPrefix + key).getProperties().getETag());
+        } catch (BlobStorageException e) {
+            if (BlobErrorCode.BLOB_NOT_FOUND.equals(e.getErrorCode())
+                    || BlobErrorCode.CONTAINER_NOT_FOUND.equals(e.getErrorCode())) {
+                return Optional.empty();
+            }
+            // Only a not-found is absence; a throttle or auth failure must surface, not read as "unchanged".
+            throw new IOException("Could not read the version of " + key, e);
+        }
     }
 
     @Override

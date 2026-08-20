@@ -1,5 +1,6 @@
 package build.jenesis.repository.store.gcs.test;
 
+import com.github.tomakehurst.wiremock.client.WireMock;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.store.ArtifactStore;
@@ -94,6 +95,41 @@ public class GcsConditionalWriteTest {
         assertThat(second).isNotEqualTo(first);
         assertThat(objects).containsKey("acme/" + key);
         assertThat(second).isEqualTo(Long.toString(objects.get("acme/" + key).generation()));
+    }
+
+    @Test
+    public void the_version_token_is_read_without_downloading_the_body() throws IOException {
+        // The property the MinIO-backed contract fixture has to skip (it speaks no generation protocol at all), proven
+        // here instead: version() must answer the SAME token readVersioned pairs with the body, and must not fetch the
+        // body to do it. A config revalidation asks this on every read; paying a full download for it is the
+        // regression this method exists to avoid.
+        String key = "config/version-only";
+        assertThat(store.writeVersioned(key, "a".getBytes(StandardCharsets.UTF_8), null)).isTrue();
+        Object expected = store.readVersioned(key).orElseThrow().token();
+
+        server.resetRequests();
+        assertThat(store.version(key)).contains(expected);
+
+        server.verify(1, WireMock.headRequestedFor(WireMock.urlPathEqualTo("/repo/acme/" + key)));
+        server.verify(0, WireMock.getRequestedFor(WireMock.urlPathEqualTo("/repo/acme/" + key)));
+    }
+
+    @Test
+    public void an_absent_object_has_no_version_and_a_faulted_head_fails_loud() throws IOException {
+        assertThat(store.version("config/never-written")).isEmpty();
+        assertThatThrownBy(() -> store.version("config/faulted"))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("faulted");
+    }
+
+    @Test
+    public void version_fails_fast_when_the_endpoint_omits_the_generation_header() {
+        // The same fail-fast readVersioned makes, for the same reason: a token the write path would reject is worse
+        // than no token, so an endpoint that answers a HEAD without the generation is a configuration error and not a
+        // reason to fabricate one.
+        assertThatThrownBy(() -> store.version("no-generation-header"))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("x-goog-generation");
     }
 
     @Test
@@ -273,8 +309,25 @@ public class GcsConditionalWriteTest {
                 return status(204);
             }
             if (RequestMethod.HEAD.equals(method)) {
-                // exists()/size() issue a HEAD; only a 404 means absent, a non-404 (here a 403) must fail loud.
-                return status(key.endsWith("faulted") ? 403 : 404);
+                // exists()/size()/version() issue a HEAD; only a 404 means absent, a non-404 (here a 403) must fail
+                // loud. A real GCS endpoint answers a HEAD for a stored object with the same x-goog-generation it
+                // puts on a GET, which is what lets version() read a token without downloading the body.
+                if (key.endsWith("faulted")) {
+                    return status(403);
+                }
+                if (key.endsWith("no-generation-header")) {
+                    // The generic S3-compatible endpoint again: a HEAD that answers without the token header.
+                    return aResponse().withStatus(200).withHeader("Content-Length", "0").build();
+                }
+                Stored existing = objects.get(key);
+                if (existing == null) {
+                    return status(404);
+                }
+                return aResponse().withStatus(200)
+                        .withHeader("x-goog-generation", Long.toString(existing.generation()))
+                        .withHeader("ETag", "\"stub-" + existing.generation() + "\"")
+                        .withHeader("Content-Length", Long.toString(existing.content().length))
+                        .build();
             }
             return status(501);
         }
