@@ -10,7 +10,7 @@ import build.jenesis.repository.importer.ImportSourceProvider;
 
 /**
  * Builds an {@link IndexSource} for an {@code "index"} migration - any server that publishes the requested
- * format's own mirror-style index, including another jenesis. Discovered by the server through
+ * format's own mirror-style index, including another jenreg. Discovered by the server through
  * {@code ServiceLoader} over {@link ImportSourceProvider}. The ecosystem format is required up front (it names
  * whose index to walk); the provider resolves it among the installed formats through
  * {@link RepositoryFormat#installed(String)} and builds no source when the format is absent or does not proxy -

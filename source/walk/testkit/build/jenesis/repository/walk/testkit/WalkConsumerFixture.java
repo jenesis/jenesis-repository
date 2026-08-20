@@ -32,7 +32,7 @@ import build.jenesis.repository.walk.WalkConsumer;
 public interface WalkConsumerFixture {
 
     /** The {@link WalkConsumer#name() consumer name} this fixture drives - the same string an operator writes as
-     *  {@code jenesis.repository.<name>}, and the consumer's own key-space and settings namespace. */
+     *  {@code jenreg.<name>}, and the consumer's own key-space and settings namespace. */
     String consumer();
 
     /** The fully qualified {@code WalkConsumer} implementation class this fixture covers, as the census parses it out

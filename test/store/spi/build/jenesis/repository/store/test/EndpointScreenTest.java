@@ -21,9 +21,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class EndpointScreenTest {
 
-    private static final String ENDPOINT_KEY = "jenesis.repository.s3.endpoint";
+    private static final String ENDPOINT_KEY = "jenreg.s3.endpoint";
 
-    private static final String ALLOW_KEY = "jenesis.repository.s3.allow-insecure-endpoint";
+    private static final String ALLOW_KEY = "jenreg.s3.allow-insecure-endpoint";
 
     @Test
     void an_https_endpoint_needs_no_opt_out_whatever_its_case() {

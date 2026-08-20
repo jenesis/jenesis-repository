@@ -4,7 +4,7 @@ import module java.base;
 
 /**
  * The effective deployment configuration a {@link SafetyAdvisor} reads to decide whether a condition holds - a
- * registry-free, {@code java.base} view of the same {@code jenesis.*} key space the settings use, so an advisor never
+ * registry-free, {@code java.base} view of the same {@code jenreg.*} key space the settings use, so an advisor never
  * touches Spring. The distribution installs the real lookup by wrapping the Spring {@code Environment}
  * ({@code Configuration.of(environment::getProperty)}), so every key is resolvable in its relaxed environment-variable
  * spelling too; a test builds one from a map. The single abstract method is {@link #value}; the typed helpers

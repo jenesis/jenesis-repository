@@ -23,7 +23,7 @@ class ArtifactStoreProviderTest {
     @Test
     void the_filesystem_backend_resolves_by_name_and_reads_its_root_from_config() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         store.write("blobs/x", new ByteArrayInputStream("hi".getBytes(StandardCharsets.UTF_8)));
         assertThat(store.exists("blobs/x")).isTrue();
     }
@@ -32,7 +32,7 @@ class ArtifactStoreProviderTest {
     void no_backend_selected_falls_back_to_the_filesystem_provider() throws IOException {
         for (String unselected : new String[] {null, "", "  "}) {
             ArtifactStore store = ArtifactStoreProvider.resolve(
-                    unselected, key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                    unselected, key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
             store.write("blobs/y", new ByteArrayInputStream("yo".getBytes(StandardCharsets.UTF_8)));
             assertThat(store.exists("blobs/y")).isTrue();
         }
@@ -44,7 +44,7 @@ class ArtifactStoreProviderTest {
         // filesystem while the intended bucket 404s - it fails loudly, naming the backend it could not resolve, the
         // default it refuses to fall back to, and what is actually installed.
         assertThatThrownBy(() -> ArtifactStoreProvider.resolve(
-                "does-not-exist", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null))
+                "does-not-exist", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'does-not-exist'")
                 .hasMessageContaining("refusing to fall back to the 'filesystem' default")

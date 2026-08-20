@@ -50,9 +50,9 @@ class ImportEdgeProviderTest {
     void there_is_nothing_to_select_so_no_selection_key_can_claim_or_release_the_edge() {
         // T-101b: unlike the named singletons beside it (fetcher, walk, gc, rate-limiter, token-exchange,
         // key-usage, tenants), this SPI is a pure presence signal resolved through Providers.installedNames - there
-        // is no jenesis.repository.import-edge=<name> key, so the §9 "explicitly selected but unavailable" case
+        // is no jenreg.import-edge=<name> key, so the §9 "explicitly selected but unavailable" case
         // cannot arise and setting such a key changes nothing in either direction.
-        System.setProperty("jenesis.repository.import-edge", "not-installed");
+        System.setProperty("jenreg.import-edge", "not-installed");
         Features.reset();
         try {
             assertThat(ImportEdgeProvider.installed())
@@ -65,17 +65,17 @@ class ImportEdgeProviderTest {
                     .isTrue();
         } finally {
             System.clearProperty(Features.key(TestImportEdgeProvider.ACTIVATION_KEY));
-            System.clearProperty("jenesis.repository.import-edge");
+            System.clearProperty("jenreg.import-edge");
             Features.reset();
         }
     }
 
     @Test
     void an_explicit_feature_off_switch_falls_back_to_the_free_import_edge() {
-        // Even with the required config present, jenesis.repository.<name>=false disables the provider (the shared
+        // Even with the required config present, jenreg.<name>=false disables the provider (the shared
         // Features switch), so a deployment can fall back to the free import edge without removing the module.
         System.setProperty(Features.key(TestImportEdgeProvider.ACTIVATION_KEY), "true");
-        System.setProperty("jenesis.repository.test-import-edge", "false");
+        System.setProperty("jenreg.test-import-edge", "false");
         Features.reset();
         try {
             assertThat(ImportEdgeProvider.installed())
@@ -83,7 +83,7 @@ class ImportEdgeProviderTest {
                     .isFalse();
         } finally {
             System.clearProperty(Features.key(TestImportEdgeProvider.ACTIVATION_KEY));
-            System.clearProperty("jenesis.repository.test-import-edge");
+            System.clearProperty("jenreg.test-import-edge");
             Features.reset();
         }
     }

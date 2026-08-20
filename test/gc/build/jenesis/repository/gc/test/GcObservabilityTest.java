@@ -17,8 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The mark-sweep collector is its own {@link build.jenesis.repository.observation.ObservabilitySource}: once it has
- * run a {@code collect} it reports {@code jenesis.gc.condemned} (the in-flight condemned set), the
- * {@code jenesis.gc.collected} counter and a {@code jenesis.gc.lastrun} task status; a collector that has not run
+ * run a {@code collect} it reports {@code jenreg.gc.condemned} (the in-flight condemned set), the
+ * {@code jenreg.gc.collected} counter and a {@code jenreg.gc.lastrun} task status; a collector that has not run
  * (as with no collector installed or selected at all - the no-op default) reports nothing. Exercised against a real
  * filesystem store, without the server or Micrometer.
  */
@@ -31,7 +31,7 @@ class GcObservabilityTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private MarkSweepGarbageCollector collector() {
@@ -64,20 +64,20 @@ class GcObservabilityTest {
 
         assertThat(collector.metrics()).satisfiesExactlyInAnyOrder(
                 condemned -> {
-                    assertThat(condemned.name()).isEqualTo("jenesis.gc.condemned");
+                    assertThat(condemned.name()).isEqualTo("jenreg.gc.condemned");
                     assertThat(condemned.kind()).isEqualTo(Metric.Kind.GAUGE);
                     assertThat(condemned.value()).isEqualTo(1.0);
                     assertThat(condemned.description()).isNotBlank();
                 },
                 collected -> {
-                    assertThat(collected.name()).isEqualTo("jenesis.gc.collected");
+                    assertThat(collected.name()).isEqualTo("jenreg.gc.collected");
                     assertThat(collected.kind()).isEqualTo(Metric.Kind.COUNTER);
                     assertThat(collected.value()).isZero();
                     assertThat(collected.description()).isNotBlank();
                 });
 
         assertThat(collector.taskStatuses()).singleElement().satisfies(lastrun -> {
-            assertThat(lastrun.name()).isEqualTo("jenesis.gc.lastrun");
+            assertThat(lastrun.name()).isEqualTo("jenreg.gc.lastrun");
             assertThat(lastrun.state()).isEqualTo(TaskStatus.State.IDLE);
             assertThat(lastrun.lastRun()).isNotNull();
             assertThat(lastrun.description()).isNotBlank();
@@ -95,10 +95,10 @@ class GcObservabilityTest {
         collector.collect(store, Known.known(List.of("publish")), clock.instant()); // collect
 
         assertThat(collector.metrics())
-                .filteredOn(metric -> metric.name().equals("jenesis.gc.collected"))
+                .filteredOn(metric -> metric.name().equals("jenreg.gc.collected"))
                 .singleElement().extracting(Metric::value).isEqualTo(1.0);
         assertThat(collector.metrics())
-                .filteredOn(metric -> metric.name().equals("jenesis.gc.condemned"))
+                .filteredOn(metric -> metric.name().equals("jenreg.gc.condemned"))
                 .singleElement().extracting(Metric::value)
                 .as("the orphan was reclaimed, so nothing is left condemned").isEqualTo(0.0);
     }
@@ -110,9 +110,9 @@ class GcObservabilityTest {
         collector.collect(store, Known.known(List.of("publish")), clock.instant());
 
         assertThat(collector.metrics()).extracting(Metric::name)
-                .allSatisfy(name -> assertThat(name).matches("jenesis\\.gc\\..+"));
+                .allSatisfy(name -> assertThat(name).matches("jenreg\\.gc\\..+"));
         assertThat(collector.taskStatuses()).extracting(TaskStatus::name)
-                .allSatisfy(name -> assertThat(name).matches("jenesis\\.gc\\..+"));
+                .allSatisfy(name -> assertThat(name).matches("jenreg\\.gc\\..+"));
     }
 
     @Test
@@ -125,7 +125,7 @@ class GcObservabilityTest {
         ObservabilityReport report = ObservabilityReport.from(List.of(collector));
 
         assertThat(report.metrics()).extracting(Metric::name)
-                .containsExactly("jenesis.gc.collected", "jenesis.gc.condemned"); // name-sorted
-        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenesis.gc.lastrun");
+                .containsExactly("jenreg.gc.collected", "jenreg.gc.condemned"); // name-sorted
+        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenreg.gc.lastrun");
     }
 }

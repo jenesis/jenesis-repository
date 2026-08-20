@@ -16,10 +16,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The two composed proxy caches are each their own {@link build.jenesis.repository.observation.ObservabilitySource}:
  * the {@link NegativeCachingFetcher} reports the upstream misses it remembers as the bounded {@code
- * jenesis.proxy.negativecache.entries} gauge (against the map bound - a used-vs-available signal on the
+ * jenreg.proxy.negativecache.entries} gauge (against the map bound - a used-vs-available signal on the
  * memory-exhaustion vector the bound caps), and the {@link RevalidatingFetcher} reports the cached index bytes as the
- * bounded {@code jenesis.proxy.revalidation.bytes} gauge (against the byte ceiling) plus a plain {@code
- * jenesis.proxy.revalidation.entries} count, each with a presence health check and no background task. The signals
+ * bounded {@code jenreg.proxy.revalidation.bytes} gauge (against the byte ceiling) plus a plain {@code
+ * jenreg.proxy.revalidation.entries} count, each with a presence health check and no background task. The signals
  * collect into the single {@link ObservabilityReport} view the distribution, Actuator and the docs all read.
  */
 class ProxyCacheObservabilityTest {
@@ -32,7 +32,7 @@ class ProxyCacheObservabilityTest {
         NegativeCachingFetcher fetcher = new NegativeCachingFetcher(status(404), Duration.ofSeconds(60));
 
         assertThat(fetcher.metrics()).singleElement().satisfies(metric -> {
-            assertThat(metric.name()).isEqualTo("jenesis.proxy.negativecache.entries");
+            assertThat(metric.name()).isEqualTo("jenreg.proxy.negativecache.entries");
             assertThat(metric.kind()).isEqualTo(Metric.Kind.GAUGE);
             assertThat(metric.value()).isZero();
             assertThat(metric.limit()).isPresent();           // bounded: it knows its ceiling
@@ -85,11 +85,11 @@ class ProxyCacheObservabilityTest {
         RevalidatingFetcher fetcher = new RevalidatingFetcher(status(200));
 
         assertThat(fetcher.metrics()).hasSize(2);
-        Metric bytes = metric(fetcher, "jenesis.proxy.revalidation.bytes");
+        Metric bytes = metric(fetcher, "jenreg.proxy.revalidation.bytes");
         assertThat(bytes.value()).isZero();
         assertThat(bytes.unit()).isEqualTo("bytes");
         assertThat(bytes.limit()).isPresent();                 // bounded by the byte ceiling
-        Metric entries = metric(fetcher, "jenesis.proxy.revalidation.entries");
+        Metric entries = metric(fetcher, "jenreg.proxy.revalidation.entries");
         assertThat(entries.value()).isZero();
         assertThat(entries.limit()).isEmpty();                 // bounded by bytes, not a fixed count
         assertThat(fetcher.taskStatuses()).isEmpty();
@@ -102,8 +102,8 @@ class ProxyCacheObservabilityTest {
 
         fetcher.fetch(INDEX, Map.of());
 
-        assertThat(metric(fetcher, "jenesis.proxy.revalidation.bytes").value()).isEqualTo((double) body.length);
-        assertThat(metric(fetcher, "jenesis.proxy.revalidation.entries").value()).isEqualTo(1.0);
+        assertThat(metric(fetcher, "jenreg.proxy.revalidation.bytes").value()).isEqualTo((double) body.length);
+        assertThat(metric(fetcher, "jenreg.proxy.revalidation.entries").value()).isEqualTo(1.0);
     }
 
     @Test
@@ -116,12 +116,12 @@ class ProxyCacheObservabilityTest {
         ObservabilityReport report = ObservabilityReport.from(List.of(negative, revalidating));
 
         assertThat(report.metrics()).extracting(Metric::name).containsExactly(
-                "jenesis.proxy.negativecache.entries",
-                "jenesis.proxy.revalidation.bytes",
-                "jenesis.proxy.revalidation.entries");         // name-sorted, one collected view
+                "jenreg.proxy.negativecache.entries",
+                "jenreg.proxy.revalidation.bytes",
+                "jenreg.proxy.revalidation.entries");         // name-sorted, one collected view
         assertThat(report.healthChecks()).extracting(HealthCheck::name).containsExactly(
-                "jenesis.proxy.negativecache",
-                "jenesis.proxy.revalidation");
+                "jenreg.proxy.negativecache",
+                "jenreg.proxy.revalidation");
         assertThat(report.healthChecks()).extracting(HealthCheck::status).containsOnly(Health.UP);
         assertThat(report.healthChecks()).extracting(HealthCheck::description).allSatisfy(
                 description -> assertThat(description).isNotBlank());
@@ -137,9 +137,9 @@ class ProxyCacheObservabilityTest {
         ObservabilityReport report = ObservabilityReport.from(
                 List.of(negatives.get(0), revalidating));
         assertThat(report.metrics()).extracting(Metric::name)
-                .allSatisfy(name -> assertThat(name).matches("jenesis\\.proxy\\..+"));
+                .allSatisfy(name -> assertThat(name).matches("jenreg\\.proxy\\..+"));
         assertThat(report.healthChecks()).extracting(HealthCheck::name)
-                .allSatisfy(name -> assertThat(name).matches("jenesis\\.proxy\\..+"));
+                .allSatisfy(name -> assertThat(name).matches("jenreg\\.proxy\\..+"));
     }
 
     @Test
@@ -161,9 +161,9 @@ class ProxyCacheObservabilityTest {
 
         // Accounting stays bounded: the ninth 8 MiB body would take the total to 72 MiB, so one entry was evicted
         // back to the 64 MiB ceiling - eight remembered, not nine.
-        assertThat(metric(fetcher, "jenesis.proxy.revalidation.bytes").value())
+        assertThat(metric(fetcher, "jenreg.proxy.revalidation.bytes").value())
                 .isEqualTo((double) ceiling).isLessThanOrEqualTo((double) ceiling);
-        assertThat(metric(fetcher, "jenesis.proxy.revalidation.entries").value()).isEqualTo(8.0);
+        assertThat(metric(fetcher, "jenreg.proxy.revalidation.entries").value()).isEqualTo(8.0);
 
         // Oldest-first: the newest entry (index-8) is still remembered, so its re-fetch carries a conditional
         // validator; the oldest (index-0) was the one evicted, so its re-fetch is unconditional - proving the

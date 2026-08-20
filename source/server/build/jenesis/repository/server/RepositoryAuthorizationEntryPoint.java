@@ -17,7 +17,7 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  * for a {@code FORBIDDEN} decision (a key that lacks the right) and {@code 401} otherwise (no key, a malformed or
  * expired key). The decision drives the status, so a present-but-unauthorized key is always a {@code 403}. Every
  * denial it answers is recorded on the {@link AuthFailures} accessor under the {@code key} mechanism, so a metrics
- * layer can surface {@code jenesis.auth.failures} without this component depending on any registry.
+ * layer can surface {@code jenreg.auth.failures} without this component depending on any registry.
  */
 public final class RepositoryAuthorizationEntryPoint implements AuthenticationEntryPoint, AccessDeniedHandler {
 
@@ -38,7 +38,7 @@ public final class RepositoryAuthorizationEntryPoint implements AuthenticationEn
     }
 
     private void respond(HttpServletRequest request, HttpServletResponse response) {
-        Object decision = request.getAttribute("jenesis.repository.decision");
+        Object decision = request.getAttribute("jenreg.decision");
         int status = decision == Authorization.Decision.FORBIDDEN ? 403 : 401;
         response.setStatus(status);
         failures.record("key", status);

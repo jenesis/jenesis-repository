@@ -8,7 +8,7 @@
  * (two racing claimants resolve to one winner, a live holder is refused - never stolen - and an expired holder's
  * segment is reclaimed from its last committed cursor by another "node"); the concurrent-publication visibility
  * contract (seen this pass or guaranteed the next); pass lifecycle and generation turnover; the
- * {@code WalkProvider} ServiceLoader resolution with its {@code jenesis.repository.walk} selection; and the
+ * {@code WalkProvider} ServiceLoader resolution with its {@code jenreg.walk} selection; and the
  * {@code ArtifactStore.page} ordered-paging contract - the filesystem backend's bounded native override against the
  * interface default they must both honour.
  *

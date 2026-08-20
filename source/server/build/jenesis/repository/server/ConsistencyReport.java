@@ -36,7 +36,7 @@ public record ConsistencyReport(List<NodeView> nodes, List<NodeDivergence> diver
         return liveCount <= 1;
     }
 
-    /** The tuning a check runs under, each grounded in a real {@code jenesis.consistency.*} setting an operator sets.
+    /** The tuning a check runs under, each grounded in a real {@code jenreg.consistency.*} setting an operator sets.
      *  {@code stalenessWindowMillis} is how far behind the fleet cursor a node may fall and still be benign lag;
      *  {@code sweepIntervalMillis} times {@code sweepIntervals} is the budget a lagging node has to advance before it is
      *  called stuck; {@code deadAfterMillis} is when a silent node drops out of the live comparison entirely. */

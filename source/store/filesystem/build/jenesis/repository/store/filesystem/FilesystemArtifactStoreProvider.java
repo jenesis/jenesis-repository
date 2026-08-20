@@ -5,7 +5,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import module java.base;
 
-/** The {@code filesystem} provider: a store rooted at {@code JENESIS_STORE_ROOT} (default {@code /var/lib/jenesis-repository}). */
+/** The {@code filesystem} provider: a store rooted at {@code jenreg.filesystem.root} (default {@code /var/lib/jenesis-repository}). */
 public final class FilesystemArtifactStoreProvider implements ArtifactStoreProvider {
 
     @Override
@@ -15,7 +15,7 @@ public final class FilesystemArtifactStoreProvider implements ArtifactStoreProvi
 
     @Override
     public ArtifactStore create(UnaryOperator<String> config) {
-        String root = config.apply("JENESIS_STORE_ROOT");
+        String root = config.apply("jenreg.filesystem.root");
         Path path = Path.of(root == null || root.isBlank() ? "/var/lib/jenesis-repository" : root);
         try {
             // Create the store root owner-only (rwx------) up front, so the top-level container is never left

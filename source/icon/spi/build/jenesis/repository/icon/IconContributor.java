@@ -41,7 +41,7 @@ import module java.base;
  * <li><b>Selection failure.</b> Nothing is selected here and nothing here is discovered: this interface has no
  *     {@code uses} clause, no {@code provides} clause and no resolution primitive of its own. An implementation is
  *     found through <em>its family's</em> clause and switched on and off by that family's
- *     {@code jenesis.repository.<name>} key; a family whose implementation is switched off contributes no mark
+ *     {@code jenreg.<name>} key; a family whose implementation is switched off contributes no mark
  *     because it contributes nothing at all, which is the same degradation as an absent module (&sect;3).</li>
  * <li><b>Tenant scoping (&sect;6).</b> A mark carries no tenant data and no repository data - it is a deployment-static
  *     brand asset, fixed at build time in the contributing module - so it is the one console-facing document that may

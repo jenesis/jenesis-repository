@@ -60,7 +60,7 @@ abstract class WalkConsumerContractSuite {
     private FaultInjectingStore store(String name) throws IOException {
         Path directory = Files.createDirectories(root.resolve(name.replaceAll("[^A-Za-z0-9]", "_")));
         return FaultInjectingStore.wrap(ArtifactStoreProvider.resolve("filesystem",
-                key -> "JENESIS_STORE_ROOT".equals(key) ? directory.toString() : null));
+                key -> "jenreg.filesystem.root".equals(key) ? directory.toString() : null));
     }
 
     /** One walk over one movable clock: {@code expireClaims} is what stands in for "the crashed node stayed dead".

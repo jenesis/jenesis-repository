@@ -30,8 +30,8 @@ final class SecurityPostureTest {
 
     @Test
     void idGrammarAcceptsTheConventionAndRejectsGarbage() {
-        assertThat(Advisories.valid("jenesis.auth.open")).isTrue();
-        assertThat(Advisories.valid("jenesis.importer.ssrf")).isTrue();
+        assertThat(Advisories.valid("jenreg.auth.open")).isTrue();
+        assertThat(Advisories.valid("jenreg.importer.ssrf")).isTrue();
         assertThat(Advisories.valid("Jenesis.Auth.Open")).isFalse();
         assertThat(Advisories.valid("jenesis")).isFalse();
         assertThat(Advisories.valid("auth.open")).isFalse();
@@ -43,9 +43,9 @@ final class SecurityPostureTest {
         assertThatThrownBy(() -> SecurityAdvisory.deployment("not a name", Severity.WARN, "t", "w", "f", "k", "v", "d"))
                 .isInstanceOf(IllegalArgumentException.class);
         // A tenant-scoped advisory must name its tenant; a deployment-wide one must not.
-        assertThatThrownBy(() -> new SecurityAdvisory("jenesis.x.y", Severity.WARN, Scope.TENANT, "", "t", "w", "f",
+        assertThatThrownBy(() -> new SecurityAdvisory("jenreg.x.y", Severity.WARN, Scope.TENANT, "", "t", "w", "f",
                 "k", "v", "d")).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SecurityAdvisory("jenesis.x.y", Severity.WARN, Scope.DEPLOYMENT, "acme", "t", "w",
+        assertThatThrownBy(() -> new SecurityAdvisory("jenreg.x.y", Severity.WARN, Scope.DEPLOYMENT, "acme", "t", "w",
                 "f", "k", "v", "d")).isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -62,9 +62,9 @@ final class SecurityPostureTest {
 
     @Test
     void aReportSortsCriticalFirstThenById() {
-        SecurityAdvisory info = SecurityAdvisory.deployment("jenesis.a.info", Severity.INFO, "t", "w", "f", "k", "v", "d");
-        SecurityAdvisory warn = SecurityAdvisory.deployment("jenesis.b.warn", Severity.WARN, "t", "w", "f", "k", "v", "d");
-        SecurityAdvisory crit = SecurityAdvisory.deployment("jenesis.c.crit", Severity.CRITICAL, "t", "w", "f", "k", "v", "d");
+        SecurityAdvisory info = SecurityAdvisory.deployment("jenreg.a.info", Severity.INFO, "t", "w", "f", "k", "v", "d");
+        SecurityAdvisory warn = SecurityAdvisory.deployment("jenreg.b.warn", Severity.WARN, "t", "w", "f", "k", "v", "d");
+        SecurityAdvisory crit = SecurityAdvisory.deployment("jenreg.c.crit", Severity.CRITICAL, "t", "w", "f", "k", "v", "d");
         PostureReport report = PostureReport.from(List.of(c -> List.of(info, warn, crit)), config());
         assertThat(report.advisories()).containsExactly(crit, warn, info);
         assertThat(report.count()).isEqualTo(3);
@@ -75,28 +75,28 @@ final class SecurityPostureTest {
     @Test
     void discoveryFindsTheProvidesDeclaredAdvisorAndHonoursTheDisabledIsSilentRule() {
         // Absent its key, the sample advisor (a stand-in for a disabled feature) contributes nothing.
-        assertThat(PostureReport.discover(config()).advisories()).noneMatch(a -> a.id().equals("jenesis.sample.unsafe"));
+        assertThat(PostureReport.discover(config()).advisories()).noneMatch(a -> a.id().equals("jenreg.sample.unsafe"));
         // Flip its key and the same discovery surfaces it.
         assertThat(PostureReport.discover(config(SampleSafetyAdvisor.KEY, "true")).advisories())
-                .anyMatch(a -> a.id().equals("jenesis.sample.unsafe"));
+                .anyMatch(a -> a.id().equals("jenreg.sample.unsafe"));
     }
 
     @Test
     void theCoreSeederIsSilentOnTheSecureDefault() {
         // The secure defaults (auth on, SSRF screen on, no dev profile, admins named, not a writable demo) raise nothing.
-        assertThat(new SecurityPosture().advise(config("jenesis.repository.rate-limit", "600"))).isEmpty();
+        assertThat(new SecurityPosture().advise(config("jenreg.rate-limit", "600"))).isEmpty();
     }
 
     @Test
     void theCoreSeederFlagsAuthOffAsCritical() {
         List<SecurityAdvisory> advisories = new SecurityPosture()
-                .advise(config("jenesis.repository.auth", "false", "jenesis.repository.rate-limit", "600"));
+                .advise(config("jenreg.auth", "false", "jenreg.rate-limit", "600"));
         assertThat(advisories).hasSize(1);
         SecurityAdvisory advisory = advisories.get(0);
-        assertThat(advisory.id()).isEqualTo("jenesis.auth.open");
+        assertThat(advisory.id()).isEqualTo("jenreg.auth.open");
         assertThat(advisory.severity()).isEqualTo(Severity.CRITICAL);
         assertThat(advisory.scope()).isEqualTo(Scope.DEPLOYMENT);
-        assertThat(advisory.settingKey()).isEqualTo("jenesis.repository.auth");
+        assertThat(advisory.settingKey()).isEqualTo("jenreg.auth");
         assertThat(advisory.settingValue()).isEqualTo("true");
     }
 
@@ -107,12 +107,12 @@ final class SecurityPostureTest {
         // immutable public demo, the recommended safe configuration - must independently NOT fire. This pins the
         // second half of the &&: a demo that is read-only is browsable-but-immutable, exactly the advisory's own fix.
         List<String> ids = new SecurityPosture().advise(config(
-                        "jenesis.repository.demo", "true",
-                        "jenesis.repository.read-only", "true",
-                        "jenesis.repository.rate-limit", "600"))
+                        "jenreg.demo", "true",
+                        "jenreg.read-only", "true",
+                        "jenreg.rate-limit", "600"))
                 .stream().map(SecurityAdvisory::id).toList();
         assertThat(ids).as("a read-only demo is the safe configuration and raises no writable-demo advisory")
-                .doesNotContain("jenesis.demo.writable");
+                .doesNotContain("jenreg.demo.writable");
     }
 
     @Test
@@ -120,52 +120,52 @@ final class SecurityPostureTest {
         // Regression: the advisory once matched only the whole value "*", so 'alice,*' - which Principals honours as
         // the wildcard (it comma-splits and checks the set contains "*"), granting every signed-in user admin - failed
         // open and raised no warning. It must fire whenever "*" appears as any element of the comma-separated list.
-        List<String> ids = new SecurityPosture().advise(config("jenesis.ui.admins", "github/alice, *"))
+        List<String> ids = new SecurityPosture().advise(config("jenreg.ui.admins", "github/alice, *"))
                 .stream().map(SecurityAdvisory::id).toList();
         assertThat(ids)
-                .as("a '*' element anywhere in jenesis.ui.admins raises the open-console advisory, not only a bare '*'")
-                .contains("jenesis.console.wildcard");
+                .as("a '*' element anywhere in jenreg.ui.admins raises the open-console advisory, not only a bare '*'")
+                .contains("jenreg.console.wildcard");
         // And a list with no wildcard - named operators only - does not raise it.
-        assertThat(new SecurityPosture().advise(config("jenesis.ui.admins", "github/alice, oidc/bob"))
+        assertThat(new SecurityPosture().advise(config("jenreg.ui.admins", "github/alice, oidc/bob"))
                 .stream().map(SecurityAdvisory::id).toList())
-                .doesNotContain("jenesis.console.wildcard");
+                .doesNotContain("jenreg.console.wildcard");
     }
 
     @Test
     void theCoreSeederFlagsTheRealFootgunsOnTheirActualKeys() {
         Configuration config = config(
-                "jenesis.repository.auth", "false",
-                "jenesis.repository.block-private-import-hosts", "false",
-                "jenesis.ui.admins", "*",
+                "jenreg.auth", "false",
+                "jenreg.block-private-import-hosts", "false",
+                "jenreg.ui.admins", "*",
                 "spring.profiles.active", "prod,dev",
-                "jenesis.repository.demo", "true",
-                "jenesis.repository.read-only", "false");
+                "jenreg.demo", "true",
+                "jenreg.read-only", "false");
         List<String> ids = new SecurityPosture().advise(config).stream().map(SecurityAdvisory::id).toList();
-        assertThat(ids).contains("jenesis.auth.open", "jenesis.importer.ssrf", "jenesis.ratelimit.unset",
-                "jenesis.console.wildcard", "jenesis.profile.dev", "jenesis.demo.writable");
+        assertThat(ids).contains("jenreg.auth.open", "jenreg.importer.ssrf", "jenreg.ratelimit.unset",
+                "jenreg.console.wildcard", "jenreg.profile.dev", "jenreg.demo.writable");
     }
 
     @Test
     void theCoreSeederWarnsOnAnonymousReadAndEscalatesAnonymousWriteOrAdmin() {
         // Read-only anonymous (the public-mirror pattern) is a WARN on its actual key.
         List<SecurityAdvisory> read = new SecurityPosture().advise(
-                config("jenesis.repository.auth", "true", "jenesis.repository.anonymous-rights", "repository:read",
-                        "jenesis.repository.rate-limit", "600"));
-        SecurityAdvisory anonymous = read.stream().filter(a -> a.id().equals("jenesis.anonymous.enabled"))
+                config("jenreg.auth", "true", "jenreg.anonymous-rights", "repository:read",
+                        "jenreg.rate-limit", "600"));
+        SecurityAdvisory anonymous = read.stream().filter(a -> a.id().equals("jenreg.anonymous.enabled"))
                 .findFirst().orElseThrow();
         assertThat(anonymous.severity()).isEqualTo(Severity.WARN);
         assertThat(anonymous.scope()).isEqualTo(Scope.DEPLOYMENT);
 
         // Anonymous write (or any manage/admin) escalates to a governance-level CRITICAL.
         List<String> writeIds = new SecurityPosture().advise(
-                        config("jenesis.repository.auth", "true", "jenesis.repository.anonymous-rights",
-                                "repository:read,repository:write", "jenesis.repository.rate-limit", "600"))
+                        config("jenreg.auth", "true", "jenreg.anonymous-rights",
+                                "repository:read,repository:write", "jenreg.rate-limit", "600"))
                 .stream().map(SecurityAdvisory::id).toList();
-        assertThat(writeIds).contains("jenesis.anonymous.write").doesNotContain("jenesis.anonymous.enabled");
+        assertThat(writeIds).contains("jenreg.anonymous.write").doesNotContain("jenreg.anonymous.enabled");
         SecurityAdvisory writeAdvisory = new SecurityPosture().advise(
-                        config("jenesis.repository.auth", "true", "jenesis.repository.anonymous-rights", "manage:read",
-                                "jenesis.repository.rate-limit", "600"))
-                .stream().filter(a -> a.id().equals("jenesis.anonymous.write")).findFirst().orElseThrow();
+                        config("jenreg.auth", "true", "jenreg.anonymous-rights", "manage:read",
+                                "jenreg.rate-limit", "600"))
+                .stream().filter(a -> a.id().equals("jenreg.anonymous.write")).findFirst().orElseThrow();
         assertThat(writeAdvisory.severity()).as("any manage/admin anonymous right is CRITICAL")
                 .isEqualTo(Severity.CRITICAL);
     }
@@ -173,13 +173,13 @@ final class SecurityPostureTest {
     @Test
     void theCoreSeederIsSilentOnAnonymousRightsWhenUnsetOrWhenTheInstanceIsAlreadyOpen() {
         // Unset (the default) => no anonymous advisory at all.
-        assertThat(new SecurityPosture().advise(config("jenesis.repository.rate-limit", "600")))
-                .noneMatch(a -> a.id().startsWith("jenesis.anonymous"));
-        // Under auth=false the instance is already fully open (jenesis.auth.open owns that), so anonymous-rights is
+        assertThat(new SecurityPosture().advise(config("jenreg.rate-limit", "600")))
+                .noneMatch(a -> a.id().startsWith("jenreg.anonymous"));
+        // Under auth=false the instance is already fully open (jenreg.auth.open owns that), so anonymous-rights is
         // redundant and raises no separate anonymous advisory.
-        assertThat(new SecurityPosture().advise(config("jenesis.repository.auth", "false",
-                "jenesis.repository.anonymous-rights", "repository:read", "jenesis.repository.rate-limit", "600")))
-                .noneMatch(a -> a.id().startsWith("jenesis.anonymous"));
+        assertThat(new SecurityPosture().advise(config("jenreg.auth", "false",
+                "jenreg.anonymous-rights", "repository:read", "jenreg.rate-limit", "600")))
+                .noneMatch(a -> a.id().startsWith("jenreg.anonymous"));
     }
 
     @Test
@@ -189,10 +189,10 @@ final class SecurityPostureTest {
         // firing advisories read, assert the seeds actually fired (so the check is not vacuous), then prove no
         // advisory's rendered text - title, why, fix, AND the recommended settingValue - repeats the sentinel.
         Configuration config = config(
-                "jenesis.repository.auth", "false",
-                "jenesis.ui.admins", "github/SECRETVALUE, *",
+                "jenreg.auth", "false",
+                "jenreg.ui.admins", "github/SECRETVALUE, *",
                 "spring.profiles.active", "SECRETVALUE,dev",
-                "jenesis.repository.demo", "true");
+                "jenreg.demo", "true");
         List<SecurityAdvisory> advisories = new SecurityPosture().advise(config);
         assertThat(advisories).as("the seeds fired, so the doesNotContain checks below are non-vacuous").isNotEmpty();
         for (SecurityAdvisory advisory : advisories) {

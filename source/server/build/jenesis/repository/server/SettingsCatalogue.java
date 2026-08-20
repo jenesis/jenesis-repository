@@ -14,9 +14,9 @@ import module java.base;
  * unreachable without hand-editing a store object - so adding one here is part of adding the read.
  *
  * <p>Deploy-time / bootstrap keys are deliberately NOT here: the store backend and its credentials (the
- * {@code JENESIS_*} env), the fixed-tenant routing ({@code jenesis.repository.tenant}), the auth and read-only
- * deployment flags, and the per-node consistency enable/identity ({@code jenesis.consistency.enabled} /
- * {@code jenesis.consistency.node-id}, which are per-instance and cannot be one fleet-shared store setting). Those are
+ * {@code JENESIS_*} env), the fixed-tenant routing ({@code jenreg.tenant}), the auth and read-only
+ * deployment flags, and the per-node consistency enable/identity ({@code jenreg.consistency.enabled} /
+ * {@code jenreg.consistency.node-id}, which are per-instance and cannot be one fleet-shared store setting). Those are
  * bound at startup from the environment/file configuration, not runtime-editable dials, and are the test's bootstrap
  * allowlist. A declared dial nobody reads is a dead dial, not a stranded key, and is out of the guard's scope.
  */
@@ -32,15 +32,15 @@ public final class SettingsCatalogue {
             //     windows NodeFingerprintPublisher and NodeConsistency read through the effective-config lookup. The
             //     enable toggle and the node id are per-node deploy-time bootstrap, not dials, so they are on the
             //     test's bootstrap allowlist, not here. ---
-            new Setting("jenesis.consistency.heartbeat",
+            new Setting("jenreg.consistency.heartbeat",
                     "Milliseconds between this node's fingerprint publishes (the consistency heartbeat interval)"),
-            new Setting("jenesis.consistency.staleness-window",
+            new Setting("jenreg.consistency.staleness-window",
                     "Milliseconds a node may lag and still count as benign lag rather than stuck-diverged"),
-            new Setting("jenesis.consistency.sweep-interval",
+            new Setting("jenreg.consistency.sweep-interval",
                     "Milliseconds between consistency sweeps (also the heartbeat fallback when the heartbeat is unset)"),
-            new Setting("jenesis.consistency.sweep-intervals",
+            new Setting("jenreg.consistency.sweep-intervals",
                     "How many frozen sweep intervals before a live-but-frozen node is reported stuck-diverged"),
-            new Setting("jenesis.consistency.dead-after",
+            new Setting("jenreg.consistency.dead-after",
                     "Milliseconds after a node's last heartbeat before it is treated as dead and no longer compared"),
 
             // --- Pull-through proxy negative cache (source/proxy). ---
@@ -62,17 +62,17 @@ public final class SettingsCatalogue {
                     "The rights a keyless caller is granted under an enforcing deployment; blank (default) grants none"),
 
             // --- Garbage-collection dials (source/gc). ---
-            new Setting("jenesis.gc.stride",
+            new Setting("jenreg.gc.stride",
                     "Mark-sweep GC batch stride (number of objects scanned per pass)"),
-            new Setting("jenesis.gc.grace",
+            new Setting("jenreg.gc.grace",
                     "Grace period an unreferenced object survives before mark-sweep GC may reclaim it"),
 
             // --- Artifact-walk dials (source/walk). ---
-            new Setting("jenesis.walk.checkpoint",
+            new Setting("jenreg.walk.checkpoint",
                     "Artifact-walk checkpoint interval (entries between resumable cursor writes)"),
-            new Setting("jenesis.walk.segments",
+            new Setting("jenreg.walk.segments",
                     "Artifact-walk parallel segment count"),
-            new Setting("jenesis.walk.ttl",
+            new Setting("jenreg.walk.ttl",
                     "Seconds an artifact-walk cursor stays resumable before it expires"));
 
     private SettingsCatalogue() {

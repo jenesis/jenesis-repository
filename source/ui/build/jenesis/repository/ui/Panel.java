@@ -33,7 +33,7 @@ import module java.base;
  *   <li><b>Selection failure.</b> There is nothing to select: the policy is additive, every discovered panel is
  *       rendered, and no configuration key names one. Discovery is a plain {@code ServiceLoader.load(Panel.class)} in
  *       {@code UiConfig} rather than the shared {@code Providers.all} primitive - a {@code Panel} declares no
- *       {@code name()} - so there is no {@code jenesis.repository.<name>=false} toggle and no <em>runtime</em>
+ *       {@code name()} - so there is no {@code jenreg.<name>=false} toggle and no <em>runtime</em>
  *       duplicate-id refusal: two panels declaring the same {@link #id()} would both render, producing two navigation
  *       entries and two identically-anchored bodies. The refusal is a <b>build-time census</b> instead
  *       (the panel contract): it compares the statically declared providers, the panels the runtime graph

@@ -37,7 +37,7 @@ class PublicationCommitTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private static ByteArrayInputStream bytes(String content) {
@@ -644,7 +644,7 @@ class PublicationCommitTest {
 
     private static ArtifactStore at(Path scope) {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? scope.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? scope.toString() : null);
     }
 
     /** Every stored object under {@code scope} as key &rarr; content digest. */

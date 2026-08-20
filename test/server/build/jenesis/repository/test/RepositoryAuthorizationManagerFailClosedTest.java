@@ -119,7 +119,7 @@ public class RepositoryAuthorizationManagerFailClosedTest {
 
     private RepositoryAuthorizationManager manager(Authorization authorization) {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         RepositoryRouting.Route route = new RepositoryRouting.Route("acme", "default", store, "maven/org/x/y/1/y-1.jar");
         return new RepositoryAuthorizationManager(authorization, new FixedRoute(route));
     }
@@ -134,7 +134,7 @@ public class RepositoryAuthorizationManagerFailClosedTest {
 
         assertThat(result.isGranted())
                 .as("an unreadable store denies the request - the gate fails closed, never open").isFalse();
-        assertThat(attributes.get("jenesis.repository.decision"))
+        assertThat(attributes.get("jenreg.decision"))
                 .as("and specifically FORBIDDEN, which the entry point answers 403 - not a 401 or, worse, an allow")
                 .isEqualTo(Authorization.Decision.FORBIDDEN);
     }
@@ -144,7 +144,7 @@ public class RepositoryAuthorizationManagerFailClosedTest {
         // The control: over a clean store where the key carries repository:read, the identical request is allowed. So
         // the fail-closed deny above is the store fault at work, not a request that would have been refused anyway.
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         Authorization authorization = Authorization.enforcing(store);
         String key = Authorization.mint("acme");
         authorization.provision("acme", Authorization.hash(key), "k", null);
@@ -154,6 +154,6 @@ public class RepositoryAuthorizationManagerFailClosedTest {
         var result = manager(authorization).authorize(() -> null, new RequestAuthorizationContext(request(key, attributes)));
 
         assertThat(result.isGranted()).as("a clean store with the right granted allows the request").isTrue();
-        assertThat(attributes.get("jenesis.repository.decision")).isEqualTo(Authorization.Decision.ALLOWED);
+        assertThat(attributes.get("jenreg.decision")).isEqualTo(Authorization.Decision.ALLOWED);
     }
 }

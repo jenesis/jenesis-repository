@@ -29,13 +29,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * problem.
  *
  * <p><b>One opt-out:</b> an internal-host migration - typically both private-addressed <em>and</em> plaintext -
- * already sets {@code jenesis.repository.block-private-import-hosts=false}, and the same loopback plaintext import
+ * already sets {@code jenreg.block-private-import-hosts=false}, and the same loopback plaintext import
  * then runs. A fake Nexus on localhost stands in for the private host these cases target.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ImportHostGuardTest {
 
-    private static final String GUARD = "jenesis.repository.block-private-import-hosts";
+    private static final String GUARD = "jenreg.block-private-import-hosts";
 
     @TempDir
     static Path root;
@@ -48,8 +48,8 @@ public class ImportHostGuardTest {
 
     @BeforeAll
     public void setUp() throws IOException {
-        System.setProperty("JENESIS_STORE_ROOT", root.toString());
-        System.setProperty("jenesis.repository.auth", "false");
+        System.setProperty("jenreg.filesystem.root", root.toString());
+        System.setProperty("jenreg.auth", "false");
 
         nexus = new WireMockServer(WireMockConfiguration.options().bindAddress("localhost").dynamicPort());
         nexus.start();
@@ -68,8 +68,8 @@ public class ImportHostGuardTest {
     public void tearDown() {
         running.close();
         nexus.stop();
-        System.clearProperty("JENESIS_STORE_ROOT");
-        System.clearProperty("jenesis.repository.auth");
+        System.clearProperty("jenreg.filesystem.root");
+        System.clearProperty("jenreg.auth");
         System.clearProperty(GUARD);
     }
 

@@ -17,10 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * An enabled batching key-usage tracker is its own {@link build.jenesis.repository.observation.ObservabilitySource}:
- * it reports its bounded queue depth ({@code jenesis.usage.queue}, used vs the fixed capacity), the per-credential
- * accumulators it holds ({@code jenesis.usage.tracked}), the hits dropped under back-pressure
- * ({@code jenesis.usage.dropped}), a {@code jenesis.usage.worker} health check (DOWN when the worker died with
- * tracking on) and a {@code jenesis.usage.flush} task status stamped with the last drain; a disabled tracker reports
+ * it reports its bounded queue depth ({@code jenreg.usage.queue}, used vs the fixed capacity), the per-credential
+ * accumulators it holds ({@code jenreg.usage.tracked}), the hits dropped under back-pressure
+ * ({@code jenreg.usage.dropped}), a {@code jenreg.usage.worker} health check (DOWN when the worker died with
+ * tracking on) and a {@code jenreg.usage.flush} task status stamped with the last drain; a disabled tracker reports
  * nothing at all. The signals collect into the single {@link ObservabilityReport} the distribution, Actuator and the
  * docs all read.
  */
@@ -39,7 +39,7 @@ class UsageTrackerObservabilityTest {
     @BeforeEach
     void setUp() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         authorization = Authorization.enforcing(store);
         hash = Authorization.hash(Authorization.mint("acme"));
         authorization.provision("acme", hash, "k", null);
@@ -60,12 +60,12 @@ class UsageTrackerObservabilityTest {
         BatchingKeyUsageTracker tracker = new BatchingKeyUsageTracker(authorization, true);
 
         assertThat(tracker.healthChecks()).singleElement().satisfies(check -> {
-            assertThat(check.name()).isEqualTo("jenesis.usage.worker");
+            assertThat(check.name()).isEqualTo("jenreg.usage.worker");
             assertThat(check.status()).as("switched on but its worker never started").isEqualTo(Health.DOWN);
             assertThat(check.detail()).isNotBlank();
         });
         assertThat(tracker.taskStatuses()).singleElement().satisfies(task -> {
-            assertThat(task.name()).isEqualTo("jenesis.usage.flush");
+            assertThat(task.name()).isEqualTo("jenreg.usage.flush");
             assertThat(task.state()).isEqualTo(TaskStatus.State.FAILED);
             assertThat(task.everRan()).as("no drain has happened yet").isFalse();
         });
@@ -94,13 +94,13 @@ class UsageTrackerObservabilityTest {
             tracker.record("acme", hash, null);   // no worker draining, so the queue fills and then drops
         }
 
-        Metric queue = metric(tracker, "jenesis.usage.queue");
+        Metric queue = metric(tracker, "jenreg.usage.queue");
         assertThat(queue.kind()).isEqualTo(Metric.Kind.GAUGE);
         assertThat(queue.limit()).as("the fixed queue bound").hasValue(100_000.0);
         assertThat(queue.value()).as("filled to the bound").isEqualTo(100_000.0);
         assertThat(queue.usage()).as("used vs available, at the ceiling").hasValue(1.0);
 
-        Metric dropped = metric(tracker, "jenesis.usage.dropped");
+        Metric dropped = metric(tracker, "jenreg.usage.dropped");
         assertThat(dropped.kind()).isEqualTo(Metric.Kind.COUNTER);
         assertThat(dropped.value()).as("offers past the bound are dropped").isGreaterThan(0.0);
     }
@@ -112,7 +112,7 @@ class UsageTrackerObservabilityTest {
 
         tracker.drain(List.of(new BatchingKeyUsageTracker.Hit("acme", hash, "10.0.0.1")), when);
 
-        assertThat(metric(tracker, "jenesis.usage.tracked").value())
+        assertThat(metric(tracker, "jenreg.usage.tracked").value())
                 .as("the drained credential is held pending its next-day flush").isEqualTo(1.0);
         assertThat(tracker.taskStatuses()).singleElement().satisfies(task -> {
             assertThat(task.everRan()).as("the drain stamped the task").isTrue();
@@ -127,12 +127,12 @@ class UsageTrackerObservabilityTest {
         ObservabilityReport report = ObservabilityReport.from(List.of(tracker));
 
         assertThat(report.metrics()).extracting(Metric::name)
-                .containsExactly("jenesis.usage.dropped", "jenesis.usage.queue", "jenesis.usage.tracked");
+                .containsExactly("jenreg.usage.dropped", "jenreg.usage.queue", "jenreg.usage.tracked");
         assertThat(report.metrics()).allSatisfy(metric ->
-                assertThat(metric.name()).matches("jenesis\\.usage\\..+"));
+                assertThat(metric.name()).matches("jenreg\\.usage\\..+"));
         assertThat(report.metrics()).allSatisfy(metric -> assertThat(metric.description()).isNotBlank());
-        assertThat(report.healthChecks()).extracting(HealthCheck::name).containsExactly("jenesis.usage.worker");
-        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenesis.usage.flush");
+        assertThat(report.healthChecks()).extracting(HealthCheck::name).containsExactly("jenreg.usage.worker");
+        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenreg.usage.flush");
     }
 
     @Test

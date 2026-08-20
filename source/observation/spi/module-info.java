@@ -2,8 +2,8 @@
  * The observability SPI: the self-describing signals a plugin reports about itself - {@link
  * build.jenesis.repository.observation.HealthCheck health checks}, {@link build.jenesis.repository.observation.Metric
  * metrics} and {@link build.jenesis.repository.observation.TaskStatus background-task status} - each carrying a stable
- * {@code jenesis.<feature>.<signal>} name (the {@link build.jenesis.repository.observation.Signals} grammar, the same
- * {@code jenesis.<feature>.*} convention configuration uses) and a human-readable description. A plugin exposes them by
+ * {@code jenreg.<feature>.<signal>} name (the {@link build.jenesis.repository.observation.Signals} grammar, the same
+ * {@code jenreg.<feature>.*} convention configuration uses) and a human-readable description. A plugin exposes them by
  * implementing {@link build.jenesis.repository.observation.ObservabilitySource} through the optional default-method
  * pattern its provider SPI already uses for {@code requiredConfig()}; it is discovered with {@link
  * java.util.ServiceLoader}, and a <em>disabled or absent</em> plugin contributes nothing - so the overview never lists

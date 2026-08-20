@@ -9,9 +9,9 @@ import module java.base;
 
 /**
  * The observability face of the multi-node consistency check (WCON.2, WO.4): the fleet's per-node numbers reported as
- * self-describing signals, so the same overview that shows every other {@code jenesis.*} signal shows how many nodes are
- * live and whether any is diverged. It reports {@code jenesis.consistency.nodes} (a gauge of live nodes),
- * {@code jenesis.consistency.diverged} (a gauge of stuck divergences), and a {@code jenesis.consistency.divergence}
+ * self-describing signals, so the same overview that shows every other {@code jenreg.*} signal shows how many nodes are
+ * live and whether any is diverged. It reports {@code jenreg.consistency.nodes} (a gauge of live nodes),
+ * {@code jenreg.consistency.diverged} (a gauge of stuck divergences), and a {@code jenreg.consistency.divergence}
  * health check that is {@link Health#UP} when the fleet has converged (or is single-node) and {@link Health#DEGRADED}
  * when a node is stuck - a detect-not-block signal, never a failure.
  *
@@ -36,10 +36,10 @@ public final class NodeConsistencyObservability implements ObservabilitySource {
             return List.of();
         }
         return List.of(
-                Metric.gauge("jenesis.consistency.nodes",
+                Metric.gauge("jenreg.consistency.nodes",
                         "Live nodes sharing this store (heartbeating within the staleness window).",
                         report.liveCount(), "nodes"),
-                Metric.gauge("jenesis.consistency.diverged",
+                Metric.gauge("jenreg.consistency.diverged",
                         "Nodes flagged stuck-diverged from the fleet (config, cursor or pointer split).",
                         report.divergences().size(), "nodes"));
     }
@@ -51,7 +51,7 @@ public final class NodeConsistencyObservability implements ObservabilitySource {
             return List.of();
         }
         if (report.singleNode()) {
-            return List.of(new HealthCheck("jenesis.consistency.divergence",
+            return List.of(new HealthCheck("jenreg.consistency.divergence",
                     "Whether any node has diverged from the fleet (detect-only, never blocks).", Health.UP,
                     "single node - nothing to diverge from"));
         }
@@ -59,7 +59,7 @@ public final class NodeConsistencyObservability implements ObservabilitySource {
         String detail = report.converged()
                 ? report.liveCount() + " live nodes converged"
                 : report.divergences().size() + " of " + report.liveCount() + " live nodes diverged";
-        return List.of(new HealthCheck("jenesis.consistency.divergence",
+        return List.of(new HealthCheck("jenreg.consistency.divergence",
                 "Whether any node has diverged from the fleet (detect-only, never blocks).", health, detail));
     }
 

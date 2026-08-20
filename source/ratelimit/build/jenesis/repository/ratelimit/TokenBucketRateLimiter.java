@@ -19,9 +19,9 @@ import module java.base;
  * service on the hot path; a single front door (or a small node count) keeps it close to the configured number.
  *
  * <p>It is its own {@link ObservabilitySource}: the live limiter the distribution holds reports {@code
- * jenesis.ratelimit.buckets} - the number of keys it is currently tracking, one bucket each - as a gauge, so an
+ * jenreg.ratelimit.buckets} - the number of keys it is currently tracking, one bucket each - as a gauge, so an
  * operator watches the very memory-exhaustion vector the shared {@code anonymous} bucket is there to bound, plus a
- * {@code jenesis.ratelimit.limiter} health check that the limiter is installed and metering. There is no background
+ * {@code jenreg.ratelimit.limiter} health check that the limiter is installed and metering. There is no background
  * task (buckets refill lazily on the request path), so {@link #taskStatuses()} stays empty.
  */
 public final class TokenBucketRateLimiter implements RateLimiter, ObservabilitySource {
@@ -52,7 +52,7 @@ public final class TokenBucketRateLimiter implements RateLimiter, ObservabilityS
 
     @Override
     public List<Metric> metrics() {
-        return List.of(Metric.gauge("jenesis.ratelimit.buckets",
+        return List.of(Metric.gauge("jenreg.ratelimit.buckets",
                 "Rate-limit buckets currently tracked, one per active key - an unbounded climb is the "
                         + "memory-exhaustion vector the shared anonymous bucket is there to bound.",
                 buckets.size(), ""));
@@ -60,7 +60,7 @@ public final class TokenBucketRateLimiter implements RateLimiter, ObservabilityS
 
     @Override
     public List<HealthCheck> healthChecks() {
-        return List.of(HealthCheck.up("jenesis.ratelimit.limiter",
+        return List.of(HealthCheck.up("jenreg.ratelimit.limiter",
                 "In-memory token-bucket rate limiter is installed and metering requests."));
     }
 

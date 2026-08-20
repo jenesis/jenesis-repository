@@ -37,7 +37,7 @@ import module java.base;
  *     exactly as the first left it - same objects, same content - or the pass is a generator of garbage rather than a
  *     converge pass (&sect;4).</li>
  * <li><b>Absence sentinel.</b> {@link #name()} returns a non-blank, stable, lower-case name - the settings namespace,
- *     the {@code jenesis.repository.<name>=false} toggle key and the consumer's own key space. {@code null} is never
+ *     the {@code jenreg.<name>=false} toggle key and the consumer's own key space. {@code null} is never
  *     a legal return, and the hooks return nothing: a consumer signals "I could not converge" through its own durable
  *     say-so surface (clause 8), never by returning quietly.</li>
  * <li><b>Streaming (&sect;1).</b> {@link #onRetained} is handed a descriptor and the walked store, never the artifact's
@@ -63,7 +63,7 @@ import module java.base;
  *     the one outcome this SPI exists to prevent. The pass generation and {@link WalkPass#started()} are what a
  *     consumer stamps onto its projection so a reader can tell how fresh it is.</li>
  * <li><b>Lifecycle / ownership.</b> Instances come from {@link #discovered()}, which builds a fresh list per call from
- *     {@link ServiceLoader} and drops the ones a {@code jenesis.repository.<name>=false} toggle disables. A consumer
+ *     {@link ServiceLoader} and drops the ones a {@code jenreg.<name>=false} toggle disables. A consumer
  *     therefore owns no threads and no clients, and - because a process death is indistinguishable from a fresh
  *     start - keeps no cross-pass state it cannot rebuild from the store.</li>
  * <li><b>Ordering / concurrency.</b> Within one worker: {@link #onPassStarted} fires before that worker's first
@@ -137,7 +137,7 @@ public interface WalkConsumer {
     }
 
     /** Every enabled consumer discovered via {@link ServiceLoader} (a parallel SPI: a
-     *  {@code jenesis.repository.<name>=false} skips one, {@link Features}), in discovery order - what the scheduled
+     *  {@code jenreg.<name>=false} skips one, {@link Features}), in discovery order - what the scheduled
      *  walk pass drives from its one enumeration. */
     static List<WalkConsumer> discovered() {
         List<WalkConsumer> consumers = new ArrayList<>();

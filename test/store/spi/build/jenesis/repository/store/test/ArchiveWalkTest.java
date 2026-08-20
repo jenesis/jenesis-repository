@@ -179,7 +179,7 @@ class ArchiveWalkTest {
     void the_key_is_spelled_the_same_at_its_constant_and_at_its_read_site() {
         // ArchiveWalk reads the key as a literal so ConfigPrincipleTest's read scan sees it; this pins the literal and
         // the exported constant equal so the two cannot drift apart.
-        assertThat(ArchiveWalk.LARGEST_WALK_KEY).isEqualTo("jenesis.archive.largest-walk");
+        assertThat(ArchiveWalk.LARGEST_WALK_KEY).isEqualTo("jenreg.archive.largest-walk");
     }
 
     @Test

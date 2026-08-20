@@ -5,7 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * The fixed-tenant {@link RepositoryRouting}: every request addresses the one configured artifact space -
- * {@code jenesis.repository.tenant} / {@code jenesis.repository.repository}, each {@code default} by default - so
+ * {@code jenreg.tenant} / {@code jenreg.repository}, each {@code default} by default - so
  * the route always carries the doubly-scoped {@code root.scope(tenant).scope(repository)} store, the same
  * {@code <tenant>/<repository>/...} layout a multi-tenant routing addresses. Artifacts are served under the
  * {@code /repository/} prefix, which is stripped so a format sees its own {@code /maven/}, {@code /raw/} ... path;

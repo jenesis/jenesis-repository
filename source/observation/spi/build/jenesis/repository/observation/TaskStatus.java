@@ -4,7 +4,7 @@ import module java.base;
 
 /**
  * The status of one background task a plugin runs (GC / reclamation, the sizes and dependents sweeps, the scheduled
- * scan and cleanup, the forwarding watermark, the continuous re-analysis sweep): a stable {@code jenesis.<feature>.<task>}
+ * scan and cleanup, the forwarding watermark, the continuous re-analysis sweep): a stable {@code jenreg.<feature>.<task>}
  * {@code name}, a human-readable {@code description}, its {@link State}, when it {@code lastRun} (null - never), how long
  * that run took ({@code lastDuration}, null when unknown) and the plain {@code outcome} of that run. So an operator - or a
  * headless agent following the console - sees each task's last-run and state rather than trusting a thread to stay up

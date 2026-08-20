@@ -42,33 +42,33 @@ class ObservabilityReportTest {
     @Test
     void merges_and_name_sorts_the_signals_of_every_source() {
         ObservabilityReport report = ObservabilityReport.from(List.of(
-                source(HealthCheck.up("jenesis.zeta.check", "z"),
-                        Metric.gauge("jenesis.zeta.gauge", "z", 1, ""),
-                        TaskStatus.idle("jenesis.zeta.task", "z")),
-                source(HealthCheck.up("jenesis.alpha.check", "a"),
-                        Metric.gauge("jenesis.alpha.gauge", "a", 1, ""),
-                        TaskStatus.idle("jenesis.alpha.task", "a"))));
+                source(HealthCheck.up("jenreg.zeta.check", "z"),
+                        Metric.gauge("jenreg.zeta.gauge", "z", 1, ""),
+                        TaskStatus.idle("jenreg.zeta.task", "z")),
+                source(HealthCheck.up("jenreg.alpha.check", "a"),
+                        Metric.gauge("jenreg.alpha.gauge", "a", 1, ""),
+                        TaskStatus.idle("jenreg.alpha.task", "a"))));
 
         assertThat(report.healthChecks()).extracting(HealthCheck::name)
-                .containsExactly("jenesis.alpha.check", "jenesis.zeta.check");
+                .containsExactly("jenreg.alpha.check", "jenreg.zeta.check");
         assertThat(report.metrics()).extracting(Metric::name)
-                .containsExactly("jenesis.alpha.gauge", "jenesis.zeta.gauge");
+                .containsExactly("jenreg.alpha.gauge", "jenreg.zeta.gauge");
         assertThat(report.tasks()).extracting(TaskStatus::name)
-                .containsExactly("jenesis.alpha.task", "jenesis.zeta.task");
+                .containsExactly("jenreg.alpha.task", "jenreg.zeta.task");
     }
 
     @Test
     void overall_health_is_the_worst_across_all_checks() {
         ObservabilityReport clean = ObservabilityReport.from(List.of(
-                source(HealthCheck.up("jenesis.a.check", "a"),
-                        Metric.gauge("jenesis.a.g", "a", 1, ""), TaskStatus.idle("jenesis.a.t", "a"))));
+                source(HealthCheck.up("jenreg.a.check", "a"),
+                        Metric.gauge("jenreg.a.g", "a", 1, ""), TaskStatus.idle("jenreg.a.t", "a"))));
         assertThat(clean.overall()).isEqualTo(Health.UP);
 
         ObservabilityReport mixed = ObservabilityReport.from(List.of(
-                source(HealthCheck.up("jenesis.a.check", "a"),
-                        Metric.gauge("jenesis.a.g", "a", 1, ""), TaskStatus.idle("jenesis.a.t", "a")),
-                source(HealthCheck.of("jenesis.b.check", "b", Health.DOWN, "dead"),
-                        Metric.gauge("jenesis.b.g", "b", 1, ""), TaskStatus.idle("jenesis.b.t", "b"))));
+                source(HealthCheck.up("jenreg.a.check", "a"),
+                        Metric.gauge("jenreg.a.g", "a", 1, ""), TaskStatus.idle("jenreg.a.t", "a")),
+                source(HealthCheck.of("jenreg.b.check", "b", Health.DOWN, "dead"),
+                        Metric.gauge("jenreg.b.g", "b", 1, ""), TaskStatus.idle("jenreg.b.t", "b"))));
         assertThat(mixed.overall()).isEqualTo(Health.DOWN);
     }
 
@@ -96,15 +96,15 @@ class ObservabilityReportTest {
         // other plugin's health, metrics and task statuses included.
         ObservabilityReport report = ObservabilityReport.from(List.of(
                 new ThrowingSource(),
-                source(HealthCheck.up("jenesis.alpha.check", "a"),
-                        Metric.gauge("jenesis.alpha.gauge", "a", 1, ""),
-                        TaskStatus.idle("jenesis.alpha.task", "a"))));
+                source(HealthCheck.up("jenreg.alpha.check", "a"),
+                        Metric.gauge("jenreg.alpha.gauge", "a", 1, ""),
+                        TaskStatus.idle("jenreg.alpha.task", "a"))));
 
         assertThat(report.healthChecks()).as("the healthy source is collected in full")
                 .extracting(HealthCheck::name)
-                .containsExactly("jenesis.alpha.check", "jenesis.observation.unavailable.throwingsource");
-        assertThat(report.metrics()).extracting(Metric::name).containsExactly("jenesis.alpha.gauge");
-        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenesis.alpha.task");
+                .containsExactly("jenreg.alpha.check", "jenreg.observation.unavailable.throwingsource");
+        assertThat(report.metrics()).extracting(Metric::name).containsExactly("jenreg.alpha.gauge");
+        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenreg.alpha.task");
 
         HealthCheck substitute = report.healthChecks().stream()
                 .filter(check -> check.name().endsWith("throwingsource")).findFirst().orElseThrow();
@@ -141,9 +141,9 @@ class ObservabilityReportTest {
     @Test
     void discovers_the_service_loader_installed_source() {
         ObservabilityReport report = ObservabilityReport.discover();
-        assertThat(report.healthChecks()).extracting(HealthCheck::name).contains("jenesis.gc.worker");
-        assertThat(report.metrics()).extracting(Metric::name).contains("jenesis.quota.used.bytes");
-        assertThat(report.tasks()).extracting(TaskStatus::name).contains("jenesis.gc.sweep");
+        assertThat(report.healthChecks()).extracting(HealthCheck::name).contains("jenreg.gc.worker");
+        assertThat(report.metrics()).extracting(Metric::name).contains("jenreg.quota.used.bytes");
+        assertThat(report.tasks()).extracting(TaskStatus::name).contains("jenreg.gc.sweep");
         assertThat(report.overall()).isEqualTo(Health.DEGRADED);
     }
 }

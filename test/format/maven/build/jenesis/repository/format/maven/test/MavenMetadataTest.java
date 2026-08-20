@@ -25,7 +25,7 @@ class MavenMetadataTest {
 
     private void publish(List<String> versions) throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         Publication publication = new Publication(store);
         for (String version : versions) {
             publication.link("/maven/org/example/lib/" + version + "/lib-" + version + ".jar", "abc" + version);
@@ -104,7 +104,7 @@ class MavenMetadataTest {
         // bare '&' - malformed XML that every fetching Maven client fails to parse (a self-inflicted index DoS) - or
         // inject markup. The reconcile path must escape exactly as the StAX derivation path (serve) does.
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         Publication publication = new Publication(store);
         publication.link("/maven/org/example/lib/1.0/lib-1.0.jar", "abc1");
         publication.link("/maven/org/example/lib/a&b/lib-a&b.jar", "abc2");   // a version folder with a raw ampersand
@@ -208,7 +208,7 @@ class MavenMetadataTest {
         // publisher's own stored document already lists. The union is screened on both legs (folders AND the stored
         // <versions>), so a version held after upload vanishes from the reconciled bytes.
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         Publication publication = new Publication(store);
         publication.link("/maven/org/example/lib/1.0/lib-1.0.jar", "abc1");
         publication.link("/maven/org/example/lib/2.0/lib-2.0.jar", "abc2");
@@ -234,7 +234,7 @@ class MavenMetadataTest {
         // a withheld newest version's name still leaked through <latest>/<release>. Reconcile must re-derive both from
         // the SCREENED set: latest = newest screened, release = newest screened non-SNAPSHOT (matching metadata()).
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         Publication publication = new Publication(store);
         publication.link("/maven/org/example/lib/1.0/lib-1.0.jar", "abc1");
         publication.link("/maven/org/example/lib/2.0/lib-2.0.jar", "abc2");

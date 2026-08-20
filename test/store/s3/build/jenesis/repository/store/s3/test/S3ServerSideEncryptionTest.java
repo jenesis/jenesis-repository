@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * bucket/account default that an operator may not have set. {@link S3ArtifactStore#encrypt} is the single point every
  * {@code PutObject} (plain, content-addressed and conditional) is built through, so asserting over it proves the write
  * request the store would send. SSE-S3 (AES256) is the default; an operator-supplied
- * {@code jenesis.repository.s3.sse-kms-key-id} upgrades to {@code aws:kms}; and there is no input that turns encryption off.
+ * {@code jenreg.s3.sse-kms-key-id} upgrades to {@code aws:kms}; and there is no input that turns encryption off.
  * Needs no Docker, so it always runs.
  */
 class S3ServerSideEncryptionTest {

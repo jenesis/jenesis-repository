@@ -14,7 +14,7 @@ import build.jenesis.repository.importer.testkit.ScriptedUpstream;
  */
 final class JenesisImportFixture implements ImportFixture {
 
-    private static final String BASE = "http://jenesis.t203";
+    private static final String BASE = "http://jenreg.t203";
     private static final String REPOSITORY = "main";
     private static final String PAGE_ONE = BASE + "/api/assets?repo=" + REPOSITORY;
     private static final String PAGE_TWO = PAGE_ONE + "&cursor=page-two";

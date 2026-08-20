@@ -17,7 +17,7 @@ import module java.base;
 public final class ThrowingSafetyAdvisor implements SafetyAdvisor {
 
     /** The message the failure carries - the report may name the exception type, never this. */
-    public static final String SECRET = "jenesis.repository.admin-password=hunter2";
+    public static final String SECRET = "jenreg.admin-password=hunter2";
 
     @Override
     public List<SecurityAdvisory> advise(Configuration config) {

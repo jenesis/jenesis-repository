@@ -18,7 +18,7 @@ import io.micrometer.observation.ObservationRegistry;
  * through (the 404 stands). The single network call sits behind {@link ProxyFormat.Fetcher} so the cache behaviour
  * is tested without the network.
  *
- * <p>Each proxy-eligible read is wrapped in a {@code jenesis.proxy.fetch} {@link Observations observation} tagged
+ * <p>Each proxy-eligible read is wrapped in a {@code jenreg.proxy.fetch} {@link Observations observation} tagged
  * with the {@code format} and the {@code outcome} - {@code hit} (served locally, no upstream call), {@code miss}
  * (fetched from upstream) or {@code negative} (upstream also missed) - so the upstream leg is visible in metrics,
  * logs and traces from one instrumentation point. Given an {@link ObservationRegistry#NOOP NOOP} registry (the
@@ -62,7 +62,7 @@ public final class PullThroughCache {
             format.handle(exchange, store);
             return;
         }
-        Observations.observe(observations, "jenesis.proxy.fetch", null, null, observation -> {
+        Observations.observe(observations, "jenreg.proxy.fetch", null, null, observation -> {
             observation.lowCardinalityKeyValue("format", format.name());
             // Consult the edition BEFORE the local-first serve, so a cached hit is verified against the current gate
             // before any byte is written. The free NONE hook returns serveThrough with no store read, so the hit path

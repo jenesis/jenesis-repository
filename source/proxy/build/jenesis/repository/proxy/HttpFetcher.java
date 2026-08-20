@@ -21,7 +21,7 @@ import build.jenesis.repository.format.ProxyFormat;
  * artifact's body transfer is not clipped by it, and a body that ends short of its declared {@code Content-Length}
  * surfaces as an {@link IOException} on the read (buffered) or on the stream the caller copies into the store
  * (streamed), so a truncated response is never written as a complete cached artifact. The timeout defaults to a
- * minute and is overridable with the {@code jenesis.proxy.request-timeout} system property (ISO-8601 like
+ * minute and is overridable with the {@code jenreg.proxy.request-timeout} system property (ISO-8601 like
  * {@code PT30S}, or a plain number of seconds).
  *
  * <p>Redirects are followed manually rather than by the JDK client's automatic {@code NORMAL} policy, because that
@@ -69,7 +69,7 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
      *  loopback fixture. */
     private final Predicate<String> blockedRedirectHost;
 
-    /** The default fetcher: a per-request timeout from {@code jenesis.proxy.request-timeout}, or one minute. */
+    /** The default fetcher: a per-request timeout from {@code jenreg.proxy.request-timeout}, or one minute. */
     public HttpFetcher() {
         this(requestTimeout());
     }
@@ -199,9 +199,9 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : "http".equalsIgnoreCase(uri.getScheme()) ? 80 : -1;
     }
 
-    /** The configured per-request timeout: {@code jenesis.proxy.request-timeout} (ISO-8601 or plain seconds), or a minute. */
+    /** The configured per-request timeout: {@code jenreg.proxy.request-timeout} (ISO-8601 or plain seconds), or a minute. */
     private static Duration requestTimeout() {
-        String value = System.getProperty("jenesis.proxy.request-timeout");
+        String value = System.getProperty("jenreg.proxy.request-timeout");
         if (value == null || value.isBlank()) {
             return Duration.ofSeconds(60);
         }

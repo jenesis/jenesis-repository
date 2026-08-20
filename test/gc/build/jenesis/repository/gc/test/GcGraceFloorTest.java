@@ -14,7 +14,7 @@ import module java.base;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The optional wall-clock grace floor ({@code jenesis.gc.grace}): on top of the one-pass generation gap, a condemned
+ * The optional wall-clock grace floor ({@code jenreg.gc.grace}): on top of the one-pass generation gap, a condemned
  * blob is not collected until it has also carried its marker for at least the configured duration - so a burst of
  * collections (several nodes, or a lease-expiry re-collect) that advances generations faster than the nominal
  * interval cannot shorten the grace an in-flight publish gets. With the default (zero) floor the grace stays purely
@@ -29,7 +29,7 @@ class GcGraceFloorTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private MarkSweepGarbageCollector collector(Duration graceFloor) {

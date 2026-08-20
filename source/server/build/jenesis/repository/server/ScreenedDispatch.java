@@ -36,7 +36,7 @@ import module java.base;
  * <p>With the core's empty discovered chain {@code screen} degrades to a plain store-then-restream and an
  * accepted {@code PUT} is byte-for-byte what a direct dispatch produced (the same content-addressed blob, the same
  * pointer the format links, the same response). This edge is nonetheless load-bearing for the downstream fixed-tenancy
- * mode ({@code jenesis.repository.tenancy=fixed}), where writes fall through this free controller with the full
+ * mode ({@code jenreg.tenancy=fixed}), where writes fall through this free controller with the full
  * {@code ComplianceScreen} chain discovered - so the choreography must be exactly the downstream deploy edge's.
  */
 public final class ScreenedDispatch {

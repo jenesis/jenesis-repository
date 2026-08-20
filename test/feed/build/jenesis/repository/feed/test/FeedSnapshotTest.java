@@ -35,7 +35,7 @@ class FeedSnapshotTest {
     void storeAndClock() {
         // Already tenant-scoped, exactly as a caller hands it in: the client never scopes one itself.
         store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null).scope("acme");
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null).scope("acme");
         clock = new Feeds.TestClock();
     }
 

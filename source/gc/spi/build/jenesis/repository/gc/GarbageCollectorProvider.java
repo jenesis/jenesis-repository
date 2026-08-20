@@ -8,10 +8,10 @@ import module java.base;
 /**
  * A named factory for a {@link GarbageCollector}, discovered at runtime with {@link ServiceLoader} - the API is an
  * SPI kept separate from its implementation, so the reclamation strategy can change without breaking a caller. An
- * optional-unique SPI: at most one collector is enabled at a time, and {@code jenesis.repository.gc=<name>} selects it
+ * optional-unique SPI: at most one collector is enabled at a time, and {@code jenreg.gc=<name>} selects it
  * by name when a deployment installs more than one (the {@code mark-sweep} reference implementation is the one the
  * free distribution ships). Each provider reads its own settings through the {@code config} lookup (a property
- * accessor returning {@code null} when unset - {@code jenesis.gc.*}). With no module installed {@link #resolve} is
+ * accessor returning {@code null} when unset - {@code jenreg.gc.*}). With no module installed {@link #resolve} is
  * empty: <b>nothing is ever reclaimed</b> and the capability surfaces say garbage collection is off - the no-op
  * default, because deleting data is never something a deployment gets without opting in. Those surfaces report
  * {@link #resolve resolve(config).isPresent()} and not {@link #installed()}, which answers a weaker, packaging
@@ -33,16 +33,16 @@ import module java.base;
  *     artifact walk) is absent, so a deployment without enumeration never gets a collector that enumerates its own
  *     way. {@code null} is never a legal return from {@link #create}, {@link #name()} or
  *     {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenesis.repository.gc=<name>} that no
+ * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenreg.gc=<name>} that no
  *     installed provider answers to, or whose provider declines, throws {@link IllegalStateException} at resolution
  *     naming the selection and the installed provider names - it does not resolve to the no-op default. An operator
  *     who named a collector and silently got none would believe reclamation is running while storage grows without
- *     bound. An explicit selection outranks the {@code jenesis.repository.<name>=false} toggle. Only an
+ *     bound. An explicit selection outranks the {@code jenreg.<name>=false} toggle. Only an
  *     <em>unselected</em> deployment degrades to empty.</li>
  * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Duplicate provider names, one provider registered
  *     twice, and more than one <em>enabled</em> collector with no selection to disambiguate them all throw, naming
  *     the candidates and the setting that resolves them - which collector deletes a deployment's data is never
- *     decided by module-path order. Malformed settings ({@code jenesis.gc.stride}, {@code jenesis.gc.grace}) fail
+ *     decided by module-path order. Malformed settings ({@code jenreg.gc.stride}, {@code jenreg.gc.grace}) fail
  *     loudly in {@link #create} rather than collecting with a silently-wrong stride or grace.</li>
  * <li><b>Lifecycle / ownership.</b> The caller owns the resolved collector: {@link #resolve} builds at most one
  *     instance per call, caches nothing and closes nothing. Provider instances are created by {@link ServiceLoader},
@@ -93,9 +93,9 @@ public interface GarbageCollectorProvider {
     }
 
     /** The single enabled collector discovered via {@link ServiceLoader}, resolved through the shared
-     *  {@link Providers#optionalUnique} policy: an explicit {@code jenesis.repository.gc=<name>} selects one by name
+     *  {@link Providers#optionalUnique} policy: an explicit {@code jenreg.gc=<name>} selects one by name
      *  and a selection nothing answers to <em>throws</em> rather than degrading (&sect;9), a
-     *  {@code jenesis.repository.<name>=false} switches one off, more than one enabled collector is ambiguous rather
+     *  {@code jenreg.<name>=false} switches one off, more than one enabled collector is ambiguous rather
      *  than a discovery-order winner, and only an <em>unselected</em> deployment with no collector installed resolves
      *  to empty - the no-op default, never {@code null}. */
     static Optional<GarbageCollector> resolve(UnaryOperator<String> config) {

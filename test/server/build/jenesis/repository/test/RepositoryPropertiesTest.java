@@ -8,8 +8,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The secure default of the repository server's credential model: per-credential authorization is enforced out of the
- * box, and anonymous/open mode is honoured only as an explicit opt-out ({@code jenesis.repository.auth=false}, env
- * {@code JENESIS_REPOSITORY_AUTH=false}). Locks the field default so a fresh deployment never boots open silently.
+ * box, and anonymous/open mode is honoured only as an explicit opt-out ({@code jenreg.auth=false}, env
+ * {@code JENREG_AUTH=false}). Locks the field default so a fresh deployment never boots open silently.
  * Also pins the hand-rolled storage-quota parser {@link RepositoryProperties#quotaBytes()}: a decimal count with an
  * optional 1024-based {@code K}/{@code M}/{@code G}/{@code T} suffix (each also spelled {@code *B} and {@code *IB}),
  * an unset/blank value meaning uncapped, and an unrecognised unit rejected.
@@ -35,7 +35,7 @@ class RepositoryPropertiesTest {
         RepositoryProperties open = new RepositoryProperties();
         open.setAuth(false);
         assertThat(open.isAuth())
-                .as("anonymous/open is honoured only as an explicit opt-out (jenesis.repository.auth=false)").isFalse();
+                .as("anonymous/open is honoured only as an explicit opt-out (jenreg.auth=false)").isFalse();
     }
 
     @Test

@@ -13,7 +13,7 @@ import module java.base;
  * {@link ArtifactStore#scope(String) scoped} store ({@code root.scope(tenant).scope(repository)}), so switching a
  * deployment between fixed- and multi-tenant routing is a configuration change that finds the data where it was
  * left. By default the {@link FixedTenantRouting} binds: every request resolves to the configured
- * {@code jenesis.repository.tenant} / {@code jenesis.repository.repository} space (each {@code default} by
+ * {@code jenreg.tenant} / {@code jenreg.repository} space (each {@code default} by
  * default) with the request path unchanged beyond the {@code /repository} prefix strip. A multi-tenant deployment
  * contributes its own {@code RepositoryRouting} bean (overriding the {@code @ConditionalOnMissingBean} default)
  * that reads the tenant from the {@code Jenesis-Repository-Key} header and the repository from the first path

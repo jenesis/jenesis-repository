@@ -8,10 +8,10 @@ import module java.base;
 /**
  * A named factory for the shared {@link ArtifactWalk}, discovered at runtime with {@link ServiceLoader} - the API is
  * an SPI kept separate from its implementation, so the enumeration strategy can change without breaking a consumer.
- * An optional-unique SPI: at most one walk is enabled at a time, and {@code jenesis.repository.walk=<name>} selects it
+ * An optional-unique SPI: at most one walk is enabled at a time, and {@code jenreg.walk=<name>} selects it
  * by name when a deployment installs more than one (the {@code paged-descent} reference implementation is the one the
  * free distribution ships). Each provider reads its own settings through the {@code config} lookup (a property accessor
- * returning {@code null} when unset - {@code jenesis.walk.checkpoint}, {@code jenesis.walk.segments}, ... for the
+ * returning {@code null} when unset - {@code jenreg.walk.checkpoint}, {@code jenreg.walk.segments}, ... for the
  * reference implementation). With no module installed {@link #resolve} is empty: every walk-riding surface then
  * degrades gracefully - nothing enumerates, and the console / capabilities say so - exactly like retention with no
  * retention provider. They say so from {@link #resolve resolve(config).isPresent()}, not from {@link #installed()},
@@ -31,12 +31,12 @@ import module java.base;
  *     consumer must then degrade visibly (nothing enumerates, the capability surface says so) rather than
  *     hand-rolling its own listing loop. {@link #create} declines with an empty {@link Optional}; {@code null} is
  *     never a legal return from it, from {@link #name()} or from {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenesis.repository.walk=<name>} that
+ * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenreg.walk=<name>} that
  *     no installed provider answers to, or whose provider declines, throws {@link IllegalStateException} at
  *     resolution naming the selection and the installed provider names. It does <em>not</em> resolve to empty:
  *     silently answering "no walk installed" to an operator who named one turns every sweep that rides the walk -
  *     garbage collection, reconcile, retroactive hold enforcement - into a no-op that looks like a healthy idle
- *     system. An explicit selection outranks the {@code jenesis.repository.<name>=false} toggle. Only an
+ *     system. An explicit selection outranks the {@code jenreg.<name>=false} toggle. Only an
  *     <em>unselected</em> deployment degrades to the empty sentinel.</li>
  * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Duplicate provider names, one provider registered
  *     twice, and more than one <em>enabled</em> walk with no selection to disambiguate them all throw, naming the
@@ -57,7 +57,7 @@ import module java.base;
 public interface WalkProvider {
 
     /** The implementation name this provider answers to, e.g. {@code paged-descent} - and, because
-     *  {@link Features} spends one namespace on both shapes, the key {@code jenesis.repository.<name>=false}
+     *  {@link Features} spends one namespace on both shapes, the key {@code jenreg.<name>=false}
      *  switches it off by. It may therefore not be the name of any SPI <em>family</em>: a walk called {@code store}
      *  keyed its toggle to the artifact store's selection key (D-005). */
     String name();
@@ -95,9 +95,9 @@ public interface WalkProvider {
     }
 
     /** The single enabled walk discovered via {@link ServiceLoader}, resolved through the shared
-     *  {@link Providers#optionalUnique} policy: an explicit {@code jenesis.repository.walk=<name>} selects one by name
+     *  {@link Providers#optionalUnique} policy: an explicit {@code jenreg.walk=<name>} selects one by name
      *  and a selection nothing answers to <em>throws</em> rather than degrading (&sect;9), a
-     *  {@code jenesis.repository.<name>=false} switches one off, more than one enabled walk is ambiguous rather than a
+     *  {@code jenreg.<name>=false} switches one off, more than one enabled walk is ambiguous rather than a
      *  discovery-order winner, and only an <em>unselected</em> deployment with no walk installed resolves to empty -
      *  the degrade-gracefully signal, never {@code null}. */
     static Optional<ArtifactWalk> resolve(UnaryOperator<String> config) {

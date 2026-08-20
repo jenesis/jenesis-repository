@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p>Since T-101b the seam resolves through the shared {@code Providers.optionalUnique} primitive, which fixes the
  * §9 defect the T-002 inventory pass found here: an <em>explicitly selected</em>
- * {@code jenesis.repository.tenants=<name>} that no provider answers to used to degrade silently to the fixed single
+ * {@code jenreg.tenants=<name>} that no provider answers to used to degrade silently to the fixed single
  * tenant, collapsing a multi-tenant deployment onto one tenant and hiding every other tenant's artifacts behind a
  * 404 that looks like an empty repository. It now throws, exactly as the store backend already did. Only
  * <em>unselected</em> absence still degrades.
@@ -40,7 +40,7 @@ class TenantsProviderTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     @Test
@@ -61,12 +61,12 @@ class TenantsProviderTest {
         // The §9 fix (T-101b): before, this silently answered the fixed single-tenant directory, so a deployment
         // that configured a tenants module it had not installed - or misspelled its name - came up looking like a
         // healthy single-tenant server while every other tenant's artifacts 404'd.
-        Features.configure(key -> "jenesis.repository.tenants".equals(key) ? "store-tenants" : null);
+        Features.configure(key -> "jenreg.tenants".equals(key) ? "store-tenants" : null);
         ArtifactStore store = store();
         assertThatThrownBy(() -> TenantsProvider.resolve(store, key -> null, "acme"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'store-tenants'")
-                .hasMessageContaining("jenesis.repository.tenants=store-tenants")
+                .hasMessageContaining("jenreg.tenants=store-tenants")
                 .hasMessageContaining("no installed provider answers to it")
                 .hasMessageContaining("refusing to degrade silently");
     }

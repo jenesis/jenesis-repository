@@ -23,7 +23,7 @@ import module java.base;
  *
  * <p>With no provider installed (the free product) the free import edge is served exactly as before, byte-for-byte
  * unchanged - the same guarantee the {@link CapabilityContributor} zero-contributor case gives. Discovery honours the
- * shared {@link Features} enable/disable convention (a {@code jenesis.repository.<name>=false} switch and the
+ * shared {@link Features} enable/disable convention (a {@code jenreg.<name>=false} switch and the
  * required-config self-disable), so a provider that is present but not configured for is inert, exactly as a missing
  * module would be.
  *
@@ -38,7 +38,7 @@ import module java.base;
  *       without this SPI. Neither {@link #name()} nor {@link #requiredConfig()} may return {@code null}.</li>
  *   <li><b>Selection failure.</b> There is nothing to select: this is a presence signal, not a named capability, so no
  *       configuration can name an edge that is absent. Unlike the named singleton SPIs beside it there is no
- *       {@code jenesis.repository.import-edge=<name>} key, so the §9 "explicitly selected but unavailable" case
+ *       {@code jenreg.import-edge=<name>} key, so the §9 "explicitly selected but unavailable" case
  *       cannot arise here and setting such a key changes nothing. A provider that is installed but inert (switched
  *       off, required config unset) is indistinguishable from an absent module <em>by design</em>, and yielding the
  *       edge back to the free controller is the intended outcome rather than a silent fallback.</li>
@@ -65,7 +65,7 @@ import module java.base;
 public interface ImportEdgeProvider {
 
     /** The distribution-owned import edge's feature name, e.g. {@code downstream-import}. Toggled off with
-     *  {@code jenesis.repository.<name>=false} through the shared {@link Features} convention, so a deployment can fall
+     *  {@code jenreg.<name>=false} through the shared {@link Features} convention, so a deployment can fall
      *  back to the free import edge without removing the module. */
     String name();
 

@@ -3,7 +3,7 @@ package build.jenesis.repository.observation;
 import module java.base;
 
 /**
- * One self-describing metric a plugin reports: a stable {@code jenesis.<feature>.<signal>} {@code name}, a
+ * One self-describing metric a plugin reports: a stable {@code jenreg.<feature>.<signal>} {@code name}, a
  * human-readable {@code description}, its {@link Kind} (a monotonic {@code COUNTER} or a point-in-time {@code GAUGE}),
  * the current {@code value}, an optional {@code limit} (the ceiling the value is measured against, where the source
  * exposes one - quota bytes available, a rate-limit budget, a cache capacity) and a {@code unit} ({@code "bytes"},

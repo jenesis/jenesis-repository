@@ -49,7 +49,7 @@ public class RepositorySecurityAutoConfiguration {
     @ConditionalOnMissingBean
     public AuthFailures authFailures() {
         // A registry-free accessor seam: the key entry point (and the console's OIDC/SAML login failure handlers)
-        // record denials here, and a metrics layer scrapes them into jenesis.auth.failures.
+        // record denials here, and a metrics layer scrapes them into jenreg.auth.failures.
         return new AuthFailures();
     }
 

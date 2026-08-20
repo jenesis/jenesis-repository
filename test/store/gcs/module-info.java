@@ -8,7 +8,7 @@
  * which MinIO does not honour) are proven against an in-process generation-aware stub on
  * {@code jdk.httpserver}, driven through the real SDK client: create-if-absent, update-if-unchanged,
  * both rejections, and the {@code x-goog-generation} version token. A live smoke runs the full
- * contract against a real GCS bucket when the {@code JENESIS_REPOSITORY_GCS_*} HMAC credentials are present in
+ * contract against a real GCS bucket when the {@code JENREG_GCS_*} HMAC credentials are present in
  * the environment - an entitlement is not a tool, so it skips (plain assumption) even on a strict run.
  *
  * @jenesis.release 25

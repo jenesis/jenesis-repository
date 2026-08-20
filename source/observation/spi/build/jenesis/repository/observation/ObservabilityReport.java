@@ -12,7 +12,7 @@ import module java.base;
  *
  * <p>A source that <em>fails</em> degrades too, but visibly: collection runs through {@link Contributions}, so a source
  * that throws is contained to its own rows and replaced by a {@link Health#UNKNOWN} health check named
- * {@code jenesis.observation.unavailable.<source>} - the report stands, every other source is collected, and the
+ * {@code jenreg.observation.unavailable.<source>} - the report stands, every other source is collected, and the
  * failure reaches both the reader and the log instead of degrading the whole overview. {@link #overall} therefore drops
  * to {@code UNKNOWN}: "a source could not determine its state" is exactly the truth about a report one of whose sources
  * threw, and it must never collapse back to {@code UP}.

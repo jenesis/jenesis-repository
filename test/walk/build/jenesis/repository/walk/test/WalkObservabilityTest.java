@@ -15,9 +15,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The shared-walk engine is its own {@link build.jenesis.repository.observation.ObservabilitySource}: once it has
- * driven a pass it reports {@code jenesis.walk.segments} (a bounded gauge of the pass's done segments against its
- * segment count), {@code jenesis.walk.resumes} (a counter of segments this node reclaimed from an expired holder)
- * and a {@code jenesis.walk.pass} task status; a never-run walk reports nothing at all. Exercised against a real
+ * driven a pass it reports {@code jenreg.walk.segments} (a bounded gauge of the pass's done segments against its
+ * segment count), {@code jenreg.walk.resumes} (a counter of segments this node reclaimed from an expired holder)
+ * and a {@code jenreg.walk.pass} task status; a never-run walk reports nothing at all. Exercised against a real
  * {@code FilesystemArtifactStore}, without the server or Micrometer.
  */
 class WalkObservabilityTest {
@@ -30,7 +30,7 @@ class WalkObservabilityTest {
     private ArtifactStore store(String name) {
         Path scoped = root.resolve(name);
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? scoped.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? scoped.toString() : null);
     }
 
     private void seed(ArtifactStore store, String... names) throws IOException {
@@ -60,7 +60,7 @@ class WalkObservabilityTest {
 
         assertThat(walk.metrics()).satisfiesExactlyInAnyOrder(
                 segments -> {
-                    assertThat(segments.name()).isEqualTo("jenesis.walk.segments");
+                    assertThat(segments.name()).isEqualTo("jenreg.walk.segments");
                     assertThat(segments.kind()).isEqualTo(Metric.Kind.GAUGE);
                     assertThat(segments.value()).isEqualTo(1.0);
                     assertThat(segments.limit()).hasValue(1.0);
@@ -68,7 +68,7 @@ class WalkObservabilityTest {
                     assertThat(segments.description()).isNotBlank();
                 },
                 resumes -> {
-                    assertThat(resumes.name()).isEqualTo("jenesis.walk.resumes");
+                    assertThat(resumes.name()).isEqualTo("jenreg.walk.resumes");
                     assertThat(resumes.kind()).isEqualTo(Metric.Kind.COUNTER);
                     assertThat(resumes.value()).isZero();
                     assertThat(resumes.limit()).isEmpty();
@@ -76,7 +76,7 @@ class WalkObservabilityTest {
                 });
 
         assertThat(walk.taskStatuses()).singleElement().satisfies(pass -> {
-            assertThat(pass.name()).isEqualTo("jenesis.walk.pass");
+            assertThat(pass.name()).isEqualTo("jenreg.walk.pass");
             assertThat(pass.state()).isEqualTo(TaskStatus.State.IDLE);
             assertThat(pass.lastRun()).isNotNull();
             assertThat(pass.outcome()).contains("generation 1");
@@ -92,9 +92,9 @@ class WalkObservabilityTest {
         walk.walk(store, "test", List.of("publish"), key -> { });
 
         assertThat(walk.metrics()).extracting(Metric::name)
-                .allSatisfy(name -> assertThat(name).matches("jenesis\\.walk\\..+"));
+                .allSatisfy(name -> assertThat(name).matches("jenreg\\.walk\\..+"));
         assertThat(walk.taskStatuses()).extracting(TaskStatus::name)
-                .allSatisfy(name -> assertThat(name).matches("jenesis\\.walk\\..+"));
+                .allSatisfy(name -> assertThat(name).matches("jenreg\\.walk\\..+"));
     }
 
     @Test
@@ -119,7 +119,7 @@ class WalkObservabilityTest {
         walk.walk(store, "test", List.of("publish"), after::add);
 
         assertThat(walk.metrics())
-                .filteredOn(metric -> metric.name().equals("jenesis.walk.resumes"))
+                .filteredOn(metric -> metric.name().equals("jenreg.walk.resumes"))
                 .singleElement()
                 .extracting(Metric::value)
                 .isEqualTo(1.0);
@@ -135,7 +135,7 @@ class WalkObservabilityTest {
         ObservabilityReport report = ObservabilityReport.from(List.of(walk));
 
         assertThat(report.metrics()).extracting(Metric::name)
-                .containsExactly("jenesis.walk.resumes", "jenesis.walk.segments"); // name-sorted
-        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenesis.walk.pass");
+                .containsExactly("jenreg.walk.resumes", "jenreg.walk.segments"); // name-sorted
+        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenreg.walk.pass");
     }
 }

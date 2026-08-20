@@ -195,7 +195,7 @@ import module java.base;
 public interface RepositoryFormat extends IconContributor {
 
     /** A stable identifier for the format, e.g. {@code maven}, {@code oci}, {@code npm}. It is the format's feature
-     *  toggle key ({@code jenesis.repository.<name>}), the key {@link #installed(String)} looks one up by, and - as
+     *  toggle key ({@code jenreg.<name>}), the key {@link #installed(String)} looks one up by, and - as
      *  the inherited {@link IconContributor#name()} - the identity its console mark is attributed to and generated
      *  from, so it is chosen once and not renamed. */
     @Override
@@ -249,7 +249,7 @@ public interface RepositoryFormat extends IconContributor {
     /** The installed format of the given {@link #name() name}, discovered via {@link ServiceLoader} from this SPI
      *  module - the sanctioned lookup for a neutral consumer (an importer walking a format's upstream index, say)
      *  that must find one format by name without carrying its own {@code uses} clause. Empty when no module on the
-     *  path provides it, or when the format is configured off ({@code jenesis.repository.<name>=false},
+     *  path provides it, or when the format is configured off ({@code jenreg.<name>=false},
      *  {@link Features}) - a disabled format degrades exactly like a missing module. */
     static Optional<RepositoryFormat> installed(String name) {
         for (RepositoryFormat format : ServiceLoader.load(RepositoryFormat.class)) {
@@ -264,7 +264,7 @@ public interface RepositoryFormat extends IconContributor {
      *  through the shared {@link Providers#all} additive policy - the sanctioned lookup for a neutral consumer that
      *  must see the whole set rather than one by name (the console resolving a namespace's mark, say) without
      *  carrying a {@code uses} clause of its own. Ordered by name, so a consumer's answer does not depend on the
-     *  module path's discovery order, and a format configured off ({@code jenesis.repository.<name>=false}) or with
+     *  module path's discovery order, and a format configured off ({@code jenreg.<name>=false}) or with
      *  required config unset is absent exactly as a missing module is. Two formats answering to one name is a
      *  packaging error and throws rather than being settled by discovery order. */
     static List<RepositoryFormat> installed() {

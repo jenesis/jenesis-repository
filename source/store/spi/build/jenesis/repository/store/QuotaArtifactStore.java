@@ -28,9 +28,9 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * the check stays a single counter read rather than a pre-sized one. A limit of zero or less means unlimited, in
  * which case this is a transparent pass-through.
  *
- * <p>A capped store is its own {@link ObservabilitySource}: it reports {@code jenesis.quota.used} - a bounded gauge
+ * <p>A capped store is its own {@link ObservabilitySource}: it reports {@code jenreg.quota.used} - a bounded gauge
  * of the bytes counted against the ceiling, so the overview shows <em>data used vs available</em> and how close to
- * the cap the store is without pre-computing a percentage - and a {@code jenesis.quota.capacity} health check that
+ * the cap the store is without pre-computing a percentage - and a {@code jenreg.quota.capacity} health check that
  * goes {@link Health#DEGRADED} once usage reaches the limit (a fresh blob is now refused) and {@link Health#UNKNOWN}
  * when the usage counter cannot be read. An <em>unlimited</em> store (a non-positive limit, the transparent
  * pass-through) reports nothing at all, consistent with the "a disabled plugin is not listed" rule; it runs no
@@ -83,7 +83,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
         if (limit <= 0 || used.isEmpty()) {
             return List.of();
         }
-        return List.of(Metric.bounded("jenesis.quota.used",
+        return List.of(Metric.bounded("jenreg.quota.used",
                 "Stored content bytes counted against the repository-wide storage quota, against the configured "
                         + "byte ceiling past which a fresh blob is refused - data used vs available, so the overview "
                         + "shows how close to the cap the store is without pre-computing a percentage.",
@@ -100,13 +100,13 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
                 + "reaches the ceiling, when a fresh blob is refused until content is deleted or the cap is raised.";
         OptionalLong used = currentUsage();
         if (used.isEmpty()) {
-            return List.of(HealthCheck.of("jenesis.quota.capacity", description, Health.UNKNOWN,
+            return List.of(HealthCheck.of("jenreg.quota.capacity", description, Health.UNKNOWN,
                     "the storage-quota usage counter could not be read"));
         }
         return List.of(used.getAsLong() >= limit
-                ? HealthCheck.of("jenesis.quota.capacity", description, Health.DEGRADED,
+                ? HealthCheck.of("jenreg.quota.capacity", description, Health.DEGRADED,
                         "storage quota reached: a new blob is refused until content is deleted or the ceiling is raised")
-                : HealthCheck.up("jenesis.quota.capacity", description));
+                : HealthCheck.up("jenreg.quota.capacity", description));
     }
 
     /** The current usage, or empty when the counter could not be read - a store error the signals degrade over rather

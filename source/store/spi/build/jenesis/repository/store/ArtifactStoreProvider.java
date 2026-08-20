@@ -5,7 +5,7 @@ import module java.base;
 /**
  * A named factory for an {@link ArtifactStore} backend, discovered at runtime with {@link ServiceLoader}.
  * The store is an <em>exclusive</em> SPI in the {@link Features} convention: the server selects one by name
- * (the {@code jenesis.repository.store} setting, default {@code filesystem} - the most universally applicable
+ * (the {@code jenreg.store} setting, default {@code filesystem} - the most universally applicable
  * backend); each provider reads its own configuration through the {@code config} lookup, staying free of any
  * framework dependency. <strong>Every</strong> backend - the bundled filesystem one no less than S3 / GCS / Azure
  * Blob - is added to the module graph by the distribution and bound here through {@code provides}: no consumer, the
@@ -32,7 +32,7 @@ import module java.base;
  *     selection, the {@code filesystem} default it refuses to fall back to, and the installed provider names. A
  *     selected backend whose {@link #requiredConfig()} is unset likewise throws, naming <em>every</em> missing key at
  *     once, and is never constructed. This SPI deliberately does not self-disable the way an optional capability may:
- *     {@code jenesis.repository.store=s3} with the s3 module absent must not boot against the local disk, publishing
+ *     {@code jenreg.store=s3} with the s3 module absent must not boot against the local disk, publishing
  *     into ephemeral storage while every artifact in the intended bucket 404s. Only an <em>unselected</em> deployment
  *     gets the {@code filesystem} default, and its required configuration is checked just the same.</li>
  * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Two providers answering to one name, or one provider

@@ -16,8 +16,8 @@ import module java.base;
 
 /**
  * Builds the OAuth2/OIDC client registrations from configuration: the built-in GitHub provider when
- * {@code jenesis.ui.github.client-id} is set, and a generic OpenID Connect provider - its endpoints and JWK set
- * discovered from {@code jenesis.ui.oidc.issuer-uri} - when that issuer and a client id are set (so any OIDC identity
+ * {@code jenreg.ui.github.client-id} is set, and a generic OpenID Connect provider - its endpoints and JWK set
+ * discovered from {@code jenreg.ui.oidc.issuer-uri} - when that issuer and a client id are set (so any OIDC identity
  * provider, e.g. Google, Keycloak, Okta, Azure AD, works). Every bean here exists only when at least one provider is
  * configured, so the app still starts with login disabled ({@link SecurityConfig} shows a notice) rather than failing,
  * and Spring Boot's property auto-configuration, which rejects a blank client id, is avoided. Discovery makes a network
@@ -31,9 +31,9 @@ public class OAuth2ClientConfig {
     public static class AnyProviderConfigured implements Condition {
         @Override
         public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-            return configured(context, "jenesis.ui.github.client-id")
-                    || (configured(context, "jenesis.ui.oidc.issuer-uri")
-                    && configured(context, "jenesis.ui.oidc.client-id"));
+            return configured(context, "jenreg.ui.github.client-id")
+                    || (configured(context, "jenreg.ui.oidc.issuer-uri")
+                    && configured(context, "jenreg.ui.oidc.client-id"));
         }
 
         private static boolean configured(ConditionContext context, String key) {

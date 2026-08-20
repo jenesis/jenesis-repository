@@ -22,12 +22,12 @@ import module java.base;
 /**
  * The {@code gcs} artifact-store backend over a Google Cloud Storage bucket, through GCS's
  * S3-compatible XML API on the modular AWS SDK v2 - no Google SDK is added to the closure. Selected
- * with {@code jenesis.repository.store=gcs}; configured by {@code jenesis.repository.gcs.bucket} (required) and
- * an HMAC key pair {@code jenesis.repository.gcs.access-key-id} / {@code jenesis.repository.gcs.secret-access-key} (a
+ * with {@code jenreg.store=gcs}; configured by {@code jenreg.gcs.bucket} (required) and
+ * an HMAC key pair {@code jenreg.gcs.access-key-id} / {@code jenreg.gcs.secret-access-key} (a
  * secret; issued under Cloud Storage &gt; Settings &gt; Interoperability), with an optional
- * {@code jenesis.repository.gcs.endpoint} (default {@code https://storage.googleapis.com}; point it elsewhere
- * for an emulator, but it must be {@code https} unless {@code jenesis.repository.gcs.allow-insecure-endpoint=true}
- * explicitly permits a plaintext one) and {@code jenesis.repository.gcs.region} (the SigV4 scope region, default
+ * {@code jenreg.gcs.endpoint} (default {@code https://storage.googleapis.com}; point it elsewhere
+ * for an emulator, but it must be {@code https} unless {@code jenreg.gcs.allow-insecure-endpoint=true}
+ * explicitly permits a plaintext one) and {@code jenreg.gcs.region} (the SigV4 scope region, default
  * {@code auto} as GCS documents). When the key pair is absent the standard AWS chain is consulted, which keeps the provider
  * drivable end to end from a test through an injected config lookup. Two SDK defaults are dialled back for GCS, which
  * does not decode aws-chunked request bodies: the flexible-checksum integrity protections become {@code WHEN_REQUIRED}
@@ -104,7 +104,7 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
      * The endpoint (the {@code storage.googleapis.com} default, or an emulator override), required to be {@code https}
      * by default so the HMAC secret and artifact bytes are not sent over a plaintext transport a MITM can read or
      * tamper with. A plaintext {@code http} emulator endpoint is an explicit opt-out: set
-     * {@code jenesis.repository.gcs.allow-insecure-endpoint=true}.
+     * {@code jenreg.gcs.allow-insecure-endpoint=true}.
      *
      * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code s3} and {@code azure-blob} backends
      * (D-023); what is this backend's own is the pair of config keys it names, and this method is where they are
@@ -115,8 +115,8 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
     }
 
     /**
-     * The static HMAC pair when both {@code jenesis.repository.gcs.access-key-id} and
-     * {@code jenesis.repository.gcs.secret-access-key} are present in the config lookup, otherwise the standard
+     * The static HMAC pair when both {@code jenreg.gcs.access-key-id} and
+     * {@code jenreg.gcs.secret-access-key} are present in the config lookup, otherwise the standard
      * AWS chain (environment, profile, instance role).
      */
     private static AwsCredentialsProvider credentials(UnaryOperator<String> config) {

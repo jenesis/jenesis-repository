@@ -96,7 +96,7 @@ import module java.base;
 public final class Providers {
 
     /** Namespace shared with {@link Features} - a diagnostic points at the exact key an operator must change. */
-    private static final String NAMESPACE = "jenesis.repository.";
+    private static final String NAMESPACE = "jenreg.";
 
     private Providers() {
     }
@@ -107,7 +107,7 @@ public final class Providers {
      * empty {@link Optional} - it is configured off in a way its enablement predicate does not see - is left out.
      * A disabled provider is never asked to create anything.
      *
-     * @param spi        the SPI's selection key, the {@code <spi>} in {@code jenesis.repository.<spi>=<name>}, used
+     * @param spi        the SPI's selection key, the {@code <spi>} in {@code jenreg.<spi>=<name>}, used
      *                   verbatim in every diagnostic.
      * @param discovered the discovered providers, normally the SPI home's own {@code ServiceLoader.load(X.class)}.
      * @param name       each provider's {@code name()} - its toggle key and attribution key.

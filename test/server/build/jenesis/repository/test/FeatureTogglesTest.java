@@ -22,9 +22,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The config-driven SPI enable/disable convention against the real installed modules: a format configured off
- * ({@code jenesis.repository.<name>=false}) degrades exactly like a missing module, and a singleton SPI's provider is
+ * ({@code jenreg.<name>=false}) degrades exactly like a missing module, and a singleton SPI's provider is
  * skippable by its feature toggle and selectable by the SPI's selection key
- * ({@code jenesis.repository.token-exchange=<name>}) - so one image carries every module and configuration decides
+ * ({@code jenreg.token-exchange=<name>}) - so one image carries every module and configuration decides
  * what runs.
  *
  * <p>Since T-101b the three {@code server-spi} singletons resolve through the shared
@@ -45,7 +45,7 @@ class FeatureTogglesTest {
     @Test
     void a_format_configured_off_degrades_like_a_missing_module() {
         assertThat(RepositoryFormat.installed("maven")).isPresent();
-        Features.configure(Map.of("jenesis.repository.maven", "false")::get);
+        Features.configure(Map.of("jenreg.maven", "false")::get);
         assertThat(RepositoryFormat.installed("maven")).isEmpty();
         assertThat(RepositoryFormat.installed("raw")).isPresent();
     }
@@ -54,14 +54,14 @@ class FeatureTogglesTest {
     void a_token_exchange_configured_off_resolves_to_none() {
         assertThat(TokenExchangeProvider.resolve(Authorization.anonymous(), key -> null))
                 .isNotSameAs(TokenExchange.NONE);
-        Features.configure(Map.of("jenesis.repository.oidc", "false")::get);
+        Features.configure(Map.of("jenreg.oidc", "false")::get);
         assertThat(TokenExchangeProvider.resolve(Authorization.anonymous(), key -> null))
                 .isSameAs(TokenExchange.NONE);
     }
 
     @Test
     void an_exclusive_selection_picks_its_implementation_by_name() {
-        Features.configure(Map.of("jenesis.repository.token-exchange", "oidc")::get);
+        Features.configure(Map.of("jenreg.token-exchange", "oidc")::get);
         assertThat(TokenExchangeProvider.resolve(Authorization.anonymous(), key -> null))
                 .isNotSameAs(TokenExchange.NONE);
     }
@@ -71,11 +71,11 @@ class FeatureTogglesTest {
         // T-101b (§9): this used to answer TokenExchange.NONE, so a deployment that configured workload identity and
         // misspelled the protocol booted with the exchange endpoint reporting "not installed" - and every CI job
         // silently falling back to a long-lived static credential.
-        Features.configure(Map.of("jenesis.repository.token-exchange", "not-installed")::get);
+        Features.configure(Map.of("jenreg.token-exchange", "not-installed")::get);
         assertThatThrownBy(() -> TokenExchangeProvider.resolve(Authorization.anonymous(), key -> null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'not-installed'")
-                .hasMessageContaining("jenesis.repository.token-exchange=not-installed")
+                .hasMessageContaining("jenreg.token-exchange=not-installed")
                 .hasMessageContaining("no installed provider answers to it")
                 .hasMessageContaining("refusing to degrade silently")
                 .hasMessageContaining("[oidc]");
@@ -84,18 +84,18 @@ class FeatureTogglesTest {
     @Test
     void a_rate_limiter_configured_off_resolves_to_none() {
         assertThat(RateLimiterProvider.resolve(key -> null)).isNotSameAs(RateLimiter.NONE);
-        Features.configure(Map.of("jenesis.repository.token-bucket", "false")::get);
+        Features.configure(Map.of("jenreg.token-bucket", "false")::get);
         assertThat(RateLimiterProvider.resolve(key -> null)).isSameAs(RateLimiter.NONE);
     }
 
     @Test
     void a_rate_limiter_selection_naming_an_uninstalled_implementation_fails_loudly() {
         // T-101b (§9): unlimited-while-configured is the worst possible degradation for a metering capability.
-        Features.configure(Map.of("jenesis.repository.rate-limiter", "coordinated")::get);
+        Features.configure(Map.of("jenreg.rate-limiter", "coordinated")::get);
         assertThatThrownBy(() -> RateLimiterProvider.resolve(key -> null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'coordinated'")
-                .hasMessageContaining("jenesis.repository.rate-limiter=coordinated")
+                .hasMessageContaining("jenreg.rate-limiter=coordinated")
                 .hasMessageContaining("refusing to degrade silently")
                 .hasMessageContaining("[token-bucket]");
     }
@@ -104,7 +104,7 @@ class FeatureTogglesTest {
     void a_key_usage_tracker_configured_off_resolves_to_none() {
         assertThat(KeyUsageTrackerProvider.resolve(Authorization.anonymous(), key -> null))
                 .isNotSameAs(KeyUsageTracker.NONE);
-        Features.configure(Map.of("jenesis.repository.batching", "false")::get);
+        Features.configure(Map.of("jenreg.batching", "false")::get);
         assertThat(KeyUsageTrackerProvider.resolve(Authorization.anonymous(), key -> null))
                 .isSameAs(KeyUsageTracker.NONE);
     }
@@ -113,11 +113,11 @@ class FeatureTogglesTest {
     void a_key_usage_selection_naming_an_uninstalled_implementation_fails_loudly() {
         // T-101b (§9): silently answering NONE would leave every credential reading "last used: never", which an
         // operator takes as evidence that an unused key is safe to revoke.
-        Features.configure(Map.of("jenesis.repository.key-usage", "streaming")::get);
+        Features.configure(Map.of("jenreg.key-usage", "streaming")::get);
         assertThatThrownBy(() -> KeyUsageTrackerProvider.resolve(Authorization.anonymous(), key -> null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'streaming'")
-                .hasMessageContaining("jenesis.repository.key-usage=streaming")
+                .hasMessageContaining("jenreg.key-usage=streaming")
                 .hasMessageContaining("refusing to degrade silently")
                 .hasMessageContaining("[batching]");
     }
@@ -125,13 +125,13 @@ class FeatureTogglesTest {
     @Test
     void an_import_skips_a_format_configured_off(@TempDir Path root) throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         ImportSource source = (consumer, checkpoint) -> {
             consumer.accept("raw", "files/a.txt",
                     () -> new ByteArrayInputStream("a".getBytes(StandardCharsets.UTF_8)));
             checkpoint.reached(null);
         };
-        Features.configure(Map.of("jenesis.repository.raw", "false")::get);
+        Features.configure(Map.of("jenreg.raw", "false")::get);
         RepositoryImport.Result withheld = new RepositoryImport().run(source, store);
         assertThat(withheld.imported()).isZero();
         assertThat(withheld.skippedFormats()).containsExactly("raw");

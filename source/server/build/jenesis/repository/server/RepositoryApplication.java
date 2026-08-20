@@ -21,7 +21,7 @@ import module java.base;
  * auto-configuration, so a consumer extends this module by overriding beans rather than
  * forking it; this class is a plain {@code @EnableAutoConfiguration} launcher rather than a component-scanning
  * {@code @SpringBootApplication}, so the module carries no beans that a consumer cannot override. The storage backend
- * is selected by {@code jenesis.repository.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem
+ * is selected by {@code jenreg.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem
  * fallback).
  */
 @SpringBootConfiguration

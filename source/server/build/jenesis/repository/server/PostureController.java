@@ -16,7 +16,7 @@ import module java.base;
  * deployment's configuration-warning advisories: every potentially-unsafe setting a discovered {@link
  * build.jenesis.repository.posture.SafetyAdvisor} raises against the effective configuration, collected once through
  * {@link PostureReport#discover} and returned severity-sorted (critical first). Each row names <em>why</em> a setting is
- * unsafe and the exact {@code jenesis.*} key/value that fixes it - it never repeats a read secret value, so this
+ * unsafe and the exact {@code jenreg.*} key/value that fixes it - it never repeats a read secret value, so this
  * surface (which enumerates the deployment's weaknesses) cannot itself leak one.
  *
  * <p>Registered as an explicit {@code @Bean} by {@link RepositoryAutoConfiguration}, reading the deployment

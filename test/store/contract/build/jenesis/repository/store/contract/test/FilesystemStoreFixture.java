@@ -40,7 +40,7 @@ final class FilesystemStoreFixture implements StoreFixture {
     public void start() throws IOException {
         root = Files.createTempDirectory("store-contract-filesystem-");
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null).scope(Containers.uniqueScope());
+                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null).scope(Containers.uniqueScope());
     }
 
     @Override

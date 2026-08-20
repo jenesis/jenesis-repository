@@ -13,9 +13,9 @@
 #   docker run -e MAINCLASS=build.jenesis.repository.bundle.Console -e PORT=8081 -p 8081:8081 \
 #       -v jenesis-data:/data jenesis-repository:free
 #
-# Configuration is entirely environment variables: every jenesis.repository.* key is settable through Spring's
-# relaxed binding (JENESIS_REPOSITORY_MAVEN=false disables the Maven layout exactly as if its module were absent,
-# JENESIS_REPOSITORY_STORE=s3 selects the store backend), plus the documented JENESIS_STORE / JENESIS_STORE_ROOT /
+# Configuration is entirely environment variables: every jenreg.* key is settable through Spring's
+# relaxed binding (JENREG_MAVEN=false disables the Maven layout exactly as if its module were absent,
+# JENREG_STORE=s3 selects the store backend), plus the documented JENREG_STORE / JENREG_FILESYSTEM_ROOT /
 # cloud-credential variables. Everything on the module path is enabled until configured off.
 #
 # A JDK runtime image, not jlink/distroless: the non-modular Spring closure cannot be linked but runs fine on the
@@ -40,8 +40,8 @@ RUN java build/jenesis/Project.java +source+bundle build \
 
 FROM ${BASE}
 COPY --from=build /opt/app /opt/app
-ENV JENESIS_STORE=filesystem \
-    JENESIS_STORE_ROOT=/data \
+ENV JENREG_STORE=filesystem \
+    JENREG_FILESYSTEM_ROOT=/data \
     MAINMODULE=build.jenesis.repository.bundle \
     MAINCLASS=build.jenesis.repository.bundle.AllInOne \
     PORT=8080

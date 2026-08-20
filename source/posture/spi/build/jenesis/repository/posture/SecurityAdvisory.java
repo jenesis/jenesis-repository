@@ -4,7 +4,7 @@ import module java.base;
 
 /**
  * One self-describing security-posture advisory: a potentially-unsafe configuration a module wants an operator to know
- * about. It carries a stable {@link #id} ({@code jenesis.<feature>.<signal>}, the {@link Advisories} grammar), a
+ * about. It carries a stable {@link #id} ({@code jenreg.<feature>.<signal>}, the {@link Advisories} grammar), a
  * {@link #severity}, a {@link #scope} (deployment-wide vs a named {@link #tenant}), a short {@link #title}, a plain
  * {@link #why} it is unsafe, a suggested safer {@link #fix} (best practice in prose), the <em>exact</em> setting to
  * change ({@link #settingKey} / {@link #settingValue}, so an operator can copy it straight into config) and a

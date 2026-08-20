@@ -36,17 +36,17 @@ import module java.base;
  * cursor: node death costs at most one checkpoint stride of re-visits, never a restart.
  *
  * <p>The segment plan is static per pass: each root's children are paged up to a planning cap and packed into
- * contiguous ranges toward the {@code jenesis.walk.segments} target; a root whose fan-out exceeds the cap and whose
+ * contiguous ranges toward the {@code jenreg.walk.segments} target; a root whose fan-out exceeds the cap and whose
  * sampled children are all long lowercase hex (the content-addressed {@code blobs/} namespace) is cut by leading hex
  * byte instead - uniform by construction, with no listing at all - and any other over-cap root conservatively stays
  * one segment. Adaptive mid-pass splitting is deliberately out of scope: splitting a claimed range safely needs a
  * two-object CAS the store does not have.
  *
  * <p>A running walk is its own {@link ObservabilitySource}: it reports the current (or last) pass this instance
- * drove as {@code jenesis.walk.segments} - a bounded gauge of the pass's done segments against its segment count,
+ * drove as {@code jenreg.walk.segments} - a bounded gauge of the pass's done segments against its segment count,
  * so the overview shows how far the pass has converged (its {@code usage()} the convergence fraction) - the
- * {@code jenesis.walk.resumes} counter of segments this instance reclaimed from an expired (dead) holder's cursor
- * (takeovers, the multi-node health signal a steadily climbing count exposes), and a {@code jenesis.walk.pass}
+ * {@code jenreg.walk.resumes} counter of segments this instance reclaimed from an expired (dead) holder's cursor
+ * (takeovers, the multi-node health signal a steadily climbing count exposes), and a {@code jenreg.walk.pass}
  * task status carrying the pass generation and started stamp, {@code RUNNING} while segments are still claimed and
  * {@code IDLE} once it completed. The pass and segment counts are read off the live pass this instance last saw
  * (pass state itself stays durable in the walked store); the resume count is this node's own view of takeovers,
@@ -63,11 +63,11 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
     private final String node = UUID.randomUUID().toString().substring(0, 8);
     private final AtomicLong workers = new AtomicLong();
     /** Segments this instance has reclaimed from an expired holder's cursor - takeovers, the {@code
-     *  jenesis.walk.resumes} multi-node-health counter. Held on the instance (never a static) so it survives a pass
+     *  jenreg.walk.resumes} multi-node-health counter. Held on the instance (never a static) so it survives a pass
      *  turnover; a per-node view, since a takeover is inherently the reclaiming node's observation. */
     private final AtomicLong resumes = new AtomicLong();
     /** The pass this instance last drove to a {@link #walk} return, or {@code null} until it has run once - the live
-     *  read the {@code jenesis.walk.*} signals surface, so a never-run walk contributes nothing. */
+     *  read the {@code jenreg.walk.*} signals surface, so a never-run walk contributes nothing. */
     private volatile WalkPass observed;
 
     public StoreArtifactWalk(int checkpoint, int segments, Duration ttl, Clock clock) {
@@ -87,12 +87,12 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
             return List.of(); // never driven: a disabled-or-absent walk lists nothing
         }
         return List.of(
-                Metric.bounded("jenesis.walk.segments",
+                Metric.bounded("jenreg.walk.segments",
                         "Segments done against the current shared-walk pass's segment count - the used-vs-available "
                                 + "shape, so the overview shows how far the running pass has converged without "
                                 + "pre-computing a percentage.",
                         pass.done(), pass.segments(), "segments"),
-                Metric.counter("jenesis.walk.resumes",
+                Metric.counter("jenreg.walk.resumes",
                         "Segments this node reclaimed from an expired (dead) holder's cursor - takeovers, the "
                                 + "multi-node health signal a steadily climbing count exposes (workers dying "
                                 + "mid-segment).",
@@ -106,7 +106,7 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
             return List.of();
         }
         boolean running = !pass.complete();
-        return List.of(TaskStatus.ran("jenesis.walk.pass",
+        return List.of(TaskStatus.ran("jenreg.walk.pass",
                 "The current (or last completed) shared-walk pass - its generation and started stamp, RUNNING "
                         + "while segments are still claimed and IDLE once every segment is done.",
                 running ? TaskStatus.State.RUNNING : TaskStatus.State.IDLE, pass.started(), null,
@@ -300,7 +300,7 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
             }
             String cursor = stale ? null : segment.cursor();
             // A same-generation CLAIMED segment that reached here is an expired holder's (a live one was skipped
-            // above): reclaiming it is a takeover resuming from its committed cursor, the jenesis.walk.resumes
+            // above): reclaiming it is a takeover resuming from its committed cursor, the jenreg.walk.resumes
             // signal. A pending or stale-generation segment is a fresh claim, not a resume.
             boolean takeover = !stale && segment.state() == WalkSegment.State.CLAIMED;
             byte[] content = bytes(serialize(manifest.generation(), index, manifest.ranges().get(index),

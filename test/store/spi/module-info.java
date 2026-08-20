@@ -4,8 +4,8 @@
  * {@link build.jenesis.repository.store.ArtifactStoreProvider#resolve}) so the store primitives are exercised without
  * the server or any network: the content-addressed {@link build.jenesis.repository.store.Publication} pointer model, the
  * {@link build.jenesis.repository.store.QuotaArtifactStore} byte-ceiling decorator (including its
- * {@link build.jenesis.repository.observation.ObservabilitySource} adoption - the {@code jenesis.quota.used}
- * used-vs-available metric and {@code jenesis.quota.capacity} health check, silent while unlimited), the provider's ServiceLoader
+ * {@link build.jenesis.repository.observation.ObservabilitySource} adoption - the {@code jenreg.quota.used}
+ * used-vs-available metric and {@code jenreg.quota.capacity} health check, silent while unlimited), the provider's ServiceLoader
  * resolution with its filesystem fallback, the config-driven SPI enable/disable convention
  * ({@link build.jenesis.repository.store.Features} - toggle semantics, required-config self-disable, and the store
  * backend's fail-loud exception to it), the {@link build.jenesis.repository.store.Tenants} directory seam

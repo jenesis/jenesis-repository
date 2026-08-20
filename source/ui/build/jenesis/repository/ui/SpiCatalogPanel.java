@@ -49,7 +49,7 @@ public final class SpiCatalogPanel implements Panel {
         html.append("<p>Every capability this repository carries is a discovered <strong>SPI</strong> (a plug-in "
                 + "contract) with one or more installed <strong>implementations</strong>. This is a read-only view "
                 + "of the whole plug-in surface, grouped by SPI; whether an implementation is active is configured "
-                + "with its <code>jenesis.repository.&lt;feature&gt;</code> key.</p>");
+                + "with its <code>jenreg.&lt;feature&gt;</code> key.</p>");
         if (byService.isEmpty()) {
             html.append("<p>No SPIs are installed.</p>");
             return html.toString();

@@ -6,8 +6,8 @@
  * namespace is never materialised as one list and a resume deep inside it is a seek on a backend that pages natively.
  * All pass state lives in the walked store ({@code walks/<consumer>/...}, compare-and-set objects only) - persist
  * only through the store, so a pass survives process death on any node sharing it. Settings:
- * {@code jenesis.walk.checkpoint} (cursor-commit stride, default 1000), {@code jenesis.walk.segments} (target
- * segment count per pass, default 32), {@code jenesis.walk.ttl} (claim lease seconds, default 900).
+ * {@code jenreg.walk.checkpoint} (cursor-commit stride, default 1000), {@code jenreg.walk.segments} (target
+ * segment count per pass, default 32), {@code jenreg.walk.ttl} (claim lease seconds, default 900).
  *
  * @jenesis.release 25
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55

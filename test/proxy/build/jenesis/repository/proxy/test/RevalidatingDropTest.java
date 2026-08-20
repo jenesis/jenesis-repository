@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The drop-and-subtract accounting the {@link RevalidatingFetcher} comment warns about: when a previously cached
  * index is superseded by a {@code 200} that carries no validator (or is oversized), the entry is dropped <em>and its
  * bytes subtracted from the running total</em>. A bare {@code cache.remove} would leak the accounting so
- * {@code jenesis.proxy.revalidation.bytes} drifts permanently high and the eviction loop later evicts every fresh
+ * {@code jenreg.proxy.revalidation.bytes} drifts permanently high and the eviction loop later evicts every fresh
  * entry, silently degrading revalidation to a pass-through. This drives exactly that transition and asserts the byte
  * gauge returns to zero and the entry is gone.
  */
@@ -40,11 +40,11 @@ class RevalidatingDropTest {
     }
 
     private static double bytes(RevalidatingFetcher fetcher) {
-        return metric(fetcher, "jenesis.proxy.revalidation.bytes");
+        return metric(fetcher, "jenreg.proxy.revalidation.bytes");
     }
 
     private static double entries(RevalidatingFetcher fetcher) {
-        return metric(fetcher, "jenesis.proxy.revalidation.entries");
+        return metric(fetcher, "jenreg.proxy.revalidation.entries");
     }
 
     private static double metric(RevalidatingFetcher fetcher, String name) {

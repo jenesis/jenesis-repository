@@ -48,12 +48,12 @@ public class GcsConditionalWriteTest {
         server.start();
         server.stubFor(any(anyUrl()).willReturn(aResponse()));
         Map<String, String> values = Map.of(
-                "jenesis.repository.gcs.bucket", "repo",
-                "jenesis.repository.gcs.endpoint", "http://localhost:" + server.port(),
+                "jenreg.gcs.bucket", "repo",
+                "jenreg.gcs.endpoint", "http://localhost:" + server.port(),
                 // The in-process stub speaks plaintext http, so opt past the https-endpoint secure default.
-                "jenesis.repository.gcs.allow-insecure-endpoint", "true",
-                "jenesis.repository.gcs.access-key-id", "hmac-access",
-                "jenesis.repository.gcs.secret-access-key", "hmac-secret");
+                "jenreg.gcs.allow-insecure-endpoint", "true",
+                "jenreg.gcs.access-key-id", "hmac-access",
+                "jenreg.gcs.secret-access-key", "hmac-secret");
         store = ArtifactStoreProvider.resolve("gcs", values::get).scope("acme");
     }
 
@@ -181,7 +181,7 @@ public class GcsConditionalWriteTest {
         assertThatThrownBy(() -> GcsArtifactStoreProvider.secureEndpoint("http://localhost:9000", null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("https")
-                .hasMessageContaining("jenesis.repository.gcs.allow-insecure-endpoint");
+                .hasMessageContaining("jenreg.gcs.allow-insecure-endpoint");
         assertThat(GcsArtifactStoreProvider.secureEndpoint("http://localhost:9000", "true"))
                 .as("the opt-out permits a plaintext emulator endpoint")
                 .isEqualTo(URI.create("http://localhost:9000"));
@@ -194,7 +194,7 @@ public class GcsConditionalWriteTest {
     public void a_missing_bucket_setting_is_a_clear_configuration_error() {
         assertThatThrownBy(() -> ArtifactStoreProvider.resolve("gcs", key -> null))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("jenesis.repository.gcs.bucket");
+                .hasMessageContaining("jenreg.gcs.bucket");
     }
 
     @Test
@@ -217,11 +217,11 @@ public class GcsConditionalWriteTest {
         // 404 an If-generation-match write treats as a CAS conflict. Mapping it to a false return would turn it into
         // silent retry-exhaustion; a versioned write must surface it as a real IOException.
         Map<String, String> values = Map.of(
-                "jenesis.repository.gcs.bucket", "gone",
-                "jenesis.repository.gcs.endpoint", "http://localhost:" + server.port(),
-                "jenesis.repository.gcs.allow-insecure-endpoint", "true",
-                "jenesis.repository.gcs.access-key-id", "hmac-access",
-                "jenesis.repository.gcs.secret-access-key", "hmac-secret");
+                "jenreg.gcs.bucket", "gone",
+                "jenreg.gcs.endpoint", "http://localhost:" + server.port(),
+                "jenreg.gcs.allow-insecure-endpoint", "true",
+                "jenreg.gcs.access-key-id", "hmac-access",
+                "jenreg.gcs.secret-access-key", "hmac-secret");
         ArtifactStore missing = ArtifactStoreProvider.resolve("gcs", values::get).scope("acme");
         assertThatThrownBy(() -> missing.writeVersioned("config/x", "v".getBytes(StandardCharsets.UTF_8), null))
                 .as("a bucket-level 404 is a real transport/config failure, never a silent CAS conflict")

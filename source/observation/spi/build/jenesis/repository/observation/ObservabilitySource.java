@@ -44,7 +44,7 @@ import module java.base;
  *   <li><b>Error visibility.</b> A throw is <b>contained to this source</b> and never reaches the reader as a broken
  *       report: {@link ObservabilityReport#from} collects through {@code Contributions}, so a source that throws (or
  *       answers {@code null}) contributes one {@link Health#UNKNOWN} check named
- *       {@code jenesis.observation.unavailable.<source>} in place of its own signals, every other source is collected,
+ *       {@code jenreg.observation.unavailable.<source>} in place of its own signals, every other source is collected,
  *       and the failure is logged once with this class's name. Containment is not absolution: the substitute check
  *       names only the failing class and the exception <em>type</em> (the message goes to the log, never to an
  *       operator-facing detail), it says nothing about what the source was actually reporting, and it drops
@@ -62,7 +62,7 @@ import module java.base;
  *   <li><b>Ordering / concurrency.</b> Results must be deterministic and independent of discovery order:
  *       {@link ObservabilityReport} concatenates the sources and sorts by signal name, so two deployments with the
  *       same plugins render the same report whatever order the module path yields. Signal names are stable and unique
- *       across plugins ({@code jenesis.<feature>.<signal>}, validated at construction) - a duplicate name is a
+ *       across plugins ({@code jenreg.<feature>.<signal>}, validated at construction) - a duplicate name is a
  *       collision between plugins, not a merge.</li>
  * </ol>
  */

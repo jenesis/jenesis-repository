@@ -29,16 +29,16 @@ import module java.base;
  *   <li><b>Default-deny condition semantics.</b> Every condition is evaluated against the value the deployment would
  *       actually run with - the same default the reading code applies - and never against key <em>presence</em>. So an
  *       unset key raises an advisory exactly when the product's own default is the unsafe one (an unset
- *       {@code jenesis.repository.rate-limit} means unlimited and raises; an unset {@code jenesis.repository.auth}
+ *       {@code jenreg.rate-limit} means unlimited and raises; an unset {@code jenreg.auth}
  *       means enforced and stays silent). Where a value is parsed, the parse mirrors the reading code's parse exactly
  *       and an ambiguity resolves <em>toward</em> raising: matching only the whole value of
- *       {@code jenesis.ui.admins} would miss the wildcard in {@code alice,*} that the reader honours, and missing it
+ *       {@code jenreg.ui.admins} would miss the wildcard in {@code alice,*} that the reader honours, and missing it
  *       fails open on the surface whose entire job is to report open configuration.</li>
  *   <li><b>Selection failure.</b> There is nothing to select: the policy is additive, every discovered advisor is
  *       evaluated, and no configuration key names one. Discovery is a plain {@code ServiceLoader.load} inside
  *       {@link PostureReport#discover} rather than the shared {@code Providers.all} primitive - an advisor declares no
  *       {@code name()} - so this SPI has no <em>provider-level</em> duplicate refusal and no
- *       {@code jenesis.repository.<name>=false} toggle: an advisor module registered twice is evaluated twice. What
+ *       {@code jenreg.<name>=false} toggle: an advisor module registered twice is evaluated twice. What
  *       that actually costs a reader - two rows under one id - is caught one level down, where it is observable:
  *       {@link PostureReport#from} reports a duplicated advisory id (clause 11) rather than merging or dropping. A
  *       module switches its own advisories off by having its feature off and returning nothing, which is the
@@ -49,7 +49,7 @@ import module java.base;
  *       the constructor enforces the id/scope/tenant consistency so a tenant row cannot arrive unattributed.</li>
  *   <li><b>Error visibility (&sect;9).</b> A throw is <b>contained to this advisor</b>: {@link PostureReport#from}
  *       collects through {@code Contributions}, so an advisor that throws (or answers {@code null}) is replaced by a
- *       {@link Severity#WARN} {@code jenesis.posture.unavailable.<advisor>} advisory naming this class and the
+ *       {@link Severity#WARN} {@code jenreg.posture.unavailable.<advisor>} advisory naming this class and the
  *       exception <em>type</em>, every other advisor is still evaluated, the console header badge and
  *       {@code GET /api/posture} still render, and the failure is logged once with this class's name. That substitute
  *       row is an admission, not an excuse: it can only say "whatever this advisor checks went unchecked", so the
@@ -74,7 +74,7 @@ import module java.base;
  *       through {@link PostureReport#from} with an explicitly built list instead.</li>
  *   <li><b>Ordering / determinism.</b> Results are independent of discovery order: {@link PostureReport} concatenates
  *       the advisors and sorts critical-first, ties broken by id, so two deployments with the same modules and the same
- *       configuration render the same report on any module path. Ids follow the {@code jenesis.<feature>.<signal>}
+ *       configuration render the same report on any module path. Ids follow the {@code jenreg.<feature>.<signal>}
  *       grammar, are validated at construction, are stable across releases (they are the docs anchor and the row key)
  *       and are unique across advisors - a duplicate id is a collision between modules, not a merge, and
  *       {@link PostureReport#from} reports one when it sees one. The key it refuses on is the id <em>plus the

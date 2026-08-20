@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * {@link WalkConsumer#discovered()} - the {@link java.util.ServiceLoader} enumeration the shared rebuild pass drives
  * from one place - lists every enabled consumer and skips a disabled one under the shared {@code
- * jenesis.repository.<name>} feature convention: nothing set means enabled, only an explicit {@code false} disables.
+ * jenreg.<name>} feature convention: nothing set means enabled, only an explicit {@code false} disables.
  * The {@link DiscoverableWalkConsumer} registered by this test module stands in for a shipped consumer.
  */
 class WalkConsumerDiscoveryTest {
@@ -36,7 +36,7 @@ class WalkConsumerDiscoveryTest {
         Features.configure(key -> (Features.key(DiscoverableWalkConsumer.NAME)).equals(key) ? "false" : null);
 
         assertThat(WalkConsumer.discovered())
-                .as("an explicit jenesis.repository.<name>=false drops the consumer from the enumeration")
+                .as("an explicit jenreg.<name>=false drops the consumer from the enumeration")
                 .noneSatisfy(consumer -> assertThat(consumer).isInstanceOf(DiscoverableWalkConsumer.class));
     }
 }

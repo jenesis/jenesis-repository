@@ -9,8 +9,8 @@ import org.springframework.context.ConfigurableApplicationContext;
  * {@link RepositoryApplication} directly is the config name: with the server and the console both in this bundle,
  * two modules carry a root {@code application.properties}, so this launcher reads the bundle's own
  * {@code allinone.properties} (a copy of the server's configuration) and stays deterministic. Every capability on
- * the module path runs until configured off - {@code jenesis.repository.<feature>=false} degrades an implementation
- * exactly like a missing module, {@code jenesis.repository.<spi>=<feature>} selects among exclusive ones - so the
+ * the module path runs until configured off - {@code jenreg.<feature>=false} degrades an implementation
+ * exactly like a missing module, {@code jenreg.<spi>=<feature>} selects among exclusive ones - so the
  * image this launcher fronts is trimmed with {@code docker run -e}, never rebuilt.
  */
 public final class AllInOne {

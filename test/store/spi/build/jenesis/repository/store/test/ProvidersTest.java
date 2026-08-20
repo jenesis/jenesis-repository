@@ -56,7 +56,7 @@ class ProvidersTest {
 
     @Test
     void two_providers_answering_to_one_name_are_a_packaging_error() {
-        // Case-insensitively equal: one jenesis.repository.<name>=false switch would toggle both.
+        // Case-insensitively equal: one jenreg.<name>=false switch would toggle both.
         List<Fake> clashing = List.of(alfa("dup", "a"), beta("DUP", "b"));
         for (Runnable primitive : everyPrimitive(clashing)) {
             assertThatThrownBy(primitive::run)
@@ -192,7 +192,7 @@ class ProvidersTest {
                 .hasMessageContaining("More than one widget implementation is enabled")
                 .hasMessageContaining("alfa")
                 .hasMessageContaining("bravo")
-                .hasMessageContaining("jenesis.repository.widget=<name>");
+                .hasMessageContaining("jenreg.widget=<name>");
     }
 
     @Test
@@ -227,7 +227,7 @@ class ProvidersTest {
                 Providers.optionalUnique(SPI, discovered, NAME, Optional.of("bravo"), ENABLED, CREATE))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'bravo'")
-                .hasMessageContaining("jenesis.repository.bravo=false")
+                .hasMessageContaining("jenreg.bravo=false")
                 .hasMessageContaining("required configuration is unset")
                 .hasMessageContaining("refusing to degrade silently");
     }

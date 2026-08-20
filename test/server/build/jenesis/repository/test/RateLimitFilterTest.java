@@ -79,7 +79,7 @@ public class RateLimitFilterTest {
     @BeforeEach
     void setUp() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         authorization = Authorization.enforcing(store);
         // The forged tenant carries a high per-tenant override. It is honoured while the tenant holds its own bucket
         // and must be ignored once the tenant overflows to the shared anonymous bucket.

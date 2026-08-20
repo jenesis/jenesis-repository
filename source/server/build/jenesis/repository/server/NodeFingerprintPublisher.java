@@ -8,7 +8,7 @@ import module java.base;
 
 /**
  * Publishes this node's {@link NodeFingerprint} to the shared store on a heartbeat (WCON.2). A stable node id is
- * derived once - the {@code jenesis.consistency.node-id} setting if given, else the hostname, else a generated
+ * derived once - the {@code jenreg.consistency.node-id} setting if given, else the hostname, else a generated
  * per-process id - and held as <em>instance</em> state on this bean (never a mutable static), so a fleet of in-process
  * nodes in a test each carry their own identity. A daemon scheduler re-publishes every heartbeat interval, so a node's
  * liveness (and its current config generation, cursor position and sampled counters) stays fresh for the fleet to
@@ -38,11 +38,11 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         this.store = Objects.requireNonNull(store, "store");
         // Opt-in per deployment, like the other operational writers (demo seeding, batch ingestion): a single-node
         // deployment publishes nothing, so it never writes an operational key into an otherwise-clean store layout; a
-        // multi-node deployment sets jenesis.consistency.enabled=true so its nodes publish and can be compared.
-        this.enabled = "true".equalsIgnoreCase(String.valueOf(config.apply("jenesis.consistency.enabled")));
+        // multi-node deployment sets jenreg.consistency.enabled=true so its nodes publish and can be compared.
+        this.enabled = "true".equalsIgnoreCase(String.valueOf(config.apply("jenreg.consistency.enabled")));
         this.nodeId = resolveNodeId(config);
         this.configGeneration = NodeFingerprint.configGeneration(mustMatch(config), tenantSet(store, config));
-        this.heartbeatMillis = Math.max(1000L, millis(config, "jenesis.consistency.heartbeat",
+        this.heartbeatMillis = Math.max(1000L, millis(config, "jenreg.consistency.heartbeat",
                 consistency.settings().sweepIntervalMillis()));
         this.scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "jenesis-consistency-" + nodeId);
@@ -56,7 +56,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         return nodeId;
     }
 
-    /** Whether this node publishes its fingerprint - opt-in via {@code jenesis.consistency.enabled}. */
+    /** Whether this node publishes its fingerprint - opt-in via {@code jenreg.consistency.enabled}. */
     public boolean enabled() {
         return enabled;
     }
@@ -107,8 +107,8 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
      *  the store backend, the routed tenant / repository, the authorization mode and the read-only flag. */
     private static Map<String, String> mustMatch(UnaryOperator<String> config) {
         Map<String, String> settings = new TreeMap<>();
-        for (String key : List.of("jenesis.repository.store", "jenesis.repository.tenant",
-                "jenesis.repository.repository", "jenesis.repository.auth", "jenesis.repository.read-only")) {
+        for (String key : List.of("jenreg.store", "jenreg.tenant",
+                "jenreg.repository", "jenreg.auth", "jenreg.read-only")) {
             String value = config.apply(key);
             settings.put(key, value == null ? "" : value);
         }
@@ -123,7 +123,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
      *  if the directory cannot be listed, fall back to the single configured tenant so the fold stays stable rather than
      *  failing the node. */
     private static Collection<String> tenantSet(ArtifactStore store, UnaryOperator<String> config) {
-        String tenant = config.apply("jenesis.repository.tenant");
+        String tenant = config.apply("jenreg.tenant");
         if (tenant == null || tenant.isBlank()) {
             tenant = "default";
         }
@@ -139,7 +139,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
     /** A stable node id: the explicit setting, else the hostname, else a generated per-process id (with a warning that
      *  a stable id is preferable so a restart does not leave an orphan fingerprint object behind). */
     private static String resolveNodeId(UnaryOperator<String> config) {
-        String configured = config.apply("jenesis.consistency.node-id");
+        String configured = config.apply("jenreg.consistency.node-id");
         if (configured != null && !configured.isBlank()) {
             return sanitize(configured.trim());
         }
@@ -152,8 +152,8 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
             // fall through to a generated id
         }
         String generated = "node-" + Long.toHexString(UUID.randomUUID().getMostSignificantBits() & 0xffffffffL);
-        LOGGER.warn("SECURITY/OPS: jenesis.consistency.node-id is unset and the hostname is unavailable, so this node "
-                + "uses a generated per-process id ({}). Set a stable jenesis.consistency.node-id so a restart re-uses "
+        LOGGER.warn("SECURITY/OPS: jenreg.consistency.node-id is unset and the hostname is unavailable, so this node "
+                + "uses a generated per-process id ({}). Set a stable jenreg.consistency.node-id so a restart re-uses "
                 + "the same identity instead of leaving an orphan fingerprint behind.", generated);
         return generated;
     }

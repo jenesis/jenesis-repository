@@ -316,7 +316,7 @@ public class RepositoryController {
         base.put("auth", Boolean.parseBoolean(settings.apply("auth")));
         // WANON.1: advertise the strictly-opt-in anonymous role so a console shows an explicit "Anonymous access"
         // banner and a client knows keyless reads are served. Empty (the default) means no anonymous access. Read off
-        // the same jenesis.repository.* settings the other flags read, so no extra dependency is threaded in.
+        // the same jenreg.* settings the other flags read, so no extra dependency is threaded in.
         base.put("anonymousRights", anonymousRights());
         // WFE.1: collect the core CapabilityContributor SPI and merge each contribution onto the base map, so a
         // richer distribution extends the one free /api/capabilities without a bean override (retiring the downstream
@@ -346,14 +346,14 @@ public class RepositoryController {
         }
     }
 
-    /** The deployment-wide read-only flag, read off the same {@code jenesis.repository.*} settings the formats read a
+    /** The deployment-wide read-only flag, read off the same {@code jenreg.*} settings the formats read a
      *  toggle from, so no extra dependency is threaded in; unset means read-write. */
     private boolean readOnly() {
         return Boolean.parseBoolean(settings.apply("read-only"));
     }
 
     /** The strictly-opt-in anonymous-role grant (WANON.1) advertised on {@code /api/capabilities}, read off the same
-     *  {@code jenesis.repository.*} settings; empty (the default) means no anonymous access. */
+     *  {@code jenreg.*} settings; empty (the default) means no anonymous access. */
     private String anonymousRights() {
         String value = settings.apply("anonymous-rights");
         return value == null ? "" : value.trim();

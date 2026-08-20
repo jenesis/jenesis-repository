@@ -7,22 +7,22 @@ import module java.base;
 
 /**
  * Provides the {@link StoreArtifactWalk} reference implementation as {@code paged-descent} - the default selection
- * when no {@code jenesis.repository.walk} names another.
+ * when no {@code jenreg.walk} names another.
  *
  * <p><b>The feature name is not {@code store}, though the walk descends the store's own key layout, because a
  * provider name <em>is</em> a configuration key</b> (D-005). {@code Features} spends one namespace on two shapes:
- * {@code jenesis.repository.<spi>=<name>} selects a singleton implementation and
- * {@code jenesis.repository.<name>=false} switches a discovered one off. A walk named {@code store} therefore keyed
- * its toggle to {@code jenesis.repository.store} - the artifact store's own selection key, which every deployment
- * already sets ({@code application.properties} binds it to {@code ${JENESIS_STORE:filesystem}}). The two never
+ * {@code jenreg.<spi>=<name>} selects a singleton implementation and
+ * {@code jenreg.<name>=false} switches a discovered one off. A walk named {@code store} therefore keyed
+ * its toggle to {@code jenreg.store} - the artifact store's own selection key, which every deployment
+ * already sets ({@code application.properties} binds it to {@code ${JENREG_STORE:filesystem}}). The two never
  * disagreed only because a backend name is not the literal {@code false}: setting the documented off-switch for this
  * walk would have selected an artifact-store backend called {@code false} and refused to boot (&sect;9), so the
  * toggle could not be used at all. {@code paged-descent} names what the walk does - bounded {@code startAfter} paging
  * over an ordered depth-first descent - and owns its own key.
  *
  * <p>Settings, read through the config lookup:
- * {@code jenesis.walk.checkpoint} items per cursor commit (default 1000), {@code jenesis.walk.segments} target
- * segments per pass (default 32), {@code jenesis.walk.ttl} claim lease seconds (default 900 - a checkpoint stride
+ * {@code jenreg.walk.checkpoint} items per cursor commit (default 1000), {@code jenreg.walk.segments} target
+ * segments per pass (default 32), {@code jenreg.walk.ttl} claim lease seconds (default 900 - a checkpoint stride
  * must renew within it, so scale the two together). A malformed value fails loudly rather than walking with a
  * silently-wrong stride.
  */
@@ -36,9 +36,9 @@ public final class StoreWalkProvider implements WalkProvider {
     @Override
     public Optional<ArtifactWalk> create(UnaryOperator<String> config) {
         return Optional.of(new StoreArtifactWalk(
-                integer(config, "jenesis.walk.checkpoint", 1000),
-                integer(config, "jenesis.walk.segments", 32),
-                Duration.ofSeconds(integer(config, "jenesis.walk.ttl", 900)),
+                integer(config, "walk.checkpoint", 1000),
+                integer(config, "walk.segments", 32),
+                Duration.ofSeconds(integer(config, "walk.ttl", 900)),
                 Clock.systemUTC()));
     }
 

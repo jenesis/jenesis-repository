@@ -32,7 +32,7 @@ public interface StoreFixture extends AutoCloseable {
     String REQUIRED_PROPERTY = "jenesis.test.required";
 
     /** The {@code ArtifactStoreProvider} name this fixture drives ({@code filesystem}, {@code s3}, {@code gcs},
-     *  {@code azure-blob}) - the same string an operator writes as {@code jenesis.repository.store}. */
+     *  {@code azure-blob}) - the same string an operator writes as {@code jenreg.store}. */
     String backend();
 
     /** The fully qualified {@code ArtifactStoreProvider} implementation class this fixture covers, as the census
