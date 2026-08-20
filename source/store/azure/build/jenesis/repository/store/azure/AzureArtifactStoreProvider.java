@@ -3,6 +3,7 @@ package build.jenesis.repository.store.azure;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Endpoints;
+import build.jenesis.repository.store.Features;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
@@ -12,27 +13,30 @@ import module java.base;
 
 /**
  * The {@code azure-blob} artifact-store backend over an Azure Blob Storage container. Selected with
- * {@code jenesis.repository.store=azure-blob}; configured by {@code JENESIS_AZURE_CONNECTION_STRING}
+ * {@code jenesis.repository.store=azure-blob}; configured by {@code jenesis.repository.azure-blob.connection-string}
  * (a storage-account connection string, or the Azurite development string) and an optional
- * {@code JENESIS_AZURE_CONTAINER} (default {@code jenesis-repository}). The blob I/O and the conditional
- * compare-and-set semantics live in {@link AzureArtifactStore}.
+ * {@code jenesis.repository.azure-blob.container} (default {@code jenesis-repository}). The blob I/O and the
+ * conditional compare-and-set semantics live in {@link AzureArtifactStore}.
  *
  * <p>The blob endpoint the connection string resolves to is required to be {@code https} unless
- * {@code JENESIS_AZURE_ALLOW_INSECURE_ENDPOINT=true} explicitly permits a plaintext one - the same &sect;13 screen the
- * {@code s3} and {@code gcs} siblings apply to their own endpoint keys, reached here through the connection string
- * because that is where this SDK carries the scheme. Azure's account key rides inside the very value that also selects
- * the transport, so a {@code DefaultEndpointsProtocol=http} puts the shared-key signature and every artifact byte on a
- * plaintext wire that no error will ever surface - a plaintext exchange succeeds.
+ * {@code jenesis.repository.azure-blob.allow-insecure-endpoint=true} explicitly permits a plaintext one - the same
+ * &sect;13 screen the {@code s3} and {@code gcs} siblings apply to their own endpoint keys, reached here through the
+ * connection string because that is where this SDK carries the scheme. Azure's account key rides inside the very value
+ * that also selects the transport, so a {@code DefaultEndpointsProtocol=http} puts the shared-key signature and every
+ * artifact byte on a plaintext wire that no error will ever surface - a plaintext exchange succeeds.
  */
 public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
 
     /** The config key an {@code azure-blob} connection string - and with it the blob endpoint's scheme - is read
      *  from, named here so the screen's refusal and the resolution that applies it cannot drift apart. */
-    public static final String CONNECTION_STRING_KEY = "JENESIS_AZURE_CONNECTION_STRING";
+    public static final String CONNECTION_STRING_KEY = Features.key("azure-blob.connection-string");
+
+    /** The blob container, defaulted when unset. */
+    public static final String CONTAINER_KEY = Features.key("azure-blob.container");
 
     /** The config key that opts the endpoint {@link #CONNECTION_STRING_KEY} resolves to out of the https-only
      *  transport screen. */
-    public static final String ALLOW_INSECURE_KEY = "JENESIS_AZURE_ALLOW_INSECURE_ENDPOINT";
+    public static final String ALLOW_INSECURE_KEY = Features.key("azure-blob.allow-insecure-endpoint");
 
     @Override
     public String name() {
@@ -46,13 +50,9 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
 
     @Override
     public ArtifactStore create(UnaryOperator<String> config) {
-        String connectionString = config.apply(CONNECTION_STRING_KEY);
-        if (connectionString == null || connectionString.isBlank()) {
-            throw new IllegalStateException(
-                    "JENESIS_AZURE_CONNECTION_STRING is required for the azure-blob artifact store backend.");
-        }
+        String connectionString = ArtifactStoreProvider.required(config, CONNECTION_STRING_KEY, "azure-blob");
         secureEndpoint(blobEndpoint(connectionString), config.apply(ALLOW_INSECURE_KEY));
-        String containerName = config.apply("JENESIS_AZURE_CONTAINER");
+        String containerName = config.apply(CONTAINER_KEY);
         if (containerName == null || containerName.isBlank()) {
             containerName = "jenesis-repository";
         }
@@ -73,8 +73,8 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
      * The blob endpoint the connection string resolves to, required to be {@code https} by default so the account key
      * and artifact bytes are not sent over a plaintext transport a MITM can read or tamper with. A plaintext
      * {@code http} endpoint - a local Azurite container, say - is an explicit opt-out: set
-     * {@code JENESIS_AZURE_ALLOW_INSECURE_ENDPOINT=true}. This is the {@code s3}/{@code gcs} rule, spelled the same
-     * way, for the one backend whose transport is not a config key of its own.
+     * {@code jenesis.repository.azure-blob.allow-insecure-endpoint=true}. This is the {@code s3}/{@code gcs} rule,
+     * spelled the same way, for the one backend whose transport is not a config key of its own.
      *
      * <p>A {@code null} endpoint - a connection string declaring neither a {@code BlobEndpoint} nor a
      * {@code DefaultEndpointsProtocol} - is a shape the SDK itself refuses, so it is left to the SDK's own diagnostic

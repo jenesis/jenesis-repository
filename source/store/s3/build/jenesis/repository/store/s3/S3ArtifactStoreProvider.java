@@ -3,6 +3,7 @@ package build.jenesis.repository.store.s3;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Endpoints;
+import build.jenesis.repository.store.Features;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
@@ -20,26 +21,30 @@ import module java.base;
 /**
  * The {@code s3} artifact-store backend over any S3-compatible bucket (AWS S3, GCS via the XML API,
  * MinIO, LocalStack). Selected with {@code jenesis.repository.store=s3}; configured by
- * {@code JENESIS_AWS_BUCKET} (required), {@code JENESIS_AWS_REGION} (default {@code us-east-1}) and an
- * optional {@code JENESIS_AWS_ENDPOINT} (an S3-compatible endpoint, enabling path-style access; required to be
- * {@code https} unless {@code JENESIS_AWS_ALLOW_INSECURE_ENDPOINT=true} explicitly permits a plaintext one).
- * Credentials come from the standard AWS chain (environment, profile or instance role) unless
- * {@code JENESIS_AWS_ACCESS_KEY_ID} and {@code JENESIS_AWS_SECRET_ACCESS_KEY} are both supplied through
- * the config lookup, in which case those static keys are used - the path a self-hosted S3-compatible
- * store (MinIO, Ceph) takes, and the seam that lets a test drive {@code create()} end to end against a
- * container through an injected config lookup, without touching the process environment. Every object is
- * written server-side encrypted: SSE-S3 (AES256) by default, or {@code aws:kms} when an optional
- * {@code JENESIS_AWS_SSE_KMS_KEY_ID} names a key - encryption cannot be turned off. The blob I/O
- * and the conditional compare-and-set semantics live in {@link S3ArtifactStore}.
+ * {@code jenesis.repository.s3.bucket} (required), {@code jenesis.repository.s3.region} (default {@code us-east-1}) and
+ * an optional {@code jenesis.repository.s3.endpoint} (an S3-compatible endpoint, enabling path-style access; required
+ * to be {@code https} unless {@code jenesis.repository.s3.allow-insecure-endpoint=true} explicitly permits a plaintext
+ * one). Credentials come from the standard AWS chain (environment, profile or instance role) unless
+ * {@code jenesis.repository.s3.access-key-id} and {@code jenesis.repository.s3.secret-access-key} are both supplied through
+ * the config lookup, in which case those static keys are used - the path a self-hosted S3-compatible store (MinIO,
+ * Ceph) takes, and the seam that lets a test drive {@code create()} end to end against a container through an injected
+ * config lookup, without touching the process environment. Every object is written server-side encrypted: SSE-S3
+ * (AES256) by default, or {@code aws:kms} when an optional {@code jenesis.repository.s3.sse-kms-key-id} names a key -
+ * encryption cannot be turned off. The blob I/O and the conditional compare-and-set semantics live in {@link
+ * S3ArtifactStore}.
  */
 public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
 
+    /** The one setting with no ambient fallback, so it is the one this backend declares as required config.
+     *  Composed through {@link Features#key} rather than written out, so the namespace has a single definition. */
+    public static final String BUCKET_KEY = Features.key("s3.bucket");
+
     /** The config key an {@code s3} endpoint override is read from - named here so the screen's refusal and the
      *  resolution that applies it cannot drift into naming different keys. */
-    public static final String ENDPOINT_KEY = "JENESIS_AWS_ENDPOINT";
+    public static final String ENDPOINT_KEY = Features.key("s3.endpoint");
 
     /** The config key that opts {@link #ENDPOINT_KEY} out of the https-only transport screen. */
-    public static final String ALLOW_INSECURE_KEY = "JENESIS_AWS_ALLOW_INSECURE_ENDPOINT";
+    public static final String ALLOW_INSECURE_KEY = Features.key("s3.allow-insecure-endpoint");
 
     @Override
     public String name() {
@@ -50,16 +55,13 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
     public Set<String> requiredConfig() {
         // The credentials may come from the ambient AWS chain (environment, profile, instance role), so only the
         // bucket is required configuration.
-        return Set.of("JENESIS_AWS_BUCKET");
+        return Set.of(BUCKET_KEY);
     }
 
     @Override
     public ArtifactStore create(UnaryOperator<String> config) {
-        String bucket = config.apply("JENESIS_AWS_BUCKET");
-        if (bucket == null || bucket.isBlank()) {
-            throw new IllegalStateException("JENESIS_AWS_BUCKET is required for the s3 artifact store backend.");
-        }
-        String region = config.apply("JENESIS_AWS_REGION");
+        String bucket = ArtifactStoreProvider.required(config, BUCKET_KEY, "s3");
+        String region = config.apply(Features.key("s3.region"));
         if (region == null || region.isBlank()) {
             region = "us-east-1";
         }
@@ -88,16 +90,17 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
             // below surface a clear error if the bucket is truly unusable.
         }
         // Server-side encryption is always on: SSE-S3 (AES256) by default, upgraded to aws:kms with the operator's
-        // key when JENESIS_AWS_SSE_KMS_KEY_ID is supplied. There is no key that turns encryption off. The presigner
+        // key when s3.sse-kms-key-id is supplied. There is no key that turns encryption off. The presigner
         // rides alongside so this store can also mint direct-fetch GET URLs (RD-1 presign).
-        String kmsKeyId = config.apply("JENESIS_AWS_SSE_KMS_KEY_ID");
+        String kmsKeyId = config.apply(Features.key("s3.sse-kms-key-id"));
         return new S3ArtifactStore(s3, presigner, bucket, kmsKeyId);
     }
 
     /**
      * The endpoint override, required to be {@code https} by default so credentials and artifact bytes are not sent
      * over a plaintext transport a MITM can read or tamper with. A plaintext {@code http} endpoint - a local MinIO or
-     * LocalStack container, say - is an explicit opt-out: set {@code JENESIS_AWS_ALLOW_INSECURE_ENDPOINT=true}.
+     * LocalStack container, say - is an explicit opt-out: set
+     * {@code jenesis.repository.s3.allow-insecure-endpoint=true}.
      *
      * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code gcs} and {@code azure-blob} backends
      * (D-023); what is this backend's own is the pair of config keys it names, and this method is where they are
@@ -108,12 +111,13 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
     }
 
     /**
-     * Static keys when both {@code JENESIS_AWS_ACCESS_KEY_ID} and {@code JENESIS_AWS_SECRET_ACCESS_KEY} are
-     * present in the config lookup, otherwise the standard AWS chain (environment, profile, instance role).
+     * Static keys when both {@code jenesis.repository.s3.access-key-id} and
+     * {@code jenesis.repository.s3.secret-access-key} are present in the config lookup, otherwise the standard AWS chain
+     * (environment, profile, instance role).
      */
     private static AwsCredentialsProvider credentials(UnaryOperator<String> config) {
-        String accessKey = config.apply("JENESIS_AWS_ACCESS_KEY_ID");
-        String secretKey = config.apply("JENESIS_AWS_SECRET_ACCESS_KEY");
+        String accessKey = config.apply(Features.key("s3.access-key-id"));
+        String secretKey = config.apply(Features.key("s3.secret-access-key"));
         if (accessKey != null && !accessKey.isBlank() && secretKey != null && !secretKey.isBlank()) {
             return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
         }
