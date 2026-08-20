@@ -19,9 +19,10 @@ import module java.base;
  */
 public class TestImportEdgeProvider implements ImportEdgeProvider {
 
-    /** The property this provider requires to become active - unset by default, so the provider is inert; the yield
-     *  test sets it to prove the free import edge yields when a distribution owns the edge. */
-    /** Bare, like every name this API takes: the deployment key is jenesis.repository.<this>, applied by Features. */
+    /** The setting this provider requires to become active - unset by default, so the provider is inert; the yield
+     *  test sets it to prove the free import edge yields when a distribution owns the edge. Bare, like every name the
+     *  {@code Features} API takes: the deployment key is {@code jenesis.repository.<this>}, and {@code Features.key}
+     *  is the one place that spelling is applied. */
     public static final String ACTIVATION_KEY = "import-edge-test-active";
 
     @Override
