@@ -47,6 +47,17 @@ public interface ArtifactWalk {
         void visit(String key) throws IOException;
 
         /**
+         * The same key, with whatever the container's listing already knew about it - see
+         * {@link ArtifactStore.Listed}. The default drops the metadata and calls {@link #visit(String)}, so a
+         * consumer that only wants keys is unaffected. A consumer that would otherwise ask the store for each key's
+         * size or age overrides this instead: on a walk that visits every key in a namespace, that is one saved
+         * round trip per key rather than one per pass.
+         */
+        default void visit(ArtifactStore.Listed entry) throws IOException {
+            visit(entry.key());
+        }
+
+        /**
          * Called immediately before the walk durably commits {@code cursor} as processed - every checkpoint
          * stride and at segment completion ({@code cursor} is {@code null} for a segment that held no keys) - the
          * visitor's moment to flush its own buffered derived writes. The cursor lands only after this returns, so

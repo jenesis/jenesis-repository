@@ -410,7 +410,12 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
                 Trees.descend(store, range.root(), new Trees.Visitor() {
                     @Override
                     public void visit(String leaf) throws IOException {
-                        emit(leaf);
+                        emit(ArtifactStore.Listed.of(leaf));
+                    }
+
+                    @Override
+                    public void visit(ArtifactStore.Listed leaf) throws IOException {
+                        emit(leaf);        // pass the listing's metadata through to the consumer untouched
                     }
 
                     @Override
@@ -445,8 +450,9 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
         /** Deliver one in-range leaf to the walk's {@link KeyVisitor}, advance the cursor, and commit (renewing the
          *  lease) every {@code checkpoint} keys - the range-consumer callback {@link Trees#descend} drives on each
          *  visited leaf. */
-        private void emit(String key) throws IOException {
-            visitor.visit(key);
+        private void emit(ArtifactStore.Listed entry) throws IOException {
+            String key = entry.key();
+            visitor.visit(entry);
             cursor = key;
             if (++count % checkpoint == 0) {
                 commit(WalkSegment.State.CLAIMED);
