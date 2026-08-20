@@ -376,6 +376,32 @@ public interface ArtifactStore {
     }
 
     /**
+     * The metadata-bearing form of {@link #page}: the same bounded, ordered page of immediate children, delivered as
+     * {@link Listed} so a caller that needs each child's size or age does not have to ask for it one request at a
+     * time.
+     *
+     * <p>A {@link Listed#key} here is the child's whole key ({@code prefix} joined with its name), not the bare name
+     * {@link #page} reports, because a caller holding metadata is about to act on the object and would otherwise
+     * re-compose it. The metadata obeys {@link Listed}'s rule exactly: it carries what the backend's listing already
+     * returned and never costs a request of its own, so a child that is a CONTAINER - which has no size or age of its
+     * own - reports neither.
+     *
+     * <p>Every shipped backend implements this one and expresses {@link #page} in terms of it, rather than the other
+     * way round: the ordering rules a hierarchical listing needs (a container's grouped prefix sorting after a
+     * sibling whose name extends it) are subtle enough that two copies would drift, and the names-only form is the
+     * one that can be derived losslessly. The inherited body is the reverse fallback for a backend that has only
+     * overridden {@code page}, and it reports no metadata rather than inventing any.
+     */
+    default void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+        page(prefix, startAfter, limit, name -> consumer.accept(Listed.of(child(prefix, name))));
+    }
+
+    /** A child's key under {@code prefix} - the root's children are keyed by their bare names. */
+    private static String child(String prefix, String name) {
+        return prefix == null || prefix.isEmpty() ? name : prefix + "/" + name;
+    }
+
+    /**
      * The most children {@link #pageByListing} will materialise before it refuses. It is deliberately far above any
      * container an in-memory or in-process store legitimately holds and far below a namespace that would exhaust the
      * heap, so it separates "this backend never needed native paging" from "this backend is about to buffer a

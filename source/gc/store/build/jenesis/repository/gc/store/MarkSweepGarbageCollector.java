@@ -376,6 +376,12 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
 
         @Override
         public void visit(String key) throws IOException {
+            visit(ArtifactStore.Listed.of(key));
+        }
+
+        @Override
+        public void visit(ArtifactStore.Listed entry) throws IOException {
+            String key = entry.key();
             // The format-declared references FIRST, and deliberately outside the pointer-size gate below: that gate
             // bounds how large an object this phase will read as a POINTER BODY, and a format whose references live in
             // a document knows its own bound (BlobReferences clause 6). Asking after the gate would silently drop the
@@ -400,7 +406,18 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
                     }
                 }
             }
-            long size = store.size(key);
+            // The pointer-size gate, answered from the listing that enumerated this key wherever the backend's
+            // listing carried a size - which is every shipped backend. A mark pass opens every key in the pointer
+            // tree, so asking the store for each one's size was a round trip per pointer, spent only to decide not
+            // to read the handful that are not pointer-shaped. A backend whose listing says nothing still gets
+            // asked, so the gate is never weaker than it was.
+            long size = entry.size().orElseGet(() -> {
+                try {
+                    return store.size(key);
+                } catch (IOException failure) {
+                    throw new UncheckedIOException(failure);
+                }
+            });
             if (size < 0 || size > LARGEST_POINTER) {
                 return;
             }

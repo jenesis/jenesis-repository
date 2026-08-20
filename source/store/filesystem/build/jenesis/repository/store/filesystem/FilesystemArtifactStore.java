@@ -214,14 +214,27 @@ public final class FilesystemArtifactStore implements ArtifactStore {
 
     @Override
     public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
+        // Expressed over pageListed so the selection below exists once: this form is the names-only view of it.
+        pageListed(prefix, startAfter, limit, listed -> consumer.accept(name(listed.key())));
+    }
+
+    private static String name(String key) {
+        int slash = key.lastIndexOf('/');
+        return slash < 0 ? key : key.substring(slash + 1);
+    }
+
+    @Override
+    public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         Path dir = resolve(prefix);
         if (limit <= 0) {
             return;
         }
         // A directory listing is unordered and a filesystem has no start-at seek, so select the page in one
-        // bounded scan: keep the limit smallest names past startAfter in a capped TreeSet - O(limit) memory
+        // bounded scan: keep the limit smallest names past startAfter in a capped TreeMap - O(limit) memory
         // however many millions of entries the directory holds, where sorting list() would buffer them all.
-        TreeSet<String> smallest = new TreeSet<>();
+        // The attributes come from the same stat the selection already needs to tell a directory from a file, so
+        // carrying them costs nothing beyond what a names-only page paid.
+        TreeMap<String, Listed> smallest = new TreeMap<>();
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(dir)) {
             for (Path path : entries) {
                 String name = path.getFileName().toString();
@@ -229,11 +242,11 @@ public final class FilesystemArtifactStore implements ArtifactStore {
                 if (name.startsWith(".upload") && name.endsWith(".tmp") || name.compareTo(startAfter) <= 0) {
                     continue;
                 }
-                if (smallest.size() < limit) {
-                    smallest.add(name);
-                } else if (name.compareTo(smallest.last()) < 0) {
-                    smallest.add(name);
-                    smallest.pollLast();
+                if (smallest.size() < limit || name.compareTo(smallest.lastKey()) < 0) {
+                    smallest.put(name, listed(prefix, name, path));
+                    if (smallest.size() > limit) {
+                        smallest.pollLastEntry();
+                    }
                 }
             }
         } catch (NoSuchFileException | NotDirectoryException _) {
@@ -243,7 +256,22 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             // so an unreadable directory paging as empty ends a traversal early and reports it as exhausted.
             throw new UncheckedIOException("Cannot page the children of " + dir, failure);
         }
-        smallest.forEach(consumer);
+        smallest.values().forEach(consumer);
+    }
+
+    /** A child as the listing saw it: a regular file carries its size and age, a directory carries neither because
+     *  a container has none of its own. A stat that races a delete degrades to the names-only shape rather than
+     *  failing the page - the walk re-judges every key on read anyway. */
+    private static Listed listed(String prefix, String name, Path path) {
+        String key = prefix == null || prefix.isEmpty() ? name : prefix + "/" + name;
+        try {
+            BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
+            return attributes.isRegularFile()
+                    ? Listed.of(key, attributes.size(), attributes.lastModifiedTime().toInstant())
+                    : Listed.of(key);
+        } catch (IOException _) {
+            return Listed.of(key);
+        }
     }
 
     /** How long a write temp is left alone before a scan reclaims it: comfortably longer than any single atomic

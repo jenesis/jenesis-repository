@@ -263,6 +263,18 @@ public final class S3ArtifactStore implements ArtifactStore {
 
     @Override
     public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
+        // The names-only view of pageListed: the ordering rules below are subtle enough that a second copy
+        // would drift, so this form derives from that one rather than repeating it.
+        pageListed(prefix, startAfter, limit, listed -> consumer.accept(name(listed.key())));
+    }
+
+    private static String name(String key) {
+        int slash = key.lastIndexOf('/');
+        return slash < 0 ? key : key.substring(slash + 1);
+    }
+
+    @Override
+    public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         if (limit <= 0) {
             return;
         }
@@ -275,7 +287,10 @@ public final class S3ArtifactStore implements ArtifactStore {
         // the server-side start-after skips the boundary's own object but not a same-named container's grouped
         // prefix, and a prefix-child of the boundary (`app` for `app.txt`) re-arrives here yet was already paged
         // by the call that emitted the boundary itself.
-        TreeSet<String> pending = new TreeSet<>();
+        // Keyed by child NAME, valued by what the listing said about it: a leaf carries its
+        // size and age straight off the response, a grouped prefix carries neither because a
+        // container has none of its own. Nothing here issues a request to fill them.
+        TreeMap<String, Listed> pending = new TreeMap<>();
         int emitted = 0;
         String last = null;
         for (ListObjectsV2Response page : s3.listObjectsV2Paginator(b -> {
@@ -285,10 +300,12 @@ public final class S3ArtifactStore implements ArtifactStore {
             }
         })) {
             List<String> ordered = new ArrayList<>();
+            Map<String, S3Object> objects = new HashMap<>();
             for (S3Object object : page.contents()) {
                 String relative = object.key().substring(base.length());
                 if (!relative.isEmpty() && relative.indexOf('/') < 0) {
                     ordered.add(relative);
+                    objects.put(relative, object);
                 }
             }
             for (CommonPrefix common : page.commonPrefixes()) {
@@ -299,10 +316,11 @@ public final class S3ArtifactStore implements ArtifactStore {
             }
             Collections.sort(ordered);
             for (String relative : ordered) {
-                while (!pending.isEmpty() && !held(pending.first(), relative)) {
-                    String name = pending.pollFirst();
+                while (!pending.isEmpty() && !held(pending.firstKey(), relative)) {
+                    Map.Entry<String, Listed> entry = pending.pollFirstEntry();
+                    String name = entry.getKey();
                     if (name.compareTo(startAfter) > 0) {
-                        consumer.accept(name);
+                        consumer.accept(entry.getValue());
                         last = name;
                         if (++emitted == limit) {
                             return;
@@ -311,18 +329,33 @@ public final class S3ArtifactStore implements ArtifactStore {
                 }
                 String name = relative.endsWith("/") ? relative.substring(0, relative.length() - 1) : relative;
                 if (!name.equals(last)) {
-                    pending.add(name); // a leaf and a same-named container page as one child
+                    // A leaf and a same-named container page as one child; the leaf's metadata
+                    // is kept, because that is what a GET of this key resolves to.
+                    pending.merge(name, listed(prefix, name, objects.get(relative)),
+                            (kept, arriving) -> kept.size().isPresent() ? kept : arriving);
                 }
             }
         }
-        for (String name : pending) {
-            if (name.compareTo(startAfter) > 0) {
-                consumer.accept(name);
+        for (Map.Entry<String, Listed> entry : pending.entrySet()) {
+            if (entry.getKey().compareTo(startAfter) > 0) {
+                consumer.accept(entry.getValue());
                 if (++emitted == limit) {
                     return;
                 }
             }
         }
+    }
+
+    /** A child as the listing saw it. {@code object} is null for a grouped prefix - a container - which reports no
+     *  size or age because it has none; both halves of a leaf's metadata ride along in the response already. */
+    private static Listed listed(String prefix, String name, S3Object object) {
+        String key = prefix == null || prefix.isEmpty() ? name : prefix + "/" + name;
+        if (object == null) {
+            return Listed.of(key);
+        }
+        return Listed.of(key,
+                object.size() == null ? 0L : object.size(),
+                object.lastModified() == null ? Instant.EPOCH : object.lastModified());
     }
 
     /** Whether {@code name} may not be paged out yet at stream position {@code relative}: a proper prefix of it

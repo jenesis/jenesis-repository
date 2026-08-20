@@ -77,6 +77,10 @@ public final class StoreContract {
         /** {@code scan} delivers each entry's size and modification time out of the backend's own listing, so a sweep
          *  costs its listings and nothing per object. A names-only scan turns every sweep into an N+1. */
         SCAN_CARRIES_LISTING_METADATA,
+        /** {@code pageListed} delivers the same children, in the same order, as {@code page} - and carries each
+         *  stored child's size and modification time from the backend's own listing, so a descent that needs them
+         *  spends no request per child. A container reports neither, having none of its own. */
+        PAGE_LISTED_AGREES_AND_CARRIES_METADATA,
         /** {@code version} answers the token without downloading the body - the backend overrides the inherited
          *  read-the-object default, except where its token genuinely needs the bytes. */
         VERSION_WITHOUT_BODY,
@@ -178,6 +182,9 @@ public final class StoreContract {
         checks.add(new Check(Property.SCAN_CARRIES_LISTING_METADATA,
                 "scan carries each entry's size and modification time from the backend's own listing",
                 StoreContract::scanCarriesListingMetadata));
+        checks.add(new Check(Property.PAGE_LISTED_AGREES_AND_CARRIES_METADATA,
+                "pageListed agrees with page and carries each stored child's size and modification time",
+                StoreContract::pageListedAgreesAndCarriesMetadata));
         checks.add(new Check(Property.VERSION_WITHOUT_BODY,
                 "version answers a token without downloading the body",
                 StoreContract::versionWithoutBody));
@@ -483,6 +490,42 @@ public final class StoreContract {
         isTrue(entry.modified().orElseThrow().isAfter(before),
                 "the carried modification time is the object's, not a placeholder");
         store.delete(key);
+    }
+
+    private static void pageListedAgreesAndCarriesMetadata(ArtifactStore store) throws Exception {
+        // A leaf beside a container, so the check covers both shapes and the ordering rule that puts them in one
+        // child stream.
+        byte[] body = utf8("nineteen characters");
+        Instant before = Instant.now().minusSeconds(60);
+        store.write("kit/listed/leaf", new ByteArrayInputStream(body));
+        store.write("kit/listed/folder/inner", new ByteArrayInputStream(utf8("x")));
+
+        List<String> named = new ArrayList<>();
+        store.page("kit/listed", "", 10, named::add);
+        List<ArtifactStore.Listed> listed = new ArrayList<>();
+        store.pageListed("kit/listed", "", 10, listed::add);
+
+        equal(listed.stream().map(entry -> entry.key().substring("kit/listed/".length())).toList(), named,
+                "pageListed delivers the same children in the same order as page - it is the same listing, and the "
+                        + "names-only form is derived from it");
+
+        ArtifactStore.Listed leaf = listed.stream()
+                .filter(entry -> entry.key().endsWith("/leaf")).findFirst().orElseThrow();
+        isTrue(leaf.size().isPresent(),
+                "a stored child carries the size its listing reported - without it a descent stats once per leaf, "
+                        + "which is a round trip per key on the pass that opens every key there is");
+        equal(leaf.size().getAsLong(), (long) body.length, "the carried size is the object's size");
+        isTrue(leaf.modified().isPresent(), "a stored child carries the modification time its listing reported");
+        isTrue(leaf.modified().orElseThrow().isAfter(before), "the carried time is the object's, not a placeholder");
+
+        ArtifactStore.Listed folder = listed.stream()
+                .filter(entry -> entry.key().endsWith("/folder")).findFirst().orElseThrow();
+        isFalse(folder.size().isPresent(),
+                "a container reports no size: it has none of its own, and a descent reads a present size as proof "
+                        + "that the child is a stored object");
+
+        store.delete("kit/listed/leaf");
+        store.delete("kit/listed/folder/inner");
     }
 
     private static void versionWithoutBody(ArtifactStore store) throws Exception {

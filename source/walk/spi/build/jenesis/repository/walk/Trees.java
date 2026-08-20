@@ -89,6 +89,16 @@ public final class Trees {
         /** A stored leaf key that {@link #emits} accepted, delivered in path order. */
         void visit(String key) throws IOException;
 
+        /**
+         * The same leaf, with whatever the container's listing already knew about it - see
+         * {@link ArtifactStore.Listed}. The default drops the metadata and calls {@link #visit(String)}, so a visitor
+         * that does not care is unaffected; one that would otherwise ask the store for a leaf's size or age overrides
+         * this instead and pays no request for it.
+         */
+        default void visit(ArtifactStore.Listed entry) throws IOException {
+            visit(entry.key());
+        }
+
         /** Whether a stored leaf key falls in range and should be {@link #visit visited}; every leaf by default.
          *  Called exactly once per stored leaf the descent opens, so a bounded visitor charges its per-node budget
          *  here (and in {@link #enters}) and throws a named failure when a cap is breached. */
@@ -202,7 +212,7 @@ public final class Trees {
         }
 
         private boolean run() throws IOException {
-            Frame top = open(root);
+            Frame top = open(ArtifactStore.Listed.of(root));
             if (top == null) {
                 return true; // the root was a leaf (emitted if in range) or a non-intersecting subtree
             }
@@ -212,7 +222,7 @@ public final class Trees {
                 if (!visitor.proceeds()) {
                     return false; // the visitor stopped early: not exhausted, and no further store call is made
                 }
-                String child = stack.peek().next();
+                ArtifactStore.Listed child = stack.peek().next();
                 if (child == null) {
                     stack.pop(); // this container is drained (or reached the upper bound); ascend
                     continue;
@@ -220,7 +230,7 @@ public final class Trees {
                 // The child sits stack.size() levels below the root: the descent's own stack IS the depth counter, so
                 // the ceiling is enforced before the node costs a probe and without re-measuring the key.
                 if (stack.size() > depth) {
-                    throw new TraversalException(TraversalException.Reason.DEPTH, child,
+                    throw new TraversalException(TraversalException.Reason.DEPTH, child.key(),
                             stack.size() + " levels below the root '" + root + "' exceeds the depth ceiling of "
                                     + depth);
                 }
@@ -235,10 +245,21 @@ public final class Trees {
         /** Process one node: a stored key is a leaf ({@link Visitor#visit} it when {@link Visitor#emits in range}) and
          *  yields no frame; a subtree the visitor will not {@link Visitor#enters enter} is pruned and yields no frame;
          *  any other name is a container to descend, returned as a fresh {@link Frame}. */
-        private Frame open(String key) throws IOException {
-            if (store.exists(key)) {
+        /** The bare child name of a listed key - the paging cursor and the traversal screen both work in names. */
+        private static String name(String key) {
+            int slash = key.lastIndexOf('/');
+            return slash < 0 ? key : key.substring(slash + 1);
+        }
+
+        private Frame open(ArtifactStore.Listed entry) throws IOException {
+            String key = entry.key();
+            // A listing that reported a SIZE has already proven this child is a stored object: only a leaf has one,
+            // and a container has none of its own. That makes the existence probe below redundant for exactly the
+            // children a descent spends most of its time on, and this descent visits every key in a namespace - so
+            // the probe it skips is one store round trip per leaf, not one per pass.
+            if (entry.size().isPresent() || store.exists(key)) {
                 if (visitor.emits(key)) {
-                    visitor.visit(key);
+                    visitor.visit(entry);
                 }
                 return null;
             }
@@ -260,7 +281,7 @@ public final class Trees {
              *  inside this container. */
             private final String seekChild;
             private boolean seekYielded;
-            private List<String> buffer;
+            private List<ArtifactStore.Listed> buffer;
             private int position;
 
             private Frame(String key) {
@@ -278,22 +299,27 @@ public final class Trees {
             /** The next child key to descend, or {@code null} once this container is exhausted. Every name a store
              *  backend hands back is screened as a traversal-free segment here - the one point a name becomes a key -
              *  so no rider of this descent can be walked out of its subtree by a hostile or corrupt listing. */
-            private String next() throws TraversalException {
+            private ArtifactStore.Listed next() throws TraversalException {
                 if (seekChild != null && !seekYielded) {
                     // The seek-path child, descended first and WITHOUT the ceiling guard; its own enters() prune (in
-                    // open) still applies the upper bound.
+                    // open) still applies the upper bound. It is named rather than listed, so it carries no metadata
+                    // and open() probes it exactly as before.
                     seekYielded = true;
-                    return Traversal.key(key, seekChild);
+                    return ArtifactStore.Listed.of(Traversal.key(key, seekChild));
                 }
                 String ceiling = visitor.ceiling();
                 while (true) {
                     if (buffer != null && position < buffer.size()) {
-                        String child = buffer.get(position++);
-                        String full = Traversal.key(key, child);
+                        ArtifactStore.Listed child = buffer.get(position++);
+                        String full = Traversal.key(key, name(child.key()));
                         if (ceiling != null && order(full, ceiling) >= 0) {
                             return null; // sorted siblings: nothing at or past the upper bound can be in range
                         }
-                        return full;
+                        // Re-key through Traversal.key: that is the one point a listed NAME becomes a key, and it is
+                        // where a hostile or corrupt listing is screened as a traversal-free segment.
+                        return child.size().isPresent()
+                                ? new ArtifactStore.Listed(full, child.size(), child.modified())
+                                : ArtifactStore.Listed.of(full);
                     }
                     if (buffer != null && buffer.size() < page) {
                         return null; // the last page was short: this container is drained
@@ -302,9 +328,9 @@ public final class Trees {
                     // resumes strictly after the previous page's last name - the ordered-paging cursor.
                     String startAfter = buffer == null
                             ? (seekChild != null ? seekChild : "")
-                            : buffer.getLast();
-                    List<String> next = new ArrayList<>();
-                    store.page(key, startAfter, page, next::add);
+                            : name(buffer.getLast().key());
+                    List<ArtifactStore.Listed> next = new ArrayList<>();
+                    store.pageListed(key, startAfter, page, next::add);
                     buffer = next;
                     position = 0;
                     if (buffer.isEmpty()) {
