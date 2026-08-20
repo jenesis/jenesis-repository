@@ -246,6 +246,10 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         smallest.forEach(consumer);
     }
 
+    /** How long a write temp is left alone before a scan reclaims it: comfortably longer than any single atomic
+     *  write, so an in-flight one is never touched, and short enough that a crashed one does not outlive the day. */
+    private static final Duration TEMP_GRACE = Duration.ofHours(1);
+
     @Override
     public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
         if (limit <= 0) {
@@ -267,8 +271,23 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             public FileVisitResult visitFile(Path path, BasicFileAttributes attributes) {
                 String name = path.getFileName().toString();
                 // The same in-flight .upload*.tmp filter as list() and page(), so a concurrent atomic write is never
-                // scanned out as a stored object.
+                // scanned out as a stored object - and, past a grace window, the one place they are RECLAIMED.
+                //
+                // A write creates a temp and atomically moves it into place; a crash between the two leaves the temp
+                // behind, filtered out of every listing and therefore invisible to everything - it is not an object,
+                // so no sweep counts it, and the volume ratchets toward a permanent full. Reaping it here is a side
+                // effect in a read, which needs justifying: this is the only traversal that visits every file under a
+                // prefix, the class that creates the temps is the one that knows their shape, and the grace window is
+                // what keeps a concurrent in-flight write safe. A failure to delete is ignored - another node may
+                // have won the race, and a scan must not fail because a reclaim did.
                 if (name.startsWith(".upload") && name.endsWith(".tmp")) {
+                    if (attributes.lastModifiedTime().toInstant().isBefore(Instant.now().minus(TEMP_GRACE))) {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (IOException _) {
+                            // Raced, or not ours to delete. The next scan tries again.
+                        }
+                    }
                     return FileVisitResult.CONTINUE;
                 }
                 String key = rootPath.relativize(path.normalize()).toString().replace(File.separatorChar, '/');
@@ -312,7 +331,14 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     public Optional<Capacity> capacity() throws IOException {
         // A real volume, so a real answer - and a failure to measure one throws rather than reporting empty, which
         // would read as "this backend has no volume" and silently disable a free-space policy.
-        FileStore store = Files.getFileStore(root);
+        // A scoped store's root need not exist yet - a tenant subspace is a directory the first write creates - and
+        // the volume is the same either way, so measure the nearest ancestor that does. Only a root with no existing
+        // ancestor at all is a real failure, and that throws.
+        Path measured = root;
+        while (!Files.exists(measured) && measured.getParent() != null) {
+            measured = measured.getParent();
+        }
+        FileStore store = Files.getFileStore(measured);
         return Optional.of(new Capacity(store.getUsableSpace(), store.getTotalSpace()));
     }
 
