@@ -321,6 +321,33 @@ public interface ArtifactStore {
     /** Delete the blob, tidying any now-empty container it leaves behind. */
     void delete(String key) throws IOException;
 
+    /** Free and total bytes of a backing volume. */
+    record Capacity(long usable, long total) {
+    }
+
+    /**
+     * The backing volume's free and total bytes, or empty when this backend has no volume to report.
+     *
+     * <p>Empty is a statement about the backend, not a failed probe: an object store has no capacity a client can
+     * meaningfully be told about, so it reports nothing rather than a number that would have to be read as "assume
+     * unlimited". A backend that HAS a volume and cannot measure it throws, because that is a failure and must not be
+     * mistaken for the absence.
+     */
+    default Optional<Capacity> capacity() throws IOException {
+        return Optional.empty();
+    }
+
+    /**
+     * Mark a key as recently used, where the backend has an access time to set; a no-op where it has not.
+     *
+     * <p>Recency-on-read, for an eviction policy that wants least-recently-USED rather than least-recently-written.
+     * An object store has no settable access time and so does nothing here - which is honest rather than lossy: its
+     * {@link Listed#modified} is the write time, and a policy reading it gets least-recently-written and should know
+     * that is what it got.
+     */
+    default void touch(String key) throws IOException {
+    }
+
     /** The immediate child names under a key prefix (for the console browse and metadata maintenance). */
     List<String> list(String prefix);
 
@@ -398,12 +425,186 @@ public interface ArtifactStore {
         }
     }
 
+    /**
+     * One enumerated object: its {@code key}, plus whatever the backend's own listing <em>already told it</em>.
+     *
+     * <p>{@code size} and {@code modified} are optional, and the rule behind the optionality is the whole point of
+     * this record: <strong>a backend may never make a call to fill them</strong>. They carry what the native listing
+     * returned in the same response and nothing else, so enriching a scan costs no round trip and a caller that
+     * ignores them pays nothing for their presence. A backend whose listing is names-only reports them empty, and the
+     * caller decides whether the answer is worth a {@link ArtifactStore#size} of its own.
+     *
+     * <p>Every shipped backend fills both, because every one of their listings carries them: S3's
+     * {@code ListObjectsV2} returns {@code Size} and {@code LastModified}, GCS returns {@code size} and
+     * {@code updated}, Azure returns {@code contentLength} and {@code lastModified}, and the filesystem's file-tree
+     * visitor is handed {@code BasicFileAttributes} before it ever decides to emit the entry. The optionality is for
+     * an in-memory double and for a future backend that genuinely cannot - not a licence the four may take, which is
+     * why the store kit asserts it as a property.
+     */
+    record Listed(String key, OptionalLong size, Optional<Instant> modified) {
+
+        public Listed {
+            Objects.requireNonNull(key, "key");
+            Objects.requireNonNull(size, "size");
+            Objects.requireNonNull(modified, "modified");
+        }
+
+        /** An entry whose listing carried no metadata - the names-only shape. */
+        public static Listed of(String key) {
+            return new Listed(key, OptionalLong.empty(), Optional.empty());
+        }
+
+        /** An entry whose listing carried both, which is the shape every shipped backend produces. */
+        public static Listed of(String key, long size, Instant modified) {
+            return new Listed(key, OptionalLong.of(size), Optional.of(Objects.requireNonNull(modified, "modified")));
+        }
+    }
+
+    /**
+     * What one {@link #scan} call saw: how many entries it {@code delivered}, how many {@code steps} - listing
+     * round-trips - it spent, and the continuation {@code cursor}, present exactly when a cap cut the call short.
+     *
+     * <p>It is deliberately the same shape as the traversal tier's own result, and deliberately a different type: the
+     * walk module that owns that one {@code requires} this one, so a store-level primitive cannot name it without a
+     * module cycle. A caller in the traversal tier converts; the two agree on the one rule that matters, which is
+     * that a cursor is present exactly when there is more to come and a scan may never over-claim completeness.
+     */
+    record Scan(long delivered, long steps, Optional<String> cursor) {
+
+        public Scan {
+            Objects.requireNonNull(cursor, "cursor");
+            if (delivered < 0 || steps < 0) {
+                throw new IllegalArgumentException("Negative scan counters: " + delivered + " / " + steps);
+            }
+        }
+
+        /** The prefix was seen whole: nothing more is coming. */
+        public static Scan exhausted(long delivered, long steps) {
+            return new Scan(delivered, steps, Optional.empty());
+        }
+
+        /** A cap was reached after {@code cursor}: resume with it to receive the rest. */
+        public static Scan truncated(String cursor, long delivered, long steps) {
+            return new Scan(delivered, steps, Optional.of(Objects.requireNonNull(cursor, "cursor")));
+        }
+
+        /** Whether a cap cut this call short, so {@link #cursor()} must be followed to see the rest. */
+        public boolean truncated() {
+            return cursor.isPresent();
+        }
+    }
+
+    /**
+     * Stream up to {@code limit} objects at or below {@code prefix} to {@code consumer}, in key order, resuming
+     * strictly after {@code startAfter} (the empty string starts from the beginning), each carrying whatever metadata
+     * the backend's listing already knew - see {@link Listed}.
+     *
+     * <p><strong>Recursive, where {@link #page} is not.</strong> {@code page} answers "what are the immediate children
+     * of this container", which is the question a browse tree asks. This answers "what objects are under here", which
+     * is the question a sweep asks - a garbage collection walking {@code blobs/}, an eviction pass walking a project.
+     * The two are different questions and stay different methods; neither is the other with a flag.
+     *
+     * <p><strong>Why the metadata rides along.</strong> A sweep needs each object's size, and usually its age. Getting
+     * those from a names-only listing costs one metadata request per object - the classic N+1, on the one code path
+     * that by construction touches every object in the store. Every object store returns both in the listing response
+     * already, so the cost of carrying them here is zero and the cost of not carrying them is a round trip per entry.
+     *
+     * <p>A {@link Listed#key} is a whole KEY relative to this store's scope - not a child name relative to
+     * {@code prefix}, which is what {@link #list} and {@link #page} report. A sweep hands what it is given straight
+     * back to {@link #size}, {@link #delete} or {@link #readVersioned}, so a scan that reported names would make
+     * every caller re-compose them. {@code startAfter} is one of those keys, handed back verbatim.
+     *
+     * @throws IllegalArgumentException when {@code limit} is not positive - an empty page would read as a drained
+     *                                  prefix, and a scan may not answer in the vocabulary of completeness by accident
+     */
+    default Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return scanByListing(this, prefix, startAfter, limit, consumer);
+    }
+
+    /**
+     * Scan {@code store} by walking {@link #list} recursively - the explicit, named form of the fallback {@link #scan}
+     * inherits, for an implementation whose key space is already materialised (a map-backed store, an in-process
+     * spool) and for which a "native" scan would be this code anyway.
+     *
+     * <p>It delivers {@link Listed#of(String) names-only} entries: a listing that does not carry metadata does not
+     * acquire it here by stat-ing, because that is precisely the N+1 {@link #scan} exists to avoid, and a fallback
+     * that quietly made one request per object would be worse than the one that refuses.
+     *
+     * <p>Bounded like {@link #pageByListing} and for the same reason: past {@link #MAX_INHERITED_CHILDREN} examined
+     * keys it throws rather than buffering a namespace to answer one page.
+     *
+     * @throws IllegalStateException when the prefix holds more than {@link #MAX_INHERITED_CHILDREN} keys
+     */
+    static Scan scanByListing(ArtifactStore store, String prefix, String startAfter, int limit,
+                              Consumer<Listed> consumer) {
+        if (limit <= 0) {
+            throw new IllegalArgumentException("A scan limit must be positive: " + limit);
+        }
+        List<String> keys = new ArrayList<>();
+        collect(store, prefix, keys);
+        if (keys.size() > MAX_INHERITED_CHILDREN) {
+            throw new IllegalStateException(store.getClass().getName() + " scans '" + prefix + "' by materialising its "
+                    + keys.size() + " keys, past the " + MAX_INHERITED_CHILDREN + "-key bound on the inherited "
+                    + "ArtifactStore.scan fallback. Override scan(...) with the backend's own prefix listing; a "
+                    + "recursive scan that first buffers the whole prefix is not one.");
+        }
+        Collections.sort(keys);
+        long delivered = 0;
+        String last = null;
+        for (String key : keys) {
+            if (startAfter != null && !startAfter.isEmpty() && key.compareTo(startAfter) <= 0) {
+                continue;
+            }
+            if (delivered == limit) {
+                return Scan.truncated(last, delivered, 1);
+            }
+            consumer.accept(Listed.of(key));
+            delivered++;
+            last = key;
+        }
+        return Scan.exhausted(delivered, 1);
+    }
+
+    /** Depth-first accumulation of every key at or below {@code prefix}, for {@link #scanByListing}. A child with no
+     *  children of its own is a leaf and therefore a key; the recursion is what makes the fallback recursive. */
+    private static void collect(ArtifactStore store, String prefix, List<String> keys) {
+        List<String> children = store.list(prefix);
+        if (children.isEmpty()) {
+            if (!prefix.isEmpty() && store.exists(prefix)) {
+                keys.add(prefix);
+            }
+            return;
+        }
+        for (String child : children) {
+            collect(store, prefix.isEmpty() ? child : prefix + "/" + child, keys);
+            if (keys.size() > MAX_INHERITED_CHILDREN) {
+                return;         // the caller's bound reports this; stop digging rather than finish an illegal walk
+            }
+        }
+    }
+
     /** A small object plus an opaque version token, for compare-and-set writes. */
     record Versioned(byte[] content, Object token) {
     }
 
     /** Read a small object with its version token; empty if absent. */
     Optional<Versioned> readVersioned(String key) throws IOException;
+
+    /**
+     * The version token alone, without transferring the body; empty if absent.
+     *
+     * <p>The metadata half of {@link #readVersioned}, for the caller that only wants to know whether something
+     * changed - a revalidating config cache, an {@code ETag} answer. Every object store answers it with a metadata
+     * request where {@code readVersioned} costs a full download, so a caller that asks "has this changed?" through
+     * {@code readVersioned} pays for the bytes it then throws away.
+     *
+     * <p>The inherited body is exactly that mistake, made explicit and correct: it reads the object and keeps the
+     * token. It is the right answer for a backend with no cheaper probe, and the wrong one for all four shipped
+     * backends, which override it - the store kit holds them to it.
+     */
+    default Optional<Object> version(String key) throws IOException {
+        return readVersioned(key).map(Versioned::token);
+    }
 
     /**
      * Write a small object only if the stored version still matches {@code expected} ({@code null} requires
