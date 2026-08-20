@@ -3,7 +3,7 @@ package build.jenesis.repository.observation;
 import module java.base;
 
 /**
- * One self-describing health check a plugin reports: a stable {@code jenesis.<feature>.<check>} {@code name}, a
+ * One self-describing health check a plugin reports: a stable {@code jenreg.<feature>.<check>} {@code name}, a
  * human-readable {@code description} (the same text Actuator and the console overview show, so the check explains
  * itself), a {@link Health} {@code status} and an optional plain-text {@code detail} explaining a degraded/down state
  * (never a secret). Immutable; the name is validated at construction against {@link Signals}, so a check that breaks the

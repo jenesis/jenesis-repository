@@ -16,7 +16,7 @@ import module java.base;
  */
 public final class LogRingBuffer {
 
-    /** The default number of entries retained when {@code jenesis.repository.logs-buffer} is unset. */
+    /** The default number of entries retained when {@code jenreg.logs-buffer} is unset. */
     public static final int DEFAULT_CAPACITY = 1000;
 
     private final int capacity;

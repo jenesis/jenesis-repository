@@ -35,7 +35,7 @@ import module java.base;
  * {@code gc/condemned/<hash>} marker removed; an unreferenced one is <em>condemned</em> (marker created, stamped
  * with this pass) the first time and <em>deleted only when its marker carries an earlier pass</em> - the marker is
  * the clock, giving every crash-torn or in-flight publish a full mark-pass enumeration of grace (spared the moment it
- * is referenced) with no store-timestamp API, and, when {@code jenesis.gc.grace} is set, a wall-clock floor on top so
+ * is referenced) with no store-timestamp API, and, when {@code jenreg.gc.grace} is set, a wall-clock floor on top so
  * a fast generation turnover across nodes cannot shorten it. The marker re-read immediately before deletion is the final guard: a dedup re-publish that
  * re-links condemned content clears the marker on the write path ({@code Publication.link}), collapsing the
  * residual race to the two back-to-back reads between that re-read and the delete. Blob first, marker last; a
@@ -59,10 +59,10 @@ import module java.base;
  * shape, and every existing test) leaves the mark byte-for-byte what it was.
  *
  * <p>An installed collector is its own {@link ObservabilitySource}: once it has run a {@link #collect} it reports
- * {@code jenesis.gc.condemned} - a gauge of the blobs currently condemned ({@code gc/condemned/}) awaiting the
+ * {@code jenreg.gc.condemned} - a gauge of the blobs currently condemned ({@code gc/condemned/}) awaiting the
  * confirming pass, the in-flight condemn-then-collect set the last sweep left standing - the
- * {@code jenesis.gc.collected} counter of blobs reclaimed (accumulated across collects), and a
- * {@code jenesis.gc.lastrun} task status stamped with the last collect. Because garbage collection is <em>no-op by
+ * {@code jenreg.gc.collected} counter of blobs reclaimed (accumulated across collects), and a
+ * {@code jenreg.gc.lastrun} task status stamped with the last collect. Because garbage collection is <em>no-op by
  * absence</em> (with no collector installed or selected there is no source at all), a deployment with GC off
  * contributes nothing here - GC-off is visible on the capabilities surface, not as a silent signal - and a
  * collector that has never run a pass likewise reports nothing until its first {@code collect}. The counts are read
@@ -111,11 +111,11 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
     private final String collector = UUID.randomUUID().toString().substring(0, 8);
     private final AtomicLong batches = new AtomicLong();
 
-    /** Blobs reclaimed across every {@link #collect} this instance ran - the monotonic {@code jenesis.gc.collected}
+    /** Blobs reclaimed across every {@link #collect} this instance ran - the monotonic {@code jenreg.gc.collected}
      *  counter, held on the instance (never a static) so it survives a pass turnover. */
     private final AtomicLong collectedTotal = new AtomicLong();
     /** Blobs left condemned ({@code gc/condemned/}) awaiting the confirming pass, as the last completed-or-partial
-     *  sweep counted them - the {@code jenesis.gc.condemned} in-flight gauge. */
+     *  sweep counted them - the {@code jenreg.gc.condemned} in-flight gauge. */
     private volatile long condemnedStanding;
     /** When this instance last ran a {@code collect}, or {@code null} until it has - the gate that keeps a never-run
      *  (or GC-off, absent) collector reporting nothing. */
@@ -249,8 +249,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
         return GcPlan.of(true, sweep.condemned, sweep.spared, sweep.collected, sweep.sample);
     }
 
-    /** Stamp the {@code jenesis.gc.*} observability state after a collect pass: the last-run instant the {@code
-     *  jenesis.gc.lastrun} task status carries and whether it completed both walk passes. The condemned gauge and
+    /** Stamp the {@code jenreg.gc.*} observability state after a collect pass: the last-run instant the {@code
+     *  jenreg.gc.lastrun} task status carries and whether it completed both walk passes. The condemned gauge and
      *  collected counter are updated at the sweep in {@link #collect} itself. */
     private void observe(Instant now, boolean complete) {
         lastComplete = complete;
@@ -263,11 +263,11 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
             return List.of(); // installed but never run - like a disabled plugin, lists nothing until first collect
         }
         return List.of(
-                Metric.gauge("jenesis.gc.condemned",
+                Metric.gauge("jenreg.gc.condemned",
                         "Blobs currently condemned (gc/condemned/) awaiting the confirming pass - the "
                                 + "condemn-then-collect in-flight set the last sweep left standing.",
                         condemnedStanding, "blobs"),
-                Metric.counter("jenesis.gc.collected",
+                Metric.counter("jenreg.gc.collected",
                         "Blobs reclaimed by the mark-sweep collector, accumulated across collect passes - a "
                                 + "monotonic count that climbs by what each collect deletes.",
                         collectedTotal.get(), "blobs"));
@@ -281,7 +281,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
             // is visible on the capabilities surface, never as a silent signal here.
             return List.of();
         }
-        return List.of(TaskStatus.ran("jenesis.gc.lastrun",
+        return List.of(TaskStatus.ran("jenreg.gc.lastrun",
                 "The garbage-collection pass, stamped with its last collect - the mark-then-sweep that condemns "
                         + "unreferenced blobs and reclaims those an earlier pass already condemned.",
                 TaskStatus.State.IDLE, ran, null,
@@ -461,7 +461,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
         private final References references;
         private long condemned, spared, collected;
         /** Blobs this sweep left carrying a condemned marker - newly condemned this pass plus those still within
-         *  their grace - the in-flight {@code gc/condemned/} set the jenesis.gc.condemned gauge reports. */
+         *  their grace - the in-flight {@code gc/condemned/} set the jenreg.gc.condemned gauge reports. */
         private long standing;
         private final List<String> sample = new ArrayList<>();
 

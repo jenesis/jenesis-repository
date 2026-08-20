@@ -26,12 +26,12 @@ import module java.base;
  *     reports as off, so a console shows "not tracked" rather than an ambiguous zero. {@link #create} declines with
  *     an empty {@link Optional}; {@code null} is never a legal return from it, from {@link #name()} or from
  *     {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenesis.repository.key-usage=<name>}
+ * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenreg.key-usage=<name>}
  *     that no installed provider answers to, or whose provider declines, throws {@link IllegalStateException} at
  *     resolution naming the selection and the installed provider names - it does <em>not</em> resolve to
  *     {@link KeyUsageTracker#NONE}. An operator who asked for usage tracking and silently got none would read every
  *     credential's "last used: never" as evidence it is safe to revoke. An explicit selection outranks the
- *     {@code jenesis.repository.<name>=false} toggle. Only an <em>unselected</em> deployment degrades to the
+ *     {@code jenreg.<name>=false} toggle. Only an <em>unselected</em> deployment degrades to the
  *     sentinel.</li>
  * <li><b>Tenant scoping (&sect;6).</b> Every recorded hit carries its tenant and credential hash, and a tracker
  *     persists through the {@link Authorization} it was handed - it never widens a record beyond the tenant the
@@ -71,9 +71,9 @@ public interface KeyUsageTrackerProvider {
     }
 
     /** The single enabled tracker discovered via {@link ServiceLoader}, resolved through the shared
-     *  {@link Providers#optionalUnique} policy: an explicit {@code jenesis.repository.key-usage=<name>} selects one by
+     *  {@link Providers#optionalUnique} policy: an explicit {@code jenreg.key-usage=<name>} selects one by
      *  name and a selection nothing answers to <em>throws</em> rather than degrading (&sect;9), a
-     *  {@code jenesis.repository.<name>=false} switches one off, more than one enabled tracker is ambiguous rather
+     *  {@code jenreg.<name>=false} switches one off, more than one enabled tracker is ambiguous rather
      *  than a discovery-order winner, and only an <em>unselected</em> deployment with no tracker installed resolves to
      *  {@link KeyUsageTracker#NONE}. */
     static KeyUsageTracker resolve(Authorization authorization, UnaryOperator<String> config) {

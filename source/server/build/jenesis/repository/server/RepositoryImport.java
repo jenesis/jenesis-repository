@@ -66,7 +66,7 @@ public final class RepositoryImport {
         AtomicInteger rejected = new AtomicInteger();
         Set<String> skippedFormats = new LinkedHashSet<>();
         source.forEach((format, path, content) -> {
-            // A format configured off (jenesis.repository.<format>=false) imports nothing either - its assets
+            // A format configured off (jenreg.<format>=false) imports nothing either - its assets
             // count as skipped, exactly as if its importer module were absent.
             if (Features.enabled(format)) {
                 for (RepositoryImporter importer : importers) {

@@ -13,7 +13,7 @@ import module java.base;
  * advisories - every potentially-unsafe setting a discovered {@link build.jenesis.repository.posture.SafetyAdvisor}
  * raises against the effective configuration, collected once through {@link PostureReport#discover} and rendered
  * severity-sorted (critical first). Each row shows <strong>why</strong> a setting is unsafe, the suggested safer
- * alternative and the <strong>exact {@code jenesis.*} key/value</strong> that fixes it, plus a docs link - the free
+ * alternative and the <strong>exact {@code jenreg.*} key/value</strong> that fixes it, plus a docs link - the free
  * counterpart of the downstream console's Security-posture page and its {@code /api/admin/posture} admin API.
  *
  * <p>It reads no artifact data, so the {@link ArtifactStore} is unused; the console is an authenticated operator surface
@@ -56,7 +56,7 @@ public final class PosturePanel implements Panel {
         StringBuilder html = new StringBuilder();
         html.append("<p>Every potentially-unsafe configuration this deployment reports about itself, in one plain "
                 + "overview - each with why it is unsafe, a suggested safer alternative and the exact "
-                + "<code>jenesis.*</code> setting that fixes it. The read is collected once "
+                + "<code>jenreg.*</code> setting that fixes it. The read is collected once "
                 + "(<code>PostureReport.discover()</code>), the same source the downstream console's Security-posture "
                 + "page and its <code>/api/admin/posture</code> admin API render. Read-only: observing posture never "
                 + "changes it, and no advisory prints a secret value.</p>");

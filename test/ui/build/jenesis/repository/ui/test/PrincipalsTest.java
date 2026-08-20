@@ -10,7 +10,7 @@ import module java.base;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The console's authority model is deny-by-default: an unconfigured {@code jenesis.ui.admins} grants {@code ROLE_USER}
+ * The console's authority model is deny-by-default: an unconfigured {@code jenreg.ui.admins} grants {@code ROLE_USER}
  * but never {@code ROLE_ADMIN}, so an unconfigured deployment denies writes (a POST/PUT/DELETE needs {@code ADMIN})
  * rather than handing full admin to whoever signs in. A configured id still becomes an admin, and the {@code *}
  * wildcard is the explicit opt-out that re-opens the console to every authenticated user.

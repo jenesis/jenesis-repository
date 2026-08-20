@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The config-driven SPI enable/disable convention: a feature toggle ({@code jenesis.repository.<feature>}) is on
+ * The config-driven SPI enable/disable convention: a feature toggle ({@code jenreg.<feature>}) is on
  * unless explicitly {@code false}, an exclusive SPI reads its selection key, a feature whose required config keys
  * are unset self-disables, and the default lookup answers from system properties - so the identical keys work with
  * and without an application shell. The exclusive store backend is the deliberate exception to self-disabling: a
@@ -28,16 +28,16 @@ class FeaturesTest {
     void a_feature_is_enabled_unless_configured_false() {
         Features.configure(key -> null);
         assertThat(Features.enabled("anything")).isTrue();
-        Features.configure(Map.of("jenesis.repository.anything", "false")::get);
+        Features.configure(Map.of("jenreg.anything", "false")::get);
         assertThat(Features.enabled("anything")).isFalse();
     }
 
     @Test
     void only_an_explicit_false_disables() {
         Features.configure(Map.of(
-                "jenesis.repository.on", "true",
-                "jenesis.repository.blank", "",
-                "jenesis.repository.shouting", "FALSE")::get);
+                "jenreg.on", "true",
+                "jenreg.blank", "",
+                "jenreg.shouting", "FALSE")::get);
         assertThat(Features.enabled("on")).isTrue();
         assertThat(Features.enabled("blank")).isTrue();
         assertThat(Features.enabled("shouting")).isFalse();
@@ -45,7 +45,7 @@ class FeaturesTest {
 
     @Test
     void an_exclusive_selection_reads_its_spi_key() {
-        Features.configure(Map.of("jenesis.repository.token-exchange", " oidc ")::get);
+        Features.configure(Map.of("jenreg.token-exchange", " oidc ")::get);
         assertThat(Features.selection("token-exchange")).contains("oidc");
         assertThat(Features.selection("store")).isEmpty();
     }
@@ -53,8 +53,8 @@ class FeaturesTest {
     @Test
     void a_feature_missing_required_config_self_disables() {
         // Prefixed, like every other key this API reads: a required key is a bare name to the caller and
-        // jenesis.repository.<name> to the deployment, exactly as the feature toggle beside it is.
-        Features.configure(Map.of("jenesis.repository.some-credential", "value")::get);
+        // jenreg.<name> to the deployment, exactly as the feature toggle beside it is.
+        Features.configure(Map.of("jenreg.some-credential", "value")::get);
         assertThat(Features.active("fed", Set.of("some-credential"))).isTrue();
         assertThat(Features.active("starved", Set.of("some-credential", "other-credential"))).isFalse();
     }
@@ -65,10 +65,10 @@ class FeaturesTest {
         // product's own namespace - and settings() is that view over whatever configure() installed, so which
         // property source answers (a Spring Environment, the persistent settings layered into it, a test's map) is
         // not a consumer's business.
-        Map<String, String> properties = Map.of("jenesis.repository.scheduled-scan", "false");
+        Map<String, String> properties = Map.of("jenreg.scheduled-scan", "false");
 
         assertThat(Features.namespaced(properties::get).apply("scheduled-scan")).isEqualTo("false");
-        assertThat(Features.key("scheduled-scan")).isEqualTo("jenesis.repository.scheduled-scan");
+        assertThat(Features.key("scheduled-scan")).isEqualTo("jenreg.scheduled-scan");
 
         Features.configure(properties::get);
         assertThat(Features.settings().apply("scheduled-scan")).isEqualTo("false");
@@ -76,19 +76,19 @@ class FeaturesTest {
 
     @Test
     void a_disabled_feature_is_inactive_regardless_of_required_config() {
-        Features.configure(Map.of("jenesis.repository.off", "false")::get);
+        Features.configure(Map.of("jenreg.off", "false")::get);
         assertThat(Features.active("off", Set.of())).isFalse();
     }
 
     @Test
     void system_properties_answer_the_default_lookup() {
-        System.setProperty("jenesis.repository.sys-prop-feature", "false");
+        System.setProperty("jenreg.sys-prop-feature", "false");
         try {
             Features.reset();
             assertThat(Features.enabled("sys-prop-feature")).isFalse();
             assertThat(Features.enabled("some-other-feature")).isTrue();
         } finally {
-            System.clearProperty("jenesis.repository.sys-prop-feature");
+            System.clearProperty("jenreg.sys-prop-feature");
         }
     }
 

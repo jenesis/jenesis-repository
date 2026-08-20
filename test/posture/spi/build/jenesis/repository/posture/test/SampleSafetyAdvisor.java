@@ -15,17 +15,17 @@ import module java.base;
 public final class SampleSafetyAdvisor implements SafetyAdvisor {
 
     /** The key a test flips to prove the advisor fires and that a report discovers it. */
-    public static final String KEY = "jenesis.sample.unsafe";
+    public static final String KEY = "jenreg.sample.unsafe";
 
     @Override
     public List<SecurityAdvisory> advise(Configuration config) {
         if (!config.flag(KEY, false)) {
             return List.of();
         }
-        return List.of(SecurityAdvisory.deployment("jenesis.sample.unsafe", Severity.INFO,
+        return List.of(SecurityAdvisory.deployment("jenreg.sample.unsafe", Severity.INFO,
                 "The sample feature is in its unsafe demo mode",
                 "The sample feature is running in a demonstration mode that is not meant for production.",
                 "Turn the sample feature's unsafe mode off.",
-                KEY, "false", "https://jenesis.build/docs/security/posture#jenesis.sample.unsafe"));
+                KEY, "false", "https://jenesis.build/docs/security/posture#jenreg.sample.unsafe"));
     }
 }

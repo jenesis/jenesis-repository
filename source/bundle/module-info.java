@@ -6,9 +6,9 @@
  * usage tracker and the web console ({@code ui}) - so the packaging {@code bundle} step emits a {@code bundle.zip}
  * carrying the complete free product, and the {@code Dockerfile} turns that one zip into the all-in-one image.
  * Nothing here names a plugin: the server keeps discovering everything through {@code ServiceLoader}, and the image
- * is trimmed by configuration instead of rebuilt - {@code jenesis.repository.<feature>=false} (settable as
- * {@code JENESIS_REPOSITORY_<FEATURE>=false} through relaxed binding) disables an implementation exactly as if its
- * module were absent, and {@code jenesis.repository.<spi>=<feature>} selects among exclusive implementations
+ * is trimmed by configuration instead of rebuilt - {@code jenreg.<feature>=false} (settable as
+ * {@code JENREG_<FEATURE>=false} through relaxed binding) disables an implementation exactly as if its
+ * module were absent, and {@code jenreg.<spi>=<feature>} selects among exclusive implementations
  * (the store defaults to {@code filesystem}), per the {@code build.jenesis.repository.store.Features} convention.
  *
  * <p>{@link build.jenesis.repository.bundle.AllInOne} boots the repository server under the config name

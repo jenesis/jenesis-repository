@@ -6,7 +6,7 @@
  * build.jenesis.repository.posture.PostureReport} critical-first aggregation both from an explicit set of advisors and
  * through the {@link java.util.ServiceLoader} discovery a {@code provides}-declared test advisor proves, and the core
  * {@link build.jenesis.repository.posture.SecurityPosture} seeder's real-key conditions (each seed fires on its actual
- * {@code jenesis.*} key and stays silent on the secure default).
+ * {@code jenreg.*} key and stays silent on the secure default).
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.posture

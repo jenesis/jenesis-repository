@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The {@code s3} endpoint override must be {@code https} by default so credentials and artifact bytes never travel a
  * plaintext transport a MITM can read or tamper with. A plaintext {@code http} endpoint - a local MinIO or LocalStack
- * container - is refused unless {@code jenesis.repository.s3.allow-insecure-endpoint=true} explicitly opts in. Needs no
+ * container - is refused unless {@code jenreg.s3.allow-insecure-endpoint=true} explicitly opts in. Needs no
  * Docker, so it always runs; the opted-in http path against a real container is exercised by
  * {@code S3ArtifactStoreProviderTest}.
  */
@@ -22,7 +22,7 @@ class S3EndpointSchemeTest {
         assertThatThrownBy(() -> S3ArtifactStoreProvider.secureEndpoint("http://localhost:9000", null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("https")
-                .hasMessageContaining("jenesis.repository.s3.allow-insecure-endpoint");
+                .hasMessageContaining("jenreg.s3.allow-insecure-endpoint");
     }
 
     @Test

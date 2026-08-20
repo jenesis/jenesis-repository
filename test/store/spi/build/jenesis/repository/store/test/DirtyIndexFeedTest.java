@@ -35,7 +35,7 @@ class DirtyIndexFeedTest {
     @BeforeEach
     void setUp() {
         store = new CountingStore(ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null));
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
         feed = new DirtyIndexFeed(store, "index/search");
     }
 

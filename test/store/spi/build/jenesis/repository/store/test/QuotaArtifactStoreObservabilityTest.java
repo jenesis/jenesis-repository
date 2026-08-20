@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * A capped {@link QuotaArtifactStore} is its own {@link build.jenesis.repository.observation.ObservabilitySource}: it
- * reports {@code jenesis.quota.used} as a bounded gauge (used vs the configured ceiling, so the overview shows data
- * used vs available) and a {@code jenesis.quota.capacity} health check that goes DEGRADED once usage reaches the limit
+ * reports {@code jenreg.quota.used} as a bounded gauge (used vs the configured ceiling, so the overview shows data
+ * used vs available) and a {@code jenreg.quota.capacity} health check that goes DEGRADED once usage reaches the limit
  * and UNKNOWN when the counter cannot be read; an <em>unlimited</em> store reports nothing at all and runs no
  * background task, so it carries no {@code TaskStatus}. The signals collect into the single
  * {@link ObservabilityReport} view the distribution, Actuator and the docs all read, exercised against a real
@@ -29,7 +29,7 @@ class QuotaArtifactStoreObservabilityTest {
 
     private ArtifactStore delegate() {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private static ByteArrayInputStream bytes(int length) {
@@ -52,7 +52,7 @@ class QuotaArtifactStoreObservabilityTest {
         store.write("publish/maven/x", bytes(500));   // a pointer is not a blob and does not count
         store.write("blobs/aaa", bytes(250));
 
-        Metric used = metric(store, "jenesis.quota.used");
+        Metric used = metric(store, "jenreg.quota.used");
         assertThat(used.kind()).isEqualTo(Metric.Kind.GAUGE);
         assertThat(used.value()).as("only blob bytes counted").isEqualTo(250.0);
         assertThat(used.limit()).as("the configured ceiling").hasValue(1000.0);
@@ -65,7 +65,7 @@ class QuotaArtifactStoreObservabilityTest {
         QuotaArtifactStore store = new QuotaArtifactStore(delegate(), 1000);
 
         assertThat(store.healthChecks()).singleElement().satisfies(check -> {
-            assertThat(check.name()).isEqualTo("jenesis.quota.capacity");
+            assertThat(check.name()).isEqualTo("jenreg.quota.capacity");
             assertThat(check.status()).as("fresh store has headroom").isEqualTo(Health.UP);
         });
     }
@@ -100,10 +100,10 @@ class QuotaArtifactStoreObservabilityTest {
 
         ObservabilityReport report = ObservabilityReport.from(List.of(store));
 
-        assertThat(report.metrics()).extracting(Metric::name).containsExactly("jenesis.quota.used");
-        assertThat(report.healthChecks()).extracting(HealthCheck::name).containsExactly("jenesis.quota.capacity");
+        assertThat(report.metrics()).extracting(Metric::name).containsExactly("jenreg.quota.used");
+        assertThat(report.healthChecks()).extracting(HealthCheck::name).containsExactly("jenreg.quota.capacity");
         assertThat(report.metrics()).allSatisfy(metric -> {
-            assertThat(metric.name()).matches("jenesis\\.quota\\..+");
+            assertThat(metric.name()).matches("jenreg\\.quota\\..+");
             assertThat(metric.description()).isNotBlank();
         });
         assertThat(report.tasks()).as("a quota store runs no background task").isEmpty();

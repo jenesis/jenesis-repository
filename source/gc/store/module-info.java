@@ -8,7 +8,7 @@
  * marker is the clock) and deleted only when a <em>later</em> pass confirms it still unreferenced - at least one
  * full collection interval of grace - with the marker re-read immediately before deletion and cleared on the write
  * path by every pointer link, so a referenced, re-linked or in-flight blob is never deleted. Settings:
- * {@code jenesis.gc.stride} (checkpoint stride of the collector's walk passes, default 20000).
+ * {@code jenreg.gc.stride} (checkpoint stride of the collector's walk passes, default 20000).
  *
  * @jenesis.release 25
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55

@@ -41,7 +41,7 @@ public final class Authorization {
     // The strictly-opt-in anonymous role (WANON.1): the rights a keyless caller is granted, as scope -> tokens, exactly
     // the shape a minted credential's grants object has. Empty (the default) means no anonymous access: a keyless
     // request is rejected byte-for-byte as an enforcing deployment rejects it today. Immutable instance state (never a
-    // mutable static), parsed once from jenesis.repository.anonymous-rights at bean creation.
+    // mutable static), parsed once from jenreg.anonymous-rights at bean creation.
     private final Map<String, List<String>> anonymousGrants;
 
     private Authorization(ArtifactStore store) {

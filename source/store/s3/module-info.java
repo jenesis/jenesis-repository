@@ -2,7 +2,7 @@
  * The S3-compatible artifact-store backend (AWS S3, GCS via the XML API, MinIO, LocalStack). A pure
  * storage provider: it implements the {@code ArtifactStore} SPI and is discovered through {@code provides},
  * so the server adds it to its module graph at deploy time and selects it with
- * {@code jenesis.repository.store=s3}, with no compile-time dependency from the server. The version token
+ * {@code jenreg.store=s3}, with no compile-time dependency from the server. The version token
  * is the object ETag, giving a true cross-node compare-and-set on conditional writes (see
  * {@code S3ArtifactStore}). The rest of the AWS SDK closure resolves transitively through Maven (no
  * exclusions are possible under the module resolver, so the full closure is pulled and pinned here).

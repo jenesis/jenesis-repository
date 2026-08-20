@@ -20,16 +20,16 @@ import module java.base;
 
 /**
  * The {@code s3} artifact-store backend over any S3-compatible bucket (AWS S3, GCS via the XML API,
- * MinIO, LocalStack). Selected with {@code jenesis.repository.store=s3}; configured by
- * {@code jenesis.repository.s3.bucket} (required), {@code jenesis.repository.s3.region} (default {@code us-east-1}) and
- * an optional {@code jenesis.repository.s3.endpoint} (an S3-compatible endpoint, enabling path-style access; required
- * to be {@code https} unless {@code jenesis.repository.s3.allow-insecure-endpoint=true} explicitly permits a plaintext
+ * MinIO, LocalStack). Selected with {@code jenreg.store=s3}; configured by
+ * {@code jenreg.s3.bucket} (required), {@code jenreg.s3.region} (default {@code us-east-1}) and
+ * an optional {@code jenreg.s3.endpoint} (an S3-compatible endpoint, enabling path-style access; required
+ * to be {@code https} unless {@code jenreg.s3.allow-insecure-endpoint=true} explicitly permits a plaintext
  * one). Credentials come from the standard AWS chain (environment, profile or instance role) unless
- * {@code jenesis.repository.s3.access-key-id} and {@code jenesis.repository.s3.secret-access-key} are both supplied through
+ * {@code jenreg.s3.access-key-id} and {@code jenreg.s3.secret-access-key} are both supplied through
  * the config lookup, in which case those static keys are used - the path a self-hosted S3-compatible store (MinIO,
  * Ceph) takes, and the seam that lets a test drive {@code create()} end to end against a container through an injected
  * config lookup, without touching the process environment. Every object is written server-side encrypted: SSE-S3
- * (AES256) by default, or {@code aws:kms} when an optional {@code jenesis.repository.s3.sse-kms-key-id} names a key -
+ * (AES256) by default, or {@code aws:kms} when an optional {@code jenreg.s3.sse-kms-key-id} names a key -
  * encryption cannot be turned off. The blob I/O and the conditional compare-and-set semantics live in {@link
  * S3ArtifactStore}.
  */
@@ -100,7 +100,7 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
      * The endpoint override, required to be {@code https} by default so credentials and artifact bytes are not sent
      * over a plaintext transport a MITM can read or tamper with. A plaintext {@code http} endpoint - a local MinIO or
      * LocalStack container, say - is an explicit opt-out: set
-     * {@code jenesis.repository.s3.allow-insecure-endpoint=true}.
+     * {@code jenreg.s3.allow-insecure-endpoint=true}.
      *
      * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code gcs} and {@code azure-blob} backends
      * (D-023); what is this backend's own is the pair of config keys it names, and this method is where they are
@@ -111,8 +111,8 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
     }
 
     /**
-     * Static keys when both {@code jenesis.repository.s3.access-key-id} and
-     * {@code jenesis.repository.s3.secret-access-key} are present in the config lookup, otherwise the standard AWS chain
+     * Static keys when both {@code jenreg.s3.access-key-id} and
+     * {@code jenreg.s3.secret-access-key} are present in the config lookup, otherwise the standard AWS chain
      * (environment, profile, instance role).
      */
     private static AwsCredentialsProvider credentials(UnaryOperator<String> config) {

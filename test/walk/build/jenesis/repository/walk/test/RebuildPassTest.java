@@ -37,7 +37,7 @@ class RebuildPassTest {
     private ArtifactStore store(String name) {
         Path scoped = root.resolve(name);
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? scoped.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? scoped.toString() : null);
     }
 
     private StoreArtifactWalk walk() {

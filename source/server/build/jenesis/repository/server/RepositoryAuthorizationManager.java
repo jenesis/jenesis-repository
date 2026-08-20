@@ -52,7 +52,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         // /api or /actuator route - so it cannot slip a deployment-wide read past these equals() checks either.
         String uri = UriUtils.decode(request.getRequestURI(), StandardCharsets.UTF_8);
         if (!normalized(uri)) {
-            request.setAttribute("jenesis.repository.decision", Authorization.Decision.FORBIDDEN);
+            request.setAttribute("jenreg.decision", Authorization.Decision.FORBIDDEN);
             return new AuthorizationDecision(false);
         }
         String scope = request.getHeader("Jenesis-Repository-Name");
@@ -70,7 +70,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         // GET /api/logs, GET /api/consistency, GET /api/posture and the /actuator endpoints serve DEPLOYMENT-WIDE
         // content - every repository's / every tenant's log lines (logger names + messages carrying other scopes'
         // coordinates, paths, errors), the whole fleet's per-node consistency state, every tenant's unsafe-setting
-        // advisories (each posture row names the tenant, scope and the exact jenesis.* key/value that is unsafe - the
+        // advisories (each posture row names the tenant, scope and the exact jenreg.* key/value that is unsafe - the
         // deployment's whole security-weakness enumeration, though never a resolved secret value), and the actuator's
         // deployment-wide Micrometer metrics (request counts/URIs/statuses across all repositories, JVM internals) and
         // build info. Authorizing them against the caller's self-named Jenesis-Repository-Name lets a key scoped to a
@@ -115,7 +115,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
             decision = Authorization.Decision.FORBIDDEN;
         }
         // Close an anonymous-grant cross-scope disclosure on the deployment-wide operator-observability routes. When an
-        // operator enables the public-mirror opt-in jenesis.repository.anonymous-rights=repository:read, the anonymous
+        // operator enables the public-mirror opt-in jenreg.anonymous-rights=repository:read, the anonymous
         // grant parses to the WILDCARD scope "*" - exactly what these routes are rebound to above - so a completely
         // KEYLESS caller would satisfy covers("*","*",path) + grantedBy("repository:read") and authorize() ALLOWS it,
         // reading the deployment-wide operator view (the fleet log ring, the whole fleet's consistency state, the
@@ -129,7 +129,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         if (operatorObservability && keyless && decision == Authorization.Decision.ALLOWED) {
             decision = Authorization.Decision.FORBIDDEN;
         }
-        request.setAttribute("jenesis.repository.decision", decision);
+        request.setAttribute("jenreg.decision", decision);
         return new AuthorizationDecision(decision == Authorization.Decision.ALLOWED);
     }
 

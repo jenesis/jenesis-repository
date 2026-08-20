@@ -6,7 +6,7 @@ import module java.base;
  * A back-pressure-style accessor seam for authentication/authorization failures, mirroring
  * {@link RateLimitFilter#rejected()}: the wire components (the repository key entry point, and the OIDC/SAML login
  * failure handlers in the console) record a denial by its {@code mechanism} and HTTP {@code outcome}, and a metrics
- * layer scrapes the running totals into the {@code jenesis.auth.failures} meter. The core stays registry-free -
+ * layer scrapes the running totals into the {@code jenreg.auth.failures} meter. The core stays registry-free -
  * this holds only plain counters, and the Micrometer adapter lives in the distribution (downstream
  * {@code GovernanceMetrics}). The set of (mechanism, outcome) pairs is small and bounded ({@code key|oidc|saml} ×
  * {@code 401|403}), so a reader can register one counter per pair up front.

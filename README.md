@@ -31,7 +31,7 @@ java build/jenesis/Project.java +source+store+s3 build   # one module and its de
 Run the server against the filesystem backend:
 
 ```bash
-JENESIS_STORE_ROOT=/var/lib/jenesis-repository \
+JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
   java -Djenesis.execute.module=source+server build/jenesis/Execute.java
 ```
 

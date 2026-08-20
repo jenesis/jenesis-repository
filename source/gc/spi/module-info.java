@@ -1,6 +1,6 @@
 /**
  * The garbage-collection SPI: reclaiming the content blobs no live pointer references any more is a discovered,
- * optional-unique capability ({@code jenesis.repository.gc=<name>} selects among installed collectors), kept separate
+ * optional-unique capability ({@code jenreg.gc=<name>} selects among installed collectors), kept separate
  * from its implementation so the reclamation strategy can change without breaking a caller - and <em>no-op by
  * absence</em>: with no module installed, {@code GarbageCollectorProvider.resolve} is empty, nothing is ever
  * reclaimed, and the capability surfaces say garbage collection is off. No blob is deleted by a deployment that did

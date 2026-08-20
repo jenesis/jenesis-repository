@@ -27,7 +27,7 @@ class WalkCheckpointFlushTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private static List<String> seed(ArtifactStore store, int count) throws IOException {

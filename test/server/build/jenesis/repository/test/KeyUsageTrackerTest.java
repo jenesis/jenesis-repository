@@ -26,7 +26,7 @@ class KeyUsageTrackerTest {
     @BeforeEach
     void setUp() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         authorization = Authorization.enforcing(store);
         hash = Authorization.hash(Authorization.mint("acme"));
         authorization.provision("acme", hash, "k", null);

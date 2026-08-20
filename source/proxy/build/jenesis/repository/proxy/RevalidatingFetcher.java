@@ -18,11 +18,11 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * URL, bounded, and safe for concurrent use.
  *
  * <p>It is its own {@link ObservabilitySource}: the live fetcher the distribution holds reports {@code
- * jenesis.proxy.revalidation.bytes} - the cached index body bytes held, as a <em>bounded</em> gauge against the byte
+ * jenreg.proxy.revalidation.bytes} - the cached index body bytes held, as a <em>bounded</em> gauge against the byte
  * ceiling past which the oldest entries are evicted, so the overview shows <em>data used vs available</em> and how
  * close the cache is to that ceiling without pre-computing a percentage - alongside {@code
- * jenesis.proxy.revalidation.entries} (the indexes currently remembered, bounded by the byte ceiling rather than a
- * fixed count) and a {@code jenesis.proxy.revalidation} health check that the cache is installed and saving
+ * jenreg.proxy.revalidation.entries} (the indexes currently remembered, bounded by the byte ceiling rather than a
+ * fixed count) and a {@code jenreg.proxy.revalidation} health check that the cache is installed and saving
  * transfers. There is no background task (eviction happens lazily on the store path), so {@link #taskStatuses()}
  * stays empty.
  */
@@ -91,12 +91,12 @@ public final class RevalidatingFetcher implements ProxyFormat.Fetcher, Observabi
     @Override
     public List<Metric> metrics() {
         return List.of(
-                Metric.bounded("jenesis.proxy.revalidation.bytes",
+                Metric.bounded("jenreg.proxy.revalidation.bytes",
                         "Cached proxied-index body bytes held for conditional revalidation, against the byte ceiling "
                                 + "past which the oldest entries are evicted - a used-vs-available signal whose usage() "
                                 + "fraction shows how close the cache is to thrashing back toward a full re-download.",
                         bytes.get(), MAX_TOTAL, "bytes"),
-                Metric.gauge("jenesis.proxy.revalidation.entries",
+                Metric.gauge("jenreg.proxy.revalidation.entries",
                         "Proxied mutable indexes currently remembered with their ETag/Last-Modified validator, so a "
                                 + "re-fetch is a conditional request whose 304 saves the transfer; bounded by the byte "
                                 + "ceiling, not a fixed entry count.",
@@ -105,7 +105,7 @@ public final class RevalidatingFetcher implements ProxyFormat.Fetcher, Observabi
 
     @Override
     public List<HealthCheck> healthChecks() {
-        return List.of(HealthCheck.up("jenesis.proxy.revalidation",
+        return List.of(HealthCheck.up("jenreg.proxy.revalidation",
                 "The revalidation cache is installed and saving index transfers by revalidating remembered bodies "
                         + "against the upstream."));
     }

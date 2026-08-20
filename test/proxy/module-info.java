@@ -2,7 +2,7 @@
  * Focused unit tests for the proxy caches' observability adoption - that the two composed {@link
  * build.jenesis.repository.proxy.RevalidatingFetcher} and {@link build.jenesis.repository.proxy.NegativeCachingFetcher}
  * decorators are each an {@link build.jenesis.repository.observation.ObservabilitySource} reporting their bounded
- * {@code jenesis.proxy.*} used-vs-available gauges (the remembered upstream misses against the map bound, the cached
+ * {@code jenreg.proxy.*} used-vs-available gauges (the remembered upstream misses against the map bound, the cached
  * index bytes against the byte ceiling) and a presence health check, all collected into the single {@link
  * build.jenesis.repository.observation.ObservabilityReport} view - exercised without the server, Micrometer or any
  * network through a stub upstream fetcher. The caches' proxying behaviour itself is covered by the server test module.

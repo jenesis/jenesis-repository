@@ -16,14 +16,14 @@ import module java.base;
  * nothing is unsafe" - which is why an advisor that throws must not simply vanish, and must certainly not take the
  * report down: every console view renders {@code postureCount} and {@code GET /api/posture} reads the same collection.
  * {@link #from} therefore collects through {@code Contributions}: an advisor that throws (or answers {@code null}) is
- * contained to its own rows and replaced by a {@link Severity#WARN} {@code jenesis.posture.unavailable.<advisor>}
+ * contained to its own rows and replaced by a {@link Severity#WARN} {@code jenreg.posture.unavailable.<advisor>}
  * advisory saying that whatever it checks is unreported, every other advisor is evaluated, and the failure is logged
  * once with the advisor's class. The badge count rises rather than falls, because a deployment whose posture is
  * partially unknown is not a deployment with less to worry about.
  *
  * <p>The same rule covers the collision this additive SPI has no {@code name()} to refuse: two advisories sharing an id
  * (and, for a tenant-scoped row, a tenant) are both kept - dropping one would hide a real advisory - and a
- * {@code jenesis.posture.collision} advisory reports the duplicated ids, so a packaging accident is visible on the
+ * {@code jenreg.posture.collision} advisory reports the duplicated ids, so a packaging accident is visible on the
  * surface instead of rendering as two identically-anchored rows nobody can tell apart. <b>The collision row is filed at
  * the scope it is about</b> (D-150): ids that clashed deployment-wide become one {@link Scope#DEPLOYMENT} row, and ids
  * that clashed <em>for a tenant</em> become one {@link Scope#TENANT} row per tenant, carrying that tenant in
@@ -63,14 +63,14 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
 
     /**
      * The row an advisor that threw is reported as. It is filed under the advisor's own implementation class
-     * ({@code jenesis.posture.unavailable.<advisor>}), so two failing advisors are two rows rather than one merged
+     * ({@code jenreg.posture.unavailable.<advisor>}), so two failing advisors are two rows rather than one merged
      * one, and it names the <em>kind</em> of failure only - an exception message can quote a configured value, and
      * this surface enumerates a deployment's weaknesses to an operator, so the message goes to the log and never into
      * an advisory (see {@link Contributions#reason}).
      */
     private static List<SecurityAdvisory> unavailable(SafetyAdvisor advisor, Exception failure) {
         return List.of(SecurityAdvisory.deployment(
-                "jenesis.posture.unavailable." + Contributions.segment(advisor),
+                "jenreg.posture.unavailable." + Contributions.segment(advisor),
                 Severity.WARN,
                 "A safety advisor could not be evaluated",
                 "The " + advisor.getClass().getName() + " advisor threw " + Contributions.reason(failure)
@@ -139,8 +139,8 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
         String fix = "Rename one of the colliding advisories, or remove the duplicate module registration that raised"
                 + " it twice.";
         return tenant.isEmpty()
-                ? SecurityAdvisory.deployment("jenesis.posture.collision", Severity.WARN, title, why, fix, "", "", "")
-                : SecurityAdvisory.tenant("jenesis.posture.collision", Severity.WARN, tenant, title, why, fix,
+                ? SecurityAdvisory.deployment("jenreg.posture.collision", Severity.WARN, title, why, fix, "", "", "")
+                : SecurityAdvisory.tenant("jenreg.posture.collision", Severity.WARN, tenant, title, why, fix,
                         "", "", "");
     }
 

@@ -26,11 +26,11 @@ import module java.base;
  *     open default for a capability a deployment opts into. {@link #create} declines with an empty {@link Optional};
  *     {@code null} is never a legal return from it, from {@link #name()} or from {@link #requiredConfig()}.</li>
  * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em>
- *     {@code jenesis.repository.rate-limiter=<name>} that no installed provider answers to, or whose provider
+ *     {@code jenreg.rate-limiter=<name>} that no installed provider answers to, or whose provider
  *     declines, throws {@link IllegalStateException} at resolution naming the selection and the installed provider
  *     names - it does <em>not</em> resolve to {@link RateLimiter#NONE}. Silently admitting everything for an operator
  *     who asked for metering is the §9 defect exactly: the deployment looks protected and is not. An explicit
- *     selection outranks the {@code jenesis.repository.<name>=false} toggle. Only an <em>unselected</em> deployment
+ *     selection outranks the {@code jenreg.<name>=false} toggle. Only an <em>unselected</em> deployment
  *     degrades to the sentinel.</li>
  * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed at resolution: duplicate provider names, one provider
  *     registered twice, and more than one <em>enabled</em> limiter with no selection to disambiguate them all throw,
@@ -62,9 +62,9 @@ public interface RateLimiterProvider {
     }
 
     /** The single enabled limiter discovered via {@link ServiceLoader}, resolved through the shared
-     *  {@link Providers#optionalUnique} policy: an explicit {@code jenesis.repository.rate-limiter=<name>} selects one
+     *  {@link Providers#optionalUnique} policy: an explicit {@code jenreg.rate-limiter=<name>} selects one
      *  by name and a selection nothing answers to <em>throws</em> rather than degrading (&sect;9), a
-     *  {@code jenesis.repository.<name>=false} switches one off, more than one enabled limiter is ambiguous rather
+     *  {@code jenreg.<name>=false} switches one off, more than one enabled limiter is ambiguous rather
      *  than a discovery-order winner, and only an <em>unselected</em> deployment with no limiter installed resolves to
      *  {@link RateLimiter#NONE}. */
     static RateLimiter resolve(UnaryOperator<String> config) {

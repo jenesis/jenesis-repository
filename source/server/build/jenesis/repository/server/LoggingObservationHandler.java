@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
  * The logging pillar of the Observation API, in one place beside {@link Observations}: it logs each observed
  * operation once it completes, with the observation name, its key-values (repository, tenant, any outcome) and any
  * error. Registered once as a bean by the free auto-configuration, so a single handler lights logging for every
- * {@code jenesis.*} operation wherever the server module runs - the console, the maintenance sweep, the downstream
+ * {@code jenreg.*} operation wherever the server module runs - the console, the maintenance sweep, the downstream
  * controllers - instead of each module carrying its own copy. Boot's observation auto-configuration attaches it to
  * the auto-configured {@code ObservationRegistry} alongside the metrics handler (Micrometer, exposed through
  * Actuator) and a tracing handler (when a tracing bridge is on the path), so one instrumentation point feeds

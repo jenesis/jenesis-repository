@@ -39,7 +39,7 @@ class MultiNodeConsistencyTest {
     }
 
     private static ArtifactStore filesystem(Path root) {
-        return ArtifactStoreProvider.resolve("filesystem", key -> "JENESIS_STORE_ROOT".equals(key)
+        return ArtifactStoreProvider.resolve("filesystem", key -> "jenreg.filesystem.root".equals(key)
                 ? root.toString() : null);
     }
 
@@ -51,7 +51,7 @@ class MultiNodeConsistencyTest {
     @Test
     void two_nodes_that_agree_show_no_divergence(@TempDir Path root) throws IOException {
         ArtifactStore store = filesystem(root);
-        long generation = NodeFingerprint.configGeneration(Map.of("jenesis.repository.store", "filesystem"));
+        long generation = NodeFingerprint.configGeneration(Map.of("jenreg.store", "filesystem"));
         over(store).publish(fresh("node-a", 100, generation));
         over(store).publish(fresh("node-b", 100, generation));
 
@@ -138,8 +138,8 @@ class MultiNodeConsistencyTest {
     @Test
     void a_config_generation_mismatch_is_flagged(@TempDir Path root) throws IOException {
         ArtifactStore store = filesystem(root);
-        long generationA = NodeFingerprint.configGeneration(Map.of("jenesis.repository.read-only", "false"));
-        long generationB = NodeFingerprint.configGeneration(Map.of("jenesis.repository.read-only", "true"));
+        long generationA = NodeFingerprint.configGeneration(Map.of("jenreg.read-only", "false"));
+        long generationB = NodeFingerprint.configGeneration(Map.of("jenreg.read-only", "true"));
         over(store).publish(fresh("node-a", 100, generationA));
         over(store).publish(fresh("node-b", 100, generationB));
 
@@ -153,7 +153,7 @@ class MultiNodeConsistencyTest {
     void two_nodes_with_the_same_config_and_tenant_set_agree() {
         // WCON.2: the tenant set is folded into the generation, but two nodes over the same config AND the same tenant
         // directory still land on one value - order-independent, so a set discovered in any order agrees.
-        Map<String, String> config = Map.of("jenesis.repository.store", "filesystem");
+        Map<String, String> config = Map.of("jenreg.store", "filesystem");
         long a = NodeFingerprint.configGeneration(config, List.of("acme", "globex"));
         long b = NodeFingerprint.configGeneration(config, List.of("globex", "acme"));
         assertThat(a).as("same config + same tenant set (any order) -> equal generation").isEqualTo(b);
@@ -163,7 +163,7 @@ class MultiNodeConsistencyTest {
     void the_same_config_with_a_different_tenant_set_diverges(@TempDir Path root) throws IOException {
         // The new detection: two nodes route byte-for-byte the same config, but one has grown a tenant the other has
         // not - a real multi-tenant split the config-key hash alone would miss. The folded tenant set catches it.
-        Map<String, String> config = Map.of("jenesis.repository.store", "filesystem");
+        Map<String, String> config = Map.of("jenreg.store", "filesystem");
         long onFewer = NodeFingerprint.configGeneration(config, List.of("acme"));
         long onMore = NodeFingerprint.configGeneration(config, List.of("acme", "globex"));
         assertThat(onFewer).as("same config but different tenant sets -> different generation").isNotEqualTo(onMore);
@@ -182,7 +182,7 @@ class MultiNodeConsistencyTest {
         // A free single-tenant deployment folds exactly its one tenant (what TenantsProvider.resolve answers with no
         // tenants module installed - Tenants.fixed(tenant).list()), so every free node agrees. Folding one tenant is a
         // real, additive contribution: it is distinct from folding no tenant set at all (the config-only overload).
-        Map<String, String> config = Map.of("jenesis.repository.store", "filesystem");
+        Map<String, String> config = Map.of("jenreg.store", "filesystem");
         long defaultTenant = NodeFingerprint.configGeneration(config, Tenants.fixed("default").list());
         long alsoDefault = NodeFingerprint.configGeneration(config, List.of("default"));
         assertThat(defaultTenant).as("the fixed single-tenant directory folds its one tenant, deterministically")
@@ -248,7 +248,7 @@ class MultiNodeConsistencyTest {
     void the_divergence_advisor_maps_severities_and_ids() {
         assertThat(NodeDivergenceAdvisor.advisory(NodeDivergence.stuck("node-x", 40, 2_400_000)))
                 .satisfies(advisory -> {
-                    assertThat(advisory.id()).isEqualTo("jenesis.consistency.stuck");
+                    assertThat(advisory.id()).isEqualTo("jenreg.consistency.stuck");
                     assertThat(advisory.severity()).isEqualTo(Severity.WARN);
                     assertThat(advisory.why()).contains("node-x").doesNotContain("secret");
                 });
@@ -263,7 +263,7 @@ class MultiNodeConsistencyTest {
             throws IOException {
         ArtifactStore store = filesystem(root);
         Configuration config = Configuration.ofMap(Map.of(
-                "jenesis.repository.store", "filesystem", "JENESIS_STORE_ROOT", root.toString()));
+                "jenreg.store", "filesystem", "jenreg.filesystem.root", root.toString()));
 
         over(store).publish(new NodeFingerprint("node-a", System.currentTimeMillis(), System.currentTimeMillis(),
                 100, "", 1L, 0L, 0L, Map.of()));
@@ -275,7 +275,7 @@ class MultiNodeConsistencyTest {
         assertThat(new NodeDivergenceAdvisor().advise(config))
                 .as("two live nodes on different config generations surface a critical advisory")
                 .anySatisfy(advisory -> {
-                    assertThat(advisory.id()).isEqualTo("jenesis.consistency.config");
+                    assertThat(advisory.id()).isEqualTo("jenreg.consistency.config");
                     assertThat(advisory.severity()).isEqualTo(Severity.CRITICAL);
                 });
     }
@@ -295,7 +295,7 @@ class MultiNodeConsistencyTest {
         NodeConsistencyObservability fleet = new NodeConsistencyObservability(over(store));
         assertThat(fleet.healthChecks()).extracting(HealthCheck::status).containsExactly(Health.DEGRADED);
         assertThat(fleet.metrics()).extracting(Metric::name)
-                .contains("jenesis.consistency.nodes", "jenesis.consistency.diverged");
+                .contains("jenreg.consistency.nodes", "jenreg.consistency.diverged");
     }
 
     /** An {@link ArtifactStore} decorator that counts the reads a consistency check makes, so a test can prove the

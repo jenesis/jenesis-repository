@@ -27,12 +27,12 @@ import module java.base;
  *     rather than by a failing fetch. The deployment then serves local content only: no upstream is consulted and an
  *     import is refused. {@link #create} declines with an empty {@link Optional}; {@code null} is never a legal
  *     return from it, from {@link #name()} or from {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenesis.repository.fetcher=<name>}
+ * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenreg.fetcher=<name>}
  *     that no installed provider answers to, or whose provider declines, throws {@link IllegalStateException} at
  *     resolution naming the selection and the installed provider names - it does <em>not</em> resolve to
  *     {@link ProxyFormat.Fetcher#NONE}. An operator who named a transport and silently got none would see every
  *     proxy route answer 404 as if upstream held nothing. An explicit selection outranks the
- *     {@code jenesis.repository.<name>=false} toggle. Only an <em>unselected</em> deployment degrades to the
+ *     {@code jenreg.<name>=false} toggle. Only an <em>unselected</em> deployment degrades to the
  *     sentinel.</li>
  * <li><b>Streaming (&sect;1).</b> The fetcher is on the artifact download path: a proxied artifact must be streamed
  *     through to the caller and the store, never fully materialised. Only small index/metadata documents may be read
@@ -136,9 +136,9 @@ public interface FetcherProvider {
     }
 
     /** The single enabled fetcher discovered via {@link ServiceLoader}, resolved through the shared
-     *  {@link Providers#optionalUnique} policy: an explicit {@code jenesis.repository.fetcher=<name>} selects one by
+     *  {@link Providers#optionalUnique} policy: an explicit {@code jenreg.fetcher=<name>} selects one by
      *  name and a selection nothing answers to <em>throws</em> rather than degrading (&sect;9), a
-     *  {@code jenesis.repository.<name>=false} switches one off, more than one enabled fetcher is ambiguous rather
+     *  {@code jenreg.<name>=false} switches one off, more than one enabled fetcher is ambiguous rather
      *  than a discovery-order winner, and only an <em>unselected</em> deployment with no fetcher installed resolves to
      *  {@link ProxyFormat.Fetcher#NONE}. */
     static ProxyFormat.Fetcher resolve(UnaryOperator<String> config) {

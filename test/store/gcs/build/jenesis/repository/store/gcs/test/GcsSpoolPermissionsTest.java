@@ -45,11 +45,11 @@ public class GcsSpoolPermissionsTest {
         server.start();
         server.stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withHeader("ETag", "\"stub\"")));
         Map<String, String> values = Map.of(
-                "jenesis.repository.gcs.bucket", "repo",
-                "jenesis.repository.gcs.endpoint", "http://localhost:" + server.port(),
-                "jenesis.repository.gcs.allow-insecure-endpoint", "true",
-                "jenesis.repository.gcs.access-key-id", "hmac-access",
-                "jenesis.repository.gcs.secret-access-key", "hmac-secret");
+                "jenreg.gcs.bucket", "repo",
+                "jenreg.gcs.endpoint", "http://localhost:" + server.port(),
+                "jenreg.gcs.allow-insecure-endpoint", "true",
+                "jenreg.gcs.access-key-id", "hmac-access",
+                "jenreg.gcs.secret-access-key", "hmac-secret");
         store = ArtifactStoreProvider.resolve("gcs", values::get).scope("acme");
     }
 

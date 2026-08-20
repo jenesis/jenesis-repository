@@ -38,16 +38,16 @@ public final class NodeConsistency {
         return settings;
     }
 
-    /** The consistency-check tuning read from the {@code jenesis.consistency.*} settings, falling back to
+    /** The consistency-check tuning read from the {@code jenreg.consistency.*} settings, falling back to
      *  {@link ConsistencyReport.Settings#defaults()} for any key an operator leaves unset - the one place the dial
      *  names are resolved, shared by the publisher and the advisor so both run under the same window. */
     public static ConsistencyReport.Settings settingsFrom(UnaryOperator<String> config) {
         ConsistencyReport.Settings defaults = ConsistencyReport.Settings.defaults();
         return new ConsistencyReport.Settings(
-                millis(config, "jenesis.consistency.staleness-window", defaults.stalenessWindowMillis()),
-                millis(config, "jenesis.consistency.sweep-interval", defaults.sweepIntervalMillis()),
-                (int) millis(config, "jenesis.consistency.sweep-intervals", defaults.sweepIntervals()),
-                millis(config, "jenesis.consistency.dead-after", defaults.deadAfterMillis()));
+                millis(config, "jenreg.consistency.staleness-window", defaults.stalenessWindowMillis()),
+                millis(config, "jenreg.consistency.sweep-interval", defaults.sweepIntervalMillis()),
+                (int) millis(config, "jenreg.consistency.sweep-intervals", defaults.sweepIntervals()),
+                millis(config, "jenreg.consistency.dead-after", defaults.deadAfterMillis()));
     }
 
     private static long millis(UnaryOperator<String> config, String key, long fallback) {

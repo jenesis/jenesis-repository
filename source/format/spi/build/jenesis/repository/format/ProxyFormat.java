@@ -160,7 +160,7 @@ public interface ProxyFormat {
      * stream is lazy (an index page is only read as the stream advances) and each {@link Coordinate} pairs the
      * layout path the artifact occupies under this format - the path this format's
      * {@link RepositoryImporter} accepts - with the upstream URL its bytes download from, so a vendor-neutral
-     * migration walks any repository that speaks the format's own protocol, including another jenesis. The
+     * migration walks any repository that speaks the format's own protocol, including another jenreg. The
      * default returns an empty stream: a format whose ecosystem publishes no walkable index (Conan exposes only a
      * search API) simply cannot enumerate, and a caller treats "nothing enumerated" as that format's honest
      * answer. Failures reading the initial index throw; a failure while the stream advances surfaces as an

@@ -40,7 +40,7 @@ class OidcExchangeTest {
     @BeforeEach
     void setUp() throws Exception {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         authorization = Authorization.enforcing(store);
         exchange = new OidcExchange(authorization);
 

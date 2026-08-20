@@ -7,27 +7,27 @@ import module java.base;
  * base SPI module and reused verbatim by every distribution - a feature keeps the same key whether it ships in the
  * free image or a commercial one, and relocating a component between them never changes its configuration.
  *
- * <p>The convention, over the shared {@code jenesis.repository.*} namespace:
+ * <p>The convention, over the shared {@code jenreg.*} namespace:
  * <ul>
  * <li>A <em>parallel</em> SPI (many implementations active at once - formats, import sources, feeds, gate
- *     policies, maintenance tasks) toggles each implementation with {@code jenesis.repository.<feature>=true|false},
+ *     policies, maintenance tasks) toggles each implementation with {@code jenreg.<feature>=true|false},
  *     where {@code <feature>} is the provider's {@code name()}. Nothing set means <em>enabled</em>; only an explicit
  *     {@code false} disables. A disabled implementation is simply not activated at {@link ServiceLoader} discovery,
  *     so it degrades exactly like a missing module (its endpoint answers {@code 501} / not-found, the rest runs).</li>
  * <li>A <em>singleton</em> SPI (one active implementation - the store backend, the token exchange) selects its
- *     implementation with {@code jenesis.repository.<spi>=<feature>}; nothing set picks the most universally
+ *     implementation with {@code jenreg.<spi>=<feature>}; nothing set picks the most universally
  *     applicable default (the {@code filesystem} store) or, where the SPI is optional, the single enabled
  *     implementation. Resolution runs through the {@link Providers} primitives, so an explicitly selected
  *     implementation that is absent, switched off or unconfigured fails loudly (&sect;9) and two enabled
  *     implementations are ambiguous - discovery order never picks a winner.</li>
- * <li><em>One key, one meaning:</em> because both shapes live in the one {@code jenesis.repository.*} namespace, an
+ * <li><em>One key, one meaning:</em> because both shapes live in the one {@code jenreg.*} namespace, an
  *     implementation's {@code name()} may never be the name of an <em>SPI</em>. The two readings of such a key
  *     collide silently in the benign direction and destructively in the other: the walk implementation was called
- *     {@code store}, so its documented off-switch {@code jenesis.repository.store=false} was also the artifact
+ *     {@code store}, so its documented off-switch {@code jenreg.store=false} was also the artifact
  *     store's selection key, and using it selected a storage backend named {@code false} and refused to boot -
- *     while every deployment's ordinary {@code jenesis.repository.store=filesystem} was silently doubling as that
+ *     while every deployment's ordinary {@code jenreg.store=filesystem} was silently doubling as that
  *     walk's toggle (D-005). A build guard scans for the collision rather than trusting the convention.</li>
- * <li>An implementation's own settings live under {@code jenesis.<feature>.<property>=<value>} or its documented
+ * <li>An implementation's own settings live under {@code jenreg.<feature>.<property>=<value>} or its documented
  *     settings keys; they are never consulted here.</li>
  * <li><em>Required-config self-disable:</em> a provider declares the config keys it cannot run without (a
  *     credential, a bucket) through its {@code requiredConfig()}; a feature whose required keys are unset disables
@@ -36,7 +36,7 @@ import module java.base;
  *
  * <p>The lookup is installed once at boot by the application shell ({@link #configure(UnaryOperator)}, handed the
  * Spring {@code Environment} so relaxed binding makes every key settable as an environment variable -
- * {@code JENESIS_REPOSITORY_<FEATURE>=false} in a plain {@code docker run -e}). Outside a shell the default lookup
+ * {@code JENREG_<FEATURE>=false} in a plain {@code docker run -e}). Outside a shell the default lookup
  * reads system properties and then the environment under the same relaxed spelling, so a bare {@code ServiceLoader}
  * consumer honours the identical keys.
  */
@@ -44,8 +44,8 @@ public final class Features {
 
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(Features.class);
 
-    /** Namespace shared with the Spring property schema; a feature toggle is {@code jenesis.repository.<feature>}. */
-    private static final String NAMESPACE = "jenesis.repository.";
+    /** Namespace shared with the Spring property schema; a feature toggle is {@code jenreg.<feature>}. */
+    private static final String NAMESPACE = "jenreg.";
 
     private static final Set<String> ANNOUNCED = ConcurrentHashMap.newKeySet();
 
@@ -78,7 +78,7 @@ public final class Features {
      * image carrying every module runs everything until configured off.
      *
      * <p><b>The one rule of this API: a name is bare, and every key is prefixed here.</b> Callers pass
-     * {@code scheduled-scan}, never {@code jenesis.repository.scheduled-scan} - the namespace is applied by
+     * {@code scheduled-scan}, never {@code jenreg.scheduled-scan} - the namespace is applied by
      * {@link #settings()} (or {@link #namespaced(UnaryOperator)} over some other source), which is the only place it
      * is spelled. Which property source answers is {@link #configure}'s business: the shell installs the Spring
      * {@code Environment}, with the persistent settings layered into it, and a consumer module neither knows nor
@@ -93,7 +93,7 @@ public final class Features {
      *
      * <p>The same question as {@link #enabled(String)}, asked of a key space this class does not own: a maintenance
      * task's per-run settings context, a tenant's overrides, a test's map. The no-arg form above is exactly this one
-     * against the installed lookup with {@code jenesis.repository.} applied, which is the whole difference between
+     * against the installed lookup with {@code jenreg.} applied, which is the whole difference between
      * them and the reason both live here - the namespace is spelled once, in {@link #NAMESPACE}, rather than at
      * every caller that happens to read a toggle.
      */
@@ -101,7 +101,7 @@ public final class Features {
         return !"false".equalsIgnoreCase(config.apply(feature));
     }
 
-    /** The implementation name a singleton SPI is configured to ({@code jenesis.repository.<spi>=<feature>}), or
+    /** The implementation name a singleton SPI is configured to ({@code jenreg.<spi>=<feature>}), or
      *  empty when unset - the caller then applies its own most-universal default, or resolves the single enabled
      *  implementation through {@link Providers}. A <em>present</em> value is an explicit operator decision, so the
      *  resolution primitives fail rather than degrade when nothing answers to it (&sect;9). */
@@ -118,7 +118,7 @@ public final class Features {
 
     /** Whether the named feature is {@link #enabled} <em>and</em> all its required config keys are set. A feature
      *  that is enabled but missing a required key (a credential, a bucket) disables itself and logs one line -
-     *  naming the missing keys and the {@code jenesis.repository.<feature>=false} switch that silences it. */
+     *  naming the missing keys and the {@code jenreg.<feature>=false} switch that silences it. */
     public static boolean active(String feature, Collection<String> requiredConfig) {
         return active(settings(), feature, requiredConfig);
     }
@@ -143,7 +143,7 @@ public final class Features {
     /**
      * A bare-name view of a namespaced property source - {@code Features.namespaced(environment::getProperty)}.
      *
-     * <p><b>This is the one place {@code jenesis.repository.} is spelled.</b> Every seam that takes a config lookup
+     * <p><b>This is the one place {@code jenreg.} is spelled.</b> Every seam that takes a config lookup
      * in this product reads it with BARE names ({@code socket-token}, {@code scheduled-scan}, {@code read-only}) -
      * some hundred and thirty call sites do - while a deployment configures those under the shared namespace. The
      * adapter between the two used to be a lambda written out at each entry point, thirty-five times, which is a

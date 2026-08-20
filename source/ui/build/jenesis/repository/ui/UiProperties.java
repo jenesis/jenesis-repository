@@ -3,7 +3,7 @@ package build.jenesis.repository.ui;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Configuration for the console, bound from {@code jenesis.ui.*}. The artifact store is selected the same way the
+ * Configuration for the console, bound from {@code jenreg.ui.*}. The artifact store is selected the same way the
  * repository server selects it - a backend name resolved through {@code ArtifactStoreProvider}, reading its own
  * configuration (root / bucket / connection string) from the environment - so the console reads the very store the
  * server writes. Sign-in is optional: a GitHub OAuth client and a generic OpenID Connect provider (discovered from its
@@ -12,12 +12,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * empty no signed-in user is an admin (the secure default - the console denies writes until an admin is named), and
  * the single {@code *} wildcard makes every authenticated user an admin (the explicit open-console opt-out).
  *
- *   jenesis.ui.store             the artifact-store backend name (JENESIS_STORE), default filesystem
- *   jenesis.ui.admins            comma-separated provider-qualified admin ids, or * for everyone (JENESIS_UI_ADMINS)
- *   jenesis.ui.github.*          built-in GitHub OAuth client (JENESIS_UI_GITHUB_CLIENT_ID/SECRET)
- *   jenesis.ui.oidc.*            a generic OpenID Connect provider (JENESIS_UI_OIDC_ISSUER_URI/_CLIENT_ID/_CLIENT_SECRET/_NAME)
+ *   jenreg.ui.store             the artifact-store backend name (JENREG_STORE), default filesystem
+ *   jenreg.ui.admins            comma-separated provider-qualified admin ids, or * for everyone (JENREG_UI_ADMINS)
+ *   jenreg.ui.github.*          built-in GitHub OAuth client (JENREG_UI_GITHUB_CLIENT_ID/SECRET)
+ *   jenreg.ui.oidc.*            a generic OpenID Connect provider (JENREG_UI_OIDC_ISSUER_URI/_CLIENT_ID/_CLIENT_SECRET/_NAME)
  */
-@ConfigurationProperties(prefix = "jenesis.ui")
+@ConfigurationProperties(prefix = "jenreg.ui")
 public class UiProperties {
 
     private String store = "filesystem";

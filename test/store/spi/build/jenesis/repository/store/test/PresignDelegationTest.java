@@ -27,7 +27,7 @@ class PresignDelegationTest {
     @Test
     void the_spi_default_is_empty_so_a_filesystem_backend_streams_as_today() {
         ArtifactStore filesystem = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "JENESIS_STORE_ROOT".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         assertThat(filesystem.presign("blobs/x", TTL)).as("the filesystem backend cannot presign").isEmpty();
         assertThat(filesystem.scope("acme").presign("blobs/x", TTL)).as("a scoped view too").isEmpty();
     }

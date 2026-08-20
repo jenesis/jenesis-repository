@@ -54,7 +54,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     /** Requests shed with {@code 429} since startup, broken down by the bucket they metered against ({@code anonymous}
-     *  for a keyless request, else the tenant), so a metrics layer can tag {@code jenesis.ratelimit.rejected} by
+     *  for a keyless request, else the tenant), so a metrics layer can tag {@code jenreg.ratelimit.rejected} by
      *  tenant. A snapshot view; a tenant that has never been rate-limited is absent rather than zero. */
     public Map<String, Long> rejectedByTenant() {
         return rejectedByTenant.entrySet().stream()

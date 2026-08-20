@@ -31,10 +31,10 @@ class ObservabilityPanelTest {
     @Test
     void it_renders_each_signal_with_its_registration_description_grouped_by_kind() {
         ObservabilityReport report = new ObservabilityReport(
-                List.of(HealthCheck.of("jenesis.store.reachable", "Whether the artifact store answers",
+                List.of(HealthCheck.of("jenreg.store.reachable", "Whether the artifact store answers",
                         Health.DEGRADED, "slow backend")),
-                List.of(Metric.counter("jenesis.gateway.requests", "Requests served since boot", 42, "requests")),
-                List.of(TaskStatus.ran("jenesis.gc.sweep", "The blob reclamation sweep", TaskStatus.State.IDLE,
+                List.of(Metric.counter("jenreg.gateway.requests", "Requests served since boot", 42, "requests")),
+                List.of(TaskStatus.ran("jenreg.gc.sweep", "The blob reclamation sweep", TaskStatus.State.IDLE,
                         Instant.parse("2026-07-27T00:00:00Z"), Duration.ofSeconds(3), "reclaimed 5 blobs")));
 
         String body = ObservabilityPanel.renderReport(report);
@@ -43,20 +43,20 @@ class ObservabilityPanelTest {
         assertThat(body).as("the three signal kinds are grouped under headings")
                 .contains("<h4>Health</h4>").contains("<h4>Metrics</h4>").contains("<h4>Background tasks</h4>");
         assertThat(body).as("the health check shows its name, state and registration description")
-                .contains("jenesis.store.reachable").contains("DEGRADED")
+                .contains("jenreg.store.reachable").contains("DEGRADED")
                 .contains("Whether the artifact store answers").contains("slow backend");
         assertThat(body).as("the metric shows its current value, unit and registration description")
-                .contains("jenesis.gateway.requests").contains("42").contains("requests")
+                .contains("jenreg.gateway.requests").contains("42").contains("requests")
                 .contains("Requests served since boot");
         assertThat(body).as("the task shows its state, last-run and registration description")
-                .contains("jenesis.gc.sweep").contains("IDLE").contains("The blob reclamation sweep")
+                .contains("jenreg.gc.sweep").contains("IDLE").contains("The blob reclamation sweep")
                 .contains("reclaimed 5 blobs");
     }
 
     @Test
     void a_bounded_metric_shows_used_versus_available_as_a_plain_bar_no_graph() {
         ObservabilityReport report = new ObservabilityReport(List.of(),
-                List.of(Metric.bounded("jenesis.quota.bytes", "Storage used against the tenant quota",
+                List.of(Metric.bounded("jenreg.quota.bytes", "Storage used against the tenant quota",
                         750, 1000, "bytes")),
                 List.of());
 
@@ -80,7 +80,7 @@ class ObservabilityPanelTest {
     @Test
     void the_listing_is_searchable_by_name_and_description() {
         ObservabilityReport report = new ObservabilityReport(
-                List.of(HealthCheck.up("jenesis.store.reachable", "Whether the artifact store answers")),
+                List.of(HealthCheck.up("jenreg.store.reachable", "Whether the artifact store answers")),
                 List.of(), List.of());
 
         String body = ObservabilityPanel.renderReport(report);
@@ -89,6 +89,6 @@ class ObservabilityPanelTest {
                 .contains("type=\"search\"");
         assertThat(body).as("each item carries a data-search string of its name and description so the filter "
                         + "matches by what a signal does, not just its name")
-                .contains("data-search=\"jenesis.store.reachable Whether the artifact store answers");
+                .contains("data-search=\"jenreg.store.reachable Whether the artifact store answers");
     }
 }

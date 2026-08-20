@@ -3,7 +3,7 @@
  * requires; the rest of the Azure SDK closure resolves transitively through Maven and is pinned here. A
  * pure storage provider: it implements the {@code ArtifactStore} SPI and is discovered through
  * {@code provides}, so the server adds it to its module graph at deploy time and selects it with
- * {@code jenesis.repository.store=azure-blob}. The version token is the blob ETag, giving a true
+ * {@code jenreg.store=azure-blob}. The version token is the blob ETag, giving a true
  * cross-node compare-and-set on conditional writes (see {@code AzureArtifactStore}).
  *
  * @jenesis.release 25

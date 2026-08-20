@@ -35,12 +35,12 @@ import module java.base;
  * Publishes the repository as Spring Boot auto-configuration so a downstream distribution can consume it with a plain
  * {@code requires build.jenesis.repository.server} and extend it by overriding beans rather than forking the module.
  * Every bean is {@link ConditionalOnMissingBean conditional}: the storage backend (a name resolved through
- * {@code ArtifactStoreProvider}), the {@link Authorization} (enforcing when {@code jenesis.repository.auth} is set,
+ * {@code ArtifactStoreProvider}), the {@link Authorization} (enforcing when {@code jenreg.auth} is set,
  * otherwise anonymous), the {@link RepositoryFormat} plugins discovered with {@link ServiceLoader}, the pull-through
- * {@code upstreams} (format name to upstream URI, from {@code jenesis.repository.proxy.*}) and upstream
+ * {@code upstreams} (format name to upstream URI, from {@code jenreg.proxy.*}) and upstream
  * {@link ProxyFormat.Fetcher}, the framework-neutral {@link FormatDispatcher}, the {@link RepositoryRouting} (the
  * {@link FixedTenantRouting} default, resolving every request to the configured
- * {@code jenesis.repository.tenant}/{@code jenesis.repository.repository} artifact space), the {@link Tenants}
+ * {@code jenreg.tenant}/{@code jenreg.repository} artifact space), the {@link Tenants}
  * directory (resolved through {@code TenantsProvider}; the fixed single tenant unless a tenants module is
  * discovered), and the {@link RepositoryController} itself. Because an auto-configuration is applied after
  * user configuration, a bean an embedder contributes - an audited or replicating {@link ArtifactStore} decorator, a
@@ -55,7 +55,7 @@ public class RepositoryAutoConfiguration {
 
     public RepositoryAutoConfiguration(Environment environment) {
         // Hand the Spring Environment to the config-driven SPI enable/disable convention before any bean below
-        // discovers providers, so every jenesis.repository.* toggle - including its JENESIS_REPOSITORY_* environment
+        // discovers providers, so every jenreg.* toggle - including its JENREG_* environment
         // spelling through relaxed binding - gates ServiceLoader discovery deployment-wide.
         Features.configure(environment::getProperty);
         logSecurityPosture(environment);
@@ -94,7 +94,7 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public Authorization authorization(RepositoryProperties properties, ArtifactStore store) {
         // Secure-defaults principle: an insecure configuration must be loud, not silent. The auth=false open-deployment
-        // WARN is no longer an ad-hoc line here; it is the jenesis.auth.open security-posture advisory
+        // WARN is no longer an ad-hoc line here; it is the jenreg.auth.open security-posture advisory
         // (SecurityPosture), logged once at boot by logSecurityPosture(...) and surfaced on the console and
         // GET /api/posture - one source of truth, no divergent second list.
         String anonymousRights = properties.getAnonymousRights().strip();
@@ -103,28 +103,28 @@ public class RepositoryAutoConfiguration {
             // instance is ALREADY fully open, so a configured anonymous-rights is redundant and ignored - warn so the
             // operator is not misled into thinking it is narrowing an open deployment.
             if (!anonymousRights.isEmpty()) {
-                LOGGER.warn("SECURITY: jenesis.repository.anonymous-rights is set but jenesis.repository.auth=false, so "
+                LOGGER.warn("SECURITY: jenreg.anonymous-rights is set but jenreg.auth=false, so "
                         + "the deployment is ALREADY fully open (every request is served anonymously) and the "
-                        + "anonymous-rights grant is redundant and ignored. Set jenesis.repository.auth=true to make it "
+                        + "anonymous-rights grant is redundant and ignored. Set jenreg.auth=true to make it "
                         + "meaningful: keys are then required and a keyless caller is limited to exactly this grant.");
             }
             return Authorization.anonymous();
         }
         // WANON.1 guardrail 2: a loud startup WARN naming exactly what a keyless caller may do, escalated for
         // write/admin. This names the exact grant (the posture surface names the risk, never the value); the
-        // jenesis.anonymous.* security-posture advisories carry the governance escalation onto the console and
+        // jenreg.anonymous.* security-posture advisories carry the governance escalation onto the console and
         // GET /api/posture. Default (empty) => no anonymous access and no warning, byte-for-byte today's behaviour.
         if (!anonymousRights.isEmpty()) {
             if (Authorization.grantsWriteOrAdmin(anonymousRights)) {
                 LOGGER.warn("SECURITY: anonymous access ENABLED with WRITE/ADMIN rights: {}. A keyless caller may "
                         + "mutate or administer artifacts with NO credential (a public drop-box / open admin) - the "
                         + "loudest anonymous combination. This is an explicit opt-in; unset "
-                        + "jenesis.repository.anonymous-rights to require a key for every request.", anonymousRights);
+                        + "jenreg.anonymous-rights to require a key for every request.", anonymousRights);
             } else {
                 LOGGER.warn("SECURITY: anonymous access ENABLED: {}. A keyless caller is granted these rights with no "
-                        + "credential (the public-mirror pattern - pair with jenesis.repository.read-only=true for a "
+                        + "credential (the public-mirror pattern - pair with jenreg.read-only=true for a "
                         + "browsable-but-immutable mirror). This is an explicit opt-in; unset "
-                        + "jenesis.repository.anonymous-rights to require a key for every request.", anonymousRights);
+                        + "jenreg.anonymous-rights to require a key for every request.", anonymousRights);
             }
         }
         return Authorization.enforcing(store).withAnonymousRights(anonymousRights);
@@ -142,7 +142,7 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean(name = "formats")
     public List<RepositoryFormat> formats() {
         // A parallel SPI: every discovered format is active unless configured off by name
-        // (jenesis.repository.<format>=false), so the one image carries every format and a deployment trims by config.
+        // (jenreg.<format>=false), so the one image carries every format and a deployment trims by config.
         List<RepositoryFormat> formats = new ArrayList<>();
         ServiceLoader.load(RepositoryFormat.class).forEach(format -> {
             if (Features.active(format.name(), format.requiredConfig())) {
@@ -175,7 +175,7 @@ public class RepositoryAutoConfiguration {
                 // authorization bean takes for anonymous mode. A non-HTTPS upstream is proxied verbatim (a build tool
                 // pulls its dependencies through it), so a MITM on that hop can inject or tamper with artifacts. Warn
                 // loudly at boot rather than refuse: a plaintext internal mirror is a legitimate explicit choice and
-                // refusing would break the documented `jenesis.repository.proxy.<format>=<url>` config shape. Point the
+                // refusing would break the documented `jenreg.proxy.<format>=<url>` config shape. Point the
                 // upstream at an https:// URL to remove this warning.
                 LOGGER.warn("SECURITY: the '{}' proxy upstream {} is NOT HTTPS - artifacts are pulled through over a "
                         + "plaintext/untrusted transport and can be tampered with in transit. This is an explicit "
@@ -216,7 +216,7 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public LoggingObservationHandler loggingObservationHandler() {
         // The one logging pillar of the Observation API, registered once beside the Observations wrapper so every
-        // jenesis.* operation logs from a single handler. Boot attaches it to the auto-configured ObservationRegistry.
+        // jenreg.* operation logs from a single handler. Boot attaches it to the auto-configured ObservationRegistry.
         return new LoggingObservationHandler();
     }
 
@@ -270,7 +270,7 @@ public class RepositoryAutoConfiguration {
     }
 
     /** The recent-logs ring (WO.4): a bounded in-memory store of the most recent entries, sized from
-     *  {@code jenesis.repository.logs-buffer} at startup - the bound behind {@code GET /api/logs}. */
+     *  {@code jenreg.logs-buffer} at startup - the bound behind {@code GET /api/logs}. */
     @Bean
     @ConditionalOnMissingBean
     public LogRingBuffer logRingBuffer(RepositoryProperties properties) {
@@ -309,7 +309,7 @@ public class RepositoryAutoConfiguration {
     }
 
     /** The multi-node consistency check (WCON.2): the fingerprint compare over the shared store, tuned from the
-     *  {@code jenesis.consistency.*} settings. Reads only the {@code consistency/nodes/} prefix, never a scan. */
+     *  {@code jenreg.consistency.*} settings. Reads only the {@code consistency/nodes/} prefix, never a scan. */
     @Bean
     @ConditionalOnMissingBean
     public NodeConsistency nodeConsistency(ArtifactStore store, Environment environment) {
@@ -356,7 +356,7 @@ public class RepositoryAutoConfiguration {
                                                      RoutedServing routed,
                                                      Environment environment) {
         // A format reads a runtime toggle off the exchange (the Maven metadata computation opt-in); resolve the bare
-        // setting key against the environment under the shared jenesis.repository.* prefix, into which a stored
+        // setting key against the environment under the shared jenreg.* prefix, into which a stored
         // setting is layered at boot, so the format needs no settings dependency. The un-scoped store is handed in so
         // the /api/assets enumeration can scope to an explicitly named repo within the request's tenant. The routed
         // serving seam (NONE here, a router in a multi-repository distribution) drives a read of a proxy/group repo.
@@ -388,7 +388,7 @@ public class RepositoryAutoConfiguration {
     /**
      * Matches when <em>no</em> {@link ImportEdgeProvider} is installed, so the free {@link ImportEdgeController} is
      * registered only while a richer distribution has not claimed the import edge (WFE.1). Installs the shared
-     * {@link Features} lookup against the effective {@link Environment} first, so the same {@code jenesis.repository.*}
+     * {@link Features} lookup against the effective {@link Environment} first, so the same {@code jenreg.*}
      * enable/disable toggles gate the provider discovery here as everywhere else (and a provider missing its required
      * config is inert - the free edge is then served).
      */

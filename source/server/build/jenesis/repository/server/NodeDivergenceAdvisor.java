@@ -32,7 +32,7 @@ public final class NodeDivergenceAdvisor implements SafetyAdvisor {
     public List<SecurityAdvisory> advise(Configuration config) {
         ConsistencyReport report;
         try {
-            String backend = config.optional("jenesis.repository.store").orElse("filesystem");
+            String backend = config.optional("jenreg.store").orElse("filesystem");
             ArtifactStore store = ArtifactStoreProvider.resolve(backend, config::value);
             NodeConsistency check = new NodeConsistency(store, NodeConsistency.settingsFrom(config::value));
             report = check.report(System.currentTimeMillis());
@@ -56,31 +56,31 @@ public final class NodeDivergenceAdvisor implements SafetyAdvisor {
      *  config or pointer split is a CRITICAL - the fleet disagrees on what must be identical. */
     public static SecurityAdvisory advisory(NodeDivergence divergence) {
         return switch (divergence.kind()) {
-            case STUCK_CURSOR -> SecurityAdvisory.deployment("jenesis.consistency.stuck", Severity.WARN,
+            case STUCK_CURSOR -> SecurityAdvisory.deployment("jenreg.consistency.stuck", Severity.WARN,
                     "Node " + divergence.nodeId() + " is stuck behind the fleet",
                     "Node " + divergence.nodeId() + " " + divergence.detail() + ". It is alive (still heartbeating) but "
                             + "its derived-index cursor has not advanced past the configured sweep-interval budget, so "
                             + "it is serving a stale view rather than merely lagging.",
                     "Check that node's index-sweep lease and worker: a wedged sweep or a lost lease keeps it from "
-                            + "converging. Widen jenesis.consistency.sweep-intervals only if the fleet legitimately "
+                            + "converging. Widen jenreg.consistency.sweep-intervals only if the fleet legitimately "
                             + "needs longer to catch up.",
-                    "jenesis.consistency.sweep-intervals", "3", DOCS + "#jenesis.consistency.stuck");
-            case CONFIG_MISMATCH -> SecurityAdvisory.deployment("jenesis.consistency.config", Severity.CRITICAL,
+                    "jenreg.consistency.sweep-intervals", "3", DOCS + "#jenreg.consistency.stuck");
+            case CONFIG_MISMATCH -> SecurityAdvisory.deployment("jenreg.consistency.config", Severity.CRITICAL,
                     "Node " + divergence.nodeId() + " disagrees on the deployment config",
                     "Node " + divergence.nodeId() + " " + divergence.detail() + ". Config must be identical on every "
                             + "node; a live node on a different generation missed a config change or is split from the "
                             + "others, so it enforces different settings than the fleet.",
                     "Reconcile this node's configuration with the fleet and confirm it reloaded - restart it if it did "
                             + "not pick up the change. A persistent split points at a lost lease or a partitioned store.",
-                    "", "", DOCS + "#jenesis.consistency.config");
-            case POINTER_MISMATCH -> SecurityAdvisory.deployment("jenesis.consistency.pointer", Severity.CRITICAL,
+                    "", "", DOCS + "#jenreg.consistency.config");
+            case POINTER_MISMATCH -> SecurityAdvisory.deployment("jenreg.consistency.pointer", Severity.CRITICAL,
                     "Node " + divergence.nodeId() + " resolves a pointer differently",
                     "Node " + divergence.nodeId() + " " + divergence.detail() + ". Two live nodes resolving the same "
                             + "pointer to different content is a split-brain resolution - a client gets different bytes "
                             + "depending on which node answers.",
                     "Investigate this node's derived-index snapshot and cache: force a re-sweep or restart it so it "
                             + "reconverges on the shared store's authoritative resolution.",
-                    "", "", DOCS + "#jenesis.consistency.pointer");
+                    "", "", DOCS + "#jenreg.consistency.pointer");
         };
     }
 }

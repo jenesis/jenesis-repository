@@ -4,7 +4,7 @@
  * native {@code google-cloud-storage} client's dependency graph carries jars without a stable module
  * name, so it cannot be adopted under this build's module resolver). A pure storage provider: it
  * implements the {@code ArtifactStore} SPI and is discovered through {@code provides}, so the server
- * adds it to its module graph at deploy time and selects it with {@code jenesis.repository.store=gcs},
+ * adds it to its module graph at deploy time and selects it with {@code jenreg.store=gcs},
  * with no compile-time dependency from the server. Unlike the {@code s3} backend, the version token is
  * the object <em>generation</em> ({@code x-goog-generation}), because GCS honours {@code If-Match} /
  * {@code If-None-Match} only on reads - conditional writes go through GCS's own

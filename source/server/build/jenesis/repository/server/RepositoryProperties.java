@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import module java.base;
 
 /**
- * The configuration of the Spring repository server, bound from {@code jenesis.repository.*}: the artifact-store
+ * The configuration of the Spring repository server, bound from {@code jenreg.*}: the artifact-store
  * backend name ({@code filesystem} by default, chosen through {@code ArtifactStoreProvider}), the fixed
  * {@link #getTenant() tenant} / {@link #getRepository() repository} artifact space every request resolves to
  * (each {@code default} by default, the {@link FixedTenantRouting} specialization of the shared
@@ -14,10 +14,10 @@ import module java.base;
  * gated by the {@link Authorization} credential model (enforced by default, the secure default; anonymous is an
  * explicit opt-out), an
  * optional repository-wide storage {@link #getQuota() quota}, and the pull-through {@link #getProxy() proxy}
- * upstreams keyed by format name ({@code jenesis.repository.proxy.<format>}), so a format that is a
+ * upstreams keyed by format name ({@code jenreg.proxy.<format>}), so a format that is a
  * {@link build.jenesis.repository.format.ProxyFormat} serves a local miss from the upstream.
  */
-@ConfigurationProperties(prefix = "jenesis.repository")
+@ConfigurationProperties(prefix = "jenreg")
 public class RepositoryProperties {
 
     private String store = "filesystem";
@@ -28,7 +28,7 @@ public class RepositoryProperties {
 
     /** Enforce per-credential authorization. On by default - the secure default: a fresh deployment authorizes every
      *  request against a per-credential key. Anonymous/open mode is an <em>explicit opt-out</em>: an operator sets
-     *  {@code jenesis.repository.auth=false} (env {@code JENESIS_REPOSITORY_AUTH=false}), and the server logs a loud
+     *  {@code jenreg.auth=false} (env {@code JENREG_AUTH=false}), and the server logs a loud
      *  boot warning that it is running open so the choice is never silent. */
     private boolean auth = true;
 
@@ -40,8 +40,8 @@ public class RepositoryProperties {
      *  repository, and a {@code <repository>=<token>} entry scopes a token to one named repository - the same
      *  {@code <scope>/<surface>:<verb>} vocabulary a minted credential carries, so there is no new right vocabulary.
      *  Only meaningful under {@code auth=true}; a non-empty value under {@code auth=false} is redundant (already fully
-     *  open) and warns. The env spelling is {@code JENESIS_REPOSITORY_ANONYMOUS_RIGHTS}. Paired with
-     *  {@code jenesis.repository.read-only=true} and {@code anonymous-rights=repository:read} this is the public-mirror
+     *  open) and warns. The env spelling is {@code JENREG_ANONYMOUS_RIGHTS}. Paired with
+     *  {@code jenreg.read-only=true} and {@code anonymous-rights=repository:read} this is the public-mirror
      *  pattern (WRO.1): reads served anonymously while writes/admin stay key-gated and the store write-gate refuses
      *  internal writes. */
     private String anonymousRights = "";
@@ -214,7 +214,7 @@ public class RepositoryProperties {
      *  every mutating admin action, plus internal writes (write-through proxy caching, import replay, a background
      *  sweep) - is refused at the {@link build.jenesis.repository.store.ReadOnlyArtifactStore} store choke point, while
      *  browse, download, search and all read APIs work normally. Off by default; a demo or a public read-only mirror
-     *  turns it on. The env spelling is {@code JENESIS_REPOSITORY_READ_ONLY}. */
+     *  turns it on. The env spelling is {@code JENREG_READ_ONLY}. */
     public boolean isReadOnly() {
         return readOnly;
     }

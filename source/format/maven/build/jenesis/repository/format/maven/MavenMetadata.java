@@ -36,7 +36,7 @@ public final class MavenMetadata {
     // factory is safe to share for creating writers once configured (only the per-render writer is not shared).
     private static final XMLOutputFactory XML_OUTPUT = XMLOutputFactory.newInstance();
 
-    /** The bare setting key (under {@code jenesis.repository.}) that opts a deployment into computing the served
+    /** The bare setting key (under {@code jenreg.}) that opts a deployment into computing the served
      *  artifact-level {@code maven-metadata.xml} rather than serving the stored bytes verbatim - default off, read
      *  off the exchange so the free format needs no settings dependency. */
     public static final String COMPUTE_SETTING = "maven-metadata-compute";

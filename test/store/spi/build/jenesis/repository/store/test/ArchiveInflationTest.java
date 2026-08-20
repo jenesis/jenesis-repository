@@ -119,7 +119,7 @@ class ArchiveInflationTest {
     void the_key_is_spelled_the_same_at_its_constant_and_at_its_read_site() {
         // ArchiveInflation reads the key as a literal so ConfigPrincipleTest's read scan sees it; this pins the
         // literal and the exported constant equal so the two cannot drift apart.
-        assertThat(ArchiveInflation.LARGEST_ENTRY_KEY).isEqualTo("jenesis.archive.largest-entry");
+        assertThat(ArchiveInflation.LARGEST_ENTRY_KEY).isEqualTo("jenreg.archive.largest-entry");
     }
 
     @Test

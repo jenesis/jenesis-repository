@@ -13,7 +13,7 @@ import org.springframework.context.ConfigurableApplicationContext;
  * an open shell: sections are contributed as {@link Panel} plugins discovered with {@code ServiceLoader} and bridged
  * into Spring by {@link UiConfig}, and login mechanisms are contributed as {@link LoginContributor} beans, so neither
  * requires a fork of the console. The console is store-agnostic - it reads whatever {@code ArtifactStore} backend is on
- * the module path (filesystem, S3, Azure), selected by {@code jenesis.ui.store} - so a deployment or a test supplies
+ * the module path (filesystem, S3, Azure), selected by {@code jenreg.ui.store} - so a deployment or a test supplies
  * the backend, the shell names none.
  */
 @SpringBootApplication

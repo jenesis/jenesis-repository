@@ -19,10 +19,10 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * flood of still-live misses would otherwise push it past the bound, so the map can never exceed its cap.
  *
  * <p>It is its own {@link ObservabilitySource}: the live fetcher the distribution holds reports {@code
- * jenesis.proxy.negativecache.entries} - the upstream misses currently remembered, as a <em>bounded</em> gauge
+ * jenreg.proxy.negativecache.entries} - the upstream misses currently remembered, as a <em>bounded</em> gauge
  * against the map bound past which a fresh miss triggers an eviction sweep, so the overview shows <em>data used vs
  * available</em> and how close the cache is to that bound (the same memory-exhaustion vector a shared bucket would
- * cap) without pre-computing a percentage - plus a {@code jenesis.proxy.negativecache} health check that the cache
+ * cap) without pre-computing a percentage - plus a {@code jenreg.proxy.negativecache} health check that the cache
  * is installed and remembering misses. There is no background task (expired entries are swept lazily on the record
  * path), so {@link #taskStatuses()} stays empty.
  */
@@ -87,7 +87,7 @@ public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, Observ
 
     @Override
     public List<Metric> metrics() {
-        return List.of(Metric.bounded("jenesis.proxy.negativecache.entries",
+        return List.of(Metric.bounded("jenreg.proxy.negativecache.entries",
                 "Upstream 404s currently remembered, so a build tool's re-probes for a missing artifact are answered "
                         + "from memory rather than re-hitting the upstream, against the bounded map size past which a "
                         + "fresh miss first sweeps expired entries - a used-vs-available signal on the very "
@@ -97,7 +97,7 @@ public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, Observ
 
     @Override
     public List<HealthCheck> healthChecks() {
-        return List.of(HealthCheck.up("jenesis.proxy.negativecache",
+        return List.of(HealthCheck.up("jenreg.proxy.negativecache",
                 "The negative cache is installed and remembering upstream misses so repeated probes are answered "
                         + "from memory."));
     }

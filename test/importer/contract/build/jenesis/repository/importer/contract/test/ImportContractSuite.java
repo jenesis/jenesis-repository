@@ -38,6 +38,6 @@ abstract class ImportContractSuite {
     private ArtifactStore store(String name) throws IOException {
         Path directory = Files.createDirectories(root.resolve(name.replaceAll("[^A-Za-z0-9]", "_")));
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "JENESIS_STORE_ROOT".equals(key) ? directory.toString() : null);
+                key -> "jenreg.filesystem.root".equals(key) ? directory.toString() : null);
     }
 }

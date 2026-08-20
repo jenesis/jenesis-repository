@@ -139,7 +139,7 @@ class ContributionsTest {
 
     @Test
     void a_failure_row_is_keyed_by_a_grammar_safe_segment_derived_from_the_contributor_class() {
-        // The three surfaces file failure rows under jenesis.<feature>.unavailable.<segment>, whose grammar is
+        // The three surfaces file failure rows under jenreg.<feature>.unavailable.<segment>, whose grammar is
         // [a-z][a-z0-9]* - so the segment must survive class names with digits, dollars and mixed case.
         assertThat(Contributions.segment(new ThrowingSource())).isEqualTo("throwingsource");
         assertThat(Contributions.segment(new Object())).isEqualTo("object");
