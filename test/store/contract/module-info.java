@@ -8,7 +8,7 @@
  * backend runs all of it through a {@link build.jenesis.repository.store.testkit.StoreFixture}: the filesystem inline
  * on a temporary directory, {@code s3} and {@code gcs} against one MinIO container (the GCS backend speaks the
  * S3-compatible XML surface), {@code azure-blob} against Azurite. The containerised fixtures self-skip without a
- * Docker daemon and <em>fail</em> under the strict lane's {@code -Djenesis.test.required}, where the environment is
+ * Docker daemon and <em>fail</em> under the strict lane's {@code -Djenreg.test.required}, where the environment is
  * declared complete and a skip would be a broken lane reported as green.
  *
  * <p>This module deliberately requires all four backend implementations and reaches them only through

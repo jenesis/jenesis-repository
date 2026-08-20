@@ -113,7 +113,7 @@ jobs:
         shell: bash
         run: |
           # A full-suite run selects the `ci` profile: its process-override properties inject
-          # -Djenesis.test.required into the forked test JVMs, so a tool/network-gated test FAILS
+          # -Djenreg.test.required into the forked test JVMs, so a tool/network-gated test FAILS
           # instead of self-skipping (the runner's docker CLI is all that is needed - every other
           # client and service is a container the tests start). A pull request's partial run stays
           # lenient - its excluded suites make an unreachable dependency expected.
