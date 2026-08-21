@@ -1,9 +1,7 @@
 /**
  * End-to-end test of the dual-layout repository. It boots the real {@link build.jenesis.repository.server.RepositoryApplication}
- * on an ephemeral port over a temporary filesystem store, publishes artifacts over HTTP, then resolves them back
- * through the actual Jenesis build-side repository clients - {@code JenesisModuleRepository} for the module layout
- * and {@code MavenDefaultRepository} for the Maven layout - so the very resolution code a build runs proves the
- * bridge works both ways: a Maven library that carries a module name is consumable by module name, and a module is
+ * on an ephemeral port over a temporary filesystem store, publishes artifacts over HTTP, and resolves them back
+ * under both layouts - a Maven library that carries a module name is consumable by module name, and a module is
  * consumable by its Maven coordinate, off one content-addressed blob. The {@code jdk.httpserver} requirement backs
  * the in-test fake Nexus and Artifactory upstreams the import tests drive, not the repository server itself.
  *
@@ -13,8 +11,6 @@
  * @jenesis.alias wiremock.jetty org.wiremock/wiremock-jetty
  * @jenesis.alias wiremock.httpclient org.wiremock/wiremock-httpclient-apache5
  * @jenesis.attach org.mockito
- * @jenesis.pin build.jenesis 0.8.1
- * @jenesis.pin build.jenesis/build.jenesis 0.8.1 SHA-256/b824ecde8b7337fe2ef42194f8a8a98f2eab942313a198db9a369df0f99f18c0
  * @jenesis.pin ch.qos.logback.classic 1.6.1
  * @jenesis.pin ch.qos.logback.core 1.6.1
  * @jenesis.pin ch.qos.logback/logback-classic 1.6.1 SHA-256/be8970a67c145e610071817622212b50ee531f2ee8649d70a704e8549b958bbd
@@ -239,7 +235,6 @@ open module build.jenesis.repository.test {
     requires build.jenesis.repository.importer.jenesis;
     requires build.jenesis.repository.importer.maven;
     requires build.jenesis.repository.importer.index;
-    requires build.jenesis;
     requires build.jenesis.repository.posture;
     requires build.jenesis.repository.observation;
     requires tools.jackson.databind;
