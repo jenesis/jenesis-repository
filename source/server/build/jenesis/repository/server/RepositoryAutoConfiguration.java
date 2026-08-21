@@ -170,6 +170,22 @@ public class RepositoryAutoConfiguration {
                 + "as it is set.", tenant);
     }
 
+    /** The default credential context: tenant from the key, no auditing. A distribution publishes its own. */
+    @Bean
+    @ConditionalOnMissingBean
+    public CredentialContext credentialContext() {
+        return CredentialContext.basic();
+    }
+
+    /** The one credential surface. A distribution varies it through {@link CredentialContext}, never by
+     *  re-declaring the routes: two implementations of "issue a credential" would drift, in an authorization
+     *  surface. */
+    @Bean
+    @ConditionalOnMissingBean
+    public CredentialsController credentialsController(Authorization authorization, CredentialContext context) {
+        return new CredentialsController(authorization, context);
+    }
+
     @Bean
     @ConditionalOnMissingBean
     public RateLimiter rateLimiter() {
