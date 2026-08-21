@@ -22,7 +22,7 @@ public class KeyAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String key = request.getHeader("Jenesis-Repository-Key");
+        String key = PresentedKey.from(request);
         if (key != null && !key.isBlank()) {
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                     key, null, Collections.emptyList());

@@ -68,7 +68,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
-        String presented = request.getHeader("Jenesis-Repository-Key");
+        String presented = PresentedKey.from(request);
         String tenant = Authorization.wellFormed(presented) ? Authorization.tenantOf(presented) : null;
         String bucket = buckets.bucket(tenant);
         // A tenant that overflowed the cap meters against the shared bucket on the default ceiling - never its own

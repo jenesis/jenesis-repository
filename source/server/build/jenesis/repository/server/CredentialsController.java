@@ -2,6 +2,7 @@ package build.jenesis.repository.server;
 
 import build.jenesis.repository.server.spi.Authorization;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,7 +10,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,14 +29,12 @@ import module java.base;
  *
  * <p>Every route is under {@code /api/} and is therefore gated by {@code manage:read} (the GET) or
  * {@code manage:write} (the mutations) at scope {@code *} by the security chain before it is reached; nothing here
- * re-decides authorization. A minted secret is returned <em>once</em> and never again: only its hash is stored, so
+ * re-decides authorization. The managing key is read the way the chain reads it ({@link PresentedKey}), so a caller
+ * may present it in the native header or as a bearer token. A minted secret is returned <em>once</em> and never again: only its hash is stored, so
  * a lost key is re-issued rather than recovered.
  */
 @RestController
 public final class CredentialsController {
-
-    /** The header a caller presents its managing key in - the same one the security chain authorizes against. */
-    private static final String KEY = "Jenesis-Repository-Key";
 
     /** A credential id is the key's hash - 64 hex characters - and nothing else may be used to address one. */
     private static final Pattern HASH = Pattern.compile("[0-9a-f]{64}");
@@ -52,8 +50,9 @@ public final class CredentialsController {
     /** Every credential of the managing key's tenant, secrets excluded - they are not stored to begin with. */
     @GetMapping("/api/credentials")
     @ResponseBody
-    public List<CredentialView> credentials(@RequestHeader(value = KEY, required = false) String key)
+    public List<CredentialView> credentials(HttpServletRequest http)
             throws IOException {
+        String key = PresentedKey.from(http);
         String tenant = context.tenant(key);
         List<CredentialView> views = new ArrayList<>();
         for (String hash : authorization.credentials(tenant)) {
@@ -72,9 +71,10 @@ public final class CredentialsController {
      */
     @PostMapping("/api/credentials")
     @ResponseBody
-    public Minted mint(@RequestHeader(value = KEY, required = false) String key,
+    public Minted mint(HttpServletRequest http,
                        @RequestBody(required = false) MintRequest request,
                        HttpServletResponse response) throws IOException {
+        String key = PresentedKey.from(http);
         String tenant = context.tenant(key);
         String minted = Authorization.mint(tenant);
         String hash = Authorization.hash(minted);
@@ -90,9 +90,10 @@ public final class CredentialsController {
     /** Grant a credential rights at a scope: a repository name, or {@code *} for every repository of the tenant. */
     @PostMapping("/api/credentials/{id}/grants")
     public void setGrant(@PathVariable("id") String id,
-                         @RequestHeader(value = KEY, required = false) String key,
+                         HttpServletRequest http,
                          @RequestBody GrantRequest request,
                          HttpServletResponse response) throws IOException {
+        String key = PresentedKey.from(http);
         authorization.setGrant(context.tenant(key), hashId(id), request.scope(), String.join(",", request.tokens()));
         context.audit(key, "grant.set", id + " " + request.scope());
         response.setStatus(200);
@@ -100,8 +101,9 @@ public final class CredentialsController {
 
     @DeleteMapping("/api/credentials/{id}/grants/{scope}")
     public void removeGrant(@PathVariable("id") String id, @PathVariable("scope") String scope,
-                            @RequestHeader(value = KEY, required = false) String key,
+                            HttpServletRequest http,
                             HttpServletResponse response) throws IOException {
+        String key = PresentedKey.from(http);
         authorization.removeGrant(context.tenant(key), hashId(id), scope);
         context.audit(key, "grant.remove", id + " " + scope);
         response.setStatus(200);
@@ -109,9 +111,10 @@ public final class CredentialsController {
 
     @PutMapping("/api/credentials/{id}/expiry")
     public void setExpiry(@PathVariable("id") String id,
-                          @RequestHeader(value = KEY, required = false) String key,
+                          HttpServletRequest http,
                           @RequestBody(required = false) ExpiryRequest request,
                           HttpServletResponse response) throws IOException {
+        String key = PresentedKey.from(http);
         authorization.setExpiry(context.tenant(key), hashId(id), request == null ? null : expiry(request.expires()));
         context.audit(key, "credential.expiry", id);
         response.setStatus(200);
@@ -119,8 +122,9 @@ public final class CredentialsController {
 
     @DeleteMapping("/api/credentials/{id}")
     public void revoke(@PathVariable("id") String id,
-                       @RequestHeader(value = KEY, required = false) String key,
+                       HttpServletRequest http,
                        HttpServletResponse response) throws IOException {
+        String key = PresentedKey.from(http);
         authorization.revoke(context.tenant(key), hashId(id));
         context.audit(key, "credential.revoke", id);
         response.setStatus(200);
@@ -133,9 +137,10 @@ public final class CredentialsController {
     @PostMapping("/api/credentials/{id}/rotate")
     @ResponseBody
     public Minted rotate(@PathVariable("id") String id,
-                         @RequestHeader(value = KEY, required = false) String key,
+                         HttpServletRequest http,
                          @RequestBody(required = false) RotateRequest request,
                          HttpServletResponse response) throws IOException {
+        String key = PresentedKey.from(http);
         Authorization.Rotated rotated = authorization.rotate(context.tenant(key), hashId(id),
                 request == null ? null : overlap(request.overlap()));
         context.audit(key, "credential.rotate", id + " -> " + Authorization.hash(rotated.key()));
@@ -150,9 +155,10 @@ public final class CredentialsController {
      */
     @PutMapping("/api/credentials/{id}/allowed-ips")
     public void setAllowedAddresses(@PathVariable("id") String id,
-                                    @RequestHeader(value = KEY, required = false) String key,
+                                    HttpServletRequest http,
                                     @RequestBody(required = false) AllowedAddressesRequest request,
                                     HttpServletResponse response) throws IOException {
+        String key = PresentedKey.from(http);
         authorization.setAllowedAddresses(context.tenant(key), hashId(id),
                 request == null ? null : request.addresses());
         context.audit(key, "credential.allowed-ips", id);

@@ -102,7 +102,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
                 || (("GET".equals(method) || "HEAD".equals(method)) && "/api/posture".equals(uri))) {
             scope = "*";
         }
-        String key = request.getHeader("Jenesis-Repository-Key");
+        String key = PresentedKey.from(request);
         boolean keyless = key == null || key.isBlank();
         // Reuse the router's own resolution of the in-repository path (the request URI with the /repository prefix
         // stripped, exactly as the format dispatcher matches on) rather than re-deriving it here, so a path-scoped
