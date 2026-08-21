@@ -181,6 +181,27 @@ class OidcExchangeTest {
     }
 
     @Test
+    void an_issuer_that_cannot_be_reached_is_not_reported_as_an_invalid_token() {
+        // "I could not verify this" and "this token is not valid" were the same answer: the decode was wrapped in
+        // catch (RuntimeException) { continue; }, and fromIssuerLocation performs OIDC discovery and fetches a JWKS
+        // over the network, so a timeout, a 5xx or an unreachable issuer arrived here and left as null - which is
+        // exactly what a forged token produces. An operator could not tell an outage from an attack, and a loaded
+        // machine could turn a healthy token into a rejection.
+        //
+        // This is why the cell above was flaky rather than wrong: under a full build the discovery call is slow
+        // enough to fail, and the failure was indistinguishable from the expiry it was asserting about.
+        String valid = rs256(header("RS256", "k1"), body("\"jenesis\"", Instant.now().plusSeconds(300)),
+                keyPair.getPrivate());
+        server.stop();   // the issuer goes away AFTER the trust was registered, as an outage would
+
+        assertThatThrownBy(() -> exchange.exchange("acme", valid))
+                .as("an unreachable issuer is an infrastructure failure, not a judgement about the token: it must "
+                        + "reach the caller rather than degrade into the null a forged token produces")
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("infrastructure failure");
+    }
+
+    @Test
     void expiry_tolerates_small_clock_skew_but_not_a_stale_token() throws IOException {
         assertThat(exchange.exchange("acme", rs256(header("RS256", "k1"),
                 body("\"jenesis\"", Instant.now().minusSeconds(30)), keyPair.getPrivate())))

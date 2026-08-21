@@ -6,6 +6,7 @@ import build.jenesis.repository.server.spi.TokenExchange;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
+import org.springframework.security.oauth2.jwt.JwtException;
 
 import module java.base;
 
@@ -38,8 +39,21 @@ public final class OidcExchange implements TokenExchange {
             Jwt jwt;
             try {
                 jwt = decoders.computeIfAbsent(trust.issuer(), JwtDecoders::fromIssuerLocation).decode(token);
-            } catch (RuntimeException e) {
+            } catch (JwtException notThisTrust) {
+                // The token itself did not verify against THIS issuer - wrong signature, wrong issuer, expired
+                // beyond the tolerated skew. That is a real answer about the token, so ask the next trust.
                 continue;
+            } catch (RuntimeException broken) {
+                // Anything else is the machinery, not the token: fromIssuerLocation performs OIDC discovery and
+                // fetches a JWKS over the network, and a timeout, a 5xx or an unreachable issuer arrives here as
+                // some other RuntimeException. Swallowing it into `continue` made the method answer null, and null
+                // is what it answers for a token that is simply invalid - so "I could not verify this" and "this
+                // token is not valid" became the same answer, and the caller cannot tell a broken issuer from a
+                // forged token. Fail closed and loudly instead: the exchange is refused either way, but the reason
+                // is now legible and a monitoring surface can tell an outage from an attack.
+                throw new IOException("could not verify the token against issuer " + trust.issuer()
+                        + " (trust '" + trust.name() + "'): the decoder could not be built or applied, which is an "
+                        + "infrastructure failure rather than a judgement about the token", broken);
             }
             if (!audienceMatches(jwt.getAudience(), trust.audience())
                     || !subjectMatches(jwt.getSubject(), trust.subject())) {
