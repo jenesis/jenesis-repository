@@ -38,6 +38,7 @@ class PanelCensusTest {
     private static final List<String> REGISTERED = List.of(
             "build.jenesis.repository.ui.BrowsePanel",
             "build.jenesis.repository.ui.ConsistencyPanel",
+            "build.jenesis.repository.ui.CredentialsPanel",
             "build.jenesis.repository.ui.LogPanel",
             "build.jenesis.repository.ui.ObservabilityPanel",
             "build.jenesis.repository.ui.SpiCatalogPanel",

@@ -86,6 +86,18 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         boolean operatorObservability = ("GET".equals(method) || "HEAD".equals(method))
                 && ("/api/logs".equals(uri) || "/api/consistency".equals(uri)
                         || "/actuator".equals(uri) || uri.startsWith("/actuator/"));
+        // The credential surface administers the TENANT's keys, not one repository's content, so it is bound
+        // deployment-wide for the same reason the observability routes are: authorizing it against the caller's
+        // self-named repository would let a repository-scoped key mint itself a credential for every other scope.
+        // It also takes the manage: rights rather than the repository: ones - issuing a key is administration, and
+        // a key that may publish an artifact must not thereby be able to issue more keys.
+        boolean credentials = "/api/credentials".equals(uri) || uri.startsWith("/api/credentials/");
+        if (credentials) {
+            scope = "*";
+            required = "GET".equals(method) || "HEAD".equals(method)
+                    ? Authorization.MANAGE_READ
+                    : Authorization.MANAGE_WRITE;
+        }
         if (operatorObservability
                 || (("GET".equals(method) || "HEAD".equals(method)) && "/api/posture".equals(uri))) {
             scope = "*";
