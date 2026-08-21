@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The import walk is an ingress edge: it screens each asset against its target-layout coordinate before the demoted,
  * layout-only importer lays it out (EPIC 26). This re-establishes, now at the edge, the screening coverage the raw
  * importer carried before its embedded gate was removed. It drives {@link RepositoryImport#run} over a fake
- * {@link ImportSource} of raw assets and the real discovered chain - the {@link MarkerInterceptor} that quarantines a
+ * {@link ImportSource} of raw assets and the real discovered chain - the {@code MarkerInterceptor} that quarantines a
  * {@code gate-quarantine} path and rejects a {@code gate-reject} one - so a held, a rejected and an accepted asset are
  * routed off the same gate a deploy or batch upload passes, with zero compliance module on the path.
  *

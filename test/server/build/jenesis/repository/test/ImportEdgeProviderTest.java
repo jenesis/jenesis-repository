@@ -9,11 +9,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * WFE.1 - the core {@link ImportEdgeProvider} discovery seam, unit half. Proves the single question the free
  * {@link build.jenesis.repository.server.RepositoryAutoConfiguration} asks - "is a distribution's import edge
- * installed?" - answers off the shared {@code Features} enable/disable convention: {@link TestImportEdgeProvider} is
+ * installed?" - answers off the shared {@code Features} enable/disable convention: {@code TestImportEdgeProvider} is
  * discovered via {@link java.util.ServiceLoader} (this test module's {@code provides} clause) but stays inert until its
  * required-config activation key is set, so the free import edge is served by default and yields only when a
  * distribution is genuinely configured for. The end-to-end consequence - the free mapping is then not registered - is
- * proven against the live server by {@link ImportEdgeYieldTest}.
+ * proven against the live server by {@code ImportEdgeYieldTest}.
  */
 class ImportEdgeProviderTest {
 
