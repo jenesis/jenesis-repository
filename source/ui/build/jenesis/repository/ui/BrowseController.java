@@ -78,7 +78,7 @@ public class BrowseController {
     /**
      * The console face of the free {@code GET /api/assets} enumeration: a downloadable, streamed export of every
      * published asset in the repository as NDJSON (one {@code {"path","size","sha256"}} object per line), the outbound
-     * mirror of the import connectors so getting your data out is never the paid feature. It walks the {@code publish/}
+     * mirror of the import connectors so getting your data out is never an afterthought. It walks the {@code publish/}
      * pointer tree through the shared {@link PublishedAssets} walk the server's {@code /api/assets} catalogue also uses
      * - reading only the tiny publication pointer (its content <em>is</em> the blob hash) and the blob's stored size,
      * never an artifact blob - and writes each entry as it is reached, so an arbitrarily large repository exports

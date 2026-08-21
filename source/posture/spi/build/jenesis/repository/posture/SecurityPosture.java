@@ -16,7 +16,7 @@ import module java.base;
 public final class SecurityPosture implements SafetyAdvisor {
 
     /** Where the reference documents each advisory's condition and fix; each advisory anchors on its id. */
-    static final String DOCS = "https://jenesis.build/docs/security/posture";
+    static final String DOCS = "https://jenesis.build/repository/observability/";
 
     @Override
     public List<SecurityAdvisory> advise(Configuration config) {
@@ -56,7 +56,7 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "No request rate limit is configured",
                     "jenreg.rate-limit is unset (0 = unlimited), so a public instance has no per-credential "
                             + "throttle and a single client can saturate it (a brute-force or denial-of-service vector).",
-                    "Set a sensible per-credential request-per-second ceiling; a small limit stops abuse while leaving "
+                    "Set a sensible per-credential requests-per-minute ceiling; a small limit stops abuse while leaving "
                             + "normal build traffic untouched.",
                     "jenreg.rate-limit", "600", DOCS + "#jenreg.ratelimit.unset"));
         }

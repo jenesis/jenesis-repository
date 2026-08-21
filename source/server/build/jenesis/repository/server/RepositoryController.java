@@ -218,7 +218,7 @@ public class RepositoryController {
     /**
      * The paged asset enumeration - the free product's first {@code /api} surface and the outbound mirror of the
      * import connectors, so a jenesis instance can be walked by another tool (or another jenesis) and getting your
-     * data out is never the paid feature. {@code GET /api/assets?repo=<name>&cursor=<token>&limit=<n>} returns a
+     * data out is never an afterthought. {@code GET /api/assets?repo=<name>&cursor=<token>&limit=<n>} returns a
      * flat, stably-ordered slice of the repository's published assets: each entry's {@code path}, {@code size} and
      * {@code sha256} come straight from the {@link build.jenesis.repository.store.Publication publication pointer}
      * (no blob is ever opened - read-first) and its {@code format}/{@code ecosystem}/{@code coordinate}/

@@ -32,7 +32,7 @@ class PosturePanelTest {
                 SecurityAdvisory.deployment("jenreg.auth.open", Severity.CRITICAL,
                         "Authorization is disabled - the instance is fully open",
                         "serves every request anonymously", "Enforce per-credential authorization",
-                        "jenreg.auth", "true", "https://jenesis.build/docs/security/posture#jenreg.auth.open")));
+                        "jenreg.auth", "true", "https://jenesis.build/repository/observability/#jenreg.auth.open")));
 
         String body = PosturePanel.renderReport(report);
 
@@ -42,7 +42,7 @@ class PosturePanelTest {
         assertThat(body).as("the exact setting key/value to change is shown so an operator can copy it")
                 .contains("jenreg.auth=true");
         assertThat(body).as("a critical advisory is marked").contains("[CRITICAL]");
-        assertThat(body).as("the docs link is rendered").contains("posture#jenreg.auth.open");
+        assertThat(body).as("the docs link is rendered").contains("observability/#jenreg.auth.open");
     }
 
     @Test

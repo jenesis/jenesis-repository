@@ -9,13 +9,13 @@ jenesis-repository
 
 **A dual-layout artifact repository.** It serves the same artifacts under the Maven layout, so any Maven,
 Gradle or Jenesis build resolves them, and under the Jenesis module layout, so a modular build resolves them
-by module name - publish once, and the server computes the POM both ecosystems need. It is also a
+by module name - publish a modular jar once and both ecosystems resolve it. It is also a
 standards-compliant OCI registry over the same store, so `docker push` works against it too. Every layout,
-storage backend, importer and console panel is a `ServiceLoader` plug-in over one content-addressed store.
+storage backend, importer and console panel is a `ServiceLoader` plugin over one content-addressed store.
 
 📖 **The user documentation lives at [jenesis.build/repository](https://jenesis.build/repository/)** -
-deploying it, the formats, storage backends, proxying, authentication, maintenance and the console. What
-follows is for people working *on* this repository.
+deploying it, the formats, storage backends, proxying, authentication, import, observability and the
+console. What follows is for people working *on* this repository.
 
 ## Building and running
 
@@ -28,16 +28,26 @@ java build/jenesis/Project.java build                # build everything
 java build/jenesis/Project.java +source+store+s3 build   # one module and its dependencies
 ```
 
-Run the server against the filesystem backend:
+Run the all-in-one server against the filesystem backend - `source/bundle` is the launchable module that
+carries every layout, backend, importer and the console; `source/server` on its own `requires` none of
+them and has nothing to serve:
 
 ```bash
-JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
-  java -Djenesis.execute.module=source+server build/jenesis/Execute.java
+JENREG_AUTH=false JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
+  java -Djenesis.execute.module=source+bundle build/jenesis/Execute.java
 ```
 
-The server `requires` no layout, backend or importer of its own: it discovers whatever is on its module path
-at startup, so what you put beside `source+server` is what the deployment speaks. For local work the `dev`
-profile (`SPRING_PROFILES_ACTIVE=dev`) swaps the OIDC sign-in for a built-in `admin`/`admin` form login.
+The server discovers whatever is on its module path at startup, so a narrower deployment is a launcher
+whose `requires` name only the modules it should speak. Authentication is enforced by default and the server
+ships no command that mints a key, hence `JENREG_AUTH=false` for local work. The web console is a second
+process on port 8081 - the `dev` profile swaps its OAuth sign-in for a built-in `admin`/`admin` form login:
+
+```bash
+PORT=8081 SPRING_PROFILES_ACTIVE=dev JENREG_UI_SECURE_COOKIE=false \
+JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
+  java -Djenesis.execute.module=source+bundle \
+       -Djenesis.execute.mainClass=build.jenesis.repository.bundle.Console build/jenesis/Execute.java
+```
 
 `Dockerfile` builds the all-in-one image: `source/bundle` requires every implementation, and its
 `bundle=true` packaging emits the resolved runtime closure that the image consumes, so a deployment is
@@ -45,14 +55,14 @@ trimmed by configuration rather than rebuilt.
 
 ## Module layout
 
-Every module is a JPMS module under `source/`, and the split into `spi` and implementations is the extension
-seam: a plug-in implements an SPI and is discovered by `ServiceLoader`, never by the core naming it.
+Every module is a Java module under `source/`, and the split into `spi` and implementations is the extension
+seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by the core naming it.
 
 | Path | Module |
 |------|--------|
 | `source/server`, `source/server-spi` | The format-neutral dispatcher: routing, auth, the publish edge, the pull-through serve loop, and the `/api` surface. Knows no layout. |
 | `source/store/{spi,filesystem,s3,gcs,azure}` | The content-addressed store and its backends. |
-| `source/format/{spi,maven,java,oci,raw}` | The layouts, each a plug-in: Maven, the Jenesis module layout, OCI/Docker, and raw. |
+| `source/format/{spi,maven,java,oci,raw}` | The layouts, each a plugin: Maven, the Jenesis module layout, OCI/Docker, and raw. |
 | `source/importer/{spi,maven,nexus,artifactory,index}` | Migration connectors that walk another repository and pull its artifacts in. |
 | `source/proxy` | The upstream fetcher behind pull-through caching, with revalidation and a negative cache. |
 | `source/walk/{spi,store}`, `source/gc/{spi,store}` | The resumable artifact walk, and mark-sweep garbage collection over it. |
@@ -64,9 +74,9 @@ seam: a plug-in implements an SPI and is discovered by `ServiceLoader`, never by
 Each family's `testkit` module carries the contract tests an implementation must pass, so a new backend or
 format is validated against the same suite the built-in ones are.
 
-## Writing a plug-in
+## Writing a plugin
 
-A plug-in is a module that `provides` one of the SPIs above. Two rules make the seam work:
+A plugin is a module that `provides` one of the SPIs above. Two rules make the seam work:
 
 - **Implement the contract, then run its test kit.** `source/*/testkit` exists so an implementation proves it
   behaves like the ones already shipping - a store backend that passes the store contract is one the server
