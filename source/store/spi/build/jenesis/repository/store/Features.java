@@ -98,7 +98,25 @@ public final class Features {
      * every caller that happens to read a toggle.
      */
     public static boolean enabled(UnaryOperator<String> config, String feature) {
-        return !"false".equalsIgnoreCase(config.apply(feature));
+        return enabled(config, feature, true);
+    }
+
+    /**
+     * Whether {@code feature} is enabled, for a feature whose posture when the key is <em>unset</em> is not the
+     * usual on.
+     *
+     * <p>Most toggles are on unless switched off, which is what the two-argument form above reads. A few are the
+     * other way round - a tool that generates synthetic traffic, a console sign-in method meant for demos - and
+     * their catalogue entries say so with a {@code "false"} default. Reading those through the two-argument form
+     * makes the code answer ENABLED on a deployment that has never stored the key, while the catalogue, the
+     * console and the operator all say it is off (D-168). Nothing reconciles the two, so the default has to be
+     * stated where the gate is read.
+     *
+     * <p>Blank counts as unset: a key present with an empty value is a cleared setting, not a choice.
+     */
+    public static boolean enabled(UnaryOperator<String> config, String feature, boolean byDefault) {
+        String value = config.apply(feature);
+        return value == null || value.isBlank() ? byDefault : !"false".equalsIgnoreCase(value);
     }
 
     /** The implementation name a singleton SPI is configured to ({@code jenreg.<spi>=<feature>}), or
