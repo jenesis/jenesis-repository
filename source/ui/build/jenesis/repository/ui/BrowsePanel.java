@@ -87,10 +87,10 @@ public final class BrowsePanel implements Panel {
             // already screened the reserved plumbing out, so what reaches here is published content.
             Mark mark = marks.forNamespace(name).orElseGet(() -> Marks.orphaned(name));
             html.append("<li><span class=\"app-mark").append(mark.installed() ? "" : " app-mark--orphaned")
-                    .append("\" title=\"").append(escape(mark.title())).append("\" role=\"img\" aria-label=\"")
-                    .append(escape(mark.title())).append("\">").append(mark.svg()).append("</span>")
+                    .append("\" title=\"").append(Panel.escape(mark.title())).append("\" role=\"img\" aria-label=\"")
+                    .append(Panel.escape(mark.title())).append("\">").append(mark.svg()).append("</span>")
                     .append("<a href=\"/browse?path=").append(urlEscape(name)).append("\">")
-                    .append(escape(name)).append("</a>");
+                    .append(Panel.escape(name)).append("</a>");
             if (!mark.installed()) {
                 html.append(" <small>&mdash; no installed format serves this namespace</small>");
             }
@@ -100,21 +100,6 @@ public final class BrowsePanel implements Panel {
         return html.toString();
     }
 
-    private static String escape(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (int index = 0; index < value.length(); index++) {
-            char c = value.charAt(index);
-            switch (c) {
-                case '&' -> escaped.append("&amp;");
-                case '<' -> escaped.append("&lt;");
-                case '>' -> escaped.append("&gt;");
-                case '"' -> escaped.append("&quot;");
-                case '\'' -> escaped.append("&#39;");
-                default -> escaped.append(c);
-            }
-        }
-        return escaped.toString();
-    }
 
     /** Percent-encode a namespace name for the {@code path} query parameter, so a name is safe in the href. */
     private static String urlEscape(String value) {

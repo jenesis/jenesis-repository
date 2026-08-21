@@ -75,18 +75,18 @@ public final class PosturePanel implements Panel {
 
         for (SecurityAdvisory advisory : advisories) {
             html.append("<article class=\"app-card\">");
-            html.append("<header><strong>").append(escape(badge(advisory.severity()))).append(' ')
-                    .append(escape(advisory.title())).append("</strong> ")
-                    .append("<small><code>").append(escape(advisory.id())).append("</code></small></header>");
-            html.append("<p><strong>Why:</strong> ").append(escape(advisory.why())).append("</p>");
-            html.append("<p><strong>Fix:</strong> ").append(escape(advisory.fix()));
+            html.append("<header><strong>").append(Panel.escape(badge(advisory.severity()))).append(' ')
+                    .append(Panel.escape(advisory.title())).append("</strong> ")
+                    .append("<small><code>").append(Panel.escape(advisory.id())).append("</code></small></header>");
+            html.append("<p><strong>Why:</strong> ").append(Panel.escape(advisory.why())).append("</p>");
+            html.append("<p><strong>Fix:</strong> ").append(Panel.escape(advisory.fix()));
             if (!advisory.settingKey().isEmpty()) {
-                html.append(" <code>").append(escape(advisory.settingKey())).append('=')
-                        .append(escape(advisory.settingValue())).append("</code>");
+                html.append(" <code>").append(Panel.escape(advisory.settingKey())).append('=')
+                        .append(Panel.escape(advisory.settingValue())).append("</code>");
             }
             html.append("</p>");
             if (!advisory.docs().isEmpty()) {
-                html.append("<p><a href=\"").append(escape(advisory.docs()))
+                html.append("<p><a href=\"").append(Panel.escape(advisory.docs()))
                         .append("\" rel=\"noopener noreferrer\" target=\"_blank\">Documentation</a></p>");
             }
             html.append("</article>");
@@ -103,19 +103,4 @@ public final class PosturePanel implements Panel {
         };
     }
 
-    private static String escape(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (int index = 0; index < value.length(); index++) {
-            char c = value.charAt(index);
-            switch (c) {
-                case '&' -> escaped.append("&amp;");
-                case '<' -> escaped.append("&lt;");
-                case '>' -> escaped.append("&gt;");
-                case '"' -> escaped.append("&quot;");
-                case '\'' -> escaped.append("&#39;");
-                default -> escaped.append(c);
-            }
-        }
-        return escaped.toString();
-    }
 }

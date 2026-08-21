@@ -100,4 +100,36 @@ public interface Panel {
 
     /** Render the panel body as an HTML fragment, reading the repository through the scoped {@code store}. */
     String render(ArtifactStore store) throws IOException;
+
+    /**
+     * Escape {@code value} for interpolation into a panel fragment.
+     *
+     * <p>Clause 12 says a fragment is dropped into the shell <em>unescaped</em>, so every repository-, signal- and
+     * configuration-derived string a panel interpolates has to be escaped by the panel. That obligation had five
+     * byte-identical private implementations behind it - four panels here and one downstream report - which is the
+     * shape that drifts, and it guarded the one surface whose contract clause is called "Output safety". It lives
+     * here, on the interface that creates the obligation, because that is where the next panel author looks.
+     *
+     * <p>Five entities, and the ampersand first so an escaped entity is not escaped again. {@code null} answers
+     * empty rather than the string "null": a panel interpolating an absent value wants nothing, and the downstream
+     * copy already had that guard while the four here did not.
+     */
+    static String escape(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        StringBuilder escaped = new StringBuilder(value.length() + 16);
+        for (int index = 0; index < value.length(); index++) {
+            char c = value.charAt(index);
+            switch (c) {
+                case '&' -> escaped.append("&amp;");
+                case '<' -> escaped.append("&lt;");
+                case '>' -> escaped.append("&gt;");
+                case '"' -> escaped.append("&quot;");
+                case '\'' -> escaped.append("&#39;");
+                default -> escaped.append(c);
+            }
+        }
+        return escaped.toString();
+    }
 }
