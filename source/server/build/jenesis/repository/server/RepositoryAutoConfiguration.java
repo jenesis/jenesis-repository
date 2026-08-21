@@ -127,7 +127,47 @@ public class RepositoryAutoConfiguration {
                         + "jenreg.anonymous-rights to require a key for every request.", anonymousRights);
             }
         }
-        return Authorization.enforcing(store).withAnonymousRights(anonymousRights);
+        Authorization authorization = Authorization.enforcing(store).withAnonymousRights(anonymousRights);
+        bootstrap(authorization, properties.getBootstrapKey().strip());
+        return authorization;
+    }
+
+    /**
+     * Provision the configured bootstrap key, so an operator has a way to get their FIRST credential.
+     *
+     * <p>An enforcing deployment is otherwise unusable as configured: a keyless caller is rejected and every route
+     * that could mint a key requires one already. The only remaining advice was to switch authentication off,
+     * which is not a bootstrap - it is a different deployment.
+     *
+     * <p>Idempotent by construction: the key's own hash is its identity, so re-provisioning the same key on every
+     * boot converges rather than accumulating. It grants everything on its tenant, which is what makes it a
+     * bootstrap and also why it is announced loudly and meant to be removed once real credentials exist - the same
+     * treatment {@code anonymous-rights} gets, for the same reason.
+     */
+    private static void bootstrap(Authorization authorization, String key) {
+        if (key.isEmpty()) {
+            return;
+        }
+        // tenantOf answers null rather than throwing for anything it does not recognise, so the check is on the
+        // answer. Refused rather than ignored: an operator who set this expects a working key, and silently
+        // dropping a typo would leave them locked out with no line saying why.
+        String tenant = Authorization.tenantOf(key);
+        if (tenant == null || tenant.isBlank()) {
+            throw new IllegalStateException("jenreg.bootstrap-key is not a well-formed key: it must look like "
+                    + "jenk_<tenant>.<secret><checksum>, since the tenant it provisions is read out of the key "
+                    + "itself");
+        }
+        try {
+            String hash = Authorization.hash(key);
+            authorization.provision(tenant, hash, "bootstrap", null);
+            authorization.setGrant(tenant, hash, "*", "*");
+        } catch (IOException unwritable) {
+            throw new IllegalStateException("jenreg.bootstrap-key could not be provisioned into the store", unwritable);
+        }
+        LOGGER.warn("SECURITY: a bootstrap key is provisioned for tenant '{}' (jenreg.bootstrap-key) - it grants "
+                + "EVERY right on every repository of that tenant and never expires. Use it to issue the "
+                + "credentials you actually want, then unset it; it is re-provisioned on every boot for as long "
+                + "as it is set.", tenant);
     }
 
     @Bean

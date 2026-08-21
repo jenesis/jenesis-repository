@@ -32,6 +32,26 @@ public class RepositoryProperties {
      *  boot warning that it is running open so the choice is never silent. */
     private boolean auth = true;
 
+    /**
+     * A key the deployment provisions at boot if it is not already known - the way an operator gets their FIRST
+     * credential on an enforcing deployment.
+     *
+     * <p>Without it a fresh install is unusable as configured: {@code auth} is on, a keyless caller is rejected,
+     * and every route that could mint a key itself requires one. The only remaining advice was to turn
+     * authentication off, which is not a bootstrap, it is a different deployment.
+     *
+     * <p>Empty by default, so nothing changes for a deployment that already has keys. Set it once
+     * ({@code JENREG_BOOTSTRAP_KEY}), use it to issue the credentials you actually want, then unset it: it grants
+     * every right on every repository of its tenant, and it is a deploy-time secret rather than a stored one, so
+     * it is re-provisioned on every boot for as long as it is set. The server logs a loud SECURITY line while it
+     * is in effect, for the same reason {@code anonymous-rights} does.
+     *
+     * <p>It must be a well-formed key - {@code jenk_<tenant>.<secret><checksum>}, as {@code Authorization.mint}
+     * produces - because the tenant it belongs to is read out of the key itself. A malformed value is refused at
+     * boot rather than silently ignored.
+     */
+    private String bootstrapKey = "";
+
     /** The strictly-opt-in anonymous role (WANON.1): the rights a keyless (no-credential) caller is granted under an
      *  enforcing deployment ({@code auth=true}). <em>Empty by default</em> - a keyless caller is then rejected exactly
      *  as enforcing does today. A non-empty value is a comma-list in the existing grant grammar: a bare
@@ -131,6 +151,14 @@ public class RepositoryProperties {
             default -> throw new IllegalArgumentException("Unrecognized storage quota unit in: " + value);
         };
         return (long) (number * multiplier);
+    }
+
+    public String getBootstrapKey() {
+        return bootstrapKey;
+    }
+
+    public void setBootstrapKey(String bootstrapKey) {
+        this.bootstrapKey = bootstrapKey;
     }
 
     public boolean isAuth() {

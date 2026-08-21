@@ -194,5 +194,6 @@ open module build.jenesis.repository.ui {
                     build.jenesis.repository.ui.SpiCatalogPanel,
                     build.jenesis.repository.ui.ObservabilityPanel,
                     build.jenesis.repository.ui.LogPanel,
-                    build.jenesis.repository.ui.ConsistencyPanel;
+                    build.jenesis.repository.ui.ConsistencyPanel,
+                    build.jenesis.repository.ui.CredentialsPanel;
 }
