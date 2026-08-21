@@ -770,6 +770,81 @@ public final class PublicationHookContract {
     }
 
     /**
+     * The contract properties nothing this kit can substitute falsifies, each with the reason - the reviewed list,
+     * shared by both trees so the review is made once.
+     *
+     * <p>A property here is not exempt from being measured; it is a property whose negation cannot be EXPRESSED
+     * through the seams the kit owns. Anything else on this list would be a claim rather than a finding, which is
+     * why it holds exactly one entry.
+     */
+    public static Map<Property, String> unfalsifiable() {
+        return Map.of(
+
+                Property.THE_BLOB_TO_CHAIN_CRASH_WINDOW_LEAVES_ONLY_AN_UNREFERENCED_BLOB,
+                "the chain never runs in this window - the crash is armed on the blob's own size read, before the first "
+                        + "screen is asked - so the fixture's hook is not called and neither is any arrangement of the "
+                        + "kit's own probes. There is nothing of the choreography left to remove: what the window leaves "
+                        + "is Publication's and the store's, and falsifying it would mean mutating the product itself, "
+                        + "which is a mechanism this kit deliberately does not own (see ChoreographyMutant).");
+    }
+
+    /**
+     * The arrangement that falsifies each clause about {@code Publication}'s own commit choreography (D-148).
+     *
+     * <p>These clauses are not un-falsifiable, they are un-falsifiable-<em>by-a-hook</em>: no substitution of a
+     * hook's own answers can make "the chain ran in ascending order" or "committed fired before the commit point"
+     * come out false, because the behaviour belongs to the choreography around the hook rather than to the hook. The
+     * mutation is applied to the arrangement instead, and {@link Falsification#requireBrokenByChoreography} requires
+     * the clause to say otherwise.
+     *
+     * <p>It lives here rather than in a driver because BOTH trees must falsify these clauses over their own
+     * population - the core's archetypes, and the fourteen hooks that actually ship - and a pairing declared
+     * twice is a pairing that can disagree with itself.
+     */
+    public static Map<Property, ChoreographyMutant> choreography() {
+        return Map.ofEntries(
+                Map.entry(Property.AN_ERROR_ESCAPES_THE_OBSERVER_CONTAINMENT,
+                        ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
+                Map.entry(Property.THE_WITHHOLD_FEED_FIRES_ONLY_ON_A_DURABLE_TRANSITION,
+                        ChoreographyMutant.A_WITHHOLD_FEED_THAT_FIRES_TWICE),
+                Map.entry(Property.EVERY_SCREEN_IN_THE_CHAIN_PARTICIPATES,
+                        ChoreographyMutant.A_CHAIN_THAT_ASKS_A_REPEATED_SCREEN_ONCE),
+                Map.entry(Property.THE_CONTENT_VIEW_RESTREAMS_THE_BLOB_UNDER_TWO_DIFFERENT_BOUNDS,
+                        ChoreographyMutant.A_CONTENT_VIEW_THAT_IGNORES_THE_CALLERS_BOUND),
+                Map.entry(Property.A_THROWING_ASSESS_FAILS_THE_PUBLISH_WITH_NO_POINTER_LINKED,
+                        ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
+                Map.entry(Property.A_THROWING_COMMITTED_FAILS_THE_PUBLISH,
+                        ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
+                Map.entry(Property.A_THROWING_WITHHELD_FAILS_THE_READ_CLOSED,
+                        ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
+                Map.entry(Property.AN_ERROR_ESCAPES_BOTH_SIDES_OF_THE_CONTAINMENT,
+                        ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
+                Map.entry(Property.THE_INHERITED_OBSERVER_LEGS_STAY_CONTAINED,
+                        ChoreographyMutant.AN_OBSERVER_FAILURE_THAT_STOPS_THE_FAN_OUT),
+                Map.entry(PublicationHookContract.Property
+                                .THE_DISCOVERED_CHAIN_IS_CACHED_AND_AN_INJECTED_ONE_IS_SORTED_PER_CONSTRUCTION,
+                        ChoreographyMutant.A_CHAIN_IN_THE_ORDER_IT_WAS_GIVEN),
+                Map.entry(Property.THE_CHAIN_RUNS_IN_ASCENDING_ORDER_AND_THE_STRONGEST_DISPOSITION_ROUTES,
+                        ChoreographyMutant.A_CHAIN_IN_THE_ORDER_IT_WAS_GIVEN),
+                Map.entry(Property.ASSESS_IS_NOT_SHORT_CIRCUITED_BY_A_REJECT,
+                        ChoreographyMutant.A_CHAIN_THAT_STOPS_AT_THE_FIRST_REJECT),
+                Map.entry(Property.WITHHELD_IS_SHORT_CIRCUITED_ON_THE_FIRST_TRUE,
+                        ChoreographyMutant.A_WITHHELD_THAT_ASKS_EVERY_SCREEN),
+                Map.entry(Property.COMMITTED_FIRES_FOR_EVERY_DISPOSITION_OVER_THE_WHOLE_CHAIN,
+                        ChoreographyMutant.A_COMMITTED_THAT_SKIPS_THE_NEUTRAL_VERDICT),
+                Map.entry(Property.THE_CHAIN_IS_AWAITED_IN_FULL_AND_NEVER_ABANDONED_PART_WAY,
+                        ChoreographyMutant.A_CHAIN_ABANDONED_AFTER_THE_FIRST_SCREEN),
+                Map.entry(Property.STORE_THEN_GATE_LINKS_NO_POINTER_BEFORE_THE_CHAIN_VOTED,
+                        ChoreographyMutant.A_POINTER_LINKED_BEFORE_THE_CHAIN_VOTES),
+                Map.entry(Property.COMMITTED_FIRES_BEFORE_THE_COMMIT_POINT_SO_ACCEPT_IS_NOT_VISIBILITY,
+                        ChoreographyMutant.A_POINTER_LINKED_BEFORE_THE_CHAIN_VOTES),
+                Map.entry(Property.A_QUARANTINE_REVIEW_POINTER_IS_WRITTEN_BEFORE_COMMITTED_FIRES,
+                        ChoreographyMutant.A_REVIEW_POINTER_REMOVED_BEFORE_COMMITTED),
+                Map.entry(Property.THE_QUARANTINE_POINTER_TO_COMMITTED_CRASH_WINDOW_REPLAYS_CLEAN,
+                        ChoreographyMutant.A_REVIEW_POINTER_REMOVED_BEFORE_COMMITTED));
+    }
+
+    /**
      * Whether this fixture's surface actually MOVES on a plain publish, computed from its own declared convergence.
      *
      * <p>An observer that records on the withhold leg or the delete leg alone - a hold-release recorder, a

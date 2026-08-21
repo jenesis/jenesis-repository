@@ -315,46 +315,6 @@ class PublicationHookCensusTest {
      * defect itself. {@code Publication} is {@code final} on purpose and stays that way - the argument is in its
      * javadoc, where a reader who wonders why they cannot substitute it meets it.
      */
-    private static final Map<PublicationHookContract.Property, ChoreographyMutant> CHOREOGRAPHY = Map.ofEntries(
-            Map.entry(PublicationHookContract.Property.AN_ERROR_ESCAPES_THE_OBSERVER_CONTAINMENT,
-                    ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
-            Map.entry(PublicationHookContract.Property.THE_WITHHOLD_FEED_FIRES_ONLY_ON_A_DURABLE_TRANSITION,
-                    ChoreographyMutant.A_WITHHOLD_FEED_THAT_FIRES_TWICE),
-            Map.entry(PublicationHookContract.Property.EVERY_SCREEN_IN_THE_CHAIN_PARTICIPATES,
-                    ChoreographyMutant.A_CHAIN_THAT_ASKS_A_REPEATED_SCREEN_ONCE),
-            Map.entry(PublicationHookContract.Property.THE_CONTENT_VIEW_RESTREAMS_THE_BLOB_UNDER_TWO_DIFFERENT_BOUNDS,
-                    ChoreographyMutant.A_CONTENT_VIEW_THAT_IGNORES_THE_CALLERS_BOUND),
-            Map.entry(PublicationHookContract.Property.A_THROWING_ASSESS_FAILS_THE_PUBLISH_WITH_NO_POINTER_LINKED,
-                    ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
-            Map.entry(PublicationHookContract.Property.A_THROWING_COMMITTED_FAILS_THE_PUBLISH,
-                    ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
-            Map.entry(PublicationHookContract.Property.A_THROWING_WITHHELD_FAILS_THE_READ_CLOSED,
-                    ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
-            Map.entry(PublicationHookContract.Property.AN_ERROR_ESCAPES_BOTH_SIDES_OF_THE_CONTAINMENT,
-                    ChoreographyMutant.A_CONTAINMENT_THAT_SWALLOWS_EVERY_FAILURE),
-            Map.entry(PublicationHookContract.Property.THE_INHERITED_OBSERVER_LEGS_STAY_CONTAINED,
-                    ChoreographyMutant.AN_OBSERVER_FAILURE_THAT_STOPS_THE_FAN_OUT),
-            Map.entry(PublicationHookContract.Property
-                            .THE_DISCOVERED_CHAIN_IS_CACHED_AND_AN_INJECTED_ONE_IS_SORTED_PER_CONSTRUCTION,
-                    ChoreographyMutant.A_CHAIN_IN_THE_ORDER_IT_WAS_GIVEN),
-            Map.entry(PublicationHookContract.Property.THE_CHAIN_RUNS_IN_ASCENDING_ORDER_AND_THE_STRONGEST_DISPOSITION_ROUTES,
-                    ChoreographyMutant.A_CHAIN_IN_THE_ORDER_IT_WAS_GIVEN),
-            Map.entry(PublicationHookContract.Property.ASSESS_IS_NOT_SHORT_CIRCUITED_BY_A_REJECT,
-                    ChoreographyMutant.A_CHAIN_THAT_STOPS_AT_THE_FIRST_REJECT),
-            Map.entry(PublicationHookContract.Property.WITHHELD_IS_SHORT_CIRCUITED_ON_THE_FIRST_TRUE,
-                    ChoreographyMutant.A_WITHHELD_THAT_ASKS_EVERY_SCREEN),
-            Map.entry(PublicationHookContract.Property.COMMITTED_FIRES_FOR_EVERY_DISPOSITION_OVER_THE_WHOLE_CHAIN,
-                    ChoreographyMutant.A_COMMITTED_THAT_SKIPS_THE_NEUTRAL_VERDICT),
-            Map.entry(PublicationHookContract.Property.THE_CHAIN_IS_AWAITED_IN_FULL_AND_NEVER_ABANDONED_PART_WAY,
-                    ChoreographyMutant.A_CHAIN_ABANDONED_AFTER_THE_FIRST_SCREEN),
-            Map.entry(PublicationHookContract.Property.STORE_THEN_GATE_LINKS_NO_POINTER_BEFORE_THE_CHAIN_VOTED,
-                    ChoreographyMutant.A_POINTER_LINKED_BEFORE_THE_CHAIN_VOTES),
-            Map.entry(PublicationHookContract.Property.COMMITTED_FIRES_BEFORE_THE_COMMIT_POINT_SO_ACCEPT_IS_NOT_VISIBILITY,
-                    ChoreographyMutant.A_POINTER_LINKED_BEFORE_THE_CHAIN_VOTES),
-            Map.entry(PublicationHookContract.Property.A_QUARANTINE_REVIEW_POINTER_IS_WRITTEN_BEFORE_COMMITTED_FIRES,
-                    ChoreographyMutant.A_REVIEW_POINTER_REMOVED_BEFORE_COMMITTED),
-            Map.entry(PublicationHookContract.Property.THE_QUARANTINE_POINTER_TO_COMMITTED_CRASH_WINDOW_REPLAYS_CLEAN,
-                    ChoreographyMutant.A_REVIEW_POINTER_REMOVED_BEFORE_COMMITTED));
 
     /**
      * The contract properties nothing this kit can substitute falsifies - <b>one, since D-148</b>, and it is the one
@@ -368,13 +328,6 @@ class PublicationHookCensusTest {
      * reaches nineteen of them. This one it cannot reach: the crash lands before the chain runs at all, so there is no
      * hook call to arrange and what the window leaves is the store's and {@code Publication}'s alone.
      */
-    private static final Map<PublicationHookContract.Property, String> UNFALSIFIABLE = Map.of(
-            PublicationHookContract.Property.THE_BLOB_TO_CHAIN_CRASH_WINDOW_LEAVES_ONLY_AN_UNREFERENCED_BLOB,
-            "the chain never runs in this window - the crash is armed on the blob's own size read, before the first "
-                    + "screen is asked - so the fixture's hook is not called and neither is any arrangement of the "
-                    + "kit's own probes. There is nothing of the choreography left to remove: what the window leaves "
-                    + "is Publication's and the store's, and falsifying it would mean mutating the product itself, "
-                    + "which is a mechanism this kit deliberately does not own (see ChoreographyMutant).");
 
     /**
      * The (hook, property) pairs where the property IS falsifiable in general but this hook's own shape puts the
@@ -409,19 +362,19 @@ class PublicationHookCensusTest {
                 EnumSet.allOf(PublicationHookContract.Property.class);
         undeclared.removeAll(declaring);
 
-        Set<PublicationHookContract.Property> choreography = EnumSet.copyOf(CHOREOGRAPHY.keySet());
-        choreography.addAll(UNFALSIFIABLE.keySet());
+        Set<PublicationHookContract.Property> choreography = EnumSet.copyOf(PublicationHookContract.choreography().keySet());
+        choreography.addAll(PublicationHookContract.unfalsifiable().keySet());
         assertThat(undeclared)
                 .as("a property that names no mutation is a property nothing proves could have said otherwise - the "
                         + "vacuity D-135 exists to close. It may only be left undeclared when the clause is about "
                         + "Publication rather than about the hook, and then it owes either an arranged choreography "
-                        + "that falsifies it (CHOREOGRAPHY, D-148) or a reason on the reviewed UNFALSIFIABLE list.")
+                        + "that falsifies it (PublicationHookContract.choreography(), D-148) or a reason on the reviewed PublicationHookContract.unfalsifiable() list.")
                 .isEqualTo(choreography);
-        assertThat(CHOREOGRAPHY.keySet())
+        assertThat(PublicationHookContract.choreography().keySet())
                 .as("a clause cannot be both arranged and unfalsifiable: the two lists are a partition of the "
                         + "choreography half, so an entry that gained an arrangement must lose its exemption")
-                .doesNotContainAnyElementsOf(UNFALSIFIABLE.keySet());
-        UNFALSIFIABLE.values().forEach(reason -> assertThat(reason).isNotBlank());
+                .doesNotContainAnyElementsOf(PublicationHookContract.unfalsifiable().keySet());
+        PublicationHookContract.unfalsifiable().values().forEach(reason -> assertThat(reason).isNotBlank());
     }
 
     @Test
@@ -434,7 +387,7 @@ class PublicationHookCensusTest {
         List<String> survived = new ArrayList<>();
         for (PublicationHookFixture fixture : FIXTURES) {
             for (PublicationHookContract.Check check : PublicationHookContract.checks(fixture)) {
-                ChoreographyMutant arrangement = CHOREOGRAPHY.get(check.property());
+                ChoreographyMutant arrangement = PublicationHookContract.choreography().get(check.property());
                 if (arrangement == null) {
                     continue;
                 }
@@ -465,7 +418,7 @@ class PublicationHookCensusTest {
         // Two mirrors, and both are needed. An arrangement no clause names is a defect nothing applies - the same
         // blind spot as a mutant no property declares. And the ordinary leg must run under NONE, or every green in
         // this kit would be a green about an arranged choreography rather than about the product's.
-        Set<ChoreographyMutant> arranged = EnumSet.copyOf(CHOREOGRAPHY.values());
+        Set<ChoreographyMutant> arranged = EnumSet.copyOf(PublicationHookContract.choreography().values());
         Set<ChoreographyMutant> vocabulary = EnumSet.allOf(ChoreographyMutant.class);
         vocabulary.remove(ChoreographyMutant.NONE);
         assertThat(arranged)
@@ -525,7 +478,7 @@ class PublicationHookCensusTest {
         List<String> unreached = new ArrayList<>();
         for (PublicationHookFixture fixture : FIXTURES) {
             for (PublicationHookContract.Check check : PublicationHookContract.checks(fixture)) {
-                if (UNFALSIFIABLE.containsKey(check.property()) || CHOREOGRAPHY.containsKey(check.property())) {
+                if (PublicationHookContract.unfalsifiable().containsKey(check.property()) || PublicationHookContract.choreography().containsKey(check.property())) {
                     continue;                       // the choreography half - argued or arranged, once for every hook
                 }
                 if (PublicationHookContract.mutations(fixture, check.property()).isEmpty()) {
@@ -551,7 +504,7 @@ class PublicationHookCensusTest {
      *
      * <p>It is derived rather than pinned to a literal, because the honest answer is large and moves with the kit:
      * on this graph a hook that does nothing at all passes <b>101 of the 114 checks</b>, and almost all of them for
-     * the same reason {@link #CHOREOGRAPHY} gives - the clause is Publication's, and the hook is a bystander in it.
+     * the same reason {@link PublicationHookContract#choreography()} gives - the clause is Publication's, and the hook is a bystander in it.
      * What must never happen is a check that an inert hook survives AND that nothing else falsifies, because that
      * check is proven over nothing at all; that is what this leg refuses.
      *
@@ -568,7 +521,7 @@ class PublicationHookCensusTest {
                 if (!survivesAnInertHook(fixture, check)) {
                     continue;                                   // the general probe already catches this one
                 }
-                if (UNFALSIFIABLE.containsKey(check.property()) || CHOREOGRAPHY.containsKey(check.property())
+                if (PublicationHookContract.unfalsifiable().containsKey(check.property()) || PublicationHookContract.choreography().containsKey(check.property())
                         || NOT_THIS_HOOKS_TO_FALSIFY.containsKey(fixture.hook() + " / " + check.property())) {
                     continue;                                   // argued above, or falsified by an arrangement
                 }
@@ -584,7 +537,7 @@ class PublicationHookCensusTest {
                 .as("a hook that does nothing at all passes these checks, and no targeted mutation catches them "
                         + "either - so nothing in the kit distinguishes a compliant hook from one that never ran. "
                         + "That is exactly the shape T-205b hit by hand. Give the property a mutation that removes "
-                        + "the behaviour it is really about, or argue the pair onto UNFALSIFIABLE / "
+                        + "the behaviour it is really about, or argue the pair onto PublicationHookContract.unfalsifiable() / "
                         + "NOT_THIS_HOOKS_TO_FALSIFY.%n%s", String.join(System.lineSeparator(), unguarded))
                 .isEmpty();
     }
