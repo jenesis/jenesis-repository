@@ -215,7 +215,7 @@
  * @jenesis.pin tools.jackson.core/jackson-databind 3.2.0 SHA-256/3ef94a3dddeafc247c50230fad0315981b2ce4ae6e91cfb4368a86f328904e4f
  */
 open module build.jenesis.repository.bundle {
-    exports build.jenesis.repository.bundle to build.jenesis.repository.bundle.test;
+    exports build.jenesis.repository.bundle to build.jenesis.repository.bundle.e2e;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.ui;
     requires build.jenesis.repository.store.filesystem;
