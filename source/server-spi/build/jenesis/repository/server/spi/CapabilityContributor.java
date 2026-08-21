@@ -154,6 +154,22 @@ public interface CapabilityContributor {
     Map<String, Object> capabilities(UnaryOperator<String> configuration);
 
     /**
+     * Discover every installed contributor and {@linkplain #merge merge} it onto {@code base}, resolving each
+     * against {@code configuration}. This is the <b>one</b> discovery site for this SPI, which is why the
+     * {@code uses} clause lives in this module beside the sibling families' {@code resolve} statics rather than in
+     * whichever module happens to serve a surface: a second {@code ServiceLoader.load} elsewhere would be a second
+     * discovery pipeline, and two pipelines over one contributor set is how two surfaces come to disagree about a
+     * flag (clause 4). Every consumer - the serving controller and the console's own module-presence gate - calls
+     * this, so a flag has exactly one definition and one answer.
+     *
+     * @param base          the caller's own entries, which win every conflict.
+     * @param configuration the caller's effective-value chain, handed to each contributor.
+     */
+    static Merged resolve(Map<String, Object> base, UnaryOperator<String> configuration) {
+        return merge(base, ServiceLoader.load(CapabilityContributor.class), configuration);
+    }
+
+    /**
      * Merge every {@code contributor}'s {@link #capabilities} into a copy of {@code base}, applying the documented
      * precedence rule: a base key always wins a conflict, and among contributors the first discovered wins. The base
      * keys keep their insertion order first; new keys are appended in contributor discovery order. When

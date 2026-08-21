@@ -166,7 +166,6 @@ open module build.jenesis.repository.server {
     exports build.jenesis.repository.server;
     uses build.jenesis.repository.format.RepositoryFormat;
     uses build.jenesis.repository.importer.ImportSourceProvider;
-    uses build.jenesis.repository.server.spi.CapabilityContributor;
     provides build.jenesis.repository.posture.SafetyAdvisor
             with build.jenesis.repository.server.NodeDivergenceAdvisor;
 }
