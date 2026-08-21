@@ -54,6 +54,19 @@ class RepositoryAuthorizationEntryPointTest {
     }
 
     @Test
+    void a_keyless_cargo_index_request_is_also_challenged_with_cargo() {
+        HttpServletRequest request = request("/repository/releases/cargo/config.json", null);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+
+        new RepositoryAuthorizationEntryPoint(failures).commence(request, response,
+                new InsufficientAuthenticationException("no key"));
+
+        verify(response).setStatus(401);
+        verify(response).setHeader("WWW-Authenticate", "Basic realm=\"Jenesis Repository\"");
+        verify(response).addHeader("WWW-Authenticate", "Cargo");
+    }
+
+    @Test
     void a_keyless_api_request_answers_a_bare_401() {
         HttpServletRequest request = request("/api/credentials", null);
         HttpServletResponse response = mock(HttpServletResponse.class);

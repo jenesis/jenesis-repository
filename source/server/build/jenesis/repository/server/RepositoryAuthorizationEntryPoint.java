@@ -21,7 +21,9 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  * on an artifact path ({@code /repository/**}, {@code /v2/**}) additionally carries a {@code WWW-Authenticate: Basic}
  * challenge, because several ecosystem clients present their credentials only in answer to one - Maven on a read,
  * a Distribution client on everything - and without it they report the repository as unauthorized and never send
- * the key they hold. The API and actuator paths stay bare, so a browser calling them is never shown a Basic dialog.
+ * the key they hold. A Cargo registry path additionally carries Cargo's own challenge scheme, because cargo asks for
+ * the sparse index's {@code config.json} without a token and retries with one only when the 401 names that scheme.
+ * The API and actuator paths stay bare, so a browser calling them is never shown a Basic dialog.
  */
 public final class RepositoryAuthorizationEntryPoint implements AuthenticationEntryPoint, AccessDeniedHandler {
 
@@ -51,6 +53,9 @@ public final class RepositoryAuthorizationEntryPoint implements AuthenticationEn
         response.setStatus(status);
         if (status == 401 && artifact(request.getRequestURI())) {
             response.setHeader("WWW-Authenticate", "Basic realm=\"Jenesis Repository\"");
+            if (request.getRequestURI().contains("/cargo/")) {
+                response.addHeader("WWW-Authenticate", "Cargo");
+            }
         }
         failures.record("key", status);
     }
