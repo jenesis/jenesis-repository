@@ -18,7 +18,8 @@
 module build.jenesis.repository.importer.index {
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.format;
-    exports build.jenesis.repository.importer.index to build.jenesis.repository.test, build.jenesis.repository.importer.index.test;
+    exports build.jenesis.repository.importer.index to build.jenesis.repository.test,
+            build.jenesis.repository.server.e2e, build.jenesis.repository.importer.index.test;
     provides build.jenesis.repository.importer.ImportSourceProvider
             with build.jenesis.repository.importer.index.IndexSourceProvider;
 }

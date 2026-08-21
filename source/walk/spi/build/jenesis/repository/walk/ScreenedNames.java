@@ -38,7 +38,7 @@ import module java.base;
  *       RubyGems and CocoaPods are laid out.</li>
  * </ul>
  *
- * <p><strong>Containers are not leaves.</strong> A name a caller's {@link Containers} probe classifies as a container
+ * <p><strong>Containers are not leaves.</strong> A name a caller's {@code Containers} probe classifies as a container
  * (a directory in a browse tree, a sub-listing in a raw index) is forwarded unscreened, because it is a listing and
  * its own leaves carry the screen; the sink is told which it got. With no probe configured every name is a leaf and
  * every name is screened. The reserved {@linkplain ServableNames#QUARANTINE review subtree} is suppressed whenever the
@@ -57,7 +57,7 @@ import module java.base;
  * <ol>
  *   <li><b>Thread-safety.</b> An immutable configuration (seam, face, policy, bounds, caps), safe to share, cache and
  *       drive concurrently; one {@link #scan} call owns all its mutable state and calls the caller's {@link Disclosed}
- *       sink and {@link Containers} probe only on the calling thread.</li>
+ *       sink and {@code Containers} probe only on the calling thread.</li>
  *   <li><b>Idempotency / replay.</b> A pure read that commits nothing: re-running a scan, or resuming from an older
  *       cursor, is always safe. A sink with side effects must be idempotent per name, since a crash before the cursor
  *       is committed replays the last page.</li>
@@ -127,7 +127,7 @@ public final class ScreenedNames {
          * Called once per disclosable child name, in the store's lexicographic child order.
          *
          * @param name      the child name (not a key - compose it onto the prefix, or onto the surface's own path)
-         * @param container whether {@link Containers} classified it a container, and it therefore forwarded
+         * @param container whether {@code Containers} classified it a container, and it therefore forwarded
          *                  unscreened; {@code false} means the seam judged this very name disclosable
          */
         void accept(String name, boolean container) throws IOException;

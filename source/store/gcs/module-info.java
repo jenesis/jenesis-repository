@@ -82,7 +82,8 @@
  * @jenesis.pin software.amazon.eventstream/eventstream 1.0.1 SHA-256/0c37d8e696117f02c302191b8110b0d0eb20fa412fce34c3a269ec73c16ce822
  */
 module build.jenesis.repository.store.gcs {
-    exports build.jenesis.repository.store.gcs to build.jenesis.repository.store.gcs.test;
+    exports build.jenesis.repository.store.gcs to build.jenesis.repository.store.gcs.test,
+            build.jenesis.repository.store.backends.e2e;
     requires build.jenesis.repository.store;
     requires software.amazon.awssdk.services.s3;
     requires software.amazon.awssdk.core;

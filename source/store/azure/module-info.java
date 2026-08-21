@@ -62,7 +62,8 @@
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
  */
 module build.jenesis.repository.store.azure {
-    exports build.jenesis.repository.store.azure to build.jenesis.repository.store.azure.test;
+    exports build.jenesis.repository.store.azure to build.jenesis.repository.store.azure.test,
+            build.jenesis.repository.store.backends.e2e;
     requires build.jenesis.repository.store;
     requires com.azure.storage.blob;
     provides build.jenesis.repository.store.ArtifactStoreProvider
