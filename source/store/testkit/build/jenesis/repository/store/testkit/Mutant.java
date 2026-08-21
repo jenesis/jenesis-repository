@@ -14,10 +14,10 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
 /**
  * One deliberately broken substitution for the deployment object a {@link PublicationHookContract.Property} is about,
  * injected at the seams {@link PublicationHookFixture} hands the kit one from - the falsification half of the kit
- * (D-135, carrying D-114's mechanism to this second kit).
+ * (carrying the earlier mechanism to this second kit).
  *
  * <p><b>Why the kit needs one at all.</b> Every check in {@link PublicationHookContract} states what a hook must do;
- * nothing states that the check <em>could have said otherwise</em>. T-205b's hold-release legs would have passed
+ * nothing states that the check <em>could have said otherwise</em>. the earlier hold-release legs would have passed
  * against a hook that was a no-op from end to end - the release surface still released, the retry still converged,
  * the discard still promoted nothing - and that was caught by an agent who happened to give the kit's paths a
  * coordinate, not by the kit. This enum makes the leg part of the kit: each property names the mutation that must
@@ -49,7 +49,7 @@ public enum Mutant {
      * {@code onReleased} and {@code onDiscarded} without touching the store. The identity legs - the class, the role,
      * the declared namespaces - are the real hook's.
      *
-     * <p>This is the kit's general vacuity probe and the literal shape T-205b hit: a property whose check a hook that
+     * <p>This is the kit's general vacuity probe and the literal shape hit: a property whose check a hook that
      * does nothing at all still satisfies is a property proven over nothing. The properties that legitimately survive
      * it are a reviewed list on the census.
      */
@@ -128,7 +128,7 @@ public enum Mutant {
 
     /**
      * The fixture's declaration of convergence, reduced to the empty view - a convergence the untouched store already
-     * satisfies. This is the second seam, and it is the T-209b shape: a projection that reads as converged
+     * satisfies. This is the second seam, and it is the shape: a projection that reads as converged
      * <em>over an empty answer</em>, where the comparison the check makes is true of a surface nothing ever wrote to.
      */
     A_CONVERGENCE_THE_SEEDED_STORE_ALREADY_HAS("the declared convergence - it is now the empty view, which an "

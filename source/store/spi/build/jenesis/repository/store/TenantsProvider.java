@@ -10,7 +10,7 @@ import module java.base;
  * directory, whose tenants are the top-level scopes of the shared {@code <tenant>/<repository>/...} layout. With no
  * module installed, {@link #resolve} answers the {@link Tenants#fixed fixed} directory over the configured tenant,
  * so the console's tenancy chrome follows the resolved directory. It does not gate on {@link #installed()}, which
- * answers a weaker, packaging question and is read by no production surface at all (D-164; see the method).
+ * answers a weaker, packaging question and is read by no production surface at all (see the method).
  *
  * <h2>Contract</h2>
  * <ol>
@@ -23,7 +23,7 @@ import module java.base;
  * <li><b>Absence sentinel.</b> The unselected absence of a tenants module is <em>not</em> an error: {@link #resolve}
  *     answers the {@link Tenants#fixed fixed} directory over the configured tenant, which lists exactly that one
  *     tenant and refuses to grow. {@link #installed()} is {@code false} in the same situation, but it is not the
- *     signal anything gates on and answers a weaker question than {@code resolve} (D-164; see the method).
+ *     signal anything gates on and answers a weaker question than {@code resolve} (see the method).
  *     {@link #create} declares "I decline" with an empty {@link Optional};
  *     {@code null} is never a legal return from it, from {@link #name()} or from {@link #requiredConfig()}.</li>
  * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenreg.tenants=<name>}
@@ -78,7 +78,7 @@ public interface TenantsProvider {
      * Whether a tenants module is installed and not switched off.
      *
      * <p><b>No production surface reads this</b>, and this javadoc asserted that a console gated its tenant management
-     * on it for as long as none did - D-164. The tenant kernel resolves a directory through
+     * on it for as long as none did -. The tenant kernel resolves a directory through
      * {@link #resolve(ArtifactStore, UnaryOperator, String) resolve}, and the console's tenancy chrome follows the
      * resolved directory: with none resolved the directory is the fixed single tenant and the chrome is hidden,
      * which is the same decision taken one layer lower and against the stronger question.

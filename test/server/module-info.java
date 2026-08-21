@@ -215,10 +215,10 @@ open module build.jenesis.repository.test {
     requires build.jenesis.repository.store.filesystem;
     // The shared fault fixture: MavenCrossPublishSequenceTest drives a real store failure at each step of the Maven
     // cross-publish rather than substituting a throwing ModuleView, so the crash windows it asserts are the ones a
-    // backend outage really produces (D-059).
+    // backend outage really produces.
     requires build.jenesis.repository.store.testkit;
     // The capability-signal census reads GarbageCollectorProvider.installed() and WalkProvider.installed() off the
-    // linked types, not just off their sources: a rename a text scan stops matching reads exactly like a pass (D-164).
+    // linked types, not just off their sources: a rename a text scan stops matching reads exactly like a pass.
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.walk;
     // ... and its shipped implementation, so the same suite can run a real rebuild pass over the residue a crashed
@@ -271,7 +271,7 @@ open module build.jenesis.repository.test {
                     build.jenesis.repository.test.MarkerInterceptor,
                     build.jenesis.repository.test.CountingInterceptor,
                     build.jenesis.repository.test.CensusObserver;
-    // WFE.1: register a test ImportEdgeProvider so the running free server discovers it via ServiceLoader exactly as a
+    // register a test ImportEdgeProvider so the running free server discovers it via ServiceLoader exactly as a
     // richer distribution would, proving the free import edge yields (its mapping is not registered) when a distribution
     // owns the edge - no WebMvcRegistrations suppression. Inert by default (a required-config gate), activated only by
     // the yield test, so every other import test still sees the free edge served.

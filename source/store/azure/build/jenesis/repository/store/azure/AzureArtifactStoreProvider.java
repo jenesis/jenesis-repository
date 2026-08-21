@@ -82,7 +82,7 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
      * reachable, whether its certificate validates and whether the container exists are the client's business and
      * surface as its own errors.
      *
-     * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code s3} and {@code gcs} backends (D-023);
+     * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code s3} and {@code gcs} backends;
      * what is this backend's own is the pair of config keys it names - and the fact that the endpoint is
      * <em>extracted</em> from one of them rather than read from it - so this method is where the two are bound to the
      * screen.

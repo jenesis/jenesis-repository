@@ -12,9 +12,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The product's shared archive-<em>walk</em> bound (D-068): one named, operator-settable ceiling on how far a read may
+ * The product's shared archive-<em>walk</em> bound: one named, operator-settable ceiling on how far a read may
  * run through an artifact archive looking for the member that declares it, and a walk that reports <em>why</em> it
- * stopped rather than conflating "this archive carries no such member" with "we never reached one" (D-020).
+ * stopped rather than conflating "this archive carries no such member" with "we never reached one".
  *
  * <p>The sibling of {@code ArchiveInflationTest}, one dimension over, and it reuses that bound's own
  * {@link ArchiveInflation.Outcome} vocabulary deliberately: an archive read has two ways to be cut short and one way
@@ -61,7 +61,7 @@ class ArchiveWalkTest {
 
     @Test
     void an_archive_that_declares_nothing_is_exhausted_not_truncated() throws IOException {
-        // The whole point of the outcome, and the D-020 conflation: an archive that carries no such member and one
+        // The whole point of the outcome, and the conflation: an archive that carries no such member and one
         // whose member sat past the bound must never answer the same way.
         ArchiveWalk.Found<String> nothing = ArchiveWalk.walk(archive(512), 1024, _ -> null);
 
@@ -116,7 +116,7 @@ class ArchiveWalkTest {
         assertThat(truncated.orNull()).isNull();
         assertThat(empty.orNull()).isNull();
 
-        // The artifact's identity, or a guard's only input, fails closed - and D-020 is exactly this: the refusal must
+        // The artifact's identity, or a guard's only input, fails closed - and is exactly this: the refusal must
         // say WHICH of the two happened, or an operator is told a .deb "carries no control stanza" when the walk never
         // reached it.
         assertThatThrownBy(() -> truncated.required("Debian .deb", "control member"))

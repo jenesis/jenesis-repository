@@ -181,7 +181,7 @@ class MarkSweepTest {
 
     @Test
     void a_tagged_images_config_and_layers_are_deleted_when_its_format_lends_nothing() throws IOException {
-        // The D-027 reproduction, and the negative control for every leg below. D-022 made the MANIFEST reachable (its
+        // The reproduction, and the negative control for every leg below. an earlier change made the MANIFEST reachable (its
         // sha256:<hex> tag-pointer body now names it), but the manifest is the ONLY OCI blob any pointer body names:
         // an image's config and layer digests live INSIDE the manifest document, behind no store key at all. With no
         // lender the mark counts them not at all, so one pass condemns them and the next DELETES them - leaving a
@@ -200,9 +200,9 @@ class MarkSweepTest {
 
         GcPlan second = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(second.collected()).isEqualTo(2);
-        assertThat(store.exists("blobs/" + manifest)).as("the manifest survives (D-022)").isTrue();
-        assertThat(store.exists("blobs/" + config)).as("D-027: the live image's config is DELETED").isFalse();
-        assertThat(store.exists("blobs/" + layer)).as("D-027: the live image's layer is DELETED").isFalse();
+        assertThat(store.exists("blobs/" + manifest)).as("the manifest survives").isTrue();
+        assertThat(store.exists("blobs/" + config)).as("the live image's config is DELETED").isFalse();
+        assertThat(store.exists("blobs/" + layer)).as("the live image's layer is DELETED").isFalse();
     }
 
     @Test
@@ -230,7 +230,7 @@ class MarkSweepTest {
                 .collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(second.complete()).isTrue();
         assertThat(second.collected()).isZero();
-        assertThat(store.exists("blobs/" + manifest)).as("the manifest survives (D-022)").isTrue();
+        assertThat(store.exists("blobs/" + manifest)).as("the manifest survives").isTrue();
         assertThat(store.exists("blobs/" + config)).as("the config the manifest names survives").isTrue();
         assertThat(store.exists("blobs/" + layer)).as("the layer the manifest names survives").isTrue();
         // Deliberately no StoreInvariants sweep here: its unreferenced-blob leg knows only publish/ pointers, and an
@@ -239,9 +239,9 @@ class MarkSweepTest {
 
     @Test
     void a_digest_only_manifest_and_its_layers_are_never_collected() throws IOException {
-        // The other half of D-027: a manifest pulled by digest and never tagged is a legitimate OCI state (the format
+        // The other half of a manifest pulled by digest and never tagged is a legitimate OCI state (the format
         // serves /v2/<name>/manifests/sha256:<hex> straight out of blobs/, and its API has no DELETE to retire one),
-        // and it carries no tag pointer - so even after D-022 NOTHING named it and the sweep deleted the whole image,
+        // and it carries no tag pointer - so even after NOTHING named it and the sweep deleted the whole image,
         // manifest included. The per-document sidecar oci/types/<hex> is the durable record that this hex is a manifest
         // the registry ingested and serves; resolving the image from that key is what makes the untagged case reachable
         // at all, and it is why a lender is asked about every key under its roots, not only pointer-shaped ones.

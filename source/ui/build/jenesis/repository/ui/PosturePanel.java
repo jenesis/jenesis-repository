@@ -9,7 +9,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import module java.base;
 
 /**
- * The Security-posture panel (WO.5): the console's window onto <em>all</em> of this deployment's configuration-warning
+ * The Security-posture panel: the console's window onto <em>all</em> of this deployment's configuration-warning
  * advisories - every potentially-unsafe setting a discovered {@link build.jenesis.repository.posture.SafetyAdvisor}
  * raises against the effective configuration, collected once through {@link PostureReport#discover} and rendered
  * severity-sorted (critical first). Each row shows <strong>why</strong> a setting is unsafe, the suggested safer

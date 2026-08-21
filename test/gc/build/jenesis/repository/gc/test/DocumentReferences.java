@@ -7,7 +7,7 @@ import module java.base;
 
 /**
  * A stand-in for the blobs-namespace format whose served blobs are reachable only through a stored <em>document</em> -
- * OCI's shape, kept format-neutral here so the collector's half of D-027 is asserted without the gc tests taking a
+ * OCI's shape, kept format-neutral here so the collector's half of is asserted without the gc tests taking a
  * dependency on a format plugin or a JSON parser. It resolves the two key faces OCI has:
  *
  * <ul>

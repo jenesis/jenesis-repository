@@ -6,7 +6,7 @@ import module org.junit.jupiter.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The bundled recent-logs panel (WO.4): the console's window onto the server's {@code GET /api/logs} tail. Like its
+ * The bundled recent-logs panel: the console's window onto the server's {@code GET /api/logs} tail. Like its
  * sibling {@code ConsistencyPanel} it is a thin, key-gated live-API panel that reads nothing from the store, so it
  * renders with a null store; the read carries the {@code Jenesis-Repository-Key} header and needs {@code
  * repository:read}, and all dynamic, API-derived text is escaped in JS ({@code jlogsEsc}) before it reaches the DOM.

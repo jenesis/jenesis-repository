@@ -79,7 +79,7 @@ class JavaLayoutTest {
 
     @Test
     void the_metadata_cap_is_the_shared_operator_settable_bound_not_a_constant_private_to_this_module() throws IOException {
-        // D-054: the ceiling used to be this module's own private constant, keyed to nothing an operator could set and
+        // the ceiling used to be this module's own private constant, keyed to nothing an operator could set and
         // parallel-by-convention with every other format's. It is now the product's one bound, so moving the shared
         // dial moves what this layout will materialise - which is the whole difference between a rule a format holds
         // and a rule the product holds.
@@ -101,7 +101,7 @@ class JavaLayoutTest {
 
     @Test
     void the_walk_that_looks_for_the_manifest_is_bounded_too_not_only_the_manifest_it_reads() throws IOException {
-        // D-068, the other dimension. The inflation bound above says how big the manifest may be; it says nothing
+        //, the other dimension. The inflation bound above says how big the manifest may be; it says nothing
         // about how far this read may run to REACH it, so a jar that buries its manifest behind a huge payload
         // satisfies that bound perfectly while spending as much of the publish thread as its author chose. The walk
         // now runs under the product's shared, operator-settable walk bound, and a walk the bound stopped declares

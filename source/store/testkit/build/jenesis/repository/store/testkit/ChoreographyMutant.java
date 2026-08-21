@@ -10,10 +10,10 @@ import build.jenesis.repository.store.PublishInterceptor.Disposition;
 
 /**
  * One deliberately broken commit choreography, for the twenty {@link PublicationHookContract.Property} clauses that
- * are about {@link Publication} rather than about a hook (D-148).
+ * are about {@link Publication} rather than about a hook.
  *
  * <h2>The problem this exists for</h2>
- * D-135's {@link Mutant} substitutes the <em>hook</em>, which is the right subject for the clauses a provider owns.
+ * the earlier {@link Mutant} substitutes the <em>hook</em>, which is the right subject for the clauses a provider owns.
  * Twenty of the kit's forty-six clauses are not those: they are claims about the choreography the hooks plug into -
  * the chain's ordering, its short-circuiting, where a review pointer lands relative to {@code committed}, what escapes
  * the containment, three crash windows - asserted with kit-owned probe screens while the fixture's hook rides along as

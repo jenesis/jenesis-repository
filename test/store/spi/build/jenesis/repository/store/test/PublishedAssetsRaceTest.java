@@ -71,7 +71,7 @@ class PublishedAssetsRaceTest {
         @Override
         public Optional<Versioned> readVersioned(String key) {
             if (!key.startsWith("publish/")) {
-                // Nothing here is held: the screen also probes the withheld/<hash> marker (D-251), and a stub that
+                // Nothing here is held: the screen also probes the withheld/<hash> marker, and a stub that
                 // answered every key as a pointer would report every leaf as withheld and emit nothing.
                 return Optional.empty();
             }

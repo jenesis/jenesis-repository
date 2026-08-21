@@ -3,7 +3,7 @@ package build.jenesis.repository.ui;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The bundled recent-logs panel (WO.4): the console's window onto the server's {@code GET /api/logs} tail - the bounded
+ * The bundled recent-logs panel: the console's window onto the server's {@code GET /api/logs} tail - the bounded
  * in-memory ring a logback appender feeds. Consistent with the downstream console's Logs tab: a level filter, a text
  * search and an auto-tail (a poll that advances the {@code since} cursor), calling the key-auth'd JSON API with the
  * {@code Jenesis-Repository-Key} header (the free console authenticates the human by session, but the server's

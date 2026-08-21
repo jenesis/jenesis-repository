@@ -1,5 +1,5 @@
 /**
- * The security-posture SPI (WO.5): the self-describing <em>configuration warnings</em> a plugin reports about the
+ * The security-posture SPI: the self-describing <em>configuration warnings</em> a plugin reports about the
  * effective deployment configuration - each a {@link build.jenesis.repository.posture.SecurityAdvisory} carrying a
  * stable {@code jenreg.<feature>.<signal>} id (the {@link build.jenesis.repository.posture.Advisories} grammar, the
  * same {@code jenreg.<feature>.*} convention configuration and observation use), a

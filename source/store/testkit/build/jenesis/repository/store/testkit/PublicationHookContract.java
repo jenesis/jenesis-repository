@@ -37,9 +37,9 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
  * from durable state that the crash landed where it says. A point that stopped biting fails rather than passing
  * vacuously.
  *
- * <p><b>Every falsifiable property also declares what must break it</b> (D-135, carrying D-114's mechanism here).
+ * <p><b>Every falsifiable property also declares what must break it</b> (carrying the earlier mechanism here).
  * A check states what a hook must do; nothing in a check states that it <em>could have said otherwise</em>, and
- * T-205b's hold-release legs would have passed against a hook that was a no-op from end to end. So each
+ * the earlier hold-release legs would have passed against a hook that was a no-op from end to end. So each
  * {@link Property} the hook actually owns names one or more {@link Mutation}s - a {@link Mutant} that removes exactly
  * the behaviour the property is about - and the JUnit driver runs the same check body a second time against each,
  * requiring an {@link AssertionError}. A check that survives its property's mutation does not measure that property
@@ -47,7 +47,7 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
  * of falsification, only out of a whole property, and that opt-out is already a reviewed list on the census.
  *
  * <p><b>And the clauses that are about the choreography rather than the hook declare an arrangement instead</b>
- * (D-148). Twenty of the forty-six are claims about {@link Publication}'s commit sequence, asserted with kit-owned
+ *. Twenty of the forty-six are claims about {@link Publication}'s commit sequence, asserted with kit-owned
  * probes while the fixture's hook is a bystander, so a {@link Mutant} could never falsify them - which meant the
  * falsification leg proved things about implementations and said nothing about the choreography they plug into.
  * {@link ChoreographyMutant} closes nineteen of them by arranging the hooks this kit hands {@code Publication} so the
@@ -60,10 +60,10 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
  * own fixtures exactly as it already requires the rest of this module. The JUnit driver lives under {@code test/**}
  * and turns each check into one dynamic test.
  *
- * <h2>Clauses this kit discharges (T-304)</h2>
+ * <h2>Clauses this kit discharges</h2>
  * restating the
  * clause numbers each {@link Property}'s javadoc already opens with. The interceptor half reaches <b>all thirteen</b>
- * {@code PublishInterceptor} clauses - which is the burn-down T-301b predicted, since it recorded all thirteen as
+ * {@code PublishInterceptor} clauses - which is the burn-down predicted, since it recorded all thirteen as
  * residue while nothing yet drove that chain. The after-commit half reaches four of {@code PublicationObserver}'s
  * eleven (2, 6, 7, 11); the remaining seven - thread-safety, the absence sentinel, selection, streaming, read purity,
  * lifecycle and ordering - carry no property here and stay checkup rows.
@@ -143,7 +143,7 @@ public final class PublicationHookContract {
         THE_CONTENT_VIEW_RESTREAMS_THE_BLOB_UNDER_TWO_DIFFERENT_BOUNDS(Role.PUBLISH_INTERCEPTOR),
         /** Clause 6, in both directions. {@code Content.store()} and the stores handed to {@code committed} and
          *  {@code withheld} are the one doubly-scoped view the publication routed through - <em>and</em> the screen's
-         *  own derived rows land inside it, never one scope up. The second half was added by D-135: this check drove
+         *  own derived rows land inside it, never one scope up. The second half was added by this check drove
          *  a real screen under a real scope and read only the kit's probe, so a screen recording its verdict against
          *  the deployment root passed the whole kit. */
         THE_VERDICT_LEGS_RECEIVE_THE_PUBLICATIONS_OWN_SCOPED_STORE(Role.PUBLISH_INTERCEPTOR),
@@ -311,7 +311,7 @@ public final class PublicationHookContract {
     }
 
     /**
-     * One deliberately broken deployment object a property's check <em>must</em> fail against, and why (D-135). The
+     * One deliberately broken deployment object a property's check <em>must</em> fail against, and why. The
      * predicate is the contract's, not the fixture's: a mutation whose removed behaviour a hook's shape genuinely
      * does not have (a read side on a screen that votes only at publish time) is declared inapplicable here, in front
      * of whoever reviews the kit, rather than waived inside the fixture it would excuse.
@@ -358,7 +358,7 @@ public final class PublicationHookContract {
     }
 
     /**
-     * What must break each property, keyed by property - the kit's falsification declaration (D-135). Read as a
+     * What must break each property, keyed by property - the kit's falsification declaration. Read as a
      * table: <em>this</em> property is about <em>that</em> behaviour of the hook, so removing it must turn the check
      * red. A property whose entry is empty is a property no substitution for a hook can falsify, and the census holds
      * that set to a reviewed, reason-bearing list rather than letting an entry quietly shrink to nothing.
@@ -377,7 +377,7 @@ public final class PublicationHookContract {
      * about the core's own final class, so those carry no mutation <em>here</em>. The seven that remain are the
      * clauses a provider actually owns.
      *
-     * <p><b>The choreography half is falsified elsewhere, by a different subject</b> (D-148). Those clauses are not
+     * <p><b>The choreography half is falsified elsewhere, by a different subject</b>. Those clauses are not
      * unfalsifiable, they are un-falsifiable-<em>by-a-hook</em>: {@link ChoreographyMutant} arranges the hooks this
      * kit hands {@link Publication} so the commit sequence produces exactly the observable a mutated
      * {@code Publication} would produce, and the census pairs nineteen of the twenty clauses with the arrangement each
@@ -438,7 +438,7 @@ public final class PublicationHookContract {
                         "the observer-facing half of the blast radius is that the surface is demonstrably STALE after "
                                 + "a lost call. A fixture whose declared converged view the untouched store already "
                                 + "satisfies makes that unprovable while the check still passes - the "
-                                + "converged-over-an-empty-answer shape T-209b hit by hand")));
+                                + "converged-over-an-empty-answer shape hit by hand")));
         mutations.put(Property.THE_COMMIT_TO_CALLBACK_WINDOW_LOSES_THE_CALL, List.of(
                 new Mutation(Mutant.A_CONVERGENCE_THE_SEEDED_STORE_ALREADY_HAS,
                         "same shape, and it matters more here: this leg is what refuses a fixture the "
@@ -635,8 +635,8 @@ public final class PublicationHookContract {
                     + observer.delivery() + ", which this seam does not provide. Publication makes the artifact "
                     + "visible and only THEN calls the observer, so a crash in that window loses the call whatever "
                     + "the callback writes once invoked; an outbox written inside the callback buys "
-                    + Delivery.DURABLE_AFTER_ENQUEUE + ", not at-least-once observation. Only T-107's pre-commit "
-                    + "intent/state machine, proven at every injected crash point, could raise the class - and T-107 "
+                    + Delivery.DURABLE_AFTER_ENQUEUE + ", not at-least-once observation. Only the earlier pre-commit "
+                    + "intent/state machine, proven at every injected crash point, could raise the class - and "
                     + "has not landed.");
         }
         fixture.unsupported().forEach((property, reason) -> {
@@ -732,7 +732,7 @@ public final class PublicationHookContract {
      * A publication over {@code hooks}, split into interceptors and observers exactly as {@link Publication} splits
      * its own discovered list - the kit never keeps a second opinion about which hook is which.
      *
-     * <p>It is also where a {@link ChoreographyMutant} lands (D-148). Every check builds its publication here, and the
+     * <p>It is also where a {@link ChoreographyMutant} lands. Every check builds its publication here, and the
      * store it hands over is the one deployment object every check body already holds, so a choreography arranged on
      * the store reaches every publication without forty-six signatures learning about it. With no mutant armed - which
      * is every ordinary run - {@link ChoreographyMutant#NONE} hands the hooks straight through.
@@ -789,7 +789,7 @@ public final class PublicationHookContract {
     }
 
     /**
-     * The arrangement that falsifies each clause about {@code Publication}'s own commit choreography (D-148).
+     * The arrangement that falsifies each clause about {@code Publication}'s own commit choreography.
      *
      * <p>These clauses are not un-falsifiable, they are un-falsifiable-<em>by-a-hook</em>: no substitution of a
      * hook's own answers can make "the chain ran in ascending order" or "committed fired before the commit point"

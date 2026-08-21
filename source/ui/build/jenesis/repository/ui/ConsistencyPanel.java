@@ -3,8 +3,8 @@ package build.jenesis.repository.ui;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The bundled multi-node consistency panel (WCON.2): the console's window onto the server's
- * {@code GET /api/consistency} read - the per-node fingerprints every node publishes to the shared store (WO.4
+ * The bundled multi-node consistency panel: the console's window onto the server's
+ * {@code GET /api/consistency} read - the per-node fingerprints every node publishes to the shared store (
  * per-node numbers) and any divergence the check found between them. Consistent with the downstream console's
  * consistency page and its {@code /api/admin/consistency} admin API: a per-node table (id, live/stale, heartbeat age,
  * index cursor, config generation, quota) and a divergence list (each a stuck-cursor / config / pointer split with a

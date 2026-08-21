@@ -303,7 +303,7 @@ final class InterceptorContract {
                             + "other store is a verdict recorded for the wrong repository.");
         }
 
-        // ... and the screen USED it. The witness above proves what the three legs are handed; until D-135's
+        // ... and the screen USED it. The witness above proves what the three legs are handed; until the earlier
         // falsification leg went looking, nothing proved the fixture's own screen wrote through it - this check drove
         // a real screen under a real scope and then only ever read the kit's probe. A screen that recorded its
         // verdict against the deployment root instead puts one repository's quarantine decision in another

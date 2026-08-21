@@ -14,7 +14,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>It has two methods and both write; there is deliberately no removal direction. A cross-view is removed by the
  * same eviction that removes the Maven version it mirrors (through {@code ArtifactLayout.paths}), and the one caller
  * that used to un-link a view by hand - the proxy leg retracting an artifact that failed its upstream checksum - no
- * longer needs to, because that leg now verifies before it links anything at all (D-059).
+ * longer needs to, because that leg now verifies before it links anything at all.
  *
  * <h2>Contract</h2>
  * <ol>

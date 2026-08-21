@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * into the module layout both by module name and version and by module name alone (the latest), so a client resolving
  * either way reaches the same content-addressed blob - while {@code rebuild}, the seam a repair pass drives, re-links
  * only the version-addressed half and leaves the ordering-dependent "latest" pointer exactly where the last publish
- * put it (D-059).
+ * put it.
  */
 class ModuleViewPublisherTest {
 

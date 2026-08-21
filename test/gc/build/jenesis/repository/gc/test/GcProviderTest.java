@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * and enabled; a disabled feature or an absent walk resolves to empty - and empty means <em>nothing is ever
  * reclaimed</em>, the SPI's default for the one unrecoverable operation.
  *
- * <p>Since T-101b the seam resolves through the shared {@code Providers.optionalUnique} primitive, so the empty
+ * <p>Since the seam resolves through the shared {@code Providers.optionalUnique} primitive, so the empty
  * outcome is reserved for genuine <em>unselected</em> absence: an operator who explicitly names a collector - or a
  * walk for the collector to ride - that nothing answers to gets a loud failure instead, because a silent no-op would
  * read as a healthy idle system while storage grows without bound (&sect;9).
@@ -32,7 +32,7 @@ class GcProviderTest {
 
     @Test
     void an_explicitly_selected_collector_no_provider_answers_to_fails_loudly() {
-        // T-101b (§9): this used to resolve to the no-op default, so `jenreg.gc=other` looked like a
+        // (§9): this used to resolve to the no-op default, so `jenreg.gc=other` looked like a
         // deployment with garbage collection configured while nothing was ever reclaimed.
         Features.configure(key -> "jenreg.gc".equals(key) ? "other" : null);
         assertThatThrownBy(() -> GarbageCollectorProvider.resolve(key -> null))
@@ -67,7 +67,7 @@ class GcProviderTest {
         // ride, and the deployment degrades to no garbage collection rather than a hand-rolled listing loop. The
         // reference walk's feature name is `paged-descent` (StoreWalkProvider), so that is the toggle that removes
         // it - it used to be `store`, which is the artifact store's own selection key, so this line was configuring
-        // two things at once and the operator following it would not have booted (D-005).
+        // two things at once and the operator following it would not have booted.
         Features.configure(key -> "jenreg.paged-descent".equals(key) ? "false" : null);
         assertThat(GarbageCollectorProvider.resolve(key -> null)).isEmpty();
     }

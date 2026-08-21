@@ -107,7 +107,7 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
      * {@code jenreg.gcs.allow-insecure-endpoint=true}.
      *
      * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code s3} and {@code azure-blob} backends
-     * (D-023); what is this backend's own is the pair of config keys it names, and this method is where they are
+     *; what is this backend's own is the pair of config keys it names, and this method is where they are
      * bound to the screen.
      */
     public static URI secureEndpoint(String endpoint, String allowInsecure) {

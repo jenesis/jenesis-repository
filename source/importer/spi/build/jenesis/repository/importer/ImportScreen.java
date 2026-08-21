@@ -15,7 +15,7 @@ import module java.base;
  * per-asset {@code downloadUrl}; a format's own index enumerates absolute coordinate URLs. Those URLs are
  * operator-supplied only at one remove, and a compromised or hostile incumbent controls them completely - so screening
  * only what the operator typed screens the one URL that was never the interesting one. Screening inside each connector
- * instead was the shape D-152 found: two connectors handed the fetcher a URL a remote party had chosen freely, both
+ * instead was the shape found: two connectors handed the fetcher a URL a remote party had chosen freely, both
  * carried a screen of their own, the two screens disagreed with each other (one skipped the asset, one failed the
  * walk) and neither judged the transport - so an {@code https} base whose listing answered
  * {@code http://same-host/...} was <em>cross-origin</em> by scheme and passed. A third (the Maven tree walk) fetches

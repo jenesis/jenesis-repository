@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
  * Publishes deployment-wide flags every console view reads to the model, so a template shows them without each
  * controller repeating the lookup. It is the read-only flag ({@code jenreg.read-only}, env
  * {@code JENREG_READ_ONLY}): when set, the console renders a read-only banner (and a mutating affordance
- * can hide itself with the same attribute); and the security-posture count (WO.5): the number of configuration-warning
+ * can hide itself with the same attribute); and the security-posture count: the number of configuration-warning
  * advisories the discovered {@link build.jenesis.repository.posture.SafetyAdvisor}s raise against the effective
  * configuration, which the header shows as a badge linking to the Security-posture panel. Both are read straight off the
  * {@link Environment} - the console does no store write of its own, so it needs no bound configuration bean to observe

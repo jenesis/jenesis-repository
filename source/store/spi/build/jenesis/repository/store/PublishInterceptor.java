@@ -39,7 +39,7 @@ import module java.base;
  * this type inherits</b>, and the clauses below state what the verdict role adds or reverses. Where the two disagree -
  * clause 7 above all - this contract wins for {@link #assess}, {@link #withheld} and {@link #committed}, and the base
  * contract wins for {@link #onPublished}, {@link #onDeleted}, {@link PublicationObserver#onWithheld} and
- * {@link PublicationObserver#onWithholdCleared}. No contract kit drives this chain yet: T-205's interceptor kit is
+ * {@link PublicationObserver#onWithholdCleared}. No contract kit drives this chain yet: the earlier interceptor kit is
  * what will, and the clauses are written first so that kit asserts a stated contract instead of inventing one. The
  * core ships no interceptor, so every clause below is a rule for a downstream implementor, and the choreography
  * every clause is stated against is {@link Publication#commit}'s.

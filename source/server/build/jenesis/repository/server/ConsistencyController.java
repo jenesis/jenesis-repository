@@ -8,10 +8,10 @@ import org.springframework.web.bind.annotation.RestController;
 import module java.base;
 
 /**
- * The multi-node consistency read - {@code GET /api/consistency} (WCON.2), the console / CLI / API read of the fleet's
+ * The multi-node consistency read - {@code GET /api/consistency}, the console / CLI / API read of the fleet's
  * per-node fingerprints and any divergence between them. It runs the same {@link NodeConsistency#report bounded check}
  * (the {@code consistency/nodes/} prefix plus one small object per node, never a scan) and returns the per-node numbers
- * (WO.4), the divergences (each a stuck-cursor / config / pointer split with a value-free reason), and the
+ *, the divergences (each a stuck-cursor / config / pointer split with a value-free reason), and the
  * {@code converged} / {@code singleNode} flags - so a caller sees at a glance whether the nodes agree.
  *
  * <p>Read like every other {@code /api} surface - key-auth'd ({@code repository:read}) by

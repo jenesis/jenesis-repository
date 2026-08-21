@@ -443,12 +443,12 @@ public final class Publication {
     }
 
     /**
-     * <b>The one containment behind every after-commit observer notify (D-198).</b> Six faces - published, deleted,
+     * <b>The one containment behind every after-commit observer notify.</b> Six faces - published, deleted,
      * and the two withhold transitions in their instance and static forms - used to carry six copies of this loop,
      * and a copy is a place where one of them quietly stops matching the others; this is the same
      * one-choke-point move {@code EventSink.emit} makes for its own fan-out.
      *
-     * <p>Three properties, and the middle one is what D-195's census found missing.
+     * <p>Three properties, and the middle one is what the earlier census found missing.
      * <ol>
      *   <li><b>An ordinary failure is contained and named, and the next observer still runs.</b> These fire after the
      *       publish has committed, so a notification that could not be filed must never retract an artifact that is
@@ -457,13 +457,13 @@ public final class Publication {
      *   <li><b>An {@link Error} is attributed and then propagates.</b> It is the runtime or the module graph giving
      *       way rather than a notification failing to file, and filing it as one observer's contained failure would
      *       leave a deployment serving artifacts on a broken runtime with a WARNING to show for it. It used to
-     *       propagate with <em>no</em> line at all, which is D-094's ruling half-applied: an operator learned that
+     *       propagate with <em>no</em> line at all, which is the earlier ruling half-applied: an operator learned that
      *       the publish 500ed and nothing about which of N installed observers had given way. The propagation
      *       direction is deliberately unchanged - it is arguable, because the publish HAS committed and the client
      *       is told it failed, and that argument is a separate decision from this diagnosis.</li>
      *   <li><b>The identity is the observer's class, read before the call.</b> This SPI carries no {@code name()},
      *       so there is nothing to re-enter - but reading it up front is what keeps it that way, and it is the same
-     *       rule D-094 and D-162 landed one host each.</li>
+     *       rule and landed one host each.</li>
      * </ol>
      */
     private static void notify(List<PublicationObserver> observers, String subject, Notification notification) {

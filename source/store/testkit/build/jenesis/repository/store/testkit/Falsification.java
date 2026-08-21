@@ -4,7 +4,7 @@ import module java.base;
 
 /**
  * Runs one publication-hook contract check over its own deployment - once as itself, and once against a
- * {@link Mutant} it must not survive (D-135).
+ * {@link Mutant} it must not survive.
  *
  * <p>Both legs live here rather than in the JUnit driver for the same reason the checks live in
  * {@link PublicationHookContract}: a runner inside the suite could only ever be exercised by running the whole kit,
@@ -37,7 +37,7 @@ public final class Falsification {
 
     /**
      * Run {@code check} over a fresh store whose publications all run under {@code mutant}'s arranged choreography -
-     * the D-148 leg. The fixture's hook is <em>not</em> substituted here: the subject of these clauses is the commit
+     * the leg. The fixture's hook is <em>not</em> substituted here: the subject of these clauses is the commit
      * sequence, and the hook rides along exactly as it does on the ordinary leg.
      */
     public static void run(PublicationHookFixture fixture, PublicationHookContract.Check check,
@@ -47,7 +47,7 @@ public final class Falsification {
     }
 
     /**
-     * The choreography falsification leg (D-148): run {@code check} under an arranged commit sequence that produces
+     * The choreography falsification leg: run {@code check} under an arranged commit sequence that produces
      * exactly the observable a mutated {@link build.jenesis.repository.store.Publication} would produce, and require
      * the check to say otherwise.
      *

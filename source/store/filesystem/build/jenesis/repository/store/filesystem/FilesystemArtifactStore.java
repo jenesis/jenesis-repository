@@ -412,7 +412,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      * The opaque version token: the last-modified stamp <em>and</em> a digest of the stored bytes, so it identifies
      * the object incarnation rather than the tick it was written in.
      *
-     * <p>The stamp alone was not enough, and the gap is D-006. A stamp is a property of a <em>moment</em>, not of an
+     * <p>The stamp alone was not enough, and the gap is. A stamp is a property of a <em>moment</em>, not of an
      * object: delete a key and re-create it inside the same millisecond and the new incarnation carries the same
      * stamp, so a token read from the object that is now gone still passes the compare-and-set and a stale write lands
      * over content it never saw. The window is not the filesystem's - ext4 timestamps are nanosecond-resolution - it is

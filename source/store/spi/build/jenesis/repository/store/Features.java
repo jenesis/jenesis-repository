@@ -26,7 +26,7 @@ import module java.base;
  *     {@code store}, so its documented off-switch {@code jenreg.store=false} was also the artifact
  *     store's selection key, and using it selected a storage backend named {@code false} and refused to boot -
  *     while every deployment's ordinary {@code jenreg.store=filesystem} was silently doubling as that
- *     walk's toggle (D-005). A build guard scans for the collision rather than trusting the convention.</li>
+ *     walk's toggle. A build guard scans for the collision rather than trusting the convention.</li>
  * <li>An implementation's own settings live under {@code jenreg.<feature>.<property>=<value>} or its documented
  *     settings keys; they are never consulted here.</li>
  * <li><em>Required-config self-disable:</em> a provider declares the config keys it cannot run without (a
@@ -109,7 +109,7 @@ public final class Features {
      * other way round - a tool that generates synthetic traffic, a console sign-in method meant for demos - and
      * their catalogue entries say so with a {@code "false"} default. Reading those through the two-argument form
      * makes the code answer ENABLED on a deployment that has never stored the key, while the catalogue, the
-     * console and the operator all say it is off (D-168). Nothing reconciles the two, so the default has to be
+     * console and the operator all say it is off. Nothing reconciles the two, so the default has to be
      * stated where the gate is read.
      *
      * <p>Blank counts as unset: a key present with an empty value is a cleared setting, not a choice.

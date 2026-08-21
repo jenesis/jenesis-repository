@@ -16,9 +16,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * D-027: the blobs an OCI image keeps alive, and the garbage collection pass that would otherwise delete them.
+ * the blobs an OCI image keeps alive, and the garbage collection pass that would otherwise delete them.
  *
- * <p>The manifest is the only OCI blob a store key's <em>body</em> names (D-022 taught the mark phase to read that
+ * <p>The manifest is the only OCI blob a store key's <em>body</em> names (taught the mark phase to read that
  * body's {@code sha256:<hex>} dialect); an image's config and layer digests live inside the manifest document behind
  * no key at all, and a manifest pulled by digest has no tag pointer either. {@link OciFormat} lends that set through
  * {@link BlobReferences#references}, so this asserts both halves: the derivation itself - from a tag pointer, from the
@@ -303,7 +303,7 @@ class OciBlobReferencesTest {
 
     @Test
     void a_pushed_image_survives_the_two_passes_that_used_to_reclaim_it() throws IOException {
-        // The end-to-end D-027 claim, over the real format and the real collector: push an image, run the two
+        // The end-to-end claim, over the real format and the real collector: push an image, run the two
         // collection passes it takes to condemn and then delete, and pull every part of it back.
         String config = pushBlob("library/app", "e2e config".getBytes(StandardCharsets.UTF_8));
         String layer = pushBlob("library/app", "e2e layer".getBytes(StandardCharsets.UTF_8));
@@ -321,7 +321,7 @@ class OciBlobReferencesTest {
         assertThat(pull.status()).isEqualTo(200);
         FakeExchange pullLayer = new FakeExchange("GET", "/v2/library/app/blobs/sha256:" + layer);
         format.handle(pullLayer, store);
-        assertThat(pullLayer.status()).as("the layer still pulls - the 404 D-027 reported is closed").isEqualTo(200);
+        assertThat(pullLayer.status()).as("the layer still pulls - the 404 reported is closed").isEqualTo(200);
         FakeExchange pullConfig = new FakeExchange("GET", "/v2/library/app/blobs/sha256:" + config);
         format.handle(pullConfig, store);
         assertThat(pullConfig.status()).isEqualTo(200);

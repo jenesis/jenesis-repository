@@ -3,9 +3,9 @@ package build.jenesis.repository.server;
 import module java.base;
 
 /**
- * One finding from the multi-node consistency check (WCON.2): a live node that is <em>stuck diverged</em> rather than
+ * One finding from the multi-node consistency check: a live node that is <em>stuck diverged</em> rather than
  * benignly lagging. It names the node, the {@link Kind} of divergence and a plain, value-free {@link #detail} an
- * operator can act on. The {@link NodeDivergenceAdvisor} turns each of these into a WO.5 security-posture advisory with
+ * operator can act on. The {@link NodeDivergenceAdvisor} turns each of these into a security-posture advisory with
  * the <em>why</em> and the fix; the admin API and console page render them directly. It carries no configuration value
  * or resolved hash - a divergence names the risk (which node, how far behind, for how long), never a secret.
  */

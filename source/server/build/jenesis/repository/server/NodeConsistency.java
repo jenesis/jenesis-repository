@@ -6,7 +6,7 @@ import tools.jackson.databind.json.JsonMapper;
 import module java.base;
 
 /**
- * The multi-node consistency engine (WCON.2): it publishes this node's {@link NodeFingerprint} to the shared
+ * The multi-node consistency engine: it publishes this node's {@link NodeFingerprint} to the shared
  * {@link ArtifactStore} and reads every node's fingerprint back to build a {@link ConsistencyReport}. Fingerprints live
  * under the fixed, internal key prefix {@code consistency/nodes/<id>} - the same store every node already shares - so a
  * node joins the comparison simply by publishing, and the check needs no registry, no coordinator and no cross-node RPC.

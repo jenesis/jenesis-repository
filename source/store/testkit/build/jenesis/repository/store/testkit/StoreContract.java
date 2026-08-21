@@ -21,7 +21,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
  * thrown write becomes one {@code FAILED} entry instead of aborting the batch, and {@link Property#STORE_INVARIANTS}
  * runs {@link StoreInvariants} against a freshly scoped subspace of the live backend.
  *
- * <h2>Clauses this kit discharges (T-304)</h2>
+ * <h2>Clauses this kit discharges</h2>
  * Almost all of
  * this kit's properties are about {@link build.jenesis.repository.store.ArtifactStore}, which is not an inventoried
  * surface - no {@code uses}/{@code provides} clause names it - so they are claimed nowhere and the clause-to-property
@@ -346,7 +346,7 @@ public final class StoreContract {
         // screen sits at the one choke point every backend already calls, before any I/O, so all four now refuse the
         // same publish the same way and a store migration cannot relocate or lose an object.
         // The backslash rows are the same divergence one alphabet over, and they are here because the screen once read
-        // only '/' (D-003): "kit\..\escape" carries no '/'-delimited traversal segment at all, so it passed the screen
+        // only '/': "kit\..\escape" carries no '/'-delimited traversal segment at all, so it passed the screen
         // and reached the backends - where a Windows-hosted filesystem store resolves it as a REAL traversal and lands
         // the body a level up, while S3, GCS and Azure store it as one literal key with a backslash in the name. The
         // bare "kit\escape" row is the same fact without the traversal: one key, two placements, so a store migration
@@ -589,7 +589,7 @@ public final class StoreContract {
      * How many delete-and-re-create cycles {@link #versionTokenPerIncarnation} runs. The property it asserts is
      * unconditional - a token from a previous incarnation must never pass, whenever the two incarnations happened -
      * but the shape that breaks it on a wall-clock-stamped backend only appears when both land inside one stamp tick
-     * (D-006), and a single cycle straddles the tick boundary as often as not. A cycle is four small operations, so a
+     *, and a single cycle straddles the tick boundary as often as not. A cycle is four small operations, so a
      * few dozen of them sweep across the boundary in well under a second on any backend while staying a bounded,
      * fixed amount of work. The deterministic form of the same probe - the two incarnations forced onto one stamp -
      * is the filesystem backend's own suite, where the stamp is reachable.

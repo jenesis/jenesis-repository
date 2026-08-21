@@ -41,7 +41,7 @@ import build.jenesis.repository.walk.testkit.WalkConsumerFixture.Corpus;
  * distribution can require it for its own fixtures exactly as it already requires the store testkit. The JUnit driver
  * lives under {@code test/**} and turns each check into one dynamic test.
  *
- * <h2>Clauses this kit discharges (T-304)</h2>
+ * <h2>Clauses this kit discharges</h2>
  * restating the
  * clause numbers the {@link Property} javadocs already cite: 2 and 5
  * ({@code FULL_PASS_REBUILDS_THE_DECLARED_PROJECTION}, {@code SECOND_PASS_OVER_UNCHANGED_STATE_IS_A_NO_OP},
@@ -668,7 +668,7 @@ public final class WalkConsumerContract {
     /** Every stored key, found through the shared descent primitive rather than a hand-rolled walk - so a consumer
      *  that planted a deep key cannot overflow the check meant to catch it. */
     /**
-     * The hint a self-feeding consumer's author needs when the delivery count does not match (D-255).
+     * The hint a self-feeding consumer's author needs when the delivery count does not match.
      *
      * <p>A consumer whose namespaces overlap the roots the pass enumerates writes rows that the same pass then
      * enumerates, so its count is not one per seeded artifact. That is legitimate - a module view really is a

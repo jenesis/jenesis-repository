@@ -10,7 +10,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import module java.base;
 
 /**
- * The WCON.2 "node divergence" security-posture advisor (WO.5): it reads every node's published
+ * The "node divergence" security-posture advisor: it reads every node's published
  * {@link NodeFingerprint} from the shared store, runs the {@link ConsistencyReport consistency check}, and raises one
  * advisory per {@link NodeDivergence stuck divergence} - each with the <em>why</em> (which node, how far behind, for how
  * long) and the fix (check the sweep lease, reconcile the config), so a wedged node surfaces on the same

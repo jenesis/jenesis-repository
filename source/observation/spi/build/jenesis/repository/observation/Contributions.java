@@ -34,7 +34,7 @@ import module java.base;
  * {@link LinkageError} from a half-installed plugin, an {@link OutOfMemoryError} - propagates: that is a broken module
  * graph or a dying JVM rather than a contributor failing to answer, and reporting it as one degraded row on an
  * otherwise healthy-looking page would misreport it. It is nonetheless <b>attributed on its way out</b>, at
- * {@code ERROR}, with the contributor's class (D-206): D-094's ruling is that an {@code Error} is attributed
+ * {@code ERROR}, with the contributor's class: the earlier ruling is that an {@code Error} is attributed
  * <em>and</em> escalated, and this class used to do the second half only - so an operator whose console 500ed learned
  * that something on the page had given way and nothing about which of N plugins it was. Nor is this class for a
  * <em>verdict-bearing</em> seam: a gate,
@@ -132,10 +132,10 @@ public final class Contributions {
                             + " answered null; null is never a legal contribution.");
                 }
             } catch (Error broken) {
-                // NOT contained - see the class note - but named on its way out (D-206). The propagation is right: a
+                // NOT contained - see the class note - but named on its way out. The propagation is right: a
                 // LinkageError from a half-installed plugin is a broken module graph rather than a contributor
                 // declining to answer, and one degraded row on an otherwise healthy-looking page would misreport it.
-                // What was missing is D-094's other half. An Error left here with no log line at all, so an operator
+                // What was missing is the earlier other half. An Error left here with no log line at all, so an operator
                 // whose console 500ed learned that something on the page raised a NoClassDefFoundError and nothing
                 // about which of N plugins it was. Attributed and rethrown, exactly as EventSink.emit does: the
                 // escalation is unchanged, the diagnosis is not.

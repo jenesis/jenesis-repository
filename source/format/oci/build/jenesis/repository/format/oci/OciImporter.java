@@ -30,7 +30,7 @@ public final class OciImporter implements RepositoryImporter {
         // and maven apply, applied by the importer whose answer is the most permissive of the three).
         RepositoryImporter.importablePath(sourcePath, "oci");
         // Structural exception: an OCI push is not a single-body write - a manifest references blobs pushed as their
-        // own assets - so OCI owns its screening choke point through its own manifest choreography (T26.7), not the
+        // own assets - so OCI owns its screening choke point through its own manifest choreography, not the
         // import edge. Empty tells the walk to lay each OCI asset out unscreened here; the manifest gate screens it.
         return Optional.empty();
     }

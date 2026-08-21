@@ -15,7 +15,7 @@ import module java.base;
  * empty: <b>nothing is ever reclaimed</b> and the capability surfaces say garbage collection is off - the no-op
  * default, because deleting data is never something a deployment gets without opting in. Those surfaces report
  * {@link #resolve resolve(config).isPresent()} and not {@link #installed()}, which answers a weaker, packaging
- * question and is read by no production surface at all (D-164; see the method).
+ * question and is read by no production surface at all (see the method).
  *
  * <h2>Contract</h2>
  * <ol>
@@ -74,7 +74,7 @@ public interface GarbageCollectorProvider {
      * Whether a garbage collector is installed and not switched off.
      *
      * <p><b>No production surface reads this</b>, and this javadoc asserted that a console and a maintenance surface
-     * gated on it for as long as neither did - D-164. The reader that exists is the reclamation module's
+     * gated on it for as long as neither did -. The reader that exists is the reclamation module's
      * {@code CapabilityContributor}, which reports the {@code gc} flag from
      * {@link #resolve resolve(config).isPresent()}.
      *

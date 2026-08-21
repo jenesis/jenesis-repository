@@ -33,7 +33,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *       was stored rather than about a status code a format could answer while still having written somewhere.</li>
  * </ul>
  *
- * <h2>Clauses this kit discharges (T-304)</h2>
+ * <h2>Clauses this kit discharges</h2>
  * so a clause named here leaves the principle-checkup checklist. They restate, in machine-readable form,
  * exactly the clause numbers each {@link Property}'s javadoc already cites - no more: {@code RepositoryFormat} 2 and
  * 4 ({@code PUBLISH_SERVES_EXACT_BYTES}, {@code HEAD_ANSWERS_FROM_METADATA}), 6
@@ -43,7 +43,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>What it deliberately does <b>not</b> claim is {@code ProxyFormat} clause 9 - an upstream-supplied name is as
  * untrusted as a client-supplied one. This kit drives a scripted upstream it controls, so it can prove a leg refuses
  * a hostile <em>name</em>; it holds no reference for whether a leg's outbound <em>URL</em> handling is right, which
- * is a per-format question against that ecosystem's protocol and is T-304's first checkup theme.
+ * is a per-format question against that ecosystem's protocol and is the earlier first checkup theme.
  *
  * @jenesis.covers build.jenesis.repository.format.RepositoryFormat 2, 4, 6, 7, 12
  * @jenesis.covers build.jenesis.repository.format.ArtifactLayout 3

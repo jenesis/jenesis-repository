@@ -195,7 +195,7 @@ public interface PublicationHookFixture {
      * one cannot honour; that exclusion is then the record that the hook is wider than its declared class.
      *
      * <p>The third constant exists so that claiming it is a <em>named refusal</em> rather than an absent idea:
-     * {@link PublicationHookContract} rejects a fixture that declares it, naming T-107, because writing an outbox
+     * {@link PublicationHookContract} rejects a fixture that declares it, naming, because writing an outbox
      * <em>inside</em> an after-commit callback buys durable-after-enqueue and not at-least-once observation - the
      * commit-to-callback window is still lossy, and only a pre-commit intent/state machine proven at every crash point
      * could change that.

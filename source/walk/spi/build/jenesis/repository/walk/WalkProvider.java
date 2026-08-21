@@ -15,7 +15,7 @@ import module java.base;
  * reference implementation). With no module installed {@link #resolve} is empty: every walk-riding surface then
  * degrades gracefully - nothing enumerates, and the console / capabilities say so - exactly like retention with no
  * retention provider. They say so from {@link #resolve resolve(config).isPresent()}, not from {@link #installed()},
- * which answers a weaker, packaging question and is read by no production surface at all (D-164; see the method).
+ * which answers a weaker, packaging question and is read by no production surface at all (see the method).
  *
  * <h2>Contract</h2>
  * <ol>
@@ -59,7 +59,7 @@ public interface WalkProvider {
     /** The implementation name this provider answers to, e.g. {@code paged-descent} - and, because
      *  {@link Features} spends one namespace on both shapes, the key {@code jenreg.<name>=false}
      *  switches it off by. It may therefore not be the name of any SPI <em>family</em>: a walk called {@code store}
-     *  keyed its toggle to the artifact store's selection key (D-005). */
+     *  keyed its toggle to the artifact store's selection key. */
     String name();
 
     /** Build the walk, reading settings through {@code config}; empty when configured off. */
@@ -75,7 +75,7 @@ public interface WalkProvider {
      * Whether a walk implementation is installed and not switched off.
      *
      * <p><b>No production surface reads this</b>, and this javadoc asserted that a console and a walk-riding
-     * maintenance surface gated on it for as long as neither did - D-164. The reader that exists is the reclamation
+     * maintenance surface gated on it for as long as neither did -. The reader that exists is the reclamation
      * module's {@code CapabilityContributor}, which reports the {@code walk} flag from
      * {@link #resolve resolve(config).isPresent()}, and every walk-riding pass resolves the walk itself.
      *

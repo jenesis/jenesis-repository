@@ -13,7 +13,7 @@ import module java.base;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The metrics-overview panel (WO.2) renders the whole collected {@link ObservabilityReport} as a plain, no-graphs
+ * The metrics-overview panel renders the whole collected {@link ObservabilityReport} as a plain, no-graphs
  * overview - current values, health and background-task status, each carrying the description from its registration -
  * grouped by signal kind and searchable. A hand-built report is the fixture (the pure {@code renderReport} the
  * discovery path shares), so the grouping, the self-describing descriptions, the used-vs-available of a bounded metric

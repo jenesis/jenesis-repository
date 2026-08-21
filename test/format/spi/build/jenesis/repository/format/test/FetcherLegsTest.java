@@ -8,7 +8,7 @@ import module org.junit.jupiter.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The shape of {@link ProxyFormat.Fetcher} (D-055): the streaming leg and the metadata leg are <b>declared</b>, never
+ * The shape of {@link ProxyFormat.Fetcher}: the streaming leg and the metadata leg are <b>declared</b>, never
  * inherited, and the derivations that violate the streaming clause live on a named type a class has to write down.
  *
  * <p>The defect this pins was not that the derivations existed - a scripted upstream genuinely has nothing but a small

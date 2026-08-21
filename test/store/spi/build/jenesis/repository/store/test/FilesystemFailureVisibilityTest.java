@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Contract clause 6 on the default backend: <b>a failure to look is not an absence</b> (D-071).
+ * Contract clause 6 on the default backend: <b>a failure to look is not an absence</b>.
  *
  * <p>The three object-store backends have always complied - each re-throws anything that is not a 404 - but the
  * filesystem answered a confident {@code false} / empty for a permission refusal, an I/O error or a stale mount,

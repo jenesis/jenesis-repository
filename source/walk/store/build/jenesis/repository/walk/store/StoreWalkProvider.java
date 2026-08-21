@@ -10,7 +10,7 @@ import module java.base;
  * when no {@code jenreg.walk} names another.
  *
  * <p><b>The feature name is not {@code store}, though the walk descends the store's own key layout, because a
- * provider name <em>is</em> a configuration key</b> (D-005). {@code Features} spends one namespace on two shapes:
+ * provider name <em>is</em> a configuration key</b>. {@code Features} spends one namespace on two shapes:
  * {@code jenreg.<spi>=<name>} selects a singleton implementation and
  * {@code jenreg.<name>=false} switches a discovered one off. A walk named {@code store} therefore keyed
  * its toggle to {@code jenreg.store} - the artifact store's own selection key, which every deployment

@@ -24,7 +24,7 @@ import javax.xml.stream.XMLStreamWriter;
  * pure function of the version set and the checksum a client cached still matches a re-fetch. The matching
  * {@code .sha1} / {@code .md5} are computed from those same bytes.
  *
- * <p>Deriving is no longer the default (W5.12): a {@code maven-metadata.xml} a client publishes is stored verbatim
+ * <p>Deriving is no longer the default: a {@code maven-metadata.xml} a client publishes is stored verbatim
  * like any artifact and served back byte-for-byte, so a publisher-authored document round-trips untouched. The
  * derivation above is the opt-in {@link #COMPUTE_SETTING} computation instead - {@link #computed} reconciles a stored
  * document's version list against the folders (leaving every other field verbatim) and falls back to a full

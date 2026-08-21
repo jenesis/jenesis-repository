@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * A hold placed on a cross-published modular jar must retract EVERY alias it is served under, including the aliases no
- * hold writer can enumerate (D-251).
+ * hold writer can enumerate.
  *
  * <p>A hold has two halves. The path half is a {@code publish/quarantine<path>} review pointer, which an interceptor
  * reads and which the retroactive sweeps link once per served path they can name - they name them through
@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>The alias that only the content half can reach is the cross-publish's <b>"latest" view</b>,
  * {@code /module/<name>/<name>.jar}. It is not version-addressed, so no {@code paths} overload reports it for a
  * version and no hold writer ever links a review pointer at it - yet it points straight at the held blob. Before
- * D-251 the {@code publish/}-namespace read ({@code ServableNames.state}, which {@code Publication.located} and every
+ * the {@code publish/}-namespace read ({@code ServableNames.state}, which {@code Publication.located} and every
  * Maven/raw serve run through) consulted only the chain and never the marker, so a held modular jar kept serving under
  * that name: driven here end-to-end, and asserted the other way round below.
  *

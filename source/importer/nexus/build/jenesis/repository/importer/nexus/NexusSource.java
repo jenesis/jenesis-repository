@@ -98,7 +98,7 @@ public final class NexusSource implements ImportSource {
                     // sees it, and the import trigger only vetted the operator's base URL. That screen is ImportScreen,
                     // riding on the fetcher this source was handed (ImportSourceProvider.open), so it judges the URL
                     // for every connector in one place and in one order rather than once per connector - which is how
-                    // this leg came to screen the host but never the transport (D-152).
+                    // this leg came to screen the host but never the transport.
                     consumer.accept(format, path, () -> open(download));
                 }
             }

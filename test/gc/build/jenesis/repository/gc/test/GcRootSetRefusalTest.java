@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * D-109: the collector must be tellable that a root set is <em>incomplete</em>, and must refuse to sweep when it is.
+ * the collector must be tellable that a root set is <em>incomplete</em>, and must refuse to sweep when it is.
  *
  * <p>The hazard is asymmetric in a way no other bound in this product is. A missing pointer root does not degrade
  * the scan - it makes an entire namespace's serving pointers invisible, so every blob beneath it reads as

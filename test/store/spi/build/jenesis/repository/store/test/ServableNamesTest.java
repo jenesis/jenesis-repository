@@ -144,7 +144,7 @@ class ServableNamesTest {
     @Test
     void a_marker_on_the_hash_a_publish_pointer_names_withholds_it_with_no_quarantine_pointer_anywhere()
             throws IOException {
-        // D-251. The publish/ face used to consult only the interceptor chain, so the content half of a hold - the
+        //. The publish/ face used to consult only the interceptor chain, so the content half of a hold - the
         // withheld/<hash> marker, keyed by content precisely so ONE hold retracts the bytes wherever served - reached
         // only the blobs/ face. Any publish/-namespace alias the hold writer's path enumeration did not name therefore
         // kept serving held bytes; the Maven cross-publish's /module/<name>/<name>.jar "latest" view is the driven
@@ -260,7 +260,7 @@ class ServableNamesTest {
         Withholding chain = new Withholding("/maven/g/a/1/withheld.jar");
         ServableNames names = new ServableNames(store, new Publication(store, List.of(chain)));
 
-        // publish-namespace membership: chain probe plus the pointer/marker read (D-251 made this face read the
+        // publish-namespace membership: chain probe plus the pointer/marker read (made this face read the
         // content half of a hold too, exactly as the blobs-namespace face below always has) - and still no blob stat.
         store.blobStats = 0;
         assertThat(names.disclosable("/maven/g/a/1/served.jar", Policy.HIDE_WITHHELD)).isTrue();

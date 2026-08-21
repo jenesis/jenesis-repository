@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@link java.util.ServiceLoader} stub providers this module registers ({@code empty}, which always declines,
  * {@code alpha} answering {@code 201} and {@code beta} answering {@code 202}).
  *
- * <p>Since T-101b the seam resolves through the shared {@code Providers.optionalUnique} primitive, and this suite
+ * <p>Since the seam resolves through the shared {@code Providers.optionalUnique} primitive, and this suite
  * pins the two semantics that changed with it:
  *
  * <ul>
@@ -80,7 +80,7 @@ class FetcherProviderTest {
 
     @Test
     void two_enabled_fetchers_without_a_selection_are_ambiguous_rather_than_a_discovery_order_winner() {
-        // T-101b: this used to answer alpha, purely because the module path happened to list it before beta. Which
+        // this used to answer alpha, purely because the module path happened to list it before beta. Which
         // transport a deployment proxies through is a configuration decision, never a packaging accident.
         UnaryOperator<String> ambiguous = configured(Map.of("jenreg.empty", "false"));
         assertThatThrownBy(() -> FetcherProvider.resolve(ambiguous))
@@ -114,7 +114,7 @@ class FetcherProviderTest {
 
     @Test
     void an_explicitly_selected_fetcher_no_provider_answers_to_fails_loudly() {
-        // T-101b (§9): this used to answer NONE, so a deployment that misspelled its transport - or forgot its
+        // (§9): this used to answer NONE, so a deployment that misspelled its transport - or forgot its
         // module - served every proxy route as a 404 that looks exactly like "upstream does not have it".
         UnaryOperator<String> misspelled = configured(Map.of("jenreg.fetcher", "htpp"));
         assertThatThrownBy(() -> FetcherProvider.resolve(misspelled))

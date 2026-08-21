@@ -342,7 +342,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     /**
      * The blobs an OCI key keeps alive beyond the one its own pointer body names - the answer that stops a garbage
-     * collection pass deleting a live image's layers (D-027).
+     * collection pass deleting a live image's layers.
      *
      * <p>OCI is the standing example of a format a pointer-body reference scan cannot see: the ONLY store key whose
      * body names a blob is the tag pointer, and it names the <em>manifest</em>. An image's config and layer digests
@@ -1116,7 +1116,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * uses. A registry that disables the catalog (Docker Hub does) answers {@code 404} there, which surfaces as the
      * initial index failure - enumeration honestly needs the catalog.
      *
-     * <p><b>The stream is lazy; the dedup used not to be (D-188).</b> The {@code Stream} is a chain of paged
+     * <p><b>The stream is lazy; the dedup used not to be.</b> The {@code Stream} is a chain of paged
      * {@code _catalog} and {@code tags/list} iterators, so no repository or tag list is ever materialised - but the
      * dedup set beside it retained one entry per distinct blob and by-digest manifest for the <em>whole</em>
      * enumeration. That is the right dedup semantics and the wrong lifetime: importing a large registry ended with a
@@ -1216,7 +1216,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     /**
-     * The bounded dedup an upstream enumeration remembers digests in (D-188): a fixed-capacity, least-recently-used
+     * The bounded dedup an upstream enumeration remembers digests in: a fixed-capacity, least-recently-used
      * set of the blob and by-digest-manifest digests already emitted, so the walk still skips the layers tags share
      * without retaining one entry per digest of the <em>source registry</em> for the whole import.
      *

@@ -25,7 +25,7 @@ import module java.base;
 /**
  * The free single-tenant import edge: the repo-less {@code /repository/admin/import} migration trigger and its status
  * read, peeled out of {@link RepositoryController} into its own controller bean so a richer distribution can OWN the
- * import edge without a cross-layer mapping override (WFE.1). It triggers an asynchronous migration through the first
+ * import edge without a cross-layer mapping override. It triggers an asynchronous migration through the first
  * {@link ImportSourceProvider} that handles the requested source - discovered with {@code ServiceLoader} like the
  * formats, so the server knows no incumbent by name - run as a background {@link ImportJobs} writing into the request's
  * routed artifact space (so an import lands exactly where serving reads), and {@code GET /repository/admin/import/<id>}
@@ -146,7 +146,7 @@ public class ImportEdgeController {
                 .findFirst()
                 // open(), not create(): the fetcher a connector walks with is screened against the URL the operator
                 // submitted, so every per-asset URL a listing hands back is judged before it is fetched. A connector
-                // carries no screen of its own, and one added tomorrow arrives screened (D-152).
+                // carries no screen of its own, and one added tomorrow arrives screened.
                 .map(provider -> ImportSourceProvider.open(provider, importRequest, fetcher))
                 .orElse(null);
         if (source == null) {

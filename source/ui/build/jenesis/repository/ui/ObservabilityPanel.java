@@ -9,7 +9,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import module java.base;
 
 /**
- * The metrics-overview panel (WO.2): the console's plain, no-graphs window onto <em>all</em> of this repository's
+ * The metrics-overview panel: the console's plain, no-graphs window onto <em>all</em> of this repository's
  * observability - every self-describing signal a plugin reports about itself, collected once through {@link
  * ObservabilityReport#discover()} and rendered as current values, health states and background-task status rather than
  * a time-series chart (the free counterpart of the downstream console's metrics-overview page and its

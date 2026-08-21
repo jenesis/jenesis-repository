@@ -3,7 +3,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 /**
- * A lightweight, self-published snapshot of one node's derived in-memory view (WCON.2). A deployment runs N nodes over
+ * A lightweight, self-published snapshot of one node's derived in-memory view. A deployment runs N nodes over
  * one shared {@link build.jenesis.repository.store.ArtifactStore}, each with its own caches, derived-index cursor and
  * snapshot, quota / inventory counters and config generation - eventually consistent by design. Each node writes this
  * fingerprint to the shared store under {@code consistency/nodes/<id>} on a heartbeat, and the {@link NodeConsistency}
@@ -61,7 +61,7 @@ public record NodeFingerprint(String nodeId, long heartbeatMillis, long cursorAd
     }
 
     /**
-     * The same stable generation, additionally folding the deployment's <em>tenant set</em> into the hash (WCON.2).
+     * The same stable generation, additionally folding the deployment's <em>tenant set</em> into the hash.
      * Beyond the must-match settings, two nodes that route the same config but keep <em>different tenant directories</em>
      * are a real split - a multi-tenant edition where one node has grown a tenant the other has not is inconsistent even
      * though every config key matches. The core reads this set from the {@link build.jenesis.repository.store.Tenants}

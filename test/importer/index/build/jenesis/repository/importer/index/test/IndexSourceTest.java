@@ -166,7 +166,7 @@ class IndexSourceTest {
 
     @Test
     void an_index_url_that_downgrades_an_https_migration_to_cleartext_is_refused() {
-        // The other half of the same miss (D-152): the operator submitted https, and the foreign index enumerates a
+        // The other half of the same miss: the operator submitted https, and the foreign index enumerates a
         // plaintext URL on a perfectly public host - which the private-host half has nothing to say about. Nothing
         // leaks (the credential wrapper is same-origin only); what happens is that the artifact bytes arrive over a
         // channel an active intermediary can rewrite, and an imported artifact carries no independent integrity check

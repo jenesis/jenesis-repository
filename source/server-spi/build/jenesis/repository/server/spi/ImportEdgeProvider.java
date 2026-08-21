@@ -15,7 +15,7 @@ import module java.base;
  * import controller - the downstream edition's tenant-scoped {@code /repository/<repo>/admin/import} with its audited,
  * SSRF-screened choreography - is the <em>only</em> import edge at boot.
  *
- * <p>This retires the cross-layer stopgap WFE.1 exists to remove: the downstream edition previously dropped the free
+ * <p>This retires the cross-layer stopgap exists to remove: the downstream edition previously dropped the free
  * import mapping with a {@code WebMvcRegistrations} bean (a bean/mapping override reaching across the free layer). With
  * this hook the downstream instead ships an {@code ImportEdgeProvider} service - its mere presence on the module path
  * makes the free edge yield - and contributes its own controller bean, so free and downstream contribute

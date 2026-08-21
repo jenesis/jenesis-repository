@@ -10,7 +10,7 @@ import module java.base;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Hardening guarantees for the OCI format (W7.0 group 2): a blob/manifest reference that is not a real sha256 digest is
+ * Hardening guarantees for the OCI format (group 2): a blob/manifest reference that is not a real sha256 digest is
  * refused before it becomes a {@code blobs/<hex>} key (so a {@code ..}-laced digest cannot aim the read at a
  * neighbouring key space), and a tag pointer survives a lost compare-and-set by retrying (the {@code Publication.link}
  * idiom) rather than a concurrent push silently dropping the re-tag while still answering 201.

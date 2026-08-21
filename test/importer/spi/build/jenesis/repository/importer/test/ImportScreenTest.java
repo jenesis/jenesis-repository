@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * The one import screen, in both its shapes. The <em>edge</em> shape judges the URL an operator submitted under the
  * {@code block-private-import-hosts} dial; the <em>fetch</em> shape judges every URL a source then hands back, against
  * the URL that dial admitted, and it needs no dial of its own because the authorisation level is already stated by the
- * submitted URL. The fetch shape is the one D-152 was missing: a screen that judges only what the operator typed
+ * submitted URL. The fetch shape is the one was missing: a screen that judges only what the operator typed
  * judges the one URL a hostile source does not control.
  */
 class ImportScreenTest {
@@ -54,7 +54,7 @@ class ImportScreenTest {
 
     @Test
     void a_plaintext_url_under_an_https_migration_is_refused_even_on_the_very_same_host() {
-        // D-152's vector. The scheme is part of the origin, so this URL is cross-origin and the credential half
+        // the earlier vector. The scheme is part of the origin, so this URL is cross-origin and the credential half
         // correctly withheld the password - nothing leaks. What travels in the clear is the artifact body, which is
         // then written into the hosted store, and no integrity check stands behind it: the checksums a migration can
         // see are served by the same party that serves the bytes.
@@ -176,7 +176,7 @@ class ImportScreenTest {
 
     @Test
     void a_plaintext_submitted_url_is_refused_by_default_even_to_a_public_host() {
-        // The half the free edge was missing (D-153): the private-host screen is silent about a public host, and the
+        // The half the free edge was missing: the private-host screen is silent about a public host, and the
         // request below attaches the operator's upstream username and password.
         assertThat(ImportScreen.refusalReason("http://incumbent.example/", true))
                 .isEqualTo("the URL is not https (scheme 'http')");

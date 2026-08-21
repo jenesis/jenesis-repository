@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * something that would otherwise have been linked rather than passing vacuously. Answered from a fixed in-memory
  * upstream, no network.
  *
- * <p><b>This used to be a retraction, and D-059 is why it no longer is.</b> The leg laid the fetched bytes out first
+ * <p><b>This used to be a retraction, and is why it no longer is.</b> The leg laid the fetched bytes out first
  * and un-linked them again when the checksum did not hold, which meant the tampered jar was briefly reachable by
  * coordinate and - if any step of the un-linking failed - stayed reachable, with nothing to repair it (a local hit
  * never re-enters the proxy leg, so the retraction had no second chance). The verification now happens before the
@@ -84,7 +84,7 @@ class MavenProxyChecksumRefusalTest {
 
     @Test
     void a_checksum_sibling_this_repository_could_not_read_refuses_the_fill() throws IOException {
-        // Clause 5's split (D-236). "The upstream publishes no .sha1 for this artifact" is a documented fact about
+        // Clause 5's split. "The upstream publishes no.sha1 for this artifact" is a documented fact about
         // Maven repositories and is the one thing that may downgrade a fill to unverified. A sibling fetch that never
         // landed, or one answered by a 429 under a shared egress IP or a 5xx, is not that fact - it is this repository
         // failing to read what the upstream published - and reading it as that fact means anyone who can drop one
@@ -116,7 +116,7 @@ class MavenProxyChecksumRefusalTest {
 
     @Test
     void an_upstream_that_answers_it_publishes_no_checksum_still_caches_unverified() throws IOException {
-        // The half that must NOT change, and the reason D-236 is a split rather than a blanket refusal: the upstream
+        // The half that must NOT change, and the reason is a split rather than a blanket refusal: the upstream
         // ANSWERED that it carries no .sha1 beside this artifact, and clause 5 says such a repository is proxied
         // unverified rather than having a check fabricated for it. A leg that refused here would stop serving every
         // Maven repository that publishes no checksums at all.

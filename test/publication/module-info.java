@@ -4,7 +4,7 @@
  * static inventory, the runtime graph and the fixtures in step.
  *
  * <p>The suite exists because <b>nothing had ever driven the interceptor chain against its stated contract</b>. The
- * {@code PublishInterceptor} javadoc carries thirteen numbered clauses written by T-301a/T-301b from reading the
+ * {@code PublishInterceptor} javadoc carries thirteen numbered clauses written by /from reading the
  * code, and the only executable evidence was a handful of happy-path cases in {@code PublishInterceptorTest}: no
  * fail-closed leg, no crash window, no ordering asymmetry, and - because {@code FaultInjectingStore} had never been
  * armed on the screen path at all - no test of the window between {@code committed} firing and the declared

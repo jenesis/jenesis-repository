@@ -17,7 +17,7 @@ import module java.base;
  * things: a {@code /quarantine<path>} pointer holds ONE alias, and the marker holds the BYTES wherever they are
  * served. A {@code publish/} face that read only the chain therefore let a content-addressed hold be escaped by any
  * alias the hold writer's path enumeration did not name - the Maven cross-publish's {@code /module/<name>/<name>.jar}
- * "latest" view being the driven case (D-251): it belongs to no single version, so neither {@code paths} overload of
+ * "latest" view being the driven case: it belongs to no single version, so neither {@code paths} overload of
  * the Maven layout that placed the jar reports it - both are version-addressed - and so no hold writer ever links a
  * review pointer at it, yet it points straight at the held blob. (The Jenesis layout does name that pointer, for every
  * version of a module <em>it</em> published first-hand; a jar cross-published from a Maven coordinate is recorded
@@ -282,7 +282,7 @@ public final class ServableNames {
      *  is not a gap for any hold a writer places today - every retroactive sweep links a {@code /quarantine<path>}
      *  pointer beside the marker for a path that carries a {@code publish/} pointer, so leg (a) already screens the
      *  folder - but it is a genuine residual disagreement for a byte-identical SIBLING coordinate, whose version name
-     *  keeps listing while its download now 404s on the marker. Filed as D-262 with the cost that decides it, rather
+     *  keeps listing while its download now 404s on the marker. Filed as with the cost that decides it, rather
      *  than paid here unmeasured. */
     public boolean disclosableVersionFolder(String folder) throws IOException {
         try {

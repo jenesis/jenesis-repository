@@ -15,7 +15,7 @@ import module java.base;
  */
 public final class SecurityPosture implements SafetyAdvisor {
 
-    /** Where the reference documents each advisory's condition and fix (W10.0); each advisory anchors on its id. */
+    /** Where the reference documents each advisory's condition and fix; each advisory anchors on its id. */
     static final String DOCS = "https://jenesis.build/docs/security/posture";
 
     @Override

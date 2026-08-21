@@ -13,7 +13,7 @@ import module java.base;
  * {@code S3ArtifactStoreProvider}, once in {@code GcsArtifactStoreProvider}, once in
  * {@code AzureArtifactStoreProvider} - each parsing the {@link URI}, testing the scheme, reading the opt-out through
  * {@link Boolean#parseBoolean} and composing its own refusal message, so the three refusals read differently for the
- * same defect and a fourth backend would have arrived with a fourth wording (D-023). What genuinely differs between
+ * same defect and a fourth backend would have arrived with a fourth wording. What genuinely differs between
  * the backends is only <em>which config keys</em> carry the endpoint and the opt-out, so that is what a caller passes
  * and everything else lives here. A backend module cannot reach a sibling backend's copy - each exports its package
  * only to its own test module, and a store backend must not depend on another store backend for a five-line predicate
