@@ -38,8 +38,10 @@ JENREG_AUTH=false JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
 ```
 
 The server discovers whatever is on its module path at startup, so a narrower deployment is a launcher
-whose `requires` name only the modules it should speak. Authentication is enforced by default and the server
-ships no command that mints a key, hence `JENREG_AUTH=false` for local work. The web console is a second
+whose `requires` name only the modules it should speak. Authentication is enforced by default; a real
+deployment starts from `JENREG_BOOTSTRAP_KEY` (a well-formed `jenk_<tenant>.<secret><checksum>` key the
+server provisions at boot) and issues its keys through `/api/credentials`, while `JENREG_AUTH=false` is the
+shortcut for local work. The web console is a second
 process on port 8081 - the `dev` profile swaps its OAuth sign-in for a built-in `admin`/`admin` form login:
 
 ```bash
