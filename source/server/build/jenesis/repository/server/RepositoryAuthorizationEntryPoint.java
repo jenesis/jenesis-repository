@@ -18,9 +18,10 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  * expired key). The decision drives the status, so a present-but-unauthorized key is always a {@code 403}. Every
  * denial it answers is recorded on the {@link AuthFailures} accessor under the {@code key} mechanism, so a metrics
  * layer can surface {@code jenreg.auth.failures} without this component depending on any registry. A {@code 401}
- * under {@code /v2/} additionally carries a {@code WWW-Authenticate: Basic} challenge, because a Distribution client
- * ({@code docker login}, {@code docker push}) presents its credentials only in answer to a challenge - without one it
- * reports the registry as unauthorized and never sends the key it holds.
+ * on an artifact path ({@code /repository/**}, {@code /v2/**}) additionally carries a {@code WWW-Authenticate: Basic}
+ * challenge, because several ecosystem clients present their credentials only in answer to one - Maven on a read,
+ * a Distribution client on everything - and without it they report the repository as unauthorized and never send
+ * the key they hold. The API and actuator paths stay bare, so a browser calling them is never shown a Basic dialog.
  */
 public final class RepositoryAuthorizationEntryPoint implements AuthenticationEntryPoint, AccessDeniedHandler {
 
@@ -40,11 +41,15 @@ public final class RepositoryAuthorizationEntryPoint implements AuthenticationEn
         respond(request, response);
     }
 
+    private static boolean artifact(String uri) {
+        return uri.startsWith("/repository/") || uri.startsWith("/v2/");
+    }
+
     private void respond(HttpServletRequest request, HttpServletResponse response) {
         Object decision = request.getAttribute("jenreg.decision");
         int status = decision == Authorization.Decision.FORBIDDEN ? 403 : 401;
         response.setStatus(status);
-        if (status == 401 && request.getRequestURI().startsWith("/v2/")) {
+        if (status == 401 && artifact(request.getRequestURI())) {
             response.setHeader("WWW-Authenticate", "Basic realm=\"Jenesis Repository\"");
         }
         failures.record("key", status);
