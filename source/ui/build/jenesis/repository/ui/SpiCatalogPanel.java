@@ -57,11 +57,11 @@ public final class SpiCatalogPanel implements Panel {
         for (Map.Entry<String, List<String[]>> entry : byService.entrySet()) {
             List<String[]> implementations = entry.getValue();
             implementations.sort(Comparator.comparing(implementation -> implementation[0]));
-            html.append("<article><h4>").append(escape(simpleName(entry.getKey()))).append("</h4>");
-            html.append("<p><small><code>").append(escape(entry.getKey())).append("</code></small></p><ul>");
+            html.append("<article><h4>").append(Panel.escape(simpleName(entry.getKey()))).append("</h4>");
+            html.append("<p><small><code>").append(Panel.escape(entry.getKey())).append("</code></small></p><ul>");
             for (String[] implementation : implementations) {
-                html.append("<li><strong>").append(escape(simpleName(implementation[0])))
-                        .append("</strong> &mdash; <code>").append(escape(implementation[1])).append("</code></li>");
+                html.append("<li><strong>").append(Panel.escape(simpleName(implementation[0])))
+                        .append("</strong> &mdash; <code>").append(Panel.escape(implementation[1])).append("</code></li>");
             }
             html.append("</ul></article>");
         }
@@ -74,19 +74,4 @@ public final class SpiCatalogPanel implements Panel {
         return dot < 0 ? fqn : fqn.substring(dot + 1);
     }
 
-    private static String escape(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (int index = 0; index < value.length(); index++) {
-            char c = value.charAt(index);
-            switch (c) {
-                case '&' -> escaped.append("&amp;");
-                case '<' -> escaped.append("&lt;");
-                case '>' -> escaped.append("&gt;");
-                case '"' -> escaped.append("&quot;");
-                case '\'' -> escaped.append("&#39;");
-                default -> escaped.append(c);
-            }
-        }
-        return escaped.toString();
-    }
 }

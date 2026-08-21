@@ -288,8 +288,17 @@ public enum Mutant {
         public void drain(ArtifactStore store) throws IOException {
             delegate.drain(store);
             if (mutant == A_DRAIN_THAT_IS_NOT_REPLAYABLE && drains.incrementAndGet() > 1) {
+                // With a blob, and a blob that is really in the store. A bare at(ecosystem, path) carries a null
+                // hash, and a hook is entitled to drop one - forwarding's observer returns on hash() == null before
+                // it enqueues anything - so a hash-less redelivery made this mutation inert against exactly the
+                // fixtures whose surface it exists to grow.
+                String path = "/kit/contract-mutant-drain-" + drains.get();
+                byte[] body = path.getBytes(StandardCharsets.UTF_8);
+                Publication publication = new Publication(store, List.of(), List.of());
+                String hash = publication.storeBlob(new ByteArrayInputStream(body));
+                publication.link(path, hash);
                 delegate.create().onPublished(
-                        ArtifactDescriptor.at("kit", "/kit/contract-mutant-drain-" + drains.get()), store);
+                        ArtifactDescriptor.at("kit", path).withBlob(hash, body.length), store);
                 delegate.drain(store);
             }
         }

@@ -50,7 +50,7 @@ public final class ObservabilityPanel implements Panel {
                 + "disabled or absent source is simply not listed. The read is collected once "
                 + "(<code>ObservabilityReport.discover()</code>), the same source the downstream console's "
                 + "metrics-overview page and its <code>/api/admin/observability</code> admin API render.</p>");
-        html.append("<p>Overall health: <strong>").append(escape(report.overall().name())).append("</strong></p>");
+        html.append("<p>Overall health: <strong>").append(Panel.escape(report.overall().name())).append("</strong></p>");
 
         boolean empty = report.healthChecks().isEmpty() && report.metrics().isEmpty() && report.tasks().isEmpty();
         if (empty) {
@@ -69,12 +69,12 @@ public final class ObservabilityPanel implements Panel {
         } else {
             for (HealthCheck check : report.healthChecks()) {
                 String search = check.name() + " " + check.description() + " " + check.status().name();
-                html.append("<article class=\"jmetrics-item\" data-search=\"").append(escape(search)).append("\">");
-                html.append("<strong>").append(escape(check.name())).append("</strong> — ")
-                        .append("<span>").append(escape(check.status().name())).append("</span>");
-                html.append("<br><small>").append(escape(check.description())).append("</small>");
+                html.append("<article class=\"jmetrics-item\" data-search=\"").append(Panel.escape(search)).append("\">");
+                html.append("<strong>").append(Panel.escape(check.name())).append("</strong> — ")
+                        .append("<span>").append(Panel.escape(check.status().name())).append("</span>");
+                html.append("<br><small>").append(Panel.escape(check.description())).append("</small>");
                 if (!check.detail().isEmpty()) {
-                    html.append("<br><small><code>").append(escape(check.detail())).append("</code></small>");
+                    html.append("<br><small><code>").append(Panel.escape(check.detail())).append("</code></small>");
                 }
                 html.append("</article>");
             }
@@ -86,25 +86,25 @@ public final class ObservabilityPanel implements Panel {
         } else {
             for (Metric metric : report.metrics()) {
                 String search = metric.name() + " " + metric.description() + " " + metric.unit();
-                html.append("<article class=\"jmetrics-item\" data-search=\"").append(escape(search)).append("\">");
-                html.append("<strong>").append(escape(metric.name())).append("</strong> — ")
-                        .append("<span>").append(escape(number(metric.value())));
+                html.append("<article class=\"jmetrics-item\" data-search=\"").append(Panel.escape(search)).append("\">");
+                html.append("<strong>").append(Panel.escape(metric.name())).append("</strong> — ")
+                        .append("<span>").append(Panel.escape(number(metric.value())));
                 if (!metric.unit().isEmpty()) {
-                    html.append(' ').append(escape(metric.unit()));
+                    html.append(' ').append(Panel.escape(metric.unit()));
                 }
-                html.append("</span> <small>(").append(escape(metric.kind().name().toLowerCase())).append(")</small>");
+                html.append("</span> <small>(").append(Panel.escape(metric.kind().name().toLowerCase())).append(")</small>");
                 OptionalDouble limit = metric.limit();
                 OptionalDouble usage = metric.usage();
                 if (limit.isPresent() && usage.isPresent()) {
                     long percent = Math.round(usage.getAsDouble() * 100);
-                    html.append("<br><small>").append(escape(number(metric.value()))).append(" of ")
-                            .append(escape(number(limit.getAsDouble()))).append(" used — ").append(percent)
+                    html.append("<br><small>").append(Panel.escape(number(metric.value()))).append(" of ")
+                            .append(Panel.escape(number(limit.getAsDouble()))).append(" used — ").append(percent)
                             .append("%</small>");
                     // A plain progress bar, not a time-series graph: the fraction of the limit occupied right now.
                     html.append("<div><progress value=\"").append(clampPercent(percent)).append("\" max=\"100\">")
                             .append(percent).append("%</progress></div>");
                 }
-                html.append("<br><small>").append(escape(metric.description())).append("</small>");
+                html.append("<br><small>").append(Panel.escape(metric.description())).append("</small>");
                 html.append("</article>");
             }
         }
@@ -115,20 +115,20 @@ public final class ObservabilityPanel implements Panel {
         } else {
             for (TaskStatus task : report.tasks()) {
                 String search = task.name() + " " + task.description() + " " + task.state().name();
-                html.append("<article class=\"jmetrics-item\" data-search=\"").append(escape(search)).append("\">");
-                html.append("<strong>").append(escape(task.name())).append("</strong> — ")
-                        .append("<span>").append(escape(task.state().name())).append("</span>");
+                html.append("<article class=\"jmetrics-item\" data-search=\"").append(Panel.escape(search)).append("\">");
+                html.append("<strong>").append(Panel.escape(task.name())).append("</strong> — ")
+                        .append("<span>").append(Panel.escape(task.state().name())).append("</span>");
                 if (task.everRan()) {
-                    html.append(" <small>last run ").append(escape(String.valueOf(task.lastRun())));
+                    html.append(" <small>last run ").append(Panel.escape(String.valueOf(task.lastRun())));
                     if (task.lastDuration() != null) {
-                        html.append(" (").append(escape(String.valueOf(task.lastDuration()))).append(')');
+                        html.append(" (").append(Panel.escape(String.valueOf(task.lastDuration()))).append(')');
                     }
                     if (!task.outcome().isEmpty()) {
-                        html.append(" — ").append(escape(task.outcome()));
+                        html.append(" — ").append(Panel.escape(task.outcome()));
                     }
                     html.append("</small>");
                 }
-                html.append("<br><small>").append(escape(task.description())).append("</small>");
+                html.append("<br><small>").append(Panel.escape(task.description())).append("</small>");
                 html.append("</article>");
             }
         }
@@ -166,19 +166,4 @@ public final class ObservabilityPanel implements Panel {
         return Math.max(0, Math.min(100, percent));
     }
 
-    private static String escape(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (int index = 0; index < value.length(); index++) {
-            char c = value.charAt(index);
-            switch (c) {
-                case '&' -> escaped.append("&amp;");
-                case '<' -> escaped.append("&lt;");
-                case '>' -> escaped.append("&gt;");
-                case '"' -> escaped.append("&quot;");
-                case '\'' -> escaped.append("&#39;");
-                default -> escaped.append(c);
-            }
-        }
-        return escaped.toString();
-    }
 }

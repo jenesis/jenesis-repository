@@ -420,15 +420,15 @@ public final class PublicationHookContract {
                                 + "The route back is the fixture's repair leg, and this check RUNS it - so a repair "
                                 + "that does nothing must fail here rather than leaving the claim in a comment")));
         mutations.put(Property.A_DUPLICATE_DELIVERY_CONVERGES, List.of(
-                new Mutation(Mutant.NO_WORK_AT_ALL,
+                new Mutation(Mutant.NO_WORK_AT_ALL, PublicationHookContract::recordsOnPublish,
                         "the preamble is that the first delivery converged; an observer that records nothing must "
                                 + "fail it rather than sailing into a comparison of two empty surfaces"),
-                new Mutation(Mutant.A_ROW_PER_DELIVERY,
+                new Mutation(Mutant.A_ROW_PER_DELIVERY, PublicationHookContract::recordsOnPublish,
                         "and the repeat must be able to notice an append. One extra row from the second delivery on "
                                 + "is the smallest divergence this property exists to catch - a surface that grows "
                                 + "once per notification of bytes that never changed")));
         mutations.put(Property.THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE, List.of(
-                new Mutation(Mutant.A_ROOT_SCOPED_RECORD,
+                new Mutation(Mutant.A_ROOT_SCOPED_RECORD, PublicationHookContract::recordsOnPublish,
                         "the whole property is WHERE the row lands, so the mutation moves the row and changes nothing "
                                 + "else: a derived row written one scope up is a row recorded for the wrong "
                                 + "repository, and it reads as a correct row from anywhere but the scope it belongs "
@@ -454,15 +454,15 @@ public final class PublicationHookContract {
                                 + "callback returned; a callback that enqueues nothing must fail here, which is what "
                                 + "keeps the class from being a label")));
         mutations.put(Property.A_REPEATED_DRAIN_LEAVES_THE_SAME_SURFACE, List.of(
-                new Mutation(Mutant.A_DRAIN_THAT_IS_NOT_REPLAYABLE,
+                new Mutation(Mutant.A_DRAIN_THAT_IS_NOT_REPLAYABLE, PublicationHookContract::recordsOnPublish,
                         "the property is about the SECOND drain, so the mutation is one extra row from the second "
                                 + "drain on - a note redelivered after a crashed drain compounding rather than "
                                 + "converging, which is the only thing this leg is for"),
-                new Mutation(Mutant.NO_WORK_AT_ALL,
+                new Mutation(Mutant.NO_WORK_AT_ALL, PublicationHookContract::recordsOnPublish,
                         "and the drained surface must be the converged one, or the two drains are being compared over "
                                 + "a surface nothing delivered to")));
         mutations.put(Property.A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED, List.of(
-                new Mutation(Mutant.A_PUBLISH_ROW_FROM_THE_WITHHOLD_LEG,
+                new Mutation(Mutant.A_PUBLISH_ROW_FROM_THE_WITHHOLD_LEG, PublicationHookContract::recordsOnPublish,
                         "a QUARANTINE legitimately fires the withhold-change feed, so the honest way for a held "
                                 + "artifact to acquire a PUBLISH row is an observer that treats the two feeds as one. "
                                 + "That is the smallest thing this check forbids, and it is invisible to any "
@@ -715,7 +715,7 @@ public final class PublicationHookContract {
     }
 
     /** Whether a key belongs to a namespace the fixture declared. */
-    private static boolean owned(PublicationHookFixture fixture, String key) {
+    static boolean owned(PublicationHookFixture fixture, String key) {
         return fixture.namespaces().stream().anyMatch(space -> key.equals(space) || key.startsWith(space + "/"));
     }
 
@@ -767,6 +767,22 @@ public final class PublicationHookContract {
 
     static ByteArrayInputStream bytes(String body) {
         return new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Whether this fixture's surface actually MOVES on a plain publish, computed from its own declared convergence.
+     *
+     * <p>An observer that records on the withhold leg or the delete leg alone - a hold-release recorder, a
+     * retraction index - declares an empty converged view for a published artifact. Every publish-shaped check
+     * then compares one empty view against another, and a publish-shaped mutation is invisible to that comparison
+     * <em>by construction</em> rather than tolerated by it: the check would read the same whether the hook ran or
+     * not. Declaring the mutation inapplicable there is the argument the falsification leg's failure message asks
+     * for, and it is computed from the fixture rather than listed by hook name, so a hook that starts recording on
+     * publish is measured from that day on without anyone remembering to strike it off a list.
+     */
+    private static boolean recordsOnPublish(PublicationHookFixture fixture) {
+        return fixture instanceof PublicationHookFixture.Observer observer
+                && !observer.converged(List.of(descriptor("/kit/applicability-probe"))).isEmpty();
     }
 
     static ArtifactDescriptor descriptor(String path) {
