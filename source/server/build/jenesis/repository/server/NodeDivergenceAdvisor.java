@@ -26,7 +26,7 @@ import module java.base;
  */
 public final class NodeDivergenceAdvisor implements SafetyAdvisor {
 
-    static final String DOCS = "https://jenesis.build/docs/observability/consistency";
+    static final String DOCS = "https://jenesis.build/repository/observability/";
 
     @Override
     public List<SecurityAdvisory> advise(Configuration config) {

@@ -1,7 +1,8 @@
 /**
  * The dual-layout repository server: it serves the same artifacts under the Maven layout ({@code /maven/...})
- * and the Jenesis module layout ({@code /module/...}, {@code /artifact/...}), generating the POM and
- * {@code maven-metadata.xml} when a module is uploaded. Headless and stateless over the ArtifactStore SPI: it
+ * and the Jenesis module layout ({@code /module/...}, {@code /artifact/...}), cross-publishing a modular jar
+ * uploaded the Maven way under its module name, and computing {@code maven-metadata.xml} on read only when
+ * {@code jenreg.maven-metadata-compute} is on. Headless and stateless over the ArtifactStore SPI: it
  * {@code requires} no backend at all and resolves the one named by {@code JENREG_STORE} through
  * {@code ArtifactStoreProvider.resolve} over {@code ServiceLoader}, exactly as it discovers formats - the backends a
  * deployment can select are a distribution decision (the bundle requires filesystem, s3, gcs and azure), never a
