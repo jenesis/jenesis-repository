@@ -3,7 +3,7 @@ target/
 # .jenreg.skip marker and the upstream submodule, which stay tracked).
 .jenesis/artifacts/
 .jenesis/cache/
-# Anchored to the repo root: a runtime cache dir, not the build.jenesis.cache package dirs.
+# Anchored to the repo root: a runtime cache dir, not the build.jenesis.repository.cache package dirs.
 /cache/
 *.class
 /sdk/*
