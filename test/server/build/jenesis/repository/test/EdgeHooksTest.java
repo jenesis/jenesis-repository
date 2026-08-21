@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (once per screened write, the deploy observation) - and a {@code beforeLayout} refusal short-circuits layout so the
  * format never lays the body out and no {@code published()} fires. The edge is driven directly over a real filesystem
  * store with a spy format and a spy hooks, reusing the T26.2 {@link ScreenedDispatchTest} scaffolding, and the
- * discovered {@link MarkerInterceptor} drives the {@code QUARANTINE}/{@code REJECT} verdicts off marker paths.
+ * discovered {@code MarkerInterceptor} drives the {@code QUARANTINE}/{@code REJECT} verdicts off marker paths.
  */
 public class EdgeHooksTest {
 
