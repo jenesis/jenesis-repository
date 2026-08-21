@@ -1,9 +1,11 @@
 package build.jenesis.repository.server;
 
 import build.jenesis.repository.posture.Configuration;
+import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.posture.PostureReport;
 import build.jenesis.repository.posture.SecurityAdvisory;
 import tools.jackson.databind.json.JsonMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,10 +39,17 @@ public final class PostureController {
     }
 
     @GetMapping("/api/posture")
-    public void posture(HttpServletResponse response) throws IOException {
+    public void posture(HttpServletRequest request, HttpServletResponse response) throws IOException {
         PostureReport report = PostureReport.discover(Configuration.of(environment::getProperty));
+        // Deployment-wide rows for everyone; a tenant's rows only for a key that belongs to that tenant. Rendering
+        // report.advisories() handed every TENANT-scoped advisory to any repository:read caller - the §6 leak, on
+        // the surface whose whole job is to enumerate the deployment's weaknesses. A caller with no key (auth off,
+        // or an anonymous read) resolves to no tenant and sees the deployment rows alone, which is the fail-closed
+        // direction. This is the same composition the downstream console's ScopedPosture performs; the primitives
+        // it uses live here, in the free report, and were simply not being called.
+        List<SecurityAdvisory> visible = report.visibleTo(Authorization.tenantOf(PresentedKey.from(request)));
         List<Map<String, Object>> rows = new ArrayList<>();
-        for (SecurityAdvisory advisory : report.advisories()) {
+        for (SecurityAdvisory advisory : visible) {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", advisory.id());
             row.put("severity", advisory.severity().name());
@@ -54,11 +63,13 @@ public final class PostureController {
             row.put("docs", advisory.docs());
             rows.add(row);
         }
+        // Counted over what is rendered, not over the whole report: a total that included rows the caller may not
+        // see would report the existence of another tenant's advisories, which is the same leak one field over.
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("count", report.count());
-        body.put("critical", report.count(build.jenesis.repository.posture.Severity.CRITICAL));
-        body.put("warn", report.count(build.jenesis.repository.posture.Severity.WARN));
-        body.put("info", report.count(build.jenesis.repository.posture.Severity.INFO));
+        body.put("count", visible.size());
+        body.put("critical", severity(visible, build.jenesis.repository.posture.Severity.CRITICAL));
+        body.put("warn", severity(visible, build.jenesis.repository.posture.Severity.WARN));
+        body.put("info", severity(visible, build.jenesis.repository.posture.Severity.INFO));
         body.put("advisories", rows);
         response.setHeader("Content-Type", "application/json");
         response.setStatus(200);
@@ -66,5 +77,10 @@ public final class PostureController {
         try (OutputStream out = response.getOutputStream()) {
             out.write(bytes);
         }
+    }
+
+    /** How many of the rendered rows carry {@code severity} - the counts must describe the body, not the report. */
+    private static long severity(List<SecurityAdvisory> visible, build.jenesis.repository.posture.Severity severity) {
+        return visible.stream().filter(advisory -> advisory.severity() == severity).count();
     }
 }

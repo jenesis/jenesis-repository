@@ -41,6 +41,20 @@ import module java.base;
  *     path derives from a name someone published to the incumbent, and it becomes a store write on the write half. A
  *     source screens every path it reports; the importer refuses one that slipped through
  *     ({@code RepositoryImporter.importable}), and the two screens agree by construction.</li>
+ * <li><b>Fetch refusal.</b> The twin of the clause above, on the half that reaches outward. A listing row carries a
+ *     <em>path</em>, which the clause above screens, and frequently also a <em>location</em> the source must
+ *     dereference to obtain the bytes - and that location is likewise a value the incumbent supplied, so it is
+ *     likewise not to be trusted. A source therefore fetches only through the {@link build.jenesis.repository.format.ProxyFormat.Fetcher} it was
+ *     handed, which is already screened ({@code ImportScreen}, applied by {@code ImportSourceProvider.open}); it
+ *     may wrap that fetcher to add credentials, and it may not replace it, build an HTTP client of its own, or
+ *     dereference a location by any other route. A location the screen refuses fails the walk loudly rather than
+ *     being skipped, because a refused download is either an incumbent that is misconfigured or one that is
+ *     hostile, and a walk that quietly omits the asset reports the same "nothing here" as an empty repository.
+ *     <p>Stated on this side as well as on {@code ImportSourceProvider}'s clause 10 because the two halves are
+ *     enforced in different places and a contract that constrains what a provider is <em>given</em> but not what a
+ *     source may <em>do</em> with it leaves the more dangerous half unstated - which is structurally why the
+ *     download-URL screen was once per-connector and drifted into three different answers across the
+ *     connectors.</li>
  * <li><b>Ordering / concurrency.</b> The enumeration order is deterministic for a given source state, because that is
  *     what makes a cursor mean anything: a resumed walk must be able to skip exactly what the interrupted one
  *     completed. {@link Checkpoint#reached} is called only after every asset of a batch has been fully consumed, so a

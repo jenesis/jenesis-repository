@@ -113,6 +113,24 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 String module = moduleName(store, hash.get());
                 if (module != null) {
                     paths.add("/module/" + module + "/" + version);
+                    // And the module's "latest" pointer, but ONLY while it names this version. It is the one
+                    // cross-published path that is not version-addressed, so it belongs to whichever version it
+                    // currently points at and to no other - which is exactly what the store can answer here, by
+                    // comparing what the pointer resolves to against this version's own jar.
+                    //
+                    // Omitting it made this method under-reach in both directions it is used. An eviction of the
+                    // version the pointer names removed the blob and left the pointer aimed at it, so the module's
+                    // latest view 404'd until someone republished, instead of falling back to the newest survivor.
+                    // And a release could not lift the content-addressed marker, because the version's own latest
+                    // alias - missing from the exclusion set - read as a foreign alias still holding those bytes,
+                    // which left a reviewer's released artifact permanently unreachable under its module name.
+                    // Reporting it by resolution rather than by construction also settles the opposite error one
+                    // layout over, where every version claimed the pointer and a first-version eviction destroyed
+                    // a live pointer naming a later one.
+                    String latest = "/module/" + module + "/" + module + ".jar";
+                    if (publication.blob(latest).filter(hash.get()::equals).isPresent()) {
+                        paths.add(latest);
+                    }
                 }
             }
         } catch (IOException _) {
