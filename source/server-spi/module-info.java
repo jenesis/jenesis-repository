@@ -26,6 +26,7 @@
 module build.jenesis.repository.server.spi {
     requires transitive build.jenesis.repository.store;
     exports build.jenesis.repository.server.spi;
+    uses build.jenesis.repository.server.spi.CapabilityContributor;
     uses build.jenesis.repository.server.spi.RateLimiterProvider;
     uses build.jenesis.repository.server.spi.KeyUsageTrackerProvider;
     uses build.jenesis.repository.server.spi.TokenExchangeProvider;

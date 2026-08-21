@@ -318,13 +318,12 @@ public class RepositoryController {
         // banner and a client knows keyless reads are served. Empty (the default) means no anonymous access. Read off
         // the same jenreg.* settings the other flags read, so no extra dependency is threaded in.
         base.put("anonymousRights", anonymousRights());
-        // collect the core CapabilityContributor SPI and merge each contribution onto the base map, so a
-        // richer distribution extends the one free /api/capabilities without a bean override (retiring the downstream
-        // WebMvcRegistrations mapping-suppression stopgap). Base keys win a conflict; with no contributor the body is
-        // the base map unchanged. Discovered per request through the same ServiceLoader seam the formats/import-sources
-        // use, so a distribution plugs in with no core change.
-        CapabilityContributor.Merged merged =
-                CapabilityContributor.merge(base, ServiceLoader.load(CapabilityContributor.class), settings);
+        // Merge each discovered contribution onto the base map, so a richer distribution extends the one free
+        // /api/capabilities without a bean override (retiring the downstream WebMvcRegistrations
+        // mapping-suppression stopgap). Base keys win a conflict; with no contributor the body is the base map
+        // unchanged. The discovery itself lives in the SPI home, not here, so this surface and every other consumer
+        // of the same flags read one answer from one pipeline rather than each loading its own.
+        CapabilityContributor.Merged merged = CapabilityContributor.resolve(base, settings);
         report(merged);
         response.setHeader("Content-Type", "application/json");
         respond(response, 200, JSON.writeValueAsString(merged.capabilities()));

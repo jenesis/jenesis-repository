@@ -179,8 +179,14 @@ public class RepositoryAutoConfiguration {
 
     /** The one credential surface. A distribution varies it through {@link CredentialContext}, never by
      *  re-declaring the routes: two implementations of "issue a credential" would drift, in an authorization
-     *  surface. */
-    @Bean
+     *  surface.
+     *
+     *  <p>The bean is named for its module rather than for its type. A console that renders credential <em>pages</em>
+     *  beside this API naturally calls its own controller {@code CredentialsController} too, and Spring derives a
+     *  component's bean name from its simple name - so an unqualified {@code credentialsController} here collides
+     *  with that console's bean by name while {@link ConditionalOnMissingBean}, which matches on type, sees no
+     *  reason to stand down. The two serve different paths and both belong; only the name was shared. */
+    @Bean("repositoryCredentialsController")
     @ConditionalOnMissingBean
     public CredentialsController credentialsController(Authorization authorization, CredentialContext context) {
         return new CredentialsController(authorization, context);
