@@ -177,4 +177,28 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
                 .filter(advisory -> advisory.scope() == Scope.TENANT && advisory.tenant().equals(tenant))
                 .toList();
     }
+
+    /**
+     * Everything a caller belonging to {@code tenant} may be shown: every deployment-wide advisory, plus that
+     * tenant's own. A {@code null} or blank tenant - an anonymous read, or a key that belongs to no tenant - sees
+     * the deployment-wide rows alone.
+     *
+     * <p>The composition lives here rather than at each read surface, because getting it wrong is a disclosure and
+     * there is more than one surface. This report enumerates a deployment's weaknesses by design, so a surface that
+     * renders {@link #advisories()} whole hands one tenant's unsafe settings to every other tenant's readers -
+     * which is exactly what the free {@code /api/posture} did while the downstream console composed the same two
+     * calls correctly one edition over.
+     *
+     * <p>Callers that need the two halves apart - a console rendering "your tenant" and "this deployment" as
+     * separate panels - keep using {@link #scoped} and {@link #forTenant} directly; this is for the surfaces that
+     * serve one flat list.
+     */
+    public List<SecurityAdvisory> visibleTo(String tenant) {
+        if (tenant == null || tenant.isBlank()) {
+            return scoped(Scope.DEPLOYMENT);
+        }
+        List<SecurityAdvisory> visible = new ArrayList<>(scoped(Scope.DEPLOYMENT));
+        visible.addAll(forTenant(tenant));
+        return List.copyOf(visible);
+    }
 }

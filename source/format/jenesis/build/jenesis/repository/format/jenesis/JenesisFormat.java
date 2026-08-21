@@ -59,18 +59,39 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
         if (!ArtifactLayout.addressable(coordinate, version)) {
             return List.of();
         }
-        // The two link shapes ModuleViewPublisher publishes for a module version: the version directory holding the
-        // versioned jar (/module/<name>/<version>/<name>.jar), and the version-less latest pointer file
-        // (/module/<name>/<name>.jar) - both pure functions of the coordinate, no artifact read, so a cleanup pass (or
-        // a read-path navigation) enumerates and unpublishes exactly the pointers this coordinate version occupies.
-        return List.of("/module/" + coordinate + "/" + version, "/module/" + coordinate + "/" + coordinate + ".jar");
+        // The version directory holding the versioned jar. The version-less latest pointer
+        // (/module/<name>/<name>.jar) is deliberately NOT here: it is not version-addressed, so it belongs to
+        // whichever version it currently names and to no other, and this overload is handed no store to ask with.
+        // Claiming it for every version made a first-version eviction unpublish a live pointer aimed at a later
+        // one - a pointer destroyed rather than re-aimed. The store overload below reports it exactly when it
+        // resolves to this version, which is the same rule the Maven layout applies to its own mirror.
+        return List.of("/module/" + coordinate + "/" + version);
     }
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // Both jenesis pointers are pure functions of the coordinate - unlike Maven, nothing here reads the store to
-        // find a cross-published mirror - so the store overload is exactly the coordinate-only one.
-        return paths(coordinate, version);
+        List<String> primary = paths(coordinate, version);
+        if (primary.isEmpty()) {
+            return primary;
+        }
+        // The latest pointer, while it names this version. Resolved rather than composed, so an eviction reaches
+        // the pointer it is about to invalidate and leaves alone one that names a surviving version, and so a
+        // release's cross-alias exclusion set covers the version's own alias instead of reading it as a foreign
+        // one still holding those bytes.
+        List<String> paths = new ArrayList<>(primary);
+        String versioned = "/module/" + coordinate + "/" + version + "/" + coordinate + ".jar";
+        String latest = "/module/" + coordinate + "/" + coordinate + ".jar";
+        try {
+            Publication publication = new Publication(store);
+            Optional<String> hash = publication.blob(versioned);
+            if (hash.isPresent() && publication.blob(latest).filter(hash.get()::equals).isPresent()) {
+                paths.add(latest);
+            }
+        } catch (IOException _) {
+            // best-effort, exactly as the Maven mirror is: the version directory still evicts and the blob is
+            // reclaimed when it becomes unreferenced.
+        }
+        return paths;
     }
 
     /** The neutral descriptor of a {@code /module/...} path, or empty when the path carries no coordinate to describe (a

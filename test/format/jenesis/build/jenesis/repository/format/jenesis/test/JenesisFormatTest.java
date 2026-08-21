@@ -123,15 +123,36 @@ class JenesisFormatTest {
     }
 
     @Test
-    void paths_round_trip_the_two_module_view_link_shapes() {
-        // The version directory holding the versioned jar and the version-less latest pointer file - exactly the two
-        // links ModuleViewPublisher publishes for a module version, recovered from the coordinate alone.
+    void paths_report_the_version_directory_and_claim_the_latest_pointer_only_when_it_names_this_version() {
+        // The latest pointer (/module/<name>/<name>.jar) is not version-addressed, so it belongs to whichever
+        // version it currently names and to no other. Claiming it from the coordinate alone made every version
+        // report it, and an eviction of 1.0 then unpublished a live pointer aimed at 2.0 - a pointer destroyed
+        // rather than re-aimed. The coordinate-only overload is handed no store and so cannot know; it reports the
+        // version directory and stops.
         assertThat(format.paths("com.acme", "1.0"))
-                .containsExactly("/module/com.acme/1.0", "/module/com.acme/com.acme.jar");
+                .as("no store, no claim on a pointer that may name another version")
+                .containsExactly("/module/com.acme/1.0");
         assertThat(format.paths("com.acme", "1.0", store))
-                .as("the store overload adds no cross-published mirror for jenesis")
-                .containsExactly("/module/com.acme/1.0", "/module/com.acme/com.acme.jar");
+                .as("and with an empty store there is no pointer resolving to this version either")
+                .containsExactly("/module/com.acme/1.0");
         assertThat(format.paths("", "1.0")).as("an empty coordinate maps nowhere").isEmpty();
+    }
+
+    @Test
+    void the_store_overload_claims_the_latest_pointer_for_the_version_it_actually_names() throws IOException {
+        Publication publication = new Publication(store);
+        String hash = publication.storeBlob(new ByteArrayInputStream("jar".getBytes(StandardCharsets.UTF_8)));
+        publication.link("/module/com.acme/1.0/com.acme.jar", hash);
+        publication.link("/module/com.acme/com.acme.jar", hash);
+        String other = publication.storeBlob(new ByteArrayInputStream("other".getBytes(StandardCharsets.UTF_8)));
+        publication.link("/module/com.acme/2.0/com.acme.jar", other);
+
+        assertThat(format.paths("com.acme", "1.0", store))
+                .as("1.0 is what the latest pointer resolves to, so 1.0 occupies it")
+                .containsExactlyInAnyOrder("/module/com.acme/1.0", "/module/com.acme/com.acme.jar");
+        assertThat(format.paths("com.acme", "2.0", store))
+                .as("2.0 does not, so evicting 2.0 must not take the pointer with it")
+                .containsExactly("/module/com.acme/2.0");
     }
 
     @Test
