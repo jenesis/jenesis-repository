@@ -42,9 +42,11 @@ public final class CredentialsController {
     private static final Pattern HASH = Pattern.compile("[0-9a-f]{64}");
 
     private final Authorization authorization;
+    private final CredentialContext context;
 
-    public CredentialsController(Authorization authorization) {
+    public CredentialsController(Authorization authorization, CredentialContext context) {
         this.authorization = Objects.requireNonNull(authorization, "authorization");
+        this.context = Objects.requireNonNull(context, "context");
     }
 
     /** Every credential of the managing key's tenant, secrets excluded - they are not stored to begin with. */
@@ -52,7 +54,7 @@ public final class CredentialsController {
     @ResponseBody
     public List<CredentialView> credentials(@RequestHeader(value = KEY, required = false) String key)
             throws IOException {
-        String tenant = tenantOf(key);
+        String tenant = context.tenant(key);
         List<CredentialView> views = new ArrayList<>();
         for (String hash : authorization.credentials(tenant)) {
             Optional<Authorization.Credential> credential = authorization.credential(tenant, hash);
@@ -73,13 +75,14 @@ public final class CredentialsController {
     public Minted mint(@RequestHeader(value = KEY, required = false) String key,
                        @RequestBody(required = false) MintRequest request,
                        HttpServletResponse response) throws IOException {
-        String tenant = tenantOf(key);
+        String tenant = context.tenant(key);
         String minted = Authorization.mint(tenant);
         String hash = Authorization.hash(minted);
         Instant expires = authorization.mintExpiry(tenant,
                 request == null ? null : expiry(request.expires()),
                 request != null && Boolean.TRUE.equals(request.nonExpiring()));
         authorization.provision(tenant, hash, request == null ? null : request.label(), expires);
+        context.audit(key, "credential.mint", hash);
         response.setStatus(201);
         return new Minted(hash, minted, expires == null ? null : expires.toString());
     }
@@ -90,7 +93,8 @@ public final class CredentialsController {
                          @RequestHeader(value = KEY, required = false) String key,
                          @RequestBody GrantRequest request,
                          HttpServletResponse response) throws IOException {
-        authorization.setGrant(tenantOf(key), hashId(id), request.scope(), String.join(",", request.tokens()));
+        authorization.setGrant(context.tenant(key), hashId(id), request.scope(), String.join(",", request.tokens()));
+        context.audit(key, "grant.set", id + " " + request.scope());
         response.setStatus(200);
     }
 
@@ -98,7 +102,8 @@ public final class CredentialsController {
     public void removeGrant(@PathVariable("id") String id, @PathVariable("scope") String scope,
                             @RequestHeader(value = KEY, required = false) String key,
                             HttpServletResponse response) throws IOException {
-        authorization.removeGrant(tenantOf(key), hashId(id), scope);
+        authorization.removeGrant(context.tenant(key), hashId(id), scope);
+        context.audit(key, "grant.remove", id + " " + scope);
         response.setStatus(200);
     }
 
@@ -107,7 +112,8 @@ public final class CredentialsController {
                           @RequestHeader(value = KEY, required = false) String key,
                           @RequestBody(required = false) ExpiryRequest request,
                           HttpServletResponse response) throws IOException {
-        authorization.setExpiry(tenantOf(key), hashId(id), request == null ? null : expiry(request.expires()));
+        authorization.setExpiry(context.tenant(key), hashId(id), request == null ? null : expiry(request.expires()));
+        context.audit(key, "credential.expiry", id);
         response.setStatus(200);
     }
 
@@ -115,16 +121,47 @@ public final class CredentialsController {
     public void revoke(@PathVariable("id") String id,
                        @RequestHeader(value = KEY, required = false) String key,
                        HttpServletResponse response) throws IOException {
-        authorization.revoke(tenantOf(key), hashId(id));
+        authorization.revoke(context.tenant(key), hashId(id));
+        context.audit(key, "credential.revoke", id);
         response.setStatus(200);
     }
 
-    /** The tenant the managing key belongs to - a key carries its own, so nothing else has to be consulted. */
-    private static String tenantOf(String key) {
-        if (key == null || key.isBlank()) {
-            throw new IllegalArgumentException("A managing key is required to address a tenant's credentials");
-        }
-        return Authorization.tenantOf(key);
+    /**
+     * Rotate a credential: mint a successor that inherits its grants and allowlist, and expire the old one after
+     * an overlap so the swap needs no downtime. The successor's secret is returned once, like any mint.
+     */
+    @PostMapping("/api/credentials/{id}/rotate")
+    @ResponseBody
+    public Minted rotate(@PathVariable("id") String id,
+                         @RequestHeader(value = KEY, required = false) String key,
+                         @RequestBody(required = false) RotateRequest request,
+                         HttpServletResponse response) throws IOException {
+        Authorization.Rotated rotated = authorization.rotate(context.tenant(key), hashId(id),
+                request == null ? null : overlap(request.overlap()));
+        context.audit(key, "credential.rotate", id + " -> " + Authorization.hash(rotated.key()));
+        response.setStatus(201);
+        return new Minted(Authorization.hash(rotated.key()), rotated.key(),
+                rotated.expires() == null ? null : rotated.expires().toString());
+    }
+
+    /**
+     * Set or clear a credential's source-IP allowlist (comma-separated CIDRs or addresses). A request from an
+     * address in none of them is forbidden even with a valid key, which is what makes a leaked key survivable.
+     */
+    @PutMapping("/api/credentials/{id}/allowed-ips")
+    public void setAllowedAddresses(@PathVariable("id") String id,
+                                    @RequestHeader(value = KEY, required = false) String key,
+                                    @RequestBody(required = false) AllowedAddressesRequest request,
+                                    HttpServletResponse response) throws IOException {
+        authorization.setAllowedAddresses(context.tenant(key), hashId(id),
+                request == null ? null : request.addresses());
+        context.audit(key, "credential.allowed-ips", id);
+        response.setStatus(200);
+    }
+
+    /** A blank overlap applies the default week, so a rotation without one is still downtime-free. */
+    private static Duration overlap(String value) {
+        return value == null || value.isBlank() ? null : Duration.parse(value.trim());
     }
 
     private static String hashId(String id) {
@@ -170,5 +207,11 @@ public final class CredentialsController {
     }
 
     public record ExpiryRequest(String expires) {
+    }
+
+    public record RotateRequest(String overlap) {
+    }
+
+    public record AllowedAddressesRequest(String addresses) {
     }
 }
