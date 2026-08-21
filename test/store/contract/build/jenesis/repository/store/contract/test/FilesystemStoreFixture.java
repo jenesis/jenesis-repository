@@ -40,7 +40,7 @@ final class FilesystemStoreFixture implements StoreFixture {
     public void start() throws IOException {
         root = Files.createTempDirectory("store-contract-filesystem-");
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null).scope(Containers.uniqueScope());
+                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null).scope(uniqueScope());
     }
 
     @Override
@@ -58,5 +58,10 @@ final class FilesystemStoreFixture implements StoreFixture {
                 Files.deleteIfExists(path);
             }
         }
+    }
+
+    /** A scope nothing else in this JVM will pick, so two fixtures never share a key space. */
+    private static String uniqueScope() {
+        return "kit" + Long.toHexString(java.util.concurrent.ThreadLocalRandom.current().nextLong() >>> 1);
     }
 }

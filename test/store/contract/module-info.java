@@ -18,7 +18,6 @@
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.store.testkit
- * @jenesis.alias org.containers org.containers/containers
  * @jenesis.pin com.azure.storage.blob 12.35.0
  * @jenesis.pin com.azure/azure-core 1.58.1 SHA-256/7b339126e92af79b07fcf96fe16fa5ba2a2854bb8ce7e03ac4776b9474fe7df5
  * @jenesis.pin com.azure/azure-core-http-netty 1.16.5 SHA-256/61091ba5634e711e396721edfcca5c6782be1c1e86f2ecf856eb57aa20260c0c
@@ -106,7 +105,6 @@
  * @jenesis.pin org.reflections/reflections 0.10.2 SHA-256/938a2d08fe54050d7610b944d8ddc3a09355710d9e6be0aac838dbc04e9a2825
  * @jenesis.pin org.rnorth.duct-tape/duct-tape 1.0.8 SHA-256/31cef12ddec979d1f86d7cf708c41a17da523d05c685fd6642e9d0b2addb7240
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
- * @jenesis.pin org.containers/containers 2.0.5 SHA-256/0466f481343d5f350a91274cd7bf984308cbaf90d706247fd1cf4b1a8010c2e1
  * @jenesis.pin software.amazon.awssdk.auth 2.46.15
  * @jenesis.pin software.amazon.awssdk.http.urlconnection 2.46.15
  * @jenesis.pin software.amazon.awssdk.regions 2.46.15
@@ -154,7 +152,6 @@ open module build.jenesis.repository.store.contract.test {
     requires build.jenesis.repository.store.azure;
     requires org.junit.jupiter;
     requires org.assertj.core;
-    requires org.containers;
 
     // Discovery is the thing under test here, so this module loads the SPI itself rather than through a resolver
     // static: the census has to enumerate what ServiceLoader really sees in this graph and compare it against the
