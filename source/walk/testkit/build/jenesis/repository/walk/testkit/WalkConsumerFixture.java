@@ -69,8 +69,22 @@ public interface WalkConsumerFixture {
      */
     Corpus seed(ArtifactStore store, int artifacts) throws IOException;
 
-    /** A seeded corpus: how many {@link WalkConsumer#onRetained} calls one full pass makes over it, and the
-     *  {@link #projection} a converged consumer must then answer. */
+    /**
+     * A seeded corpus: how many {@link WalkConsumer#onRetained} calls one full pass makes over it, and the
+     * {@link #projection} a converged consumer must then answer.
+     *
+     * <p><b>{@code deliveries} is the fixture's to count, and it is not always one per seeded artifact</b>
+     * (D-255). The kit cannot derive it, because a consumer whose derived state is <em>itself</em> a retained
+     * pointer feeds its own walk: the rows it writes during a pass land under {@link #pointerRoots()} and are
+     * enumerated by the same pass that wrote them, so the count depends on the order the roots are listed in and
+     * cannot be known before the pass runs. The first shipped consumer is one of these - a module view is a
+     * serving pointer, so one pass over {@code n} modular jars delivers {@code 2n + 1}, not {@code n}.
+     *
+     * <p>A fixture in that position owes two things beside the number: a reason the count is <em>stable</em>
+     * (which root sorts first, so every derived row is written before the subtree it lands in is listed), and a
+     * seed that makes the derived subtree exist from the first listing - without it a first pass and a second
+     * disagree, and the contract's re-run legs read that as a consumer that does not converge.
+     */
     record Corpus(int deliveries, Map<String, String> converged) {
 
         public Corpus {

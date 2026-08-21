@@ -218,7 +218,7 @@ public final class WalkConsumerContract {
         Instrumented worker = pass(fixture, harness, store, null, corpus);
 
         equal(worker.deliveries, corpus.deliveries(), fixture,
-                "one pass delivers every retained pointer exactly once");
+                "one pass delivers every retained pointer exactly once" + selfFeeding(fixture));
         equal(fixture.projection(store), corpus.converged(), fixture,
                 "the walk alone rebuilt the consumer's whole declared projection");
         equal(fixture.degradation(store), Optional.empty(), fixture,
@@ -667,6 +667,25 @@ public final class WalkConsumerContract {
 
     /** Every stored key, found through the shared descent primitive rather than a hand-rolled walk - so a consumer
      *  that planted a deep key cannot overflow the check meant to catch it. */
+    /**
+     * The hint a self-feeding consumer's author needs when the delivery count does not match (D-255).
+     *
+     * <p>A consumer whose namespaces overlap the roots the pass enumerates writes rows that the same pass then
+     * enumerates, so its count is not one per seeded artifact. That is legitimate - a module view really is a
+     * serving pointer - but it is invisible from the failure alone, and the first fixture in this position worked
+     * it out by hand. Saying it here is what stops the next one repeating that.
+     */
+    private static String selfFeeding(WalkConsumerFixture fixture) {
+        List<String> overlapping = fixture.namespaces().stream()
+                .filter(namespace -> fixture.pointerRoots().stream()
+                        .anyMatch(root -> namespace.startsWith(root) || root.startsWith(namespace)))
+                .toList();
+        return overlapping.isEmpty() ? "" : ". NOTE: this consumer writes into " + overlapping + ", which the pass "
+                + "also enumerates, so its rows feed the walk that wrote them and the count is NOT one per seeded "
+                + "artifact - declare what the pass really delivers, and say in the fixture why that number is "
+                + "stable (see WalkConsumerFixture.Corpus)";
+    }
+
     private static List<String> keys(ArtifactStore store) throws IOException {
         List<String> keys = new ArrayList<>();
         for (String top : store.list("")) {
