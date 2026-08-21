@@ -48,7 +48,7 @@ import module java.base;
  * is safe: a contributor that knows a priori which keys it may not claim can still refuse at the point it builds its
  * contribution, long before the merge sees it.
  *
- * <p>The same reasoning covers a contributor that <em>throws</em> from {@link #capabilities()}: the exception is
+ * <p>The same reasoning covers a contributor that <em>throws</em> from {@link #capabilities}: the exception is
  * contained, the contributor is named under {@value #FAILURES_KEY}, and the rest of the map is served. Containing it is
  * not swallowing it - nothing about the failure is lost, it is simply delivered as data instead of as a dead endpoint.
  * The one failure that is deliberately <em>not</em> contained here is a contributor that will not instantiate at all:
@@ -59,9 +59,9 @@ import module java.base;
  * <ol>
  *   <li><b>Thread-safety.</b> The server discovers and calls contributors on the request thread and may do so
  *       concurrently for concurrent requests; an implementation must be safe to call from several threads at once. It
- *       is handed no shared mutable state and must introduce none - {@link #capabilities()} builds and returns a fresh
+ *       is handed no shared mutable state and must introduce none - {@link #capabilities} builds and returns a fresh
  *       map, and the map passed to {@link #merge} is never mutated by a contributor.</li>
- *   <li><b>Idempotency / replay.</b> {@link #capabilities()} is called once per request, not once per boot. Two calls
+ *   <li><b>Idempotency / replay.</b> {@link #capabilities} is called once per request, not once per boot. Two calls
  *       over an unchanged deployment must return equal maps; a call must have no side effect, so re-serving the
  *       endpoint any number of times changes nothing.</li>
  *   <li><b>Absence sentinel.</b> "Nothing to contribute" is an empty map (a {@code null} return is tolerated and means
@@ -86,7 +86,7 @@ import module java.base;
  *       that throws is reported in {@link Merged#failures()} and under {@value #FAILURES_KEY}. Both are additionally
  *       logged by the serving controller. The blast radius of either is confined to the losing entry: the base map and
  *       every other contribution are served intact.</li>
- *   <li><b>Read purity.</b> {@link #capabilities()} answers a GET, so it renders state the process already holds -
+ *   <li><b>Read purity.</b> {@link #capabilities} answers a GET, so it renders state the process already holds -
  *       installed modules, resolved settings, discovered providers. It performs no external fetch, no scan and no
  *       write, and the endpoint must still answer when an upstream a capability describes is down (&sect;10).</li>
  *   <li><b>Lifecycle / ownership.</b> Instances are created by {@link ServiceLoader} from a public no-arg constructor
@@ -102,13 +102,23 @@ import module java.base;
  *       is served is decided by the order the loader saw their modules. Two distributions must therefore not claim
  *       one key - and when they do, the conflict report is what makes the collision visible rather than a stable
  *       winner making it invisible.</li>
- *   <li><b>Bounded work / cancellation.</b> {@link #capabilities()} is on the request path and must be cheap and
+ *   <li><b>Bounded work / cancellation.</b> {@link #capabilities} is on the request path and must be cheap and
  *       bounded - a handful of already-known flags, not an enumeration of stored artifacts. It is given no
  *       cancellation signal, so it must not block.</li>
  *   <li><b>Durability / delivery.</b> Nothing here is durable. The merged map is derived afresh per request from the
  *       installed module set and the live settings; there is no commit point, no crash window and nothing to heal.
  *       {@value #CONFLICTS_KEY} and {@value #FAILURES_KEY} are likewise derived, so a fixed deployment stops reporting
  *       on its very next request with nothing to clear.</li>
+ *   <li><b>Stable key and type.</b> A contributed key is part of the wire. The CLI and the console read
+ *       {@code gc}, {@code walk}, {@code search}, {@code dependents}, {@code scan}, {@code provenance} and
+ *       {@code audit} by name, so a flag key is a lowercase, dot-free identifier and is <b>never renamed</b>: a
+ *       rename reads to every client as "the capability is gone", because a missing key is {@code false}. A
+ *       capability that outgrows "present/enabled" becomes a differently-named entry rather than a re-typed flag,
+ *       so a client that understands the old key keeps working.</li>
+ *   <li><b>Live resolution.</b> A contributor resolves its answer from the {@code configuration} operator it is
+ *       handed on each call rather than pinning it at construction, so a selection or a required setting that turns
+ *       the capability off shows up on the next read without a restart. The operator is the serving surface's own
+ *       effective-value chain; a contributor neither builds one nor reaches for a static holder to find one.</li>
  * </ol>
  * Clauses 5 (streaming), 6 (tenant scoping) and 9 (staleness) do not apply: nothing here streams, the surface is
  * deployment-global by definition rather than tenant-scoped (a contributor must therefore put no per-tenant data in
@@ -137,11 +147,14 @@ public interface CapabilityContributor {
      * <p>Keys are a shared namespace: one a base key or an earlier contributor already owns will not be served, and the
      * loss is reported rather than silently absorbed (see the merge rule above), so name a key for the concept it
      * carries and prefix it where a collision with another distribution is plausible.
+     *
+     * @param configuration the serving surface's effective-value chain for a setting key, resolved live per call
+     *                      (clause 12). A contributor that reports nothing configuration-dependent ignores it.
      */
-    Map<String, Object> capabilities();
+    Map<String, Object> capabilities(UnaryOperator<String> configuration);
 
     /**
-     * Merge every {@code contributor}'s {@link #capabilities()} into a copy of {@code base}, applying the documented
+     * Merge every {@code contributor}'s {@link #capabilities} into a copy of {@code base}, applying the documented
      * precedence rule: a base key always wins a conflict, and among contributors the first discovered wins. The base
      * keys keep their insertion order first; new keys are appended in contributor discovery order. When
      * {@code contributors} is empty the returned map equals {@code base} exactly (same keys, same order, same values) -
@@ -150,10 +163,14 @@ public interface CapabilityContributor {
      * <p>Every entry the rule refuses is <b>named</b> rather than dropped: the returned {@link Merged} carries the
      * conflicts and the contributor failures as data, and - when there are any - the served map carries them too under
      * {@value #CONFLICTS_KEY} and {@value #FAILURES_KEY}. This method therefore never throws on account of a
-     * contributor: a contributor that throws from {@link #capabilities()} is contained and reported, because a plugin's
+     * contributor: a contributor that throws from {@link #capabilities} is contained and reported, because a plugin's
      * mistake must not take down the endpoint that advertises the free product's own flags.
+     *
+     * @param configuration handed to every contributor, so each resolves its answer through the calling surface's
+     *                      own effective-value chain rather than composing a second one.
      */
-    static Merged merge(Map<String, Object> base, Iterable<CapabilityContributor> contributors) {
+    static Merged merge(Map<String, Object> base, Iterable<CapabilityContributor> contributors,
+                        UnaryOperator<String> configuration) {
         Map<String, Object> merged = new LinkedHashMap<>(base);
         // Who owns each key that is already spoken for, so a refused contribution can say what beat it rather than
         // only that it lost. The two diagnostic keys are reserved here, not written here: a contributor claiming one
@@ -169,7 +186,7 @@ public interface CapabilityContributor {
             String name = contributor.getClass().getName();
             Map<String, Object> contribution;
             try {
-                contribution = contributor.capabilities();
+                contribution = contributor.capabilities(configuration);
             } catch (RuntimeException exception) {
                 // Contained, not swallowed: the contributor is named with its failure and the rest of the map is
                 // served. An optional plugin that cannot build its view must not cost the deployment the endpoint.

@@ -324,7 +324,7 @@ public class RepositoryController {
         // the base map unchanged. Discovered per request through the same ServiceLoader seam the formats/import-sources
         // use, so a distribution plugs in with no core change.
         CapabilityContributor.Merged merged =
-                CapabilityContributor.merge(base, ServiceLoader.load(CapabilityContributor.class));
+                CapabilityContributor.merge(base, ServiceLoader.load(CapabilityContributor.class), settings);
         report(merged);
         response.setHeader("Content-Type", "application/json");
         respond(response, 200, JSON.writeValueAsString(merged.capabilities()));
