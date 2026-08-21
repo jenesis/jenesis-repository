@@ -6,7 +6,7 @@ import build.jenesis.repository.ui.Panel;
 import module java.base;
 
 /**
- * A {@code provides}-declared panel that always fails to render, so the booted console in {@link ConsoleE2ETest} really
+ * A {@code provides}-declared panel that always fails to render, so the booted console in {@code ConsoleE2ETest} (downstream) really
  * serves a page containing a contained panel failure. That is the leg a unit test cannot cover: whether the shell
  * <em>renders</em> the failure - the navigation marker, the alert in the panel's own card - only shows when a real
  * request meets a real failing panel, and a template expression that is only evaluated on failure would otherwise be

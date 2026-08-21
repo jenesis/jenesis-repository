@@ -19,7 +19,8 @@ module build.jenesis.repository.importer.maven {
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.format;
     requires java.xml;
-    exports build.jenesis.repository.importer.maven to build.jenesis.repository.test, build.jenesis.repository.importer.maven.test;
+    exports build.jenesis.repository.importer.maven to build.jenesis.repository.test,
+            build.jenesis.repository.server.e2e, build.jenesis.repository.importer.maven.test;
     provides build.jenesis.repository.importer.ImportSourceProvider
             with build.jenesis.repository.importer.maven.MavenSourceProvider;
 }

@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * read is cheap (it lists only the {@code consistency/nodes/} prefix and reads one small object per node - it never
  * scans the blob namespace, proven with a read/list counter that stays bounded no matter how many blobs exist). It also
  * pins the divergence advisory's severities (WO.5) and the observability health (WO.4). The {@code GET /api/consistency}
- * authorization gating and the console panel are pinned end to end by {@link MultiNodeConsistencyE2ETest}.
+ * authorization gating and the console panel are pinned end to end by {@code MultiNodeConsistencyE2ETest}.
  */
 class MultiNodeConsistencyTest {
 
