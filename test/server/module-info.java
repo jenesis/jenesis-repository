@@ -9,7 +9,6 @@
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.server
- * @jenesis.alias org.containers org.containers/containers
  * @jenesis.alias wiremock.core org.wiremock/wiremock-core
  * @jenesis.alias wiremock.jetty org.wiremock/wiremock-jetty
  * @jenesis.alias wiremock.httpclient org.wiremock/wiremock-httpclient-apache5
@@ -187,7 +186,6 @@
  * @jenesis.pin org.springframework/spring-expression 7.0.8 SHA-256/3c97c38ab59c77ee886e08ccf8096f6bb58a1245f68dfed7a40e93f41c435f9a
  * @jenesis.pin org.springframework/spring-web 7.0.8 SHA-256/4d4ed7ecb0453d25d735ea27d025ea36b003c3d29cb7d006bedd6d5188a2f5c0
  * @jenesis.pin org.springframework/spring-webmvc 7.0.8 SHA-256/48f7e1e2d0d46e98ed3fa30d5a64cb1f7ed2aa339a82edcd87289ed8ff216f04
- * @jenesis.pin org.containers/containers 2.0.5 SHA-256/0466f481343d5f350a91274cd7bf984308cbaf90d706247fd1cf4b1a8010c2e1
  * @jenesis.pin org.wiremock/certificate-generator 4.0.0-beta.38 SHA-256/09b7af9b1c6cb9669504c3b318f94db7e48c69f42eb7091f659e3f7c65d84ee5
  * @jenesis.pin org.wiremock/wiremock-core 4.0.0-beta.38 SHA-256/b1611d85ca6f5a2b5d2929a8244a4807b3f843704f2bc0225992cea59e1fe419
  * @jenesis.pin org.wiremock/wiremock-httpclient-apache5 4.0.0-beta.38 SHA-256/789f40cad051cb8296b04b581f12aba4e32301e2dcb1cc5a67f572c4a7262cc7
@@ -261,7 +259,6 @@ open module build.jenesis.repository.test {
     requires wiremock.core;
     requires wiremock.jetty;
     requires wiremock.httpclient;
-    requires org.containers;
     requires org.mockito;
     // ImporterContractTest discovers every RepositoryImporter the way the server does - ServiceLoader over the
     // RepositoryFormat providers, filtered to the import capability - so it declares the same service dependency.
