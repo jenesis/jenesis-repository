@@ -246,7 +246,7 @@ class PublishInterceptorTest {
 
     @Test
     void a_bounded_sibling_read_honours_a_limit_above_the_whole_document_ceiling() throws IOException {
-        // D-035. The bounded read's bound is the CALLER's, not this seam's. A companion between the whole-document
+        //. The bounded read's bound is the CALLER's, not this seam's. A companion between the whole-document
         // ceiling (8 MiB) and the caller's own inspection window is exactly the case that used to divide the two
         // ingress legs: a proxy screen streaming its own bound returned the sibling whole and hashable, while the
         // publish leg - whose only route was the whole-document read - raised out of the interceptor chain and failed

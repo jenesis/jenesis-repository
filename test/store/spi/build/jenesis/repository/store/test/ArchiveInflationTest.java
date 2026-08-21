@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The product's shared archive-inflation bound (D-054): one named, operator-settable ceiling on how many decompressed
+ * The product's shared archive-inflation bound: one named, operator-settable ceiling on how many decompressed
  * bytes of a single archive member a format may materialise, and a read that reports <em>why</em> it stopped rather
  * than conflating "this archive declares nothing" with "the bound stopped us looking".
  */

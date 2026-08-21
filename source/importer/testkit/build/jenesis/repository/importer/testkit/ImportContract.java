@@ -41,7 +41,7 @@ import build.jenesis.repository.store.Features;
  * for its own connector fixtures exactly as it already requires the store testkit. The JUnit driver lives under
  * {@code test/**} and turns each check into one dynamic test.
  *
- * <h2>Clauses this kit discharges (T-304)</h2>
+ * <h2>Clauses this kit discharges</h2>
  *
  * {@code SELF_SKIPS_WITHOUT_CREDENTIALS} is {@code ImportSourceProvider}'s absence-sentinel and selection-failure
  * pair, which its own javadoc already cites. The kit's four other properties are about {@code ImportSource}, which
@@ -351,7 +351,7 @@ public final class ImportContract {
                             + "store write on the import's write half");
             // The two screens must agree. The source screens what it REPORTS and the importer screens what it LAYS
             // OUT; a path either side accepts and the other refuses is a seam where an asset is either silently
-            // dropped or composed into a key nobody intended - which is exactly the shape T-202a found one seam over.
+            // dropped or composed into a key nobody intended - which is exactly the shape found one seam over.
             isTrue(RepositoryImporter.importable(path), fixture,
                     "the walk reported '" + path + "', which passes ImportSource.safePath but fails "
                             + "RepositoryImporter.importable - the read half and the write half disagree about what a "

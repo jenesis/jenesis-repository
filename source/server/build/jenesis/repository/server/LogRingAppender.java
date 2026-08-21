@@ -8,7 +8,7 @@ import ch.qos.logback.core.AppenderBase;
 /**
  * The logback tap that feeds the {@link LogRingBuffer}: an {@link AppenderBase} attached to the running logback root
  * logger so every {@code info}/{@code warn}/{@code error} the JVM emits through slf4j is captured into the bounded ring
- * without ever re-reading a log file (WO.4, the stream-don't-buffer rule). Each event contributes its level, timestamp,
+ * without ever re-reading a log file (the stream-don't-buffer rule). Each event contributes its level, timestamp,
  * logger name and already-formatted message; the tenant is read from the MDC key {@value #TENANT_MDC_KEY} when the
  * request path threaded one, and is left {@code null} - a deployment-wide entry - when it did not. The appender does
  * only an O(1) push per event onto the ring, so it adds no measurable cost to the logging path and cannot grow memory

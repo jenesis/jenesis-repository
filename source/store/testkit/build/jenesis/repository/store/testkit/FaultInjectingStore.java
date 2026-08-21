@@ -61,7 +61,7 @@ public final class FaultInjectingStore implements ArtifactStore {
     private final List<Rule> rules = new ArrayList<>();
     private final Map<Op, Integer> counts = new EnumMap<>(Op.class);
 
-    /** Which commit choreography this deployment simulates (D-148). It rides the store rather than the check's
+    /** Which commit choreography this deployment simulates. It rides the store rather than the check's
      *  signature because every check reaches its {@code Publication} through
      *  {@link PublicationHookContract#publication}, and the store is the one deployment object every check body is
      *  already handed - so the arrangement follows the deployment instead of forty-six signatures. */
@@ -77,7 +77,7 @@ public final class FaultInjectingStore implements ArtifactStore {
     }
 
     /** Run every publication built over this store - or over a scope of it - under {@code mutant}'s arranged
-     *  choreography (D-148). Armed like a fault, and for the same reason: it is a property of the deployment a check
+     *  choreography. Armed like a fault, and for the same reason: it is a property of the deployment a check
      *  is driving rather than of the check. */
     public FaultInjectingStore simulating(ChoreographyMutant mutant) {
         this.choreography = Objects.requireNonNull(mutant, "mutant");

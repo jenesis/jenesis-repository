@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@code GcsConditionalWriteTest}, {@code AzureEndpointSchemeTest}) and the store contract kit's
  * {@code PLAINTEXT_ENDPOINT_REFUSED} property that drives it through a real resolution.
  *
- * <p>The rule used to be written out once per backend (D-023), so a boundary a reviewer fixed in one copy - which
+ * <p>The rule used to be written out once per backend, so a boundary a reviewer fixed in one copy - which
  * spellings of the opt-out count as {@code true}, whether an uppercase scheme passes - was silently a different rule
  * in the other two. Those boundaries are asserted here once, on the one implementation, so a change to them cannot be
  * partial.

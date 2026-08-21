@@ -114,7 +114,7 @@ final class OciFormatFixture implements FormatFixture {
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(FormatContract.Property.COORDINATE_TRAVERSAL_REFUSED,
                 "OciFormat implements no ArtifactLayout: an image's coordinate-to-pointer mapping is the downstream "
-                        + "OciBlobLayout, which the T-202b fixtures cover. Every client-supplied name this format "
+                        + "OciBlobLayout, which the fixtures cover. Every client-supplied name this format "
                         + "does splice into a store key - the image name, the tag, the digest - is screened at the "
                         + "request seam by isImageName/isTag/isDigestHex and asserted by "
                         + "REQUEST_PATH_TRAVERSAL_REFUSED");

@@ -74,7 +74,7 @@ public interface WalkConsumerFixture {
      * {@link #projection} a converged consumer must then answer.
      *
      * <p><b>{@code deliveries} is the fixture's to count, and it is not always one per seeded artifact</b>
-     * (D-255). The kit cannot derive it, because a consumer whose derived state is <em>itself</em> a retained
+     *. The kit cannot derive it, because a consumer whose derived state is <em>itself</em> a retained
      * pointer feeds its own walk: the rows it writes during a pass land under {@link #pointerRoots()} and are
      * enumerated by the same pass that wrote them, so the count depends on the order the roots are listed in and
      * cannot be known before the pass runs. The first shipped consumer is one of these - a module view is a

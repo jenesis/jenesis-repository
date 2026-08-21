@@ -125,7 +125,7 @@ class StoreWalkTest {
 
     @Test
     void an_explicitly_selected_walk_no_provider_answers_to_fails_loudly() {
-        // T-101b (§9): this used to resolve to empty, so `jenreg.walk=other` silently turned every
+        // (§9): this used to resolve to empty, so `jenreg.walk=other` silently turned every
         // walk-riding sweep - garbage collection, reconcile, retroactive hold enforcement - into a no-op that looks
         // exactly like a healthy idle system.
         Features.configure(key -> "jenreg.walk".equals(key) ? "other" : null);

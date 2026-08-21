@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The three-valued answer (D-111 layer 1): "the answer is this", "the answer is nothing", and "I could not ask".
+ * The three-valued answer (layer 1): "the answer is this", "the answer is nothing", and "I could not ask".
  *
  * <p>Most of what this type is for is proven by the <em>compiler</em> - a seam typed on {@link Known.Determined}
  * cannot be handed a {@link Known.Unknown} - and a test that would not compile is not a test. So the shape checks
@@ -108,7 +108,7 @@ class KnownTest {
 
     @Test
     void an_unanswerable_question_does_not_fit_a_seam_that_demands_an_answered_one() {
-        // The mechanism of D-111 layer 2: a destructive/releasing/disclosing seam types its parameter on Determined,
+        // The mechanism of layer 2: a destructive/releasing/disclosing seam types its parameter on Determined,
         // and Unknown is a peer of Determined rather than a subtype, so handing one over is a compile error at the
         // call site instead of a review item. If this ever became true, every such seam would silently re-open.
         assertThat(Known.Determined.class.isAssignableFrom(Known.Unknown.class)).isFalse();

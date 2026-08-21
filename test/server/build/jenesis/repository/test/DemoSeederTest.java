@@ -154,7 +154,7 @@ class DemoSeederTest {
 
     /** A fixed in-memory fetcher answering each URL from a canned map and counting its calls. An unmapped URL is a
      *  {@code 404} - the upstream <em>answering</em> that it carries no such thing - and not the empty
-     *  {@link Optional} that means the transport never reached it. Since D-236 the Maven proxy tells those two apart:
+     *  {@link Optional} that means the transport never reached it. Since the Maven proxy tells those two apart:
      *  a {@code 404} on a {@code .sha1} sibling is "this repository publishes no checksum here" and the artifact is
      *  proxied unverified, while a transport failure declines the fill outright. This stub means the former, and used
      *  to say the latter because the leg could not tell the difference. */

@@ -191,7 +191,7 @@ class NexusSourceTest {
 
     @Test
     void a_listing_download_url_that_downgrades_an_https_migration_to_cleartext_is_refused() {
-        // D-152, and the sharp one: the base is https and the listing answers http:// on the SAME host. That is
+        //, and the sharp one: the base is https and the listing answers http:// on the SAME host. That is
         // cross-origin (the scheme is part of the origin), so credentials were correctly withheld and nothing leaked -
         // but the artifact BYTES were pulled in cleartext and written into the hosted store with no integrity check
         // behind them, so an active intermediary substitutes what the migration imports. The host half is silent here

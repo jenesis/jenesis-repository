@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The Maven layout driven through {@link MavenFormat#handle}: a jar PUT is stored content-addressed and served back
  * (201/200), a missing artifact is a 404, a {@code maven-metadata.xml} PUT is stored verbatim like any artifact and
- * served back byte-for-byte, an absent one a 404 (W5.12 - deriving is no longer the default), and the opt-in
+ * served back byte-for-byte, an absent one a 404 (- deriving is no longer the default), and the opt-in
  * computation reconciles a stored document's version list or derives one for a coordinate no client uploaded.
  */
 class MavenFormatTest {
@@ -135,7 +135,7 @@ class MavenFormatTest {
     @Test
     void paths_still_reports_the_module_mirror_once_the_jar_is_held() throws IOException {
         // This overload answers where a version LIVES, not what a GET would serve, and the difference is load-bearing
-        // for a held version (D-251). It used to resolve the jar through Publication.located, so a hold made the
+        // for a held version. It used to resolve the jar through Publication.located, so a hold made the
         // mirror vanish from the very callers a hold needs - the retroactive sweeps' converge pass, eviction,
         // reconciliation, and the release path's cross-alias exclusion set, which then read the version's own mirror
         // as a foreign alias still holding those bytes and refused to lift the content-addressed marker.
@@ -329,7 +329,7 @@ class MavenFormatTest {
         // ProxyFormat clause 2's split. maven-metadata.xml IS the <versions> list a range or a LATEST/RELEASE marker
         // resolves against, so a 404 here is not "not cached, re-pull" - it is the answer that the coordinate has no
         // versions, and a resolver acts on it (or, under a mirror list, moves on as though this repository had really
-        // answered). A fetch that never landed must therefore not wear that answer's clothes. This is D-231's defect,
+        // answered). A fetch that never landed must therefore not wear that answer's clothes. This is the earlier defect,
         // found on the Go leg's @v/list and retrofitted here for parity.
         for (Optional<build.jenesis.repository.format.ProxyFormat.Fetched> answer : List.of(
                 Optional.<build.jenesis.repository.format.ProxyFormat.Fetched>empty(),   // a transport failure

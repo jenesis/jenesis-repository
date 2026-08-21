@@ -73,7 +73,7 @@ public final class TraversalVectors {
             new Vector("deep-parent", "kit/nested/../../../" + ESCAPE, Kind.DECODED),
             // The same traversal one alphabet over: '\' is a real path separator on a Windows-hosted filesystem
             // backend and a literal character on the three object stores, so a screen that split on '/' alone read
-            // this as one long, harmless leaf name (D-003). It is a DECODED row, not an ENCODED one - nothing has to
+            // this as one long, harmless leaf name. It is a DECODED row, not an ENCODED one - nothing has to
             // decode anything for it to escape; the platform below simply reads a separator the screen did not.
             new Vector("backslash-parent", "kit\\..\\" + ESCAPE, Kind.DECODED),
             // ... and the same fact without a traversal in it: one key, two placements (a nested object on Windows, a

@@ -100,7 +100,7 @@ public final class IndexSource implements ImportSource {
         // spliced into an absolute URL by the format's enumerate) and is fetched as an INITIAL request - not a redirect
         // - so the fetcher's redirect-only SSRF screen never inspects it. ImportScreen, wrapped around the fetcher this
         // source was handed (ImportSourceProvider.open), is the screen: one rule for every connector, so this leg and
-        // the Nexus one cannot answer the same question differently - which they did until D-152.
+        // the Nexus one cannot answer the same question differently - which they did until.
         ProxyFormat.Download download = fetcher.download(url, coordinate.headers())
                 .orElseThrow(() -> ImportFailure.unreachable(url));
         if (download.status() != 200) {

@@ -137,7 +137,7 @@ public class GcsConditionalWriteTest {
         // The store contract's VERSION_TOKEN_PER_INCARNATION property, proven here because the MinIO leg cannot
         // speak the generation protocol at all. A generation is a per-write counter the bucket never re-issues, so a
         // key deleted and re-created carries one no reader of the dead incarnation holds - the property a
-        // wall-clock-stamped backend has to construct rather than inherit (D-006).
+        // wall-clock-stamped backend has to construct rather than inherit.
         String key = "config/incarnation";
         assertThat(store.writeVersioned(key, "first".getBytes(StandardCharsets.UTF_8), null)).isTrue();
         Object stale = store.readVersioned(key).orElseThrow().token();
@@ -304,7 +304,7 @@ public class GcsConditionalWriteTest {
             }
             if (RequestMethod.DELETE.equals(method)) {
                 // A deleted object's generation is never re-issued: the counter only ever advances, which is what
-                // makes a token from a deleted incarnation unusable rather than accidentally current (D-006).
+                // makes a token from a deleted incarnation unusable rather than accidentally current.
                 objects.remove(key);
                 return status(204);
             }

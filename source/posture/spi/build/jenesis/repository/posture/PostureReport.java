@@ -25,7 +25,7 @@ import module java.base;
  * (and, for a tenant-scoped row, a tenant) are both kept - dropping one would hide a real advisory - and a
  * {@code jenreg.posture.collision} advisory reports the duplicated ids, so a packaging accident is visible on the
  * surface instead of rendering as two identically-anchored rows nobody can tell apart. <b>The collision row is filed at
- * the scope it is about</b> (D-150): ids that clashed deployment-wide become one {@link Scope#DEPLOYMENT} row, and ids
+ * the scope it is about</b>: ids that clashed deployment-wide become one {@link Scope#DEPLOYMENT} row, and ids
  * that clashed <em>for a tenant</em> become one {@link Scope#TENANT} row per tenant, carrying that tenant in
  * {@link SecurityAdvisory#tenant()} and naming no tenant in its text. A report is a fan-out that may carry rows for
  * several tenants at once, which is why a row's scope is the only thing a tenant-facing consumer may route on -
@@ -90,7 +90,7 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
      * advisory) and one extra row names the clashing ids, because a duplicate id is a collision between modules
      * rather than a merge, and it silently ruins the row key the docs anchor and the API consumer use.
      *
-     * <p><strong>Each collision row is filed at the scope of the rows that collided</strong> (D-150), so reporting the
+     * <p><strong>Each collision row is filed at the scope of the rows that collided</strong>, so reporting the
      * clash never widens who can see it. A clash between deployment-wide rows is one {@link Scope#DEPLOYMENT} row
      * naming the ids; a clash between one tenant's rows is a {@link Scope#TENANT} row for <em>that</em> tenant, which
      * carries the tenant in {@link SecurityAdvisory#tenant()} and names it nowhere in its text. The alternative - the

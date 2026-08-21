@@ -107,7 +107,7 @@ class ImporterContractTest {
     /**
      * The traversal row, run over <em>every</em> discovered importer with the shared probe vectors rather than per
      * format, because a screen that each importer's own suite probes with the shapes its author thought of is exactly
-     * how the coordinate seam rotted format by format before T-202a.
+     * how the coordinate seam rotted format by format before.
      *
      * <p>What it holds open: {@code RawImporter.importTarget("/../x")} used to answer a descriptor whose path was
      * {@code /raw/../x}, and {@code MavenImporter} inherited {@code MavenFormat.describe}'s fall-through to

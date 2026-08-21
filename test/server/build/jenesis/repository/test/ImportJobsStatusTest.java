@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code read()} (two round trips - a real second network call on an object-store backend - on the endpoint a
  * migration client polls). The counting store here demonstrates, not merely asserts, that a present job costs one
  * lookup and no separate existence probe, and an absent job the same, so the poll cannot regress to the double-probe
- * the W7.1 sweep removed.
+ * the sweep removed.
  */
 class ImportJobsStatusTest {
 

@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * caller aim the server at its own network - a cloud metadata service (169.254.169.254), the loopback control plane
  * (127.0.0.1) or an internal host - so a loopback upstream is refused with a {@code 400}.
  *
- * <p><b>The transport half (D-153):</b> a migration is walked server-side with the operator's upstream username and
+ * <p><b>The transport half:</b> a migration is walked server-side with the operator's upstream username and
  * password attached, so a plaintext source hands that credential to every observer on the path - and it bites exactly
  * where the host half is silent, on a perfectly public host, which is why it was invisible. It is refused with the
  * same {@code 400}, naming the transport rather than sending the operator to look at a host that was never the
@@ -86,7 +86,7 @@ public class ImportHostGuardTest {
 
     @Test
     public void a_plaintext_import_url_is_refused_by_default_even_to_a_public_host() throws Exception {
-        // D-153. The host half has nothing to say about incumbent.example, and the request below would have carried
+        //. The host half has nothing to say about incumbent.example, and the request below would have carried
         // the operator's upstream password to it in the clear. The refusal names the transport, so an operator whose
         // source is plaintext on a public host is not sent to go and look at its host.
         System.setProperty(GUARD, "true");

@@ -385,7 +385,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
             // The format-declared references FIRST, and deliberately outside the pointer-size gate below: that gate
             // bounds how large an object this phase will read as a POINTER BODY, and a format whose references live in
             // a document knows its own bound (BlobReferences clause 6). Asking after the gate would silently drop the
-            // references of any key that is not itself pointer-shaped - the same class of omission D-022 fixed one line
+            // references of any key that is not itself pointer-shaped - the same class of omission fixed one line
             // down, and with the same consequence: an unmarked blob is condemned and then deleted.
             //
             // An IOException from a lender is NOT contained: BlobReferences clause 3 makes a short list illegal, so a

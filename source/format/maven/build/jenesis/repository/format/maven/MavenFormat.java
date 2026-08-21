@@ -100,7 +100,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         // serve", which is a fact about the current hold. Asking the serving question here made the mirror vanish
         // from every caller the moment the jar was held - and the callers are the retroactive holds' own converge
         // pass, eviction, reconciliation and the release path's cross-alias exclusion set. Driven consequences
-        // (D-251): a hold that crashed between the coordinate pointer and the mirror pointer could never converge,
+        //: a hold that crashed between the coordinate pointer and the mirror pointer could never converge,
         // because the re-run no longer saw the path it had not yet held; an eviction of a held version left the
         // mirror pointing at a blob it had just reclaimed; and a release of the coordinate could not lift the
         // content-addressed marker, because the version's OWN mirror - missing from the exclusion set - read as a
@@ -148,7 +148,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             return;
         }
         if (exchange.method().equals("PUT")) {
-            // W5.12(1): a maven-metadata.xml (and its checksum siblings) is stored verbatim like any artifact rather
+            // (1): a maven-metadata.xml (and its checksum siblings) is stored verbatim like any artifact rather
             // than dropped, so a publisher-authored document round-trips even when the server does not derive one.
             // Screening rides the ingress edge now (EPIC 26): this branch only lays the body out and responds 201 -
             // the body reaching here has already been screened to ACCEPT, so verdicts are no longer the format's call.
@@ -157,7 +157,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             return;
         }
         boolean head = exchange.method().equals("HEAD");
-        // W5.12(3): with the opt-in computation on, an artifact-level document has its version list reconciled (or is
+        // (3): with the opt-in computation on, an artifact-level document has its version list reconciled (or is
         // derived for a coordinate no client uploaded); a checksum is served from the authored bytes. Empty means the
         // default verbatim serve stands.
         if (MavenMetadata.isMetadataRequest(path) && metadataCompute(exchange)) {
@@ -174,7 +174,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 return;
             }
         }
-        // W5.12(2): the default - serve the stored metadata (and its stored checksums) byte-for-byte, a 404 when
+        // (2): the default - serve the stored metadata (and its stored checksums) byte-for-byte, a 404 when
         // absent; a normal artifact is streamed from its content-addressed blob.
         Optional<String> key = new Publication(store).located(path);
         if (key.isEmpty()) {
@@ -288,11 +288,11 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     /**
      * Proxy a {@code /maven/} miss to the upstream Maven repository (Maven Central). Artifacts (jars, poms and their
      * checksums) are immutable and cached, and a cached modular jar is cross-published like a local one;
-     * {@code maven-metadata.xml} is a mutable index, so it is proxied fresh from upstream on each miss (W5.12) - never
+     * {@code maven-metadata.xml} is a mutable index, so it is proxied fresh from upstream on each miss - never
      * derived locally or cached - the way every other format's index is, so a later upstream publish shows through.
      *
      * <p>A cached artifact is held to the upstream's {@code .sha1} <em>before</em> it is laid out, so a fill this leg
-     * refuses (a mismatch, or a sibling this repository could not read - D-236) never becomes reachable under any
+     * refuses (a mismatch, or a sibling this repository could not read -) never becomes reachable under any
      * coordinate: the fetched bytes are stored content-addressed as they stream, and the {@link #layout(ArtifactStore,
      * String, String) layout sequence} runs only once the bytes have been held to the checksum. Nothing is retracted
      * because nothing was linked.
@@ -317,7 +317,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             // range or a LATEST/RELEASE marker resolves against, and a SNAPSHOT document is the timestamped build a
             // resolver picks - so a 404 here is not "not cached here, re-pull", it is the answer that the coordinate
             // has no versions. Serving a fetch that never landed as that answer breaks a build with a wrong fact it
-            // cannot tell from the truth (D-231, on the Go leg's @v/list). Only an upstream that ANSWERED 404/410 may
+            // cannot tell from the truth (on the Go leg's @v/list). Only an upstream that ANSWERED 404/410 may
             // reach the client as one; a transport failure or any other status refuses visibly instead.
             //
             // Its .sha1/.md5 siblings deliberately keep the plain decline: a checksum answers "what digest", not "what
@@ -363,7 +363,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 URI sibling = URI.create(prefix + rest + ".sha1");
                 Sha1 expected = upstreamSha1(fetcher, sibling);
                 if (expected.unreadable() != null) {
-                    // Clause 5's split (D-236). "The upstream publishes no .sha1 for this artifact" is a fact about
+                    // Clause 5's split. "The upstream publishes no.sha1 for this artifact" is a fact about
                     // Maven repositories that is true often enough to be documented, and it is the ONLY thing that may
                     // downgrade a fill to unverified. A .sha1 fetch that never landed, or one answered by a 429 under a
                     // shared egress IP, is not that fact - it is this repository having failed to read what the
@@ -443,7 +443,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     /** The upstream SHA-1 for an artifact, read from its {@code .sha1} sibling (the 40-hex digest, optionally followed
      *  by a filename). The upstream <em>answering</em> {@code 404}/{@code 410}, or answering with a body that is not a
      *  40-hex digest, publishes none - the artifact is proxied unverified rather than refused. A transport failure or
-     *  any other status could not be read, and is refused instead (D-236). */
+     *  any other status could not be read, and is refused instead. */
     private static Sha1 upstreamSha1(ProxyFormat.Fetcher fetcher, URI sha1) throws IOException {
         Optional<ProxyFormat.Fetched> response = fetcher.fetch(sha1, Map.of());
         if (response.isEmpty()) {

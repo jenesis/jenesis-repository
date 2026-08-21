@@ -7,7 +7,7 @@ import module java.base;
 
 /**
  * The fixture for the first <em>shipped</em> walk consumer: the Maven format's {@code ModuleViewRebuild}, which
- * re-derives the {@code /module/} view of every published modular jar from the durable store (D-059).
+ * re-derives the {@code /module/} view of every published modular jar from the durable store.
  *
  * <p>It is the first fixture whose corpus is the free {@code publish/} namespace rather than a format's own
  * blobs-namespace root, and the first whose derived state is itself a <em>serving pointer</em> - a module view has to

@@ -3,7 +3,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 /**
- * The single collected view of a multi-node consistency check (WCON.2): the {@link NodeView per-node numbers} every
+ * The single collected view of a multi-node consistency check: the {@link NodeView per-node numbers} every
  * live node published and the {@link NodeDivergence divergences} the comparison found. {@link #analyze} is the pure
  * function at the heart of the feature - it takes the fingerprints read from the shared store, a wall-clock {@code now}
  * and the {@link Settings} (the staleness window and the sweep-interval budget) and classifies the fleet, so the
@@ -139,7 +139,7 @@ public record ConsistencyReport(List<NodeView> nodes, List<NodeDivergence> diver
         return found;
     }
 
-    /** One node's published numbers, for the WO.4 per-node view - what the console page and the metrics render. */
+    /** One node's published numbers, for the per-node view - what the console page and the metrics render. */
     public record NodeView(String nodeId, long heartbeatAgeMillis, boolean live, boolean stale, long indexCursor,
                            String snapshotVersion, long configGeneration, long inventoryTotal, long quotaUsed) {
     }

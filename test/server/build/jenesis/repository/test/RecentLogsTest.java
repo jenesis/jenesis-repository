@@ -14,7 +14,7 @@ import module java.base;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The recent-logs ring and its logback tap (WO.4, the core mirror of the downstream viewer): the unit proofs that
+ * The recent-logs ring and its logback tap (the core mirror of the downstream viewer): the unit proofs that
  * the bounded ring captures and evicts, that the level / text / since-cursor / tenant filters select correctly, that
  * the appender maps a real logback event (including the MDC tenant tag) into an entry, and that an empty ring degrades
  * gracefully. The {@code GET /api/logs} authorization gating is pinned by {@code RecentLogsE2ETest}.

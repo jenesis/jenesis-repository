@@ -11,7 +11,7 @@ import module java.base;
  * and leaves it {@code null} otherwise). A value record: the buffer stores exactly what the appender captured, the
  * {@code GET /api/logs} read renders it, and nothing re-reads a file.
  *
- * <p>The core's recent-logs viewer (WO.4) mirrors the downstream implementation independently - a parallel,
+ * <p>The core's recent-logs viewer mirrors the downstream implementation independently - a parallel,
  * consistent design in each repo's own modules, not a shared module.
  */
 public record LogEntry(long seq, Instant timestamp, String level, int levelValue, String logger, String message,

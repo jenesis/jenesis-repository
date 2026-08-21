@@ -87,7 +87,7 @@ public final class PublishedAssets {
         }
         pending.push(root);
         while (!pending.isEmpty()) {
-            // D-189: checked per CHILD, not per node. This walk honoured its cap only BETWEEN nodes and called
+            // checked per CHILD, not per node. This walk honoured its cap only BETWEEN nodes and called
             // store.list(...) at every one, so one high-fan-out container - a flat publish/ root, or a coordinate with
             // a large version space - was read entire before a single row was emitted and the cap never got a chance
             // to stop it. Now the container is paged, and the cap ends the walk inside it.
@@ -131,9 +131,9 @@ public final class PublishedAssets {
      * {@link #PAGE}-wide strides and hands them out one at a time, so the walk's stack holds a page per level rather
      * than a whole child set per node. This is what the walk's own javadoc always claimed - "a bounded page is a slice
      * of pointer metadata, the only full materialization the streaming principle allows" - and what the body did not
-     * do (D-189).
+     * do.
      *
-     * <p><b>Why not {@code PagedTreeWalk}, the shared primitive T-102 built for exactly this?</b> It cannot be
+     * <p><b>Why not {@code PagedTreeWalk}, the shared primitive built for exactly this?</b> It cannot be
      * reached from here: {@code build.jenesis.repository.walk} <em>requires</em> this module, so a dependency the
      * other way is a module cycle. The one enumeration of the {@code publish/} tree therefore has to page itself,
      * which is why this frame exists rather than a call. Moving {@code PublishedAssets} into the walk module is the

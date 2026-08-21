@@ -4,7 +4,7 @@ import module java.base;
 
 /**
  * A thread-safe, <em>bounded</em> in-memory ring of the most recent {@link LogEntry log entries} - the recent-logs
- * viewer's store (WO.4). It is the stream-don't-buffer discipline made concrete: the {@link LogRingAppender} taps the
+ * viewer's store. It is the stream-don't-buffer discipline made concrete: the {@link LogRingAppender} taps the
  * running logback context and pushes each event here, the oldest entry is evicted once {@link #capacity()} is reached,
  * and nothing ever re-reads a log file or grows without bound. Each entry carries a monotonic {@code seq} so a reader
  * tails by asking only for entries past the cursor it last saw.

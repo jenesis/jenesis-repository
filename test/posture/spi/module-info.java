@@ -1,5 +1,5 @@
 /**
- * Focused unit tests for the security-posture SPI (WO.5) - the self-describing configuration-warning contract, exercised
+ * Focused unit tests for the security-posture SPI - the self-describing configuration-warning contract, exercised
  * without the server or any network: the {@link build.jenesis.repository.posture.Advisories} id grammar, the {@link
  * build.jenesis.repository.posture.SecurityAdvisory} construction-time validation (id grammar, scope/tenant
  * consistency), the {@link build.jenesis.repository.posture.Configuration} typed helpers, the {@link

@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       {@code jenreg.posture.unavailable.<advisor>} advisory saying that whatever it checks went unchecked.</li>
  *   <li>Two advisors raising one id are both kept and the clash is reported, because an id is the row key and the docs
  *       anchor; a tenant-scoped advisory raised for two tenants is not a clash.</li>
- *   <li>And the clash is reported <em>at the scope of the rows that collided</em> (D-150), so saying that two rows
+ *   <li>And the clash is reported <em>at the scope of the rows that collided</em>, so saying that two rows
  *       collided never tells a viewer something about a tenant that is not theirs.</li>
  * </ul>
  */
@@ -116,7 +116,7 @@ class PostureContainmentTest {
     }
 
     /**
-     * D-150: a clash between one tenant's rows is that tenant's row, not a deployment-wide row carrying its name.
+     * a clash between one tenant's rows is that tenant's row, not a deployment-wide row carrying its name.
      * Before this landed, {@code collisions} keyed a tenant row as {@code "<id> (tenant <name>)"} and interpolated
      * that key into a {@code SecurityAdvisory.deployment(...)} message - so a fan-out raising rows for two tenants
      * put one tenant's name and one advisory id into the deployment-wide row that {@code ScopedPosture} and

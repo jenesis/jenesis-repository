@@ -115,7 +115,7 @@ class FilesystemArtifactStoreTest {
     @Test
     void a_token_from_a_deleted_incarnation_is_refused_even_when_the_replacement_lands_on_the_same_stamp()
             throws IOException {
-        // D-006, deterministic: the shared kit runs this shape often enough to catch a same-tick re-creation by
+        //, deterministic: the shared kit runs this shape often enough to catch a same-tick re-creation by
         // chance, but only here can the tick be forced. The replacement's stamp is set back to the previous
         // incarnation's, which is exactly the state a delete-and-re-create inside one millisecond leaves - and the
         // state in which a bare last-modified token re-issues a value a reader of the dead incarnation still holds.

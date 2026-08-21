@@ -8,7 +8,7 @@ import build.jenesis.repository.ui.Panel;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The one escaper every panel interpolates through, asserted once (D-223).
+ * The one escaper every panel interpolates through, asserted once.
  *
  * <p>{@code Panel} clause 12 says a fragment is dropped into the shell UNESCAPED, so escaping is the panel's
  * obligation - and it was met by four byte-identical private copies in this module and a fifth in downstream. Four

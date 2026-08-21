@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   <li><b>Fail-closed, but never silently short.</b> A hostile name whose probe throws a {@link RuntimeException} is
  *       contained and dropped (one bad name cannot 500 a page, and is never disclosed); a real store failure
  *       propagates instead of handing back a listing that quietly lost names.</li>
- *   <li><b>Bounded per T-102a.</b> The take cap (disclosable names) and the scan cap (examined names) each answer
+ *   <li><b>Bounded per the earlier work.</b> The take cap (disclosable names) and the scan cap (examined names) each answer
  *       {@link Traversal.Outcome#TRUNCATED} with a continuation cursor that resumes without skipping or repeating a
  *       name; the step bound still raises. A container whose names are all held is bounded by the scan cap, which the
  *       take cap alone would never reach.</li>
@@ -214,7 +214,7 @@ class ScreenedNamesTest {
         assertThat(names).isEmpty();
     }
 
-    // ---- bounded per T-102a --------------------------------------------------------------------------------------
+    // ---- bounded per the earlier work --------------------------------------------------------------------------------------
 
     @Test
     void the_take_cap_answers_truncated_with_a_cursor_and_the_continuation_resumes_exactly() throws IOException {

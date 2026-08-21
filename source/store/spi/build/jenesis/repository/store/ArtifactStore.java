@@ -18,7 +18,7 @@ import module java.base;
  * Most clauses below are executable: {@code StoreContract} in the store testkit states one once and each backend runs
  * it through a fixture, so it is proven on the filesystem and on containerised S3 / GCS / Azure alike rather than
  * being re-interpreted per backend. The enforcement is named per clause, because it is not uniform, and a clause is
- * <em>not</em> weaker for being unproven - it is an audit item (T-304's residue) rather than a build guard:
+ * <em>not</em> weaker for being unproven - it is an audit item (the earlier residue) rather than a build guard:
  * <ul>
  *   <li><b>kit-proven</b> - clause 2 ({@code CONTENT_ADDRESSED_WRITE}, {@code KEYED_BLOB_ROUND_TRIP}'s repeated
  *       delete, {@code VERSIONED_UPDATE_IF_UNCHANGED}), clause 3 ({@code KEYED_BLOB_ROUND_TRIP},
@@ -81,7 +81,7 @@ import module java.base;
  *     a traversal-shaped key can address storage outside the subspace it was handed. <b>Both screens count {@code \}
  *     as a path separator</b>, because it is one on a Windows-hosted filesystem backend and a literal on the object
  *     stores: a screen that read only {@code /} would call {@code a\..\b} traversal-free and let it walk a level up on
- *     the one backend where it can (D-003).</li>
+ *     the one backend where it can.</li>
  * <li><b>Error visibility (&sect;9).</b> Nothing on a correctness-bearing path is swallowed. Only a genuine
  *     object-level miss reads as absent: a throttle, an authorization failure, a permission refusal, a missing
  *     bucket/container or a stale mount must surface, never degrade {@link #exists} to {@code false}, {@link #size}
@@ -139,7 +139,7 @@ import module java.base;
  *     deleted and re-created carries a token no reader of the previous incarnation holds, so a compare-and-set from
  *     before the delete is refused rather than landing over content it never saw. A backend whose token is a
  *     wall-clock stamp therefore has to add something the re-creation cannot repeat - the filesystem folds in a digest
- *     of the bytes, the object stores already have an ETag or a generation (D-006). The one collision this permits is
+ *     of the bytes, the object stores already have an ETag or a generation. The one collision this permits is
  *     a re-creation that is byte-identical at the same stamp, where the state a stale token passes against is
  *     precisely the state its holder read. {@link #writeBatch} is explicitly <b>not</b> a transaction: there is no atomicity across
  *     keys and no rollback, each entry commits, conflicts or fails on its own, and a caller must read the per-entry
@@ -249,7 +249,7 @@ public interface ArtifactStore {
      * shape "traversal-free" would let the very publish this screen exists to refuse through on the one backend where
      * it escapes, and would break the interchangeability {@link #key(String)} is here to keep (&sect;13). Nothing below
      * this line re-screens it: the {@code segment}/{@code ArtifactLayout.addressable}/{@code RepositoryImporter}
-     * seams above all refuse a backslash already, and this was the one place that did not (D-003).
+     * seams above all refuse a backslash already, and this was the one place that did not.
      *
      * <p>An empty segment is not a traversal (a trailing slash on a directory listing request, a doubled separator)
      * and a percent-encoded {@code %2e%2e} is not one either: it is a literal name until something decodes it, and

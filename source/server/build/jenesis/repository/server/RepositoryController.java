@@ -30,7 +30,7 @@ import module java.base;
  * matched format and the format is a {@link ProxyFormat}, a local miss is served through the {@link PullThroughCache}
  * from that upstream and cached, so a later read is a local hit. The single-tenant import edge
  * ({@code POST /repository/admin/import} and {@code GET /repository/admin/import/<id>}) is served by the separate
- * {@link ImportEdgeController} bean - peeled out (WFE.1) so a richer distribution can OWN the import edge through the
+ * {@link ImportEdgeController} bean - peeled out so a richer distribution can OWN the import edge through the
  * {@link ImportEdgeProvider} SPI without a cross-layer mapping override. Authorization is not done here:
  * {@link RepositorySecurityAutoConfiguration} gates the wire through the {@link Authorization} credential model.
  */
@@ -318,7 +318,7 @@ public class RepositoryController {
         // banner and a client knows keyless reads are served. Empty (the default) means no anonymous access. Read off
         // the same jenreg.* settings the other flags read, so no extra dependency is threaded in.
         base.put("anonymousRights", anonymousRights());
-        // WFE.1: collect the core CapabilityContributor SPI and merge each contribution onto the base map, so a
+        // collect the core CapabilityContributor SPI and merge each contribution onto the base map, so a
         // richer distribution extends the one free /api/capabilities without a bean override (retiring the downstream
         // WebMvcRegistrations mapping-suppression stopgap). Base keys win a conflict; with no contributor the body is
         // the base map unchanged. Discovered per request through the same ServiceLoader seam the formats/import-sources

@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The Maven format's cross-publish sequence, its crash windows and its repair (D-059), driven with <em>both</em>
+ * The Maven format's cross-publish sequence, its crash windows and its repair, driven with <em>both</em>
  * layout formats on the module path so the one required cross-publish really runs.
  *
  * <p>{@code MavenFormat.layout} links the {@code /maven/} coordinate, reads the module name back out of the stored

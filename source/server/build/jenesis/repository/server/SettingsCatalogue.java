@@ -28,7 +28,7 @@ public final class SettingsCatalogue {
 
     /** Every runtime-tunable setting the core reads through the effective-config lookup. */
     public static final List<Setting> ALL = List.of(
-            // --- Multi-node consistency dials (WCON.2 / #146): the heartbeat cadence and the divergence-detection
+            // --- Multi-node consistency dials (/ #146): the heartbeat cadence and the divergence-detection
             //     windows NodeFingerprintPublisher and NodeConsistency read through the effective-config lookup. The
             //     enable toggle and the node id are per-node deploy-time bootstrap, not dials, so they are on the
             //     test's bootstrap allowlist, not here. ---

@@ -264,7 +264,7 @@ final class AfterCommitContract {
         settle(observer, store);
         isTrue(!observer.projection(store).equals(observer.converged(List.of(artifact))), fixture,
                 "and nothing was delivered. A fixture may not declare " + Delivery.COMMIT_COUPLED_AT_LEAST_ONCE
-                        + " while this holds; only T-107's pre-commit intent machine could change it.");
+                        + " while this holds; only the earlier pre-commit intent machine could change it.");
     }
 
     private static void aDroppedCallIsHealedByAnExecutableRepair(PublicationHookFixture fixture,

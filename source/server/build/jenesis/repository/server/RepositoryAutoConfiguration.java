@@ -61,7 +61,7 @@ public class RepositoryAutoConfiguration {
         logSecurityPosture(environment);
     }
 
-    /** Log the deployment-wide security-posture advisories at boot (WO.5), the single source of truth for the
+    /** Log the deployment-wide security-posture advisories at boot, the single source of truth for the
      *  secure-defaults boot WARNs (auth off, SSRF screen off, dev profile, ...): the same discovered {@link
      *  build.jenesis.repository.posture.SafetyAdvisor} list the console panel and {@code GET /api/posture} surface, so a
      *  condition is expressed once and both logged and shown. A clean deployment logs nothing. */
@@ -269,7 +269,7 @@ public class RepositoryAutoConfiguration {
         });
     }
 
-    /** The recent-logs ring (WO.4): a bounded in-memory store of the most recent entries, sized from
+    /** The recent-logs ring: a bounded in-memory store of the most recent entries, sized from
      *  {@code jenreg.logs-buffer} at startup - the bound behind {@code GET /api/logs}. */
     @Bean
     @ConditionalOnMissingBean
@@ -277,7 +277,7 @@ public class RepositoryAutoConfiguration {
         return new LogRingBuffer(properties.getLogsBuffer());
     }
 
-    /** The recent-logs tap (WO.4): attach the logback appender to the running root logger at startup so every entry the
+    /** The recent-logs tap: attach the logback appender to the running root logger at startup so every entry the
      *  JVM emits is captured into the ring, never re-reading a file. A non-logback slf4j binding leaves the appender
      *  unattached and the ring simply stays empty (graceful). */
     @Bean
@@ -300,7 +300,7 @@ public class RepositoryAutoConfiguration {
         return new RecentLogsController(buffer);
     }
 
-    /** The security-posture read (WO.5) - {@code GET /api/posture}, the console / CLI read of the deployment's
+    /** The security-posture read - {@code GET /api/posture}, the console / CLI read of the deployment's
      *  configuration-warning advisories, discovered against the effective {@code Environment}. */
     @Bean
     @ConditionalOnMissingBean
@@ -308,7 +308,7 @@ public class RepositoryAutoConfiguration {
         return new PostureController(environment);
     }
 
-    /** The multi-node consistency check (WCON.2): the fingerprint compare over the shared store, tuned from the
+    /** The multi-node consistency check: the fingerprint compare over the shared store, tuned from the
      *  {@code jenreg.consistency.*} settings. Reads only the {@code consistency/nodes/} prefix, never a scan. */
     @Bean
     @ConditionalOnMissingBean
@@ -316,7 +316,7 @@ public class RepositoryAutoConfiguration {
         return new NodeConsistency(store, NodeConsistency.settingsFrom(environment::getProperty));
     }
 
-    /** This node's fingerprint publisher (WCON.2): a stable node id and a daemon heartbeat that publishes this node's
+    /** This node's fingerprint publisher: a stable node id and a daemon heartbeat that publishes this node's
      *  derived-state fingerprint to the shared store, so the fleet has something to compare. Best-effort - it never
      *  blocks the node it runs on. */
     @Bean(initMethod = "start", destroyMethod = "close")
@@ -326,7 +326,7 @@ public class RepositoryAutoConfiguration {
         return new NodeFingerprintPublisher(consistency, store, environment::getProperty);
     }
 
-    /** The multi-node consistency read (WCON.2) - {@code GET /api/consistency}, the per-node fingerprints and any
+    /** The multi-node consistency read - {@code GET /api/consistency}, the per-node fingerprints and any
      *  divergence between them, read-authorised like the rest of the wire; the downstream edition mirrors it as an
      *  operator-gated {@code /api/admin/consistency}. */
     @Bean
@@ -336,7 +336,7 @@ public class RepositoryAutoConfiguration {
         return new ConsistencyController(consistency, publisher.nodeId());
     }
 
-    /** The observability face of the consistency check (WCON.2, WO.4): live-node and divergence gauges plus a
+    /** The observability face of the consistency check: live-node and divergence gauges plus a
      *  divergence health check, so the overview shows how many instances there are and whether they agree - what makes
      *  the "these numbers are instance-specific" caveat trustworthy. */
     @Bean
@@ -367,7 +367,7 @@ public class RepositoryAutoConfiguration {
     /**
      * The free single-tenant import edge ({@code POST /repository/admin/import}, {@code GET /repository/admin/import/<id>}),
      * registered as its own controller bean so a richer distribution can OWN the import edge without a cross-layer
-     * mapping override (WFE.1). It is registered only when {@link FreeImportEdgeCondition no ImportEdgeProvider is
+     * mapping override. It is registered only when {@link FreeImportEdgeCondition no ImportEdgeProvider is
      * installed}: when a distribution ships an {@link ImportEdgeProvider} - the downstream edition's tenant-scoped,
      * audited import edge - this bean is not created, so its mapping never joins the handler mapping and the
      * distribution's own controller is the only import edge, retiring the {@code WebMvcRegistrations}
@@ -387,7 +387,7 @@ public class RepositoryAutoConfiguration {
 
     /**
      * Matches when <em>no</em> {@link ImportEdgeProvider} is installed, so the free {@link ImportEdgeController} is
-     * registered only while a richer distribution has not claimed the import edge (WFE.1). Installs the shared
+     * registered only while a richer distribution has not claimed the import edge. Installs the shared
      * {@link Features} lookup against the effective {@link Environment} first, so the same {@code jenreg.*}
      * enable/disable toggles gate the provider discovery here as everywhere else (and a provider missing its required
      * config is inert - the free edge is then served).

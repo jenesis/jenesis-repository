@@ -68,12 +68,12 @@ class PublicationHookCensusTest {
      * the role its downstream source declares, is the honest alternative to widening the helper until it stops
      * asserting anything.
      *
-     * <p>All fourteen are <b>T-205b's</b> to fixture. The split matters: the three interceptors and the four
+     * <p>All fourteen are <b>the earlier</b> to fixture. The split matters: the three interceptors and the four
      * hold-release hooks are pre-commit and fail-closed, and running any of them through the after-commit legs would
      * assert the opposite of their contract.
      */
     private static final Map<String, Role> OUT_OF_GRAPH = Map.ofEntries(
-            // ENT after-commit observers - contained, best-effort, repaired by the walk (T-107's migration candidates)
+            // ENT after-commit observers - contained, best-effort, repaired by the walk (the earlier migration candidates)
             Map.entry("build.jenesis.repository.forwarding.ForwardingObserver", Role.AFTER_COMMIT_OBSERVER),
             Map.entry("build.jenesis.repository.webhook.WebhookPublicationObserver", Role.AFTER_COMMIT_OBSERVER),
             Map.entry("build.jenesis.repository.index.IndexRetractionObserver", Role.AFTER_COMMIT_OBSERVER),
@@ -293,16 +293,16 @@ class PublicationHookCensusTest {
                 .containsExactlyInAnyOrderElementsOf(EnumSet.allOf(Delivery.class).stream()
                         .filter(Delivery::supported).collect(Collectors.toSet()));
         assertThat(Delivery.COMMIT_COUPLED_AT_LEAST_ONCE.supported())
-                .as("and the unsupported class stays unsupported until T-107 proves a pre-commit intent machine at "
+                .as("and the unsupported class stays unsupported until proves a pre-commit intent machine at "
                         + "every crash point - writing an outbox inside an after-commit callback is not that")
                 .isFalse();
     }
 
-    // --- the falsification declaration (D-135) ---------------------------------------------------------------------
+    // --- the falsification declaration ---------------------------------------------------------------------
 
     /**
      * Which arranged commit choreography falsifies each clause that is about {@link Publication} rather than about a
-     * hook (D-148). This map is the answer to the finding D-135 recorded and D-148 was raised to close: twenty of the
+     * hook. This map is the answer to the finding recorded and was raised to close: twenty of the
      * kit's forty-six clauses are the choreography's, the fixture's hook is a bystander in them, and until now
      * <b>the falsification leg proved things about implementations and said nothing about the choreography they plug
      * into</b> - which is where several of this plan's crash-window claims live.
@@ -317,7 +317,7 @@ class PublicationHookCensusTest {
      */
 
     /**
-     * The contract properties nothing this kit can substitute falsifies - <b>one, since D-148</b>, and it is the one
+     * The contract properties nothing this kit can substitute falsifies - <b>one, since the earlier work</b>, and it is the one
      * where there is no observable to arrange because nothing the kit hands {@code Publication} is ever invoked.
      *
      * <p>The list used to hold twenty, all with the same reason: the clause is about {@link Publication}'s own commit
@@ -366,9 +366,9 @@ class PublicationHookCensusTest {
         choreography.addAll(PublicationHookContract.unfalsifiable().keySet());
         assertThat(undeclared)
                 .as("a property that names no mutation is a property nothing proves could have said otherwise - the "
-                        + "vacuity D-135 exists to close. It may only be left undeclared when the clause is about "
+                        + "vacuity exists to close. It may only be left undeclared when the clause is about "
                         + "Publication rather than about the hook, and then it owes either an arranged choreography "
-                        + "that falsifies it (PublicationHookContract.choreography(), D-148) or a reason on the reviewed PublicationHookContract.unfalsifiable() list.")
+                        + "that falsifies it (PublicationHookContract.choreography()) or a reason on the reviewed PublicationHookContract.unfalsifiable() list.")
                 .isEqualTo(choreography);
         assertThat(PublicationHookContract.choreography().keySet())
                 .as("a clause cannot be both arranged and unfalsifiable: the two lists are a partition of the "
@@ -379,7 +379,7 @@ class PublicationHookCensusTest {
 
     @Test
     void every_choreography_clause_is_falsified_by_the_arrangement_it_names() throws Exception {
-        // D-148's leg. Each clause about Publication's own commit sequence is re-run under the arranged choreography
+        // the earlier leg. Each clause about Publication's own commit sequence is re-run under the arranged choreography
         // it names - a chain that stops at the first REJECT, a committed that skips the neutral verdict, a review
         // pointer that is gone when committed fires - and must say otherwise. It is run for EVERY fixture the clause
         // binds to, not for one representative, because the checks divide the interceptor clauses between three screen
@@ -497,7 +497,7 @@ class PublicationHookCensusTest {
     }
 
     /**
-     * <b>The kit's own T-205b lens, executed rather than declared.</b> Every check of every fixture is run once more
+     * <b>The kit's own lens, executed rather than declared.</b> Every check of every fixture is run once more
      * against a hook that is a no-op from end to end - the shape every hand-run mutation pass in this plan has found -
      * and the survivors are required to be covered some other way: by a <em>targeted</em> mutation this fixture runs,
      * or by one of the two reviewed lists above.
@@ -536,7 +536,7 @@ class PublicationHookCensusTest {
         assertThat(unguarded)
                 .as("a hook that does nothing at all passes these checks, and no targeted mutation catches them "
                         + "either - so nothing in the kit distinguishes a compliant hook from one that never ran. "
-                        + "That is exactly the shape T-205b hit by hand. Give the property a mutation that removes "
+                        + "That is exactly the shape hit by hand. Give the property a mutation that removes "
                         + "the behaviour it is really about, or argue the pair onto PublicationHookContract.unfalsifiable() / "
                         + "NOT_THIS_HOOKS_TO_FALSIFY.%n%s", String.join(System.lineSeparator(), unguarded))
                 .isEmpty();
@@ -612,7 +612,7 @@ class PublicationHookCensusTest {
 
     @Test
     void the_choreography_leg_trips_when_a_check_survives_its_arrangement() throws IOException {
-        // The same three outcomes for the D-148 runner, and for the same reason: the arranged-choreography leg is
+        // The same three outcomes for the runner, and for the same reason: the arranged-choreography leg is
         // otherwise the one part of the kit nothing falsifies, which is exactly the shape this whole family is about.
         PublicationHookFixture fixture = FIXTURES.getFirst();
         ChoreographyMutant arrangement = ChoreographyMutant.A_CHAIN_THAT_STOPS_AT_THE_FIRST_REJECT;
@@ -653,13 +653,13 @@ class PublicationHookCensusTest {
         return FaultInjectingStore.wrap(store(name.replaceAll("[^A-Za-z0-9]", "_")));
     }
 
-    // --- the out-of-graph inventory T-205b inherits ----------------------------------------------------------------
+    // --- the out-of-graph inventory inherits ----------------------------------------------------------------
 
     @Test
     void the_out_of_graph_hooks_stay_named_and_role_keyed() {
         assertThat(OUT_OF_GRAPH)
                 .as("every hook this graph cannot reach is named WITH the role its downstream source declares, "
-                        + "because that role is what decides which legs T-205b's fixture must run")
+                        + "because that role is what decides which legs the earlier fixture must run")
                 .hasSize(14);
         assertThat(OUT_OF_GRAPH.values().stream().filter(Role.PUBLISH_INTERCEPTOR::equals).count())
                 .as("the three pre-commit screens riding the one `uses PublicationObserver` clause").isEqualTo(3);
@@ -734,7 +734,7 @@ class PublicationHookCensusTest {
                 .as("gate 5: no fixture may declare a delivery class the commit protocol does not provide, and the "
                         + "refusal names the ticket that could change it")
                 .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("T-107");
+                .hasMessageContaining("");
     }
 
     @Test
@@ -788,7 +788,7 @@ class PublicationHookCensusTest {
                 key -> "jenreg.filesystem.root".equals(key) ? directory.toString() : null);
     }
 
-    /** The role a provider's own source declares - the static half of the split, read the way T-002's inventory reads
+    /** The role a provider's own source declares - the static half of the split, read the way the earlier inventory reads
      *  it: a provider is keyed to the role interface it names among its supertypes. */
     private static Role roleInSource(String providerClass) throws IOException {
         Path source = repositoryRoot().resolve("test").resolve("publication")

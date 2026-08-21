@@ -7,7 +7,7 @@ import build.jenesis.repository.store.TenantsProvider;
 import module java.base;
 
 /**
- * Publishes this node's {@link NodeFingerprint} to the shared store on a heartbeat (WCON.2). A stable node id is
+ * Publishes this node's {@link NodeFingerprint} to the shared store on a heartbeat. A stable node id is
  * derived once - the {@code jenreg.consistency.node-id} setting if given, else the hostname, else a generated
  * per-process id - and held as <em>instance</em> state on this bean (never a mutable static), so a fleet of in-process
  * nodes in a test each carry their own identity. A daemon scheduler re-publishes every heartbeat interval, so a node's
@@ -118,7 +118,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
     /** This deployment's tenant set, read once at boot through the same {@code TenantsProvider} seam the rest of the
      *  core resolves the {@link build.jenesis.repository.store.Tenants} directory through: the single configured
      *  tenant with no tenants module installed, the store-backed scopes with one. Folded into the config generation so
-     *  two nodes that route the same config but keep different tenant directories are caught as inconsistent (WCON.2),
+     *  two nodes that route the same config but keep different tenant directories are caught as inconsistent,
      *  with multi-tenancy riding this one seam rather than a parallel fingerprint. Best-effort like the heartbeat write:
      *  if the directory cannot be listed, fall back to the single configured tenant so the fold stays stable rather than
      *  failing the node. */

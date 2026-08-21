@@ -8,14 +8,14 @@ import build.jenesis.repository.observation.ObservabilitySource;
 import module java.base;
 
 /**
- * The observability face of the multi-node consistency check (WCON.2, WO.4): the fleet's per-node numbers reported as
+ * The observability face of the multi-node consistency check: the fleet's per-node numbers reported as
  * self-describing signals, so the same overview that shows every other {@code jenreg.*} signal shows how many nodes are
  * live and whether any is diverged. It reports {@code jenreg.consistency.nodes} (a gauge of live nodes),
  * {@code jenreg.consistency.diverged} (a gauge of stuck divergences), and a {@code jenreg.consistency.divergence}
  * health check that is {@link Health#UP} when the fleet has converged (or is single-node) and {@link Health#DEGRADED}
  * when a node is stuck - a detect-not-block signal, never a failure.
  *
- * <p>These numbers are the very thing that makes the WO.4 "these numbers are instance-specific; warn when multiple
+ * <p>These numbers are the very thing that makes the "these numbers are instance-specific; warn when multiple
  * nodes" caveat trustworthy: the overview can now say <em>how many</em> instances there are and whether they agree. A
  * single-node deployment reports one node and full health - no false divergence. Reading it is cheap: it runs the same
  * bounded {@link NodeConsistency#report} (the {@code consistency/nodes/} prefix plus one small object per node), never a

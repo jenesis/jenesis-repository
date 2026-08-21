@@ -7,7 +7,7 @@ import module org.junit.jupiter.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * WFE.1 - the core {@link ImportEdgeProvider} discovery seam, unit half. Proves the single question the free
+ * - the core {@link ImportEdgeProvider} discovery seam, unit half. Proves the single question the free
  * {@link build.jenesis.repository.server.RepositoryAutoConfiguration} asks - "is a distribution's import edge
  * installed?" - answers off the shared {@code Features} enable/disable convention: {@code TestImportEdgeProvider} is
  * discovered via {@link java.util.ServiceLoader} (this test module's {@code provides} clause) but stays inert until its
@@ -48,7 +48,7 @@ class ImportEdgeProviderTest {
 
     @Test
     void there_is_nothing_to_select_so_no_selection_key_can_claim_or_release_the_edge() {
-        // T-101b: unlike the named singletons beside it (fetcher, walk, gc, rate-limiter, token-exchange,
+        // unlike the named singletons beside it (fetcher, walk, gc, rate-limiter, token-exchange,
         // key-usage, tenants), this SPI is a pure presence signal resolved through Providers.installedNames - there
         // is no jenreg.import-edge=<name> key, so the §9 "explicitly selected but unavailable" case
         // cannot arise and setting such a key changes nothing in either direction.

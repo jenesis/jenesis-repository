@@ -6,7 +6,7 @@ import module org.junit.jupiter.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The multi-node consistency panel (WCON.2, WO.4): the console's window onto the server's {@code GET /api/consistency}
+ * The multi-node consistency panel: the console's window onto the server's {@code GET /api/consistency}
  * read. Like the recent-logs panel it is a thin, key-gated live-API panel that reads nothing from the store, so it
  * renders without a live fleet - and it carries an explicit <strong>single-node</strong> path so a lone deployment
  * shows one node and no divergence rather than a false positive. All dynamic text is escaped in JS before it reaches

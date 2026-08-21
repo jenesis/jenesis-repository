@@ -68,7 +68,7 @@ import module java.base;
  * <li><b>Traversal refusal.</b> A request path is client-supplied and is refused before it becomes a store key. A path
  *     carrying a {@code .} or {@code ..} segment, or a {@code \} anywhere - exactly the shapes
  *     {@link ArtifactStore#traversalFree} names, the backslash among them because it is a separator on a
- *     Windows-hosted filesystem backend and a literal on the object stores (D-003) -
+ *     Windows-hosted filesystem backend and a literal on the object stores -
  *     addresses nothing in this format's namespace and is answered {@code 404}, storing and serving nothing; the same
  *     screen applies to every client-supplied name a format splices into a key (an image name, a tag, a digest). A
  *     format never percent-decodes its own path, so an encoded {@code %2e%2e} stays a literal name rather than

@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The shared single-response reader (D-061): the twelve lines every feed whose answer is ONE document wrote for
+ * The shared single-response reader: the twelve lines every feed whose answer is ONE document wrote for
  * itself - hold a field, parse into it, return no cursor, hand the field back - now owned by the client, with only
  * the vendor's parse left outside it.
  *

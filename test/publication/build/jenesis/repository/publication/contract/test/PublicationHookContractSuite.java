@@ -23,7 +23,7 @@ import module java.base;
  * convergence and crash windows are all what these checks assert, so a store carrying another check's rows would
  * weaken them.
  *
- * <p><b>And every check is run a second time against each mutation its property declares</b> (D-135), by
+ * <p><b>And every check is run a second time against each mutation its property declares</b>, by
  * {@link #every_contract_check_is_falsifiable()}. The two factories are deliberately separate: the first says what
  * the hook does, the second says the first could have said otherwise, and a green in one is not evidence for the
  * other. The mutated leg runs in the same lane as the ordinary one - it costs roughly what the ordinary leg costs,

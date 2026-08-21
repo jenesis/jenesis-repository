@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import module java.base;
 
 /**
- * The security-posture read - {@code GET /api/posture} (WO.5), the console / CLI / headless-agent read of the
+ * The security-posture read - {@code GET /api/posture}, the console / CLI / headless-agent read of the
  * deployment's configuration-warning advisories: every potentially-unsafe setting a discovered {@link
  * build.jenesis.repository.posture.SafetyAdvisor} raises against the effective configuration, collected once through
  * {@link PostureReport#discover} and returned severity-sorted (critical first). Each row names <em>why</em> a setting is

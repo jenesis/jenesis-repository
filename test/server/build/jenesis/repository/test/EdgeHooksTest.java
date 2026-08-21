@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * release-immutability {@code 409}), {@code held} (the quarantine branch's replay-context record) and {@code verdict}
  * (once per screened write, the deploy observation) - and a {@code beforeLayout} refusal short-circuits layout so the
  * format never lays the body out and no {@code published()} fires. The edge is driven directly over a real filesystem
- * store with a spy format and a spy hooks, reusing the T26.2 {@link ScreenedDispatchTest} scaffolding, and the
+ * store with a spy format and a spy hooks, reusing the {@link ScreenedDispatchTest} scaffolding, and the
  * discovered {@code MarkerInterceptor} drives the {@code QUARANTINE}/{@code REJECT} verdicts off marker paths.
  */
 public class EdgeHooksTest {

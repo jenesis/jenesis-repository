@@ -21,12 +21,12 @@ import module java.base;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The multi-node consistency check (WCON.2, core): two in-process nodes over one shared store agree (no
+ * The multi-node consistency check (core): two in-process nodes over one shared store agree (no
  * divergence); stalling one node's cursor flags it <em>stuck</em>, not benign lag, respecting the staleness window; a
  * config-generation mismatch is flagged; a single node degrades to one node with no false positive; the fingerprint
  * read is cheap (it lists only the {@code consistency/nodes/} prefix and reads one small object per node - it never
  * scans the blob namespace, proven with a read/list counter that stays bounded no matter how many blobs exist). It also
- * pins the divergence advisory's severities (WO.5) and the observability health (WO.4). The {@code GET /api/consistency}
+ * pins the divergence advisory's severities and the observability health. The {@code GET /api/consistency}
  * authorization gating and the console panel are pinned end to end by {@code MultiNodeConsistencyE2ETest}.
  */
 class MultiNodeConsistencyTest {
@@ -151,7 +151,7 @@ class MultiNodeConsistencyTest {
 
     @Test
     void two_nodes_with_the_same_config_and_tenant_set_agree() {
-        // WCON.2: the tenant set is folded into the generation, but two nodes over the same config AND the same tenant
+        // the tenant set is folded into the generation, but two nodes over the same config AND the same tenant
         // directory still land on one value - order-independent, so a set discovered in any order agrees.
         Map<String, String> config = Map.of("jenreg.store", "filesystem");
         long a = NodeFingerprint.configGeneration(config, List.of("acme", "globex"));

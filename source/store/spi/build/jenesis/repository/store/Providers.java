@@ -32,7 +32,7 @@ import module java.base;
  *     by caller-supplied policy before it is built (the {@code ArtifactStoreProvider} shape).</li>
  * </ul>
  * plus {@link #installedNames}, the shared enumeration every SPI's {@code installed()} static is built from (which
- * of them a surface actually reads is per-SPI, and is censused rather than assumed - D-164).
+ * of them a surface actually reads is per-SPI, and is censused rather than assumed -).
  *
  * <p><strong>Discovery stays with the SPI.</strong> No method here calls {@link ServiceLoader#load}: the {@code uses}
  * clause belongs in the module that owns the service interface, so the SPI's own {@code resolve}/{@code installed}
@@ -288,7 +288,7 @@ public final class Providers {
      * weaker two are not: only {@code Features.active} agrees with what {@code resolve} will do, so a surface gated on
      * an {@code enabled}-predicated {@code installed()} opens for an implementation that self-disabled on a missing
      * required key, and opens just before an ambiguous or unanswered selection throws. That divergence is why the
-     * capability-signal census (D-164) asks per SPI who reads {@code installed()}, rather than treating the shape as
+     * capability-signal census asks per SPI who reads {@code installed()}, rather than treating the shape as
      * self-evidently a capability.
      *
      * @return the matching names in a stable sorted order; never {@code null}, never modifiable.

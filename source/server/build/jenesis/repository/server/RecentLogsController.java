@@ -10,7 +10,7 @@ import module java.base;
 
 /**
  * The recent-logs tail - {@code GET /api/logs}, the console / CLI / API's read of the instance's most recent log
- * entries from the bounded in-memory {@link LogRingBuffer ring} a logback appender feeds (WO.4, never re-reading a file,
+ * entries from the bounded in-memory {@link LogRingBuffer ring} a logback appender feeds (never re-reading a file,
  * never unbounded). Supports a {@code level} filter (entries at that level or higher), a {@code q} case-insensitive
  * text search over the logger name and message, a {@code since} cursor a tailing reader passes back (the response
  * carries the current {@code cursor}) to fetch only what is new, an optional {@code tenant} scope, and a {@code limit}.

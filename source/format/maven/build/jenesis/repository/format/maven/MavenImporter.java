@@ -26,7 +26,7 @@ public final class MavenImporter implements RepositoryImporter {
         // a path that is not a full coordinate, so without this screen a "/../x" asset would describe to the
         // traversal-shaped "/maven/../x" - the coordinate the edge screens against and an edition records. Screened
         // here rather than in describe(): describe() answers for a REQUEST path, which MavenFormat.handle has already
-        // refused (T-202a), while this composes a /maven/ path out of a foreign source path.
+        // refused, while this composes a /maven/ path out of a foreign source path.
         String relative = RepositoryImporter.importablePath(sourcePath, "maven");
         // The coordinate-enriched descriptor MavenFormat parses from the /maven/ path an asset lands on, so the edge
         // screens against the real Maven coordinate/version. Empty for a generated maven-metadata.xml (which the import

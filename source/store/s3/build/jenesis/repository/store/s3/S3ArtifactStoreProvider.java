@@ -103,7 +103,7 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
      * {@code jenreg.s3.allow-insecure-endpoint=true}.
      *
      * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code gcs} and {@code azure-blob} backends
-     * (D-023); what is this backend's own is the pair of config keys it names, and this method is where they are
+     *; what is this backend's own is the pair of config keys it names, and this method is where they are
      * bound to the screen.
      */
     public static URI secureEndpoint(String endpoint, String allowInsecure) {

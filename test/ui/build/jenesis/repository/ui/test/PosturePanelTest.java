@@ -11,7 +11,7 @@ import module java.base;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The Security-posture panel (WO.5) renders a collected {@link PostureReport} as plain rows - each advisory's why, its
+ * The Security-posture panel renders a collected {@link PostureReport} as plain rows - each advisory's why, its
  * suggested fix and the exact {@code jenreg.*} key/value, severity-sorted - and degrades to a friendly "no advisories"
  * state when the configuration is clean. A hand-built report is the fixture (the pure {@code renderReport} the discovery
  * path shares), so the ordering, the why/fix/key-value and the graceful-empty state are proven without an ambient
