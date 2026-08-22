@@ -54,6 +54,24 @@ public interface PublicationHookFixture {
     Object create();
 
     /**
+     * The descriptor a kit publish at {@code path} should carry for this hook.
+     *
+     * <p>The default is coordinate-less, which is a real publish shape and the one several properties are about: a
+     * checksum, a generated sidecar, an envelope path that carries no version. A hook keyed on the neutral
+     * ecosystem/coordinate/version triple skips exactly that shape by design, so for those hooks every kit publish
+     * used to be invisible - and their fixtures had to exclude whole properties with a reason saying the kit could
+     * not reach them, which turns a check into a note.
+     *
+     * <p>A fixture whose hook is coordinate-keyed overrides this with
+     * {@link PublicationHookContract#coordinated(String, String, String)}, deriving a coordinate from the path so
+     * every publish the kit makes is one the hook can see. Overriding changes nothing else: the visibility the kit
+     * declares carries the refinement only when the descriptor has one.
+     */
+    default ArtifactDescriptor describe(String path) {
+        return PublicationHookContract.descriptor(path);
+    }
+
+    /**
      * This hook's role. The default is the derivation {@link Publication} itself performs, and a fixture should not
      * override it: {@link PublicationHookContract#checks(PublicationHookFixture)} re-derives the role from
      * {@link #create()} and fails when the two disagree, so an override can only ever be a caught lie.

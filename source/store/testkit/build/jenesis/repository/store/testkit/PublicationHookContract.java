@@ -762,7 +762,26 @@ public final class PublicationHookContract {
     static Publication.Commit commit(Publication publication, ArtifactDescriptor artifact, InputStream body)
             throws IOException {
         return publication.commit(artifact, body, Publication.Republish.overwrite(),
-                _ -> Publication.Visibility.at(artifact.path()));
+                _ -> visibility(artifact));
+    }
+
+    /**
+     * The visibility one kit publish declares: the request path, and - when the descriptor carries one - the
+     * coordinate it stands for.
+     *
+     * <p>Every kit publish used to declare {@link Publication.Visibility#at} alone, which sets no {@code described},
+     * so every artifact the kit committed reached an observer with no coordinate and no version. That is exactly the
+     * shape a coordinate-keyed observer skips by design, so hooks like the search and event publication observers
+     * could not be driven through the kit at all and their fixtures carried exclusions saying so. The refinement
+     * seam already existed on the free {@code Visibility}; the kit simply never used it.
+     *
+     * <p>A path-only descriptor still declares a path-only visibility, so a fixture that wants the old shape - and
+     * the checks about coordinate-less envelope paths, which are about exactly that - gets it by handing a
+     * descriptor built with {@link #descriptor(String)}.
+     */
+    private static Publication.Visibility visibility(ArtifactDescriptor artifact) {
+        Publication.Visibility at = Publication.Visibility.at(artifact.path());
+        return artifact.coordinate() == null ? at : at.describing(artifact);
     }
 
     static ByteArrayInputStream bytes(String body) {
@@ -860,8 +879,21 @@ public final class PublicationHookContract {
                 && !observer.converged(List.of(descriptor("/kit/applicability-probe"))).isEmpty();
     }
 
-    static ArtifactDescriptor descriptor(String path) {
+    public static ArtifactDescriptor descriptor(String path) {
         return ArtifactDescriptor.at("kit", path);
+    }
+
+    /**
+     * A descriptor that names the coordinate its path stands for, for the checks and fixtures that need an observer
+     * keyed on the neutral ecosystem/coordinate/version triple to see anything at all.
+     *
+     * <p>{@link #descriptor(String)} deliberately remains coordinate-less: a path-only publish is a real shape the
+     * contract has properties about, and it is what a format that lays out an envelope produces. This is the other
+     * one, and until it existed the kit could only produce the first - so a coordinate-keyed observer was
+     * unreachable through the kit and its fixture had to say so in an exclusion rather than in a check.
+     */
+    public static ArtifactDescriptor coordinated(String path, String coordinate, String version) {
+        return new ArtifactDescriptor("kit", coordinate, version, path, null, false, null, -1L);
     }
 
     /** The SHA-256 hex {@code body} is stored under, so a check can name a blob before publishing it. */

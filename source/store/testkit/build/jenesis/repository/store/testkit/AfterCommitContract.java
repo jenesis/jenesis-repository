@@ -88,7 +88,7 @@ final class AfterCommitContract {
     private static void aThrowingObserverIsContained(PublicationHookFixture fixture, FaultInjectingStore store)
             throws Exception {
         Observer observer = (Observer) fixture;
-        ArtifactDescriptor artifact = descriptor("/kit/contained");
+        ArtifactDescriptor artifact = fixture.describe("/kit/contained");
 
         // (a) a probe that always throws sits AHEAD of the fixture's observer, so containment is exercised even if
         //     the implementation happens to swallow its own failures, and "later observers still run" is asserted.
@@ -111,7 +111,7 @@ final class AfterCommitContract {
         //     stand - and, per the plan's gate 4, the failure must leave a TRACE: a contained failure that is
         //     indistinguishable from a successful one is the defect, not the containment. The trace here is durable
         //     divergence plus a route back, and both are asserted from the store rather than from a log line.
-        ArtifactDescriptor second = descriptor("/kit/contained-own");
+        ArtifactDescriptor second = fixture.describe("/kit/contained-own");
         for (String space : observer.namespaces()) {
             Predicate<String> keys = FaultInjectingStore.keyPrefix(space);
             store.failEveryOn(FaultInjectingStore.Op.WRITE, keys);
@@ -139,7 +139,7 @@ final class AfterCommitContract {
     private static void anErrorEscapesTheContainment(PublicationHookFixture fixture, FaultInjectingStore store)
             throws Exception {
         Observer observer = (Observer) fixture;
-        ArtifactDescriptor artifact = descriptor("/kit/error");
+        ArtifactDescriptor artifact = fixture.describe("/kit/error");
         Publication publication = publication(store, List.of(
                 (PublicationObserver) (_, _) -> {
                     throw new StackOverflowError("an observer that blew the stack");
@@ -163,7 +163,7 @@ final class AfterCommitContract {
     private static void aDuplicateDeliveryConverges(PublicationHookFixture fixture, FaultInjectingStore store)
             throws Exception {
         Observer observer = (Observer) fixture;
-        ArtifactDescriptor artifact = descriptor("/kit/replayed");
+        ArtifactDescriptor artifact = fixture.describe("/kit/replayed");
         Publication publication = publication(store, List.of(observer.create()));
 
         commit(publication, artifact);
@@ -187,7 +187,7 @@ final class AfterCommitContract {
                                                                    FaultInjectingStore store) throws Exception {
         Observer observer = (Observer) fixture;
         ArtifactStore scoped = store.scope("acme").scope("main");
-        ArtifactDescriptor artifact = descriptor("/kit/scoped");
+        ArtifactDescriptor artifact = fixture.describe("/kit/scoped");
 
         commit(publication(scoped, List.of(observer.create())), artifact);
         settle(observer, scoped);
@@ -204,7 +204,7 @@ final class AfterCommitContract {
     private static void aLostCallHidesNothing(PublicationHookFixture fixture, FaultInjectingStore store)
             throws Exception {
         Observer observer = (Observer) fixture;
-        ArtifactDescriptor artifact = descriptor("/kit/lost");
+        ArtifactDescriptor artifact = fixture.describe("/kit/lost");
         Publication publication = publication(store, List.of(observer.create()));
 
         // The documented window: the declared visibility write lands and the caller never learns it did, so the
@@ -229,7 +229,7 @@ final class AfterCommitContract {
 
         // The other half of clause 7's promise: a lost call can never hide a HOLD either. A held path stays held
         // whatever an observer of the hold did or did not manage to record.
-        ArtifactDescriptor held = descriptor("/kit/held");
+        ArtifactDescriptor held = fixture.describe("/kit/held");
         Publication holding = publication(store, List.of(throwing(new IOException("feed consumer down")),
                 observer.create()));
         commit(holding, held);
@@ -247,7 +247,7 @@ final class AfterCommitContract {
     private static void theCommitToCallbackWindowLosesTheCall(PublicationHookFixture fixture,
                                                               FaultInjectingStore store) throws Exception {
         Observer observer = (Observer) fixture;
-        ArtifactDescriptor artifact = descriptor("/kit/window");
+        ArtifactDescriptor artifact = fixture.describe("/kit/window");
 
         store.crashAfterWrite(FaultInjectingStore.Op.WRITE_VERSIONED, FaultInjectingStore.keyPrefix("publish/"));
         Throwable failed = thrownBy(() -> commit(publication(store, List.of(observer.create())), artifact));
@@ -270,8 +270,8 @@ final class AfterCommitContract {
     private static void aDroppedCallIsHealedByAnExecutableRepair(PublicationHookFixture fixture,
                                                                  FaultInjectingStore store) throws Exception {
         Observer observer = (Observer) fixture;
-        ArtifactDescriptor seen = descriptor("/kit/repaired-seen");
-        ArtifactDescriptor missed = descriptor("/kit/repaired-missed");
+        ArtifactDescriptor seen = fixture.describe("/kit/repaired-seen");
+        ArtifactDescriptor missed = fixture.describe("/kit/repaired-missed");
         Publication publication = publication(store, List.of(observer.create()));
 
         commit(publication, seen);
@@ -300,7 +300,7 @@ final class AfterCommitContract {
     private static void anEnqueuedNoteIsDurableWhenTheCallbackReturns(PublicationHookFixture fixture,
                                                                       FaultInjectingStore store) throws Exception {
         Observer observer = (Observer) fixture;
-        ArtifactDescriptor artifact = descriptor("/kit/enqueued");
+        ArtifactDescriptor artifact = fixture.describe("/kit/enqueued");
 
         commit(publication(store, List.of(observer.create())), artifact);
 
@@ -321,7 +321,7 @@ final class AfterCommitContract {
     private static void aRepeatedDrainLeavesTheSameSurface(PublicationHookFixture fixture, FaultInjectingStore store)
             throws Exception {
         Observer observer = (Observer) fixture;
-        ArtifactDescriptor artifact = descriptor("/kit/drained-twice");
+        ArtifactDescriptor artifact = fixture.describe("/kit/drained-twice");
 
         commit(publication(store, List.of(observer.create())), artifact);
         observer.drain(store);
@@ -340,7 +340,7 @@ final class AfterCommitContract {
         Observer observer = (Observer) fixture;
         for (PublishInterceptor.Disposition disposition : List.of(
                 PublishInterceptor.Disposition.QUARANTINE, PublishInterceptor.Disposition.REJECT)) {
-            ArtifactDescriptor artifact = descriptor("/kit/unobserved-" + disposition.name().toLowerCase(Locale.ROOT));
+            ArtifactDescriptor artifact = fixture.describe("/kit/unobserved-" + disposition.name().toLowerCase(Locale.ROOT));
             Publication.Commit committed = commit(
                     publication(store, List.of(verdict(disposition), observer.create())), artifact);
 
@@ -380,7 +380,7 @@ final class AfterCommitContract {
             }
         };
         Publication publication = publication(store, List.of(feed, observer.create()));
-        String blob = commit(publication, descriptor("/kit/feed")).hash();
+        String blob = commit(publication, fixture.describe("/kit/feed")).hash();
 
         publication.link("/quarantine/kit/feed", blob);
         equal(transitions, List.of("on:/kit/feed"), fixture,
