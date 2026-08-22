@@ -37,7 +37,20 @@ public final class TokenBucketRateLimiter implements RateLimiter, ObservabilityS
         this.clock = clock;
     }
 
-    /** A limiter reading time from a supplied nanosecond clock instead of {@link System#nanoTime} (a test drives it). */
+    /**
+     * A limiter reading time from a supplied nanosecond clock instead of {@link System#nanoTime}.
+     *
+     * <p><b>A test seam, and deliberately the only wither here with no production caller.</b> A rate limiter's whole
+     * behaviour is a function of elapsed time, so a suite that cannot move the clock can only assert it by sleeping -
+     * which makes the suite slow, and flaky on a loaded machine, for a property that is exactly specified. Every
+     * other value on this type is either a constructor argument or reachable from configuration; this one is not
+     * offered to an operator because there is no deployment in which reading time from somewhere other than the
+     * system clock is a thing to want.
+     *
+     * <p>It is stated here because "public, honoured, and called by nothing in {@code source/**}" is otherwise the
+     * signature of a knob that was built and never wired up, and telling the two apart by eye is what an audit of
+     * this shape costs. A seam says so at its declaration.
+     */
     public TokenBucketRateLimiter withClock(LongSupplier clock) {
         return new TokenBucketRateLimiter(clock);
     }
