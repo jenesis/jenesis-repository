@@ -28,6 +28,19 @@ import build.jenesis.repository.observation.ObservabilitySource;
  */
 public final class RevalidatingFetcher implements ProxyFormat.Fetcher, ObservabilitySource {
 
+    private static final AtomicReference<RevalidatingFetcher> INSTALLED = new AtomicReference<>();
+
+    /** Register {@code instance} as the live one the discovered {@link RevalidationObservability} reports from; the production
+     *  construction site calls this once, and the last registration wins. */
+    public static void install(RevalidatingFetcher instance) {
+        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
+    }
+
+    /** The installed live instance, if any - what {@link RevalidationObservability} reports; empty before one is installed. */
+    static Optional<RevalidatingFetcher> installed() {
+        return Optional.ofNullable(INSTALLED.get());
+    }
+
     private static final long MAX_TOTAL = 64L * 1024 * 1024;
     private static final int MAX_BODY = 8 * 1024 * 1024;
 

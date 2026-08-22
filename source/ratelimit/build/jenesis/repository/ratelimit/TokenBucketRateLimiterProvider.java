@@ -18,6 +18,8 @@ public final class TokenBucketRateLimiterProvider implements RateLimiterProvider
 
     @Override
     public Optional<RateLimiter> create(UnaryOperator<String> config) {
-        return Optional.of(new TokenBucketRateLimiter());
+        TokenBucketRateLimiter limiter = new TokenBucketRateLimiter();
+        TokenBucketRateLimiter.install(limiter);                // the discovered observability reads this one
+        return Optional.of(limiter);
     }
 }

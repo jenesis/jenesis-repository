@@ -19,11 +19,15 @@ public final class HttpFetcherProvider implements FetcherProvider {
 
     @Override
     public Optional<ProxyFormat.Fetcher> create(UnaryOperator<String> config) {
-        ProxyFormat.Fetcher fetcher = new RevalidatingFetcher(new HttpFetcher());
+        RevalidatingFetcher revalidating = new RevalidatingFetcher(new HttpFetcher());
+        RevalidatingFetcher.install(revalidating);              // the discovered observability reads these
         Duration missTtl = missTtl(config.apply("proxy-miss-ttl"));
-        return Optional.of(missTtl.compareTo(Duration.ZERO) > 0
-                ? new NegativeCachingFetcher(fetcher, missTtl)
-                : fetcher);
+        if (missTtl.compareTo(Duration.ZERO) > 0) {
+            NegativeCachingFetcher caching = new NegativeCachingFetcher(revalidating, missTtl);
+            NegativeCachingFetcher.install(caching);
+            return Optional.of(caching);
+        }
+        return Optional.of(revalidating);
     }
 
     /** Parse the negative-cache window: ISO-8601 ({@code PT90S}) or the simple style Spring binds ({@code 90s},

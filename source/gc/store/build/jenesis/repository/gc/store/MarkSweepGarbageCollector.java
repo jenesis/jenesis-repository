@@ -71,6 +71,19 @@ import module java.base;
  */
 public final class MarkSweepGarbageCollector implements GarbageCollector, ObservabilitySource {
 
+    private static final AtomicReference<MarkSweepGarbageCollector> INSTALLED = new AtomicReference<>();
+
+    /** Register {@code instance} as the live one the discovered {@link GarbageCollectorObservability} reports from; the production
+     *  construction site calls this once, and the last registration wins. */
+    public static void install(MarkSweepGarbageCollector instance) {
+        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
+    }
+
+    /** The installed live instance, if any - what {@link GarbageCollectorObservability} reports; empty before one is installed. */
+    static Optional<MarkSweepGarbageCollector> installed() {
+        return Optional.ofNullable(INSTALLED.get());
+    }
+
     /** The two walk consumers, whose pass state a console reads back through {@code ArtifactWalk.pass}. */
     static final String MARK = "gc-mark", SWEEP = "gc-sweep";
 

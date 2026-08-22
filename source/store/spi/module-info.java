@@ -31,4 +31,6 @@ module build.jenesis.repository.store {
     uses build.jenesis.repository.store.ArtifactStoreProvider;
     uses build.jenesis.repository.store.PublicationObserver;
     uses build.jenesis.repository.store.TenantsProvider;
+    provides build.jenesis.repository.observation.ObservabilitySource
+            with build.jenesis.repository.store.QuotaObservability;
 }

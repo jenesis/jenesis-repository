@@ -84,7 +84,12 @@ public class RepositoryAutoConfiguration {
     public ArtifactStore artifactStore(RepositoryProperties properties, Environment environment) {
         ArtifactStore store = ArtifactStoreProvider.resolve(properties.getStore(), environment::getProperty);
         long quota = properties.quotaBytes();
-        ArtifactStore quotaed = quota > 0 ? new QuotaArtifactStore(store, quota) : store;
+        ArtifactStore quotaed = store;
+        if (quota > 0) {
+            QuotaArtifactStore metered = new QuotaArtifactStore(store, quota);
+            QuotaArtifactStore.install(metered);                // the discovered observability reads this one
+            quotaed = metered;
+        }
         // Read-only is the outermost wrapper, so every write - through the quota meter or straight to the backend, at
         // an HTTP endpoint or an internal path - is refused at this one choke point before it reaches the delegate.
         return properties.isReadOnly() ? new ReadOnlyArtifactStore(quotaed) : quotaed;
@@ -390,6 +395,18 @@ public class RepositoryAutoConfiguration {
         return new NodeFingerprintPublisher(consistency, store, environment::getProperty);
     }
 
+    /** The free edition's scheduled driver of the shared rebuild pass (see {@link RebuildScheduler}): a daemon cadence
+     *  over the deployment's one repository feeding every discovered walk consumer, inert when there is no walk or no
+     *  consumer, {@code jenreg.rebuild.interval=off} to switch it off. A distribution with its own maintenance
+     *  scheduler declares a bean of this type to take its place. */
+    @Bean(initMethod = "start", destroyMethod = "close")
+    @ConditionalOnMissingBean
+    public RebuildScheduler rebuildScheduler(ArtifactStore store, RepositoryProperties properties,
+                                             Environment environment) {
+        return new RebuildScheduler(store.scope(properties.getTenant()).scope(properties.getRepository()),
+                environment::getProperty);
+    }
+
     /** The multi-node consistency read - {@code GET /api/consistency}, the per-node fingerprints and any
      *  divergence between them, read-authorised like the rest of the wire; the downstream edition mirrors it as an
      *  operator-gated {@code /api/admin/consistency}. */
@@ -406,6 +423,7 @@ public class RepositoryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public NodeConsistencyObservability nodeConsistencyObservability(NodeConsistency consistency) {
+        NodeConsistencyObservability.install(consistency);      // the discovered, no-argument form reads this one
         return new NodeConsistencyObservability(consistency);
     }
 

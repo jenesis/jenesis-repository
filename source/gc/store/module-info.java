@@ -26,4 +26,6 @@ module build.jenesis.repository.gc.store {
             build.jenesis.repository.format.oci.test;
     provides build.jenesis.repository.gc.GarbageCollectorProvider
             with build.jenesis.repository.gc.store.MarkSweepGarbageCollectorProvider;
+    provides build.jenesis.repository.observation.ObservabilitySource
+            with build.jenesis.repository.gc.store.GarbageCollectorObservability;
 }

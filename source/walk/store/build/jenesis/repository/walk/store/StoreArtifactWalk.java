@@ -55,6 +55,19 @@ import module java.base;
  */
 public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySource {
 
+    private static final AtomicReference<StoreArtifactWalk> INSTALLED = new AtomicReference<>();
+
+    /** Register {@code instance} as the live one the discovered {@link ArtifactWalkObservability} reports from; the production
+     *  construction site calls this once, and the last registration wins. */
+    public static void install(StoreArtifactWalk instance) {
+        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
+    }
+
+    /** The installed live instance, if any - what {@link ArtifactWalkObservability} reports; empty before one is installed. */
+    static Optional<StoreArtifactWalk> installed() {
+        return Optional.ofNullable(INSTALLED.get());
+    }
+
     private final int checkpoint;
     private final int segments;
     private final Duration ttl;

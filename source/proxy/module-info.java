@@ -18,4 +18,7 @@ module build.jenesis.repository.proxy {
     exports build.jenesis.repository.proxy;
     provides build.jenesis.repository.format.FetcherProvider
             with build.jenesis.repository.proxy.HttpFetcherProvider;
+    provides build.jenesis.repository.observation.ObservabilitySource
+            with build.jenesis.repository.proxy.RevalidationObservability,
+                 build.jenesis.repository.proxy.NegativeCacheObservability;
 }

@@ -28,6 +28,19 @@ import build.jenesis.repository.observation.ObservabilitySource;
  */
 public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, ObservabilitySource {
 
+    private static final AtomicReference<NegativeCachingFetcher> INSTALLED = new AtomicReference<>();
+
+    /** Register {@code instance} as the live one the discovered {@link NegativeCacheObservability} reports from; the production
+     *  construction site calls this once, and the last registration wins. */
+    public static void install(NegativeCachingFetcher instance) {
+        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
+    }
+
+    /** The installed live instance, if any - what {@link NegativeCacheObservability} reports; empty before one is installed. */
+    static Optional<NegativeCachingFetcher> installed() {
+        return Optional.ofNullable(INSTALLED.get());
+    }
+
     private static final int MAX_ENTRIES = 16_384;
 
     private final ProxyFormat.Fetcher delegate;

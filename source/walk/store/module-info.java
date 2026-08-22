@@ -18,4 +18,6 @@ module build.jenesis.repository.walk.store {
     exports build.jenesis.repository.walk.store;
     provides build.jenesis.repository.walk.WalkProvider
             with build.jenesis.repository.walk.store.StoreWalkProvider;
+    provides build.jenesis.repository.observation.ObservabilitySource
+            with build.jenesis.repository.walk.store.ArtifactWalkObservability;
 }
