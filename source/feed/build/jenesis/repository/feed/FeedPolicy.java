@@ -133,6 +133,23 @@ public record FeedPolicy(FailMode failMode,
                 maxBackoff, maxResponseBytes, maxSnapshotBytes, refreshInterval, retryInterval, sameOriginOnly);
     }
 
+    /**
+     * The three retry-curve withers below are <b>test seams</b>, and deliberately the only withers on this record
+     * with no production caller.
+     *
+     * <p>Every other value here is chosen in code by the signal source that owns the feed - {@code maxPages},
+     * {@code failMode}, {@code refreshInterval} and the rest all have callers picking a value for their vendor. The
+     * retry curve does not, because no source has needed one other than the default: a first delay, a multiplier and
+     * a ceiling that together bound how hard a transient upstream is retried.
+     *
+     * <p>They exist because a suite that cannot shorten the curve can only assert it by waiting out real seconds of
+     * exponential backoff, which makes the suite slow and flaky for behaviour that is exactly specified. Stated here
+     * because "public, honoured, and called by nothing" is otherwise indistinguishable from a knob that was built
+     * and never wired up, and telling the two apart by eye is what an audit of this shape costs.
+     *
+     * <p>They are not operator dials and are not reachable from configuration. If a source ever needs a gentler
+     * curve for a rate-limited vendor, it sets one here the way it already sets its page count.
+     */
     public FeedPolicy backoff(Duration value) {
         return new FeedPolicy(failMode, requestTimeout, deadline, maxPages, maxAttempts, value, backoffMultiplier,
                 maxBackoff, maxResponseBytes, maxSnapshotBytes, refreshInterval, retryInterval, sameOriginOnly);

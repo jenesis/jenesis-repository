@@ -72,9 +72,21 @@ public final class MavenSource implements ImportSource {
         return new MavenSource(base, repository, fetcher, authorization, cursor, refreshLimit);
     }
 
-    /** Cap the coordinates the listing-less index walk retains for its metadata-refresh pass (default
-     *  {@link #MAX_REFRESH_COORDINATES}), so a very large source imports with bounded heap. The limit must be stable
-     *  across a resumed run, since the retained set is rebuilt by replaying the index stream deterministically. */
+    /**
+     * Cap the coordinates the listing-less index walk retains for its metadata-refresh pass (default
+     * {@link #MAX_REFRESH_COORDINATES}), so a very large source imports with bounded heap. The limit must be stable
+     * across a resumed run, since the retained set is rebuilt by replaying the index stream deterministically.
+     *
+     * <p><b>A test seam, and the only wither here with no production caller.</b> The bound it moves is a heap
+     * guard whose default is a quarter of a million coordinates, and the overflow behaviour - index records still
+     * imported, only the supplementary metadata refresh skipped - cannot be asserted by building a source that
+     * large. A suite sets it to 2 and drives the same code path in three coordinates.
+     *
+     * <p>It is not an operator dial. {@code ImportRequest} carries a fixed field set shared by every importer, so
+     * a Maven-specific heap knob has no place on it, and there is no configuration path that would fit this without
+     * distorting that SPI. Said here because "public, honoured, and called by nothing" is otherwise the signature
+     * of a knob that was built and never wired up.
+     */
     public MavenSource withRefreshLimit(int refreshLimit) {
         if (refreshLimit <= 0) {
             throw new IllegalArgumentException("A refresh limit must be positive");
