@@ -174,4 +174,37 @@ public class RateLimitFilterTest {
         assertThat(limiter.ceiling).as("and meters against its own per-tenant override")
                 .isEqualTo((double) TENANT_OVERRIDE);
     }
+
+    @Test
+    void the_default_ceiling_is_read_live_so_a_runtime_setting_is_honoured_without_a_reboot() throws Exception {
+        long[] configured = {DEFAULT_CEILING};
+        Capturing limiter = new Capturing();
+        RateLimitFilter filter = new RateLimitFilter(limiter, Authorization.anonymous(), () -> configured[0]);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getRequestURI()).thenReturn("/repository/maven/org/x/y/1/y-1.jar");
+        when(request.getDispatcherType()).thenReturn(DispatcherType.REQUEST);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        FilterChain chain = mock(FilterChain.class);
+
+        configured[0] = 42;
+        filter.doFilter(request, response, chain);
+
+        assertThat(limiter.ceiling)
+                .as("the ceiling is what the supplier answers when the bucket is first metered, not a boot-time copy")
+                .isEqualTo(42.0);
+    }
+
+    @Test
+    void the_live_default_resolves_the_rate_limit_setting_and_falls_back_to_the_boot_value() {
+        assertThat(RateLimitFilter.liveDefault(Map.of("jenreg.rate-limit", "0")::get, DEFAULT_CEILING).getAsLong())
+                .as("an operator who writes 0 disables the limiter").isEqualTo(0);
+        assertThat(RateLimitFilter.liveDefault(Map.of("jenreg.rate-limit", "120")::get, DEFAULT_CEILING).getAsLong())
+                .isEqualTo(120);
+        assertThat(RateLimitFilter.liveDefault(Map.<String, String>of()::get, DEFAULT_CEILING).getAsLong())
+                .as("nothing written at runtime leaves the boot property in force").isEqualTo(DEFAULT_CEILING);
+        assertThat(RateLimitFilter.liveDefault(Map.of("jenreg.rate-limit", "plenty")::get, DEFAULT_CEILING)
+                .getAsLong())
+                .as("a value that is not a number never turns every request into an error")
+                .isEqualTo(DEFAULT_CEILING);
+    }
 }
