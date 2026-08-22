@@ -26,6 +26,20 @@ public interface FormatExchange {
         return path();
     }
 
+    /**
+     * The scheme the request arrived on - {@code https} when the server terminated TLS for it, {@code http}
+     * otherwise - so a format that writes absolute self-referential URLs into a generated index (a packument, a
+     * service index, a sparse-index config) tells the client to come back the way it came, and a credential the
+     * client attaches to that URL never travels in cleartext from a deployment that serves TLS. A deployment behind a
+     * TLS-terminating proxy sees {@code http} here unless the container is told to honour the proxy's forwarded
+     * headers; the formats consult {@code X-Forwarded-Proto} first for that case. The {@code default} is
+     * {@code http}, for the exchanges that have no connection at all (a headless embed, an internal push, a test
+     * double).
+     */
+    default String scheme() {
+        return "http";
+    }
+
     String queryParameter(String name);
 
     String requestHeader(String name);

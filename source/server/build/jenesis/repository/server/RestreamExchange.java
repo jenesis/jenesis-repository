@@ -53,6 +53,11 @@ public final class RestreamExchange implements FormatExchange {
     }
 
     @Override
+    public String scheme() {
+        return delegate.scheme();
+    }
+
+    @Override
     public String queryParameter(String name) {
         return delegate.queryParameter(name);
     }
