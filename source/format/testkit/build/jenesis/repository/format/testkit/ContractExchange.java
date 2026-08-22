@@ -27,6 +27,8 @@ public final class ContractExchange implements FormatExchange {
     private final String path;
     private final Map<String, String> query;
     private final Map<String, String> requestHeaders;
+
+    private String scheme = "http";
     private final UnaryOperator<String> settings;
     private final Supplier<InputStream> requestBody;
 
@@ -54,6 +56,25 @@ public final class ContractExchange implements FormatExchange {
     }
 
     /** A bodiless request ({@code GET}, {@code HEAD}, {@code DELETE}). */
+    /**
+     * Serve this exchange as though the connection carried {@code scheme}.
+     *
+     * <p>A generated index that emits absolute URLs has to build them on something, and getting that wrong is not
+     * cosmetic: a document telling a client to fetch over {@code http} from a deployment that serves TLS downgrades
+     * every credential the client attaches. The default is {@code http}, matching {@link FormatExchange#scheme},
+     * which is right for an exchange with no connection - and useless for asking whether a format carries the
+     * scheme it was given, because the wrong answer and the default are the same string.
+     */
+    public ContractExchange servedOver(String scheme) {
+        this.scheme = Objects.requireNonNull(scheme, "scheme");
+        return this;
+    }
+
+    @Override
+    public String scheme() {
+        return scheme;
+    }
+
     public static ContractExchange of(String method, String path) {
         return new ContractExchange(method, path, Map.of(), Map.of(), _ -> null, InputStream::nullInputStream);
     }
