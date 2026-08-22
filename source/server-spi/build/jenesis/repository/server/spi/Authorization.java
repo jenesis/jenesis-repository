@@ -154,6 +154,47 @@ public final class Authorization {
         return new Authorization(store, defaultLifetime, maxLifetime, anonymousGrants);
     }
 
+    /**
+     * The deployment's two credential-lifetime dials applied from their raw configuration values, each blank one
+     * leaving this authorization unchanged.
+     *
+     * <p>It takes the config strings rather than {@link Duration}s for the reason {@link #withAnonymousRights} does:
+     * the value's grammar, and what a malformed one means, belong to the type that owns the concept rather than to
+     * whichever wiring layer happens to read the property.
+     *
+     * <p>Both dials were honoured where they are read and reachable from no configuration at all - the withers were
+     * public, the mint path consulted them, nothing outside a test called them - so every deployment ran the 90-day
+     * default with no ceiling and no way to say otherwise, while a <em>tenant</em> policy could already narrow both.
+     * That made the missing deployment-wide floor and ceiling the odd gap rather than a deliberate omission.
+     *
+     * <p>A blank value leaves the shipped posture untouched, deliberately: a ceiling appearing on upgrade would cap
+     * every tenant's credentials at once, and an operator who never asked for one would find keys expiring early
+     * with nothing in their configuration to explain it. A malformed duration throws rather than falling back - a
+     * lifetime silently reverting to 90 days because someone wrote {@code 30d} for {@code P30D} is only noticed when
+     * a key outlives what its operator believes it does.
+     */
+    public Authorization withLifetimes(String defaultLifetime, String maxLifetime) {
+        Authorization configured = this;
+        if (defaultLifetime != null && !defaultLifetime.isBlank()) {
+            configured = configured.withDefaultLifetime(
+                    lifetime(defaultLifetime.strip(), "credential-default-lifetime"));
+        }
+        if (maxLifetime != null && !maxLifetime.isBlank()) {
+            configured = configured.withMaxLifetime(lifetime(maxLifetime.strip(), "credential-max-lifetime"));
+        }
+        return configured;
+    }
+
+    /** An ISO-8601 duration, or a refusal naming the key and what a well-formed value looks like. */
+    private static Duration lifetime(String value, String key) {
+        try {
+            return Duration.parse(value);
+        } catch (DateTimeParseException malformed) {
+            throw new IllegalArgumentException("jenreg." + key + " is not an ISO-8601 duration: '" + value
+                    + "'. Write it as P30D (thirty days), PT12H (twelve hours) or P1DT6H.", malformed);
+        }
+    }
+
     public Duration defaultLifetime() {
         return defaultLifetime;
     }
