@@ -220,7 +220,7 @@ public final class Publication {
      *  the write path (every link site: publish, quarantine, promotion, cross-publish) un-condemns it before the
      *  collecting sweep's final marker re-read. One existence probe per link, a no-op wherever collection never
      *  condemned the blob; the marker key is the store-layout convention the {@code gc} SPI documents. */
-    public void link(String requestPath, String hash) throws IOException {
+    public String link(String requestPath, String hash) throws IOException {
         // The one cheap check the publish hot path pays: a non-quarantine link is exactly the write below and nothing
         // more. A /quarantine<path> link is the pointer face of the withhold-change feed - a hold writer (the gate's
         // QUARANTINE branch, a retroactive KEV/license/reachability sweep) links a review pointer here - so a FRESH one
@@ -231,6 +231,13 @@ public final class Publication {
         for (int attempt = 0; attempt < 3; attempt++) {
             Optional<ArtifactStore.Versioned> prior = store.readVersioned("publish" + requestPath);
             Object token = prior.map(ArtifactStore.Versioned::token).orElse(null);
+            // Any prior pointer counts, INCLUDING one naming the same blob. A byte-identical re-publish
+            // replaces a contribution with an equal one, so a consumer folding a delta must see it and compute
+            // zero; filtering it out here as "nothing was replaced" is what makes such a publish count twice, and
+            // is the defect this value exists to close.
+            String replaced = prior.map(versioned -> new String(versioned.content(), StandardCharsets.UTF_8).trim())
+                    .filter(previous -> !previous.isEmpty())
+                    .orElse(null);
             if (store.writeVersioned("publish" + requestPath, hash.getBytes(StandardCharsets.UTF_8), token)) {
                 String condemned = "gc/condemned/" + hash;
                 if (store.exists(condemned)) {
@@ -240,7 +247,7 @@ public final class Publication {
                     notifyWithheld(ArtifactDescriptor.at(null, requestPath.substring(QUARANTINE_PATH.length()))
                             .withBlob(hash, -1L));
                 }
-                return;
+                return replaced;
             }
         }
         throw new IOException("could not link publish" + requestPath + " after repeated version conflicts");
@@ -899,16 +906,26 @@ public final class Publication {
         }
         // The commit point. Every declared step is a compare-and-set write of a small pointer object; the artifact is
         // servable from the first one that lands and completely visible once the last has.
+        String replaced = null;
         for (Visibility.Step step : visibility.steps) {
             if (step.requestPath() != null) {
-                link(step.requestPath(), hash);
+                // The first step is the artifact's own request path; a later one is a cross-published mirror, whose
+                // replacement is a different path's business. Only the first is what this publish overwrote.
+                String overwritten = link(step.requestPath(), hash);
+                replaced = replaced == null ? overwritten : replaced;
             } else {
                 step.serving().link(hash, store);
             }
         }
-        ArtifactDescriptor committed = visibility.described == null
+        ArtifactDescriptor committed;
+        committed = visibility.described == null
                 ? stored
                 : visibility.described.withBlob(hash, stored.size());
+        if (replaced != null) {
+            committed = new ArtifactDescriptor(committed.ecosystem(), committed.coordinate(), committed.version(),
+                    committed.path(), committed.contentType(), committed.prerelease(), committed.hash(),
+                    committed.size(), replaced);
+        }
         published(committed);
         return new Commit(PublishInterceptor.Disposition.ACCEPT, committed, true);
     }
