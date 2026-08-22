@@ -127,7 +127,9 @@ public class RepositoryAutoConfiguration {
                         + "jenreg.anonymous-rights to require a key for every request.", anonymousRights);
             }
         }
-        Authorization authorization = Authorization.enforcing(store).withAnonymousRights(anonymousRights);
+        Authorization authorization = Authorization.enforcing(store)
+                .withLifetimes(properties.getCredentialDefaultLifetime(), properties.getCredentialMaxLifetime())
+                .withAnonymousRights(anonymousRights);
         bootstrap(authorization, properties.getBootstrapKey().strip());
         return authorization;
     }

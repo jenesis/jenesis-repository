@@ -8,6 +8,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The credential model in isolation: keys are minted as {@code jenk_<tenant>.<secret><checksum>} and hashed at
@@ -669,5 +670,43 @@ class AuthorizationTest {
         public Optional<Versioned> readVersioned(String key) throws IOException {
             return delegate.readVersioned(key);
         }
+    }
+
+    /**
+     * The two deployment-wide lifetime dials are reachable from configuration.
+     *
+     * <p>Both withers were public and honoured and nothing outside a test called them, so every deployment ran the
+     * 90-day default with no ceiling and had no way to say otherwise - while a tenant policy could already narrow
+     * both. This drives them the way the wiring does, from the raw configuration strings.
+     */
+    @Test
+    void the_deployment_lifetime_dials_are_reachable_from_their_configuration_values() {
+        Authorization configured = authorization.withLifetimes("P30D", "P60D");
+        assertThat(configured.defaultLifetime()).isEqualTo(Duration.ofDays(30));
+        assertThat(configured.maxLifetime()).isEqualTo(Duration.ofDays(60));
+    }
+
+    /** A blank dial leaves the shipped posture exactly as it was: 90 days, uncapped. A ceiling appearing on upgrade
+     *  would shorten every tenant's credentials with nothing in the configuration to explain it. */
+    @Test
+    void a_blank_lifetime_dial_changes_nothing() {
+        assertThat(authorization.withLifetimes("", "  ").defaultLifetime())
+                .isEqualTo(authorization.defaultLifetime());
+        assertThat(authorization.withLifetimes(null, null).maxLifetime())
+                .as("and an unset ceiling stays unset rather than becoming a default one")
+                .isEqualTo(authorization.maxLifetime());
+    }
+
+    /** A malformed duration refuses, naming the key and a well-formed value. Falling back to 90 days instead is only
+     *  noticed when a key outlives what its operator believes it does. */
+    @Test
+    void a_malformed_lifetime_dial_refuses_rather_than_falling_back() {
+        assertThatThrownBy(() -> authorization.withLifetimes("30d", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("credential-default-lifetime")
+                .hasMessageContaining("P30D");
+        assertThatThrownBy(() -> authorization.withLifetimes(null, "forever"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("credential-max-lifetime");
     }
 }

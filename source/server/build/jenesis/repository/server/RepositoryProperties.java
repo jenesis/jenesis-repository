@@ -66,6 +66,15 @@ public class RepositoryProperties {
      *  internal writes. */
     private String anonymousRights = "";
 
+    /** The lifetime stamped on a credential minted without an explicit expiry, as an ISO-8601 duration. Blank keeps
+     *  the {@code Authorization} default of 90 days. */
+    private String credentialDefaultLifetime = "";
+
+    /** The ceiling on any credential's lifetime, as an ISO-8601 duration. Blank leaves the deployment uncapped, which
+     *  is the shipped posture: a ceiling is an operator's decision about their own key hygiene, and imposing one by
+     *  default would silently shorten every existing deployment's credentials on upgrade. */
+    private String credentialMaxLifetime = "";
+
     private String quota = "";
 
     private long rateLimit = 0;
@@ -171,6 +180,22 @@ public class RepositoryProperties {
 
     /** The strictly-opt-in anonymous-role grant (WANON.1), empty by default (no anonymous access whatsoever). See the
      *  field javadoc for the grammar. */
+    public String getCredentialDefaultLifetime() {
+        return credentialDefaultLifetime;
+    }
+
+    public void setCredentialDefaultLifetime(String credentialDefaultLifetime) {
+        this.credentialDefaultLifetime = credentialDefaultLifetime;
+    }
+
+    public String getCredentialMaxLifetime() {
+        return credentialMaxLifetime;
+    }
+
+    public void setCredentialMaxLifetime(String credentialMaxLifetime) {
+        this.credentialMaxLifetime = credentialMaxLifetime;
+    }
+
     public String getAnonymousRights() {
         return anonymousRights;
     }
