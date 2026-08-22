@@ -240,6 +240,16 @@ class AuthorizationTest {
     }
 
     @Test
+    void a_peer_is_a_trusted_proxy_only_within_the_configured_ranges() {
+        List<String> trusted = List.of("10.0.0.0/8", "192.168.1.5");
+        assertThat(Authorization.trustedProxy("10.3.2.1", trusted)).isTrue();
+        assertThat(Authorization.trustedProxy("192.168.1.5", trusted)).isTrue();
+        assertThat(Authorization.trustedProxy("203.0.113.50", trusted)).isFalse();
+        assertThat(Authorization.trustedProxy("10.3.2.1", List.of())).as("nobody is trusted by default").isFalse();
+        assertThat(Authorization.trustedProxy(null, trusted)).as("no peer, no trust").isFalse();
+    }
+
+    @Test
     void a_leaked_key_revokes_only_itself_and_only_when_well_formed_and_provisioned() throws IOException {
         String key = Authorization.mint("acme");
         authorization.grant(key, "*", Authorization.REPOSITORY_READ);

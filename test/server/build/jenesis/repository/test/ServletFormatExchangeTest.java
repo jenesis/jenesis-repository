@@ -23,9 +23,12 @@ class ServletFormatExchangeTest {
     void the_scheme_is_the_one_the_request_arrived_on() {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getScheme()).thenReturn("https");
+        when(request.getRemoteAddr()).thenReturn("10.0.0.7");
         FormatExchange exchange = new ServletFormatExchange(request, mock(HttpServletResponse.class), "/npm/x");
 
         assertThat(exchange.scheme()).isEqualTo("https");
+        assertThat(exchange.remoteAddress()).as("the peer, for a format deciding whether to believe a forwarded header")
+                .isEqualTo("10.0.0.7");
     }
 
     @Test
@@ -67,5 +70,6 @@ class ServletFormatExchangeTest {
         };
 
         assertThat(headless.scheme()).isEqualTo("http");
+        assertThat(headless.remoteAddress()).isNull();
     }
 }

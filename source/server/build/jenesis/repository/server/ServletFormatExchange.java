@@ -60,6 +60,11 @@ public final class ServletFormatExchange implements FormatExchange {
     }
 
     @Override
+    public String remoteAddress() {
+        return request.getRemoteAddr();
+    }
+
+    @Override
     public String queryParameter(String name) {
         return request.getParameter(name);
     }

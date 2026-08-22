@@ -775,7 +775,7 @@ public final class Authorization {
      *  the client - a forwarded header from an untrusted source is ignored, so the source-IP allowlist cannot be
      *  spoofed by a client that sets its own {@code X-Forwarded-For}. */
     public static String clientAddress(String peer, String forwardedFor, List<String> trustedProxies) {
-        if (peer == null || trustedProxies == null || trustedProxies.isEmpty() || !withinAny(peer, trustedProxies)) {
+        if (!trustedProxy(peer, trustedProxies)) {
             return peer;
         }
         if (forwardedFor == null || forwardedFor.isBlank()) {
@@ -789,6 +789,13 @@ public final class Authorization {
             }
         }
         return peer;
+    }
+
+    /** Whether {@code peer} is one of the deployment's trusted reverse proxies - the one condition under which any
+     *  header the peer forwarded ({@code X-Forwarded-For}, {@code X-Forwarded-Proto}, {@code X-Forwarded-Host}) is
+     *  believed. An empty or absent list trusts nobody. */
+    public static boolean trustedProxy(String peer, List<String> trustedProxies) {
+        return peer != null && trustedProxies != null && !trustedProxies.isEmpty() && withinAny(peer, trustedProxies);
     }
 
     private static boolean withinAny(String address, List<String> cidrs) {
