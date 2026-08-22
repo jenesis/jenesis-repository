@@ -52,6 +52,27 @@ class ProvidersTest {
                 .hasMessageContaining("filesystem");
     }
 
+    @Test
+    void the_ambiguity_message_offers_a_selection_key_only_when_the_spi_reads_one() {
+        List<Fake> two = List.of(alfa("alfa", "a"), beta("beta", "b"));
+
+        assertThatThrownBy(() -> Providers.optionalUnique(SPI, two, NAME, Optional.empty(), ENABLED, CREATE))
+                .as("an SPI that reads a selection may advise using it")
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("jenreg." + SPI + "=<name>")
+                .hasMessageContaining("jenreg.<name>=false");
+
+        // The no-selection form. Eleven call sites hard-wired Optional.empty(), so that key was never read for any
+        // of them - and for `search` and `staging` the key the message named is the server module's own off-switch,
+        // so an operator following the instruction switched the console module off instead of selecting anything.
+        assertThatThrownBy(() -> Providers.optionalUnique(SPI, two, NAME, ENABLED, CREATE))
+                .as("an SPI that reads no selection must not advise setting a key nothing consults")
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageNotContaining("jenreg." + SPI + "=<name>")
+                .hasMessageContaining("reads no selection key")
+                .hasMessageContaining("jenreg.<name>=false");
+    }
+
     // --- packaging errors, rejected by every primitive -------------------------------------------------------
 
     @Test

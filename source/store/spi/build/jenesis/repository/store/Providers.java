@@ -151,12 +151,46 @@ public final class Providers {
      * @param create     builds the implementation, empty when the provider declines.
      * @return the single resolved implementation, or empty when the capability is not installed or not switched on.
      */
+    /**
+     * The {@code OPTIONAL_UNIQUE} policy for an SPI that reads <b>no</b> selection key - the shape where the family
+     * is chosen by which implementation is installed and enabled, never by name.
+     *
+     * <p>It exists so the ambiguity diagnostic can tell the truth. The selection-taking form advises an operator to
+     * "select it with {@code jenreg.<spi>=<name>}", and eleven call sites passed {@code Optional.empty()} for the
+     * selection - hard-wired, not merely unset - so that key was never read for any of them. Following the advice
+     * therefore did nothing, and for {@code search} and {@code staging} it did something worse than nothing:
+     * {@code jenreg.search} and {@code jenreg.staging} are those server modules' own documented off-switches, so an
+     * operator resolving an ambiguity by the message's instruction switched the console module off instead of
+     * selecting an implementation. A key answered by someone else is the sharper half of the namespace this SPI
+     * family shares.
+     *
+     * <p>Choosing this overload is therefore a statement, checked by the compiler: this SPI has no selection, so
+     * the diagnostic offers only the remedy that works. An SPI that grows one moves back to the other form.
+     */
+    public static <P, T> Optional<T> optionalUnique(String spi,
+                                                    Iterable<? extends P> discovered,
+                                                    Function<? super P, String> name,
+                                                    Predicate<? super P> enabled,
+                                                    Function<? super P, Optional<T>> create) {
+        return optionalUnique(spi, discovered, name, Optional.empty(), enabled, create, false);
+    }
+
     public static <P, T> Optional<T> optionalUnique(String spi,
                                                     Iterable<? extends P> discovered,
                                                     Function<? super P, String> name,
                                                     Optional<String> selection,
                                                     Predicate<? super P> enabled,
                                                     Function<? super P, Optional<T>> create) {
+        return optionalUnique(spi, discovered, name, selection, enabled, create, true);
+    }
+
+    private static <P, T> Optional<T> optionalUnique(String spi,
+                                                     Iterable<? extends P> discovered,
+                                                     Function<? super P, String> name,
+                                                     Optional<String> selection,
+                                                     Predicate<? super P> enabled,
+                                                     Function<? super P, Optional<T>> create,
+                                                     boolean selectable) {
         Objects.requireNonNull(enabled, "enabled");
         Objects.requireNonNull(create, "create");
         List<Named<P>> providers = validated(spi, discovered, name);
@@ -176,8 +210,11 @@ public final class Providers {
         if (candidates.size() > 1) {
             // Never a discovery-order winner: which module the loader saw first is not a configuration decision.
             throw new IllegalStateException("More than one " + spi + " implementation is enabled ("
-                    + names(candidates) + ") but " + spi + " resolves to exactly one; select it with "
-                    + NAMESPACE + spi + "=<name>, or switch the others off with " + NAMESPACE + "<name>=false.");
+                    + names(candidates) + ") but " + spi + " resolves to exactly one; "
+                    + (selectable
+                            ? "select it with " + NAMESPACE + spi + "=<name>, or switch the others off with "
+                            : spi + " reads no selection key, so switch the others off with ")
+                    + NAMESPACE + "<name>=false.");
         }
         Named<P> only = candidates.getFirst();
         return created(create.apply(only.provider()), spi, only);
