@@ -61,7 +61,16 @@ import module java.base;
  *       after-commit observer has no say in the disposition - and it bounds the blast radius of a failure to the
  *       observer's own derived surface, which may then over-serve or over-count but can never hide a served artifact
  *       or a hold. The verdict-bearing legs of the {@link PublishInterceptor} sub-interface are the opposite and
- *       propagate; do not confuse the two.</li>
+ *       propagate; do not confuse the two.
+ *       <p><b>An {@link Error} is not contained, and that is a decision rather than an omission.</b> The
+ *       containment above is for an <em>exception</em> - a notification failing to file. An {@code Error} is the
+ *       runtime or the module graph giving way, so it is attributed with the observer's class at {@code ERROR} and
+ *       then re-thrown. The cost is real and is accepted: {@code notifyPublished} runs on the producer's thread
+ *       <em>after</em> the artifact has committed and been laid out, so the publisher is told its publish failed
+ *       when it in fact succeeded. Swallowing an {@code Error} to protect a status code is the worse trade - the
+ *       process is no longer one whose answers can be relied on - and a client retrying an idempotent publish is
+ *       cheap. An observer must therefore not raise an {@code Error} to signal an ordinary failure; that is what
+ *       the contained exception path is for.</li>
  *   <li><b>Read purity.</b> Not a read path: these fire on a write, and an observer may write its own derived store
  *       objects. It must not perform external I/O inline (a webhook, a replication push) - it records a durable note
  *       and a background drain performs the call, so a remote target's latency or outage never couples into a
