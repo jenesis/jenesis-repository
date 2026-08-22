@@ -40,6 +40,15 @@ public interface FormatExchange {
         return "http";
     }
 
+    /**
+     * The address the request came from - the TCP peer, which is the reverse proxy in a proxied deployment - or
+     * {@code null} for an exchange that has no connection. A format that trusts a forwarded header only when the
+     * peer is one of the deployment's trusted proxies asks this; the header itself is not evidence of anything.
+     */
+    default String remoteAddress() {
+        return null;
+    }
+
     String queryParameter(String name);
 
     String requestHeader(String name);

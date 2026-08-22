@@ -173,6 +173,11 @@ public final class PullThroughCache {
         }
 
         @Override
+        public String remoteAddress() {
+            return delegate.remoteAddress();
+        }
+
+        @Override
         public String queryParameter(String name) {
             return delegate.queryParameter(name);
         }
