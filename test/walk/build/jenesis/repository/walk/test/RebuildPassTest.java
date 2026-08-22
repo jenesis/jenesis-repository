@@ -51,8 +51,9 @@ class RebuildPassTest {
         return hash;
     }
 
-    /** A consumer recording everything it is handed: the event order, and an idempotent path-to-hash view. */
-    private static final class Recording implements WalkConsumer {
+    /** A consumer recording everything it is handed: the event order, and an idempotent path-to-hash view.
+     *  Not final: a leg below extends it to fail once part way through and then behave. */
+    private static class Recording implements WalkConsumer {
 
         final List<String> events = new ArrayList<>();
         final List<ArtifactDescriptor> retained = new ArrayList<>();
@@ -280,5 +281,98 @@ class RebuildPassTest {
         StoreArtifactWalk walk = walk();
         assertThat(RebuildPass.run(walk, store, List.of("publish"), List.of())).isEmpty();
         assertThat(walk.pass(store, RebuildPass.CONSUMER)).as("no consumer, no pass state touched").isEmpty();
+    }
+
+    /**
+     * A consumer that fails mid-pass is re-delivered every item it missed, because the cursor never moved past it.
+     *
+     * <p>This is the property that makes propagating the right choice rather than a missing containment, and it is
+     * the one a reviewer would break. The cursor is <em>shared</em> - one walk, one committed position, N consumers
+     * - so containing consumer A's failure while the stride commits would advance past items A never received,
+     * permanently, and A would then report itself converged: the silently-incomplete view §5 forbids.
+     *
+     * <p>The sibling crash leg above pins that the failure propagates at all, by expecting a throw. It does not pin
+     * the consequence: it resumes with only the surviving consumer, so it never asks whether the <em>failing</em>
+     * one is made whole afterwards. This leg asks exactly that.
+     *
+     * <p>It asserts the resumed generation as well as the delivery, and that pairing is load-bearing rather than
+     * decorative. Measured against a planted containment that swallows during the walk and rethrows once the pass
+     * is over - the shape that keeps a throw and still advances the cursor - the delivery assertion alone passes,
+     * because a completed pass makes the next run a fresh generation that re-walks everything and hands the failed
+     * consumer its items after all. The generation assertion is what sees the cursor moved.
+     */
+    @Test
+    void a_consumer_that_failed_mid_pass_is_re_delivered_everything_it_missed() throws IOException {
+        ArtifactStore store = store("redelivery");
+        Map<String, String> expected = new HashMap<>();
+        for (char letter = 'a'; letter <= 'z'; letter++) {
+            expected.put("/" + letter + "/artifact", publish(store, "/" + letter + "/artifact", "content " + letter));
+        }
+        Recording healthy = new Recording();
+        // Fails once, part way through, then behaves - the plugin that was briefly broken and is now fixed.
+        boolean[] alreadyFailed = {false};
+        Recording flaky = new Recording() {
+            @Override
+            public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) {
+                if (!alreadyFailed[0] && derived.size() == 13) {
+                    alreadyFailed[0] = true;
+                    // Unchecked, because Recording's own onRetained declares no IOException - and it drives the
+                    // runtime arm of the fan-out, where the sibling crash leg drives the checked one. One-shot: the
+                    // plugin that was briefly broken and is fixed by the time the pass resumes.
+                    throw new UncheckedIOException(new IOException("consumer gave way mid-pass"));
+                }
+                super.onRetained(artifact, store);
+            }
+        };
+
+        assertThatThrownBy(() -> RebuildPass.run(walk(), store, List.of("publish"), List.of(healthy, flaky)))
+                .as("the failure is not contained: it reaches the pass, which is what holds the cursor")
+                .hasMessageContaining("consumer gave way mid-pass");
+        int seenBeforeFailing = flaky.derived.size();
+        assertThat(seenBeforeFailing).as("it really did stop part way").isLessThan(expected.size());
+
+        clock.advance(Duration.ofMinutes(11));
+        Optional<WalkPass> resumed = RebuildPass.run(walk(), store, List.of("publish"), List.of(healthy, flaky));
+
+        assertThat(resumed).hasValueSatisfying(pass -> assertThat(pass.generation())
+                .as("the resume JOINS the interrupted pass rather than starting a fresh one - which is the half "
+                        + "that fails if the failure was contained and the pass therefore ran to completion")
+                .isEqualTo(1));
+        assertThat(flaky.derived)
+                .as("the consumer that failed is whole afterwards - the cursor never advanced past what it missed")
+                .containsExactlyInAnyOrderEntriesOf(expected);
+        assertThat(healthy.derived)
+                .as("and the consumer that did not fail is whole too")
+                .containsExactlyInAnyOrderEntriesOf(expected);
+    }
+
+    /** A propagating failure says which consumer produced it. Propagating is right, but it left the operator a
+     *  stack frame and no name: with a dozen consumers installed that is the difference between a name and a
+     *  bisect. The exception itself is untouched - a caller still distinguishes an IOException from a runtime one
+     *  - and the attribution rides as a suppressed marker. */
+    @Test
+    void a_propagating_failure_names_the_consumer_that_produced_it() throws IOException {
+        ArtifactStore store = store("attribution");
+        publish(store, "/a/artifact", "content a");
+        WalkConsumer broken = new WalkConsumer() {
+            @Override
+            public String name() {
+                return "the-broken-one";
+            }
+
+            @Override
+            public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
+                throw new IOException("plugin gave way");
+            }
+        };
+
+        assertThatThrownBy(() -> RebuildPass.run(walk(), store, List.of("publish"), List.of(broken)))
+                .isInstanceOf(IOException.class)
+                .as("the consumer's own exception reaches the caller unchanged in type and message")
+                .hasMessageContaining("plugin gave way")
+                .satisfies(failure -> assertThat(failure.getSuppressed())
+                        .as("and carries the name of the consumer that produced it")
+                        .anySatisfy(marker -> assertThat(marker.getMessage())
+                                .contains("the-broken-one").contains(broken.getClass().getName())));
     }
 }
