@@ -36,13 +36,12 @@ import build.jenesis.repository.walk.WalkConsumer;
  * crash-resume re-lands identical bytes and a second full pass leaves the store exactly as the first did. The consumer
  * holds no state between deliveries or passes.
  *
- * <p><b>What drives it, and what that costs the core.</b> It is discovered like any other consumer and driven
- * by whatever runs the shared pass on a cadence - today the downstream {@code RebuildTask}, or an embedder calling
- * {@code RebuildPass.run} itself. This repository ships no scheduler of its own, so in a free-only deployment the
- * repair runs only when something drives a pass; a republish of the same bytes still re-runs the whole layout
- * sequence, which is the other repair and needs no scheduler. That is a gap in the driver, not in the consumer, and
- * naming it here is the honest form: the residue is repairable, and whether it is repaired unattended depends on the
- * deployment.
+ * <p><b>What drives it.</b> It is discovered like any other consumer and driven by whatever runs the shared pass
+ * on a cadence - the free server's {@code RebuildScheduler} (daily unless {@code jenreg.rebuild.interval} says
+ * otherwise), the downstream {@code RebuildTask}, or an embedder calling {@code RebuildPass.run} itself; a republish
+ * of the same bytes still re-runs the whole layout sequence, which is the other repair and needs no scheduler. So
+ * the residue is repairable and is repaired unattended on the cadence; between two passes it stands until the next
+ * one.
  *
  * <p>It writes into the {@code publish/module/} keys the view provider owns rather than a key space of its own,
  * because the pointer it repairs is that provider's pointer - it goes through the same bridge the publish path uses,

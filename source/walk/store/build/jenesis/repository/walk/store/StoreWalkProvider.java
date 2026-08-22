@@ -35,11 +35,13 @@ public final class StoreWalkProvider implements WalkProvider {
 
     @Override
     public Optional<ArtifactWalk> create(UnaryOperator<String> config) {
-        return Optional.of(new StoreArtifactWalk(
+        StoreArtifactWalk walk = new StoreArtifactWalk(
                 integer(config, "walk.checkpoint", 1000),
                 integer(config, "walk.segments", 32),
                 Duration.ofSeconds(integer(config, "walk.ttl", 900)),
-                Clock.systemUTC()));
+                Clock.systemUTC());
+        StoreArtifactWalk.install(walk);                        // the discovered observability reads this one
+        return Optional.of(walk);
     }
 
     private static int integer(UnaryOperator<String> config, String key, int fallback) {

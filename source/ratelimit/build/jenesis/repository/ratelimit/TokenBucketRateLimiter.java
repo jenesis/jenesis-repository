@@ -26,6 +26,19 @@ import module java.base;
  */
 public final class TokenBucketRateLimiter implements RateLimiter, ObservabilitySource {
 
+    private static final AtomicReference<TokenBucketRateLimiter> INSTALLED = new AtomicReference<>();
+
+    /** Register {@code instance} as the live one the discovered {@link RateLimiterObservability} reports from; the production
+     *  construction site calls this once, and the last registration wins. */
+    public static void install(TokenBucketRateLimiter instance) {
+        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
+    }
+
+    /** The installed live instance, if any - what {@link RateLimiterObservability} reports; empty before one is installed. */
+    static Optional<TokenBucketRateLimiter> installed() {
+        return Optional.ofNullable(INSTALLED.get());
+    }
+
     private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
     private final LongSupplier clock;
 

@@ -32,6 +32,19 @@ import module java.base;
  */
 public final class BatchingKeyUsageTracker implements KeyUsageTracker, ObservabilitySource {
 
+    private static final AtomicReference<BatchingKeyUsageTracker> INSTALLED = new AtomicReference<>();
+
+    /** Register {@code instance} as the live one the discovered {@link KeyUsageObservability} reports from; the production
+     *  construction site calls this once, and the last registration wins. */
+    public static void install(BatchingKeyUsageTracker instance) {
+        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
+    }
+
+    /** The installed live instance, if any - what {@link KeyUsageObservability} reports; empty before one is installed. */
+    static Optional<BatchingKeyUsageTracker> installed() {
+        return Optional.ofNullable(INSTALLED.get());
+    }
+
     /** A use worth recording: the tenant the key carries, the key's SHA-256 hash and the request's source address. */
     public record Hit(String tenant, String hash, String address) {
     }

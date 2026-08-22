@@ -735,7 +735,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * <p><b>Interim, not a durable index.</b> The audit's ideal is a durable, generation-flipped, lexicographically
      * sorted image-name index rebuilt by a fleet-exclusive maintenance task, read as a pure seek. This edition has no
      * such generation-index precedent to mirror (no {@code StorageNamespace}, no generation-directory /
-     * {@code built}-marker index, and no scheduler wiring a format into {@code RebuildPass}), so rather than ship a
+     * {@code built}-marker index), so rather than ship a
      * half-built durable index this bounds the per-request work and heap of the live walk and emits the same
      * {@code Link} paging - the same shape {@code tags/list} now uses.
      */

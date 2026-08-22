@@ -139,6 +139,7 @@ open module build.jenesis.repository.server {
     requires transitive build.jenesis.repository.server.spi;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.format;
+    requires build.jenesis.repository.walk;
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.posture;
     requires build.jenesis.repository.observation;
@@ -168,4 +169,7 @@ open module build.jenesis.repository.server {
     uses build.jenesis.repository.importer.ImportSourceProvider;
     provides build.jenesis.repository.posture.SafetyAdvisor
             with build.jenesis.repository.server.NodeDivergenceAdvisor;
+    provides build.jenesis.repository.observation.ObservabilitySource
+            with build.jenesis.repository.server.NodeConsistencyObservability,
+                 build.jenesis.repository.server.RebuildScheduler.Observability;
 }

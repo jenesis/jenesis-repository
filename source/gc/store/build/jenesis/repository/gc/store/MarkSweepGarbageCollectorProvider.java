@@ -42,7 +42,11 @@ public final class MarkSweepGarbageCollectorProvider implements GarbageCollector
         List<BlobReferences> lenders = BlobReferences.installed();
         return WalkProvider.resolve(key ->
                         "walk.checkpoint".equals(key) ? stride : config.apply(key))
-                .map(walk -> new MarkSweepGarbageCollector(walk, grace, lenders));
+                .map(walk -> {
+                    MarkSweepGarbageCollector collector = new MarkSweepGarbageCollector(walk, grace, lenders);
+                    MarkSweepGarbageCollector.install(collector);     // the discovered observability reads this one
+                    return collector;
+                });
     }
 
     private static Duration duration(UnaryOperator<String> config, String key) {

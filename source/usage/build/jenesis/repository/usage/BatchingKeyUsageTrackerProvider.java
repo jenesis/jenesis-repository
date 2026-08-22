@@ -19,7 +19,9 @@ public final class BatchingKeyUsageTrackerProvider implements KeyUsageTrackerPro
 
     @Override
     public Optional<KeyUsageTracker> create(Authorization authorization, UnaryOperator<String> config) {
-        return Optional.of(new BatchingKeyUsageTracker(authorization,
-                Boolean.parseBoolean(config.apply("track-key-usage"))));
+        BatchingKeyUsageTracker tracker = new BatchingKeyUsageTracker(authorization,
+                Boolean.parseBoolean(config.apply("track-key-usage")));
+        BatchingKeyUsageTracker.install(tracker);               // the discovered observability reads this one
+        return Optional.of(tracker);
     }
 }

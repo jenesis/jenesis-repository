@@ -15,4 +15,6 @@ module build.jenesis.repository.ratelimit {
             build.jenesis.repository.server.e2e, build.jenesis.repository.ratelimit.test;
     provides build.jenesis.repository.server.spi.RateLimiterProvider
             with build.jenesis.repository.ratelimit.TokenBucketRateLimiterProvider;
+    provides build.jenesis.repository.observation.ObservabilitySource
+            with build.jenesis.repository.ratelimit.RateLimiterObservability;
 }
