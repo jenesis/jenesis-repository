@@ -171,6 +171,20 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
                 body.close(); // release the intermediate redirect's connection before the next hop
             }
             current = current.resolve(location.get());
+            // The scheme first, because the host screen cannot speak for a URI that has no host. An upstream
+            // answering `Location: file:///etc/passwd` resolves to a URI whose getHost() is null, which the private-
+            // host classifier admits - correctly, since a null host is not a private address - and the next hop then
+            // hands a non-http(s) URI to HttpRequest.newBuilder, which throws IllegalArgumentException. That is
+            // unchecked and uncaught through fetch/download/head, so an upstream-controlled Location header turned a
+            // proxy read into a 500. A redirect off http(s) is never something to follow in any case.
+            String scheme = current.getScheme();
+            if (scheme == null || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+                throw new IOException("refusing to follow a redirect off http(s), which is not a scheme an upstream "
+                        + "fetch may take: " + current.getScheme() + " (from " + location.get() + ")");
+            }
+            if (current.getHost() == null || current.getHost().isBlank()) {
+                throw new IOException("refusing to follow a redirect to a URI carrying no host: " + location.get());
+            }
             if (blockedRedirectHost.test(current.getHost())) {
                 throw new IOException("refusing to follow a redirect to a private, loopback, link-local or "
                         + "cloud-metadata host (SSRF): " + current.getHost());
