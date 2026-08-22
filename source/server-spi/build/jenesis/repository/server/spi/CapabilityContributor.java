@@ -73,8 +73,12 @@ import module java.base;
  *       but that cannot be instantiated fails at {@link ServiceLoader} resolution and is not silently skipped
  *       (&sect;9); a contributor that instantiates but cannot compute is contained and reported (see above).
  *       <p>Unlike the named singleton SPIs beside it, this one does <em>not</em> resolve through the shared
- *       {@code Providers} primitives and cannot: those are keyed by a provider {@code name()} and a contributor
- *       declares none - the contributed <em>keys</em> are its identity. Two consequences follow and are stated rather
+ *       {@code Providers} primitives. Not because it could not be keyed: {@code Providers.all} takes the name as a
+ *       function rather than requiring a {@code name()} method, and this merge already computes a per-contributor
+ *       identity for its own reports, so keying it is available. What it must not adopt is
+ *       {@code Providers.validated}'s refusal, which turns a duplicate provider class into a throw - and this
+ *       merge runs inside the request, where throwing costs the endpoint (see above). The ordering those
+ *       primitives give is adopted directly instead, by name-sorting here. Two consequences follow and are stated rather
  *       than assumed. First, the packaging guards {@code Providers} applies to every other family are absent here: a
  *       contributor registered twice, or two distributions shipping the same contribution, are not refused at
  *       resolution - they surface instead as this merge's own conflict report, which is the weaker but per-key
@@ -94,14 +98,14 @@ import module java.base;
  *       to close. A contributor needing live application state bridges it in through a static holder rather than
  *       holding it itself.</li>
  *   <li><b>Ordering / concurrency.</b> The base map's keys come first in their insertion order; contributed keys are
- *       appended in discovery order, then the diagnostic keys last. Among contributors the first discovered wins a
- *       key. The reports are deterministic: conflicts appear in contributor discovery order and, within one
+ *       appended in <b>contributor-class-name order</b>, then the diagnostic keys last. Among contributors the
+ *       first in that order wins a contested key. The reports are deterministic: conflicts appear in contributor discovery order and, within one
  *       contribution, sorted by key, so an unordered contributed map cannot make the report shuffle between
- *       requests. That determinism is <em>within one deployment</em> and is deliberately not claimed across module
- *       paths: nothing name-sorts the contributors (see clause 4), so on a key two contributors both claim, which one
- *       is served is decided by the order the loader saw their modules. Two distributions must therefore not claim
- *       one key - and when they do, the conflict report is what makes the collision visible rather than a stable
- *       winner making it invisible.</li>
+ *       requests. The determinism now holds <em>across module paths</em> too, which it did not while the winner
+ *       was whichever module the loader happened to see first: two distributions claiming one key still must not,
+ *       but when they do they now disagree reproducibly rather than per deployment. The conflict report is emitted
+ *       either way - it was never the alternative to a stable winner, only the thing that makes the collision
+ *       visible once there is one.</li>
  *   <li><b>Bounded work / cancellation.</b> {@link #capabilities} is on the request path and must be cheap and
  *       bounded - a handful of already-known flags, not an enumeration of stored artifacts. It is given no
  *       cancellation signal, so it must not block.</li>
@@ -198,7 +202,16 @@ public interface CapabilityContributor {
 
         List<Conflict> conflicts = new ArrayList<>();
         List<Failure> failures = new ArrayList<>();
-        for (CapabilityContributor contributor : contributors) {
+        // Name-sorted, not discovery-ordered. Whoever wins a contested key must win it on every module path, and
+        // the sort key is the identity this merge already computes for its own reports - so a stable winner costs
+        // nothing that was not being calculated anyway. Discovery order made two distributions claiming one key
+        // disagree PER DEPLOYMENT, which is the hardest kind of disagreement to reproduce; the conflict report is
+        // emitted either way, so a stable winner plus the report is strictly better than an unstable one plus the
+        // report rather than an alternative to it.
+        List<CapabilityContributor> ordered = new ArrayList<>();
+        contributors.forEach(ordered::add);
+        ordered.sort(Comparator.comparing(contributor -> contributor.getClass().getName()));
+        for (CapabilityContributor contributor : ordered) {
             String name = contributor.getClass().getName();
             Map<String, Object> contribution;
             try {

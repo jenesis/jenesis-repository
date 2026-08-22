@@ -322,7 +322,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
                 if (key.compareTo(after) <= 0) {
                     return FileVisitResult.CONTINUE;
                 }
-                if (smallest.size() < limit + 1) {
+                if (smallest.size() < ArtifactStore.oneMoreThan(limit)) {
                     smallest.put(key, listed(key, attributes));
                 } else if (key.compareTo(smallest.lastKey()) < 0) {
                     smallest.put(key, listed(key, attributes));

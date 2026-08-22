@@ -274,7 +274,39 @@ public interface ArtifactStore {
         return true;
     }
 
-    /** Whether a blob exists at this object key. */
+    /**
+     * One more than {@code limit}, saturating: the probe size a paged read asks for so that receiving the extra
+     * record proves more remains, without a second request asking.
+     *
+     * <p>Every paged backend in this product computes that, and every one of them computed it as {@code limit + 1}.
+     * At {@link Integer#MAX_VALUE} - a positive, legal bound, and the obvious way for a caller to ask for
+     * everything - that wraps to {@link Integer#MIN_VALUE}, the underlying page comes back empty, and the read dies
+     * somewhere unrelated: a bare {@code NoSuchElementException} out of a {@code getLast()} on the empty batch. The
+     * {@code Math.min(limit + 1, 1000)} guards that look like they cover it do not, because they clamp <em>after</em>
+     * the wrap and {@code MIN_VALUE} is smaller than every ceiling.
+     *
+     * <p>Saturating is the right answer rather than throwing: a caller asking for {@code MAX_VALUE} is asking for
+     * everything, and everything is what {@code MAX_VALUE} records already means. It is stated here, once, because
+     * six backends were each spelling it and each getting it wrong the same way.
+     */
+    static int oneMoreThan(int limit) {
+        return limit == Integer.MAX_VALUE ? limit : limit + 1;
+    }
+
+    /**
+     * Whether a blob exists at this object key.
+     *
+     * <p><b>Not a basis for a fail-closed decision.</b> It answers {@code boolean}, so it cannot tell "absent" from
+     * "the backend could not answer": a store hiccup reads as {@code false}. That is harmless where absence is the
+     * conservative reading - a serve that 404s an artifact it could not confirm - and it is a disclosure where
+     * absence is the permissive one. A screen keying a verdict or a {@code withheld} probe on this
+     * <b>structurally cannot</b> honour {@link PublishInterceptor}'s fail-closed rule, because an outage under the
+     * probe reads as "nothing is withheld" and the unscreened artifact serves.
+     *
+     * <p>So a caller whose {@code false} branch <em>permits</em> something uses {@link #readVersioned} and treats a
+     * failure as a failure - {@link Withheld#is} is exactly that read, and is why the withhold probes go through it
+     * rather than through here.
+     */
     boolean exists(String key);
 
     /** Stream the blob to {@code out}. */
