@@ -3,6 +3,7 @@ package build.jenesis.repository.format.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.format.ArtifactLayout;
+import build.jenesis.repository.format.EcosystemLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.FormatMarks;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -26,14 +27,17 @@ class FormatMarksTest {
     private static final String NPM_MARK = "<svg data-mark=\"npm\">stroke=currentColor</svg>";
     private static final String CARGO_MARK = "<svg data-mark=\"cargo\">stroke=currentColor</svg>";
 
-    // A hosted-only format (no ArtifactLayout) that owns /npm/ and ships a mark.
-    private final RepositoryFormat npm = new StubFormat("npm", "/npm/", NPM_MARK);
+    // A hosted-only format that owns /npm/, ships a mark and declares its ecosystem without laying artifacts out
+    // under the published tree - the shape of every blobs-namespace format.
+    private final RepositoryFormat npm = new StubEcosystemFormat("npm", "/npm/", "npm", NPM_MARK);
+    // A hosted-only format that declares no ecosystem at all.
+    private final RepositoryFormat raw = new StubFormat("raw", "/raw/", null);
     // A coordinate-bearing format with an ecosystem and a mark - the shape a browse hit resolves against.
     private final RepositoryFormat cargo = new StubLayoutFormat("cargo", "/cargo/", "crates.io", CARGO_MARK);
     // A coordinate-bearing format with an ecosystem and no mark - the shape every bundled format has today.
     private final RepositoryFormat maven = new StubLayoutFormat("maven", "/maven/", "Maven", null);
 
-    private final FormatMarks marks = new FormatMarks(List.of(npm, cargo, maven));
+    private final FormatMarks marks = new FormatMarks(List.of(npm, raw, cargo, maven));
 
     @Test
     void a_namespace_resolves_to_the_mark_of_the_format_that_claims_its_request_prefix() {
@@ -68,14 +72,20 @@ class FormatMarksTest {
     }
 
     @Test
-    void an_ecosystem_resolves_through_the_coordinate_bearing_formats_only() {
-        // A browse hit carries the ecosystem of its coordinate, which only an ArtifactLayout declares; a hosted-only
-        // format is not a candidate however its namespace is spelled.
+    void an_ecosystem_resolves_through_every_format_that_declares_one_whichever_way_it_stores() {
+        // A browse hit carries the ecosystem of its coordinate. Both layout families declare one: a format under the
+        // published tree and a format in its own blobs namespace are equally installed, and an operator must never
+        // read "not installed" beside a format that is. A format that declares no ecosystem is not a candidate
+        // however its namespace is spelled.
         assertThat(marks.forEcosystem("crates.io")).hasValueSatisfying(mark ->
                 assertThat(mark.svg()).isEqualTo(CARGO_MARK));
         assertThat(marks.forEcosystem("Maven")).hasValueSatisfying(mark ->
                 assertThat(mark.kind()).isEqualTo(Mark.Kind.GENERATED));
-        assertThat(marks.forEcosystem("npm")).isEmpty();
+        assertThat(marks.forEcosystem("npm")).hasValueSatisfying(mark -> {
+            assertThat(mark.svg()).isEqualTo(NPM_MARK);
+            assertThat(mark.installed()).isTrue();
+        });
+        assertThat(marks.forEcosystem("raw")).isEmpty();
         assertThat(marks.forEcosystem("nothing-installed")).isEmpty();
     }
 
@@ -147,6 +157,20 @@ class FormatMarksTest {
         @Override
         public Optional<IconResource> icon() {
             return Optional.ofNullable(mark).map(IconResource::svg);
+        }
+    }
+
+    private static class StubEcosystemFormat extends StubFormat implements EcosystemLayout {
+        private final String ecosystem;
+
+        StubEcosystemFormat(String name, String prefix, String ecosystem, String mark) {
+            super(name, prefix, mark);
+            this.ecosystem = ecosystem;
+        }
+
+        @Override
+        public String ecosystem() {
+            return ecosystem;
         }
     }
 
