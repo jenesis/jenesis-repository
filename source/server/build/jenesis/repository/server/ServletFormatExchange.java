@@ -55,6 +55,11 @@ public final class ServletFormatExchange implements FormatExchange {
     }
 
     @Override
+    public String scheme() {
+        return request.getScheme();
+    }
+
+    @Override
     public String queryParameter(String name) {
         return request.getParameter(name);
     }
