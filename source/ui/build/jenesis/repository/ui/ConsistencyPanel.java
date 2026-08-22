@@ -63,7 +63,7 @@ public final class ConsistencyPanel implements Panel {
                     fetch('/api/consistency',{headers:headers}).then(function(r){
                       if(!r.ok)throw new Error('status '+r.status); return r.json();
                     }).then(function(d){render(d);
-                      document.getElementById('jcon-status').textContent=d.liveCount+' live of '+d.nodeCount+' node(s)';
+                      document.getElementById('jcon-status').textContent=d.liveCount+' live of '+d.nodeCount+' node(s)'+(d.truncated?' (listing cut short: more fingerprints exist than the report reads)':'');
                     }).catch(function(e){document.getElementById('jcon-status').textContent='error: '+e.message;});
                   };
                   function render(d){

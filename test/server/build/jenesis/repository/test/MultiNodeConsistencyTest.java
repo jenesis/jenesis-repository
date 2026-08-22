@@ -38,6 +38,19 @@ class MultiNodeConsistencyTest {
         return new NodeConsistency(store, SETTINGS);
     }
 
+    /** A fingerprint written as a node of the past left it - straight into the store, with no heartbeat to reap. */
+    private static void stored(ArtifactStore store, NodeFingerprint fingerprint) throws IOException {
+        NodeConsistency fresh = new NodeConsistency(store, SETTINGS);
+        store.writeVersioned(NodeConsistency.PREFIX + fingerprint.nodeId(),
+                ("{\"nodeId\":\"" + fingerprint.nodeId() + "\",\"heartbeatMillis\":" + fingerprint.heartbeatMillis()
+                        + ",\"cursorAdvancedMillis\":" + fingerprint.cursorAdvancedMillis() + ",\"indexCursor\":"
+                        + fingerprint.indexCursor() + ",\"snapshotVersion\":\"\",\"configGeneration\":"
+                        + fingerprint.configGeneration() + ",\"inventoryTotal\":0,\"quotaUsed\":0,\"pointers\":{}}")
+                        .getBytes(StandardCharsets.UTF_8), null);
+        assertThat(fresh.report(NOW).nodes()).extracting(ConsistencyReport.NodeView::nodeId)
+                .contains(fingerprint.nodeId());
+    }
+
     private static ArtifactStore filesystem(Path root) {
         return ArtifactStoreProvider.resolve("filesystem", key -> "jenreg.filesystem.root".equals(key)
                 ? root.toString() : null);
@@ -225,6 +238,45 @@ class MultiNodeConsistencyTest {
     }
 
     @Test
+    void a_node_silent_past_the_forget_window_is_forgotten_by_a_publishing_node(@TempDir Path root)
+            throws IOException {
+        ArtifactStore store = filesystem(root);
+        // A host that left the fleet two days ago: dead long since, and past the day after which it is forgotten.
+        long gone = NOW - Duration.ofDays(2).toMillis();
+        stored(store, new NodeFingerprint("gone-node", gone, gone, 0, "", 1L, 0L, 0L, Map.of()));
+        // A host silent for an hour: dead, but still remembered - the report keeps showing it for visibility.
+        long silent = NOW - Duration.ofHours(1).toMillis();
+        stored(store, new NodeFingerprint("silent-node", silent, silent, 0, "", 1L, 0L, 0L, Map.of()));
+        assertThat(over(store).report(NOW).nodes()).as("a read forgets nothing").hasSize(2);
+
+        NodeConsistency live = over(store);
+        live.publish(fresh("live-node", 100, 1L));              // the first heartbeat after an hour reaps
+
+        assertThat(store.readVersioned(NodeConsistency.PREFIX + "gone-node")).as("forgotten").isEmpty();
+        assertThat(store.readVersioned(NodeConsistency.PREFIX + "silent-node")).as("dead but remembered").isPresent();
+        assertThat(live.report(NOW).nodes()).extracting(ConsistencyReport.NodeView::nodeId)
+                .containsExactlyInAnyOrder("live-node", "silent-node");
+    }
+
+    @Test
+    void the_report_reads_at_most_a_page_of_fingerprints_and_says_so(@TempDir Path root) throws IOException {
+        ArtifactStore store = filesystem(root);
+        for (int i = 0; i <= NodeConsistency.MAX_NODES; i++) {
+            store.writeVersioned(NodeConsistency.PREFIX + String.format("node-%05d", i),
+                    ("{\"nodeId\":\"node-" + i + "\",\"heartbeatMillis\":" + NOW + ",\"cursorAdvancedMillis\":" + NOW
+                            + ",\"indexCursor\":1,\"snapshotVersion\":\"\",\"configGeneration\":1,"
+                            + "\"inventoryTotal\":0,\"quotaUsed\":0,\"pointers\":{}}").getBytes(StandardCharsets.UTF_8),
+                    null);
+        }
+
+        ConsistencyReport report = over(store).report(NOW);
+
+        assertThat(report.nodes()).as("one page, never the whole listing").hasSize(NodeConsistency.MAX_NODES);
+        assertThat(report.truncated()).as("the cap is visible on the report").isTrue();
+        assertThat(over(filesystem(root.resolve("empty"))).report(NOW).truncated()).isFalse();
+    }
+
+    @Test
     void the_fingerprint_read_is_cheap_and_never_scans_the_store(@TempDir Path root) throws IOException {
         CountingStore counting = new CountingStore(filesystem(root));
         // Seed a large blob namespace: a full scan would touch all of these. The check must not.
@@ -321,6 +373,12 @@ class MultiNodeConsistencyTest {
         public List<String> list(String prefix) {
             listCalls++;
             return delegate.list(prefix);
+        }
+
+        @Override
+        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
+            listCalls++;                                        // a page is the bounded listing the check reads
+            delegate.page(prefix, startAfter, limit, consumer);
         }
 
         @Override

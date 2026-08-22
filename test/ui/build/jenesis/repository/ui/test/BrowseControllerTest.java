@@ -11,6 +11,8 @@ import org.springframework.ui.Model;
 import module java.base;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * The console browse controller's listing: it pages the immediate children of a browse path (never materialising a
@@ -96,6 +98,53 @@ class BrowseControllerTest {
         List<Map<String, Object>> entries = (List<Map<String, Object>>) model.getAttribute("entries");
         assertThat(entries).as("the render is capped so a huge directory cannot OOM the console").hasSize(1000);
         assertThat(model.getAttribute("truncated")).as("and the cap is surfaced, not silent").isEqualTo(true);
+    }
+
+    @Test
+    void the_export_emits_one_slice_per_request_and_a_cursor_to_continue_from() throws IOException {
+        // The export is a sequence of bounded requests, never one walk of the whole repository: a slice carries at
+        // most `limit` entries and, when more remain, a last line with the cursor the next request resumes past.
+        String hash = store.writeBlob(new ByteArrayInputStream("x".getBytes(StandardCharsets.UTF_8)));
+        for (int i = 0; i < 5; i++) {
+            publication.link(String.format("/export/v%d.jar", i), hash);
+        }
+        BrowseController controller = new BrowseController(store);
+
+        List<String> first = lines(controller, null, "2");
+        assertThat(first).hasSize(3);
+        assertThat(first.subList(0, 2)).allMatch(line -> line.startsWith("{\"path\":\"/export/v"));
+        assertThat(first.get(2)).startsWith("{\"cursor\":\"export/v1.jar\"");
+
+        List<String> second = lines(controller, "export/v1.jar", "2");
+        assertThat(second).hasSize(3);
+        assertThat(second.get(0)).contains("/export/v2.jar");
+        List<String> last = lines(controller, "export/v3.jar", "2");
+        assertThat(last).as("the last slice carries no cursor").hasSize(1);
+        assertThat(last.get(0)).contains("/export/v4.jar");
+        assertThat(lines(controller, null, "1000000")).as("a limit past the slice cap is clamped, not honoured")
+                .hasSize(5);
+    }
+
+    private static List<String> lines(BrowseController controller, String cursor, String limit) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        jakarta.servlet.http.HttpServletResponse response = mock(jakarta.servlet.http.HttpServletResponse.class);
+        when(response.getOutputStream()).thenReturn(new jakarta.servlet.ServletOutputStream() {
+            @Override
+            public boolean isReady() {
+                return true;
+            }
+
+            @Override
+            public void setWriteListener(jakarta.servlet.WriteListener listener) {
+            }
+
+            @Override
+            public void write(int b) {
+                bytes.write(b);
+            }
+        });
+        controller.assets(cursor, limit, response);
+        return bytes.toString(StandardCharsets.UTF_8).lines().toList();
     }
 
     /** A store decorator that counts {@code list(prefix)} calls and delegates {@code page(...)} to the real backend's

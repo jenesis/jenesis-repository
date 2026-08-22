@@ -68,6 +68,7 @@ public final class ConsistencyController {
         body.put("liveCount", report.liveCount());
         body.put("converged", report.converged());
         body.put("singleNode", report.singleNode());
+        body.put("truncated", report.truncated());
         body.put("nodes", nodes);
         body.put("divergences", divergences);
 

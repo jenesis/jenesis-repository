@@ -89,12 +89,48 @@ public class BrowseController {
      * console does not carry, so the export carries the format-neutral pointer facts the walk emits, as NDJSON.
      */
     @GetMapping("/assets")
-    public void assets(HttpServletResponse response) throws IOException {
+    public void assets(@RequestParam(name = "cursor", required = false) String cursor,
+                       @RequestParam(name = "limit", required = false) String limit,
+                       HttpServletResponse response) throws IOException {
+        // One slice per request, never the whole repository in one walk: at most `limit` entries (the export's
+        // default, capped), and when more remain a last line carrying the cursor to ask for the next slice with -
+        // the walk resumes strictly past the last path emitted, so a very large repository exports as a sequence
+        // of bounded requests and a single request cannot be made to walk it whole.
+        int cap = slice(limit);
+        String after = cursor == null || cursor.isBlank() ? null : cursor;
         response.setHeader("Content-Type", "application/x-ndjson");
         response.setHeader("Content-Disposition", "attachment; filename=\"assets.ndjson\"");
         try (Writer out = new OutputStreamWriter(response.getOutputStream(), StandardCharsets.UTF_8)) {
-            assets.walk(null, Integer.MAX_VALUE, entry -> emit(entry, out));
+            String[] last = {null};
+            int[] emitted = {0};
+            assets.walk(after, cap + 1, entry -> {
+                if (emitted[0]++ < cap) {
+                    emit(entry, out);
+                    last[0] = entry.path();
+                } else {
+                    out.write("{\"cursor\":\"" + jsonEscape(relative(last[0])) + "\"}\n");
+                }
+            });
         }
+    }
+
+    /** The most entries one export request emits; a request asks for fewer, never for more. */
+    static final int EXPORT_SLICE = 10_000;
+
+    private static int slice(String limit) {
+        if (limit == null || limit.isBlank()) {
+            return EXPORT_SLICE;
+        }
+        try {
+            return Math.clamp(Integer.parseInt(limit.trim()), 1, EXPORT_SLICE);
+        } catch (NumberFormatException _) {
+            return EXPORT_SLICE;
+        }
+    }
+
+    /** The walk's cursor form of an emitted path: relative, no leading slash. */
+    private static String relative(String path) {
+        return path.startsWith("/") ? path.substring(1) : path;
     }
 
     /** Render one walked pointer as an NDJSON object; the domain walk already skipped withheld pointers and the
