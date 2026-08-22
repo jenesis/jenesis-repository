@@ -307,6 +307,49 @@ public interface PublishInterceptor extends PublicationObserver {
         return false;
     }
 
+    /**
+     * Whether <em>any</em> of {@code interceptors} withholds {@code path} - the whole-chain probe every serving edge
+     * asks, with one answer to what a failing probe means.
+     *
+     * <p>There were three answers and none of them was stated. One edge caught {@link IOException} and returned
+     * {@code true} for the <b>whole chain</b>, so a transient store read failure under the first interceptor made
+     * every path read as withheld - the edge stopped serving entirely - and every later interceptor's hold became
+     * unreachable for that request. Another propagated. The kit did something else again. Fail-closed is the right
+     * direction for a probe that decides whether an unscreened artifact serves; aborting the chain is not that
+     * direction, it is a different failure wearing its clothes.
+     *
+     * <p>So: every interceptor is asked, a failing one does not stop the others, and the outcome is decided by what
+     * the chain as a whole managed to establish. A hold found by <em>any</em> interceptor wins immediately - it is a
+     * definite answer and no failure elsewhere can make it less definite. Only when nothing held and something
+     * failed is the failure raised, carrying the first probe's cause. The caller then decides what its surface does
+     * with "could not determine", which is a decision that belongs at the edge and differs between edges: a serving
+     * read may refuse the request, a redirect edge may treat it as withheld. What no caller can now do by accident
+     * is read a store outage as "nothing is withheld".
+     */
+    static boolean withheldByAny(String path, ArtifactStore store, Iterable<PublishInterceptor> interceptors)
+            throws IOException {
+        IOException failed = null;
+        for (PublishInterceptor interceptor : interceptors) {
+            try {
+                if (interceptor.withheld(path, store)) {
+                    return true;
+                }
+            } catch (IOException probeFailed) {
+                if (failed == null) {
+                    failed = probeFailed;
+                } else {
+                    failed.addSuppressed(probeFailed);
+                }
+            }
+        }
+        if (failed != null) {
+            throw new IOException("Could not determine whether " + path + " is withheld: an interceptor's probe "
+                    + "failed and no other interceptor withheld it, so the answer is unknown rather than 'serves'.",
+                    failed);
+        }
+        return false;
+    }
+
     /** React to the routed outcome once the collective disposition is decided - the seam for inventory recording on
      *  {@code ACCEPT}, a quarantine or rejection audit otherwise. The scoped store the publication routed through
      *  rides along so such a record lands in the publish's own tenant/repository space - the doubly-scoped store

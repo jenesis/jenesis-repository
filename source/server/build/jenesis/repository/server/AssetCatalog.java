@@ -66,7 +66,7 @@ public final class AssetCatalog {
         // Ask the shared walk for one extra to learn whether a further page exists without a second walk: > limit
         // means there is a next cursor, otherwise the walk is exhausted. The cursor is the relative path (no leading
         // slash) the walk resumes strictly past.
-        assets.walk(cursor, limit + 1, entry -> page.add(enrich(entry)));
+        assets.walk(cursor, ArtifactStore.oneMoreThan(limit), entry -> page.add(enrich(entry)));
         if (page.size() > limit) {
             Asset last = page.get(limit - 1);
             return new Page(List.copyOf(page.subList(0, limit)), last.path().substring(1));

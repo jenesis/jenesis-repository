@@ -273,7 +273,7 @@ public final class GcsArtifactStore implements ArtifactStore {
         int emitted = 0;
         String last = null;
         for (ListObjectsV2Response page : s3.listObjectsV2Paginator(b -> {
-            b.bucket(bucket).prefix(base).delimiter("/").maxKeys(Math.min(limit + 1, 1000));
+            b.bucket(bucket).prefix(base).delimiter("/").maxKeys(Math.min(ArtifactStore.oneMoreThan(limit), 1000));
             if (!startAfter.isEmpty()) {
                 b.startAfter(base + startAfter);
             }
@@ -363,7 +363,7 @@ public final class GcsArtifactStore implements ArtifactStore {
         long delivered = 0;
         String last = null;
         for (ListObjectsV2Response page : s3.listObjectsV2Paginator(b -> {
-            b.bucket(bucket).prefix(base).maxKeys(Math.min(limit + 1, 1000));
+            b.bucket(bucket).prefix(base).maxKeys(Math.min(ArtifactStore.oneMoreThan(limit), 1000));
             if (startAfter != null && !startAfter.isEmpty()) {
                 b.startAfter(keyPrefix + startAfter);
             }
