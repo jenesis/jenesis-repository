@@ -48,18 +48,41 @@ public final class CredentialsController {
     }
 
     /** Every credential of the managing key's tenant, secrets excluded - they are not stored to begin with. */
+    /** The most credentials one answer lists; a caller past it follows the {@code X-Next-Cursor} header. */
+    static final int MAX_PAGE = 500;
+
+    /** The tenant's credentials, one page per request: at most {@code limit} (default and at most {@link #MAX_PAGE})
+     *  in key order from {@code after}, with the cursor of the next page in the {@code X-Next-Cursor} header when
+     *  more remain - a tenant that has minted and rotated keys for years is a listing to page, not to render. */
     @GetMapping("/api/credentials")
     @ResponseBody
-    public List<CredentialView> credentials(HttpServletRequest http)
+    public List<CredentialView> credentials(HttpServletRequest http, HttpServletResponse response)
             throws IOException {
         String key = PresentedKey.from(http);
         String tenant = context.tenant(key);
+        String after = http.getParameter("after");
+        Authorization.CredentialPage page = authorization.credentials(tenant,
+                after == null || after.isBlank() ? null : after, pageSize(http.getParameter("limit")));
         List<CredentialView> views = new ArrayList<>();
-        for (String hash : authorization.credentials(tenant)) {
+        for (String hash : page.hashes()) {
             Optional<Authorization.Credential> credential = authorization.credential(tenant, hash);
             credential.ifPresent(value -> views.add(view(value)));
         }
+        if (page.next() != null) {
+            response.setHeader("X-Next-Cursor", page.next());
+        }
         return views;
+    }
+
+    private static int pageSize(String value) {
+        if (value == null || value.isBlank()) {
+            return MAX_PAGE;
+        }
+        try {
+            return Math.clamp(Integer.parseInt(value.trim()), 1, MAX_PAGE);
+        } catch (NumberFormatException _) {
+            return MAX_PAGE;
+        }
     }
 
     /**

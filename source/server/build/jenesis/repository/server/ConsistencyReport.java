@@ -18,11 +18,21 @@ import module java.base;
  * for more than {@code N} sweep intervals while it lags, or that disagrees on what must be identical: the config
  * generation, or a sampled pointer's resolution). A benign lagger is not flagged; a stuck one is.
  */
-public record ConsistencyReport(List<NodeView> nodes, List<NodeDivergence> divergences, int liveCount) {
+public record ConsistencyReport(List<NodeView> nodes, List<NodeDivergence> divergences, int liveCount,
+                                boolean truncated) {
 
     public ConsistencyReport {
         nodes = List.copyOf(nodes);
         divergences = List.copyOf(divergences);
+    }
+
+    public ConsistencyReport(List<NodeView> nodes, List<NodeDivergence> divergences, int liveCount) {
+        this(nodes, divergences, liveCount, false);
+    }
+
+    /** The same report, marked as read from a capped listing: more fingerprints exist than it compares. */
+    public ConsistencyReport truncated(boolean value) {
+        return new ConsistencyReport(nodes, divergences, liveCount, value);
     }
 
     /** Whether the fleet is consistent - no divergence found (an empty divergence list is the healthy state). */
@@ -41,13 +51,21 @@ public record ConsistencyReport(List<NodeView> nodes, List<NodeDivergence> diver
      *  {@code sweepIntervalMillis} times {@code sweepIntervals} is the budget a lagging node has to advance before it is
      *  called stuck; {@code deadAfterMillis} is when a silent node drops out of the live comparison entirely. */
     public record Settings(long stalenessWindowMillis, long sweepIntervalMillis, int sweepIntervals,
-                           long deadAfterMillis) {
+                           long deadAfterMillis, long forgetAfterMillis) {
+
+        public Settings(long stalenessWindowMillis, long sweepIntervalMillis, int sweepIntervals,
+                        long deadAfterMillis) {
+            this(stalenessWindowMillis, sweepIntervalMillis, sweepIntervals, deadAfterMillis,
+                    Duration.ofDays(1).toMillis());
+        }
 
         /** The documented defaults: a 5-minute staleness window, a 60-second sweep interval, 3 intervals to catch up
-         *  before stuck, and a 15-minute silence before a node is considered dead. */
+         *  before stuck, a 15-minute silence before a node is considered dead, and a day of silence before its
+         *  fingerprint is forgotten - deleted by a publishing node, so a fleet that schedules a fresh host (a pod)
+         *  per restart does not accumulate one fingerprint per host it ever ran on. */
         public static Settings defaults() {
             return new Settings(Duration.ofMinutes(5).toMillis(), Duration.ofSeconds(60).toMillis(), 3,
-                    Duration.ofMinutes(15).toMillis());
+                    Duration.ofMinutes(15).toMillis(), Duration.ofDays(1).toMillis());
         }
 
         /** The wall-clock budget a lagging node has to advance its cursor before it is judged stuck. */

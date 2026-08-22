@@ -605,6 +605,25 @@ public final class Authorization {
         return store.list("auth/" + tenant);
     }
 
+    /** One page of a tenant's credential hashes, in key order: at most {@code limit} names strictly after
+     *  {@code after} ({@code null} from the start) and the name to continue from, {@code null} on the last page. The
+     *  listing names the tenant's per-tenant objects ({@code policy}, {@code quota}, ...) as well; {@link #credential}
+     *  answers empty for those. The face a management surface pages through, never the whole listing. */
+    public CredentialPage credentials(String tenant, String after, int limit) {
+        if (store == null) {
+            return new CredentialPage(List.of(), null);
+        }
+        List<String> names = new ArrayList<>();
+        store.page("auth/" + tenant, after == null ? "" : after, ArtifactStore.oneMoreThan(limit), names::add);
+        boolean more = names.size() > limit;
+        List<String> page = more ? names.subList(0, limit) : names;
+        return new CredentialPage(List.copyOf(page), more ? page.getLast() : null);
+    }
+
+    /** One page of credential hashes and the cursor the next page resumes after ({@code null} when exhausted). */
+    public record CredentialPage(List<String> hashes, String next) {
+    }
+
     /** A credential's metadata and grants, or empty if neither is present. */
     public Optional<Credential> credential(String tenant, String hash) throws IOException {
         Properties grants = read(grantsPath(tenant, hash));

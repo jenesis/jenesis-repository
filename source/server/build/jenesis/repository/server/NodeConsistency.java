@@ -22,7 +22,7 @@ public final class NodeConsistency {
 
     /** The internal key prefix every node publishes its fingerprint under - a fixed, hidden operational space beside
      *  the store's other operational keys ({@code quota/}, {@code walks/}), never an artifact space. */
-    static final String PREFIX = "consistency/nodes/";
+    public static final String PREFIX = "consistency/nodes/";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -47,7 +47,8 @@ public final class NodeConsistency {
                 millis(config, "jenreg.consistency.staleness-window", defaults.stalenessWindowMillis()),
                 millis(config, "jenreg.consistency.sweep-interval", defaults.sweepIntervalMillis()),
                 (int) millis(config, "jenreg.consistency.sweep-intervals", defaults.sweepIntervals()),
-                millis(config, "jenreg.consistency.dead-after", defaults.deadAfterMillis()));
+                millis(config, "jenreg.consistency.dead-after", defaults.deadAfterMillis()),
+                millis(config, "jenreg.consistency.forget-after", defaults.forgetAfterMillis()));
     }
 
     private static long millis(UnaryOperator<String> config, String key, long fallback) {
@@ -69,7 +70,51 @@ public final class NodeConsistency {
         Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
         Object token = current.map(ArtifactStore.Versioned::token).orElse(null);
         byte[] body = JSON.writeValueAsBytes(toMap(fingerprint));
-        return store.writeVersioned(key, body, token);
+        boolean written = store.writeVersioned(key, body, token);
+        if (fingerprint.heartbeatMillis() - lastReapMillis >= REAP_INTERVAL_MILLIS) {
+            lastReapMillis = fingerprint.heartbeatMillis();
+            reap(fingerprint.heartbeatMillis());
+        }
+        return written;
+    }
+
+    /** The most fingerprints a report reads and a reap examines: a fleet is tens of nodes, and a listing past this
+     *  is the accumulation the reap exists to prevent - the report says it was cut short rather than reading on. */
+    public static final int MAX_NODES = 1000;
+
+    /** How often a publishing node reaps the fingerprints of nodes silent past the forget-after window. */
+    private static final long REAP_INTERVAL_MILLIS = Duration.ofHours(1).toMillis();
+
+    private volatile long lastReapMillis;
+
+    /**
+     * Delete the fingerprint of every node silent for longer than {@link ConsistencyReport.Settings#forgetAfterMillis}
+     * - a host that left the fleet, a pod that was rescheduled under a new name - so the listing a report reads holds
+     * the nodes that exist and not every node that ever did. Run by a publishing node on its heartbeat, never by a
+     * read; answers how many fingerprints were forgotten.
+     */
+    public int reap(long now) {
+        int forgotten = 0;
+        for (String id : ids()) {
+            try {
+                Optional<NodeFingerprint> fingerprint = store.readVersioned(PREFIX + id)
+                        .map(versioned -> fromBytes(id, versioned.content()));
+                if (fingerprint.isPresent()
+                        && fingerprint.get().heartbeatAgeMillis(now) > settings.forgetAfterMillis()) {
+                    store.delete(PREFIX + id);
+                    forgotten++;
+                }
+            } catch (IOException | RuntimeException skip) {
+            }
+        }
+        return forgotten;
+    }
+
+    /** The first {@link #MAX_NODES} node ids under the prefix - one bounded page, never the whole listing. */
+    private List<String> ids() {
+        List<String> ids = new ArrayList<>();
+        store.page(PREFIX.substring(0, PREFIX.length() - 1), "", MAX_NODES, ids::add);
+        return ids;
     }
 
     /** Read every published fingerprint and classify the fleet as of {@code now}. Lists only the node prefix and reads
@@ -77,7 +122,8 @@ public final class NodeConsistency {
      *  is skipped (it simply does not take part) rather than failing the whole read. */
     public ConsistencyReport report(long now) {
         List<NodeFingerprint> fingerprints = new ArrayList<>();
-        for (String id : store.list(PREFIX)) {
+        List<String> ids = ids();
+        for (String id : ids) {
             try {
                 store.readVersioned(PREFIX + id)
                         .map(versioned -> fromBytes(id, versioned.content()))
@@ -86,7 +132,7 @@ public final class NodeConsistency {
                 // A single unreadable/garbled node object must not fail the whole check - it just does not participate.
             }
         }
-        return ConsistencyReport.analyze(fingerprints, now, settings);
+        return ConsistencyReport.analyze(fingerprints, now, settings).truncated(ids.size() >= MAX_NODES);
     }
 
     private static NodeFingerprint fromBytes(String id, byte[] content) {
