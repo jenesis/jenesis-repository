@@ -94,7 +94,14 @@ public final class RebuildPass {
         if (pass.complete()) {
             delivery.started(pass);
             for (WalkConsumer consumer : consumers) {
-                consumer.onPassCompleted(pass);
+                try {
+                    consumer.onPassCompleted(pass);
+                } catch (RuntimeException failure) {
+                    // Narrower than the other three deliberately: onPassCompleted declares no IOException, so a
+                    // runtime failure is the only shape there is to name here.
+                    failure.addSuppressed(new WalkConsumerFailure(consumer));
+                    throw failure;
+                }
             }
         }
         return Optional.of(pass);
@@ -156,8 +163,40 @@ public final class RebuildPass {
             }
             started = true;
             for (WalkConsumer consumer : consumers) {
-                consumer.onPassStarted(pass);
+                attributed(consumer, delivered -> delivered.onPassStarted(pass));
             }
+        }
+
+        /**
+         * Run {@code delivery} for {@code consumer} and, if it fails, say whose failure it was before letting it
+         * through.
+         *
+         * <p><b>This names; it never contains.</b> The four fan-outs below deliberately let a consumer's failure
+         * propagate, and that is the load-bearing choice: the cursor is <em>shared</em> - one walk, one committed
+         * position, N consumers - so containing one consumer's failure while the pass commits the stride would
+         * advance past items that consumer never received, permanently, with it then reporting itself converged.
+         * Propagating is what holds the cursor, so the pass resumes from the last committed position and a failure
+         * <em>delays</em> a rebuild instead of truncating it.
+         *
+         * <p>What propagating cost was attribution: the failing consumer's class reached the operator only in a
+         * stack trace, and appeared in no counter and no message. An operator seeing a rebuild stall was told a
+         * pass failed and not which plugin stalled it. So the exception is rethrown - the same exception, with its
+         * type and its own message intact, because a caller distinguishing {@code IOException} from a runtime one
+         * must keep being able to - carrying a suppressed marker that names the consumer.
+         */
+        private void attributed(WalkConsumer consumer, Handoff handoff) throws IOException {
+            try {
+                handoff.to(consumer);
+            } catch (IOException | RuntimeException failure) {
+                failure.addSuppressed(new WalkConsumerFailure(consumer));
+                throw failure;
+            }
+        }
+
+        /** One consumer hook, so {@link #attributed} covers all four fan-outs rather than one. */
+        @FunctionalInterface
+        private interface Handoff {
+            void to(WalkConsumer consumer) throws IOException;
         }
 
         /** The walk is about to commit {@code cursor}: hand every consumer its flush moment first, so a consumer that
@@ -173,7 +212,7 @@ public final class RebuildPass {
                 return;
             }
             for (WalkConsumer consumer : consumers) {
-                consumer.beforeCheckpoint(cursor);
+                attributed(consumer, delivered -> delivered.beforeCheckpoint(cursor));
             }
         }
 
@@ -208,7 +247,7 @@ public final class RebuildPass {
             ArtifactDescriptor artifact = new ArtifactDescriptor(null, null, null, path, null, false, named,
                     store.size("blobs/" + named));
             for (WalkConsumer consumer : consumers) {
-                consumer.onRetained(artifact, store);
+                attributed(consumer, delivered -> delivered.onRetained(artifact, store));
             }
         }
 
