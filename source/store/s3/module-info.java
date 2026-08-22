@@ -29,12 +29,6 @@
  * @jenesis.pin org.apiguardian/apiguardian-api 1.1.2 SHA-256/b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38
  * @jenesis.pin org.javassist 3.32.0-GA
  * @jenesis.pin org.javassist/javassist 3.32.0-GA SHA-256/712ef75bc3406782bb4529b0408cce8155b53f2124c6ae03d2c5fbfa13d62c1c
- * @jenesis.pin org.junit.jupiter/junit-jupiter-api 5.8.2 SHA-256/1808ee87e0f718cd6e25f3b75afc17956ac8a3edc48c7e9bab9f19f9a79e3801
- * @jenesis.pin org.junit.platform/junit-platform-commons 1.8.2 SHA-256/d2e015fca7130e79af2f4608dc54415e4b10b592d77333decb4b1a274c185050
- * @jenesis.pin org.mockito/mockito-core 4.6.0 SHA-256/125899de3dad49e375ad9ed34004d2ed582fa60b1f070a5b344bd928f9eac876
- * @jenesis.pin org.mockito/mockito-junit-jupiter 4.6.0 SHA-256/a773c0a51530291b72d03aca35191928bb18967700a8ceb53694e9bc8a1cff15
- * @jenesis.pin org.objenesis/objenesis 3.2 SHA-256/03d960bd5aef03c653eb000413ada15eb77cdd2b8e4448886edf5692805e35f3
- * @jenesis.pin org.opentest4j/opentest4j 1.2.0 SHA-256/58812de60898d976fb81ef3b62da05c6604c18fd4a249f5044282479fc286af2
  * @jenesis.pin org.reactivestreams/reactive-streams 1.0.4 SHA-256/f75ca597789b3dac58f61857b9ac2e1034a68fa672db35055a8fb4509e325f28
  * @jenesis.pin org.reflections/reflections 0.10.2 SHA-256/938a2d08fe54050d7610b944d8ddc3a09355710d9e6be0aac838dbc04e9a2825
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
