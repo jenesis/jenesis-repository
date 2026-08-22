@@ -78,6 +78,11 @@ final class JenesisFormatFixture implements FormatFixture {
                         + "streams through the same Publication.storeBlob the Maven and raw legs stream through",
                 FormatContract.Property.GENERATED_INDEX_IS_REVALIDATABLE,
                 "the module layout renders nothing on read - every /module/ and /artifact/ response is stored bytes "
-                        + "streamed back - so it has no generated document to revalidate");
+                        + "streamed back - so it has no generated document to revalidate",
+                FormatContract.Property.GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME,
+                "the same reason: with no generated document there is no emitted URL to carry a scheme. A format "
+                        + "that streams stored bytes composes no absolute address of its own, so the defect this "
+                        + "property ratchets - a document telling a client to fetch over cleartext from a "
+                        + "TLS-serving deployment - has nowhere to occur here");
     }
 }

@@ -95,7 +95,12 @@ public final class FormatContract {
         /** A generated document arrives through the buffered response overload, is a pure function of the stored state
          *  it renders, revalidates to {@code 304} against its own validator, and stops doing so once the state moves
          *  (clause 12). */
-        GENERATED_INDEX_IS_REVALIDATABLE
+        GENERATED_INDEX_IS_REVALIDATABLE,
+        /** Every absolute URL a generated document emits back at this deployment carries the scheme the request
+         *  arrived on. A document that tells a client to fetch over {@code http} from a deployment serving TLS
+         *  downgrades every credential the client attaches to that URL - and a cache may hand that document to
+         *  others (clause 12, and the request-base rule the formats share). */
+        GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME
     }
 
     /** One named, independently runnable contract check. */
@@ -146,7 +151,10 @@ public final class FormatContract {
                         FormatContract::proxyStreamsUpstreamBody),
                 new Check(Property.GENERATED_INDEX_IS_REVALIDATABLE,
                         "a generated document is buffered, deterministic and conditionally revalidatable",
-                        FormatContract::generatedIndexIsRevalidatable));
+                        FormatContract::generatedIndexIsRevalidatable),
+                new Check(Property.GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME,
+                        "a generated document's absolute URLs carry the scheme the request arrived on",
+                        FormatContract::generatedIndexCarriesTheRequestScheme));
     }
 
     /**
@@ -489,6 +497,63 @@ public final class FormatContract {
         equal(store.size("blobs/" + body.sha256()), body.length(), fixture, "the whole body landed, not a prefix");
         equal(fetched.responseLength(), body.length(), fixture, "the proxy serves the whole artifact through");
         equal(fetched.responseSha256(), body.sha256(), fixture, "the proxy serves the upstream's exact bytes");
+    }
+
+    /**
+     * A generated document rendered over TLS emits no {@code http://} URL back at this deployment.
+     *
+     * <p>Five formats each carried a private {@code baseUrl(exchange)} that read {@code X-Forwarded-Proto} and fell
+     * back to {@code http}, so a deployment serving TLS told clients to fetch tarballs, sparse-index entries and
+     * service indexes over cleartext. They are one site now, and this is what holds them there: nothing stops a
+     * sixth format composing its own base and reintroducing the defect one ecosystem at a time, which is exactly
+     * how it reached five.
+     *
+     * <p>It asks only about URLs pointing back at <em>this</em> deployment. An index legitimately names upstream
+     * addresses it does not own - a mirror, a vendor CDN, a checksum database - and their scheme is theirs. The
+     * host the exchange was asked on is what separates the two.
+     *
+     * <p>A format that emits no absolute URL at all passes without asserting anything, deliberately: the property
+     * is conditional by nature ("if you emit one, it carries the scheme"), and demanding an exclusion from every
+     * format that simply has no absolute URLs would make the exclusion list the opposite of informative.
+     */
+    private static void generatedIndexCarriesTheRequestScheme(FormatFixture fixture, ArtifactStore store)
+            throws Exception {
+        FormatFixture.Index index = fixture.index(store).orElseThrow(() -> failure(fixture,
+                "this fixture seeds no generated document. Either seed one, or exclude "
+                        + Property.GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME + " with a reason saying the format "
+                        + "generates none."));
+
+        // The Host is set here rather than left to the caller, and that is load-bearing: an exchange without one
+        // gives this check nothing to compare against, and an earlier version guarded on "host == null" and so
+        // asserted nothing at all for every format. A planted private baseUrl - the exact defect five formats
+        // carried - passed it green.
+        String host = "repo.example:8443";
+        ContractExchange over = get(fixture, index.path()).header("Host", host).servedOver("https");
+        fixture.serving().handle(over, store);
+        equal(over.status(), 200, fixture, "the generated document renders over TLS");
+
+        String rendered = over.responseText();
+        for (String downgraded : absoluteUrls(rendered, "http://")) {
+            isTrue(!downgraded.regionMatches(true, "http://".length(), host, 0, host.length()),
+                    fixture, "a generated document rendered over TLS emits '" + downgraded + "', which points back "
+                            + "at this deployment over cleartext. Every credential a client attaches to that URL "
+                            + "travels in the clear, and a cache may hand the document to others. Compose the base "
+                            + "through the shared request-base seam rather than defaulting the scheme.");
+        }
+    }
+
+    /** Every {@code prefix}-schemed absolute URL in {@code body}, as bare tokens - enough to tell which host a
+     *  document points at without teaching this kit any format's document grammar. */
+    private static List<String> absoluteUrls(String body, String prefix) {
+        List<String> found = new ArrayList<>();
+        for (int at = body.indexOf(prefix); at >= 0; at = body.indexOf(prefix, at + 1)) {
+            int end = at;
+            while (end < body.length() && " \t\r\n\"\'<>),]}".indexOf(body.charAt(end)) < 0) {
+                end++;
+            }
+            found.add(body.substring(at, end));
+        }
+        return found;
     }
 
     private static void generatedIndexIsRevalidatable(FormatFixture fixture, ArtifactStore store) throws Exception {
