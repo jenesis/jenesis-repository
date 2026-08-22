@@ -42,7 +42,7 @@ import module java.base;
  *     layout view the format publishes - never an enumeration of a version's contents.</li>
  * </ol>
  */
-public interface ArtifactLayout {
+public interface ArtifactLayout extends EcosystemLayout {
 
     /**
      * Whether every one of these coordinate-derived name parts is a single addressable path segment - non-null,
@@ -70,7 +70,9 @@ public interface ArtifactLayout {
     /** The package-ecosystem name this format's artifacts report - the value {@link #describe}'s descriptors carry
      *  (a Maven format's OSV name {@code "Maven"}, an npm format's {@code "npm"}) - so a coordinate-only consumer, a
      *  cleanup eviction resolving a stored coordinate back to its format, finds the format by its declared ecosystem
-     *  rather than guessing from the format id. */
+     *  rather than guessing from the format id. Declared on {@link EcosystemLayout}, which the other layout family
+     *  shares. */
+    @Override
     String ecosystem();
 
     /** The descriptor for a request path this format owns (hash and size unset, since nothing is stored yet), or empty

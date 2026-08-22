@@ -15,7 +15,9 @@ import module java.base;
  * <p>A format writes its layout under its own request prefix ({@code npm} under {@code /npm/}, {@code pypi} under
  * {@code /pypi/}), which is the top-level key its content sits under, so a namespace resolves through
  * {@link RepositoryFormat#handles}. An ecosystem is declared by the coordinate-bearing formats only, so it resolves
- * through {@link ArtifactLayout#ecosystem()}. Both answer {@link Optional#empty()} when no <em>installed</em> format
+ * through {@link EcosystemLayout#ecosystem()} - whichever layout family the format stores through, since a format
+ * that keeps its artifacts in a blobs namespace is as installed as one that lays them out under the published tree.
+ * Both answer {@link Optional#empty()} when no <em>installed</em> format
  * claims the key, and that emptiness is deliberately not resolved here: a caller looking at a bookkeeping bucket
  * ({@code blobs}, {@code publish}) renders nothing, while a caller looking at a namespace that really holds
  * published artifacts is looking at an <b>orphan</b> - content whose format module is no longer on this deployment -
@@ -80,7 +82,7 @@ public final class FormatMarks {
 
     private Optional<Mark> resolveEcosystem(String ecosystem) {
         return formats.stream()
-                .filter(format -> format instanceof ArtifactLayout layout && ecosystem.equals(layout.ecosystem()))
+                .filter(format -> format instanceof EcosystemLayout layout && ecosystem.equals(layout.ecosystem()))
                 .findFirst()
                 .map(Marks::of);
     }
