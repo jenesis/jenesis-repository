@@ -1,6 +1,7 @@
 package build.jenesis.repository.server;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
+import build.jenesis.repository.store.Features;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -25,6 +26,11 @@ import module java.base;
  * adversarial excess spills to the shared one. The Actuator endpoints are never limited, so liveness and scrape
  * probes are unaffected. The effective ceiling is cached briefly per bucket so the limiter, not a store read, is on
  * the hot path. A ceiling of zero (nothing configured) is unlimited - the filter is then a no-op.
+ *
+ * <p>The deployment default is read live, through the lookup the runtime settings resolve against
+ * ({@link #liveDefault}), so an operator who lowers, raises or zeroes {@code rate-limit} through the settings API
+ * sees it take effect within the cache's ten seconds of the lookup seeing it rather than at the next boot. The boot
+ * property stays the fallback for a deployment that never set it at runtime.
  */
 public class RateLimitFilter extends OncePerRequestFilter {
 
@@ -36,16 +42,43 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RateLimiter limiter;
     private final Authorization authorization;
-    private final long defaultPermitsPerMinute;
+    private final LongSupplier defaultPermitsPerMinute;
     private final BoundedTenantBuckets buckets = new BoundedTenantBuckets(MAX_TRACKED_TENANTS);
     private final ConcurrentHashMap<String, long[]> ceilings = new ConcurrentHashMap<>();
     private final AtomicLong rejected = new AtomicLong();
     private final ConcurrentHashMap<String, AtomicLong> rejectedByTenant = new ConcurrentHashMap<>();
 
     public RateLimitFilter(RateLimiter limiter, Authorization authorization, long defaultPermitsPerMinute) {
+        this(limiter, authorization, () -> defaultPermitsPerMinute);
+    }
+
+    public RateLimitFilter(RateLimiter limiter, Authorization authorization, LongSupplier defaultPermitsPerMinute) {
         this.limiter = limiter;
         this.authorization = authorization;
         this.defaultPermitsPerMinute = defaultPermitsPerMinute;
+    }
+
+    /**
+     * The deployment default as the runtime settings currently resolve it: the {@code rate-limit} setting when an
+     * operator has written one - whatever {@code lookup} answers for {@code jenreg.rate-limit}, which is
+     * {@link Features#lookup()} on the free shell and the store-backed chain (pin over stored override over
+     * environment) on a shell that has one - otherwise {@code fallback}, the boot property's value. A value that does
+     * not parse as a non-negative number is ignored in favour of the fallback rather than turning every request
+     * into an error: the settings API validates the setting's kind on write, so this only guards a hand-edited store.
+     */
+    public static LongSupplier liveDefault(UnaryOperator<String> lookup, long fallback) {
+        return () -> {
+            String configured = lookup.apply("jenreg.rate-limit");
+            if (configured == null || configured.isBlank()) {
+                return fallback;
+            }
+            try {
+                long ceiling = Long.parseLong(configured.trim());
+                return ceiling < 0 ? fallback : ceiling;
+            } catch (NumberFormatException notANumber) {
+                return fallback;
+            }
+        };
     }
 
     /** The number of requests shed with {@code 429} since startup - a back-pressure signal a metrics layer can scrape. */
@@ -90,7 +123,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (cached != null && cached[1] > now) {
             return cached[0];
         }
-        long ceiling = defaultPermitsPerMinute;
+        long ceiling = defaultPermitsPerMinute.getAsLong();
         if (tenant != null) {
             try {
                 long override = authorization.rateLimit(tenant);

@@ -1,6 +1,7 @@
 package build.jenesis.repository.server;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
+import build.jenesis.repository.store.Features;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -58,7 +59,8 @@ public class RepositorySecurityAutoConfiguration {
     public RateLimitFilter rateLimitFilter(RateLimiter rateLimiter, Authorization authorization,
                                            RepositoryProperties properties) {
         // A bean (not an inline filter) so a metrics layer can scrape the same instance the chain sheds load with.
-        return new RateLimitFilter(rateLimiter, authorization, properties.getRateLimit());
+        // The default ceiling is read live, so the rate-limit setting an operator writes at runtime is honoured.
+        return new RateLimitFilter(rateLimiter, authorization, RateLimitFilter.liveDefault(Features.lookup(), properties.getRateLimit()));
     }
 
     @Bean
