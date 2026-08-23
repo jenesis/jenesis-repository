@@ -80,6 +80,16 @@ public final class TraversalVectors {
             // flat one with a backslash in its name everywhere else), which is the divergence the store's key screen
             // exists to keep out rather than a shape any of the fourteen ecosystems publishes.
             new Vector("backslash-separator", "kit\\" + ESCAPE, Kind.DECODED),
+            // The third alphabet, and the one the free core screened nowhere until D-288: a C0 control character.
+            // It is a DECODED row for the backslash's reason - nothing decodes anything, the layer below simply reads
+            // the byte differently. A NUL truncates the key at the first C API that handles it, so a screen that
+            // passed the whole string guards a prefix of what is acted on; a newline forges a line in every log
+            // record and generated listing the key reaches afterwards, which is a coordinate writing rows that read
+            // as the server's own. This row could not be asserted before the rule existed - a probe row is only
+            // assertable once something refuses the shape, which is why D-127 waited on D-288 rather than being the
+            // data change it looked like.
+            new Vector("null-byte", "kit/" + '\u0000' + ESCAPE, Kind.DECODED),
+            new Vector("newline-injected", "kit/" + '\n' + ESCAPE, Kind.DECODED),
             new Vector("encoded-parent", "%2e%2e/" + ESCAPE, Kind.ENCODED),
             new Vector("encoded-separator", "..%2f" + ESCAPE, Kind.ENCODED),
             new Vector("over-deep", String.join("/", Collections.nCopies(ArtifactStore.MAX_SEGMENTS + 4, "kit")),

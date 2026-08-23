@@ -370,7 +370,7 @@ public final class FormatContract {
 
     /** The name parts a coordinate or a version must not be able to smuggle into a composed request path. */
     private static final List<String> HOSTILE_PARTS =
-            List.of("..", ".", "../..", "a/../b", "a/b", "", "..\\b", "/");
+            List.of("..", ".", "../..", "a/../b", "a/./b", "a/b", "a//b", "", "..\\b", "/", "a\tb", "a\u0000b");
 
     /** {@code hostile} offered as the whole coordinate and spliced into the last structural component of the real
      *  one, so a coordinate whose parts are separated ({@code group:artifact}) is probed part by part. */

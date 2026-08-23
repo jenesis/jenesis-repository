@@ -57,9 +57,9 @@ public final class StoreContract {
         /** Write paths reject a key past {@link ArtifactStore#MAX_SEGMENTS} or {@link ArtifactStore#MAX_KEY_BYTES}
          *  through {@link ArtifactStore#key}, storing nothing; a key at the cap is accepted. */
         KEY_SHAPE_REJECTED,
-        /** Write paths reject a key carrying a {@code .} or {@code ..} segment, or a {@code \} anywhere, storing
-         *  nothing - the same screen {@code scope} applies to a segment, applied to the key, separator half
-         *  included. */
+        /** Write paths reject a key carrying a {@code .} or {@code ..} segment, or a {@code \} or C0 control
+         *  character anywhere, storing nothing - the same screen {@code scope} applies to a segment, applied to the
+         *  key, separator and character halves included. */
         KEY_TRAVERSAL_REJECTED,
         /** {@code list} returns the immediate children of a prefix and nothing deeper; a leaf and an absent prefix
          *  both list empty. */
@@ -165,7 +165,7 @@ public final class StoreContract {
                 "a write past the segment or byte cap is rejected and stores nothing",
                 StoreContract::keyShapeRejected));
         checks.add(new Check(Property.KEY_TRAVERSAL_REJECTED,
-                "a write whose key carries a . or .. segment, or a backslash, is rejected and stores nothing",
+                "a write whose key carries a . or .. segment, a backslash or a control character is rejected",
                 StoreContract::keyTraversalRejected));
         checks.add(new Check(Property.LISTING_IMMEDIATE_CHILDREN,
                 "list returns the immediate children of a prefix and nothing deeper",
@@ -351,8 +351,17 @@ public final class StoreContract {
         // the body a level up, while S3, GCS and Azure store it as one literal key with a backslash in the name. The
         // bare "kit\escape" row is the same fact without the traversal: one key, two placements, so a store migration
         // would relocate it. Both are refused at the shared screen, so all four backends stay interchangeable.
+        // The control-character rows are the third alphabet of the same divergence, and the last one the free core
+        // screened nowhere - not in traversalFree, not in key, not in segment - while this product's own request
+        // guard had refused them since it was written. A NUL truncates the key at the first C API that handles it, so
+        // a key screened whole is acted on in part and the four backends need not even agree on which object was
+        // meant; a CR or LF forges a line in every log record and generated listing the key later reaches, so a
+        // coordinate can write rows that read as the server's own. Refused at the shared screen, before any I/O, so
+        // no backend has to have an opinion.
         for (String key : new String[]{"kit/../escape", "../escape", "kit/./here", "..", ".",
-                "kit\\..\\escape", "..\\escape", "kit\\.\\here", "kit\\escape", "\\"}) {
+                "kit\\..\\escape", "..\\escape", "kit\\.\\here", "kit\\escape", "\\",
+                "kit/esc\u0000ape", "kit/esc\nape", "kit/esc\rape", "kit/esc\tape", "\u0000",
+                "\u0001kit/escape", "kit/escape\u001f"}) {
             throwsIae(() -> store.write(key, new ByteArrayInputStream(ramp(4))),
                     "writing the traversal-shaped key '" + key + "'");
             throwsIae(() -> store.writeVersioned(key, ramp(4), null),

@@ -1261,18 +1261,27 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return true;
     }
 
-    /** Whether an image name is a traversal-free path of Distribution name segments - each non-empty and not {@code .}
-     *  or {@code ..}, with no backslash - so a {@code ..}- or empty-segment-laced name can never aim an
-     *  {@code oci/<name>/...} key at a neighbouring key space. The in-format counterpart of {@link #isDigestHex} and
-     *  {@link #isTag} on the blob and tag paths: a multi-segment image name is the one request element that otherwise
-     *  leans on the servlet firewall alone, so it is validated here before it becomes a store key (kept minimal - only
-     *  the traversal-relevant segments - so every already-valid name still resolves). */
+    /**
+     * Whether an image name may become the {@code oci/<name>/...} key it addresses: the free store's own path rule
+     * plus the one thing that rule deliberately allows and the Distribution grammar does not - an empty segment.
+     *
+     * <p>The character half is {@link ArtifactStore#traversalFree}, not a local copy of it. It used to be a copy, and
+     * the copy was a segment behind: it refused {@code .}, {@code ..} and a backslash, and said nothing about a
+     * control character, so {@code /v2/kit/<NUL>lib/manifests/1.0} passed this screen, became a store key and threw
+     * {@code InvalidPathException} out of the filesystem backend - an unmapped {@code 500} at a request whose honest
+     * answer is {@code 404}, and a different answer again on each object-store backend. Delegating is what keeps this
+     * screen and the store's write screen from ever disagreeing about which names are addressable (&sect;2, &sect;13).
+     *
+     * <p>The empty-segment check stays local because it is genuinely this format's own: {@code traversalFree} permits
+     * an empty segment on purpose - a trailing slash and a doubled separator are legitimate request shapes - while a
+     * Distribution name segment may not be empty.
+     */
     private static boolean isImageName(String name) {
-        if (name.isEmpty()) {
+        if (name.isEmpty() || !ArtifactStore.traversalFree(name)) {
             return false;
         }
         for (String segment : name.split("/", -1)) {
-            if (segment.isEmpty() || segment.equals(".") || segment.equals("..") || segment.indexOf('\\') >= 0) {
+            if (segment.isEmpty()) {
                 return false;
             }
         }
