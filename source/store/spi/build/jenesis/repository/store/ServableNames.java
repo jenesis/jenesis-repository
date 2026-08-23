@@ -1,5 +1,6 @@
 package build.jenesis.repository.store;
 
+import build.jenesis.repository.store.Publication;
 import module java.base;
 
 /**
@@ -299,7 +300,7 @@ public final class ServableNames {
         try {
             // (a) The review-pointer convention: a held version has >=1 /quarantine<servedPath> pointer under it, so
             // any child under publish/quarantine<folder> means at least part of the version is held.
-            if (!store.list("publish/quarantine" + folder).isEmpty()) {
+            if (!store.list(Publication.quarantineKey(folder)).isEmpty()) {
                 return false;
             }
             // (b) The interceptor chain withholds one of the version's leaves. Bounded, and stats no blob. A folder

@@ -133,7 +133,31 @@ public final class Publication {
     /** The reserved review-subtree request-path root ({@code /quarantine}) - the pointer face of the hold convention
      *  whose enumeration face is {@link ServableNames#QUARANTINE}. A hold writer links a review pointer at
      *  {@code /quarantine/<servedPath>}; this is that {@code /quarantine} prefix as a request path. */
-    private static final String QUARANTINE_PATH = "/quarantine";
+    public static final String QUARANTINE_PATH = "/quarantine";
+
+    /**
+     * The pointer subtree a hold writer links a review pointer under: {@code publish/quarantine}.
+     *
+     * <p>Public, and the one place it is spelled. Fourteen classes across both trees composed
+     * {@code Publication.quarantineKey(path)} themselves - the gate, the inventory browse, four maintenance sweeps, two
+     * contract kits and this module's own {@code ServableNames}. They agreed, and agreeing is not the same as
+     * having an owner: the space is the largest un-owned one in the tree, and its direct ancestor is a defect where
+     * two pushes shared one pointer path. It lives here because the free core owns {@code publish/} and every
+     * caller sits above this module, which is what "a shared thing goes below everything that needs it" means when
+     * a suitable module already exists.
+     */
+    public static final String QUARANTINE_ROOT = "publish" + QUARANTINE_PATH;
+
+    /**
+     * The review-pointer key for a served request path - {@code publish/quarantine<requestPath>}.
+     *
+     * <p>Composed here rather than by each caller because the concatenation is where the convention hides: a
+     * caller that writes {@code QUARANTINE_ROOT + path} for a path with no leading slash, or that trims one, has
+     * silently invented a second layout, and nothing would notice until a held artifact served.
+     */
+    public static String quarantineKey(String requestPath) {
+        return QUARANTINE_ROOT + (requestPath.startsWith("/") ? requestPath : "/" + requestPath);
+    }
 
     /** Whether a request path is a {@code /quarantine} review pointer - the pointer face of the withhold-change feed -
      *  matched on the exact {@code /}-subtree boundary the enumeration seam ({@link ServableNames#reviewSubtree}) uses:
@@ -141,7 +165,7 @@ public final class Publication {
      *  A bare {@code startsWith("/quarantine")} would misclassify a sibling like {@code /quarantined/foo} or
      *  {@code /quarantine-cache/x} as a hold and fire a spurious withhold-feed signal with a mangled served path (the
      *  substring below would eat the leading slash and one more char), so the two seams would disagree on the boundary. */
-    private static boolean isQuarantinePath(String requestPath) {
+    public static boolean isQuarantinePath(String requestPath) {
         return requestPath != null
                 && (requestPath.equals(QUARANTINE_PATH) || requestPath.startsWith(QUARANTINE_PATH + "/"));
     }
