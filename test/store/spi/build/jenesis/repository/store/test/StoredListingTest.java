@@ -213,6 +213,27 @@ class StoredListingTest {
         }
     }
 
+    /** A deferred derivation runs off the caller's thread, and {@code settle} waits for what was queued before it -
+     *  the guarantee a stopping node, or a test about to tear its store down, relies on. */
+    @Test
+    void settle_waits_for_the_deferred_derivations_queued_before_it() {
+        AtomicInteger ran = new AtomicInteger();
+        Thread caller = Thread.currentThread();
+        AtomicBoolean onCaller = new AtomicBoolean();
+        StoredListing.later("test/twin", () -> {
+            onCaller.set(Thread.currentThread() == caller);
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            ran.incrementAndGet();
+        });
+        StoredListing.settle();
+        assertThat(ran).as("settle returns once the queued derivation has run").hasValue(1);
+        assertThat(onCaller).as("the derivation ran off the queuing thread").isFalse();
+    }
+
     @Test
     void the_store_key_is_under_the_listing_root() {
         assertThat(StoredListing.key("debian/main/Packages")).isEqualTo("listing/debian/main/Packages");

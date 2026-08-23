@@ -529,6 +529,35 @@ public final class StoredListing {
 
     private static final Map<String, Runnable> LATER = new HashMap<>();
 
+    /**
+     * Wait until every derivation queued through {@link #later} before this call has run - a node finishing its
+     * derived twins before it stops, or a test finishing them before it tears its store down. Bounded: a derivation
+     * still running after thirty seconds is left to the next write or rebuild.
+     */
+    public static void settle() {
+        Future<?> marker = LATER_EXECUTOR.submit(() -> { });
+        try {
+            marker.get(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException | TimeoutException e) {
+            LOGGER.warn("deferred derivations did not settle; the next write or rebuild re-derives them", e);
+        }
+    }
+
+    /** The deferred derivations as a closeable for a container's shutdown: closing it {@linkplain #settle settles}
+     *  them. */
+    public static final class Deferred implements AutoCloseable {
+
+        public Deferred() {
+        }
+
+        @Override
+        public void close() {
+            settle();
+        }
+    }
+
     private static final ExecutorService LATER_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "jenesis-listing-derive");
         thread.setDaemon(true);
