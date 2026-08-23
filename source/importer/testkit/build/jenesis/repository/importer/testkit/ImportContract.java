@@ -94,7 +94,11 @@ public final class ImportContract {
         /** Every path the walk reports is one a store write may address: it passes both the source-side
          *  {@link ImportSource#safePath} screen and the importer-side {@link RepositoryImporter#importable} screen, and
          *  a traversal-laced listing entry is skipped rather than reported ({@code ImportSource} clause 6). */
-        REPORTS_ONLY_IMPORTABLE_PATHS
+        REPORTS_ONLY_IMPORTABLE_PATHS,
+        /** A walk that <em>derives</em> asset paths from a coordinate rather than reading them from a listing derives
+         *  every sibling a consumer of the ecosystem resolves against, not only the primary artifact - so a coordinate
+         *  migrated through that leg arrives whole ({@code ImportSource} clause 1). */
+        CARRIES_EVERY_DERIVABLE_SIBLING
     }
 
     /** One named, independently runnable contract check. */
@@ -131,6 +135,9 @@ public final class ImportContract {
                 new Check(Property.CLASSIFIES_FAILURES,
                         "a refusal, an absence and an outage are three distinguishable failures",
                         ImportContract::classifiesFailures),
+                new Check(Property.CARRIES_EVERY_DERIVABLE_SIBLING,
+                        "a coordinate walked without a listing still arrives with every sibling it publishes",
+                        ImportContract::carriesEveryDerivableSibling),
                 new Check(Property.SELF_SKIPS_WITHOUT_CREDENTIALS,
                         "the connector declines what it cannot run and walks anonymously without credentials",
                         ImportContract::selfSkipsWithoutCredentials),
@@ -366,6 +373,34 @@ public final class ImportContract {
                             + "entry is skipped, and the walk continues rather than failing (one bad row never aborts "
                             + "a migration)");
         }
+    }
+
+    private static void carriesEveryDerivableSibling(ImportFixture fixture, ArtifactStore store) throws Exception {
+        ImportFixture.Corpus derived = fixture.derived().orElseThrow(() -> failure(fixture,
+                "this fixture supplies no derived walk. Either supply one, or exclude "
+                        + Property.CARRIES_EVERY_DERIVABLE_SIBLING + " with a reason saying every path this connector "
+                        + "reports was read from the incumbent's own listing rather than composed from a coordinate."));
+        Walk walk = walk(fixture, derived.upstream(), fixture.request(), false);
+        isTrue(!derived.paths().isEmpty(), fixture,
+                "the derived corpus must expect at least one path, or this asserts nothing");
+
+        // Set comparison, not list: the order a derived walk composes a coordinate's siblings in is its own business
+        // and no consumer depends on it. What a consumer depends on is that none of them is missing.
+        Set<String> missing = new LinkedHashSet<>(derived.paths());
+        walk.paths().forEach(missing::remove);
+        if (!missing.isEmpty()) {
+            throw failure(fixture, "the derived walk did not carry " + missing + ". This leg composes an asset's path "
+                    + "out of a coordinate rather than reading it from a listing, so a sibling it omits is omitted by "
+                    + "this repository, not by the incumbent - and it is omitted silently. A migrated coordinate that "
+                    + "arrives without one of these does not fail to resolve; it resolves DIFFERENTLY, and the "
+                    + "operator's build stays green over it. Every sibling at a path derivable from the coordinate is "
+                    + "one this leg can fetch, exactly as it already fetches the primary descriptor.");
+        }
+        Set<String> extra = new LinkedHashSet<>(walk.paths());
+        derived.paths().forEach(extra::remove);
+        isTrue(extra.isEmpty(), fixture, "the derived walk reported " + extra + ", which the corpus does not expect - "
+                + "a derived path that came from nowhere is a composed key, and the corpus is where what this leg "
+                + "carries is stated");
     }
 
     // --- helpers -----------------------------------------------------------------------------------------------

@@ -65,6 +65,10 @@ final class JenesisFormatFixture implements FormatFixture {
     @Override
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
+                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
+                "the same reason again: with no ProxyFormat there is no upstream refusal to spell, so the format "
+                        + "cannot confuse one with an absence",
+                
                 FormatContract.Property.WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION,
                 "the module layout publishes no enumeration surface at all - no listing, no version index, no "
                         + "catalogue - so there is no name for a hold to leave. Its serve-side retraction (a held "

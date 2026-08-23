@@ -99,6 +99,13 @@ final class RawFormatFixture implements FormatFixture {
     @Override
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
+                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
+                "the raw protocol advertises no digest, so this leg has no integrity refusal to spell in the first "
+                        + "place - and it has no elective path either: a raw asset's request path IS its identity, "
+                        + "and a client asking for one that is not there is asking for a file it expects, so the miss "
+                        + "is a loud answer. Maven's .module descriptor proves the property where absence really is "
+                        + "a resolution signal",
+                
                 FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
                 "the raw protocol is a plain HTTP file tree: it publishes no checksum sibling, no digest header and "
                         + "no content-addressed reference, so an upstream body carries nothing to hold it to. The kit "

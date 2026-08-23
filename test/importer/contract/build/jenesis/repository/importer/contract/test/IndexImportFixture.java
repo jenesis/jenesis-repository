@@ -3,6 +3,7 @@ package build.jenesis.repository.importer.contract.test;
 import module java.base;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.importer.ImportRequest;
+import build.jenesis.repository.importer.testkit.ImportContract;
 import build.jenesis.repository.importer.testkit.ImportFixture;
 import build.jenesis.repository.importer.testkit.ScriptedUpstream;
 
@@ -93,4 +94,14 @@ final class IndexImportFixture implements ImportFixture {
         paths.forEach(path -> document.add(path + " " + ROOT + path));
         return document.toString();
     }
+    @Override
+    public Map<ImportContract.Property, String> unsupported() {
+        return Map.of(ImportContract.Property.CARRIES_EVERY_DERIVABLE_SIBLING,
+                "this source is a pass-through over ProxyFormat.enumerate: the format reads its ecosystem's own published "
+                        + "index and this walk reports exactly the coordinates it yields, adding none. Whether an "
+                        + "index names a coordinate's siblings is the upstream index's business, not a "
+                        + "derivation this connector could get wrong. The maven leg proves the property where "
+                        + "paths really are composed");
+    }
+
 }
