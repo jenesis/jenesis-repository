@@ -88,7 +88,7 @@ public final class PullThroughCache {
                 observation.lowCardinalityKeyValue("outcome", "hit");
                 return null;
             }
-            if (proxy.proxy(exchange, store, upstream, hooks.screenFetch(exchange.path(), fetcher))) {
+            if (proxy.proxy(exchange, store, upstream, hooks.screenFetch(exchange.path(), fetcher, store))) {
                 observation.lowCardinalityKeyValue("outcome", "miss");
                 observePublish(format, exchange.path(), store);
             } else {
