@@ -52,6 +52,9 @@
  */
 open module build.jenesis.repository.publication.contract.test {
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.format.maven;
+    requires build.jenesis.repository.format.oci;
+    requires build.jenesis.repository.format.raw;
     requires build.jenesis.repository.store.testkit;
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.contract.testkit;

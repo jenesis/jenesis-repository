@@ -211,28 +211,39 @@ public final class ServableNames {
      *  on a path that already reads its pointer, and it can only ever hide more: a pointer naming a hash no marker
      *  covers answers exactly as before. */
     public State state(String requestPath) throws IOException {
+        return located(requestPath).state();
+    }
+
+    /** A path's state and, when it is {@link State#SERVABLE}, the content hash its pointer resolved to - so a serve
+     *  that has just decided a path is servable streams {@code blobs/<hash>} without reading the pointer again. */
+    public record Location(State state, String hash) {
+    }
+
+    public Location located(String requestPath) throws IOException {
         try {
             if (publication.withheld(requestPath)) {
-                return State.WITHHELD;
+                return new Location(State.WITHHELD, null);
             }
             Optional<String> hash = publication.blob(requestPath);
             if (hash.isEmpty()) {
-                return State.UNPUBLISHED;
+                return new Location(State.UNPUBLISHED, null);
             }
             if (Withheld.is(store, hash.get())) {
-                return State.WITHHELD;
+                return new Location(State.WITHHELD, null);
             }
             // A sidecar is held by its subject's hold. Read AFTER the pointer, so a path that is not published pays
             // nothing and still answers UNPUBLISHED - the sidecar question is only ever asked about a path that is
             // otherwise servable.
             String subject = subject(requestPath);
             if (subject != null && held(subject)) {
-                return State.WITHHELD;
+                return new Location(State.WITHHELD, null);
             }
-            return store.exists("blobs/" + hash.get()) ? State.SERVABLE : State.BLOB_GONE;
+            return store.exists("blobs/" + hash.get())
+                    ? new Location(State.SERVABLE, hash.get())
+                    : new Location(State.BLOB_GONE, null);
         } catch (RuntimeException hostile) {
             LOGGER.warn("servable-name probe of {} failed; treating as withheld (fail-closed)", requestPath, hostile);
-            return State.WITHHELD;
+            return new Location(State.WITHHELD, null);
         }
     }
 

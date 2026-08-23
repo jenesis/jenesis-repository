@@ -1,7 +1,9 @@
 package build.jenesis.repository.format.lifecycle;
 
 import module java.base;
+import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.PagedTreeWalk;
 import build.jenesis.repository.walk.Traversal;
 
@@ -181,6 +183,7 @@ public final class Lifecycle {
         for (int attempt = 0; attempt < 3; attempt++) {
             Object token = store.readVersioned(key).map(ArtifactStore.Versioned::token).orElse(null);
             if (store.writeVersioned(key, content, token)) {
+                Publication.notifyMarked(subject(coordinate, version), store);
                 return;
             }
         }
@@ -199,7 +202,13 @@ public final class Lifecycle {
             return false;
         }
         store.delete(key);
+        Publication.notifyMarked(subject(coordinate, version), store);
         return true;
+    }
+
+    /** The lifecycle-mark event's subject: the coordinate and version, no ecosystem (a mark is keyed without one). */
+    private static ArtifactDescriptor subject(String coordinate, String version) {
+        return new ArtifactDescriptor(null, coordinate, version, null, null, false, null, -1L);
     }
 
     private static String key(String coordinate, String version) {

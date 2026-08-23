@@ -44,10 +44,20 @@ public final class Withheld {
      *  already present - and it stays silent, the same transition-only CAS the pointer face {@link Publication#link}
      *  uses ({@code prior.isEmpty()} on a versioned write). */
     public static void mark(ArtifactStore store, String hash) throws IOException {
+        mark(store, hash, ArtifactDescriptor.at(null, null));
+    }
+
+    /**
+     * {@link #mark}, with the event's subject carrying what the caller knows of the held artifact - its ecosystem,
+     * coordinate, version and served path - so an observer that keeps a per-path view (a stored listing) finds the
+     * entry to retract without a scan. The hash is set on the subject here; a caller that knows nothing else passes
+     * {@code ArtifactDescriptor.at(null, null)}, which is what the two-argument form does.
+     */
+    public static void mark(ArtifactStore store, String hash, ArtifactDescriptor subject) throws IOException {
         // Atomic-create: expected == null requires the key be absent, so this returns true for exactly one racing
         // creator and false for an idempotent re-mark of an already-marked hash. Only the winner fires the event.
         if (store.writeVersioned(ROOT + hash, new byte[0], null)) {
-            Publication.notifyWithheld(ArtifactDescriptor.at(null, null).withBlob(hash, -1L), store);
+            Publication.notifyWithheld(subject.withBlob(hash, -1L), store);
         }
     }
 
@@ -81,6 +91,13 @@ public final class Withheld {
      */
     public static boolean clear(ArtifactStore store, String hash, Known.Determined<String> otherHolder)
             throws IOException {
+        return clear(store, hash, otherHolder, ArtifactDescriptor.at(null, null));
+    }
+
+    /** {@link #clear}, with the event's subject carrying what the caller knows of the released artifact - the
+     *  mirror of {@link #mark(ArtifactStore, String, ArtifactDescriptor)}. */
+    public static boolean clear(ArtifactStore store, String hash, Known.Determined<String> otherHolder,
+                                ArtifactDescriptor subject) throws IOException {
         if (otherHolder.answer().isPresent()) {
             return false;   // a byte-identical sibling coordinate still holds these bytes
         }
@@ -88,7 +105,7 @@ public final class Withheld {
             return false;
         }
         store.delete(ROOT + hash);
-        Publication.notifyWithholdCleared(ArtifactDescriptor.at(null, null).withBlob(hash, -1L), store);
+        Publication.notifyWithholdCleared(subject.withBlob(hash, -1L), store);
         return true;
     }
 

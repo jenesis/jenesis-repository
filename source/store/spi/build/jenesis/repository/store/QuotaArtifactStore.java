@@ -339,6 +339,11 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     }
 
     @Override
+    public Object identity() {
+        return delegate.identity();
+    }
+
+    @Override
     public boolean exists(String key) {
         return delegate.exists(key);
     }

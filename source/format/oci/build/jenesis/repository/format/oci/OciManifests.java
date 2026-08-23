@@ -116,9 +116,12 @@ final class OciManifests {
                             .through((hex, target) -> {
                                 if (!reference.startsWith("sha256:")) {
                                     OciFormat.linkTag(target, "oci/" + name + "/tags/" + reference, "sha256:" + hex);
+                                    // The served tag list (and through it the catalog) is written here, on the
+                                    // push, rather than enumerated and screened on every read.
+                                    new OciListings(target).refresh(name, reference);
                                 }
                             })
-                            .andThrough((hex, target) -> clearStaleHold(target, path, hex));
+                            .andThrough((hex, target) -> clearStaleHold(target, path, hex, descriptor));
                 });
         String hex = commit.hash();
         if (commit.disposition() != PublishInterceptor.Disposition.ACCEPT) {
@@ -126,7 +129,7 @@ final class OciManifests {
             // the withheld manifest would be pullable by digest. Routing through Withheld.mark (rather than a raw
             // withheld/<hex> write) joins the OCI choke point to the withhold-change feed and the one marker idiom;
             // the disposition body is dropped (marker presence is the signal, never read). No sidecar, no tag link.
-            Withheld.mark(store, hex);
+            Withheld.mark(store, hex, descriptor);
         }
         return new Ingested(commit.disposition(), hex);
     }
@@ -157,7 +160,11 @@ final class OciManifests {
      * it means re-mark. Both are the fail-closed reading of the same uncertainty, which is why neither can be a
      * default.
      */
-    private static void clearStaleHold(ArtifactStore store, String path, String hex) throws IOException {
+    private static void clearStaleHold(ArtifactStore store, String path, String hex, ArtifactDescriptor subject)
+            throws IOException {
+        if (!Withheld.is(store, hex)) {
+            return;   // nothing to clear: the common accept pays one marker read, never the review-tree scan below
+        }
         if (!new ServableNames(store).disclosable(path, ServableNames.Policy.HIDE_WITHHELD)) {
             return;
         }
@@ -172,7 +179,7 @@ final class OciManifests {
             }
             case Known.Determined<String> determined -> otherAlias = determined;
         }
-        if (Withheld.clear(store, hex, otherAlias)) {
+        if (Withheld.clear(store, hex, otherAlias, subject)) {
             // The guard above is a read-then-clear: a concurrent enforce sweep (KEV/license/reachability) that
             // links a /quarantine pointer for this hash AFTER the guard read but before this clear would leave
             // that hold's still-live claim with its content-addressed marker gone - and the OCI serve gate keys
@@ -199,7 +206,7 @@ final class OciManifests {
             // have the same safe answer, which is the mirror image of the arm above.
             if (!new ServableNames(store).disclosable(path, ServableNames.Policy.HIDE_WITHHELD)
                     || !(new Publication(store).quarantineAlias(hex, Set.of()) instanceof Known.Absent<String>)) {
-                Withheld.mark(store, hex);
+                Withheld.mark(store, hex, subject);
             }
         }
     }

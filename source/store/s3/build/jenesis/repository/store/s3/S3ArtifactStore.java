@@ -74,6 +74,11 @@ public final class S3ArtifactStore implements ArtifactStore {
     }
 
     @Override
+    public Object identity() {
+        return "s3:" + bucket + "/" + keyPrefix;
+    }
+
+    @Override
     public Optional<URI> presign(String key, Duration ttl) {
         // No presigner configured (the two-arg constructor, or a store built without one): degrade to streaming.
         if (presigner == null) {

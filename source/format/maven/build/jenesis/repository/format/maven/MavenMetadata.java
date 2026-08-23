@@ -2,6 +2,7 @@ package build.jenesis.repository.format.maven;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.BoundedChildren;
@@ -71,6 +72,55 @@ public final class MavenMetadata {
      * when the document was authored here (a reconciled or derived document); an unchanged pass-through returns empty
      * so the caller serves the publisher's own stored checksum byte-for-byte.
      */
+    /**
+     * The bytes for a metadata request under the opt-in {@link #COMPUTE_SETTING}, from the coordinate's stored
+     * listing ({@link MavenMetadataListing}) - the document every upload maintains, materialised from
+     * {@link #computed} the first time a coordinate is read. A checksum is served from its derived twin when the
+     * listing authored the document, else empty so the caller serves the publisher's own stored checksum.
+     */
+    public Optional<byte[]> served(String requestPath) throws IOException {
+        if (!isMetadataRequest(requestPath)) {
+            return Optional.empty();
+        }
+        boolean checksum = requestPath.endsWith(".sha1") || requestPath.endsWith(".md5");
+        String documentPath = checksum ? requestPath.substring(0, requestPath.lastIndexOf('.')) : requestPath;
+        String coordinatePath = coordinatePath(documentPath);
+        MavenMetadataListing listing = new MavenMetadataListing(store);
+        Optional<StoredListing.Document> document = StoredListing.read(store, listing.spec(coordinatePath));
+        if (document.isEmpty() || document.get().body().length == 0) {
+            return Optional.empty();
+        }
+        if (!checksum) {
+            return Optional.of(document.get().body());
+        }
+        Optional<byte[]> stored = storedBytes(documentPath);
+        if (stored.isPresent() && Arrays.equals(stored.get(), document.get().body())) {
+            return Optional.empty();   // the publisher's own document, byte for byte: its own checksum stands
+        }
+        return Optional.of(hex(requestPath.endsWith(".sha1") ? "SHA-1" : "MD5", document.get().body())
+                .getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** A Maven path was uploaded under the computation flag: a metadata document resets its coordinate's listing, a
+     *  version's artifact adds its version. */
+    public void uploaded(String requestPath) throws IOException {
+        if (!requestPath.startsWith("/maven/")) {
+            return;
+        }
+        MavenMetadataListing listing = new MavenMetadataListing(store);
+        if (requestPath.endsWith("/maven-metadata.xml")) {
+            listing.uploaded(coordinatePath(requestPath));
+            return;
+        }
+        String body = requestPath.substring("/maven/".length());
+        int file = body.lastIndexOf('/');
+        int version = file < 0 ? -1 : body.lastIndexOf('/', file - 1);
+        if (version > 0 && !isMetadataRequest(requestPath) && !body.endsWith(".sha1") && !body.endsWith(".md5")
+                && !body.endsWith(".sha256") && !body.endsWith(".sha512") && !body.endsWith(".asc")) {
+            listing.refresh(body.substring(0, version), body.substring(version + 1, file));
+        }
+    }
+
     public Optional<byte[]> computed(String requestPath) throws IOException {
         if (!isMetadataRequest(requestPath)) {
             return Optional.empty();
@@ -248,7 +298,7 @@ public final class MavenMetadata {
      *  when {@code value} is null so no held name survives. A document that does not carry the element is returned
      *  unchanged - a name cannot leak through a field the publisher never wrote. Only the first occurrence is rewritten;
      *  {@code <latest>}/{@code <release>} are single-valued in a well-formed {@code maven-metadata.xml}. */
-    private static String rederiveElement(String xml, String name, String value) {
+    static String rederiveElement(String xml, String name, String value) {
         String openTag = "<" + name + ">";
         String closeTag = "</" + name + ">";
         int open = xml.indexOf(openTag);
@@ -276,7 +326,7 @@ public final class MavenMetadata {
      *  same form a version folder name off {@code store.list} takes (so it screens through the same seam), or null when
      *  the element is absent or self-closed. Only the first occurrence is read; {@code <latest>}/{@code <release>} are
      *  single-valued in a well-formed {@code maven-metadata.xml}. */
-    private static String element(String xml, String name) {
+    static String element(String xml, String name) {
         String openTag = "<" + name + ">";
         int open = xml.indexOf(openTag);
         if (open < 0) {
@@ -291,7 +341,7 @@ public final class MavenMetadata {
 
     /** Escape a text node for the hand-built reconcile document - the character-data escapes {@code XMLStreamWriter
      *  .writeCharacters} applies on the derivation path, so both paths treat a version folder name identically. */
-    private static String xmlText(String text) {
+    static String xmlText(String text) {
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
@@ -311,7 +361,7 @@ public final class MavenMetadata {
 
     /** The {@code group:artifact} coordinate a {@code group/path/artifact} folder names - what {@code describe}
      *  reports, and therefore the coordinate an operator marks through the API. */
-    private static String mavenCoordinate(String coordinatePath) {
+    static String mavenCoordinate(String coordinatePath) {
         int slash = coordinatePath.lastIndexOf('/');
         return slash < 0
                 ? coordinatePath
@@ -320,7 +370,7 @@ public final class MavenMetadata {
 
     /** The {@code <version>} texts a {@code <versions>} block already lists, in document order, decoded to their raw
      *  form so they line up with the folder names {@link #versions} returns. */
-    private static List<String> listedVersions(String inner) {
+    static List<String> listedVersions(String inner) {
         List<String> listed = new ArrayList<>();
         int cursor = 0;
         while (true) {
@@ -339,7 +389,7 @@ public final class MavenMetadata {
 
     /** The whitespace indentation of the line the element at {@code index} sits on, or empty when it does not start a
      *  line (so a reconciled block is indented consistently with the document). */
-    private static String indentBefore(String xml, int index) {
+    static String indentBefore(String xml, int index) {
         int lineStart = xml.lastIndexOf('\n', index) + 1;
         String indent = xml.substring(lineStart, index);
         return indent.isBlank() ? indent : "";
@@ -421,7 +471,7 @@ public final class MavenMetadata {
         return versions;
     }
 
-    private static byte[] metadata(String groupId, String artifactId, List<String> versions) {
+    static byte[] metadata(String groupId, String artifactId, List<String> versions) {
         String release = null;
         for (String version : versions) {
             if (!version.endsWith("-SNAPSHOT")) {
@@ -461,7 +511,7 @@ public final class MavenMetadata {
         writer.writeEndElement();
     }
 
-    private static String hex(String algorithm, byte[] content) {
+    static String hex(String algorithm, byte[] content) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance(algorithm).digest(content));
         } catch (NoSuchAlgorithmException e) {

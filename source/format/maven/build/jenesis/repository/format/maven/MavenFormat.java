@@ -171,6 +171,11 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             // Screening rides the ingress edge now (EPIC 26): this branch only lays the body out and responds 201 -
             // the body reaching here has already been screened to ACCEPT, so verdicts are no longer the format's call.
             layout(store, path, exchange.requestStream());
+            if (metadataCompute(exchange)) {
+                // The computed maven-metadata.xml is a stored listing the upload maintains, not a read-time
+                // reconciliation: a version's artifact adds its version, a metadata upload resets the document.
+                new MavenMetadata(store).uploaded(path);
+            }
             exchange.respond(201);
             return;
         }
@@ -179,7 +184,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         // derived for a coordinate no client uploaded); a checksum is served from the authored bytes. Empty means the
         // default verbatim serve stands.
         if (MavenMetadata.isMetadataRequest(path) && metadataCompute(exchange)) {
-            Optional<byte[]> computed = new MavenMetadata(store).computed(path);
+            Optional<byte[]> computed = new MavenMetadata(store).served(path);
             if (computed.isPresent()) {
                 // A HEAD answers from the computed document's length (Content-Length only, no body), the way OCI/Raw
                 // answer a HEAD from metadata instead of writing the whole document out.

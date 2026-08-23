@@ -1,7 +1,9 @@
 package build.jenesis.repository.format.testkit;
 
 import module java.base;
+import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.Withheld;
 
 /**
@@ -35,12 +37,16 @@ public final class ContractHold {
     /** Hold the request path: from now on the interceptor chain answers {@code withheld} for it, so the path serves
      *  {@code 404} and leaves every enumeration screened through {@code ServableNames}. Idempotent. */
     public static void mark(ArtifactStore store, String requestPath) throws IOException {
-        store.writeVersioned(key(requestPath), new byte[0], null);
+        if (store.writeVersioned(key(requestPath), new byte[0], null)) {
+            // A hold announces itself the way every product hold does, so a stored listing retracts the path.
+            Publication.notifyWithheld(ArtifactDescriptor.at(null, requestPath), store);
+        }
     }
 
     /** Lift the hold. Idempotent. */
     public static void clear(ArtifactStore store, String requestPath) throws IOException {
         store.delete(key(requestPath));
+        Publication.notifyWithholdCleared(ArtifactDescriptor.at(null, requestPath), store);
     }
 
     /** Whether this request path is held - the read a {@code PublishInterceptor#withheld} delegates to. */

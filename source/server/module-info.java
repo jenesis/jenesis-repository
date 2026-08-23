@@ -165,6 +165,7 @@ open module build.jenesis.repository.server {
     requires spring.security.web;
     requires spring.boot.starter.security;
     exports build.jenesis.repository.server;
+    uses build.jenesis.repository.store.PublicationObserver;
     uses build.jenesis.repository.format.RepositoryFormat;
     uses build.jenesis.repository.importer.ImportSourceProvider;
     provides build.jenesis.repository.posture.SafetyAdvisor

@@ -54,7 +54,8 @@ class PublicationHookCensusTest {
     /** Every fixture the kit registers - one per role, and one per delivery class the seam supports. */
     private static final List<PublicationHookFixture> FIXTURES = List.of(
             new IndexObserverFixture(), new OutboxObserverFixture(), new RecordingScreenFixture(),
-            new WithholdingScreenFixture(), new AuditingScreenFixture(), new OverrideHookFixture());
+            new WithholdingScreenFixture(), new AuditingScreenFixture(), new OverrideHookFixture(),
+            new MavenMetadataObserverFixture(), new OciListingObserverFixture(), new RawListingObserverFixture());
 
     /** No hook in this graph is exempt. The argument stays wired so an exemption is a visible, reason-bearing edit
      *  rather than a new mechanism. */
@@ -138,17 +139,16 @@ class PublicationHookCensusTest {
     }
 
     @Test
-    void the_shipped_hook_inventory_is_still_empty() throws IOException {
-        // The static leg over source/, alone. Today it is empty, and that emptiness is the SPI's own claim: "the free
-        // product ships no interceptor at all, so the shipped chain is empty". When it stops being empty this fails,
-        // and the fix is to add the new hook's fixture to FIXTURES (and its module to this module-info), not to relax
-        // the assertion - a shipped hook with no fail-closed or crash-window fixture is exactly the gap this kit
-        // exists to close.
+    void every_shipped_hook_has_a_fixture() throws IOException {
+        // The shipped inventory: the three stored-listing observers of the free formats (Maven's computed
+        // maven-metadata.xml, the OCI tag lists and catalog, the raw directory pages). A source module that provides a
+        // further PublicationObserver must bring a PublicationHookFixture - an Observer one with its delivery class
+        // and repair leg, or an Interceptor one with its verdicts and the keys its verdict reads - require its module
+        // here, and join FIXTURES.
         assertThat(shipped()).extracting(Provider::implementation)
-                .as("a source module now provides a PublicationObserver. Give it a PublicationHookFixture - an "
-                        + "Observer one with its delivery class and repair leg, or an Interceptor one with its "
-                        + "verdicts and the keys its verdict reads - require its module here, and add it to FIXTURES.")
-                .isEmpty();
+                .as("every shipped hook is keyed to a fixture")
+                .allSatisfy(implementation -> assertThat(FIXTURES).extracting(PublicationHookFixture::providerClass)
+                        .contains(implementation));
     }
 
     // --- the role split, derived three ways --------------------------------------------------------------------
@@ -334,23 +334,49 @@ class PublicationHookCensusTest {
      * mutation out of reach - the honest edge of the leg's per-fixture coverage, and a shorter list than it looks
      * because the three interceptor archetypes deliberately divide the clauses between them.
      */
-    private static final Map<String, String> NOT_THIS_HOOKS_TO_FALSIFY = Map.of(
-            "kit-recording-screen / A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
-            "this screen votes at publish time and has no read side, so the check drives the kit's own withholding "
+    /** Why the stored-listing observers of the shipped formats are not falsified on the recording clauses. */
+    private static final String LISTING_HOOK = "a stored-listing observer records nothing on a publish - the "
+            + "format's own publish writes the listing - and under this kit, whose 'kit' artifacts belong to no "
+            + "format, it writes nothing on any leg; the clauses about what it records are proven by the format "
+            + "contract's held-version and revalidation legs over the format's own paths (FormatContract), where a "
+            + "listing that failed to retract or to converge fails visibly.";
+
+    private static final Map<String, String> NOT_THIS_HOOKS_TO_FALSIFY = Map.ofEntries(
+            Map.entry("kit-recording-screen / A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
+                    "this screen votes at publish time and has no read side, so the check drives the kit's own withholding "
                     + "probe and the fixture's screen is a bystander in the retraction. WithholdingScreen is the "
-                    + "archetype that owns this clause and is falsified on it.",
-            "kit-auditing-screen / A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
-            "the same, and more so: this screen renders no verdict of its own at all.",
-            "kit-auditing-screen / A_SCREEN_DOES_NOT_CATCH_ITS_OWN_STORE_FAILURE_INTO_AN_ACCEPT",
-            "it declares no verdict-bearing read, so there is no read to fault and the check asserts the shape "
+                    + "archetype that owns this clause and is falsified on it."),
+            Map.entry("kit-auditing-screen / A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
+                    "the same, and more so: this screen renders no verdict of its own at all."),
+            Map.entry("kit-auditing-screen / A_SCREEN_DOES_NOT_CATCH_ITS_OWN_STORE_FAILURE_INTO_AN_ACCEPT",
+                    "it declares no verdict-bearing read, so there is no read to fault and the check asserts the shape "
                     + "(no read implies no non-ACCEPT verdict) rather than a behaviour. RecordingScreen and "
-                    + "WithholdingScreen both declare reads and are falsified on this clause.",
-            "kit-withholding-screen / ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS",
-            "it can reach exactly one verdict, so per-call state in a field would answer the same thing whatever it "
+                    + "WithholdingScreen both declare reads and are falsified on this clause."),
+            Map.entry("kit-withholding-screen / ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS",
+                    "it can reach exactly one verdict, so per-call state in a field would answer the same thing whatever it "
                     + "remembered - there is nothing for a concurrent publish to be confused with. RecordingScreen "
-                    + "reaches all three and is falsified on it.",
-            "kit-auditing-screen / ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS",
-            "the same one-verdict shape.");
+                    + "reaches all three and is falsified on it."),
+            Map.entry("kit-auditing-screen / ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS",
+                    "the same one-verdict shape."),
+            Map.entry("maven-metadata-listing / A_DUPLICATE_DELIVERY_CONVERGES",
+                    LISTING_HOOK),
+            Map.entry("maven-metadata-listing / A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED",
+                    LISTING_HOOK),
+            Map.entry("maven-metadata-listing / THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE",
+                    LISTING_HOOK),
+            Map.entry("oci-listing / A_DUPLICATE_DELIVERY_CONVERGES",
+                    LISTING_HOOK),
+            Map.entry("oci-listing / A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED",
+                    LISTING_HOOK),
+            Map.entry("oci-listing / THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE",
+                    LISTING_HOOK),
+            Map.entry("raw-listing / A_DUPLICATE_DELIVERY_CONVERGES",
+                    LISTING_HOOK),
+            Map.entry("raw-listing / A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED",
+                    LISTING_HOOK),
+            Map.entry("raw-listing / THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE",
+                    LISTING_HOOK));
+
 
     @Test
     void every_property_a_hook_owns_declares_the_mutation_that_must_break_it() {
@@ -793,6 +819,13 @@ class PublicationHookCensusTest {
     private static Role roleInSource(String providerClass) throws IOException {
         Path source = repositoryRoot().resolve("test").resolve("publication")
                 .resolve(providerClass.replace('.', '/') + ".java");
+        if (!Files.isRegularFile(source)) {
+            // A shipped hook's source sits in its module under source/; the kit's own archetypes under this module.
+            try (Stream<Path> candidates = Files.walk(repositoryRoot().resolve("source"))) {
+                source = candidates.filter(candidate -> candidate.endsWith(
+                        Path.of(providerClass.replace('.', '/') + ".java"))).findFirst().orElse(source);
+            }
+        }
         if (!Files.isRegularFile(source)) {
             throw new AssertionError(providerClass + " has no source file under test/publication, so keying it to a "
                     + "role would silently key it to nothing: " + source);

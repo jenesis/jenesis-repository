@@ -61,4 +61,10 @@ public record ArtifactDescriptor(String ecosystem,
     public ArtifactDescriptor withBlob(String hash, long size) {
         return new ArtifactDescriptor(ecosystem, coordinate, version, path, contentType, prerelease, hash, size);
     }
+
+    /** This descriptor at another served path - the same coordinate and version, naming one more alias of it. */
+    public ArtifactDescriptor withPath(String path) {
+        return new ArtifactDescriptor(ecosystem, coordinate, version, path, contentType, prerelease, hash, size,
+                replaced);
+    }
 }

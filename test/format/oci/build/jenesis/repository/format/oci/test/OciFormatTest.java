@@ -3,6 +3,8 @@ package build.jenesis.repository.format.oci.test;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.oci.OciFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.ArtifactDescriptor;
+import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import module org.junit.jupiter.api;
 
@@ -395,11 +397,13 @@ class OciFormatTest {
         assertThat(post.status()).isEqualTo(201);
     }
 
-    /** Mark a manifest's stored blob withheld through the same {@code withheld/<hash>} marker the blob and manifest
-     *  serve paths screen on, so a pull of it 404s - the setup a held-image catalog/tags/list disclosure test asserts
-     *  against. */
-    private void withhold(byte[] manifest) throws IOException {
-        store.write("withheld/" + sha256(manifest), new ByteArrayInputStream(new byte[0]));
+    /** Mark a manifest's stored blob withheld through the product's own hold primitive - the {@code withheld/<hash>}
+     *  marker the blob and manifest serve paths screen on, placed the way a hold writer places it, so the stored tag
+     *  list and catalog retract the tag on the hold's own write - and a pull of it 404s: the setup a held-image
+     *  catalog/tags/list disclosure test asserts against. */
+    private void withhold(String name, String tag, byte[] manifest) throws IOException {
+        Withheld.mark(store, sha256(manifest),
+                new ArtifactDescriptor("oci", name, tag, "/v2/" + name + "/manifests/" + tag, null, false, null, -1L));
     }
 
     @Test
@@ -410,7 +414,7 @@ class OciFormatTest {
         push("held", "1.0", held);
 
         // The held image's only manifest is withheld: a pull by tag already 404s (the serve path's withheld screen).
-        withhold(held);
+        withhold("held", "1.0", held);
         FakeExchange pull = new FakeExchange("GET", "/v2/held/manifests/1.0");
         format.handle(pull, store);
         assertThat(pull.status()).as("a withheld manifest 404s on a pull").isEqualTo(404);
@@ -441,7 +445,7 @@ class OciFormatTest {
         push("app", "hidden", hidden);
 
         // One of the image's two tags is withheld; the image keeps a surviving tag, so it stays catalogued.
-        withhold(hidden);
+        withhold("app", "hidden", hidden);
 
         FakeExchange catalog = new FakeExchange("GET", "/v2/_catalog");
         format.handle(catalog, store);
@@ -517,7 +521,7 @@ class OciFormatTest {
         for (String tag : List.of("v1", "v2", "v3", "v4", "v5")) {
             push("img", tag, ("{\"t\":\"" + tag + "\"}").getBytes(StandardCharsets.UTF_8));
         }
-        withhold("{\"t\":\"v3\"}".getBytes(StandardCharsets.UTF_8));   // v3's manifest is held - never listed
+        withhold("img", "v3", "{\"t\":\"v3\"}".getBytes(StandardCharsets.UTF_8));   // v3's manifest is held
 
         // First page of two servable tags: v1, v2. A Link carries the next n/last.
         FakeExchange first = new FakeExchange("GET", "/v2/img/tags/list", new byte[0], Map.of("n", "2"), Map.of());
@@ -559,7 +563,7 @@ class OciFormatTest {
         push("beta", "1.0", "{\"i\":\"beta\"}".getBytes(StandardCharsets.UTF_8));
         push("gamma", "1.0", "{\"i\":\"gamma\"}".getBytes(StandardCharsets.UTF_8));
         push("delta", "1.0", "{\"i\":\"delta\"}".getBytes(StandardCharsets.UTF_8));
-        withhold("{\"i\":\"gamma\"}".getBytes(StandardCharsets.UTF_8));   // gamma has no surviving tag - never catalogued
+        withhold("gamma", "1.0", "{\"i\":\"gamma\"}".getBytes(StandardCharsets.UTF_8));   // no surviving tag
 
         // First bounded page of two: alpha, beta (lexicographic). A Link carries the next n/last.
         FakeExchange first = new FakeExchange("GET", "/v2/_catalog", new byte[0], Map.of("n", "2"), Map.of());

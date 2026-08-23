@@ -4,6 +4,8 @@ import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.RebuildPass;
 import build.jenesis.repository.walk.WalkConsumer;
@@ -42,6 +44,7 @@ public final class RebuildScheduler implements AutoCloseable {
     private final Duration interval;
     private final Optional<ArtifactWalk> walk;
     private final List<WalkConsumer> consumers;
+    private final List<StoredListing.Rebuilder> rebuilders;
     private final ScheduledExecutorService scheduler;
     private final AtomicBoolean running = new AtomicBoolean();
     private volatile Instant lastRun;
@@ -50,16 +53,23 @@ public final class RebuildScheduler implements AutoCloseable {
     private volatile boolean lastFailed;
 
     public RebuildScheduler(ArtifactStore store, UnaryOperator<String> config) {
-        this(store, config, WalkProvider.resolve(config), WalkConsumer.discovered());
+        this(store, config, WalkProvider.resolve(config), WalkConsumer.discovered(), rebuilders());
     }
 
-    /** The explicit seam: the walk and the consumers handed in rather than discovered. */
+    /** The explicit seam: the walk and the consumers handed in rather than discovered, and no listing repair. */
     public RebuildScheduler(ArtifactStore store, UnaryOperator<String> config, Optional<ArtifactWalk> walk,
                             List<WalkConsumer> consumers) {
+        this(store, config, walk, consumers, List.of());
+    }
+
+    /** The explicit seam with the listing repairers handed in as well. */
+    public RebuildScheduler(ArtifactStore store, UnaryOperator<String> config, Optional<ArtifactWalk> walk,
+                            List<WalkConsumer> consumers, List<StoredListing.Rebuilder> rebuilders) {
         this.store = Objects.requireNonNull(store, "store");
         this.interval = interval(config.apply(INTERVAL));
         this.walk = Objects.requireNonNull(walk, "walk");
         this.consumers = List.copyOf(consumers);
+        this.rebuilders = List.copyOf(rebuilders);
         this.scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "jenesis-rebuild");
             thread.setDaemon(true);
@@ -67,9 +77,21 @@ public final class RebuildScheduler implements AutoCloseable {
         });
     }
 
-    /** Whether this driver schedules anything: a cadence, a walk and at least one consumer. */
+    /** Whether this driver schedules anything: a cadence, and a walk with at least one consumer or a listing to
+     *  repair. */
     public boolean active() {
-        return !interval.isZero() && walk.isPresent() && !consumers.isEmpty();
+        return !interval.isZero() && ((walk.isPresent() && !consumers.isEmpty()) || !rebuilders.isEmpty());
+    }
+
+    /** The stored-listing repairers among the discovered observers - every format that maintains a listing. */
+    public static List<StoredListing.Rebuilder> rebuilders() {
+        List<StoredListing.Rebuilder> discovered = new ArrayList<>();
+        for (PublicationObserver observer : ServiceLoader.load(PublicationObserver.class)) {
+            if (observer instanceof StoredListing.Rebuilder rebuilder) {
+                discovered.add(rebuilder);
+            }
+        }
+        return List.copyOf(discovered);
     }
 
     public Duration interval() {
@@ -83,16 +105,12 @@ public final class RebuildScheduler implements AutoCloseable {
                     + "driven by an embedder or an artifact is republished", INTERVAL);
             return;
         }
-        if (walk.isEmpty()) {
-            LOGGER.info("rebuild pass: no artifact walk is installed, nothing scheduled");
+        if ((walk.isEmpty() || consumers.isEmpty()) && rebuilders.isEmpty()) {
+            LOGGER.info("rebuild pass: no artifact walk with a consumer and no listing to repair, nothing scheduled");
             return;
         }
-        if (consumers.isEmpty()) {
-            LOGGER.info("rebuild pass: no walk consumer is discovered, nothing scheduled");
-            return;
-        }
-        LOGGER.info("rebuild pass: every {} over {} consumer(s), first in {}", interval,
-                consumers.size(), INITIAL_DELAY);
+        LOGGER.info("rebuild pass: every {} over {} consumer(s) and {} listing repairer(s), first in {}", interval,
+                consumers.size(), rebuilders.size(), INITIAL_DELAY);
         scheduler.scheduleAtFixedRate(this::runQuietly, INITIAL_DELAY.toMillis(), interval.toMillis(),
                 TimeUnit.MILLISECONDS);
     }
@@ -100,14 +118,18 @@ public final class RebuildScheduler implements AutoCloseable {
     /** Drive one pass now and answer it as this worker last saw it - the test seam and what the cadence runs;
      *  empty when the driver has nothing to run or a pass is already running. */
     public Optional<WalkPass> runNow() throws IOException {
-        if (walk.isEmpty() || consumers.isEmpty() || !running.compareAndSet(false, true)) {
+        if (((walk.isEmpty() || consumers.isEmpty()) && rebuilders.isEmpty()) || !running.compareAndSet(false, true)) {
             return Optional.empty();
         }
         Instant started = Instant.now();
         try {
-            Optional<WalkPass> pass = RebuildPass.run(walk.get(), store, roots(), consumers);
+            Optional<WalkPass> pass = walk.isEmpty() || consumers.isEmpty() ? Optional.empty()
+                    : RebuildPass.run(walk.get(), store, roots(), consumers);
+            // The stored listings are repaired after the walk: every document regenerated through the format that
+            // owns it, so a drift an incremental write could have left is corrected on this cadence, never by a read.
+            int rebuilt = rebuilders.isEmpty() ? 0 : StoredListing.rebuildAll(store, rebuilders);
             lastOutcome = pass.map(p -> p.complete() ? "complete" : "joined, other workers still active")
-                    .orElse("nothing to run");
+                    .orElse("nothing to walk") + (rebuilt > 0 ? ", " + rebuilt + " listing(s) regenerated" : "");
             lastFailed = false;
             return pass;
         } catch (IOException | RuntimeException failure) {
