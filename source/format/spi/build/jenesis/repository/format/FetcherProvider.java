@@ -1,5 +1,6 @@
 package build.jenesis.repository.format;
 
+import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Providers;
 

@@ -1,6 +1,6 @@
 /**
  * Focused unit tests for the format SPI's shared helpers: the SSRF private-range classifier
- * {@link build.jenesis.repository.format.PrivateHosts} (its hand-rolled CGNAT and IPv6 unique-local branches the JDK
+ * {@link build.jenesis.repository.net.PrivateHosts} (its hand-rolled CGNAT and IPv6 unique-local branches the JDK
  * does not recognise) and the {@link build.jenesis.repository.format.FetcherProvider#resolve} optional-unique SPI seam
  * (explicit selection, ambiguity when more than one fetcher is enabled, a loud failure when the selection names a
  * fetcher nothing answers to, and {@code NONE} only when nothing is enabled), driven through
