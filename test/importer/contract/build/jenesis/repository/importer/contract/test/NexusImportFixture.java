@@ -3,6 +3,7 @@ package build.jenesis.repository.importer.contract.test;
 import module java.base;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.importer.ImportRequest;
+import build.jenesis.repository.importer.testkit.ImportContract;
 import build.jenesis.repository.importer.testkit.ImportFixture;
 import build.jenesis.repository.importer.testkit.ScriptedUpstream;
 
@@ -90,4 +91,13 @@ final class NexusImportFixture implements ImportFixture {
         return "{\"items\":" + items + ",\"continuationToken\":"
                 + (continuation == null ? "null" : "\"" + continuation + "\"") + "}";
     }
+    @Override
+    public Map<ImportContract.Property, String> unsupported() {
+        return Map.of(ImportContract.Property.CARRIES_EVERY_DERIVABLE_SIBLING,
+                "the Nexus components API carries every asset of a component explicitly, each with its own downloadUrl, so this "
+                        + "walk reports what the incumbent listed and composes no path at all. There is nothing to "
+                        + "derive and so nothing to derive incompletely: a file Nexus does not list is a file "
+                        + "Nexus does not have. The maven leg proves the property where paths really are composed");
+    }
+
 }

@@ -160,6 +160,36 @@ public interface FormatFixture {
         return Optional.empty();
     }
 
+    /**
+     * A pull-through leg on a path the client resolves against the <em>absence</em> of - one where a {@code 404} is
+     * not "we do not have it" but a fact the client acts on and reports success over. Empty when this format has no
+     * such path, which is the common case: for a jar, a wheel or a layer, a miss is a loud answer and a build fails.
+     *
+     * <p>Supplying it puts the format's refusals on the record. A repository that detects a problem on such a path and
+     * answers a miss has not withheld anything - it has substituted a different, silently successful outcome, which is
+     * the &sect;9 failure the guard itself produced. The kit therefore drives the same path twice, and the fixture
+     * supplies both fetchers, because either half alone can be satisfied by a broken implementation: an upstream that
+     * legitimately has nothing must still reach the client as a miss, and an upstream whose body fails its advertised
+     * digest must not.
+     *
+     * @param body the generated body the {@code tampered} fetcher serves under a digest that disagrees with it
+     */
+    default Optional<Elective> elective(GeneratedBody body) throws IOException {
+        return Optional.empty();
+    }
+
+    /** One path whose absence is an answer, with the two upstreams that must not look alike to the client: {@code
+     *  absent} genuinely has nothing, {@code tampered} serves bytes that fail the digest it advertises for them. */
+    record Elective(String requestPath, URI root, ProxyFormat.Fetcher absent, ProxyFormat.Fetcher tampered) {
+
+        public Elective {
+            Objects.requireNonNull(requestPath, "requestPath");
+            Objects.requireNonNull(root, "root");
+            Objects.requireNonNull(absent, "absent");
+            Objects.requireNonNull(tampered, "tampered");
+        }
+    }
+
     /** One pull-through leg: the request path that misses locally, the upstream root, and the fetcher standing in for
      *  it. */
     record Upstream(String requestPath, URI root, ProxyFormat.Fetcher fetcher) {

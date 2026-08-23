@@ -2,6 +2,7 @@ package build.jenesis.repository.importer.maven.test;
 
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.importer.maven.MavenSource;
+import build.jenesis.repository.importer.testkit.MavenIndexChunk;
 import module org.junit.jupiter.api;
 
 import module java.base;
@@ -230,7 +231,7 @@ class MavenSourceTest {
         Map<String, ProxyFormat.Fetched> responses = new HashMap<>();
         responses.put(root, status(403));
         responses.put(root + ".index/nexus-maven-repository-index.properties", ok("nexus.index.id=repo\n"));
-        responses.put(root + ".index/nexus-maven-repository-index.gz", new ProxyFormat.Fetched(200, index(List.of(
+        responses.put(root + ".index/nexus-maven-repository-index.gz", new ProxyFormat.Fetched(200, MavenIndexChunk.of(List.of(
                 record("u", "org.acme|lib|1.0|NA|NA", "i", "jar|123|456|0|0|0|jar"),
                 record("u", "org.acme|lib|1.0|sources|jar", "i", "jar|123|456|0|0|0|jar"),
                 record("u", "org.acme|gone|1.0|NA|NA", "del", "1"),
@@ -248,6 +249,8 @@ class MavenSourceTest {
         String pom = "<project><packaging>bundle</packaging></project>";
         responses.put(root + "org/acme/lib/1.1/lib-1.1.pom", ok(pom));
         responses.put(root + "org/acme/lib/1.2/lib-1.2.pom", ok("<project><packaging>pom</packaging></project>"));
+        responses.put(root + "org/acme/lib/1.1/lib-1.1.module", status(404));
+        responses.put(root + "org/acme/lib/1.2/lib-1.2.module", status(404));
         FakeFetcher fetcher = new FakeFetcher(responses);
 
         List<String> paths = new ArrayList<>(), cursors = new ArrayList<>();
@@ -285,7 +288,7 @@ class MavenSourceTest {
         Map<String, ProxyFormat.Fetched> responses = new HashMap<>();
         responses.put(root, status(403));
         responses.put(root + ".index/nexus-maven-repository-index.properties", ok("nexus.index.id=repo\n"));
-        responses.put(root + ".index/nexus-maven-repository-index.gz", new ProxyFormat.Fetched(200, index(List.of(
+        responses.put(root + ".index/nexus-maven-repository-index.gz", new ProxyFormat.Fetched(200, MavenIndexChunk.of(List.of(
                 record("u", "org.a|lib|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"),
                 record("u", "org.b|lib|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"),
                 record("u", "org.c|lib|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"))), Map.of()));
@@ -296,6 +299,7 @@ class MavenSourceTest {
         for (String group : List.of("a", "b", "c")) {
             responses.put(root + "org/" + group + "/lib/maven-metadata.xml", ok(metadata));
             responses.put(root + "org/" + group + "/lib/2.0/lib-2.0.pom", ok("<project><packaging>pom</packaging></project>"));
+            responses.put(root + "org/" + group + "/lib/2.0/lib-2.0.module", status(404));
         }
         FakeFetcher fetcher = new FakeFetcher(responses);
 
@@ -328,7 +332,7 @@ class MavenSourceTest {
         Map<String, ProxyFormat.Fetched> responses = new HashMap<>();
         responses.put(root, status(403));
         responses.put(root + ".index/nexus-maven-repository-index.properties", ok("nexus.index.id=repo\n"));
-        responses.put(root + ".index/nexus-maven-repository-index.gz", new ProxyFormat.Fetched(200, index(records), Map.of()));
+        responses.put(root + ".index/nexus-maven-repository-index.gz", new ProxyFormat.Fetched(200, MavenIndexChunk.of(records), Map.of()));
         responses.put(root + "g/a/maven-metadata.xml", status(404));
 
         List<String> first = new ArrayList<>(), firstCursors = new ArrayList<>();
@@ -358,7 +362,7 @@ class MavenSourceTest {
         Map<String, ProxyFormat.Fetched> responses = new HashMap<>();
         responses.put(root, status(403));
         responses.put(root + ".index/nexus-maven-repository-index.properties", ok("nexus.index.id=repo\n"));
-        responses.put(root + ".index/nexus-maven-repository-index.gz", new ProxyFormat.Fetched(200, index(List.of(
+        responses.put(root + ".index/nexus-maven-repository-index.gz", new ProxyFormat.Fetched(200, MavenIndexChunk.of(List.of(
                 record("u", "org.acme|lib|1.0|NA|NA", "i", "x".repeat(17 * 1024 * 1024)))), Map.of()));
         MavenSource source = new MavenSource(URI.create("https://mirror.example/repo"), ".", new FakeFetcher(responses));
 
@@ -374,7 +378,7 @@ class MavenSourceTest {
         Map<String, ProxyFormat.Fetched> responses = new HashMap<>();
         responses.put(root, status(403));
         responses.put(root + ".index/nexus-maven-repository-index.properties", ok("nexus.index.id=repo\n"));
-        responses.put(root + ".index/nexus-maven-repository-index.gz", new ProxyFormat.Fetched(200, index(List.of(
+        responses.put(root + ".index/nexus-maven-repository-index.gz", new ProxyFormat.Fetched(200, MavenIndexChunk.of(List.of(
                 record("u", "g|a|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"))), Map.of()));
         responses.put(root + "g/a/maven-metadata.xml", status(404));
 
@@ -434,15 +438,57 @@ class MavenSourceTest {
     }
 
     @Test
+    void a_refreshed_version_carries_the_module_descriptor_beside_its_pom() throws IOException {
+        // The listing-less leg composes each version's paths from the coordinate, so what it composes is all a
+        // migration gets. Omitting the Gradle Module Metadata descriptor does not leave a hole an operator finds - the
+        // coordinate resolves, differently and silently, for every Gradle consumer of it afterwards.
+        String root = "https://mirror.example/repo/";
+        Map<String, ProxyFormat.Fetched> responses = indexFallback(MavenIndexChunk.of(List.of(
+                record("u", "org.g|lib|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"))));
+        responses.put(root + "org/g/lib/maven-metadata.xml", ok("""
+                <metadata><versioning><versions>
+                  <version>1.0</version><version>2.0</version>
+                </versions></versioning></metadata>"""));
+        responses.put(root + "org/g/lib/2.0/lib-2.0.pom", ok("<project><packaging>jar</packaging></project>"));
+        responses.put(root + "org/g/lib/2.0/lib-2.0.module", ok("{\"formatVersion\":\"1.1\"}"));
+
+        assertThat(walk(responses)).as("a version derived from maven-metadata arrives whole")
+                .contains("org/g/lib/2.0/lib-2.0.pom", "org/g/lib/2.0/lib-2.0.module", "org/g/lib/2.0/lib-2.0.jar");
+    }
+
+    @Test
+    void a_descriptor_probe_the_upstream_will_not_answer_fails_the_walk() throws IOException {
+        // Only an upstream that ANSWERED a miss means "this coordinate publishes no module metadata". A 500 means the
+        // walk could not read what the upstream has, and reading that as the absence would reintroduce the silent
+        // loss above one flaky response at a time. An import is resumable and idempotent, so failing costs a retry;
+        // skipping costs a coordinate that resolves differently with nothing to say so.
+        String root = "https://mirror.example/repo/";
+        Map<String, ProxyFormat.Fetched> responses = indexFallback(MavenIndexChunk.of(List.of(
+                record("u", "org.g|lib|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"))));
+        responses.put(root + "org/g/lib/maven-metadata.xml", ok("""
+                <metadata><versioning><versions>
+                  <version>1.0</version><version>2.0</version>
+                </versions></versioning></metadata>"""));
+        responses.put(root + "org/g/lib/2.0/lib-2.0.pom", ok("<project><packaging>jar</packaging></project>"));
+        responses.put(root + "org/g/lib/2.0/lib-2.0.module", status(500));
+
+        assertThatThrownBy(() -> walk(responses))
+                .as("an unreadable descriptor probe is not the absence of a descriptor")
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("Module metadata descriptor");
+    }
+
+    @Test
     void a_refreshed_pom_without_a_packaging_element_derives_the_default_jar() throws IOException {
         String root = "https://mirror.example/repo/";
-        Map<String, ProxyFormat.Fetched> responses = indexFallback(index(List.of(
+        Map<String, ProxyFormat.Fetched> responses = indexFallback(MavenIndexChunk.of(List.of(
                 record("u", "org.p|lib|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"))));
         responses.put(root + "org/p/lib/maven-metadata.xml", ok("""
                 <metadata><versioning><versions>
                   <version>1.0</version><version>2.0</version>
                 </versions></versioning></metadata>"""));
         responses.put(root + "org/p/lib/2.0/lib-2.0.pom", ok("<project></project>"));
+        responses.put(root + "org/p/lib/2.0/lib-2.0.module", status(404));
 
         assertThat(walk(responses)).as("a pom that declares no packaging derives the default jar artifact")
                 .contains("org/p/lib/2.0/lib-2.0.pom", "org/p/lib/2.0/lib-2.0.jar");
@@ -451,13 +497,14 @@ class MavenSourceTest {
     @Test
     void an_unparseable_refreshed_pom_is_imported_but_yields_no_primary_artifact() throws IOException {
         String root = "https://mirror.example/repo/";
-        Map<String, ProxyFormat.Fetched> responses = indexFallback(index(List.of(
+        Map<String, ProxyFormat.Fetched> responses = indexFallback(MavenIndexChunk.of(List.of(
                 record("u", "org.p|lib|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"))));
         responses.put(root + "org/p/lib/maven-metadata.xml", ok("""
                 <metadata><versioning><versions>
                   <version>1.0</version><version>2.0</version>
                 </versions></versioning></metadata>"""));
         responses.put(root + "org/p/lib/2.0/lib-2.0.pom", ok("this is not a pom at all >>> {{{"));
+        responses.put(root + "org/p/lib/2.0/lib-2.0.module", status(404));
 
         List<String> paths = walk(responses);
         assertThat(paths).as("the pom itself is still imported").contains("org/p/lib/2.0/lib-2.0.pom");
@@ -468,7 +515,7 @@ class MavenSourceTest {
     @Test
     void broken_or_versionless_metadata_lists_no_versions_to_refresh() throws IOException {
         String root = "https://mirror.example/repo/";
-        Map<String, ProxyFormat.Fetched> responses = indexFallback(index(List.of(
+        Map<String, ProxyFormat.Fetched> responses = indexFallback(MavenIndexChunk.of(List.of(
                 record("u", "org.a|lib|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"),
                 record("u", "org.b|lib|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"))));
         responses.put(root + "org/a/lib/maven-metadata.xml", ok("<<< not metadata at all"));
@@ -490,7 +537,7 @@ class MavenSourceTest {
         // even tracked for a refresh), and a refreshed version that would escape the layout is dropped before its pom
         // URL is built - no store write outside the coordinate's own directory can be steered from a hostile version.
         String root = "https://mirror.example/repo/";
-        Map<String, ProxyFormat.Fetched> responses = indexFallback(index(List.of(
+        Map<String, ProxyFormat.Fetched> responses = indexFallback(MavenIndexChunk.of(List.of(
                 record("u", "org.acme|lib|1.0|NA|NA", "i", "jar|1|1|0|0|0|jar"),
                 record("u", "org.evil|hack|../../../secret|NA|NA", "i", "jar|1|1|0|0|0|jar"),
                 record("u", "org.evil|slash|1.0/beta|NA|NA", "i", "jar|1|1|0|0|0|jar"))));
@@ -503,6 +550,7 @@ class MavenSourceTest {
                   <version>1.0/beta</version>
                 </versions></versioning></metadata>"""));
         responses.put(root + "org/acme/lib/1.1/lib-1.1.pom", ok("<project><packaging>jar</packaging></project>"));
+        responses.put(root + "org/acme/lib/1.1/lib-1.1.module", status(404));
         FakeFetcher fetcher = new FakeFetcher(responses);
 
         List<String> paths = new ArrayList<>();
@@ -594,37 +642,4 @@ class MavenSourceTest {
         return record;
     }
 
-    /** The legacy index chunk format, as the reader expects it: a GZIP stream of version byte, timestamp long, then
-     *  per record an int field count and per field a flag byte, a modified-UTF-8 name, an int length and the value
-     *  bytes - each record's {@code i} field GZIP-compressed to exercise the per-field compression flag. */
-    private static byte[] index(List<Map<String, String>> records) {
-        try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            try (DataOutputStream out = new DataOutputStream(new GZIPOutputStream(bytes))) {
-                out.writeByte(1);
-                out.writeLong(1234567890L);
-                for (Map<String, String> record : records) {
-                    out.writeInt(record.size());
-                    for (Map.Entry<String, String> field : record.entrySet()) {
-                        boolean compressed = field.getKey().equals("i");
-                        byte[] value = field.getValue().getBytes(StandardCharsets.UTF_8);
-                        if (compressed) {
-                            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-                            try (GZIPOutputStream gzip = new GZIPOutputStream(buffer)) {
-                                gzip.write(value);
-                            }
-                            value = buffer.toByteArray();
-                        }
-                        out.writeByte(compressed ? 0x08 : 0);
-                        out.writeUTF(field.getKey());
-                        out.writeInt(value.length);
-                        out.write(value);
-                    }
-                }
-            }
-            return bytes.toByteArray();
-        } catch (IOException e) {
-            throw new AssertionError(e);
-        }
-    }
 }

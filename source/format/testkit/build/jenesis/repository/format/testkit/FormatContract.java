@@ -90,6 +90,10 @@ public final class FormatContract {
         /** A proxied body whose advertised upstream digest disagrees with its bytes is refused and nothing is cached,
          *  while the honest body is accepted ({@code ProxyFormat} clause 5). */
         PROXY_VERIFIES_UPSTREAM_INTEGRITY,
+        /** On a path whose absence the client resolves against, a refusal is told apart from an absence: an upstream
+         *  that genuinely has nothing still reaches the client as a miss, and a body failing its advertised digest
+         *  does not ({@code ProxyFormat} clause 5, &sect;9). */
+        PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
         /** A proxied artifact goes from the network into the content-addressed store without being materialised, and
          *  arrives byte-exact ({@code ProxyFormat} clause 3). */
         PROXY_STREAMS_UPSTREAM_BODY,
@@ -147,6 +151,9 @@ public final class FormatContract {
                 new Check(Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
                         "an upstream body that fails its advertised digest is refused and never cached",
                         FormatContract::proxyVerifiesUpstreamIntegrity),
+                new Check(Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
+                        "where absence is an answer, a refusal does not look like one",
+                        FormatContract::proxyRefusalIsNotAnAbsence),
                 new Check(Property.PROXY_STREAMS_UPSTREAM_BODY,
                         "a proxied artifact is never materialised and arrives byte-exact",
                         FormatContract::proxyStreamsUpstreamBody),
@@ -466,6 +473,57 @@ public final class FormatContract {
         // Nothing may have been cached under the requested coordinate either, or the next plain GET would serve the
         // corrupted bytes without ever consulting the upstream again.
         ContractExchange after = get(fixture, tampered.requestPath());
+        fixture.serving().handle(after, tamperedSpace);
+        equal(after.status(), 404, fixture,
+                "after a refused proxy fetch the path is still a local miss - a rejected body is never left cached");
+    }
+
+    private static void proxyRefusalIsNotAnAbsence(FormatFixture fixture, ArtifactStore store) throws Exception {
+        ProxyFormat proxy = proxying(fixture, Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE);
+        GeneratedBody body = GeneratedBody.of(ARTIFACT_BYTES);
+        FormatFixture.Elective elective = fixture.elective(body).orElseThrow(() -> failure(fixture,
+                "this fixture supplies no path whose absence the client resolves against. Either supply one, or "
+                        + "exclude " + Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE + " with a reason saying every miss "
+                        + "this format can answer is one a client reports as a failure."));
+
+        // Half one: an upstream that genuinely publishes nothing here must still reach the client as a miss. Without
+        // this leg the property is satisfied by a format that answers every request on the path with an error, which
+        // would break the overwhelmingly common case - most coordinates legitimately have no such file.
+        ArtifactStore absentSpace = store.scope("absent");
+        ContractExchange missing = get(fixture, elective.requestPath());
+        boolean answered = proxy.proxy(missing, absentSpace, elective.root(), elective.absent());
+        if (answered && missing.status() != 404 && missing.status() != 410) {
+            throw failure(fixture, "an upstream that genuinely has nothing at " + elective.requestPath()
+                    + " was answered " + missing.status() + " rather than reaching the client as a miss. Absence is a "
+                    + "legal answer on this path and the client resolves against it; turning it into an error breaks "
+                    + "every coordinate that simply does not publish the file.");
+        }
+
+        // Half two: the same path, the same client, an upstream whose body fails the digest it advertises for it. The
+        // integrity row already proves nothing is cached and nothing is served. What it cannot see is that the client
+        // is handed the *same* answer as half one - and on this path that answer is not "withheld", it is a different
+        // resolution, reported as success. A refusal the client cannot tell from an absence is not a refusal.
+        ArtifactStore tamperedSpace = store.scope("tampered");
+        body.rewind();
+        ContractExchange refused = get(fixture, elective.requestPath());
+        boolean served = proxy.proxy(refused, tamperedSpace, elective.root(), elective.tampered());
+        if (served && refused.status() >= 200 && refused.status() < 300) {
+            throw failure(fixture, "a body that fails its advertised upstream digest was served (" + refused.status()
+                    + ") on " + elective.requestPath() + ".");
+        }
+        if (!served || refused.status() == 404 || refused.status() == 410) {
+            throw failure(fixture, "a body that fails its advertised upstream digest was refused at "
+                    + elective.requestPath() + " by answering " + (served ? String.valueOf(refused.status())
+                    + ", which is" : "a local miss, which is") + " exactly what an upstream with nothing there gets. "
+                    + "The client cannot tell the two apart, so it does not learn that anything was refused: it takes "
+                    + "the miss as the fact that the file is not published, resolves by whatever rule covers that "
+                    + "case, and reports success. A detected integrity failure has become a silent wrong answer "
+                    + "(\u00a79), produced by the guard rather than in spite of it. Refuse with a status that says "
+                    + "this repository could not decide.");
+        }
+
+        // ... and, as on the integrity row, nothing may have been left behind under the requested path.
+        ContractExchange after = get(fixture, elective.requestPath());
         fixture.serving().handle(after, tamperedSpace);
         equal(after.status(), 404, fixture,
                 "after a refused proxy fetch the path is still a local miss - a rejected body is never left cached");

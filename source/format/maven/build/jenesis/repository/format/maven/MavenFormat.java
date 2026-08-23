@@ -362,10 +362,18 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         }
         Optional<ProxyFormat.Download> fetched = fetcher.download(URI.create(prefix + rest), Map.of());
         if (fetched.isEmpty()) {
-            return false;
+            return resolvedAgainstAbsence(rest)
+                    ? undecided(prefix + rest, exchange, "the upstream could not be reached")
+                    : false;
         }
         try (ProxyFormat.Download download = fetched.get()) {
             if (download.status() != 200) {
+                // An upstream 404/410 for a descriptor IS the answer that the component publishes none, so it passes
+                // through as the plain decline. Any other status is this repository failing to read what the upstream
+                // has, which is not that answer.
+                if (resolvedAgainstAbsence(rest) && download.status() != 404 && download.status() != 410) {
+                    return undecided(prefix + rest, exchange, "the upstream answered " + download.status());
+                }
                 return false;
             }
             if (isChecksum(rest)) {
@@ -397,7 +405,9 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                     LOG.warn("Refusing to cache the proxied artifact {} unverified: {}. Nothing was cached or served; "
                             + "the local 404 stands so a later pull re-hits the upstream.", prefix + rest,
                             expected.unreadable());
-                    return false;
+                    return resolvedAgainstAbsence(rest)
+                            ? undecided(prefix + rest, exchange, "its checksum sibling could not be read")
+                            : false;
                 }
                 if (expected.hex() != null && !expected.hex().equalsIgnoreCase(HexFormat.of().formatHex(sha1.digest()))) {
                     // A body that does not hash to what the upstream published for it. Refused with a line of its own:
@@ -407,7 +417,9 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                     LOG.warn("Refusing to cache the proxied artifact {}: it does not match the SHA-1 {} the upstream "
                             + "publishes for it. Nothing was cached or served; the local 404 stands.", prefix + rest,
                             expected.hex());
-                    return false;
+                    return resolvedAgainstAbsence(rest)
+                            ? undecided(prefix + rest, exchange, "it does not match the SHA-1 the upstream publishes")
+                            : false;
                 }
                 layout(store, path, hash);
             }
@@ -430,6 +442,36 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     private static boolean unanswered(String target, FormatExchange exchange, String reason) throws IOException {
         LOG.warn("Refusing to answer the Maven metadata request {} as an empty version list: {}. Nothing was served; "
                 + "the local 404 would have been read by the resolver as the upstream's own answer.", target, reason);
+        exchange.respond(502);
+        return true;
+    }
+
+    /**
+     * Whether this path is one a client <em>resolves against the absence of</em> - so answering a refusal as a miss
+     * would not be quiet, it would be wrong.
+     *
+     * <p>A 404 normally means "we do not have it", and for a jar or a POM that is a loud answer: the build fails and
+     * an operator goes looking. Gradle Module Metadata is the case where it is not, because the overwhelming majority
+     * of coordinates publish no {@code .module} at all. A 404 there is the <b>legal and expected</b> answer, and
+     * Gradle acts on it - it falls back to the POM, picks a variant by the old rules and reports
+     * {@code BUILD SUCCESSFUL}. So spelling a refusal as a 404 does not withhold the descriptor, it substitutes a
+     * different resolution for it, silently, and the operator sees a green build over a repository that detected a
+     * problem and said nothing (&sect;9).
+     *
+     * <p>This is the same split the {@code maven-metadata.xml} leg above makes for the same reason, and it is
+     * deliberately narrow: {@code .sha1}/{@code .md5} siblings keep the plain decline, because a checksum answers
+     * "what digest", not "what exists", and nothing resolves against its absence.
+     */
+    private static boolean resolvedAgainstAbsence(String rest) {
+        return rest.endsWith(".module");
+    }
+
+    /** Refuse visibly on a path whose absence is itself an answer: the client is told this repository could not
+     *  decide, rather than being handed a miss it would read as the upstream's own answer. */
+    private static boolean undecided(String target, FormatExchange exchange, String reason) throws IOException {
+        LOG.warn("Refusing to answer the proxied descriptor {} as an absent descriptor: {}. Nothing was served; the "
+                + "local 404 would have been read by the client as \"this component publishes no module metadata\", "
+                + "and it would have resolved a different variant without an error.", target, reason);
         exchange.respond(502);
         return true;
     }

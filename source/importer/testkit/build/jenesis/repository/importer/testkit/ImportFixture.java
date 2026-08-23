@@ -72,6 +72,22 @@ public interface ImportFixture {
         }
     }
 
+    /**
+     * The corpus for this connector's <em>derived</em> walk, when it has one: a leg that composes an asset's path out
+     * of a coordinate instead of reading it from the incumbent's own listing. Empty by default, because most
+     * connectors only ever report what an incumbent listed them.
+     *
+     * <p>The distinction is the whole point of the property. A listing walk carries whatever the incumbent shows it,
+     * so a file it omits is the incumbent's omission. A derived walk carries only what its author thought to compose,
+     * so a file it omits is <em>this repository's</em> omission - and an omission on a migration-in is not a missing
+     * artifact an operator notices, it is a coordinate that resolves differently afterwards. The corpus must therefore
+     * be a coordinate the incumbent serves <b>whole</b>, with every sibling a consumer of the ecosystem resolves
+     * against present upstream, and {@link Corpus#paths()} naming every one the walk must carry across.
+     */
+    default Optional<Corpus> derived() throws IOException {
+        return Optional.empty();
+    }
+
     /** The one-asset scenario whose content is {@code body}: an incumbent serving an artifact-sized, generated body,
      *  and the path the walk reports it at. The body must be reachable only through the streaming download. */
     Streamed streamed(GeneratedBody body);

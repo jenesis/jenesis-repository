@@ -308,11 +308,52 @@ public final class MavenSource implements ImportSource {
                 continue;   // the metadata names a version the repository no longer serves
             }
             consumer.accept(FORMAT, prefix + ".pom", () -> new ByteArrayInputStream(pom.body()));
+            module(consumer, root, prefix);
             String packaging = MavenXml.packaging(pom.body());
             if (packaging != null && !packaging.equals("pom")) {
                 emit(consumer, root, prefix + "." + RepositoryIndex.extension(packaging));
             }
         }
+    }
+
+    /**
+     * The coordinate's Gradle Module Metadata descriptor, when it publishes one.
+     *
+     * <p>This walk is the listing-less fallback, and it imports what it can derive from the coordinate: the POM, and
+     * the one artifact the POM's {@code packaging} names. Classifier sidecars are genuinely unknowable without a
+     * listing and the walk says so. <b>The descriptor is not in that category</b>, and the difference matters: a
+     * missing classifier produces a missing artifact, which a build reports. A missing {@code .module} produces a
+     * <em>different resolution</em> - Gradle falls back to the POM and silently picks another variant - for every
+     * Gradle consumer of the migrated coordinate, with the build going green either way. It also sits at a path
+     * derivable from the coordinate, exactly like the POM this loop already fetches.
+     *
+     * <p>Fetched eagerly rather than emitted lazily like the packaging artifact, because most coordinates publish no
+     * descriptor at all: a miss here is the ordinary answer, not a failure, and a lazy supplier would turn it into one
+     * at open time. The cost is one conditional {@code GET} per version on this path, which is the price of not
+     * silently changing what a migrated coordinate resolves to.
+     *
+     * <p><b>Only an upstream that answered a miss may be read as "publishes none."</b> Anything else - a transport
+     * failure, a {@code 500}, a {@code 429} under a shared egress - is this walk having failed to read what the
+     * upstream has, and treating that as the absence would reintroduce the very loss this method exists to close, one
+     * flaky response at a time and with nothing in the migration report to say so. So it fails the walk instead, which
+     * an import can afford: the pass is resumable from its own checkpoint and idempotent on replay, so a failure
+     * delays a migration where a silent skip would quietly change what every Gradle consumer of the coordinate
+     * resolves.
+     */
+    private void module(Asset consumer, URI root, String prefix) throws IOException {
+        String path = prefix + ".module";
+        if (!ImportSource.safePath(path)) {
+            return;
+        }
+        URI url = URI.create(root + path);
+        ProxyFormat.Fetched descriptor = get(url);
+        if (descriptor.status() == 404 || descriptor.status() == 410) {
+            return;   // the coordinate publishes no module metadata, which is the common case
+        }
+        if (descriptor.status() != 200) {
+            throw ImportFailure.status(descriptor.status(), url, "Module metadata descriptor");
+        }
+        consumer.accept(FORMAT, path, () -> new ByteArrayInputStream(descriptor.body()));
     }
 
     /** Whether a shared pom path should be emitted now, deduplicating across the index records that reference it while

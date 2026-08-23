@@ -3,6 +3,7 @@ package build.jenesis.repository.importer.contract.test;
 import module java.base;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.importer.ImportRequest;
+import build.jenesis.repository.importer.testkit.ImportContract;
 import build.jenesis.repository.importer.testkit.ImportFixture;
 import build.jenesis.repository.importer.testkit.ScriptedUpstream;
 
@@ -94,4 +95,12 @@ final class ArtifactoryImportFixture implements ImportFixture {
     private static String folder(String... children) {
         return "{\"children\":[" + String.join(",", children) + "]}";
     }
+    @Override
+    public Map<ImportContract.Property, String> unsupported() {
+        return Map.of(ImportContract.Property.CARRIES_EVERY_DERIVABLE_SIBLING,
+                "both Artifactory listing surfaces - the Pro deep File List and the OSS Folder Info recursion - enumerate real "
+                        + "files, so every path this walk reports was read from the incumbent rather than built "
+                        + "from a coordinate. The maven leg proves the property where paths really are composed");
+    }
+
 }

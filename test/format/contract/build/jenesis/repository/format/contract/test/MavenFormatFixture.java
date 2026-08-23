@@ -27,6 +27,7 @@ final class MavenFormatFixture implements FormatFixture {
      *  storage to learn its module name, which would re-read the streaming leg's whole generated body for a reason
      *  that has nothing to do with the property under test. */
     private static final String PROXIED = COORDINATE + "/1.0.0/lib-1.0.0.bin";
+    private static final String DESCRIPTOR = COORDINATE + "/1.0.0/lib-1.0.0.module";
 
     private static final URI ROOT = URI.create("https://upstream.invalid/maven2/");
 
@@ -107,11 +108,42 @@ final class MavenFormatFixture implements FormatFixture {
         return Optional.of(new Upstream(PROXIED, ROOT, fetcher(body, "0".repeat(40))));
     }
 
+    @Override
+    public Optional<Elective> elective(GeneratedBody body) {
+        // Gradle Module Metadata. Most coordinates publish no .module at all, so a 404 here is the ordinary answer and
+        // Gradle acts on it: it falls back to the POM, selects a variant by the pre-metadata rules and reports
+        // BUILD SUCCESSFUL. That makes this the one Maven path where a miss is not a loud answer, so it is the one
+        // where a refusal spelled as a miss becomes a different resolution instead of a failed build.
+        return Optional.of(new Elective(DESCRIPTOR, ROOT,
+                nothing(), fetcher(body, "0".repeat(40), DESCRIPTOR)));
+    }
+
+    /** An upstream that publishes no descriptor for this coordinate - the common, legal case. */
+    private static ProxyFormat.Fetcher nothing() {
+        return new ProxyFormat.Fetcher.Buffered() {
+
+            @Override
+            public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
+                return Optional.of(new ProxyFormat.Fetched(404, new byte[0], Map.of()));
+            }
+
+            @Override
+            public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) {
+                return Optional.of(new ProxyFormat.Download(404, InputStream.nullInputStream(), Map.of()));
+            }
+        };
+    }
+
     /** An upstream serving {@code body} at the proxied coordinate and {@code sha1} at its checksum sibling. The
      *  artifact rides {@code download} (streamed) and the sibling {@code fetch} (buffered), exactly as the real
      *  upstream would answer them. */
     private static ProxyFormat.Fetcher fetcher(GeneratedBody body, String sha1) {
-        String artifact = ROOT + PROXIED.substring("/maven/".length());
+        return fetcher(body, sha1, PROXIED);
+    }
+
+    /** The same upstream serving at {@code requestPath} rather than at the default proxied coordinate. */
+    private static ProxyFormat.Fetcher fetcher(GeneratedBody body, String sha1, String requestPath) {
+        String artifact = ROOT + requestPath.substring("/maven/".length());
         return new ProxyFormat.Fetcher.Buffered() {
 
             @Override

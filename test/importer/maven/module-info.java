@@ -39,6 +39,7 @@
 open module build.jenesis.repository.importer.maven.test {
     requires build.jenesis.repository.importer.maven;
     requires build.jenesis.repository.importer;
+    requires build.jenesis.repository.importer.testkit;
     requires build.jenesis.repository.format;
     requires org.junit.jupiter;
     requires org.assertj.core;

@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.importer.ImportRequest;
 import build.jenesis.repository.importer.testkit.ImportFixture;
+import build.jenesis.repository.importer.testkit.MavenIndexChunk;
 import build.jenesis.repository.importer.testkit.ScriptedUpstream;
 
 /**
@@ -48,6 +49,32 @@ final class MavenImportFixture implements ImportFixture {
         }
         // Sorted per directory, depth-first: alpha's subtree completes (and checkpoints) before beta is entered.
         return new Corpus(upstream, List.of("alpha/one.jar", "alpha/two.jar", "beta/four.jar", "beta/three.jar"));
+    }
+
+    @Override
+    public Optional<Corpus> derived() {
+        // The listing-less leg, which is the only Maven walk that COMPOSES paths rather than reading them: the root
+        // refuses, so the walk falls back to the repository index, and every version the index does not already carry
+        // is derived from maven-metadata.xml. 1.0.0 rides an index record; 2.0.0 exists only in the metadata, so it
+        // is reached through the derivation, which is where a sibling is either composed or silently lost.
+        String artifact = "org/example/widget";
+        String base = artifact + "/2.0.0/widget-2.0.0";
+        ScriptedUpstream upstream = ScriptedUpstream.incumbent()
+                .refusing(ROOT, 403)
+                .answering(ROOT + ".index/nexus-maven-repository-index.properties", 200, "nexus.index.id=repo\n")
+                .answering(ROOT + ".index/nexus-maven-repository-index.gz", 200,
+                        MavenIndexChunk.of(List.of(MavenIndexChunk.record("org.example", "widget", "1.0.0", "jar"))))
+                .answering(ROOT + artifact + "/maven-metadata.xml", 200,
+                        "<metadata><versioning><versions><version>1.0.0</version><version>2.0.0</version>"
+                                + "</versions></versioning></metadata>")
+                .answering(ROOT + base + ".pom", 200, "<project><packaging>jar</packaging></project>")
+                // The sibling the derivation must not drop. It is served here, so a walk that does not carry it is
+                // choosing not to ask - the file is at a path this leg already knows how to build.
+                .answering(ROOT + base + ".module", 200, "{\"formatVersion\":\"1.1\"}")
+                .answering(ROOT + base + ".jar", 200, "jar");
+        return Optional.of(new Corpus(upstream, List.of(
+                artifact + "/1.0.0/widget-1.0.0.jar", artifact + "/1.0.0/widget-1.0.0.pom",
+                base + ".pom", base + ".module", base + ".jar")));
     }
 
     @Override

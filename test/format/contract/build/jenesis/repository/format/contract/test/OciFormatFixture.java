@@ -112,7 +112,14 @@ final class OciFormatFixture implements FormatFixture {
 
     @Override
     public Map<FormatContract.Property, String> unsupported() {
-        return Map.of(FormatContract.Property.COORDINATE_TRAVERSAL_REFUSED,
+        return Map.of(
+                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
+                "every path this format proxies is a manifest or a blob, and a client that asks for either has "
+                        + "already been told it exists - by a tag it resolved or by a digest a manifest named - so a "
+                        + "miss is a failed pull, never a fact it resolves around. Its one enumeration surface "
+                        + "(tags/list) is not proxied by this leg. Maven's .module descriptor proves the property "
+                        + "where a miss really is a legal answer the client acts on",
+                FormatContract.Property.COORDINATE_TRAVERSAL_REFUSED,
                 "OciFormat implements no ArtifactLayout: an image's coordinate-to-pointer mapping is the downstream "
                         + "OciBlobLayout, which the fixtures cover. Every client-supplied name this format "
                         + "does splice into a store key - the image name, the tag, the digest - is screened at the "

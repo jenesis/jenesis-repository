@@ -3,6 +3,7 @@ package build.jenesis.repository.importer.contract.test;
 import module java.base;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.importer.ImportRequest;
+import build.jenesis.repository.importer.testkit.ImportContract;
 import build.jenesis.repository.importer.testkit.ImportFixture;
 import build.jenesis.repository.importer.testkit.ScriptedUpstream;
 
@@ -78,4 +79,12 @@ final class JenesisImportFixture implements ImportFixture {
         }
         return "{\"assets\":" + assets + ",\"cursor\":" + (cursor == null ? "null" : "\"" + cursor + "\"") + "}";
     }
+    @Override
+    public Map<ImportContract.Property, String> unsupported() {
+        return Map.of(ImportContract.Property.CARRIES_EVERY_DERIVABLE_SIBLING,
+                "GET /api/assets enumerates the source instance's published assets one by one with their serving paths, so "
+                        + "the walk carries across exactly what the source holds - a jenesis-to-jenesis migration "
+                        + "composes nothing. The maven leg proves the property where paths really are composed");
+    }
+
 }
