@@ -93,7 +93,10 @@ class JenesisSourceTest {
                     }
                 }, cursor -> { });
 
-        assertThat(fetcher.requests).hasSize(2).allSatisfy(headers ->
+        // Three requests, key on every one: the listing, the repository-qualified shape probe the fixed-tenant
+        // source answers 404, and the bare-shape download that serves - the probe must carry the key too, since an
+        // enforcing source would otherwise answer it 401 and the fallback would misread the edition.
+        assertThat(fetcher.requests).hasSize(3).allSatisfy(headers ->
                 assertThat(headers.get("Jenesis-Repository-Key")).isEqualTo("jenk_acme.secret"));
     }
 

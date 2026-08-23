@@ -5,10 +5,11 @@ import build.jenesis.repository.format.ProxyFormat;
 import module java.base;
 
 /**
- * A fixed in-memory {@link ProxyFormat.Fetcher}: it answers each URL from a canned response map (an unmapped URL is
- * a transport failure) and records the request headers of every call, so a test can assert the walk carried the API
- * key. The default {@code download} materializes a stream from the same map, so both the listing fetch and the asset
- * download are served without a network.
+ * A fixed in-memory {@link ProxyFormat.Fetcher}: it answers each URL from a canned response map (an unmapped URL
+ * answers {@code 404}, as a server does for a path it has no artifact at - the shape probe of the source under test
+ * leans on that answer to fall back) and records the request headers of every call, so a test can assert the walk
+ * carried the API key. The default {@code download} materializes a stream from the same map, so both the listing
+ * fetch and the asset download are served without a network.
  */
 final class FakeFetcher implements ProxyFormat.Fetcher.Buffered {
 
@@ -22,6 +23,7 @@ final class FakeFetcher implements ProxyFormat.Fetcher.Buffered {
     @Override
     public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
         requests.add(requestHeaders);
-        return Optional.ofNullable(responses.get(url.toString()));
+        ProxyFormat.Fetched canned = responses.get(url.toString());
+        return Optional.of(canned == null ? new ProxyFormat.Fetched(404, new byte[0], Map.of()) : canned);
     }
 }
