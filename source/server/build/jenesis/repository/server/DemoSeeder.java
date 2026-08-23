@@ -1,5 +1,6 @@
 package build.jenesis.repository.server;
 
+import build.jenesis.repository.store.Publication;
 import module java.base;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
@@ -129,7 +130,7 @@ public final class DemoSeeder {
     /** Whether a gate quarantined the pulled-through artifact - the withhold pointer a screen links for a QUARANTINE
      *  verdict, so a suggestion whose read is a 404 (withheld) still counts as seeded rather than unavailable. */
     private static boolean quarantined(ArtifactStore store, String path) throws IOException {
-        return store.readVersioned("publish/quarantine" + path).isPresent();
+        return store.readVersioned(Publication.quarantineKey(path)).isPresent();
     }
 
     /** The outcome of a seed pass: whether it {@code ran} at all (the store was empty), and how many suggestions were

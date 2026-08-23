@@ -894,7 +894,7 @@ final class InterceptorContract {
             @Override
             public void committed(ArtifactDescriptor stored, Disposition disposition, ArtifactStore store)
                     throws IOException {
-                linkedWhenNotified.add(store.readVersioned("publish/quarantine" + artifact.path()).isPresent());
+                linkedWhenNotified.add(store.readVersioned(Publication.quarantineKey(artifact.path())).isPresent());
             }
         };
 
@@ -1034,12 +1034,12 @@ final class InterceptorContract {
         List<PublicationObserver> hooks = List.of(holder, screen.create(), watcher);
 
         store.crashAfterWrite(FaultInjectingStore.Op.WRITE_VERSIONED,
-                FaultInjectingStore.keyPrefix("publish/quarantine"));
+                FaultInjectingStore.keyPrefix(Publication.QUARANTINE_ROOT));
         Throwable failed = thrownBy(() -> commit(publication(store, hooks), artifact));
         store.heal();
 
         isTrue(failed instanceof IOException, fixture, "the injected crash must fail the commit");
-        equal(store.delegate().readVersioned("publish/quarantine" + artifact.path()).isPresent(), true, fixture,
+        equal(store.delegate().readVersioned(Publication.quarantineKey(artifact.path())).isPresent(), true, fixture,
                 "the review pointer DID land before the crash - which is what makes this the quarantine window rather "
                         + "than a plain failed screen");
         equal(log.committed, List.of(), fixture, "and committed had not fired, so no screen recorded the hold");

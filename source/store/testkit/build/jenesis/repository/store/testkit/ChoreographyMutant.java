@@ -282,7 +282,7 @@ public enum ChoreographyMutant {
                     return;
                 }
                 if (mutant == A_REVIEW_POINTER_REMOVED_BEFORE_COMMITTED) {
-                    String pointer = "publish/quarantine" + artifact.path();
+                    String pointer = Publication.quarantineKey(artifact.path());
                     if (store.exists(pointer)) {
                         store.delete(pointer);
                     }
