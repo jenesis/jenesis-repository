@@ -190,7 +190,7 @@ public class PullThroughHooksTest {
         }
 
         @Override
-        public ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream) {
+        public ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream, ArtifactStore store) {
             screenFetchPaths.add(path);
             // A screen is a DECORATOR, so it delegates all three legs rather than deriving two of them: a hook that
             // implemented only fetch would replace the wrapped transport's streaming download and real HTTP HEAD with

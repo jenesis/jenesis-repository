@@ -58,8 +58,15 @@ public interface PullThroughHooks {
      * upstreams) that do not pass through the routed gateway's own {@code screening()} decoration. The free default
      * returns {@code upstream} unchanged (identity), so the miss leg fetches exactly as today. The decoration is
      * path-bound, so the cache applies it per request at the point it invokes {@link ProxyFormat#proxy}.
+     *
+     * <p><b>{@code store} is the store the fetched body will be cached into</b>, handed over per call rather than
+     * bound when the hooks were built. A screening decorator has to write somewhere - a quarantine pointer, a review
+     * log row - and it must write into the same store the bytes land in. An implementation that captured one at
+     * construction could only ever be installed where that store is fixed, which is a seeder or a single repository;
+     * the serving dispatcher is a singleton over every tenant's store, so it could not install a screen at all. That
+     * is why the deployment-wide upstream map's leg ran unscreened (D-208).
      */
-    default ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream) {
+    default ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream, ArtifactStore store) {
         return upstream;
     }
 
