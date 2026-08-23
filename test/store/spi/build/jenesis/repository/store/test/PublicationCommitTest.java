@@ -1,5 +1,6 @@
 package build.jenesis.repository.store.test;
 
+import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -469,7 +470,7 @@ class PublicationCommitTest {
         assertThat(commit.visible()).isTrue();
         assertThat(observer.published).hasSize(1);
 
-        for (int attempt = 0; attempt < 3; attempt++) {
+        for (int attempt = 0; attempt < Retries.COMPARE_AND_SET; attempt++) {
             faulty.conflictNext(FaultInjectingStore.keyPrefix("publish/raw/b"));
         }
         assertThatThrownBy(() -> publication.commit(descriptor("/raw/b"), bytes("other"),

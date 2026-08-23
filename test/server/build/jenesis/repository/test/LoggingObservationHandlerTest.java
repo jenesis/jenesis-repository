@@ -27,7 +27,13 @@ public class LoggingObservationHandlerTest {
         assertThat(handler.supportsContext(named("spring.security.filterchains"))).isFalse();
         assertThat(handler.supportsContext(named("spring.security.authorizations"))).isFalse();
         assertThat(handler.supportsContext(named("spring.security.http.secured.requests"))).isFalse();
-        assertThat(handler.supportsContext(new Observation.Context())).isFalse();
+    }
+
+    /** An observation created from a convention is named at start, after the handler was asked; it is admitted
+     *  then and its line decided once it stops, so the request line is not lost to the order of the two calls. */
+    @Test
+    void an_observation_not_yet_named_is_admitted_and_decided_when_it_stops() {
+        assertThat(handler.supportsContext(new Observation.Context())).isTrue();
     }
 
     private static Observation.Context named(String name) {

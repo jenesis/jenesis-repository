@@ -229,7 +229,7 @@ public final class Publication {
         // presence before re-linking, so their idempotent converge passes overwrite rather than freshly link and raise
         // no event.
         boolean quarantine = isQuarantinePath(requestPath);
-        for (int attempt = 0; attempt < 3; attempt++) {
+        for (int attempt = 0; attempt < Retries.COMPARE_AND_SET; attempt++) {
             Optional<ArtifactStore.Versioned> prior = store.readVersioned("publish" + requestPath);
             Object token = prior.map(ArtifactStore.Versioned::token).orElse(null);
             // Any prior pointer counts, INCLUDING one naming the same blob. A byte-identical re-publish
@@ -250,6 +250,7 @@ public final class Publication {
                 }
                 return replaced;
             }
+            Retries.backoff(attempt);
         }
         throw new IOException("could not link publish" + requestPath + " after repeated version conflicts");
     }

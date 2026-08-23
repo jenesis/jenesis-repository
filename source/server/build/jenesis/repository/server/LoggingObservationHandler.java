@@ -24,15 +24,23 @@ public final class LoggingObservationHandler implements ObservationHandler<Obser
 
     /** This server's own operations ({@code jenreg.*}) and the request line. Boot's and Spring Security's own
      *  observations (a filter-chain position, an authorization decision - several per request) are metrics and
-     *  traces, not log lines: logging them all wrote four lines of noise for every request served. */
+     *  traces, not log lines: logging them all wrote four lines of noise for every request served. An observation
+     *  created from a convention is named only when it starts, after this is asked, so an unnamed context is
+     *  accepted here and decided in {@link #onStop}. */
     @Override
     public boolean supportsContext(Observation.Context context) {
-        String name = context.getName();
+        return context.getName() == null || logged(context.getName());
+    }
+
+    private static boolean logged(String name) {
         return name != null && (name.startsWith("jenreg.") || name.equals(REQUEST));
     }
 
     @Override
     public void onStop(Observation.Context context) {
+        if (!logged(context.getName())) {
+            return;
+        }
         if (context.getError() == null) {
             LOGGER.info("{} {}", context.getName(), context.getAllKeyValues());
         } else {
