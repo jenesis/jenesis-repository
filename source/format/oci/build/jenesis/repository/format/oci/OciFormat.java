@@ -7,6 +7,7 @@ import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -1284,11 +1285,12 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      *  repeated conflicts surfaces as an {@link IOException} instead of a false success. */
     static void linkTag(ArtifactStore store, String key, String digest) throws IOException {
         byte[] value = digest.getBytes(StandardCharsets.UTF_8);
-        for (int attempt = 0; attempt < 3; attempt++) {
+        for (int attempt = 0; attempt < Retries.COMPARE_AND_SET; attempt++) {
             Object token = store.readVersioned(key).map(ArtifactStore.Versioned::token).orElse(null);
             if (store.writeVersioned(key, value, token)) {
                 return;
             }
+            Retries.backoff(attempt);
         }
         throw new IOException("could not link " + key + " after repeated version conflicts");
     }

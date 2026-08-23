@@ -52,7 +52,7 @@ public final class StoredListing {
     public static final String ROOT = "listing/";
 
     /** The compare-and-set attempts a writer makes before it {@link #forget forgets} the document. */
-    public static final int ATTEMPTS = 12;
+    public static final int ATTEMPTS = Retries.COMPARE_AND_SET;
 
     private static final String MAGIC = "jenesis-listing/1";
 
@@ -834,11 +834,7 @@ public final class StoredListing {
     }
 
     private static void backoff(int attempt) {
-        try {
-            Thread.sleep(Math.min(200L, 2L << Math.min(attempt, 6)) + ThreadLocalRandom.current().nextLong(5L));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        Retries.backoff(attempt);
     }
 
     // ---- framing ----
