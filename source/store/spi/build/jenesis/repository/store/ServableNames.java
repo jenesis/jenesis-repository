@@ -303,7 +303,8 @@ public final class ServableNames {
             if (!store.list(Publication.quarantineKey(folder)).isEmpty()) {
                 return false;
             }
-            // (b) The interceptor chain withholds one of the version's leaves. Bounded, and stats no blob. A folder
+            // (b) A leaf of the version is held - by the interceptor chain, or by a withheld/<hash> marker on the
+            // hash its pointer names. Bounded, and stats no blob. A folder
             // wider than the bound fails CLOSED: it cannot be probed exhaustively without unbounding the chain
             // fan-out, and a fail-OPEN past the bound would leak the version name of an interceptor-only-withheld leaf
             // sitting beyond the probed prefix. The bound is well above any legitimate version folder, so this screens
@@ -313,7 +314,14 @@ public final class ServableNames {
                 return false;
             }
             for (String leaf : leaves) {
-                if (publication.withheld(folder + "/" + leaf)) {
+                // held(), not publication.withheld(): both halves of a hold, which is what D-251 made state() and
+                // disclosable() do and left this face without. The chain alone screens every hold a writer places
+                // today, because each retroactive sweep links a /quarantine<path> review pointer beside the marker -
+                // so leg (a) above already catches those. What it misses is a byte-identical SIBLING coordinate:
+                // g:b:1.0 publishing the same bytes as a held g:a:1.0 carries no review pointer of its own and no
+                // chain withhold, yet 404s on download because the marker is keyed by content. Its version name kept
+                // listing in maven-metadata.xml - the listing/download disagreement this class exists to prevent.
+                if (held(folder + "/" + leaf)) {
                     return false;
                 }
             }

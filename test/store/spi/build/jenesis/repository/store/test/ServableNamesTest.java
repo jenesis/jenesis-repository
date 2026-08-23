@@ -353,6 +353,52 @@ class ServableNamesTest {
                 .as("a version with a /quarantine review pointer must not be listed").isFalse();
     }
 
+    /**
+     * A byte-identical sibling coordinate leaves the listing too - the case the review-pointer leg cannot see.
+     *
+     * <p>The {@code /quarantine} leg above screens every hold a writer places today, because each retroactive sweep
+     * links a review pointer beside the marker for every served path that carries a {@code publish/} pointer. A
+     * sibling coordinate publishing the <em>same bytes</em> gets neither: no review pointer of its own, no
+     * interceptor withhold. But the marker is keyed by content, deliberately, so its download already 404s - and its
+     * version name kept listing in {@code maven-metadata.xml}. That is the listing-versus-download disagreement
+     * this class exists to prevent, and the one face of it that had not been closed.
+     */
+    @Test
+    void a_byte_identical_sibling_of_a_held_version_stops_listing_too() throws IOException {
+        MapStore store = new MapStore();
+        // g:a:1.0 is held by a content marker; the sweep linked its review pointer.
+        store.pointer("publish/maven/g/a/1/a-1.jar", HASH_A);
+        store.pointer("publish/quarantine/maven/g/a/1/a-1.jar", HASH_A);
+        // g:b:1.0 published the same bytes: same hash, no review pointer, no chain withhold.
+        store.pointer("publish/maven/g/b/1/b-1.jar", HASH_A);
+        store.blob(HASH_A);
+        Withheld.mark(store, HASH_A);
+
+        ServableNames names = new ServableNames(store);
+
+        assertThat(names.disclosableVersionFolder("/maven/g/a/1"))
+                .as("the held version itself, caught by the review-pointer leg as it always was").isFalse();
+        assertThat(names.disclosableVersionFolder("/maven/g/b/1"))
+                .as("and its byte-identical sibling, whose download already 404s on the content marker - listing it "
+                        + "is the disagreement this class exists to prevent")
+                .isFalse();
+        assertThat(names.state("/maven/g/b/1/b-1.jar"))
+                .as("the sibling's own serve read already agreed; only the folder face disagreed")
+                .isEqualTo(State.WITHHELD);
+    }
+
+    /** A version whose bytes carry no marker still lists - the fix must not hide everything that shares a folder
+     *  shape with something held. */
+    @Test
+    void an_unmarked_version_still_lists() throws IOException {
+        MapStore store = new MapStore();
+        store.pointer("publish/maven/g/c/1/c-1.jar", HASH_B);
+        store.blob(HASH_B);
+
+        assertThat(new ServableNames(store).disclosableVersionFolder("/maven/g/c/1"))
+                .as("nothing holds it, so it lists").isTrue();
+    }
+
     @Test
     void a_fake_hash_no_blob_version_folder_keeps_listing_because_no_blob_is_ever_stated() throws IOException {
         MapStore store = new MapStore();
