@@ -34,6 +34,19 @@ import module java.base;
  *     the {@code jenreg.<name>=false} toggle: naming a directory that is also switched off is
  *     contradictory configuration and fails rather than silently resolving to something else. Only an
  *     <em>unselected</em> deployment degrades, and only to the fixed directory.</li>
+ * <li><b>The directory is boot-bound, and deliberately.</b> {@link #create} runs once on the boot thread and the
+ *     {@link Tenants} it returns closes over the configuration it was handed, so a later edit to
+ *     {@code default-tenant} does not move it: until the deployment restarts, the directory keeps listing the
+ *     previous default. This is a genuine asymmetry with the routing legs, which re-read the same dial and move on
+ *     the next request - so an operator who changes it sees keyless traffic move immediately while the console's
+ *     instance list, the orphan diagnostic's tenant set and the purge's still name the old one.
+ *     <p>It is stated rather than fixed because the alternative is worse. Making a store-backed directory live
+ *     beside a {@link Tenants#fixed fixed} one that cannot be would make <em>installing the tenants module</em>
+ *     change when an edit takes effect - one provider answering live and another at boot, for the same dial, is
+ *     the divergence this contract exists to prevent. Both legs are boot-bound, they agree, and the settings
+ *     catalogue badges {@code default-tenant} as applying on restart so the surface says what the code does.
+ *     <p>A provider must therefore <em>not</em> resolve this value per call in an attempt to be helpful: a
+ *     directory that tracked the dial while its sibling did not would reintroduce exactly the divergence above.</li>
  * <li><b>Tenant scoping (&sect;6).</b> The directory is deployment-global by construction - it is the thing that
  *     enumerates tenants - and is built over the deployment's <em>root</em> store, before any tenant scope is
  *     applied. It answers which tenants exist and creates them; it never reads a tenant's artifacts, and a caller
