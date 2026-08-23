@@ -205,12 +205,44 @@ public enum Mutant {
         store.write(ESCAPED, new ByteArrayInputStream("contract mutant".getBytes(StandardCharsets.UTF_8)));
     }
 
-    /** The same artifact under a path one character off, which is how a blind-append surface grows a row it should
-     *  have upserted onto the row already there. */
+    /**
+     * The same artifact one delivery over, which is how a blind-append surface grows a row it should have upserted
+     * onto the one already there.
+     *
+     * <p>It moves <b>both</b> halves of the identity, and that is the whole point. Moving only the path made this
+     * mutant invisible to every fixture in the population, from two directions at once: a surface keyed on the
+     * served pointer tree skipped the variant because a path nobody published is not in that tree, and a surface
+     * keyed on the neutral ecosystem/coordinate/version triple upserted it away because the triple had not moved.
+     * The mutant landed in the gap between the two families rather than in either of them, and four fixtures
+     * carried exclusions saying they could not see it.
+     *
+     * <p>The version is what moves, not the coordinate: a coordinate-keyed surface must see a distinct row, and a
+     * new <em>version</em> of a known coordinate is the shape those surfaces are built to record. Inventing a
+     * coordinate would test whether they record an unrelated artifact, which is a different question.
+     */
     private static ArtifactDescriptor variant(ArtifactDescriptor artifact, int delivery) {
-        return new ArtifactDescriptor(artifact.ecosystem(), artifact.coordinate(), artifact.version(),
-                artifact.path() + "-mutant-" + delivery, artifact.contentType(), artifact.prerelease(),
+        String suffix = "-mutant-" + delivery;
+        return new ArtifactDescriptor(artifact.ecosystem(), artifact.coordinate(),
+                artifact.version() == null ? null : artifact.version() + suffix,
+                artifact.path() + suffix, artifact.contentType(), artifact.prerelease(),
                 artifact.hash(), artifact.size());
+    }
+
+    /**
+     * Link the variant so it is genuinely served, before the append that records it.
+     *
+     * <p>A hook whose projection inverts the served pointer tree - and several do - reads only what is published.
+     * Handing it a descriptor for a path with no pointer is handing it something it is right to skip, so the
+     * mutation changed nothing and the check passed against the very defect it names. The variant reuses the real
+     * artifact's blob, so this adds a pointer and no bytes: the smallest thing that makes an appended row visible
+     * to a surface that reads the tree rather than the notification.
+     */
+    private static void serve(ArtifactDescriptor variant, ArtifactStore store) throws IOException {
+        if (variant.path() == null || variant.hash() == null) {
+            return;
+        }
+        store.writeVersioned("publish" + variant.path(),
+                variant.hash().getBytes(StandardCharsets.UTF_8), null);
     }
 
     // --- the after-commit observer ----------------------------------------------------------------------------------
@@ -354,7 +386,9 @@ public enum Mutant {
                         hook.onPublished(artifact, store);
                         int delivery = deliveries.incrementAndGet();
                         if (delivery > 1) {
-                            hook.onPublished(variant(artifact, delivery), store);
+                            ArtifactDescriptor appended = variant(artifact, delivery);
+                            serve(appended, store);
+                            hook.onPublished(appended, store);
                         }
                     }
                     case A_KEY_OUTSIDE_THE_NAMESPACES -> {
