@@ -381,6 +381,16 @@ public final class StoreContract {
         equal(store.list(base + "/beta"), List.of("nested"), "a container lists its own children");
         equal(store.list(base + "/alpha"), List.of(), "a leaf has no children");
         equal(store.list(base + "/absent"), List.of(), "an absent prefix lists empty rather than failing");
+        // A prefix with a trailing slash names the same container: a caller that keeps a directory's slash (the hold
+        // lifecycle does) gets the same listing, never a doubled delimiter the service refuses.
+        equal(store.list(base + "/"), List.of("alpha", "beta", "gamma"), "a trailing slash names the same container");
+        List<String> paged = new ArrayList<>();
+        store.page(base + "/", "", 10, paged::add);
+        equal(paged, List.of("alpha", "beta", "gamma"), "page accepts the trailing slash too");
+        List<String> scanned = new ArrayList<>();
+        store.scan(base + "/", "", 10, listed -> scanned.add(listed.key()));
+        equal(scanned, List.of(base + "/alpha", base + "/beta/nested", base + "/gamma"),
+                "scan accepts the trailing slash and keys its results without it");
 
         store.delete(base + "/alpha");
         store.delete(base + "/beta/nested");

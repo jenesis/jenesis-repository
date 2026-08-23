@@ -221,9 +221,16 @@ public final class GcsArtifactStore implements ArtifactStore {
         }
     }
 
+    /** The storage prefix of a listing container - the scope's key prefix and the normalised container name with its
+     *  trailing delimiter - so a caller's {@code a/b/} and {@code a/b} ask the service for one prefix. */
+    private String base(String prefix) {
+        String container = ArtifactStore.container(prefix);
+        return keyPrefix + (container.isEmpty() ? "" : container + "/");
+    }
+
     @Override
     public List<String> list(String prefix) {
-        String base = keyPrefix + (prefix.isEmpty() ? "" : prefix + "/");
+        String base = base(prefix);
         TreeSet<String> names = new TreeSet<>();
         for (ListObjectsV2Response page : s3.listObjectsV2Paginator(b -> b.bucket(bucket).prefix(base).delimiter("/"))) {
             page.commonPrefixes().forEach(common -> {
@@ -262,7 +269,7 @@ public final class GcsArtifactStore implements ArtifactStore {
         if (limit <= 0) {
             return;
         }
-        String base = keyPrefix + (prefix.isEmpty() ? "" : prefix + "/");
+        String base = base(prefix);
         // GCS's XML API honours the same list-objects-v2 start-after pagination as S3, so this mirrors the s3
         // backend, including the name-order repair: the stream arrives in raw key order, where a container's
         // grouped prefix at `name + "/"` sorts AFTER a sibling whose name extends this one past a character
@@ -333,7 +340,8 @@ public final class GcsArtifactStore implements ArtifactStore {
     /** A child as the listing saw it. {@code object} is null for a grouped prefix - a container - which reports no
      *  size or age because it has none; both halves of a leaf's metadata ride along in the response already. */
     private static Listed listed(String prefix, String name, S3Object object) {
-        String key = prefix == null || prefix.isEmpty() ? name : prefix + "/" + name;
+        String container = ArtifactStore.container(prefix);
+        String key = container.isEmpty() ? name : container + "/" + name;
         if (object == null) {
             return Listed.of(key);
         }
@@ -359,7 +367,7 @@ public final class GcsArtifactStore implements ArtifactStore {
         if (limit <= 0) {
             throw new IllegalArgumentException("A scan limit must be positive: " + limit);
         }
-        String base = keyPrefix + (prefix.isEmpty() ? "" : prefix + "/");
+        String base = base(prefix);
         // No delimiter, and therefore none of page()'s name-order repair: a recursive scan wants every object under
         // the prefix, and without grouped prefixes the listing arrives in exactly the key order this method owes.
         // maxKeys is limit + 1 so the page after the last delivered key is what proves whether more remains, rather

@@ -410,8 +410,31 @@ public interface ArtifactStore {
     default void touch(String key) throws IOException {
     }
 
-    /** The immediate child names under a key prefix (for the console browse and metadata maintenance). */
+    /**
+     * The immediate child names under a key prefix (for the console browse and metadata maintenance). A prefix names
+     * a container with or without a trailing slash - {@code a/b} and {@code a/b/} are the same one, here and for
+     * {@link #page}, {@link #pageListed} and {@link #scan}; a backend normalises it with {@link #container} before it
+     * asks its storage, whose key grammar may admit only the first. A leading slash is a traversal-shaped key and
+     * is refused, as it is on every other operation.
+     */
     List<String> list(String prefix);
+
+    /**
+     * A listing prefix as a container name: trailing slashes removed, so that {@code a/b} and {@code a/b/} name one
+     * container. The filesystem resolves both to one directory; an object store's key grammar does not, and a key
+     * holding {@code //} is refused outright by some services - so every object-store listing runs its prefix
+     * through this first.
+     */
+    static String container(String prefix) {
+        if (prefix == null) {
+            return "";
+        }
+        int end = prefix.length();
+        while (end > 0 && prefix.charAt(end - 1) == '/') {
+            end--;
+        }
+        return prefix.substring(0, end);
+    }
 
     /**
      * Stream up to {@code limit} immediate child names under {@code prefix} to {@code consumer}, in lexicographic
