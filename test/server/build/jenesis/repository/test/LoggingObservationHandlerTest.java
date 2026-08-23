@@ -1,6 +1,7 @@
 package build.jenesis.repository.test;
 
 import build.jenesis.repository.server.LoggingObservationHandler;
+import io.micrometer.common.KeyValue;
 import io.micrometer.observation.Observation;
 import module org.junit.jupiter.api;
 
@@ -34,6 +35,17 @@ public class LoggingObservationHandlerTest {
     @Test
     void an_observation_not_yet_named_is_admitted_and_decided_when_it_stops() {
         assertThat(handler.supportsContext(new Observation.Context())).isTrue();
+    }
+
+    /** The access line is the method, the path and the status - an access log's shape, not the key-value dump. */
+    @Test
+    void the_request_line_is_compact() {
+        Observation.Context context = named("http.server.requests");
+        context.addLowCardinalityKeyValue(KeyValue.of("method", "GET"));
+        context.addLowCardinalityKeyValue(KeyValue.of("status", "200"));
+        context.addLowCardinalityKeyValue(KeyValue.of("outcome", "SUCCESS"));
+        context.addHighCardinalityKeyValue(KeyValue.of("http.url", "/repository/releases/npm/left-pad"));
+        assertThat(LoggingObservationHandler.line(context)).isEqualTo("GET /repository/releases/npm/left-pad 200");
     }
 
     private static Observation.Context named(String name) {
