@@ -129,9 +129,9 @@ class PublicationQuarantineAliasTest {
                 .filter(method -> method.getName().equals("clear"))
                 .toList();
 
-        assertThat(clears).hasSize(1);
-        assertThat(clears.getFirst().getParameterTypes())
-                .containsExactly(ArtifactStore.class, String.class, Known.Determined.class);
+        assertThat(clears).isNotEmpty().allSatisfy(clear -> assertThat(clear.getParameterTypes())
+                .as("every clear overload takes the proof as a Known.Determined")
+                .contains(Known.Determined.class));
         assertThat(Known.Determined.class.isAssignableFrom(Known.Unknown.class))
                 .as("an unanswerable proof must not widen into the release seam").isFalse();
     }

@@ -54,6 +54,11 @@ public final class AzureArtifactStore implements ArtifactStore {
     }
 
     @Override
+    public Object identity() {
+        return "azure:" + container.getBlobContainerUrl() + "/" + keyPrefix;
+    }
+
+    @Override
     public Optional<URI> presign(String key, Duration ttl) {
         BlobClient blob = container.getBlobClient(keyPrefix + key);
         BlobServiceSasSignatureValues values = new BlobServiceSasSignatureValues(

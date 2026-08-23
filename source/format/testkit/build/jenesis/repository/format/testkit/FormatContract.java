@@ -6,6 +6,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoredListing;
 
 /**
  * The executable {@link RepositoryFormat} / {@link ProxyFormat} / {@link ArtifactLayout} contract: one parameterized
@@ -260,8 +261,13 @@ public final class FormatContract {
         // fails here, and it fails wherever the escape landed rather than only where the check thought to look.
         List<String> escaped = new ArrayList<>();
         walk(store, "", key -> {
+            // A format's stored listings live under the shared listing/ space, keyed by the format's own names -
+            // the same names its blob namespaces carry - so a probe that lands there landed inside the format.
+            String owned = key.startsWith(StoredListing.ROOT) ? key.substring(StoredListing.ROOT.length()) : key;
             if (fixture.namespaces().stream().noneMatch(
-                    namespace -> key.equals(namespace) || key.startsWith(namespace + "/"))) {
+                    namespace -> owned.equals(namespace) || owned.startsWith(namespace + "/")
+                            || (key.startsWith(StoredListing.ROOT) && owned.startsWith(namespace.substring(
+                                    namespace.indexOf('/') + 1) + "/")))) {
                 escaped.add(key);
             }
         });

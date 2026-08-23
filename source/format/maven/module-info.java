@@ -28,6 +28,8 @@ module build.jenesis.repository.format.maven {
     uses build.jenesis.repository.format.java.bridge.ModuleView;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.maven.MavenFormat;
+    provides build.jenesis.repository.store.PublicationObserver
+            with build.jenesis.repository.format.maven.MavenMetadataObserver;
     provides build.jenesis.repository.walk.WalkConsumer
             with build.jenesis.repository.format.maven.ModuleViewRebuild;
 }

@@ -67,6 +67,11 @@ public final class GcsArtifactStore implements ArtifactStore {
     }
 
     @Override
+    public Object identity() {
+        return "gcs:" + bucket + "/" + keyPrefix;
+    }
+
+    @Override
     public Optional<URI> presign(String key, Duration ttl) {
         // GCS's S3-compatible XML API honours SigV4 presigned GET URLs exactly as S3 does, so this is the identical
         // presigner path; with no presigner configured, degrade to streaming.

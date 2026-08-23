@@ -37,6 +37,11 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         return new FilesystemArtifactStore(root.resolve(ArtifactStore.segment(tenant)));
     }
 
+    @Override
+    public Object identity() {
+        return "file:" + root.toAbsolutePath().normalize();
+    }
+
     private Path resolve(String key) {
         Path path = root.resolve(key).normalize();
         if (!path.startsWith(root.normalize())) {

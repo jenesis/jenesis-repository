@@ -152,6 +152,17 @@ public interface ArtifactStore {
     ArtifactStore scope(String tenant);
 
     /**
+     * A stable identity of this store's subspace: equal for two instances that address the same root directory or
+     * bucket prefix, unequal across scopes. {@link StoredListing} keys its per-document writer queues by it, so the
+     * concurrent writers of one listing - and only they - coalesce into one rewrite. A backend that cannot name its
+     * subspace inherits the instance itself, which stays correct and merely coalesces nothing; a decorator answers its
+     * delegate's.
+     */
+    default Object identity() {
+        return this;
+    }
+
+    /**
      * Validate {@code segment} as a single traversal-free scope name and return it - defence in depth for
      * {@link #scope(String)}. Every routing edge already rejects a non-{@code [A-Za-z0-9_-]} tenant / repository name
      * before it scopes the store, so this is a backstop: it stops a store backend from silently escaping its subspace

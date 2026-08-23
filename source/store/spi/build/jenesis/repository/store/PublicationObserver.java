@@ -157,4 +157,14 @@ public interface PublicationObserver {
      *  consumer's periodic rebuild. Default no-op. */
     default void onWithholdCleared(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
     }
+
+    /**
+     * A lifecycle flag on a coordinate/version was set or cleared (a yank, a deprecation, its reversal). The subject
+     * names the coordinate and the version and no ecosystem - a lifecycle mark is keyed without one - so a consumer
+     * that keeps a per-ecosystem view asks its own store whether the coordinate is one of its own. Fired after the
+     * flag's write, contained like every other face, so a listing that mirrors the flag is updated on the write that
+     * changed it rather than consulted on every read.
+     */
+    default void onMarked(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
+    }
 }

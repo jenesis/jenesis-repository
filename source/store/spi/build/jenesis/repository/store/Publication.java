@@ -183,10 +183,11 @@ public final class Publication {
         // "chain withheld -> pointer resolve -> blobs/<hash> exists" (with the one gain the seam brings: a hostile,
         // unresolvable request path now fails closed to empty rather than throwing an InvalidPathException out of a
         // serve), so a linked, present, non-withheld path still resolves to blobs/<hash> exactly as before.
-        if (new ServableNames(store, this).state(requestPath) != ServableNames.State.SERVABLE) {
+        ServableNames.Location location = new ServableNames(store, this).located(requestPath);
+        if (location.state() != ServableNames.State.SERVABLE) {
             return Optional.empty();
         }
-        return blob(requestPath).map(hash -> "blobs/" + hash);
+        return Optional.of("blobs/" + location.hash());   // the hash the seam just resolved - no second pointer read
     }
 
     /** Whether any interceptor in this publication's chain withholds the request path from serving - the chain probe
@@ -520,14 +521,23 @@ public final class Publication {
      *  instance) fires the marker face through, reusing the one discovered observer list rather than a second discovery.
      *  Failures are logged and contained exactly as on the instance notify paths, so a hold's marker write never fails
      *  open because a downstream consumer is down. */
-    static void notifyWithheld(ArtifactDescriptor subject, ArtifactStore store) {
+    public static void notifyWithheld(ArtifactDescriptor subject, ArtifactStore store) {
         notify(OBSERVERS, "withhold of hash " + subject.hash(), observer -> observer.onWithheld(subject, store));
     }
 
-    /** The transition-OFF mirror the same-package {@link Withheld#clear} fires through - the marker-cleared face. */
-    static void notifyWithholdCleared(ArtifactDescriptor subject, ArtifactStore store) {
+    /** The transition-OFF mirror the same-package {@link Withheld#clear} fires through - the marker-cleared face.
+     *  Public, like its twin, so a hold a {@link PublishInterceptor} places by its own means announces it the way the
+     *  marker and pointer holds do, and every listing that mirrors the hold is updated. */
+    public static void notifyWithholdCleared(ArtifactDescriptor subject, ArtifactStore store) {
         notify(OBSERVERS, "withhold-clear of hash " + subject.hash(),
                 observer -> observer.onWithholdCleared(subject, store));
+    }
+
+    /** The lifecycle-mark face ({@link PublicationObserver#onMarked}) over the discovered observers, fired by the
+     *  lifecycle primitive after a flag was set or cleared; contained like every other face. */
+    public static void notifyMarked(ArtifactDescriptor subject, ArtifactStore store) {
+        notify(OBSERVERS, "lifecycle mark of " + subject.coordinate() + " " + subject.version(),
+                observer -> observer.onMarked(subject, store));
     }
 
     /** The outcome of a screened upload: the disposition the interceptor chain reached and the SHA-256 the blob was

@@ -9,11 +9,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.walk.BoundedChildren;
-import build.jenesis.repository.walk.ScreenedNames;
-import javax.xml.stream.XMLOutputFactory;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamWriter;
+import build.jenesis.repository.store.StoredListing;
 
 /**
  * The generic (raw) format: a plain HTTP file store under {@code /raw/...}, for the artifacts that fit no package
@@ -27,20 +23,12 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     // Reused across listings rather than rebuilt per request: newInstance() runs the full JAXP provider lookup, and the
     // factory is safe to share for creating writers once configured.
-    private static final XMLOutputFactory XML_OUTPUT = XMLOutputFactory.newInstance();
 
-    /** How many immediate child names a listing pages from the store at a time - the directory is enumerated through
-     *  repeated bounded pages rather than one whole-directory {@code list()} snapshot, so a raw directory with an
-     *  enormous fan-out is never materialised twice (the raw child set and the screened subset) in heap at once. */
-    private static final int LISTING_PAGE = 1_000;
 
     /** How many entries one rendered listing document may carry. A directory browser is navigated into, not scrolled,
      *  so an enormous directory renders its first page rather than building a millions-anchor document in heap. */
     private static final int LISTING_ENTRIES = 10_000;
 
-    /** How many stored child names one listing may examine to fill {@link #LISTING_ENTRIES} - the bound that also
-     *  covers a directory whose children are mostly screened away, where the entry cap alone would never fire. */
-    private static final int LISTING_SCAN = 50_000;
 
     /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link RawImporter} - the format IS
      *  the discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
@@ -75,10 +63,14 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                 // link the path, then respond 201 - verdicts are the edge's business, not the format's.
                 String hash = publication.storeBlob(exchange.requestStream());
                 publication.link(path, hash);
+                // The directory pages are written here, on the publish: the file joins its folder's stored page and
+                // the folder its ancestors', rather than the folder being enumerated and screened on every listing.
+                new RawListings(store).refresh(path);
                 exchange.respond(201);
             }
             case "DELETE" -> {
                 publication.unpublish(path);
+                new RawListings(store).refresh(path);
                 exchange.respond(204);
             }
             // HEAD must answer exactly what a GET would: located() applies the withheld (quarantine/retraction)
@@ -147,65 +139,45 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         return true;
     }
 
+    /** A directory page ({@code GET} on a trailing slash): the folder's stored listing, streamed as it is. A folder
+     *  with no servable child at all - none published, or every child screened away - is a {@code 404}, as before;
+     *  the structural probe is paid only until the page exists. */
     private void listing(String path, ArtifactStore store, FormatExchange exchange) throws IOException {
-        String prefix = ServableNames.PUBLISHED + path.substring(0, path.length() - 1);
-        // The directory listing must not disclose a leaf a GET/HEAD would not serve: a withheld artifact 404s on GET
-        // but its pointer name still lives under publish/, so writing every child verbatim leaked the existence - and
-        // the name - of a withheld artifact. The listing is therefore produced by the shared screened enumeration:
-        // ScreenedNames pages the children AND applies the servable-name seam's serve-parity screen
-        // (HIDE_WITHHELD_AND_GONE, exactly what the item routes' located() decides) in one call, so this surface never
-        // holds an unscreened child name and cannot page-then-forget. A child that is itself a directory (it has its
-        // own children under publish/) is a sub-listing rather than a servable leaf, so it is declared a container and
-        // forwards unconditionally - its own leaves carry the screen. Folder-ness is probed with a bounded one-element
-        // page rather than listing (and discarding) each child's entire subtree, which was quadratic across a large
-        // directory. Only the screened-visible names are retained (they are rendered anyway); the raw child set is
-        // never held whole, and the render is bounded - a directory wider than the cap renders its first page rather
-        // than materialising an unbounded document.
-        ScreenedNames screened = ScreenedNames
-                .paths(new ServableNames(store, new Publication(store)), ServableNames.Policy.HIDE_WITHHELD_AND_GONE)
-                .containers(childKey -> hasChild(store, childKey))
-                .scanning(BoundedChildren.bounded().entries(LISTING_SCAN).page(LISTING_PAGE))
-                .take(LISTING_ENTRIES);
-        List<String> visible = new ArrayList<>();
-        screened.scan(store, prefix, (child, _) -> visible.add(child));
-        if (visible.isEmpty()) {
-            exchange.respond(404);   // no children at all, or every child screened away - both 404, as before
+        RawListings listings = new RawListings(store);
+        if (!StoredListing.present(store, RawListings.page(path))
+                && !hasChild(store, ServableNames.PUBLISHED + path.substring(0, path.length() - 1))) {
+            exchange.respond(404);
             return;
         }
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try {
-            XMLStreamWriter writer = XML_OUTPUT.createXMLStreamWriter(out, "UTF-8");
-            writer.writeDTD("<!DOCTYPE html>");
-            writer.writeStartElement("html");
-            writer.writeStartElement("body");
-            for (String child : visible) {
-                writer.writeStartElement("a");
-                writer.writeAttribute("href", child);
-                writer.writeCharacters(child);
-                writer.writeEndElement();
-                writer.writeEmptyElement("br");
-            }
-            writer.writeEndElement();
-            writer.writeEndElement();
-            writer.writeEndDocument();
-            writer.close();
-        } catch (XMLStreamException e) {
-            throw new IOException(e);
+        Optional<StoredListing.Served> served = StoredListing.open(store, listings.spec(path));
+        if (served.isEmpty()) {
+            exchange.respond(404);
+            return;
         }
-        exchange.setResponseHeader("Content-Type", "text/html");
-        exchange.respond(200, out.toByteArray());
+        try (StoredListing.Served page = served.get()) {
+            if (page.header().size() <= EMPTY_PAGE_LENGTH) {
+                exchange.respond(404);   // every child screened away - 404, as before
+                return;
+            }
+            String etag = '"' + page.header().sha256() + '"';
+            exchange.setResponseHeader("ETag", etag);
+            if (etag.equals(exchange.requestHeader("If-None-Match"))) {
+                exchange.respond(304);
+                return;
+            }
+            exchange.setResponseHeader("Content-Type", "text/html");
+            exchange.respond(200, page.bytes());
+        }
     }
 
-    /** Whether a prefix has at least one immediate child, tested with a bounded one-element page rather than listing
-     *  (and discarding) the child's entire subtree just to check emptiness - so classifying a child as a directory is a
-     *  single seek, not O(its own child count) round-trips. */
+    /** The length of a page listing nothing - the page frame alone. */
+    private static final long EMPTY_PAGE_LENGTH = RawListings.PAGE.join(new TreeMap<>()).length;
+
     private static boolean hasChild(ArtifactStore store, String prefix) {
         boolean[] any = {false};
         store.page(prefix, "", 1, _ -> any[0] = true);
         return any[0];
     }
-
-    // --- RepositoryImporter capability (WSPI.2 (c)): delegated to RawImporter. ---
 
     @Override
     public boolean imports(String sourceFormat) {
