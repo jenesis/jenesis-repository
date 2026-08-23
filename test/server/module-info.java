@@ -39,6 +39,7 @@
  * @jenesis.pin commons-io/commons-io 2.19.0 SHA-256/824268919b4b62f9f40f08c54381de5993b078f58667e332d17348ae019d72b9
  * @jenesis.pin commons-logging/commons-logging 1.3.5 SHA-256/6d7a744e4027649fbb50895df9497d109f98c766a637062fe8d2eabbb3140ba4
  * @jenesis.pin io.micrometer/micrometer-commons 1.17.0 SHA-256/03919dc71e2417ec4b5c254c4ba924963c972e124190f73cdcb68ed51c6eede6
+ * @jenesis.pin micrometer.observation 1.17.0
  * @jenesis.pin io.micrometer/micrometer-core 1.17.0 SHA-256/73503e701a377fafeaf33b71b9b8910a8d7884cbba88ab27971b33b3753b65aa
  * @jenesis.pin io.micrometer/micrometer-jakarta9 1.17.0 SHA-256/4ae9dbc9072fea8c36684a745e0e944b9540fd15027dfe7af0a186f8df43272c
  * @jenesis.pin io.micrometer/micrometer-observation 1.17.0 SHA-256/2fc95a327578d3b2a81c3ff40e646a4a21e46b0153ccbbf91690142bf80d9661
@@ -237,6 +238,7 @@ open module build.jenesis.repository.test {
     requires build.jenesis.repository.importer.index;
     requires build.jenesis.repository.posture;
     requires build.jenesis.repository.observation;
+    requires micrometer.observation;
     requires tools.jackson.databind;
     requires jakarta.servlet;
     requires java.net.http;
