@@ -234,6 +234,33 @@ class StoredListingTest {
         assertThat(onCaller).as("the derivation ran off the queuing thread").isFalse();
     }
 
+    /** A put rewrites the one document, so its cost grows with the document and with nothing else: ten times the
+     *  entries may cost ten times the put, never a hundred - the guard against a write that re-reads or re-scans
+     *  per entry. Measured over a Packages-shaped listing of 300-byte stanzas. */
+    @Test
+    void a_put_costs_the_document_it_rewrites_and_not_more() throws IOException {
+        StoredListing.Spec spec = StoredListing.Spec.of("scale/Packages",
+                StoredListing.Codec.delimited("\n\n", stanza -> stanza.substring(9, stanza.indexOf('\n'))),
+                TreeMap::new);
+        String filler = "x".repeat(260);
+        double perPutAt1k = 0, perPutAt10k = 0;
+        long window = System.nanoTime();
+        for (int i = 1; i <= 10_000; i++) {
+            StoredListing.put(store, spec, Integer.toString(i),
+                    ("Package: " + i + "\nVersion: 1." + i + "\nDescription: " + filler).getBytes(StandardCharsets.UTF_8));
+            if (i == 1_000) {
+                perPutAt1k = (System.nanoTime() - window) / 1e6 / 1_000;
+                window = System.nanoTime();
+            } else if (i == 10_000) {
+                perPutAt10k = (System.nanoTime() - window) / 1e6 / 9_000;
+            }
+        }
+        System.out.printf("[scale] %.2f ms per put at 1k entries, %.2f ms at 10k%n", perPutAt1k, perPutAt10k);
+        assertThat(perPutAt10k / Math.max(perPutAt1k, 0.5))
+                .as("a put at 10k entries against one at 1k: linear in the document, not quadratic")
+                .isLessThan(25);
+    }
+
     @Test
     void the_store_key_is_under_the_listing_root() {
         assertThat(StoredListing.key("debian/main/Packages")).isEqualTo("listing/debian/main/Packages");

@@ -433,13 +433,19 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      * incarnation boundary is a key deleted and re-created with byte-identical content at the same stamp - where the
      * stored state a stale token still passes against is the state its holder read, so the compare-and-set concedes
      * nothing.
+     *
+     * <p>The content digest is the length and two CRCs (CRC-32 and CRC-32C, 64 bits between them), not a
+     * cryptographic hash: the token tells incarnations apart, it does not certify bytes, and every versioned read
+     * and write computes it over the whole object - a multi-megabyte listing included - so it is computed at memory
+     * speed. Both CRCs are intrinsics on every platform the JDK targets.
      */
     private static Object token(long modified, byte[] content) {
-        try {
-            return modified + ":" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
+        CRC32 crc = new CRC32();
+        crc.update(content);
+        CRC32C crcc = new CRC32C();
+        crcc.update(content);
+        return modified + ":" + content.length + ":" + Long.toHexString(crc.getValue()) + ":"
+                + Long.toHexString(crcc.getValue());
     }
 
     @Override

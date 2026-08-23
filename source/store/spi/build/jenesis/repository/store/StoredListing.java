@@ -89,34 +89,47 @@ public final class StoredListing {
          */
         static Codec delimited(String delimiter, Function<String, String> idOf) {
             byte[] separator = delimiter.getBytes(StandardCharsets.UTF_8);
+            String latin1 = new String(separator, StandardCharsets.ISO_8859_1);
             return new Codec() {
                 @Override
                 public SortedMap<String, byte[]> split(byte[] document) {
+                    // The delimiter is searched on a Latin-1 view of the bytes - one char per byte, so a char
+                    // offset is a byte offset and the search is the JDK's vectorised one - and each fragment is cut
+                    // out of the document as it is, decoded once for its id and never re-encoded. A multi-megabyte
+                    // index is thus not decoded and re-encoded whole on every write.
                     SortedMap<String, byte[]> entries = new TreeMap<>();
-                    String text = new String(document, StandardCharsets.UTF_8);
+                    String view = new String(document, StandardCharsets.ISO_8859_1);
                     int from = 0;
-                    while (from < text.length()) {
-                        int at = text.indexOf(delimiter, from);
-                        String fragment = at < 0 ? text.substring(from) : text.substring(from, at);
-                        if (!fragment.isEmpty()) {
-                            entries.put(idOf.apply(fragment), fragment.getBytes(StandardCharsets.UTF_8));
+                    while (from < document.length) {
+                        int at = view.indexOf(latin1, from);
+                        int end = at < 0 ? document.length : at;
+                        if (end > from) {
+                            byte[] fragment = Arrays.copyOfRange(document, from, end);
+                            entries.put(idOf.apply(new String(fragment, StandardCharsets.UTF_8)), fragment);
                         }
                         if (at < 0) {
                             break;
                         }
-                        from = at + delimiter.length();
+                        from = at + separator.length;
                     }
                     return entries;
                 }
 
                 @Override
                 public byte[] join(SortedMap<String, byte[]> entries) {
-                    ByteArrayOutputStream out = new ByteArrayOutputStream();
+                    int length = 0;
                     for (byte[] fragment : entries.values()) {
-                        out.writeBytes(fragment);
-                        out.writeBytes(separator);
+                        length += fragment.length + separator.length;
                     }
-                    return out.toByteArray();
+                    byte[] document = new byte[length];
+                    int at = 0;
+                    for (byte[] fragment : entries.values()) {
+                        System.arraycopy(fragment, 0, document, at, fragment.length);
+                        at += fragment.length;
+                        System.arraycopy(separator, 0, document, at, separator.length);
+                        at += separator.length;
+                    }
+                    return document;
                 }
             };
         }
@@ -172,7 +185,7 @@ public final class StoredListing {
      * materialisation). A format keeps one of these per listing kind and hands it to every read and write, so a read
      * and a write can never disagree on the document's shape.
      */
-    public record Spec(String listing, Codec codec, Generator generator, Derivation derivation) {
+    public record Spec(String listing, Codec codec, Generator generator, Derivation derivation, boolean md5) {
 
         public Spec {
             Objects.requireNonNull(listing, "listing");
@@ -182,11 +195,17 @@ public final class StoredListing {
         }
 
         public static Spec of(String listing, Codec codec, Generator generator) {
-            return new Spec(listing, codec, generator, ignored -> { });
+            return new Spec(listing, codec, generator, ignored -> { }, false);
         }
 
         public Spec deriving(Derivation derivation) {
-            return new Spec(listing, codec, generator, derivation);
+            return new Spec(listing, codec, generator, derivation, md5);
+        }
+
+        /** Also record the body's MD5 in the header - for a format whose own documents publish it (a Debian
+         *  {@code Release}, the RubyGems compact index); every other listing pays for the SHA-256 alone. */
+        public Spec withMd5() {
+            return new Spec(listing, codec, generator, derivation, true);
         }
 
         String key() {
@@ -194,17 +213,19 @@ public final class StoredListing {
         }
     }
 
-    /** The stored header: the document's sequence (monotone per document) and its body's length and digests. */
-    public record Header(long seq, long size, String md5, String sha1, String sha256) {
+    /** The stored header: the document's sequence (monotone per document), its body's length, its SHA-256 (the
+     *  validator every read serves) and, for a listing that {@linkplain Spec#withMd5 asks for it}, its MD5 - empty
+     *  otherwise. */
+    public record Header(long seq, long size, String md5, String sha256) {
 
-        /** The header as a derived document sees it: same sequence, the derived body's own length and digests. */
-        Header derived(byte[] body) {
-            return of(seq, body);
+        /** The header a body is stored with at this sequence, SHA-256 only - what a derivation computes for a twin. */
+        public static Header of(long seq, byte[] body) {
+            return of(seq, body, false);
         }
 
-        /** The header a body would be stored with at this sequence - what a derivation computes for a twin. */
-        public static Header of(long seq, byte[] body) {
-            return new Header(seq, body.length, digest("MD5", body), digest("SHA-1", body), digest("SHA-256", body));
+        /** The header a body is stored with at this sequence, with its MD5 when {@code md5} asks for it. */
+        public static Header of(long seq, byte[] body, boolean md5) {
+            return new Header(seq, body.length, md5 ? digest("MD5", body) : "", digest("SHA-256", body));
         }
 
         private static String digest(String algorithm, byte[] body) {
@@ -483,8 +504,15 @@ public final class StoredListing {
      * built from, unless a newer one is already stored. Returns whether this body was written.
      */
     public static boolean derive(ArtifactStore store, String derived, long seq, byte[] body) throws IOException {
+        return derive(store, derived, Header.of(seq, body), body);
+    }
+
+    /** {@link #derive(ArtifactStore, String, long, byte[])} with the header the caller already computed for the
+     *  body - a caller that publishes the twin's digests computes them once, here, and not again. */
+    public static boolean derive(ArtifactStore store, String derived, Header header, byte[] body) throws IOException {
+        long seq = header.seq();
         String key = key(derived);
-        byte[] framed = frame(Header.of(seq, body), body);
+        byte[] framed = frame(header, body);
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
             Optional<ArtifactStore.Versioned> current = readStored(store, key);
             if (current.isPresent() && parse(current.get().content(), key).header().seq() >= seq) {
@@ -574,7 +602,7 @@ public final class StoredListing {
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
             Optional<ArtifactStore.Versioned> current = readStored(store, key);
             long seq = current.isPresent() ? parse(current.get().content(), key).header().seq() : 0L;
-            Document document = document(seq, spec.codec().join(spec.generator().generate()));
+            Document document = document(seq, spec.codec().join(spec.generator().generate()), spec.md5());
             if (store.writeVersioned(key, frame(document.header(), document.body()),
                     current.map(ArtifactStore.Versioned::token).orElse(null))) {
                 MATERIALISED.increment();
@@ -735,7 +763,7 @@ public final class StoredListing {
             if (current.isPresent() && Arrays.equals(joined, parse(current.get().content(), key).body())) {
                 return true;   // the changes leave the document as it is: nothing to write, nothing to derive
             }
-            Document updated = document(seq, joined);
+            Document updated = document(seq, joined, spec.md5());
             if (store.writeVersioned(key, frame(updated.header(), updated.body()),
                     current.map(ArtifactStore.Versioned::token).orElse(null))) {
                 UPDATES.increment();
@@ -798,7 +826,7 @@ public final class StoredListing {
     }
 
     private static void materialise(ArtifactStore store, Spec spec) throws IOException {
-        Document document = document(0L, spec.codec().join(spec.generator().generate()));
+        Document document = document(0L, spec.codec().join(spec.generator().generate()), spec.md5());
         if (store.writeVersioned(spec.key(), frame(document.header(), document.body()), null)) {
             MATERIALISED.increment();
             derive(spec.key(), document, spec.derivation());
@@ -815,16 +843,16 @@ public final class StoredListing {
 
     // ---- framing ----
 
-    private static Document document(long priorSeq, byte[] body) {
+    private static Document document(long priorSeq, byte[] body, boolean md5) {
         // Monotone per document, and past any sequence a forgotten predecessor could have reached (a wall-clock
         // floor), so a derived document written against the old sequence never outranks the regenerated one.
         long seq = Math.max(priorSeq + 1, System.currentTimeMillis());
-        return new Document(Header.of(seq, body), body);
+        return new Document(Header.of(seq, body, md5), body);
     }
 
     private static byte[] frame(Header header, byte[] body) {
         byte[] head = (MAGIC + "\nseq=" + header.seq() + "\nsize=" + header.size() + "\nmd5=" + header.md5()
-                + "\nsha1=" + header.sha1() + "\nsha256=" + header.sha256() + "\n\n").getBytes(StandardCharsets.US_ASCII);
+                + "\nsha256=" + header.sha256() + "\n\n").getBytes(StandardCharsets.US_ASCII);
         byte[] framed = new byte[head.length + body.length];
         System.arraycopy(head, 0, framed, 0, head.length);
         System.arraycopy(body, 0, framed, head.length, body.length);
@@ -866,22 +894,27 @@ public final class StoredListing {
 
     private static Header header(String head, String key) throws IOException {
         String[] lines = head.split("\n");
-        if (lines.length != 6 || !lines[0].equals(MAGIC)) {
+        if (lines.length < 4 || !lines[0].equals(MAGIC)) {
+            throw new IOException("not a listing document: " + key);
+        }
+        Map<String, String> fields = new HashMap<>();
+        for (int i = 1; i < lines.length; i++) {
+            int equals = lines[i].indexOf('=');
+            if (equals <= 0) {
+                throw new IOException("malformed listing header line: " + lines[i]);
+            }
+            fields.put(lines[i].substring(0, equals), lines[i].substring(equals + 1));
+        }
+        // A document from before the header dropped its SHA-1 carries one more line; it is read and ignored.
+        if (!fields.containsKey("seq") || !fields.containsKey("size") || !fields.containsKey("sha256")) {
             throw new IOException("not a listing document: " + key);
         }
         try {
-            return new Header(Long.parseLong(field(lines[1], "seq")), Long.parseLong(field(lines[2], "size")),
-                    field(lines[3], "md5"), field(lines[4], "sha1"), field(lines[5], "sha256"));
+            return new Header(Long.parseLong(fields.get("seq")), Long.parseLong(fields.get("size")),
+                    fields.getOrDefault("md5", ""), fields.get("sha256"));
         } catch (NumberFormatException e) {
             throw new IOException("not a listing document: " + key, e);
         }
-    }
-
-    private static String field(String line, String name) throws IOException {
-        if (!line.startsWith(name + "=")) {
-            throw new IOException("malformed listing header line: " + line);
-        }
-        return line.substring(name.length() + 1);
     }
 
     // ---- repair ----
