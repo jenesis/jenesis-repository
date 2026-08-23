@@ -1,5 +1,6 @@
 package build.jenesis.repository.server;
 
+import io.micrometer.common.KeyValue;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
 import org.slf4j.Logger;
@@ -41,11 +42,35 @@ public final class LoggingObservationHandler implements ObservationHandler<Obser
         if (!logged(context.getName())) {
             return;
         }
+        if (REQUEST.equals(context.getName())) {
+            String line = line(context);
+            if (context.getError() == null) {
+                LOGGER.info("{} {}", context.getName(), line);
+            } else {
+                LOGGER.warn("{} {} failed: {}", context.getName(), line, context.getError().toString());
+            }
+            return;
+        }
         if (context.getError() == null) {
             LOGGER.info("{} {}", context.getName(), context.getAllKeyValues());
         } else {
             LOGGER.warn("{} {} failed: {}", context.getName(), context.getAllKeyValues(),
                     context.getError().toString());
         }
+    }
+
+    /** The access line, compact: method, path and status - what an access log carries, at a fifth of the key-value
+     *  dump's length, on the one line the server writes per request. */
+    public static String line(Observation.Context context) {
+        return keyValue(context, "method") + " " + keyValue(context, "http.url") + " " + keyValue(context, "status");
+    }
+
+    private static String keyValue(Observation.Context context, String key) {
+        for (KeyValue keyValue : context.getAllKeyValues()) {
+            if (keyValue.getKey().equals(key)) {
+                return keyValue.getValue();
+            }
+        }
+        return "-";
     }
 }
