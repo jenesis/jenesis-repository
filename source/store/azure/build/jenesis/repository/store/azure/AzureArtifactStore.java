@@ -207,9 +207,16 @@ public final class AzureArtifactStore implements ArtifactStore {
         }
     }
 
+    /** The storage prefix of a listing container - the scope's key prefix and the normalised container name with its
+     *  trailing delimiter - so a caller's {@code a/b/} and {@code a/b} ask the service for one prefix. */
+    private String base(String prefix) {
+        String container = ArtifactStore.container(prefix);
+        return keyPrefix + (container.isEmpty() ? "" : container + "/");
+    }
+
     @Override
     public List<String> list(String prefix) {
-        String base = keyPrefix + (prefix.isEmpty() ? "" : prefix + "/");
+        String base = base(prefix);
         TreeSet<String> names = new TreeSet<>();
         for (BlobItem item : container.listBlobsByHierarchy(base)) {
             String name = item.getName().substring(base.length());
@@ -239,7 +246,7 @@ public final class AzureArtifactStore implements ArtifactStore {
         if (limit <= 0) {
             return;
         }
-        String base = keyPrefix + (prefix.isEmpty() ? "" : prefix + "/");
+        String base = base(prefix);
         // Azure's List Blobs honours a server-side start-at key (ListBlobsOptions.startFrom, its own query parameter,
         // distinct from the opaque continuation marker), so seek straight to the boundary instead of re-listing from
         // the base and skipping every prior key in the client. The resume now costs one bounded page from startAfter,
@@ -310,7 +317,8 @@ public final class AzureArtifactStore implements ArtifactStore {
     /** A child as List Blobs saw it; {@code item} is null for a prefix entry - a container - which has no size or
      *  age of its own. Both halves of a blob's metadata are in the listing response already. */
     private static Listed listed(String prefix, String name, BlobItem item) {
-        String key = prefix == null || prefix.isEmpty() ? name : prefix + "/" + name;
+        String container = ArtifactStore.container(prefix);
+        String key = container.isEmpty() ? name : container + "/" + name;
         BlobItemProperties properties = item == null ? null : item.getProperties();
         if (properties == null) {
             return Listed.of(key);
@@ -337,7 +345,7 @@ public final class AzureArtifactStore implements ArtifactStore {
         if (limit <= 0) {
             throw new IllegalArgumentException("A scan limit must be positive: " + limit);
         }
-        String base = keyPrefix + (prefix.isEmpty() ? "" : prefix + "/");
+        String base = base(prefix);
         // listBlobs, not listBlobsByHierarchy: a recursive scan wants every blob under the prefix, so there are no
         // grouped prefixes to merge and none of page()'s name-order repair to do - the flat listing already arrives
         // in the key order this method owes.

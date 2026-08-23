@@ -597,6 +597,34 @@ public final class Authorization {
         setGrant(tenantOf(key), hash(key), scope, "*");
     }
 
+    /**
+     * Provision {@code key} as the deployment's bootstrap credential - the {@code jenreg.bootstrap-key} contract: a
+     * non-expiring key labelled {@code bootstrap} holding every privilege on every repository of the tenant the key
+     * itself names. Idempotent, since the key's own hash is its identity: re-provisioning the same key on every boot
+     * converges rather than accumulating. A blank key provisions nothing and answers {@code null}; a malformed one
+     * is refused, because an operator who set it expects a working key and a silently dropped typo would leave them
+     * locked out with no line saying why.
+     *
+     * @return the tenant the key was provisioned for, or {@code null} for a blank key
+     * @throws IllegalArgumentException if the key is not of the form {@code jenk_<tenant>.<secret><checksum>}
+     */
+    public String bootstrap(String key) throws IOException {
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        String stripped = key.strip();
+        // tenantOf answers null rather than throwing for anything it does not recognise, so the check is on the answer.
+        String tenant = tenantOf(stripped);
+        if (tenant == null || tenant.isBlank()) {
+            throw new IllegalArgumentException("jenreg.bootstrap-key is not a well-formed key: it must look like "
+                    + "jenk_<tenant>.<secret><checksum>, since the tenant it provisions is read out of the key itself");
+        }
+        String hash = hash(stripped);
+        provision(tenant, hash, "bootstrap", null);
+        setGrant(tenant, hash, "*", "*");
+        return tenant;
+    }
+
     /** The credential hashes provisioned for a tenant, for the management surface to list. */
     public List<String> credentials(String tenant) {
         if (store == null) {
