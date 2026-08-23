@@ -262,6 +262,22 @@ public interface ArtifactStore {
      * this line re-screens it: the {@code segment}/{@code ArtifactLayout.addressable}/{@code RepositoryImporter}
      * seams above all refuse a backslash already, and this was the one place that did not.
      *
+     * <p><b>A C0 control character is refused too</b>, and for the reason the backslash is: it is a character that
+     * means one thing here and another somewhere downstream. A {@code NUL} truncates the key at the first C API that
+     * touches it, so a key screened whole is acted on in part; a {@code CR} or {@code LF} forges a line in every log
+     * record, generated index and listing document the key later reaches, so a coordinate can write rows that read as
+     * the server's own. Neither is part of a legitimate coordinate in any ecosystem this product serves, so the cost
+     * of refusing them is nothing, and this was the last shape the free core screened nowhere - not here, not in
+     * {@link #key(String)}, not in {@link #segment(String)} - while this edition's downstream request guard had
+     * refused it since it was written. Two layers disagreeing about which shapes are legal is the divergence this
+     * predicate exists to prevent, so the rule is stated here and the downstream guard delegates to it (&sect;2).
+     * The boundary is the C0 range: {@code 0x7F} and the C1 range are left out deliberately, because widening beyond
+     * the rule being lifted would be a second, unproven change riding a first.
+     *
+     * <p>The name is now narrower than the question. A backslash was already not a traversal, and a control character
+     * plainly is not; what every caller actually asks here is "may this path be stored and routed" - see the naming
+     * note on D-288 in the hardening plan.
+     *
      * <p>An empty segment is not a traversal (a trailing slash on a directory listing request, a doubled separator)
      * and a percent-encoded {@code %2e%2e} is not one either: it is a literal name until something decodes it, and
      * nothing below this line ever does.
@@ -270,8 +286,11 @@ public interface ArtifactStore {
         if (path == null) {
             return false;
         }
-        if (path.indexOf('\\') >= 0) {
-            return false;
+        for (int index = 0; index < path.length(); index++) {
+            char character = path.charAt(index);
+            if (character == '\\' || character < 0x20) {
+                return false;
+            }
         }
         for (int index = 0, start = 0; index <= path.length(); index++) {
             if (index == path.length() || path.charAt(index) == '/') {

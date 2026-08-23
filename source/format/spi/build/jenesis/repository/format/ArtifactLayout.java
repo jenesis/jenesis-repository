@@ -50,17 +50,23 @@ public interface ArtifactLayout extends EcosystemLayout {
      * it composes a request path out of a coordinate and a version, so a hostile or malformed coordinate maps to
      * nothing instead of to a traversal-shaped path an eviction would then delete under.
      *
-     * <p>It is deliberately the same {@code .}/{@code ..}-and-{@code \} rule the store screens a key on
-     * ({@link ArtifactStore#traversalFree}) plus the {@code /} rule the store screens a <em>scope segment</em> on
-     * ({@link ArtifactStore#segment}), stated once here for every layout rather than re-derived per format: a Maven
-     * artifactId, an OCI tag and a module name are all single segments, and a Maven groupId is checked component by
-     * component because its dots become separators. Shared so a new layout inherits the guard instead of being the
-     * next one to forget it (&sect;13).
+     * <p>It is deliberately the same rule the store screens a key on ({@link ArtifactStore#traversalFree}) plus the
+     * {@code /} rule the store screens a <em>scope segment</em> on ({@link ArtifactStore#segment}), stated once here
+     * for every layout rather than re-derived per format: a Maven artifactId, an OCI tag and a module name are all
+     * single segments, and a Maven groupId is checked component by component because its dots become separators.
+     * Shared so a new layout inherits the guard instead of being the next one to forget it (&sect;13).
+     *
+     * <p><b>It says "the same rule" and now asks for it</b>, rather than restating it. It used to spell out
+     * {@code .}, {@code ..} and {@code \} here, which is the same rule only for as long as nobody adds to the
+     * original - and something did: the store's screen grew the C0 control characters (D-288), and this copy did not,
+     * so a tab-bearing coordinate was addressable here and refused at the key screen. That gap is not merely
+     * cosmetic, because the keys {@link #paths} composes are handed to eviction, and a delete is not screened the way
+     * a write is: the composing seam is the one that has to refuse. A guard that describes itself as a copy of
+     * another is a guard that will fall behind it.
      */
     static boolean addressable(String... parts) {
         for (String part : parts) {
-            if (part == null || part.isEmpty() || part.equals(".") || part.equals("..")
-                    || part.indexOf('/') >= 0 || part.indexOf('\\') >= 0) {
+            if (part == null || part.isEmpty() || part.indexOf('/') >= 0 || !ArtifactStore.traversalFree(part)) {
                 return false;
             }
         }
