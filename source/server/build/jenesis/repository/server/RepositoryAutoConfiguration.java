@@ -9,6 +9,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.importer.ImportSourceProvider;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.QuotaArtifactStore;
@@ -393,6 +394,13 @@ public class RepositoryAutoConfiguration {
     public NodeFingerprintPublisher nodeFingerprintPublisher(NodeConsistency consistency, ArtifactStore store,
                                                              Environment environment) {
         return new NodeFingerprintPublisher(consistency, store, environment::getProperty);
+    }
+
+    /** The deferred listing derivations ({@code StoredListing.later}): a stopping node finishes the derived twins it
+     *  queued before its context closes, rather than dropping them. */
+    @Bean(destroyMethod = "close")
+    public StoredListing.Deferred deferredListingDerivations() {
+        return new StoredListing.Deferred();
     }
 
     /** The free edition's scheduled driver of the shared rebuild pass (see {@link RebuildScheduler}): a daemon cadence
