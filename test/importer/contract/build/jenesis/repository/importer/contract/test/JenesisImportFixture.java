@@ -9,9 +9,11 @@ import build.jenesis.repository.importer.testkit.ScriptedUpstream;
 
 /**
  * The jenesis-to-jenesis connector's corpus: the source instance's {@code /api/assets} enumeration paged by an opaque
- * cursor, each asset carrying its serving path and format, and the bytes streamed from {@code /repository<path>}. The
- * credential is a single opaque API key in the {@code Jenesis-Repository-Key} header rather than HTTP basic, which is
- * exactly why the shared credential leg asserts over both header names instead of one.
+ * cursor, each asset carrying its serving path and format, and the bytes streamed from {@code /repository<path>} -
+ * the fixed-tenant edition's shape, so the connector's first download probes the repository-qualified shape, is
+ * answered {@code 404} and falls back, exactly the dialogue a real fixed-tenant source holds. The credential is a
+ * single opaque API key in the {@code Jenesis-Repository-Key} header rather than HTTP basic, which is exactly why
+ * the shared credential leg asserts over both header names instead of one.
  */
 final class JenesisImportFixture implements ImportFixture {
 
@@ -42,6 +44,7 @@ final class JenesisImportFixture implements ImportFixture {
                 .answering(PAGE_TWO, 200, page(null, "/maven/g/b/2.0/b-2.0.jar", "/maven/g/b/2.0/b-2.0.pom"));
         for (String served : List.of("/maven/g/a/1.0/a-1.0.jar", "/maven/g/a/1.0/a-1.0.pom",
                 "/maven/g/b/2.0/b-2.0.jar", "/maven/g/b/2.0/b-2.0.pom")) {
+            upstream.refusing(BASE + "/repository/" + REPOSITORY + served, 404);
             upstream.answering(BASE + "/repository" + served, 200, served);
         }
         return new Corpus(upstream, List.of("g/a/1.0/a-1.0.jar", "g/a/1.0/a-1.0.pom",
@@ -53,6 +56,7 @@ final class JenesisImportFixture implements ImportFixture {
         String served = "/maven/g/a/1.0/a-1.0.jar";
         return new Streamed(ScriptedUpstream.incumbent()
                 .answering(PAGE_ONE, 200, page(null, served))
+                .refusing(BASE + "/repository/" + REPOSITORY + served, 404)
                 .generating(BASE + "/repository" + served, body), "g/a/1.0/a-1.0.jar");
     }
 
@@ -67,6 +71,7 @@ final class JenesisImportFixture implements ImportFixture {
                 .answering(PAGE_ONE, 200, page(null,
                         "/maven/../" + NexusImportFixture.ESCAPE, "/maven/g/./" + NexusImportFixture.ESCAPE,
                         "/maven/g/a/1.0/a-1.0.jar"))
+                .refusing(BASE + "/repository/" + REPOSITORY + "/maven/g/a/1.0/a-1.0.jar", 404)
                 .answering(BASE + "/repository/maven/g/a/1.0/a-1.0.jar", 200, "ok");
         return Optional.of(new Corpus(upstream, List.of("g/a/1.0/a-1.0.jar")));
     }
