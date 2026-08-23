@@ -3,7 +3,7 @@ package build.jenesis.repository.format.oci;
 import module java.base;
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.format.FormatExchange;
-import build.jenesis.repository.format.PrivateHosts;
+import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;

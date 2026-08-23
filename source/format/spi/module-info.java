@@ -23,6 +23,7 @@
 module build.jenesis.repository.format {
     requires transitive build.jenesis.repository.icon;
     requires transitive build.jenesis.repository.store;
+    requires transitive build.jenesis.repository.net;
     exports build.jenesis.repository.format;
     uses build.jenesis.repository.format.FetcherProvider;
     uses build.jenesis.repository.format.RepositoryFormat;

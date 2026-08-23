@@ -1,6 +1,6 @@
 package build.jenesis.repository.importer;
 
-import build.jenesis.repository.format.PrivateHosts;
+import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 
 import module java.base;

@@ -2,7 +2,7 @@ package build.jenesis.repository.proxy;
 
 import module java.base;
 import module java.net.http;
-import build.jenesis.repository.format.PrivateHosts;
+import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 
 /**

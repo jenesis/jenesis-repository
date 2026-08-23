@@ -1,16 +1,23 @@
-package build.jenesis.repository.format;
+package build.jenesis.repository.net;
 
 import module java.base;
 
 /**
  * The one private-range classifier the SSRF screens share, so the import trigger (an operator-supplied URL) and the
- * {@link ProxyFormat.Fetcher} redirect chain (a 30x {@code Location} an upstream chooses) apply the same rule rather
+ * {@code ProxyFormat.Fetcher} redirect chain (a 30x {@code Location} an upstream chooses) apply the same rule rather
  * than each carrying its own copy. A host is refused when it resolves to any address an unauthenticated caller must
  * not be able to aim the deployment at: a cloud metadata service ({@code 169.254.169.254}), the loopback control
  * plane ({@code 127.0.0.1}, {@code ::1}), or an internal host on a private, link-local, site-local, multicast,
  * CGNAT or IPv6 unique-local range. A host that does not resolve at all is <em>not</em> refused: it cannot be
  * reached, so it is no SSRF vector, and the caller's own connection attempt then fails naturally rather than this
  * screen masking an honest "no such host".
+ *
+ * <p><b>The table is here; the policy is not.</b> This module carries nothing but {@code java.base}, deliberately,
+ * so that anything above it may require it - which is the point: the classifier previously lived in the format SPI,
+ * and a caller that could not reach that SPI kept a second copy of the same ranges instead. What each caller does
+ * about a host that will not resolve, or a URI with no host at all, is theirs and genuinely differs - the format
+ * legs admit, the downstream webhook and forwarding guards refuse. Only the range question lives here, because
+ * that is the half where two answers is a defect rather than a decision.
  */
 public final class PrivateHosts {
 
