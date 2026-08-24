@@ -11,6 +11,7 @@
  */
 module build.jenesis.repository.format.java {
     requires transitive build.jenesis.repository.store;
+    requires build.jenesis.repository.format;
     exports build.jenesis.repository.format.java;
     exports build.jenesis.repository.format.java.bridge
             to build.jenesis.repository.format.maven, build.jenesis.repository.format.jenesis;

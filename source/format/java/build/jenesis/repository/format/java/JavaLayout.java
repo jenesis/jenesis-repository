@@ -1,5 +1,6 @@
 package build.jenesis.repository.format.java;
 
+import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 
@@ -12,7 +13,67 @@ import module java.base;
  */
 public final class JavaLayout {
 
+    /**
+     * The package-ecosystem name a Jenesis module reports - distinct from the {@code jenesis} format id that routes
+     * the paths. It lives here rather than on the format because the name is part of the <em>grammar</em>: anything
+     * that describes a module artifact reports it, including describers that must not take an edge to the layout
+     * implementation.
+     */
+    public static final String MODULE_ECOSYSTEM = "Jenesis";
+
+    /** The request-path prefix every Jenesis module view is served under. */
+    public static final String MODULE_ROUTE = "/module/";
+
     private JavaLayout() {
+    }
+
+    /**
+     * The {@code [moduleName, version]} a {@code /module/<name>/<version>/<file>.jar} request path names, or null when
+     * the path is not that shape or either segment is one a store must not address.
+     *
+     * <p>Null rather than an exception, and both refusals fold into it deliberately: a caller here is deciding
+     * whether it recognises a path, not validating a request, so "not a module coordinate" and "not one I would
+     * store" are the same answer - it does not handle the path either way.
+     */
+    public static String[] moduleCoordinate(String requestPath) {
+        if (requestPath == null || !requestPath.startsWith(MODULE_ROUTE)) {
+            return null;
+        }
+        String[] segments = requestPath.substring(MODULE_ROUTE.length()).split("/");
+        if (segments.length != 3) {
+            return null;
+        }
+        return ArtifactLayout.addressable(segments[0], segments[1]) ? new String[]{segments[0], segments[1]} : null;
+    }
+
+    /** The version-addressed view of a module - the pointer a client resolving by name and version reaches. */
+    public static String versionedModule(String moduleName, String version) {
+        return MODULE_ROUTE + moduleName + "/" + version + "/" + moduleName + ".jar";
+    }
+
+    /** The "latest" view of a module - the pointer that names whichever version published last. */
+    public static String latestModule(String moduleName) {
+        return MODULE_ROUTE + moduleName + "/" + moduleName + ".jar";
+    }
+
+    /**
+     * A file published <em>beside</em> a Maven coordinate: {@code <dir>/<artifact>-<version><suffix>}.
+     *
+     * <p>This is the one grammar a describing consumer keeps re-deriving - the sibling POM, the CycloneDX attachment
+     * a build publishes next to the jar - and each re-derivation is a chance to get the directory or the separator
+     * subtly wrong against a layout that owns the answer.
+     *
+     * @param requestPath a {@code /maven/...} path whose directory the sibling shares
+     * @param suffix      what follows the version, including its separator - {@code ".pom"}, {@code "-cyclonedx.json"}
+     * @return the sibling's request path, or null when {@code requestPath} names no full coordinate
+     */
+    public static String attachment(String requestPath, String suffix) {
+        String[] coordinate = mavenCoordinate(requestPath);
+        int slash = requestPath.lastIndexOf('/');
+        if (coordinate == null || slash < 0) {
+            return null;
+        }
+        return requestPath.substring(0, slash + 1) + coordinate[1] + "-" + coordinate[2] + suffix;
     }
 
     /** The module name a jar declares - its {@code module-info} name, or its {@code Automatic-Module-Name} - or null
@@ -76,10 +137,20 @@ public final class JavaLayout {
         }
     }
 
+    /** The request-path prefix the Maven layout serves under. */
+    public static final String MAVEN_ROUTE = "/maven/";
+
     /** The {@code [groupId, artifactId, version]} of a {@code /maven/...} request path, or null when it is not a full
-     *  coordinate (a group directory, a checksum root). */
+     *  coordinate (a group directory, a checksum root) or not on the Maven route at all.
+     *
+     *  <p>The route check is part of the grammar rather than the caller's job: without it this returns a mangled
+     *  coordinate for any path that happens to be long enough, which is a silently wrong answer rather than a
+     *  refusal. Callers that had their own copy of this split guarded it; the shared one now does. */
     public static String[] mavenCoordinate(String requestPath) {
-        String[] segments = requestPath.substring("/maven/".length()).split("/");
+        if (requestPath == null || !requestPath.startsWith(MAVEN_ROUTE)) {
+            return null;
+        }
+        String[] segments = requestPath.substring(MAVEN_ROUTE.length()).split("/");
         if (segments.length < 4) {
             return null;
         }

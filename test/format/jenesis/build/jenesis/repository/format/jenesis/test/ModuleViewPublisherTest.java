@@ -38,7 +38,7 @@ class ModuleViewPublisherTest {
         String hash = publication.storeBlob(
                 new ByteArrayInputStream("modular jar".getBytes(StandardCharsets.UTF_8)));
 
-        publisher.publish("com.acme.lib", "1.0", hash, store);
+        publisher.publish("com.acme.lib", "1.0", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
 
         assertThat(publication.located("/module/com.acme.lib/1.0/com.acme.lib.jar")).contains("blobs/" + hash);
         assertThat(publication.located("/module/com.acme.lib/com.acme.lib.jar")).contains("blobs/" + hash);
@@ -51,7 +51,7 @@ class ModuleViewPublisherTest {
         String hash = publication.storeBlob(
                 new ByteArrayInputStream("modular jar".getBytes(StandardCharsets.UTF_8)));
 
-        publisher.rebuild("com.acme.lib", "1.0", hash, store);
+        publisher.rebuild("com.acme.lib", "1.0", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
 
         assertThat(publication.located("/module/com.acme.lib/1.0/com.acme.lib.jar")).contains("blobs/" + hash);
         assertThat(publication.located("/module/com.acme.lib/com.acme.lib.jar"))
@@ -66,10 +66,10 @@ class ModuleViewPublisherTest {
         // version it reached last - here 1.0, silently undoing the 2.0 publish that owns it.
         String older = publication.storeBlob(new ByteArrayInputStream("v1".getBytes(StandardCharsets.UTF_8)));
         String newer = publication.storeBlob(new ByteArrayInputStream("v2".getBytes(StandardCharsets.UTF_8)));
-        publisher.publish("com.acme.lib", "1.0", older, store);
-        publisher.publish("com.acme.lib", "2.0", newer, store);
+        publisher.publish("com.acme.lib", "1.0", older, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
+        publisher.publish("com.acme.lib", "2.0", newer, store, "/maven/com/acme/lib/2.0/lib-2.0.jar");
 
-        publisher.rebuild("com.acme.lib", "1.0", older, store);
+        publisher.rebuild("com.acme.lib", "1.0", older, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
 
         assertThat(publication.located("/module/com.acme.lib/com.acme.lib.jar"))
                 .as("the latest published version still answers by module name alone").contains("blobs/" + newer);
@@ -83,11 +83,11 @@ class ModuleViewPublisherTest {
         // second pass over unchanged stored state leaves the same object with the same body.
         String hash = publication.storeBlob(
                 new ByteArrayInputStream("modular jar".getBytes(StandardCharsets.UTF_8)));
-        publisher.rebuild("com.acme.lib", "1.0", hash, store);
+        publisher.rebuild("com.acme.lib", "1.0", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
         Optional<ArtifactStore.Versioned> first =
                 store.readVersioned("publish/module/com.acme.lib/1.0/com.acme.lib.jar");
 
-        publisher.rebuild("com.acme.lib", "1.0", hash, store);
+        publisher.rebuild("com.acme.lib", "1.0", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
 
         assertThat(store.readVersioned("publish/module/com.acme.lib/1.0/com.acme.lib.jar"))
                 .get().extracting(ArtifactStore.Versioned::content)

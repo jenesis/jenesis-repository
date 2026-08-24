@@ -1,6 +1,7 @@
 package build.jenesis.repository.walk.contract.test;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.ServedAliases;
 import build.jenesis.repository.walk.testkit.WalkConsumerFixture;
 
 import module java.base;
@@ -52,7 +53,12 @@ final class ModuleViewFixture implements WalkConsumerFixture {
 
     @Override
     public List<String> namespaces() {
-        return List.of(SPACE);
+        // Two, because a rebuilt view is two facts. SPACE is the pointer the view serves from; the alias record is
+        // the statement that this /module/ path and the Maven coordinate it was cross-published from are ONE
+        // artifact under two names - which is what lets a reviewer's release lift both. A rebuild that restored the
+        // pointer and not the relation would leave a view that serves and a release that still strands it, so the
+        // repair owns both or it does not repair the view.
+        return List.of(SPACE, ServedAliases.NAMESPACE);
     }
 
     @Override

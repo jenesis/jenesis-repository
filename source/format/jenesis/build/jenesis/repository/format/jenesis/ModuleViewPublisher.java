@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.jenesis;
 
 import module java.base;
+import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServedAliases;
 import build.jenesis.repository.format.java.bridge.ModuleView;
@@ -43,11 +44,11 @@ public final class ModuleViewPublisher implements ModuleView {
 
     /** The version-addressed view - a function of stored state alone, so a repair pass re-derives it. */
     private static String versioned(String moduleName, String version) {
-        return "/module/" + moduleName + "/" + version + "/" + moduleName + ".jar";
+        return JavaLayout.versionedModule(moduleName, version);
     }
 
     /** The "latest" view - written by a publish only; see {@link ModuleView#rebuild}. */
     private static String latest(String moduleName) {
-        return "/module/" + moduleName + "/" + moduleName + ".jar";
+        return JavaLayout.latestModule(moduleName);
     }
 }
