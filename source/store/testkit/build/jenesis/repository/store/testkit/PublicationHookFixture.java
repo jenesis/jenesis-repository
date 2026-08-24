@@ -256,6 +256,27 @@ public interface PublicationHookFixture {
         Map<String, String> converged(List<ArtifactDescriptor> published);
 
         /**
+         * The projection this surface holds after {@code withheld} were <em>withheld</em> rather than published -
+         * the fixture's declaration of what the withhold leg alone writes.
+         *
+         * <p><b>Why this is separate from {@link #converged}, and why a key comparison was not enough.</b> A
+         * {@code QUARANTINE} legitimately fires the withhold-change feed, so an observer subscribed to it may hold a
+         * row for a held artifact - and {@code index-retraction} and {@code search-publication} legitimately write
+         * ONE key per path and upsert it from both legs. For those, "the surface holds the publish row's key" is
+         * correct behaviour and the defect's signature at the same time, so no assertion over KEYS can tell them
+         * apart. The values can: the correct hook writes what the withhold leg means, the defective one writes what
+         * a publish would have meant.
+         *
+         * <p>Empty by default, which is the honest answer for the majority - a hook that records nothing at all for a
+         * held artifact. Overriding it with the same map {@code converged} returns is a declaration that this hook
+         * cannot tell the two legs apart, and the kit reads that as the property being inapplicable rather than
+         * satisfied; say why at the override.
+         */
+        default Map<String, String> withheld(List<ArtifactDescriptor> withheld) {
+            return Map.of();
+        }
+
+        /**
          * Rebuild this surface from durable store truth alone: the walk or sweep that heals a dropped best-effort
          * call. The kit <em>runs</em> it (with a fresh hook instance, over a store the observer never saw) and
          * asserts convergence, so "there is a repair leg" is an executed fact rather than a claim in a comment.

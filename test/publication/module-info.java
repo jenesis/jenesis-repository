@@ -72,6 +72,7 @@ open module build.jenesis.repository.publication.contract.test {
     // source testkit must stay inert on a runtime graph - and because this one clause is what makes the census's
     // role split real: two observers and three screens arrive through it, and only `instanceof` tells them apart.
     provides build.jenesis.repository.store.PublicationObserver with
+            build.jenesis.repository.publication.contract.test.FeedSplittingObserver,
             build.jenesis.repository.publication.contract.test.IndexObserver,
             build.jenesis.repository.publication.contract.test.OutboxObserver,
             build.jenesis.repository.publication.contract.test.RecordingScreen,

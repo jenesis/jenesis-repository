@@ -338,6 +338,10 @@ final class AfterCommitContract {
     private static void aQuarantinedOrRejectedPublishIsNeverObserved(PublicationHookFixture fixture,
                                                                      FaultInjectingStore store) throws Exception {
         Observer observer = (Observer) fixture;
+        // Accumulated across the loop, because both dispositions run against ONE store: the QUARANTINE's withhold row
+        // is still there when the REJECT is asserted, and demanding an empty surface then would be asserting that the
+        // earlier arrangement had not happened. What a REJECT must do is add NOTHING to whatever legitimately stands.
+        Map<String, String> expected = new TreeMap<>();
         for (PublishInterceptor.Disposition disposition : List.of(
                 PublishInterceptor.Disposition.QUARANTINE, PublishInterceptor.Disposition.REJECT)) {
             ArtifactDescriptor artifact = fixture.describe("/kit/unobserved-" + disposition.name().toLowerCase(Locale.ROOT));
@@ -347,16 +351,27 @@ final class AfterCommitContract {
             equal(committed.disposition(), disposition, fixture, "the chain routed the publication");
             isTrue(!committed.visible(), fixture, disposition + " commits no visibility");
             settle(observer, store);
-            // Keyed rather than compared whole: a QUARANTINE writes a review pointer, which legitimately fires the
-            // withhold-change feed, and an observer subscribed to that feed may hold a row for it. What must never
-            // appear is the PUBLISH row - the observer rides an accepted publish and has no say in a disposition
-            // already reached.
+            // Compared WHOLE against the fixture's declared withhold row, not keyed against its publish row. A
+            // QUARANTINE writes a review pointer, which legitimately fires the withhold-change feed, so an observer
+            // subscribed to it may hold a row for a held artifact - and index-retraction and search-publication
+            // legitimately write ONE key per path and upsert it from both legs. For those, "the surface holds the
+            // publish row's key" is correct behaviour and the defect's signature at once, so no assertion over keys
+            // can separate them. The values can, which is what the withheld() declaration is for: the correct hook
+            // writes what the withhold leg means, the defective one writes what a publish would have meant.
+            // The two dispositions are NOT the same arrangement, which the old key-probe hid by asserting the same
+            // thing of both. A QUARANTINE writes a review pointer and so legitimately fires the withhold-change
+            // feed - a hook subscribed to it holds its withhold row afterwards. A REJECT refuses outright: nothing
+            // is withheld, no feed fires, and the surface must hold nothing at all.
             Map<String, String> surface = observer.projection(store);
-            for (String key : observer.converged(List.of(artifact)).keySet()) {
-                isTrue(!surface.containsKey(key), fixture,
-                        "a " + disposition + " screen never reaches an after-commit observer, yet the surface holds "
-                                + "the publish row " + key + " for it");
+            if (disposition == PublishInterceptor.Disposition.QUARANTINE) {
+                expected.putAll(observer.withheld(List.of(artifact)));
             }
+            Map<String, String> declared = Map.copyOf(expected);
+            equal(surface, declared, fixture,
+                    "a " + disposition + " screen never reaches an after-commit observer as a PUBLISH: the surface "
+                            + "must add nothing of its own: the surface must be exactly "
+                            + (declared.isEmpty() ? "empty" : "the withhold rows already standing " + declared)
+                            + ", and it holds " + surface);
         }
     }
 
