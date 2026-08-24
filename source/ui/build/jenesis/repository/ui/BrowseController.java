@@ -2,7 +2,7 @@ package build.jenesis.repository.ui;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
-import build.jenesis.repository.store.PublishedAssets;
+import build.jenesis.repository.walk.PublishedAssets;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.ScreenedNames;

@@ -1,7 +1,7 @@
-package build.jenesis.repository.store.test;
+package build.jenesis.repository.walk.test;
 
+import build.jenesis.repository.walk.PublishedAssets;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PublishedAssets;
 import module org.junit.jupiter.api;
 
 import module java.base;

@@ -1,6 +1,9 @@
-package build.jenesis.repository.store;
+package build.jenesis.repository.walk;
 
 import module java.base;
+import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * The one depth-first walk of a repository's {@code publish/} pointer tree ({@code publish/<request-path> ->
@@ -12,7 +15,7 @@ import module java.base;
  *
  * <p>It is a pure metadata walk: each entry's path, size and SHA-256 come straight from the pointer (the pointer's
  * content <em>is</em> the hex digest; the size is a {@code blobs/<hash>} stat), <strong>no artifact blob is ever
- * opened</strong>, in keeping with the read-first bias. A path a {@link PublishInterceptor} withholds (a retracted or
+ * opened</strong>, in keeping with the read-first bias. A path a {@code PublishInterceptor} withholds (a retracted or
  * quarantined artifact) is skipped through the {@link ServableNames servable-name seam} ({@link ServableNames#state}),
  * so the walk yields exactly what a {@code GET} would, and the top-level {@code /quarantine} review subtree is never
  * descended.
@@ -70,113 +73,48 @@ public final class PublishedAssets {
         collect(after, cap, new int[]{0}, visitor);
     }
 
-    /** The sibling-page width one open container buffers. The only listing this walk ever holds, so the resident cost
-     *  is O(depth x this) rather than O(one container's child set) - see {@link Frame}. */
-    private static final int PAGE = 1_000;
-
-    private void collect(String after, int cap, int[] emitted, Visitor visitor) throws IOException {
-        // Iterative work-list, not recursion: a published request-path's depth is client-controlled (the deploy
-        // controller only rejects '..', not depth), so a deeply nested deploy would otherwise overflow the stack on
-        // every catalogue / export walk - a durable StackOverflowError that slips past the IOException/RuntimeException
-        // handlers. The stack holds one open container per level, each paging its own children in order, so the walk
-        // yields the exact pre-order DFS the paging cursor (skip/compare) assumes. Mirrors StoreStaging.collect.
-        Deque<Frame> pending = new ArrayDeque<>();
-        Frame root = open("");
-        if (root == null) {
-            return;                                     // nothing is published here; the root is never a leaf
-        }
-        pending.push(root);
-        while (!pending.isEmpty()) {
-            // checked per CHILD, not per node. This walk honoured its cap only BETWEEN nodes and called
-            // store.list(...) at every one, so one high-fan-out container - a flat publish/ root, or a coordinate with
-            // a large version space - was read entire before a single row was emitted and the cap never got a chance
-            // to stop it. Now the container is paged, and the cap ends the walk inside it.
-            if (emitted[0] >= cap) {
-                return;
-            }
-            Frame frame = pending.peek();
-            String child = frame.next();
-            if (child == null) {
-                pending.pop();                          // this container is drained; ascend
-                continue;
-            }
-            if (frame.relative.isEmpty() && ServableNames.reviewSubtree(child)) {
-                // The quarantine review subtree is stored but never served; it is not an enumerable asset. Screened
-                // here, before the node is opened, so it is never descended - not merely never emitted.
-                continue;
-            }
-            String childRelative = frame.relative.isEmpty() ? child : frame.relative + "/" + child;
-            if (skip(childRelative, after)) {
-                continue;
-            }
-            Frame descended = open(childRelative);
-            if (descended == null) {
-                emit(childRelative, after, emitted, visitor);
-            } else {
-                pending.push(descended);
-            }
-        }
-    }
-
-    /** Open a node: a {@link Frame} when it holds at least one child (a container to descend), {@code null} when it
-     *  holds none (a leaf to emit). Costs exactly one page read, which is also the frame's first page - so deciding
-     *  container-versus-leaf never lists the container. */
-    private Frame open(String relative) throws IOException {
-        Frame frame = new Frame(relative);
-        return frame.opened() ? frame : null;
-    }
-
     /**
-     * One open container's ordered child cursor: it pages its children through {@link ArtifactStore#page} in
-     * {@link #PAGE}-wide strides and hands them out one at a time, so the walk's stack holds a page per level rather
-     * than a whole child set per node. This is what the walk's own javadoc always claimed - "a bounded page is a slice
-     * of pointer metadata, the only full materialization the streaming principle allows" - and what the body did not
-     * do.
+     * The bounded descent, through the shared primitive rather than a second copy of it.
      *
-     * <p><b>Why not {@code PagedTreeWalk}, the shared primitive built for exactly this?</b> It cannot be
-     * reached from here: {@code build.jenesis.repository.walk} <em>requires</em> this module, so a dependency the
-     * other way is a module cycle. The one enumeration of the {@code publish/} tree therefore has to page itself,
-     * which is why this frame exists rather than a call. Moving {@code PublishedAssets} into the walk module is the
-     * durable fix and is deliberately not this change: it moves a published type between packages.
+     * <p>This used to page itself - a stack of open container cursors, a page buffered per level - and said in place
+     * why: {@code PagedTreeWalk} "cannot be reached from here", because {@code build.jenesis.repository.walk}
+     * requires the store module and a dependency the other way is a module cycle. So the one enumeration of the
+     * {@code publish/} tree was the second implementation of the primitive built to have exactly one of. The fix was
+     * never a better copy; it was moving this class into the walk module, which is what D-227 did, and this call is
+     * what the move was for.
+     *
+     * <p>The {@code quarantine} review subtree is declined through {@link PagedTreeWalk.Prune} rather than filtered
+     * out of the emitted leaves - it is stored but never served, so it is not an enumerable asset, and it must be
+     * <em>never entered</em> rather than entered and dropped. That distinction is why the shared walk grew a prune
+     * seam instead of this walk keeping its own descent.
      */
-    private final class Frame {
+    private void collect(String after, int cap, int[] emitted, Visitor visitor) throws IOException {
+        // Depth is deliberately unbounded here, which is the one bound this walk cannot take from the shared
+        // default. ArtifactStore.key caps new writes at MAX_SEGMENTS, but it promises in the same breath that a key
+        // stored before that screen "stays readable, deletable and walkable (the iterative store walk bounds
+        // traversal regardless of a legacy key's depth)". A depth ceiling here would break exactly that promise, and
+        // break it durably: the pointer is stored, so /api/assets and the console export would refuse for as long as
+        // it exists. There is no stack risk to trade against - Trees descends iteratively - so the step budget is
+        // what bounds the work, and depth is left to the data.
+        PagedTreeWalk.bounded().depth(Integer.MAX_VALUE)
+                .entries(cap == Integer.MAX_VALUE ? PagedTreeWalk.ENTRIES : cap)
+                .walk(store, ROOT, cursor(after), key -> {
+                    if (emitted[0] >= cap) {
+                        return;
+                    }
+                    emit(key.substring(ROOT.length() + 1), after, emitted, visitor);
+                }, container -> !ServableNames.reviewSubtree(relative(container)));
+    }
 
-        private final String relative;
-        private List<String> buffer;
-        private int position;
-        private boolean drained;
+    /** The walk's cursor is a full store key; this walk's callers page by the relative request path the last entry
+     *  carried, so the two are translated at this one point rather than at every call site. */
+    private static String cursor(String after) {
+        return after == null || after.isEmpty() ? null : ROOT + "/" + after;
+    }
 
-        private Frame(String relative) {
-            this.relative = relative;
-        }
-
-        /** Read the first page and report whether this node has any children at all - the container-or-leaf question,
-         *  answered by one child rather than by a listing. */
-        private boolean opened() {
-            fill("");
-            return !buffer.isEmpty();
-        }
-
-        /** The next child name in store order, or {@code null} once this container is drained. */
-        private String next() {
-            while (true) {
-                if (position < buffer.size()) {
-                    return buffer.get(position++);
-                }
-                if (drained) {
-                    return null;
-                }
-                fill(buffer.getLast());
-            }
-        }
-
-        private void fill(String startAfter) {
-            List<String> page = new ArrayList<>(PAGE);
-            store.page(relative.isEmpty() ? ROOT : ROOT + "/" + relative, startAfter, PAGE, page::add);
-            buffer = page;
-            position = 0;
-            drained = page.size() < PAGE;               // a short page proves the container is drained
-        }
+    /** A container's path relative to {@code publish/} - empty for the root itself. */
+    private static String relative(String key) {
+        return key.length() <= ROOT.length() ? "" : key.substring(ROOT.length() + 1);
     }
 
     private void emit(String relative, String after, int[] emitted, Visitor visitor) throws IOException {

@@ -4,7 +4,7 @@ import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PublishedAssets;
+import build.jenesis.repository.walk.PublishedAssets;
 
 import module java.base;
 
