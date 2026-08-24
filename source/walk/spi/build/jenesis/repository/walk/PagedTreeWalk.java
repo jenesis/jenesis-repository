@@ -165,6 +165,18 @@ public record PagedTreeWalk(int depth, int steps, int entries, int page) {
         void accept(String key) throws IOException;
     }
 
+    /** Whether the descent enters a container, so a caller can decline a whole branch rather than filter its leaves
+     *  out one by one - see {@link #walk(ArtifactStore, String, String, Leaves, Prune)}. */
+    @FunctionalInterface
+    public interface Prune {
+
+        /** Prunes nothing: every container is entered, which is what the {@code Prune}-less overloads pass. */
+        Prune NOTHING = _ -> true;
+
+        /** Whether to descend into the container at this full store {@code key}. */
+        boolean enters(String key) throws IOException;
+    }
+
     /** Walk {@code root} from the beginning - {@link #walk(ArtifactStore, String, String, Leaves)} with no cursor. */
     public Traversal.Result walk(ArtifactStore store, String root, Leaves leaves) throws IOException {
         return walk(store, root, null, leaves);
@@ -178,13 +190,29 @@ public record PagedTreeWalk(int depth, int steps, int entries, int page) {
      * hostile-segment bounds raise {@link TraversalException} rather than shortening the answer.
      */
     public Traversal.Result walk(ArtifactStore store, String root, String cursor, Leaves leaves) throws IOException {
+        return walk(store, root, cursor, leaves, Prune.NOTHING);
+    }
+
+    /**
+     * The same walk with a subtree {@code prune} - a whole branch the caller does not merely decline to emit but
+     * declines to <em>enter</em>.
+     *
+     * <p>The distinction is not an optimisation. A caller that filters in {@link Leaves#accept} still pays the
+     * descent: every container under the pruned branch is opened, every page of it read, and every step charged
+     * against a budget that exists to bound exactly that work. For a branch that is stored but never served - the
+     * gate's {@code publish/quarantine} review subtree is the case this exists for - that is both a cost the answer
+     * never uses and a screen stated in the wrong place, because "never enumerated" and "enumerated then dropped"
+     * are different guarantees when the enumeration is what is bounded.
+     */
+    public Traversal.Result walk(ArtifactStore store, String root, String cursor, Leaves leaves, Prune prune)
+            throws IOException {
         String prefix = Traversal.root(root);
         String resume = cursor == null || cursor.isEmpty() ? null : cursor;
         if (resume != null && !resume.equals(prefix) && !resume.startsWith(prefix + "/")) {
             throw new IllegalArgumentException(
                     "Cursor '" + resume + "' is not a key under the traversal root '" + prefix + "'");
         }
-        Bounded bounded = new Bounded(resume, leaves, steps, entries);
+        Bounded bounded = new Bounded(resume, leaves, steps, entries, Objects.requireNonNull(prune, "prune"));
         boolean exhausted = Trees.descend(store, prefix, page, depth, bounded);
         return exhausted
                 ? Traversal.Result.exhausted(bounded.delivered, bounded.opened)
@@ -213,7 +241,10 @@ public record PagedTreeWalk(int depth, int steps, int entries, int page) {
         private long opened;
         private boolean stopped;
 
-        private Bounded(String cursor, Leaves leaves, int steps, int entries) {
+        private final Prune prune;
+
+        private Bounded(String cursor, Leaves leaves, int steps, int entries, Prune prune) {
+            this.prune = prune;
             this.cursor = cursor;
             this.leaves = leaves;
             this.steps = steps;
@@ -240,6 +271,9 @@ public record PagedTreeWalk(int depth, int steps, int entries, int page) {
 
         @Override
         public boolean enters(String prefix) throws IOException {
+            if (!prune.enters(prefix)) {
+                return false;   // declined before the container is opened, so its pages are never read or charged
+            }
             open(prefix);
             return true;
         }

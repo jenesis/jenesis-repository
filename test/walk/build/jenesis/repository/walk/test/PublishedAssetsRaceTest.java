@@ -1,7 +1,7 @@
-package build.jenesis.repository.store.test;
+package build.jenesis.repository.walk.test;
 
+import build.jenesis.repository.walk.PublishedAssets;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PublishedAssets;
 import module org.junit.jupiter.api;
 
 import module java.base;
@@ -84,7 +84,12 @@ class PublishedAssetsRaceTest {
 
         @Override
         public boolean exists(String key) {
-            return key.equals("blobs/" + HASH); // the blob is present; only the pointer races away
+            // The blob is present; only the pointer races away. A stored pointer must also answer here: the shared
+            // descent decides container-versus-leaf with an exists() probe where this walk's old private descent
+            // asked page() alone, and a store whose keys are readable but do not exist is not a store any backend
+            // could be - the stub was unfaithful in a way nothing had reason to notice.
+            return key.equals("blobs/" + HASH)
+                    || (key.startsWith("publish/") && readVersioned(key).isPresent());
         }
 
         @Override

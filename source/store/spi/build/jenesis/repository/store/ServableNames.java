@@ -187,7 +187,7 @@ public final class ServableNames {
     }
 
     /** Reuse the caller's {@link Publication} so the withheld chain is the caller's interceptor list rather than a
-     *  second, independently discovered one - the same explicit seam {@link PublishedAssets} takes. */
+     *  second, independently discovered one - the same explicit seam {@code PublishedAssets} takes. */
     public ServableNames(ArtifactStore store, Publication publication) {
         this.store = store;
         this.publication = publication;

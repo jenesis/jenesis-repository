@@ -7,7 +7,7 @@ import build.jenesis.repository.server.AssetCatalog;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
-import build.jenesis.repository.store.PublishedAssets;
+import build.jenesis.repository.walk.PublishedAssets;
 import module org.junit.jupiter.api;
 
 import module java.base;
