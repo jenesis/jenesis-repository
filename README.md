@@ -106,9 +106,9 @@ inherits it.
 failure. It logs in to Docker Hub when credentials are configured, only to avoid anonymous pull rate limits
 for the container-backed tests.
 
-`.github/workflows/release.yml` runs after a successful build on `main` whose head commit starts with
-`[release]` - `[release X.Y.Z]` for an exact version, `[release]` alone for the next minor of the latest tag.
-JReleaser then signs, publishes and tags. `project.properties` carries the POM metadata.
+`.github/workflows/release.yml` is dispatched by hand from the Actions tab, so any commit is releasable: the
+optional `sha` input names the commit (default: the head it runs on) and the optional `tag` input names the tag
+(`vX.Y.Z`; default: the next minor of the latest tag). JReleaser then signs, publishes and tags. `project.properties` carries the POM metadata.
 
 ## License
 
