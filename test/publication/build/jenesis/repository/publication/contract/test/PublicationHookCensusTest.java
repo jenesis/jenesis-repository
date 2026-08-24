@@ -53,7 +53,8 @@ class PublicationHookCensusTest {
 
     /** Every fixture the kit registers - one per role, and one per delivery class the seam supports. */
     private static final List<PublicationHookFixture> FIXTURES = List.of(
-            new IndexObserverFixture(), new OutboxObserverFixture(), new RecordingScreenFixture(),
+            new IndexObserverFixture(), new FeedSplittingObserverFixture(), new OutboxObserverFixture(),
+            new RecordingScreenFixture(),
             new WithholdingScreenFixture(), new AuditingScreenFixture(), new OverrideHookFixture(),
             new MavenMetadataObserverFixture(), new OciListingObserverFixture(), new RawListingObserverFixture());
 
