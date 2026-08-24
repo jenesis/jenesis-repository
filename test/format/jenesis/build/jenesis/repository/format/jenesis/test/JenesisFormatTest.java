@@ -161,7 +161,7 @@ class JenesisFormatTest {
         // link 1 (the versioned jar) lives under the version-directory prefix, link 2 is the latest-pointer file itself.
         Publication publication = new Publication(store);
         String hash = publication.storeBlob(new ByteArrayInputStream("modular jar".getBytes(StandardCharsets.UTF_8)));
-        new ModuleViewPublisher().publish("com.acme", "1.0", hash, store);
+        new ModuleViewPublisher().publish("com.acme", "1.0", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
         assertThat(publication.located("/module/com.acme/1.0/com.acme.jar")).contains("blobs/" + hash);
         assertThat(publication.located("/module/com.acme/com.acme.jar")).contains("blobs/" + hash);
 

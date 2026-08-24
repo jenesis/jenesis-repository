@@ -2,6 +2,7 @@ package build.jenesis.repository.format.jenesis;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
+import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
@@ -28,7 +29,7 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
     /** The package-ecosystem name the neutral descriptor carries - distinct from {@link #name()} "jenesis", the format
      *  id that routes the {@code /module/} and {@code /artifact/} paths. Any consumer of a Jenesis module reports the
      *  same ecosystem, whichever edition it runs in. */
-    public static final String ECOSYSTEM = "Jenesis";
+    public static final String ECOSYSTEM = JavaLayout.MODULE_ECOSYSTEM;
 
     @Override
     public String name() {
@@ -37,7 +38,7 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
 
     @Override
     public boolean handles(String path) {
-        return path.startsWith("/module/") || path.startsWith("/artifact/");
+        return path.startsWith(JavaLayout.MODULE_ROUTE) || path.startsWith("/artifact/");
     }
 
     @Override
@@ -65,7 +66,7 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
         // Claiming it for every version made a first-version eviction unpublish a live pointer aimed at a later
         // one - a pointer destroyed rather than re-aimed. The store overload below reports it exactly when it
         // resolves to this version, which is the same rule the Maven layout applies to its own mirror.
-        return List.of("/module/" + coordinate + "/" + version);
+        return List.of(JavaLayout.MODULE_ROUTE + coordinate + "/" + version);
     }
 
     @Override
@@ -79,8 +80,8 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
         // release's cross-alias exclusion set covers the version's own alias instead of reading it as a foreign
         // one still holding those bytes.
         List<String> paths = new ArrayList<>(primary);
-        String versioned = "/module/" + coordinate + "/" + version + "/" + coordinate + ".jar";
-        String latest = "/module/" + coordinate + "/" + coordinate + ".jar";
+        String versioned = JavaLayout.versionedModule(coordinate, version);
+        String latest = JavaLayout.latestModule(coordinate);
         try {
             Publication publication = new Publication(store);
             Optional<String> hash = publication.blob(versioned);
@@ -97,12 +98,17 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
     /** The neutral descriptor of a {@code /module/...} path, or empty when the path carries no coordinate to describe (a
      *  directory, an {@code /artifact/} blob, a non-jenesis path): a full {@code /module/<name>/<version>/<file>} maps
      *  to the module name + version, and the version-less latest pointer {@code /module/<name>/<name>.jar} to the module
-     *  name with no version. This is the one place the {@code /module/} coordinate convention lives. */
+     *  name with no version.
+     *
+     *  <p>The path grammar itself lives in {@link JavaLayout} - the shared Java-layout module - so that a consumer
+     *  which must describe a module artifact without taking an edge to this format implementation reads the same
+     *  rules. What stays here is the descriptor mapping, including the version-less latest pointer, which is a
+     *  format concern rather than a grammar one. */
     private static Optional<ArtifactDescriptor> descriptor(String path) {
-        if (!path.startsWith("/module/")) {
+        if (!path.startsWith(JavaLayout.MODULE_ROUTE)) {
             return Optional.empty();
         }
-        String[] segments = path.substring("/module/".length()).split("/");
+        String[] segments = path.substring(JavaLayout.MODULE_ROUTE.length()).split("/");
         if (segments.length == 3 && !segments[0].isEmpty() && !segments[1].isEmpty() && !segments[2].isEmpty()) {
             // /module/<name>/<version>/<file> - the versioned pointer.
             return Optional.of(new ArtifactDescriptor(ECOSYSTEM, segments[0], segments[1], path, null, false, null, -1L));

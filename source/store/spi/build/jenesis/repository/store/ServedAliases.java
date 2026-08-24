@@ -50,8 +50,12 @@ import java.util.TreeSet;
  */
 public final class ServedAliases {
 
-    /** The root every alias record lives under, so a store sweep can find them as one subtree. */
-    public static final String ROOT = "alias/";
+    /** The container every alias record lives under - the form a namespace declaration and a tree descent take. A
+     *  descent is over a container, so this one carries NO trailing separator; {@link #ROOT} is the key prefix. */
+    public static final String NAMESPACE = "alias";
+
+    /** The key prefix every alias record is built from, so a store sweep can find them as one subtree. */
+    public static final String ROOT = NAMESPACE + "/";
 
     private static final String OF = ROOT + "of";
 
