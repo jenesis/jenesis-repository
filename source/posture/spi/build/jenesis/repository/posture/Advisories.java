@@ -11,7 +11,7 @@ import module java.base;
  */
 public final class Advisories {
 
-    /** The full grammar: dot-separated lowercase segments under the {@code jenesis} root. */
+    /** The full grammar: dot-separated lowercase segments under the {@code jenreg} root. */
     public static final Pattern ID = Pattern.compile("^jenreg(\\.[a-z][a-z0-9]*)+$");
 
     private Advisories() {

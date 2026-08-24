@@ -1,9 +1,9 @@
 /**
  * The web console: a Spring Boot admin front for the repository, built on a mainstream Spring stack
- * (Spring Boot on embedded Tomcat, Thymeleaf views, Spring Security with OAuth2/OIDC login) so a downstream distribution
+ * (Spring Boot on embedded Jetty, Thymeleaf views, Spring Security with OAuth2/OIDC login) so a downstream distribution
  * extends this shell rather than forking it. It is an open module (Spring needs reflective access) and requires the
  * Spring modules its code compiles against plus the Spring Boot starters that root the runtime closure (embedded
- * Tomcat, Thymeleaf, Jackson, Security, OAuth2 client). Built as an open shell with a panel-registration SPI
+ * Jetty, Thymeleaf, Jackson, Security, OAuth2 client). Built as an open shell with a panel-registration SPI
  * ({@code uses Panel}) discovered with ServiceLoader and bridged into Spring, so additional panels are registered by
  * adding modules to the graph, with no fork of the console. Login mechanisms plug in the same way through the
  * {@code LoginContributor} bean seam.

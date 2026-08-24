@@ -30,7 +30,7 @@ import module java.base;
  * index) is never delivered.
  *
  * <p><b>The withheld screen.</b> Under the free {@code publish/} namespace the pass yields exactly what a {@code GET}
- * would, applying the same withheld screen {@code PublishedAssets} does through {@code Publication.located}: the
+ * would, applying the same withheld screen {@code PublishedAssets} does through {@code ServableNames.state}: the
  * quarantine review subtree ({@code publish/quarantine/...}) is stored but never served, so it is never delivered
  * (no phantom index entry for a held pointer); and a path a screen retracts after the fact (a
  * {@code PublishInterceptor.withheld} verdict against an artifact that has served for months) is skipped, so a

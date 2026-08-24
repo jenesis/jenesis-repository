@@ -8,7 +8,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 
 /**
  * The Spring Boot entry point for the repository web console. It replaces the former hand-wired JDK-httpserver skeleton
- * with a mainstream Spring stack (Spring Boot on embedded Tomcat, Thymeleaf views, Spring
+ * with a mainstream Spring stack (Spring Boot on embedded Jetty, Thymeleaf views, Spring
  * Security with OAuth2/OIDC login), so a downstream distribution extends this shell rather than forking it. The console is
  * an open shell: sections are contributed as {@link Panel} plugins discovered with {@code ServiceLoader} and bridged
  * into Spring by {@link UiConfig}, and login mechanisms are contributed as {@link LoginContributor} beans, so neither

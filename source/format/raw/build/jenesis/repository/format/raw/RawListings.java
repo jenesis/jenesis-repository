@@ -34,8 +34,8 @@ final class RawListings {
         this.names = new ServableNames(store, new Publication(store));
     }
 
-    /** The listing key of a folder ({@code /raw/a/b/} is {@code raw/a%2Fb}): flat, so a folder and its sub-folder
-     *  never nest one document under another. */
+    /** The listing key of a folder ({@code /raw/a/b/} is {@code raw/%2Fraw%2Fa%2Fb%2F}): flat, so a folder and its
+     *  sub-folder never nest one document under another. */
     static String page(String folder) {
         return "raw/" + URLEncoder.encode(folder, StandardCharsets.UTF_8);
     }

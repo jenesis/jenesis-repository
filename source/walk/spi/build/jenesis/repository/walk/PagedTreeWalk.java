@@ -18,7 +18,7 @@ import module java.base;
  *       {@link ArtifactStore#MAX_SEGMENTS} write-path ceiling, so the default never fires for a key the store would
  *       accept). A deeper node raises {@link TraversalException.Reason#DEPTH}, enforced by {@link Trees} against the
  *       descent's own stack.</li>
- *   <li>{@link #steps()} - how many nodes the descent may open, one {@link ArtifactStore#exists} probe each
+ *   <li>{@link #steps()} - how many nodes the descent may open, at most one {@link ArtifactStore#exists} probe each
  *       ({@value #STEPS} by default). Exceeding it raises {@link TraversalException.Reason#STEPS}. This is the bound
  *       that survives an attacker-shaped tree of a million empty containers holding no leaf at all: a cap on delivered
  *       entries alone would never fire there.</li>
@@ -288,7 +288,7 @@ public record PagedTreeWalk(int depth, int steps, int entries, int page) {
             return !stopped;
         }
 
-        /** Charge one opened node - called exactly once per {@link ArtifactStore#exists} probe the descent makes,
+        /** Charge one opened node - called exactly once per node the descent opens, at most one probe each,
          *  which is why the step budget bounds the traversal's store work rather than only its output. */
         private void open(String key) throws TraversalException {
             if (++opened > steps) {

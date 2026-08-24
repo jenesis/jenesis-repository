@@ -292,8 +292,9 @@ public final class FaultInjectingStore implements ArtifactStore {
 
     @Override
     public List<String> list(String prefix) {
-        // list() throws nothing in the SPI, so a fault against it is a silent empty listing - the shape a real
-        // backend outage takes there (the filesystem store maps an enumeration IOException to an empty list).
+        // list() throws nothing checked in the SPI, so a fault against it is a silent empty listing - the shape an
+        // absent container takes there (a real enumeration failure surfaces unchecked; the filesystem store maps
+        // only a missing or non-directory container to an empty list).
         return intercept(Op.LIST, prefix) != null ? List.of() : delegate.list(prefix);
     }
 
@@ -429,7 +430,7 @@ public final class FaultInjectingStore implements ArtifactStore {
 
         @Override
         public List<String> list(String prefix) {
-            // As on the outer store: an armed LIST fault is a silent empty listing, the SPI's outage shape.
+            // As on the outer store: an armed LIST fault is a silent empty listing, the SPI's absent-container shape.
             return intercept(Op.LIST, prefix) != null ? List.of() : scoped.list(prefix);
         }
 

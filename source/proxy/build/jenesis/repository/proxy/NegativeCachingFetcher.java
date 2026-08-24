@@ -13,10 +13,11 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * upstream every time, which otherwise multiplies load and risks the upstream's rate limit. Only a definite
  * {@code 404} is cached: a transport failure (empty result) or an auth challenge ({@code 401}/{@code 403}) is not,
  * being transient or resolvable, and any success passes through untouched. An entry expires after the configured
- * time-to-live, so a genuinely published artifact is seen within that window. It decorates both {@link #fetch} and
- * {@link #download} - Maven proxies through {@code download}, npm and the rest through {@code fetch} - keyed by URL
- * and safe for concurrent use, with a bounded map swept of expired entries when it fills and cleared wholesale if a
- * flood of still-live misses would otherwise push it past the bound, so the map can never exceed its cap.
+ * time-to-live, so a genuinely published artifact is seen within that window. It decorates {@link #fetch},
+ * {@link #download} and {@link #head} - Maven proxies through {@code download}, npm and the rest through
+ * {@code fetch} - keyed by URL and safe for concurrent use, with a bounded map swept of expired entries when it
+ * fills and cleared wholesale if a flood of still-live misses would otherwise push it past the bound, so the map
+ * can never exceed its cap.
  *
  * <p>It is its own {@link ObservabilitySource}: the live fetcher the distribution holds reports {@code
  * jenreg.proxy.negativecache.entries} - the upstream misses currently remembered, as a <em>bounded</em> gauge

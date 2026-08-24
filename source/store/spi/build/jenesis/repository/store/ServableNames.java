@@ -80,7 +80,7 @@ import module java.base;
  *   <li><b>Ordering / concurrency.</b> The seam imposes no ordering of its own and is re-entrant; a verdict depends
  *       only on the name and the store's current state, never on discovery order or on which surface asks.</li>
  *   <li><b>Bounded work / cancellation.</b> Each single-name method costs a fixed, small number of store round-trips
- *       (one to three). {@link #disclosableVersionFolder} is the one fan-out and is capped at {@value #PROBE_CAP}
+ *       (one to five). {@link #disclosableVersionFolder} is the one fan-out and is capped at {@value #PROBE_CAP}
  *       probed leaves, past which it fails CLOSED rather than sampling. Enumerating many names is bounded by the
  *       caller's traversal primitive, not here.</li>
  *   <li><b>Durability / delivery.</b> Nothing is committed and nothing is delivered: this type has no crash window of
@@ -281,7 +281,7 @@ public final class ServableNames {
     /** Version/leaf-folder disclosure for a generated version index (maven-metadata): the folder is UNDISCLOSABLE iff
      *  it is held - either (a) {@code publish/quarantine<folder>} has &ge;1 child (the core review-pointer
      *  convention every hold writer uses: {@code Publication.screen}'s QUARANTINE branch and the retroactive sweeps
-     *  link {@code /quarantine<servedPath>} per served path), or (b) the interceptor chain withholds any of the
+     *  link {@code /quarantine<servedPath>} per served path), or (b) a hold covers any of the
      *  folder's leaves, up to the {@value #PROBE_CAP}-leaf bound past which it fails CLOSED (a folder wider than the
      *  bound is screened, since its unprobed leaves cannot be proven un-held). It never stats a blob, so a fake-hash /
      *  no-blob / non-jar version keeps listing; with the free (empty) chain and no quarantine pointer a folder within
@@ -402,8 +402,8 @@ public final class ServableNames {
         return colon < 0 ? trimmed : trimmed.substring(colon + 1);
     }
 
-    /** The raw marker probe ({@code store.exists("withheld/" + sha256)}, via {@link Withheld#is}) - the hash-level
-     *  face OCI's catalog/tags screen delegates to. Fail-closed (withheld) on a hostile hash. */
+    /** The raw marker probe ({@code store.readVersioned("withheld/" + sha256)}, via {@link Withheld#is}) - the
+     *  hash-level face OCI's catalog/tags screen delegates to. Fail-closed (withheld) on a hostile hash. */
     public boolean withheldHash(String sha256) throws IOException {
         try {
             return Withheld.is(store, sha256);

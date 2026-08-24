@@ -1,7 +1,7 @@
 /**
  * The default {@code ArtifactWalk} reference implementation over the store's own key layout - the generalisation of
  * the private depth-first inventory walk into the shared, totally ordered, resumable, range-segmented, multi-node
- * walk the SPI promises, provided as {@code store} (the default selection) and discovered with {@code ServiceLoader}.
+ * walk the SPI promises, provided as {@code paged-descent} (the default) and discovered with {@code ServiceLoader}.
  * It enumerates exclusively through the {@code ArtifactStore.page} ordered-paging primitive, so a flat millions-entry
  * namespace is never materialised as one list and a resume deep inside it is a seek on a backend that pages natively.
  * All pass state lives in the walked store ({@code walks/<consumer>/...}, compare-and-set objects only) - persist

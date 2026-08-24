@@ -38,7 +38,7 @@ import module java.base;
  * Concurrent publishes to one listing are coalesced per node: the first writer to reach a document applies its own
  * change and every change queued behind it in one read-modify-write, and the queued writers wait for that write and
  * return with it. Across nodes the compare-and-set decides; a writer that loses retries with a fresh read, and one that
- * cannot land its change within {@value #ATTEMPTS} attempts forgets the document so the next reader regenerates it, and
+ * cannot land its change within {@value #ATTEMPTS} attempts regenerates the document in place, and
  * reports {@code false} rather than failing the publish whose pointer already landed.
  *
  * <p>Every method is thread-safe; the lanes are keyed by the store's {@link ArtifactStore#identity identity} and the
@@ -51,7 +51,7 @@ public final class StoredListing {
     /** The store root every listing document lives under; the key below it is the format's own, served-path-like key. */
     public static final String ROOT = "listing/";
 
-    /** The compare-and-set attempts a writer makes before it {@link #forget forgets} the document. */
+    /** The compare-and-set attempts a writer makes before it {@link #rebuild regenerates} the document. */
     public static final int ATTEMPTS = Retries.COMPARE_AND_SET;
 
     private static final String MAGIC = "jenesis-listing/1";
@@ -417,8 +417,8 @@ public final class StoredListing {
      * Apply {@code changes} to the listing - an id to a fragment replaces or adds that entry, an id to an empty value
      * removes it - and run {@code derivation} once they have landed. Coalesced per node and compare-and-set across
      * nodes as described above; materialises the listing through {@code generator} first when it is absent. Answers
-     * {@code false} when the change could not land within {@value #ATTEMPTS} attempts and the document was forgotten
-     * for regeneration instead.
+     * {@code false} when the change could not land within {@value #ATTEMPTS} attempts and the document was regenerated
+     * in place instead.
      */
     public static boolean update(ArtifactStore store, Spec spec, Map<String, Optional<byte[]>> changes)
             throws IOException {

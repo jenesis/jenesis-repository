@@ -7,8 +7,8 @@
  * it goes one way - Maven into the module layout, never a module back to Maven. Because the cross-view is derived from
  * the Maven coordinate rather than published beside it, this module also {@code provides} the {@code WalkConsumer}
  * ({@code ModuleViewRebuild}) that re-derives it from the durable store, which is what makes a cross-publish
- * interrupted half way a repairable state rather than a permanent one. {@code MavenMetadata} is generated on read
- * here. Discovered through {@code provides}, so the layout plugs in like any other format.
+ * interrupted half way a repairable state rather than a permanent one. {@code MavenMetadata} is computed here under
+ * an opt-in setting. Discovered through {@code provides}, so the layout plugs in like any other format.
  *
  * @jenesis.release 25
  * @jenesis.pin org.slf4j 2.0.18

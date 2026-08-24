@@ -414,8 +414,8 @@ public interface ArtifactStore {
      * The immediate child names under a key prefix (for the console browse and metadata maintenance). A prefix names
      * a container with or without a trailing slash - {@code a/b} and {@code a/b/} are the same one, here and for
      * {@link #page}, {@link #pageListed} and {@link #scan}; a backend normalises it with {@link #container} before it
-     * asks its storage, whose key grammar may admit only the first. A leading slash is a traversal-shaped key and
-     * is refused, as it is on every other operation.
+     * asks its storage, whose key grammar may admit only the first. A leading slash is not normalised here: the
+     * filesystem refuses it like any other traversal-shaped key, and an object store's own key grammar decides.
      */
     List<String> list(String prefix);
 

@@ -51,7 +51,7 @@ import module java.base;
  *     whose message <b>names the opt-out key</b> - because credentials and every artifact byte would otherwise travel
  *     in clear with no operator signal, and the operator running a local emulator needs to be told what to set. It is
  *     an opt-out, not a ban: the very same configuration resolves once an explicit
- *     {@code JENESIS_<BACKEND>_ALLOW_INSECURE_ENDPOINT=true} is set, which is how the containerised emulators are
+ *     {@code JENREG_<BACKEND>_ALLOW_INSECURE_ENDPOINT=true} is set, which is how the containerised emulators are
  *     reached. The rule binds however the endpoint reaches the provider - as its own setting for {@code s3} and
  *     {@code gcs}, or buried inside a connection string that also carries the account key for {@code azure-blob},
  *     where the scheme is easiest to mistype and most costly to get wrong. A backend with no endpoint at all (the

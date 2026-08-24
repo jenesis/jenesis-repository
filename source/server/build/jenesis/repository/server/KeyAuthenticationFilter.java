@@ -12,9 +12,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import module java.base;
 
 /**
- * Lifts the {@code Jenesis-Repository-Key} header into the Spring Security context, so a keyed request is seen as
- * authenticated (the key as the principal) rather than anonymous. The actual rights check is the
- * {@link RepositoryAuthorizationManager}, which reads the same header and consults the {@link Authorization} grants;
+ * Lifts a request's presented key ({@link PresentedKey}) into the Spring Security context, so a keyed request is seen
+ * as authenticated (the key as the principal) rather than anonymous. The actual rights check is the
+ * {@link RepositoryAuthorizationManager}, which reads the same key and consults the {@link Authorization} grants;
  * this filter only populates the principal and never rejects, always continuing the chain.
  */
 public class KeyAuthenticationFilter extends OncePerRequestFilter {

@@ -11,12 +11,12 @@ import build.jenesis.repository.store.Publication;
 import io.micrometer.observation.ObservationRegistry;
 
 /**
- * The format-agnostic pull-through loop shared by every dispatcher. A {@code GET} of a path the format handles is
- * served locally first through a {@link ProxyFormat.Fetcher.Buffered} exchange that captures the response in memory; if that is a 404
- * the format's {@link ProxyFormat#proxy} adapter is given control to fetch from upstream, cache and serve - so a
- * later read is a local hit. A non-{@code GET} request, a local hit, or an adapter that declines passes straight
- * through (the 404 stands). The single network call sits behind {@link ProxyFormat.Fetcher} so the cache behaviour
- * is tested without the network.
+ * The format-agnostic pull-through loop shared by every dispatcher. A {@code GET} or {@code HEAD} of a path the
+ * format handles is served locally first through a {@code Deferred} exchange that defers the response until it sees
+ * the format's status; if that is a 404 the format's {@link ProxyFormat#proxy} adapter is given control to fetch from
+ * upstream, cache and serve - so a later read is a local hit. A request with any other method, a local hit, or an
+ * adapter that declines passes straight through (the 404 stands). The single network call sits behind
+ * {@link ProxyFormat.Fetcher} so the cache behaviour is tested without the network.
  *
  * <p>Each proxy-eligible read is wrapped in a {@code jenreg.proxy.fetch} {@link Observations observation} tagged
  * with the {@code format} and the {@code outcome} - {@code hit} (served locally, no upstream call), {@code miss}

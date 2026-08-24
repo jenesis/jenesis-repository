@@ -256,8 +256,9 @@ public final class AzureArtifactStore implements ArtifactStore {
         // sibling whose name extends this one past a character below '/' (`app.txt` the blob precedes `app/` the
         // prefix, yet the child `app` pages first) - so every name parks and the smallest parked one releases only
         // once no smaller-named child can still arrive (held()). A released name at or below startAfter is dropped
-        // rather than emitted: start-from skips the boundary's own blob but not a same-named container's prefix, and a
-        // prefix-child of the boundary was already paged by the call that emitted the boundary itself.
+        // rather than emitted: start-from seeks to the boundary INCLUSIVELY (see scan()), so its own blob and a
+        // same-named container's prefix both re-arrive, and a prefix-child of the boundary was already paged by the
+        // call that emitted the boundary itself.
         ListBlobsOptions options = new ListBlobsOptions().setPrefix(base).setMaxResultsPerPage(Math.min(ArtifactStore.oneMoreThan(limit), 5000));
         if (!startAfter.isEmpty()) {
             options.setStartFrom(base + startAfter);

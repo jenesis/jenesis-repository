@@ -11,13 +11,13 @@ import build.jenesis.repository.format.ProxyFormat;
  * buffer it, so a large artifact (a proxied blob or an import) copies from the network to storage without
  * materializing it; the caller acts on the status and closes the stream. {@link ProxyFormat.Fetcher#head} is
  * likewise overridden to issue a real HTTP {@code HEAD}, so a size/metadata probe of an uncached large artifact
- * never opens its body (the SPI default would fall back to a body-opening {@code download}).
+ * never opens its body ({@link ProxyFormat.Fetcher.Buffered} would fall back to a body-opening {@code download}).
  *
  * <p>Every request is bounded by a per-request timeout on top of the connect timeout, so a stalled upstream - one
  * that accepts the connection but never sends a response - cannot hang a proxy read or an import forever. A timeout
  * is reported as the contract's transport failure (an empty result), so the proxy lets the local {@code 404} stand
- * and an import is refused rather than a {@code 5xx} escaping. The timeout bounds the whole exchange for a buffered
- * {@link #fetch} (a small mutable index) and the arrival of the response for a streaming {@link #download}; a large
+ * and an import is refused rather than a {@code 5xx} escaping. The timeout bounds the arrival of the response, for a
+ * buffered {@link #fetch} (a small mutable index) and a streaming {@link #download} alike; a large
  * artifact's body transfer is not clipped by it, and a body that ends short of its declared {@code Content-Length}
  * surfaces as an {@link IOException} on the read (buffered) or on the stream the caller copies into the store
  * (streamed), so a truncated response is never written as a complete cached artifact. The timeout defaults to a
@@ -127,7 +127,7 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
     /**
      * A genuine HTTP {@code HEAD}: the upstream is asked for a {@code GET}'s status and response headers with no body,
      * so an uncached large artifact's {@code HEAD} costs a header exchange and never opens - let alone reads - its
-     * body, unlike the SPI default that would fall back to a body-opening {@link #download}. Redirects are followed
+     * body, unlike a derived one that would fall back to a body-opening {@link #download}. Redirects are followed
      * by the same manual chain as {@link #fetch} / {@link #download} - the credential-dropping on a cross-origin hop
      * included - reissuing {@code HEAD} at each hop; the {@link HttpResponse.BodyHandlers#discarding() discarding}
      * handler means no body is buffered even should the upstream answer a {@code HEAD} with one.

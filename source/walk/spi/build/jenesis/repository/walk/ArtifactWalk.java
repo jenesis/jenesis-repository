@@ -43,7 +43,7 @@ public interface ArtifactWalk {
     @FunctionalInterface
     interface KeyVisitor {
 
-        /** Called once per key, in ascending lexicographic order within the current segment's range. */
+        /** Called once per key, in ascending path order within the current segment's range. */
         void visit(String key) throws IOException;
 
         /**

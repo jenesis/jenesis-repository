@@ -187,7 +187,7 @@ final class OciManifests {
             // the request-path twin of the reconcile-vs-enforce race #207 closed on the WithheldReconcileTask
             // path with a post-clear re-verify. Re-run the FULL guard face against fresh truth now that the clear
             // has landed and RE-MARK if a hold reappeared on the hash by ANY route - covering both landing sites:
-            //  - the pointer face (quarantineAliasExists with an EMPTY exclusion set): a /quarantine pointer for
+            //  - the pointer face (quarantineAlias with an EMPTY exclusion set): a /quarantine pointer for
             //    the hash on ANY served path, including THIS manifest's own path. The earlier reverify re-ran the
             //    cross-alias probe with `path` EXCLUDED (Set.of(path)) - mirroring the guard, which relies on the
             //    interceptor face below to cover this path - so a same-path enforce that links /quarantine<path>

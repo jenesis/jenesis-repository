@@ -18,10 +18,10 @@ import module java.base;
  *
  * <h2>Merge / precedence rule</h2>
  * Contributors <b>extend</b> the base map; they never shadow it. On a key conflict the <b>base key always wins</b>, and
- * among contributors the <b>first discovered wins</b> (see {@link #merge}). This guarantees the free product's own
- * flags - the read-only gate, the auth flag, the anonymous grant - can never be overwritten by a contributor, so the
- * base semantics of {@code /api/capabilities} are preserved whatever a distribution adds. New (non-conflicting) keys are
- * appended after the base keys, in contributor discovery order.
+ * among contributors the <b>first in class-name order wins</b> (see {@link #merge}). This guarantees the free
+ * product's own flags - the read-only gate, the auth flag, the anonymous grant - can never be overwritten by a
+ * contributor, so the base semantics of {@code /api/capabilities} are preserved whatever a distribution adds. New
+ * (non-conflicting) keys are appended after the base keys, in contributor class-name order.
  *
  * <h2>A losing contribution is reported, never dropped in silence</h2>
  * The precedence rule decides <em>which value is served</em>. It does not license saying nothing about the value that
@@ -82,9 +82,9 @@ import module java.base;
  *       than assumed. First, the packaging guards {@code Providers} applies to every other family are absent here: a
  *       contributor registered twice, or two distributions shipping the same contribution, are not refused at
  *       resolution - they surface instead as this merge's own conflict report, which is the weaker but per-key
- *       signal. Second, the discovery site is the serving controller's {@code ServiceLoader.load} rather than a
- *       {@code resolve}/{@code installed} static on this module, so the {@code uses} clause lives with the server that
- *       loads it; a second load site for this SPI would be a second discovery pipeline and is forbidden.</li>
+ *       signal. Second, the discovery site is this module's own {@link #resolve} static, like the sibling families'
+ *       {@code resolve}/{@code installed} statics, so the {@code uses} clause lives in this module;
+ *       a second load site for this SPI would be a second discovery pipeline and is forbidden.</li>
  *   <li><b>Error visibility.</b> No outcome of a merge is silent. A contribution that loses a key to the base or to an
  *       earlier contributor is reported in {@link Merged#conflicts()} and under {@value #CONFLICTS_KEY}; a contributor
  *       that throws is reported in {@link Merged#failures()} and under {@value #FAILURES_KEY}. Both are additionally
@@ -99,7 +99,7 @@ import module java.base;
  *       holding it itself.</li>
  *   <li><b>Ordering / concurrency.</b> The base map's keys come first in their insertion order; contributed keys are
  *       appended in <b>contributor-class-name order</b>, then the diagnostic keys last. Among contributors the
- *       first in that order wins a contested key. The reports are deterministic: conflicts appear in contributor discovery order and, within one
+ *       first in that order wins a contested key. The reports are deterministic: conflicts appear in contributor class-name order and, within one
  *       contribution, sorted by key, so an unordered contributed map cannot make the report shuffle between
  *       requests. The determinism now holds <em>across module paths</em> too, which it did not while the winner
  *       was whichever module the loader happened to see first: two distributions claiming one key still must not,
@@ -175,8 +175,8 @@ public interface CapabilityContributor {
 
     /**
      * Merge every {@code contributor}'s {@link #capabilities} into a copy of {@code base}, applying the documented
-     * precedence rule: a base key always wins a conflict, and among contributors the first discovered wins. The base
-     * keys keep their insertion order first; new keys are appended in contributor discovery order. When
+     * precedence rule: a base key always wins a conflict, and among contributors the first in class-name order wins.
+     * The base keys keep their insertion order first; new keys are appended in contributor class-name order. When
      * {@code contributors} is empty the returned map equals {@code base} exactly (same keys, same order, same values) -
      * the free product's byte-for-byte-unchanged guarantee.
      *

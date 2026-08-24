@@ -11,7 +11,7 @@
  * tokens, ordered paging, traversal rejection and the explicitly non-transactional per-entry batch outcomes - and
  * {@code StoreFixture} is how one backend registers with it. A backend is covered by writing a fixture, never by
  * copying assertions, and the kit drives the two fault fixtures above rather than duplicating them. The JUnit driver
- * and the four backend fixtures live in {@code test/store/contract}, which also carries the completeness census.
+ * and the filesystem fixture live in {@code test/store/contract}, which also carries the completeness census.
  *
  * <p><b>The publication-hook contract kit:</b> {@code PublicationHookContract} is the executable contract of the
  * {@code PublicationObserver} family, and {@code PublicationHookFixture} is how one hook registers with it. The kit's

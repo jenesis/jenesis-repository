@@ -1127,7 +1127,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     /** Same scheme and authority (host:port) as the operator-configured enumeration root - the cross-origin test the
-     *  PrivateHosts page guard uses, identical to {@code IndexSource.sameOrigin}. */
+     *  PrivateHosts page guard uses, identical to {@code ImportScreen.sameOrigin}. */
     private static boolean sameOrigin(URI origin, URI url) {
         return Objects.equals(origin.getScheme(), url.getScheme())
                 && Objects.equals(origin.getRawAuthority(), url.getRawAuthority());
@@ -1137,7 +1137,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         // The next-page URL is resolved from the upstream's own Link header (below), so its host is upstream-controlled
         // and reaches fetch() as an INITIAL request - HttpFetcher's redirect-only SSRF screen never inspects it. Refuse
         // a CROSS-ORIGIN page aimed at a private/loopback/metadata host through the same PrivateHosts guard the redirect
-        // chain and IndexSource.open use, so a malicious registry cannot steer catalog/tags pagination at 169.254.169.254
+        // chain and ImportScreen use, so a malicious registry cannot steer catalog/tags pagination at 169.254.169.254
         // or an internal control plane. The first page is same-origin with the operator-configured root, so it passes.
         if (!sameOrigin(origin, url) && PrivateHosts.resolvesToPrivate(url.getHost())) {
             throw new IOException("Refusing a cross-origin catalog/tags page to a private/loopback host: " + url);

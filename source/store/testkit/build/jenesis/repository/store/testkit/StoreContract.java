@@ -387,6 +387,12 @@ public final class StoreContract {
         List<String> paged = new ArrayList<>();
         store.page(base + "/", "", 10, paged::add);
         equal(paged, List.of("alpha", "beta", "gamma"), "page accepts the trailing slash too");
+        // pageListed composes a full key rather than a bare name, so the trailing slash reaches the key itself:
+        // a backend that joins the raw prefix answers a/b//alpha, which no other read of that key would match.
+        List<String> listedKeys = new ArrayList<>();
+        store.pageListed(base + "/", "", 10, listed -> listedKeys.add(listed.key()));
+        equal(listedKeys, List.of(base + "/alpha", base + "/beta", base + "/gamma"),
+                "pageListed keys a trailing-slash prefix exactly as it keys the bare one");
         List<String> scanned = new ArrayList<>();
         store.scan(base + "/", "", 10, listed -> scanned.add(listed.key()));
         equal(scanned, List.of(base + "/alpha", base + "/beta/nested", base + "/gamma"),

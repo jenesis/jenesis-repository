@@ -14,7 +14,7 @@ import module java.base;
  */
 public final class Signals {
 
-    /** The full grammar: dot-separated lowercase segments under the {@code jenesis} root. */
+    /** The full grammar: dot-separated lowercase segments under the {@code jenreg} root. */
     public static final Pattern NAME = Pattern.compile("^jenreg(\\.[a-z][a-z0-9]*)+$");
 
     private static final Pattern SEGMENT = Pattern.compile("[a-z][a-z0-9]*");

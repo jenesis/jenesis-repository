@@ -66,7 +66,7 @@ import module java.base;
  *       this primitive writes ({@code blobs/}, {@code publish/}, {@code gc/condemned/}) and every key it hands a
  *       layout is relative to that scope, so nothing here can read or write across tenants.</li>
  *   <li><b>Error visibility.</b> Everything up to and including the commit point propagates: a screen that cannot
- *       render a verdict, a refused republish, a failing sidecar, a pointer that loses its compare-and-set three
+ *       render a verdict, a refused republish, a failing sidecar, a pointer that loses its compare-and-set twelve
  *       times - each fails the publish loudly and leaves nothing servable. Only the after-commit observer
  *       notifications are contained: a throwing {@link PublicationObserver} is logged and the publish stands, because
  *       a lost notification may over-serve or over-count but can never hide a served artifact or a hold.</li>
@@ -75,7 +75,7 @@ import module java.base;
  *       sorted by {@link PublishInterceptor#order()} (ties keep discovery order) and the strongest disposition across
  *       the chain routes the publication; observers are notified in discovery order, sequentially, and no observer
  *       ordering is otherwise promised.</li>
- *   <li><b>Bounded work / cancellation.</b> A pointer compare-and-set retries at most three times before failing by
+ *   <li><b>Bounded work / cancellation.</b> A pointer compare-and-set retries at most twelve times before failing by
  *       name; the {@code /quarantine} alias scan is bounded by the review queue and short-circuits on the first live
  *       alias; both sibling reads are byte-capped. No step here loops on an attacker-shaped input, and no bound is
  *       reached silently - though the two sibling reads do not answer a bound the same way, because they are not
@@ -467,7 +467,7 @@ public final class Publication {
         return true;
     }
 
-    /** One notification, so the six after-commit faces reach their observers through one containment rather than six
+    /** One notification, so the seven after-commit faces reach their observers through one containment rather than six
      *  copies of it. Declares {@code Exception} because the SPI's methods declare {@code IOException} and containing
      *  it is the point. */
     @FunctionalInterface

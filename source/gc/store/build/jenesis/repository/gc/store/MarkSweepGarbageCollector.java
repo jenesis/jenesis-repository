@@ -619,7 +619,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
     }
 
     /** A condemned marker's content: the pass whose judgment condemned the blob (the clock the grace interval is
-     *  measured in) and when - the {@code since} a console shows, never consulted for correctness. */
+     *  measured in) and when - the {@code since} a console shows and the {@code jenreg.gc.grace} floor measures. */
     private record Marker(long pass, Instant since) {
     }
 

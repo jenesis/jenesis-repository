@@ -44,7 +44,7 @@ import build.jenesis.repository.store.Features;
  * <h2>Clauses this kit discharges</h2>
  *
  * {@code SELF_SKIPS_WITHOUT_CREDENTIALS} is {@code ImportSourceProvider}'s absence-sentinel and selection-failure
- * pair, which its own javadoc already cites. The kit's four other properties are about {@code ImportSource}, which
+ * pair, which its own javadoc already cites. The kit's five other properties are about {@code ImportSource}, which
  * is not an inventoried surface (no {@code uses}/{@code provides} clause names it), so they are claimed nowhere.
  *
  * @jenesis.covers build.jenesis.repository.importer.ImportSourceProvider 3, 4
@@ -76,7 +76,7 @@ public final class ImportContract {
     public enum Property {
         /** An interrupted walk resumes from the cursor it checkpointed: the resumed run delivers the rest of the
          *  corpus, re-delivers nothing the interrupted run had fully consumed, and ends on the terminal {@code null}
-         *  ({@code ImportSource} clauses 2 and 7). */
+         *  ({@code ImportSource} clauses 2 and 8). */
         RESUMES_WITHOUT_DUPLICATING,
         /** An asset is downloaded only when the consumer opens it, and its bytes go from the incumbent to storage
          *  unread - zero bytes produced at the moment the store is handed the stream ({@code ImportSource} clause 4,
@@ -173,7 +173,7 @@ public final class ImportContract {
                         + "scripts " + expected.size());
 
         // The complete walk first: the corpus really delivers what the fixture claims, in the order it claims - which
-        // is what makes a cursor mean anything at all (clause 7). Without this the resume comparison below could pass
+        // is what makes a cursor mean anything at all (clause 8). Without this the resume comparison below could pass
         // over a walk that never reported the assets the fixture named.
         Walk complete = walk(fixture, corpus.upstream(), fixture.request(), false);
         equal(complete.paths(), expected, fixture, "a complete walk reports the corpus in the fixture's declared order");
