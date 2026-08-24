@@ -1,19 +1,24 @@
 name: Release jenesis-repository
 
-# Releases ride the '[release]' commit-marker convention: a push to main whose head
-# commit message starts with '[release]' (next minor of the latest tag) or
-# '[release <version>]' (explicit) triggers this workflow once the test workflow
-# has completed successfully for that commit. Staging re-runs the build with strict
+# Releases are dispatched by hand from the Actions tab, so any commit is releasable:
+# the sha input picks the commit (the head this runs on by default) and the tag input
+# picks the tag (the next minor of the latest tag by default). Staging re-runs the build with strict
 # dependency pinning and the Maven Central POM metadata from project.properties;
 # JReleaser then signs, deploys every staged module to Maven Central and cuts the
 # GitHub release + tag. The Maven staging repository under target/stage/maven/output
 # carries all modules, each with sources and javadoc as Central requires.
 
 on:
-  workflow_run:
-    workflows: [Test jenesis-repository]
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to release; defaults to the head this workflow runs on
+        required: false
+        type: string
+      tag:
+        description: Tag to cut, vX.Y.Z; defaults to the next minor of the latest tag
+        required: false
+        type: string
 
 # Route Maven Central through the repository variable MAVEN_REPOSITORY_URI when set
 # (a mirror, to avoid Central rate-limiting the runners), falling back to Central
@@ -23,10 +28,6 @@ env:
 
 jobs:
   release:
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      (startsWith(github.event.workflow_run.head_commit.message, '[release]') ||
-       startsWith(github.event.workflow_run.head_commit.message, '[release '))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -35,23 +36,22 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ inputs.sha || github.sha }}
           # build/jenesis is a symlink into the .jenesis/upstream submodule (the pinned jenesis build tool).
           submodules: true
 
       - name: Resolve release version
         id: version
         env:
-          MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+          TAG: ${{ inputs.tag }}
         run: |
-          HEADER="$(printf '%s\n' "$MESSAGE" | head -n1)"
-          VERSION="$(echo "$HEADER" | sed -nE 's/^\[release[[:space:]]+v?([0-9]+\.[0-9]+\.[0-9]+)\].*$/\1/p')"
-          if [ -z "$VERSION" ]; then
-            STRAY="$(echo "$HEADER" | sed -nE 's/^\[release\][[:space:]]+v?([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')"
-            if [ -n "$STRAY" ]; then
-              echo "Version '$STRAY' must be inside the marker: use '[release $STRAY]', not '[release] $STRAY'." >&2
+          if [ -n "$TAG" ]; then
+            VERSION="$(printf '%s' "$TAG" | sed -nE 's/^v?([0-9]+\.[0-9]+\.[0-9]+)$/\1/p')"
+            if [ -z "$VERSION" ]; then
+              echo "Tag '$TAG' is not a release tag: pass vX.Y.Z or X.Y.Z, e.g. v1.2.3." >&2
               exit 1
             fi
+          else
             LATEST="$(git tag --list --sort=-v:refname | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 | sed 's/^v//')"
             if [ -z "$LATEST" ]; then
               VERSION="0.0.1"
@@ -61,7 +61,7 @@ jobs:
               VERSION="${MAJOR}.$((MINOR + 1)).0"
             fi
           fi
-          echo "Resolved release version: $VERSION"
+          echo "Releasing $VERSION as tag v$VERSION from $(git rev-parse HEAD)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 25
