@@ -10,8 +10,8 @@ import module java.base;
 /**
  * Keeps the OCI {@linkplain OciListings stored tag lists and catalog} in step with the transitions that happen off
  * the push path - a hold on a pushed manifest and its release, a removal - by re-deciding the tag's membership (or
- * every tag of the image, for a manifest addressed by digest). A transition that names no image forgets every OCI
- * listing, so they regenerate on their next read.
+ * every tag of the image, for a manifest addressed by digest). A transition that names no image rebuilds every OCI
+ * listing in place.
  */
 public final class OciListingObserver implements PublicationObserver, StoredListing.Rebuilder {
 

@@ -47,7 +47,6 @@ public final class CredentialsController {
         this.context = Objects.requireNonNull(context, "context");
     }
 
-    /** Every credential of the managing key's tenant, secrets excluded - they are not stored to begin with. */
     /** The most credentials one answer lists; a caller past it follows the {@code X-Next-Cursor} header. */
     static final int MAX_PAGE = 500;
 

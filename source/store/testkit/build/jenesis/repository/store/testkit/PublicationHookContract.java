@@ -370,11 +370,11 @@ public final class PublicationHookContract {
      * mutation, so a fixture that only exercises one is still falsified on the one it exercises.
      *
      * <p><b>The interceptor half is mostly empty, and that is the finding rather than an oversight.</b> Eighteen of
-     * the twenty-five {@link Role#PUBLISH_INTERCEPTOR} clauses are claims about {@link Publication}'s own commit
+     * the twenty-six {@link Role#PUBLISH_INTERCEPTOR} clauses are claims about {@link Publication}'s own commit
      * choreography - the chain's ordering, its short-circuiting, where a review pointer lands relative to
      * {@code committed}, what escapes the containment - and the kit asserts them with its own probe screens while the
      * fixture's screen rides along in the chain. No substitution for a <em>provider's</em> hook can falsify a claim
-     * about the core's own final class, so those carry no mutation <em>here</em>. The seven that remain are the
+     * about the core's own final class, so those carry no mutation <em>here</em>. The eight that remain are the
      * clauses a provider actually owns.
      *
      * <p><b>The choreography half is falsified elsewhere, by a different subject</b>. Those clauses are not

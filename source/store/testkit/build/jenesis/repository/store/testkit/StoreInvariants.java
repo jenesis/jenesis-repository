@@ -14,7 +14,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *
  * <p>Each assertion throws an {@link AssertionError} naming the first violation (so it reads in a test failure without a
  * junit dependency here) and returns cleanly when the store is consistent. It walks only the tiny pointers and blob
- * sizes, never an artifact body, so it runs identically on a filesystem and an object store.
+ * names, never an artifact body, so it runs identically on a filesystem and an object store.
  */
 public final class StoreInvariants {
 

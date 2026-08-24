@@ -36,8 +36,8 @@ import module java.base;
  * Publishes the repository as Spring Boot auto-configuration so a downstream distribution can consume it with a plain
  * {@code requires build.jenesis.repository.server} and extend it by overriding beans rather than forking the module.
  * Every bean is {@link ConditionalOnMissingBean conditional}: the storage backend (a name resolved through
- * {@code ArtifactStoreProvider}), the {@link Authorization} (enforcing when {@code jenreg.auth} is set,
- * otherwise anonymous), the {@link RepositoryFormat} plugins discovered with {@link ServiceLoader}, the pull-through
+ * {@code ArtifactStoreProvider}), the {@link Authorization} (enforcing by default, anonymous only when {@code
+ * jenreg.auth=false}), the {@link RepositoryFormat} plugins discovered with {@link ServiceLoader}, the pull-through
  * {@code upstreams} (format name to upstream URI, from {@code jenreg.proxy.*}) and upstream
  * {@link ProxyFormat.Fetcher}, the framework-neutral {@link FormatDispatcher}, the {@link RepositoryRouting} (the
  * {@link FixedTenantRouting} default, resolving every request to the configured

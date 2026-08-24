@@ -6,7 +6,7 @@ import module java.base;
 
 /**
  * A console panel, discovered with {@code ServiceLoader} and bridged into Spring by {@link UiConfig}. The shell ships
- * the core panel (browse); additional panels are registered by adding a provider module to the graph, with no fork of
+ * the core panels; additional panels are registered by adding a provider module to the graph, with no fork of
  * the console. Each panel contributes a navigation entry and renders its body against the repository's
  * {@link ArtifactStore}, so a panel provider stays free of any Spring dependency while still reading real repository
  * data. The rendered body is a trusted HTML fragment the console drops into its Thymeleaf shell, so an implementation

@@ -12,7 +12,7 @@ import module java.base;
  * that {@link #routes(String) has a routed definition} is served here (a proxy pulls through its own upstream on a
  * local miss and caches per its definition, a group consults its members in order with the first hit winning, a
  * {@code nocache} leg stays a pure view), while a plain hosted repository is left to the {@link FormatDispatcher}
- * so it keeps the deployment-wide, format-level pull-through ({@code format-upstream.<format>}). Writes are not
+ * so it keeps the deployment-wide, format-level pull-through ({@code jenreg.proxy.<format>}). Writes are not
  * routed here - a routed group deploy already lands in its push-target member on the write path - so this only
  * governs reads.
  *

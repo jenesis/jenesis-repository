@@ -20,7 +20,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * Server-side security for the repository as auto-configuration: stateless, deny-by-default authorization
  * delegated to the {@link RepositoryAuthorizationManager} (a pass-through when the deployment is anonymous), with the
  * Actuator health endpoint left open for liveness/readiness probes. The {@link KeyAuthenticationFilter} runs first to
- * lift the {@code Jenesis-Repository-Key} header into the security context. CSRF, HTTP Basic and form login are
+ * lift the presented key ({@link PresentedKey}) into the security context. CSRF, HTTP Basic and form login are
  * disabled - this is a machine-to-machine artifact API keyed by a header, not a browser session. Both the
  * authentication entry point and the access-denied handler are the {@link RepositoryAuthorizationEntryPoint}, so a
  * denied request answers the status the credential model intends ({@code 401} unauthorized, {@code 403} forbidden)

@@ -20,7 +20,7 @@ import module java.base;
  * {@link ArtifactStore} listing seam (the framework-neutral "inventory" primitive - prefix listing, one level at a
  * time) so it is generic across every format. The tree is rooted at the {@code publish/} pointer tree the formats
  * write, so a browse walks the logical request paths ({@code maven/org/apache/…}), not the content-addressed
- * {@code blobs/} bucket. Each level lists only its immediate children ({@link ArtifactStore#list}); a folder's
+ * {@code blobs/} bucket. Each level lists only its immediate children ({@link ArtifactStore#page}); a folder's
  * children are fetched only when it is navigated into or expanded, so a browse never scans or buffers a whole tree,
  * and never reads an artifact blob - only the tiny publish pointer (its content is the blob hash) and the blob's
  * stored size feed the size column.

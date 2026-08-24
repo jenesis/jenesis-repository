@@ -40,7 +40,7 @@ import module java.base;
  * <p><strong>A truncated walk yields nothing at all.</strong> A member found before the bound bit may be a decoy a
  * crafted archive placed early, with the real one deliberately past the ceiling - so handing back what was found
  * while the walk was still looking would let the archive choose what a screen sees. The record enforces it: a value
- * exactly when {@link ArchiveInflation.Outcome#EXHAUSTED}, nothing when
+ * only when {@link ArchiveInflation.Outcome#EXHAUSTED}, nothing when
  * {@link ArchiveInflation.Outcome#TRUNCATED}, the same equivalence a bounded member read enforces on its bytes.
  *
  * <p><strong>Which side a caller lands on is the read's role.</strong> The two accessors are the decision, and they

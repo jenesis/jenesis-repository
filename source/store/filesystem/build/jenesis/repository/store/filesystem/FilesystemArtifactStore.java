@@ -268,7 +268,10 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      *  a container has none of its own. A stat that races a delete degrades to the names-only shape rather than
      *  failing the page - the walk re-judges every key on read anyway. */
     private static Listed listed(String prefix, String name, Path path) {
-        String key = prefix == null || prefix.isEmpty() ? name : prefix + "/" + name;
+        // Through the same container normalisation the object stores compose their keys with, so a caller's
+        // trailing slash yields a/b/name here as it does there rather than the doubled a/b//name a raw join makes.
+        String container = ArtifactStore.container(prefix);
+        String key = container.isEmpty() ? name : container + "/" + name;
         try {
             BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
             return attributes.isRegularFile()

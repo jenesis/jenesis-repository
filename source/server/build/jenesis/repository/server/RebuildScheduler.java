@@ -20,8 +20,8 @@ import module java.base;
  * consumer's view (a format's module index, a back-fill) converges on its own without an embedder driving it and
  * without waiting for the artifact to be republished. The cadence is {@code jenreg.rebuild.interval} (a day by
  * default; {@code off} or {@code 0} switches the driver off), the first pass runs a minute after boot. The driver is
- * inert - it logs one line and schedules nothing - when no walk is installed or no consumer is discovered, so a
- * deployment without either is byte-for-byte unchanged. One pass at a time: a cadence tick that finds the previous
+ * inert - it logs one line and schedules nothing - when there is no walk with a consumer and no listing to repair, so
+ * a deployment without either is byte-for-byte unchanged. One pass at a time: a cadence tick that finds the previous
  * pass still running is skipped, never stacked. Its status is reported through {@link Observability}, the discovered
  * {@link ObservabilitySource} the report lists it under.
  */

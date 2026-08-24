@@ -56,7 +56,8 @@ public final class Authorization {
         this.anonymousGrants = anonymousGrants;
     }
 
-    /** An open deployment: every request is allowed, the headless default for the free single-token deployment. */
+    /** An open deployment: every request is allowed, the explicit {@code jenreg.auth=false} opt-out for the free
+     *  single-token deployment. */
     public static Authorization anonymous() {
         return new Authorization(null);
     }

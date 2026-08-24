@@ -73,7 +73,7 @@ public final class FormatMarks {
 
     /**
      * The mark of the format that declares an ecosystem - a browse search hit carries the ecosystem its coordinate
-     * belongs to ({@link ArtifactLayout#ecosystem()}) - or empty when no installed format declares it. As with a
+     * belongs to ({@link EcosystemLayout#ecosystem()}) - or empty when no installed format declares it. As with a
      * namespace, a format that declares the ecosystem but no mark resolves to its generated figure.
      */
     public Optional<Mark> forEcosystem(String ecosystem) {

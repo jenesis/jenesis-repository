@@ -15,7 +15,7 @@ import module java.base;
  * Sheds excess load before the request reaches the repository: each request is metered against its tenant's rate
  * ceiling (the per-tenant {@link Authorization#rateLimit} when set, otherwise the deployment default), and one that
  * exhausts the tenant's {@link RateLimiter} bucket is answered {@code 429 Too Many Requests} with a {@code
- * Retry-After}. The tenant is read from the {@code Jenesis-Repository-Key} header when the key is
+ * Retry-After}. The tenant is read from the presented key ({@link PresentedKey}) when it is
  * {@link Authorization#wellFormed well-formed}, but that check is only a CRC32 typo guard, not a signature: this
  * pre-auth filter cannot afford the store lookup that would tell a genuine key from a fabricated one, so the tenant
  * here is effectively attacker-controlled. To keep a flood of distinct fabricated tenant names from minting an

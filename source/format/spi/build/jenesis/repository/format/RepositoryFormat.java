@@ -108,8 +108,7 @@ import module java.base;
  *     obligations against it are these three, and they are what implementations have actually disagreed about:
  *     <ul>
  *       <li>a format <b>runs no screen of its own</b>. It does not invoke the interceptor chain, and a second
- *           format-embedded pass over already-screened bytes is not this model - the core structural guard
- *           clause 14 refuses one;</li>
+ *           format-embedded pass over already-screened bytes is not this model - this clause refuses one;</li>
  *       <li><b>the body the edge gates must be the artifact itself</b>, not a container that carries it. A publish
  *           whose request body is an <em>envelope</em> - a JSON document with the artifact base64'd inside it, a
  *           length-prefixed frame, a multipart form - has been screened only if the bytes the chain hashed and

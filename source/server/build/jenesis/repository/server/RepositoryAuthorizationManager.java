@@ -12,15 +12,15 @@ import org.springframework.web.util.UriUtils;
 import module java.base;
 
 /**
- * Authorizes a request against the {@link Authorization} credential model. An anonymous deployment (the headless
- * default) allows everything; an enforcing one reads the {@code Jenesis-Repository-Key} and optional
- * {@code Jenesis-Repository-Name} headers and requires {@code repository:read} for a GET/HEAD and
- * {@code repository:write} for any other method, on the router-resolved in-repository path so a path-scoped grant
- * ({@code <repo>:<prefix>}) authorizes exactly its subtree. The computed {@link Authorization.Decision} is recorded on the
- * request so {@link RepositoryAuthorizationEntryPoint} can answer {@code 401} for an unauthorized request (no key,
- * a malformed or expired key) and {@code 403} for a forbidden one (a key that lacks the right), regardless of which
- * Spring Security failure path the denial takes. It is contributed as a bean by
- * {@link RepositorySecurityAutoConfiguration}.
+ * Authorizes a request against the {@link Authorization} credential model. An anonymous deployment (the
+ * {@code jenreg.auth=false} opt-out) allows everything; an enforcing one reads the presented key
+ * ({@link PresentedKey}) and the optional {@code Jenesis-Repository-Name} header and requires
+ * {@code repository:read} for a GET/HEAD and {@code repository:write} for any other method, on the router-resolved
+ * in-repository path so a path-scoped grant ({@code <repo>:<prefix>}) authorizes exactly its subtree. The computed
+ * {@link Authorization.Decision} is recorded on the request so {@link RepositoryAuthorizationEntryPoint} can answer
+ * {@code 401} for an unauthorized request (no key, a malformed or expired key) and {@code 403} for a forbidden one
+ * (a key that lacks the right), regardless of which Spring Security failure path the denial takes. It is contributed
+ * as a bean by {@link RepositorySecurityAutoConfiguration}.
  */
 public class RepositoryAuthorizationManager implements AuthorizationManager<RequestAuthorizationContext> {
 

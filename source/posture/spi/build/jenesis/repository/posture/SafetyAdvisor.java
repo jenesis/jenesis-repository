@@ -10,7 +10,7 @@ import module java.base;
  * the observation seam follows.
  *
  * <p>Thin core: a module owns the advisories about <em>its own</em> settings; only the deployment-cross-cutting ones
- * (auth off, the dev profile, an exposed management port, no rate limit) are seeded centrally by
+ * (auth off, the dev profile, a wide-open console, no rate limit) are seeded centrally by
  * {@link SecurityPosture}. An advisor is a pure function of configuration - it holds no mutable state and never mutates
  * anything (observing posture never changes it), so it is safe to discover, cache and call on any thread.
  *

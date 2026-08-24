@@ -10,7 +10,7 @@ import module java.base;
 /**
  * Keeps the raw format's {@linkplain RawListings stored directory pages} in step with the transitions that happen
  * off the publish path - a hold on a file and its release, a removal - by re-deciding the one entry. A transition
- * that names no path forgets every page, so they regenerate on their next read.
+ * that names no path rebuilds every page in place.
  */
 public final class RawListingObserver implements PublicationObserver, StoredListing.Rebuilder {
 

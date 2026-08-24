@@ -66,9 +66,10 @@ public final class OciImporter implements RepositoryImporter {
 
     private void manifest(String name, String reference, byte[] content, ArtifactStore store) throws IOException {
         // Route the import manifest through the shared OCI choke point (EPIC 26), so an import screens its manifests
-        // exactly as a push and a proxy do - what OciImporter.describe() returning empty (an unscreened import edge)
-        // deferred to this manifest gate. The media type is read from the manifest's own field (an import carries no
-        // response headers); a withheld verdict lays out no sidecar or tag pointer, so the manifest never serves.
+        // exactly as a push and a proxy do - what OciImporter.importTarget() returning empty (an unscreened import
+        // edge) deferred to this manifest gate. The media type is read from the manifest's own field (an import
+        // carries no response headers); a withheld verdict lays out no sidecar or tag pointer, so the manifest
+        // never serves.
         try {
             OciManifests.ingest(name, reference, content, mediaType(content), store);
         } catch (OciManifests.InvalidManifest invalid) {

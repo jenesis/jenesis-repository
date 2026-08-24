@@ -178,8 +178,6 @@ public class RepositoryProperties {
         this.auth = auth;
     }
 
-    /** The strictly-opt-in anonymous-role grant (WANON.1), empty by default (no anonymous access whatsoever). See the
-     *  field javadoc for the grammar. */
     public String getCredentialDefaultLifetime() {
         return credentialDefaultLifetime;
     }
@@ -196,6 +194,8 @@ public class RepositoryProperties {
         this.credentialMaxLifetime = credentialMaxLifetime;
     }
 
+    /** The strictly-opt-in anonymous-role grant (WANON.1), empty by default (no anonymous access whatsoever). See the
+     *  field javadoc for the grammar. */
     public String getAnonymousRights() {
         return anonymousRights;
     }
