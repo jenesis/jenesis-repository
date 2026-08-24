@@ -36,6 +36,9 @@ import build.jenesis.repository.store.Publication;
  */
 public final class RepositoryImport {
 
+    private static final org.slf4j.Logger LOGGER =
+            org.slf4j.LoggerFactory.getLogger(RepositoryImport.class);
+
     private final List<RepositoryImporter> importers;
 
     public RepositoryImport() {
@@ -65,22 +68,55 @@ public final class RepositoryImport {
         AtomicInteger held = new AtomicInteger();
         AtomicInteger rejected = new AtomicInteger();
         Set<String> skippedFormats = new LinkedHashSet<>();
-        source.forEach((format, path, content) -> {
-            // A format configured off (jenreg.<format>=false) imports nothing either - its assets
-            // count as skipped, exactly as if its importer module were absent.
-            if (Features.enabled(format)) {
-                for (RepositoryImporter importer : importers) {
-                    if (importer.imports(format)) {
-                        screenAndLayout(importer, path, content, store, imported, held, rejected, listener);
-                        return;
+        Map<ImportSource.Reason, Integer> dropped = new EnumMap<>(ImportSource.Reason.class);
+        Map<ImportSource.Reason, String> examples = new EnumMap<>(ImportSource.Reason.class);
+        source.forEach(new ImportSource.Asset() {
+
+            @Override
+            public void dropped(String path, ImportSource.Reason reason) {
+                dropped.merge(reason, 1, Integer::sum);
+                examples.putIfAbsent(reason, path);
+                listener.dropped(path, reason);
+            }
+
+            @Override
+            public void accept(String format, String path, ImportSource.Content content) throws IOException {
+                walk(format, path, content);
+            }
+
+            private void walk(String format, String path, ImportSource.Content content) throws IOException {
+                // A format configured off (jenreg.<format>=false) imports nothing either - its assets
+                // count as skipped, exactly as if its importer module were absent.
+                if (Features.enabled(format)) {
+                    for (RepositoryImporter importer : importers) {
+                        if (importer.imports(format)) {
+                            screenAndLayout(importer, path, content, store, imported, held, rejected, listener);
+                            return;
+                        }
                     }
                 }
+                skipped.incrementAndGet();
+                skippedFormats.add(format);
+                listener.skipped(format);
             }
-            skipped.incrementAndGet();
-            skippedFormats.add(format);
-            listener.skipped(format);
         }, listener::checkpoint);
-        return new Result(imported.get(), skipped.get(), held.get(), rejected.get(), Set.copyOf(skippedFormats));
+        // ONE summary line, not one per drop: a hostile listing is a source of unbounded rows, so a line each is a
+        // remote party writing as much of our log as it likes. The per-reason tallies with one example carry what an
+        // operator acts on, and the example is quoted rather than interpolated bare because it is untrusted text.
+        if (!dropped.isEmpty()) {
+            StringBuilder summary = new StringBuilder();
+            for (Map.Entry<ImportSource.Reason, Integer> entry : dropped.entrySet()) {
+                summary.append(summary.isEmpty() ? "" : ", ")
+                        .append(entry.getValue()).append(' ').append(entry.getKey())
+                        .append(" (e.g. \"").append(examples.get(entry.getKey())).append("\")");
+            }
+            LOGGER.warn("Import walk refused {} row(s) the source offered and imported none of them: {}. An "
+                    + "UNSAFE_PATH count is an attack indicator rather than a broken listing - it means the source "
+                    + "offered paths that would have written outside the import's scope.",
+                    dropped.values().stream().mapToInt(Integer::intValue).sum(), summary);
+        }
+        return new Result(imported.get(), skipped.get(), held.get(), rejected.get(), Set.copyOf(skippedFormats),
+                Map.copyOf(dropped));
     }
 
     /** Screen one walked asset at the import edge, then route it by the chain's verdict: on {@code ACCEPT} restream the
@@ -156,6 +192,14 @@ public final class RepositoryImport {
         default void held(String path, ArtifactDescriptor descriptor, String hash) {
         }
 
+        /**
+         * A row the connector refused to carry, with the reason - see {@link ImportSource.Asset#dropped}. A default
+         * no-op so an existing listener keeps compiling; a job that persists progress overrides it, because the
+         * count is what separates "the source was empty" from "the source was refused wholesale" on a status read.
+         */
+        default void dropped(String path, ImportSource.Reason reason) {
+        }
+
         /** An asset was rejected: the import edge screened it to {@code REJECT}, so nothing was laid out (the orphan
          *  blob is left for garbage collection) and the walk continued. {@code descriptor} is the target coordinate. */
         default void rejected(String path, ArtifactDescriptor descriptor) {
@@ -171,6 +215,26 @@ public final class RepositoryImport {
     /** The outcome of an import: how many assets were imported, how many were held (screened to quarantine) and
      *  rejected at the import edge, how many were skipped, and the formats skipped for want of an importer (empty on a
      *  complete import). */
-    public record Result(int imported, int skipped, int held, int rejected, Set<String> skippedFormats) {
+    /**
+     * @param dropped rows the connector refused to carry at all, by reason - a laced path, an incomplete listing
+     *                entry, an unparseable URL. Empty on a clean source.
+     *                <p>It is a component rather than a log line because the number is the whole point: without it a
+     *                listing whose every row was refused finished {@code completed, imported: 0, skipped: 0}, which
+     *                reads exactly like migrating an empty repository. An operator could not tell "nothing was there"
+     *                from "everything was refused", and the second is the one that means the source is hostile.
+     */
+    public record Result(int imported, int skipped, int held, int rejected, Set<String> skippedFormats,
+                         Map<ImportSource.Reason, Integer> dropped) {
+
+        /** The five-component form, for a caller that reports no drops. Delegating rather than replaced, so existing
+         *  callers keep compiling - the shape {@code ArtifactDescriptor} took when it absorbed its ninth component. */
+        public Result(int imported, int skipped, int held, int rejected, Set<String> skippedFormats) {
+            this(imported, skipped, held, rejected, skippedFormats, Map.of());
+        }
+
+        /** Every refused row, however it was refused - the single number a status line shows. */
+        public int droppedTotal() {
+            return dropped.values().stream().mapToInt(Integer::intValue).sum();
+        }
     }
 }

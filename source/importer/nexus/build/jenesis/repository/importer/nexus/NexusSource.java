@@ -85,6 +85,12 @@ public final class NexusSource implements ImportSource {
                         path = path.substring(1);
                     }
                     if (path == null || downloadUrl == null || !ImportSource.safePath(path)) {
+                        // The two are different operational facts: a missing field is a broken listing, a laced path
+                        // is a hostile one, and only the second is an attack indicator (D-155).
+                        consumer.dropped(path == null ? "<no path>" : path,
+                                path == null || downloadUrl == null
+                                        ? ImportSource.Reason.INCOMPLETE_ENTRY
+                                        : ImportSource.Reason.UNSAFE_PATH);
                         continue;   // an incomplete entry, or a traversal-laced path no store write should see
                     }
                     URI download;
