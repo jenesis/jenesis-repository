@@ -86,7 +86,7 @@ public final class ModuleViewRebuild implements WalkConsumer {
             return;
         }
         for (ModuleView view : MODULE_VIEWS) {
-            view.rebuild(module, coordinate[2], artifact.hash(), store);
+            view.rebuild(module, coordinate[2], artifact.hash(), store, path);
         }
     }
 }

@@ -103,8 +103,14 @@ public interface ModuleView {
      * Give a published modular jar its whole {@code /module/} view: every pointer this layout addresses the module by,
      * the version-addressed one(s) and the "latest" one, aimed at the content-addressed blob the Maven publish already
      * stored. Called once per publish of a modular jar, after its Maven coordinate has been linked.
+     *
+     * @param origin the served path the jar was published under - the Maven coordinate this view is a second name
+     *               for. An implementation records the relation ({@code ServedAliases}) so that whatever must treat
+     *               the names as one artifact can, a reviewer's release above all: neither content hash nor
+     *               coordinate version identifies an alias, so the fact exists only where it is created, here.
      */
-    void publish(String moduleName, String version, String hash, ArtifactStore store) throws IOException;
+    void publish(String moduleName, String version, String hash, ArtifactStore store, String origin)
+            throws IOException;
 
     /**
      * Re-derive only the <em>version-addressed</em> part of the view {@link #publish} would link - the half that is a
@@ -118,6 +124,10 @@ public interface ModuleView {
      * a pass would silently move it to whatever the walk reached last. A view whose pointers are all version-addressed
      * simply implements this exactly as {@link #publish}; a view that carries an ordering-dependent pointer must leave
      * that pointer alone here.
+     *
+     * @param origin as on {@link #publish} - a repair pass re-records the alias relation too, which is what recovers
+     *               a record lost to a crash between the pointer write and the record write.
      */
-    void rebuild(String moduleName, String version, String hash, ArtifactStore store) throws IOException;
+    void rebuild(String moduleName, String version, String hash, ArtifactStore store, String origin)
+            throws IOException;
 }

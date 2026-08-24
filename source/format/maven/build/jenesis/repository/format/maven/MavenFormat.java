@@ -273,7 +273,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             return hash;
         }
         for (ModuleView view : MODULE_VIEWS) {
-            view.publish(module, coordinate[2], hash, store);
+            view.publish(module, coordinate[2], hash, store, path);
         }
         return hash;
     }
