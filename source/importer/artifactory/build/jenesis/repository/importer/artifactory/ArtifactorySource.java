@@ -134,6 +134,7 @@ public final class ArtifactorySource implements ImportSource {
             }
             String path = uri.startsWith("/") ? uri.substring(1) : uri;
             if (!ImportSource.safePath(path)) {
+                consumer.dropped(path, ImportSource.Reason.UNSAFE_PATH);
                 continue;                                        // a traversal-laced listing path no store write should see
             }
             URI download = URI.create(prefix + encode(repository) + "/" + encode(path));
@@ -166,6 +167,13 @@ public final class ArtifactorySource implements ImportSource {
         for (JsonNode child : JSON.readTree(new String(page.body(), StandardCharsets.UTF_8)).path("children")) {
             if (name(child) != null) {
                 children.add(child);
+            } else {
+                // name() folds two refusals into one null - an entry carrying no uri at all, and one whose uri is not
+                // a single traversal-free segment - so they are separated here rather than there: the first is a
+                // broken listing, the second is a hostile one, and only the second is an attack indicator (D-155).
+                String uri = child.path("uri").asString(null);
+                consumer.dropped(uri == null ? "<no uri>" : uri,
+                        uri == null ? ImportSource.Reason.INCOMPLETE_ENTRY : ImportSource.Reason.UNSAFE_PATH);
             }
         }
         children.sort(Comparator.comparing(ArtifactorySource::name));
@@ -196,6 +204,9 @@ public final class ArtifactorySource implements ImportSource {
         for (JsonNode child : JSON.readTree(new String(page.body(), StandardCharsets.UTF_8)).path("children")) {
             String name = name(child);
             if (name == null) {
+                String uri = child.path("uri").asString(null);
+                consumer.dropped(uri == null ? path + "/<no uri>" : path + uri,
+                        uri == null ? ImportSource.Reason.INCOMPLETE_ENTRY : ImportSource.Reason.UNSAFE_PATH);
                 continue;
             }
             String childPath = path + "/" + name;

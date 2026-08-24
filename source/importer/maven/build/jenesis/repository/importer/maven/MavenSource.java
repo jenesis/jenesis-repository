@@ -301,6 +301,7 @@ public final class MavenSource implements ImportSource {
             }
             String prefix = coordinate + "/" + version + "/" + artifact + "-" + version;
             if (!ImportSource.safePath(prefix + ".pom")) {
+                consumer.dropped(prefix + ".pom", ImportSource.Reason.UNSAFE_PATH);
                 continue;   // a coordinate/version that would not form a safe layout path no store write should see
             }
             ProxyFormat.Fetched pom = get(URI.create(root + prefix + ".pom"));
@@ -343,6 +344,7 @@ public final class MavenSource implements ImportSource {
     private void module(Asset consumer, URI root, String prefix) throws IOException {
         String path = prefix + ".module";
         if (!ImportSource.safePath(path)) {
+            consumer.dropped(path, ImportSource.Reason.UNSAFE_PATH);
             return;
         }
         URI url = URI.create(root + path);
@@ -371,6 +373,7 @@ public final class MavenSource implements ImportSource {
 
     private void emit(Asset consumer, URI root, String path) throws IOException {
         if (!ImportSource.safePath(path)) {
+            consumer.dropped(path, ImportSource.Reason.UNSAFE_PATH);
             return;   // belt-and-suspenders: the report boundary the SPI and every peer source guard, so the walk's
                       // per-segment listing/index checks are backed by the one canonical guard even if one is relaxed
         }

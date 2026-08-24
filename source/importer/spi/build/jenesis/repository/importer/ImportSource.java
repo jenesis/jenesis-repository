@@ -99,6 +99,42 @@ public interface ImportSource {
     @FunctionalInterface
     interface Asset {
         void accept(String format, String path, Content content) throws IOException;
+
+        /**
+         * A row the connector refused to carry, and why.
+         *
+         * <p>It exists because a drop was invisible: every connector {@code continue}s past a traversal-laced path,
+         * an incomplete listing row or a malformed URL, and the consumer only ever counted what it received. A
+         * listing whose every row is laced therefore finished {@code completed, imported: 0, skipped: 0} - which
+         * reads exactly like migrating an empty source. "Nothing was there" and "everything was refused" were the
+         * same answer.
+         *
+         * <p>That matters most for {@link Reason#UNSAFE_PATH}: a traversal-laced path is the one signal that a
+         * migration source is hostile, and it was the thing being discarded in silence.
+         *
+         * <p>A default no-op, so the lambdas that implement this interface today keep compiling and a connector
+         * reports what it drops as it is taught to.
+         *
+         * @param path   the offending path as the source gave it, which may be hostile - a caller that renders it
+         *               must treat it as untrusted text, never as a path it resolves
+         * @param reason what was wrong with it
+         */
+        default void dropped(String path, Reason reason) {
+        }
+    }
+
+    /** Why a connector refused a row. Carried rather than collapsed into one count, because "a hostile source" and
+     *  "a broken listing" are different operational facts and only the first is an attack indicator. */
+    enum Reason {
+
+        /** The path was not {@link #safePath} - a traversal attempt, an absolute path, or a control character. */
+        UNSAFE_PATH,
+
+        /** The listing row was missing a field the connector needs to address the asset at all. */
+        INCOMPLETE_ENTRY,
+
+        /** A download URL the source published could not be parsed as a URI. */
+        MALFORMED_URL
     }
 
     /** A deferred download of one asset's bytes, opened only once an importer has claimed the asset's format. The

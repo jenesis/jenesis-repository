@@ -372,6 +372,15 @@ public final class ImportContract {
                     "a listing carrying traversal-laced entries must report exactly the legitimate ones - a laced "
                             + "entry is skipped, and the walk continues rather than failing (one bad row never aborts "
                             + "a migration)");
+            // ... and it must SAY it dropped them. Refusing the row is only half: a walk that silently discards
+            // every entry finishes indistinguishable from one over an empty source, so an operator reading
+            // "completed, imported: 0" cannot tell a hostile listing from nothing to migrate. A traversal-laced path
+            // is the one signal that a source is hostile, and it was the thing being discarded in silence (D-155).
+            isTrue(!laced.dropped().isEmpty(), fixture,
+                    "this connector skipped the laced entries without reporting one of them through "
+                            + "ImportSource.Asset.dropped, so nothing downstream can count them: the job's status, "
+                            + "the console's Dropped column and the CLI all show a clean empty migration over a "
+                            + "listing that was refused wholesale");
         }
     }
 
@@ -407,7 +416,7 @@ public final class ImportContract {
 
     /** What one walk did: the asset paths it reported in order, the last non-null cursor it checkpointed, and whether
      *  it reached the terminal null. */
-    private record Walk(List<String> paths, String cursor, boolean terminated) {
+    private record Walk(List<String> paths, List<String> dropped, String cursor, boolean terminated) {
     }
 
     /** Thrown out of a checkpoint to interrupt a walk exactly where the connector said it was safe to stop. */
@@ -425,10 +434,22 @@ public final class ImportContract {
                             boolean interrupt) throws IOException {
         ImportSource source = fixture.build(upstream, request);
         List<String> paths = new ArrayList<>();
+        List<String> dropped = new ArrayList<>();
         String[] cursor = new String[1];
         boolean[] terminated = new boolean[1];
         try {
-            source.forEach((_, path, _) -> paths.add(path), reached -> {
+            source.forEach(new ImportSource.Asset() {
+
+                @Override
+                public void accept(String format, String path, ImportSource.Content content) {
+                    paths.add(path);
+                }
+
+                @Override
+                public void dropped(String path, ImportSource.Reason reason) {
+                    dropped.add(reason + " " + path);
+                }
+            }, reached -> {
                 if (reached == null) {
                     terminated[0] = true;
                     return;
@@ -441,7 +462,7 @@ public final class ImportContract {
         } catch (Interrupted _) {
             // the walk was stopped at the connector's own first resumable checkpoint
         }
-        return new Walk(List.copyOf(paths), cursor[0], terminated[0]);
+        return new Walk(List.copyOf(paths), List.copyOf(dropped), cursor[0], terminated[0]);
     }
 
     /** Walk every asset and read every body - the shape the credential legs need, since a connector may authenticate

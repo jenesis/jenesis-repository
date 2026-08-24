@@ -42,7 +42,8 @@ public final class ImportJobs {
      *  {@code listener} is notified in addition to it. */
     public void submit(ArtifactStore store, ImportSource source, String jobId, int baseImported, int baseSkipped,
                        RepositoryImport.Listener listener, UnaryOperator<Runnable> jobScope) throws IOException {
-        write(store, jobId, "running", baseImported, baseSkipped, 0, 0, new LinkedHashSet<>(), null, null, null);
+        write(store, jobId, "running", baseImported, baseSkipped, 0, 0, new LinkedHashSet<>(), Map.of(),
+                null, null, null);
         Runnable body = () -> run(store, source, jobId, baseImported, baseSkipped, listener);
         Thread.ofVirtual().name("import-" + jobId).start(jobScope.apply(body));
     }
@@ -54,6 +55,7 @@ public final class ImportJobs {
         AtomicInteger held = new AtomicInteger();
         AtomicInteger rejected = new AtomicInteger();
         Set<String> skippedFormats = new LinkedHashSet<>();
+        Map<ImportSource.Reason, Integer> dropped = new EnumMap<>(ImportSource.Reason.class);
         String[] cursor = {null};
         AtomicReference<String> asset = new AtomicReference<>();
         try {
@@ -85,19 +87,25 @@ public final class ImportJobs {
                 }
 
                 @Override
+                public void dropped(String path, ImportSource.Reason reason) {
+                    dropped.merge(reason, 1, Integer::sum);
+                    delegate.dropped(path, reason);
+                }
+
+                @Override
                 public void checkpoint(String reached) throws IOException {
                     cursor[0] = reached;
                     write(store, jobId, "running", imported.get(), skipped.get(), held.get(), rejected.get(),
-                            skippedFormats, reached, asset.get(), null);
+                            skippedFormats, dropped, reached, asset.get(), null);
                     delegate.checkpoint(reached);
                 }
             });
             write(store, jobId, "completed", imported.get(), skipped.get(), held.get(), rejected.get(),
-                    skippedFormats, null, asset.get(), null);
+                    skippedFormats, dropped, null, asset.get(), null);
         } catch (Exception e) {
             try {
                 write(store, jobId, "failed", imported.get(), skipped.get(), held.get(), rejected.get(),
-                        skippedFormats, cursor[0], asset.get(),
+                        skippedFormats, dropped, cursor[0], asset.get(),
                         e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             } catch (IOException suppressed) {
                 throw new UncheckedIOException(suppressed);
@@ -125,14 +133,18 @@ public final class ImportJobs {
         for (JsonNode format : state.path("skippedFormats")) {
             formats.add(format.asString(null));
         }
+        Map<String, Integer> drops = new LinkedHashMap<>();
+        JsonNode dropped = state.path("dropped");
+        dropped.propertyNames().forEach(name -> drops.put(name, dropped.path(name).asInt(0)));
         return Optional.of(new Snapshot(state.path("state").asString(null), state.path("imported").asInt(0),
                 state.path("skipped").asInt(0), state.path("held").asInt(0), state.path("rejected").asInt(0),
-                formats, state.path("cursor").asString(null),
+                formats, Map.copyOf(drops), state.path("cursor").asString(null),
                 state.path("asset").asString(null), state.path("error").asString(null)));
     }
 
     private void write(ArtifactStore store, String jobId, String state, int imported, int skipped, int held,
-                       int rejected, Set<String> skippedFormats, String cursor, String asset, String error)
+                       int rejected, Set<String> skippedFormats, Map<ImportSource.Reason, Integer> dropped,
+                       String cursor, String asset, String error)
             throws IOException {
         Map<String, Object> job = new LinkedHashMap<>();
         job.put("state", state);
@@ -141,6 +153,11 @@ public final class ImportJobs {
         job.put("held", held);
         job.put("rejected", rejected);
         job.put("skippedFormats", new ArrayList<>(skippedFormats));
+        // Persisted per reason rather than as one total: an operator polling a job needs to see that the refusals
+        // were UNSAFE_PATH - the hostile-source indicator - and not merely that some rows did not arrive.
+        Map<String, Integer> drops = new LinkedHashMap<>();
+        dropped.forEach((reason, count) -> drops.put(reason.name(), count));
+        job.put("dropped", drops);
         job.put("cursor", cursor);
         job.put("asset", asset);
         job.put("error", error);
@@ -151,6 +168,13 @@ public final class ImportJobs {
      *  screened to quarantine and rejection, {@code asset} is the source path of the most recently imported asset
      *  (which one the walk has reached), {@code null} before the first asset. */
     public record Snapshot(String state, int imported, int skipped, int held, int rejected,
-                           List<String> skippedFormats, String cursor, String asset, String error) {
+                           List<String> skippedFormats, Map<String, Integer> dropped, String cursor, String asset,
+                           String error) {
+
+        /** Every row the source offered that no connector would carry. A completed job with zero imported and a
+         *  non-zero count here is a refused source, not an empty one - the distinction this record could not make. */
+        public int droppedTotal() {
+            return dropped.values().stream().mapToInt(Integer::intValue).sum();
+        }
     }
 }

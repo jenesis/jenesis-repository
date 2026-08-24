@@ -69,6 +69,7 @@ public final class IndexSource implements ImportSource {
             while (iterator.hasNext()) {
                 ProxyFormat.Coordinate coordinate = iterator.next();
                 if (!ImportSource.safePath(coordinate.path())) {
+                    consumer.dropped(coordinate.path(), ImportSource.Reason.UNSAFE_PATH);
                     continue;   // a traversal-laced index path no store write should see - the enumerated path
                                 // derives from a foreign index (a repository name / tag the upstream controls, which
                                 // a format's enumerate splices in without promising safety), so it is only semi-

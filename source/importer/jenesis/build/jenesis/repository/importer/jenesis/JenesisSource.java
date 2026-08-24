@@ -81,6 +81,9 @@ public final class JenesisSource implements ImportSource {
                 String format = asset.path("format").asString(null);
                 String layout = layoutPath(format, path);
                 if (!ImportSource.safePath(layout)) {
+                    // Reported, not merely skipped: a laced path is the one signal that a source is hostile, and a
+                    // walk that drops every row silently finishes indistinguishable from an empty source (D-155).
+                    consumer.dropped(layout, ImportSource.Reason.UNSAFE_PATH);
                     continue;   // a traversal-laced listing path no store write should see
                 }
                 consumer.accept(format, layout, () -> open(prefix, path));
