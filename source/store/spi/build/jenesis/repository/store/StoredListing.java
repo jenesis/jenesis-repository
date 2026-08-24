@@ -216,7 +216,19 @@ public final class StoredListing {
     /** The stored header: the document's sequence (monotone per document), its body's length, its SHA-256 (the
      *  validator every read serves) and, for a listing that {@linkplain Spec#withMd5 asks for it}, its MD5 - empty
      *  otherwise. */
-    public record Header(long seq, long size, String md5, String sha256) {
+    /**
+     * @param entries how many entries the document holds, or {@link #UNKNOWN} when nothing counted them.
+     *                <p>It is recorded because emptiness is a question the read path has to answer and could not:
+     *                a format whose listing is <em>present with zero entries</em> is a repository that holds nothing,
+     *                which several clients must be told about, and the alternative was splitting the document to
+     *                count it - materialising exactly the thing that is allowed to be large (&sect;1). A derived twin
+     *                carries {@link #UNKNOWN}: it is computed from bytes alone, and inventing a count for it would be
+     *                worse than admitting there is none.
+     */
+    public record Header(long seq, long size, String md5, String sha256, long entries) {
+
+        /** No count was recorded - a derived twin, or a document written before the count existed. */
+        public static final long UNKNOWN = -1L;
 
         /** The header a body is stored with at this sequence, SHA-256 only - what a derivation computes for a twin. */
         public static Header of(long seq, byte[] body) {
@@ -225,7 +237,18 @@ public final class StoredListing {
 
         /** The header a body is stored with at this sequence, with its MD5 when {@code md5} asks for it. */
         public static Header of(long seq, byte[] body, boolean md5) {
-            return new Header(seq, body.length, md5 ? digest("MD5", body) : "", digest("SHA-256", body));
+            return of(seq, body, md5, UNKNOWN);
+        }
+
+        /** The same, carrying the entry count the writer counted while it joined the document. */
+        public static Header of(long seq, byte[] body, boolean md5, long entries) {
+            return new Header(seq, body.length, md5 ? digest("MD5", body) : "", digest("SHA-256", body), entries);
+        }
+
+        /** The entry count when one was recorded, empty when it was not - so a caller has to decide what an unknown
+         *  count means for it rather than reading {@code -1} as a number of entries. */
+        public OptionalLong count() {
+            return entries == UNKNOWN ? OptionalLong.empty() : OptionalLong.of(entries);
         }
 
         private static String digest(String algorithm, byte[] body) {
@@ -602,7 +625,8 @@ public final class StoredListing {
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
             Optional<ArtifactStore.Versioned> current = readStored(store, key);
             long seq = current.isPresent() ? parse(current.get().content(), key).header().seq() : 0L;
-            Document document = document(seq, spec.codec().join(spec.generator().generate()), spec.md5());
+            SortedMap<String, byte[]> generated = spec.generator().generate();
+            Document document = document(seq, spec.codec().join(generated), spec.md5(), generated.size());
             if (store.writeVersioned(key, frame(document.header(), document.body()),
                     current.map(ArtifactStore.Versioned::token).orElse(null))) {
                 MATERIALISED.increment();
@@ -763,7 +787,7 @@ public final class StoredListing {
             if (current.isPresent() && Arrays.equals(joined, parse(current.get().content(), key).body())) {
                 return true;   // the changes leave the document as it is: nothing to write, nothing to derive
             }
-            Document updated = document(seq, joined, spec.md5());
+            Document updated = document(seq, joined, spec.md5(), entries.size());
             if (store.writeVersioned(key, frame(updated.header(), updated.body()),
                     current.map(ArtifactStore.Versioned::token).orElse(null))) {
                 UPDATES.increment();
@@ -826,7 +850,8 @@ public final class StoredListing {
     }
 
     private static void materialise(ArtifactStore store, Spec spec) throws IOException {
-        Document document = document(0L, spec.codec().join(spec.generator().generate()), spec.md5());
+        SortedMap<String, byte[]> generated = spec.generator().generate();
+        Document document = document(0L, spec.codec().join(generated), spec.md5(), generated.size());
         if (store.writeVersioned(spec.key(), frame(document.header(), document.body()), null)) {
             MATERIALISED.increment();
             derive(spec.key(), document, spec.derivation());
@@ -839,16 +864,17 @@ public final class StoredListing {
 
     // ---- framing ----
 
-    private static Document document(long priorSeq, byte[] body, boolean md5) {
+    private static Document document(long priorSeq, byte[] body, boolean md5, long entries) {
         // Monotone per document, and past any sequence a forgotten predecessor could have reached (a wall-clock
         // floor), so a derived document written against the old sequence never outranks the regenerated one.
         long seq = Math.max(priorSeq + 1, System.currentTimeMillis());
-        return new Document(Header.of(seq, body, md5), body);
+        return new Document(Header.of(seq, body, md5, entries), body);
     }
 
     private static byte[] frame(Header header, byte[] body) {
         byte[] head = (MAGIC + "\nseq=" + header.seq() + "\nsize=" + header.size() + "\nmd5=" + header.md5()
-                + "\nsha256=" + header.sha256() + "\n\n").getBytes(StandardCharsets.US_ASCII);
+                + "\nsha256=" + header.sha256() + "\nentries=" + header.entries()
+                + "\n\n").getBytes(StandardCharsets.US_ASCII);
         byte[] framed = new byte[head.length + body.length];
         System.arraycopy(head, 0, framed, 0, head.length);
         System.arraycopy(body, 0, framed, head.length, body.length);
@@ -906,8 +932,13 @@ public final class StoredListing {
             throw new IOException("not a listing document: " + key);
         }
         try {
+            // An absent entries= is a document written before the count was recorded, and reads as UNKNOWN rather
+            // than as zero: "nobody counted" and "counted, and there were none" are the two answers this whole field
+            // exists to separate, and defaulting to zero would assert the second from the absence of evidence. The
+            // listing-rebuild repair pass regenerates such a document with a count.
             return new Header(Long.parseLong(fields.get("seq")), Long.parseLong(fields.get("size")),
-                    fields.getOrDefault("md5", ""), fields.get("sha256"));
+                    fields.getOrDefault("md5", ""), fields.get("sha256"),
+                    Long.parseLong(fields.getOrDefault("entries", String.valueOf(Header.UNKNOWN))));
         } catch (NumberFormatException e) {
             throw new IOException("not a listing document: " + key, e);
         }
