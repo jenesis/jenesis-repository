@@ -17,7 +17,7 @@ import module java.base;
  * repository, and an operation raised before a tenant is resolved carries no tenant, and neither must NPE the
  * instrumentation. The call adds any low-cardinality outcome tag (a deploy verdict, an import source, a console
  * action) to the {@link Observation} it is handed, which does become a metric tag. Naming follows the
- * {@code jenreg.<area>.<signal>} convention documented in {@code OBSERVABILITY.md}.
+ * {@code jenreg.<area>.<signal>} convention the generated {@code docs/reference/observability.md} indexes.
  */
 public final class Observations {
 
