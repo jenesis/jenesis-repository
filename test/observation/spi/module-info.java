@@ -1,7 +1,7 @@
 /**
  * Focused unit tests for the observability SPI - the self-describing signal contract every plugin reports through,
  * exercised without the server, Micrometer or any network: the {@link build.jenesis.repository.observation.Signals}
- * naming grammar (the checkable {@code jenreg.<feature>.<signal>} form of {@code OBSERVABILITY.md}), the three signal
+ * naming grammar (the checkable {@code jenreg.<feature>.<signal>} form of the observability naming grammar), the three signal
  * descriptors ({@link build.jenesis.repository.observation.HealthCheck}, {@link
  * build.jenesis.repository.observation.Metric} with its used-vs-available limit fraction, {@link
  * build.jenesis.repository.observation.TaskStatus}) and their construction-time name validation, the {@link

@@ -7,7 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The signal naming grammar - the {@code java.base} form of {@code OBSERVABILITY.md}'s
+ * The signal naming grammar - the {@code java.base} form of the observability naming grammar's
  * {@code ^jenreg(\.[a-z][a-z0-9]*)+$}: a name reads like the {@code jenreg.<feature>.*} config keys beside it, and a
  * broken one is rejected when the name is built, not when the meter is scraped.
  */
