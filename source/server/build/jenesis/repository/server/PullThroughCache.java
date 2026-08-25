@@ -18,6 +18,18 @@ import io.micrometer.observation.ObservationRegistry;
  * adapter that declines passes straight through (the 404 stands). The single network call sits behind
  * {@link ProxyFormat.Fetcher} so the cache behaviour is tested without the network.
  *
+ * <p><b>Concurrent readers of one uncached artifact make one upstream request, not one each.</b> Without that, a
+ * fleet resolving a release the moment it lands turns into as many upstream fetches as it has jobs - and the limit
+ * that bites is the upstream's, which is applied <em>per address</em>. One node is one address, so coalescing
+ * within this JVM removes exactly the amplification that gets a deployment throttled or blocked; coordinating
+ * across nodes would add a distributed lock to a read path to solve a problem no upstream is measuring.
+ *
+ * <p>The fill is what is shared, not the response. Bytes stream rather than buffer, so one download cannot be
+ * handed to several readers; instead the first reader fills the cache while the others wait and then retry the
+ * local-first path, which is an ordinary hit by then. A reader whose wait ends without a servable local answer -
+ * the leader failed, timed out, or the artifact is genuinely absent upstream - fetches for itself, so this is an
+ * optimisation that never changes an outcome.
+ *
  * <p>Each proxy-eligible read is wrapped in a {@code jenreg.proxy.fetch} {@link Observations observation} tagged
  * with the {@code format} and the {@code outcome} - {@code hit} (served locally, no upstream call), {@code miss}
  * (fetched from upstream) or {@code negative} (upstream also missed) - so the upstream leg is visible in metrics,
@@ -27,6 +39,18 @@ import io.micrometer.observation.ObservationRegistry;
 public final class PullThroughCache {
 
     private final ProxyFormat.Fetcher fetcher;
+    /**
+     * Fills in flight on this node, keyed by upstream and path. Entries are removed in a {@code finally}, so the
+     * map is bounded by the number of requests concurrently missing; the cap below is the belt to that braces, and
+     * a reader arriving past it simply fetches for itself rather than queueing behind an unbounded structure.
+     */
+    private static final ConcurrentMap<String, CompletableFuture<Void>> FILLING = new ConcurrentHashMap<>();
+
+    private static final int MAX_FILLING = 1024;
+
+    /** How long a waiting reader gives the leader before deciding to fetch for itself. */
+    private static final Duration FOLLOW = Duration.ofMinutes(5);
+
     private final ObservationRegistry observations;
     private final PullThroughHooks hooks;
 
@@ -88,12 +112,37 @@ public final class PullThroughCache {
                 observation.lowCardinalityKeyValue("outcome", "hit");
                 return null;
             }
-            if (proxy.proxy(exchange, store, upstream, hooks.screenFetch(exchange.path(), fetcher, store))) {
-                observation.lowCardinalityKeyValue("outcome", "miss");
-                observePublish(format, exchange.path(), store);
-            } else {
-                observation.lowCardinalityKeyValue("outcome", "negative");
-                exchange.respond(404);
+            String filling = upstream + "\u0000" + exchange.path();
+            CompletableFuture<Void> mine = new CompletableFuture<>();
+            boolean crowded = FILLING.size() >= MAX_FILLING;
+            CompletableFuture<Void> leader = crowded ? null : FILLING.putIfAbsent(filling, mine);
+            if (leader != null && awaitFill(leader)) {
+                // The leader has finished; the local-first path is tried once more and is normally a hit now. This
+                // is a second attempt at the SAME exchange, which is safe because Deferred withholds the response
+                // until it has seen the format's status - nothing was written for the first miss.
+                Deferred filled = new Deferred(exchange);
+                format.handle(filled, store);
+                if (!filled.missed()) {
+                    observation.lowCardinalityKeyValue("outcome", "coalesced");
+                    return null;
+                }
+                // The leader filled nothing this reader can serve, so fall through and fetch for itself.
+            }
+            try {
+                if (proxy.proxy(exchange, store, upstream, hooks.screenFetch(exchange.path(), fetcher, store))) {
+                    observation.lowCardinalityKeyValue("outcome", "miss");
+                    observePublish(format, exchange.path(), store);
+                } else {
+                    observation.lowCardinalityKeyValue("outcome", "negative");
+                    exchange.respond(404);
+                }
+            } finally {
+                if (leader == null && !crowded) {
+                    // Completed normally even when the fetch threw: a waiting reader should retry the local path
+                    // and then fetch for itself, not inherit a failure it can do nothing with.
+                    mine.complete(null);
+                    FILLING.remove(filling, mine);
+                }
             }
             return null;
         });
@@ -142,6 +191,19 @@ public final class PullThroughCache {
      * response headers) before it writes the body. Response headers are held until the commit; reads delegate to the
      * real exchange unchanged.
      */
+    /** Waits for the leader's fill; false when the wait ended without one, so the caller fetches for itself. */
+    private static boolean awaitFill(CompletableFuture<Void> leader) {
+        try {
+            leader.get(FOLLOW.toSeconds(), TimeUnit.SECONDS);
+            return true;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (ExecutionException | TimeoutException unfinished) {
+            return false;
+        }
+    }
+
     private static final class Deferred implements FormatExchange {
 
         private final FormatExchange delegate;
