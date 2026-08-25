@@ -82,8 +82,10 @@ jobs:
           if match '^source/store/azure/' || match '^test/store/azure/'; then inc_azure=true; fi
           # The shared store contract kit and its fixtures drive every backend, so a change to either has to pull in
           # all three containerised legs - none of them lives under source/store/<backend>/ or test/store/<backend>/,
-          # so without this a kit change would run only the filesystem leg and report green.
-          if match '^source/store/testkit/' || match '^test/store/contract/'; then
+          # so without this a kit change would run only the filesystem leg and report green. The kit moved from
+          # source/store/testkit to test/kit/store when the JUnit rule was restated by dependency direction; this
+          # matcher moved with it, because a stale path here fails silently and green.
+          if match '^test/kit/store/' || match '^test/store/contract/'; then
             inc_s3=true; inc_gcs=true; inc_azure=true
           fi
           exclude=()
