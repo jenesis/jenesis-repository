@@ -4,6 +4,8 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 /**
  * The executable {@link ArtifactStore} contract: one parameterized body of checks that every backend runs through a
  * {@link StoreFixture}, so a store property is stated once and proven four times instead of being re-asserted - and
@@ -863,28 +865,27 @@ public final class StoreContract {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body));
     }
 
+    // These four are now one line each over AssertJ, which this kit may use since it moved under test/. They stay
+    // as helpers rather than being inlined at their hundred-odd call sites: the argument order here is
+    // (actual, expected) and AssertJ's is assertThat(actual).isEqualTo(expected), so a mechanical inlining that
+    // transposed a pair would still pass - equality is symmetric - and only the failure message would lie. Keeping
+    // the call sites untouched removes that whole class of mistake, and the diff quality AssertJ brings arrives at
+    // every one of them anyway. The hand-rolled render() that formatted the two sides went with them.
+
     private static void equal(Object actual, Object expected, String what) {
-        if (!Objects.deepEquals(actual, expected)) {
-            throw failure(what + " - expected " + render(expected) + " but was " + render(actual));
-        }
+        assertThat(actual).as(what).isEqualTo(expected);
     }
 
     private static void isTrue(boolean actual, String what) {
-        if (!actual) {
-            throw failure(what + " - expected true but was false");
-        }
+        assertThat(actual).as(what).isTrue();
     }
 
     private static void isFalse(boolean actual, String what) {
-        if (actual) {
-            throw failure(what + " - expected false but was true");
-        }
+        assertThat(actual).as(what).isFalse();
     }
 
     private static void notNull(Object actual, String what) {
-        if (actual == null) {
-            throw failure(what + " - expected a value but was null");
-        }
+        assertThat(actual).as(what).isNotNull();
     }
 
     /** A body that must fail with an {@link IOException} - the SPI's transport-failure shape. */
@@ -936,10 +937,4 @@ public final class StoreContract {
         return new AssertionError(message);
     }
 
-    private static String render(Object value) {
-        if (value instanceof byte[] bytes) {
-            return bytes.length + " bytes " + HexFormat.of().formatHex(bytes, 0, Math.min(bytes.length, 32));
-        }
-        return String.valueOf(value);
-    }
 }

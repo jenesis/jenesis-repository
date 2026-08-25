@@ -32,9 +32,15 @@
  * runtime graph.
  *
  * @jenesis.release 25
+ * @jenesis.pin net.bytebuddy/byte-buddy 1.18.3 SHA-256/d78396e3c5bce3f2865c9186647481e5589d34cacc632484715b686108d17c66
+ * @jenesis.pin net.bytebuddy/byte-buddy-agent 1.12.10 SHA-256/5e8606d14a844c1ec70d2eb8f50c4009fb16138905dee8ca50a328116c041257
+ * @jenesis.pin org.assertj.core 3.27.7
+ * @jenesis.pin org.assertj/assertj-core 3.27.7 SHA-256/c4a445426c3c2861666863b842cc4ec7bbb1c4226fefd370b6d2fe83d6c4ff0f
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
  */
 module build.jenesis.repository.store.testkit {
     requires transitive build.jenesis.repository.store;
+    // Permitted since the kit moved under test/: the JUnit rule is a direction now, not a ban on the kits.
+    requires org.assertj.core;
     exports build.jenesis.repository.store.testkit;
 }
