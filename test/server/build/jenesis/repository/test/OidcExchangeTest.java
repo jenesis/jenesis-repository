@@ -28,6 +28,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class OidcExchangeTest {
 
+    /** Discovery attempts the fixture makes before giving up; a starved box can lose one to a read timeout. */
+    private static final int WARM_ATTEMPTS = 3;
+
     @TempDir
     Path root;
 
@@ -69,6 +72,42 @@ class OidcExchangeTest {
 
         authorization.setTrust("acme", new Authorization.Trust("github", issuer, "jenesis",
                 "repo:acme/app:*", "releases", "repository:read,repository:write", Duration.ofMinutes(15)));
+        warmTheDecoder();
+    }
+
+    /**
+     * Performs the OIDC discovery fetch here, in the fixture, so that no test's assertion depends on it.
+     *
+     * <p><b>Why this exists.</b> {@code OidcExchange} builds a decoder per issuer on first use, and building one
+     * means Spring Security fetching {@code /.well-known/openid-configuration} and then the JWKS over HTTP. Every
+     * test here gets a fresh exchange and a fresh stub, so every test used to pay that round-trip inside its own
+     * assertion. Measured once on a whole-tree run: the GET to <em>127.0.0.1</em> exceeded Spring's read timeout
+     * and the suite failed with {@code SocketTimeoutException: Read timed out} wrapped in the exchange's
+     * fail-closed arm - which is the product behaving exactly as designed, reported against a test that was really
+     * asserting something else (clock-skew tolerance, in that instance).
+     *
+     * <p>So the round-trip moves here, where it is what it actually is: fixture setup, and legitimately retryable
+     * because a slow local stub is not a claim about the product. Afterwards the decoder is cached for the issuer
+     * and every assertion below runs against a warm one, so none of them can time out on discovery at all. This is
+     * structural rather than a mitigation - it removes the dependency instead of making it less likely.
+     *
+     * <p>The warm-up token is genuinely signed by this issuer's key but carries an audience the trust does not
+     * name, so the exchange decodes it, matches no trust, and mints nothing - the fixture is not left holding a
+     * credential the tests would then have to account for.
+     */
+    private void warmTheDecoder() {
+        String warm = jwt("not-the-trusts-audience", "repo:acme/app:ci", Instant.now().plusSeconds(300));
+        IOException last = null;
+        for (int attempt = 1; attempt <= WARM_ATTEMPTS; attempt++) {
+            try {
+                exchange.exchange("acme", warm);
+                return;
+            } catch (IOException slow) {
+                last = slow;
+            }
+        }
+        throw new IllegalStateException("the issuer stub did not answer OIDC discovery in " + WARM_ATTEMPTS
+                + " attempts, so no test below could have verified a token either", last);
     }
 
     @AfterEach
@@ -194,11 +233,42 @@ class OidcExchangeTest {
                 keyPair.getPrivate());
         server.stop();   // the issuer goes away AFTER the trust was registered, as an outage would
 
-        assertThatThrownBy(() -> exchange.exchange("acme", valid))
+        // A COLD exchange, not the fixture's: building the decoder is precisely what must fail here, and the
+        // fixture's has already built one against the issuer while it was still up. Warming it is what keeps every
+        // other test in this class off the discovery round-trip (see warmTheDecoder) - this is the one test that
+        // needs the round-trip to happen, and to fail.
+        OidcExchange cold = new OidcExchange(authorization);
+        assertThatThrownBy(() -> cold.exchange("acme", valid))
                 .as("an unreachable issuer is an infrastructure failure, not a judgement about the token: it must "
                         + "reach the caller rather than degrade into the null a forged token produces")
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("infrastructure failure");
+    }
+
+    @Test
+    void the_fixture_warms_the_decoder_so_that_no_assertion_below_pays_for_discovery() throws IOException {
+        // The falsifier for warmTheDecoder, and the reason it can be trusted without reproducing the flake it
+        // exists for: after the fixture has warmed, an exchange must reach the issuer's discovery endpoint ZERO
+        // further times. Remove the warm-up and this is 0 before and 1 after, so it fails - which is exactly the
+        // per-assertion round-trip that timed out on a loaded machine.
+        long before = discoveryRequests();
+        assertThat(before).as("the fixture's warm-up really did perform discovery").isPositive();
+
+        exchange.exchange("acme", jwt("jenesis", "repo:acme/app:ref:refs/heads/main",
+                Instant.now().plusSeconds(300)));
+
+        assertThat(discoveryRequests())
+                .as("an exchange after the warm-up re-fetched the issuer's configuration; every assertion in this "
+                        + "class then depends on a live HTTP round-trip completing inside Spring's read timeout, "
+                        + "which is what made this suite flaky under a whole-tree build")
+                .isEqualTo(before);
+    }
+
+    /** How many times the issuer stub has served its OIDC discovery document. */
+    private long discoveryRequests() {
+        return server.getAllServeEvents().stream()
+                .filter(event -> event.getRequest().getUrl().contains("well-known"))
+                .count();
     }
 
     @Test
