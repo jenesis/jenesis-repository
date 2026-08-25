@@ -7,7 +7,7 @@ import module java.base;
  * background-task status all read like the configuration keys beside them. A signal name is
  * {@code jenreg.<feature>.<signal...>} - the same {@code jenreg.<feature>.*} convention the settings use - so a metric
  * called {@code jenreg.gc.reclaimed.bytes} lines up with the {@code jenreg.gc} feature it belongs to and is
- * discoverable from either side. This is the checkable, {@code java.base} form of the grammar the generated {@code docs/reference/observability.md}
+ * discoverable from either side. This is the checkable, {@code java.base} form of the grammar the generated the generated observability reference
  * documents (and the Micrometer meter-name guard enforces at the registry): a name that breaks it is rejected at
  * construction, not at scrape time, because a signal name is a build-time constant - a broken one is a bug to fail on,
  * never a string to sanitise.
