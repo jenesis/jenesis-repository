@@ -47,9 +47,16 @@ public final class ConsoleLayout {
     /** The theme picker control. */
     public static final String THEME_SELECT = "themeSelect";
 
+    /** The shared list of what every page loads - a console adding its own {@code <head>} extras includes this. */
+    public static final String HEAD_CONTENTS = "headContents";
+
+    /** A destructive submit: the danger treatment and its confirmation together, so neither can be forgotten. */
+    public static final String DANGER_BUTTON = "dangerButton";
+
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
-            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BADGE, BRAND, THEME_SELECT);
+            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BADGE, BRAND, THEME_SELECT, HEAD_CONTENTS,
+            DANGER_BUTTON);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

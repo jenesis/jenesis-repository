@@ -9,7 +9,10 @@
   th:replace-ing these fragments rather than re-vendoring a second copy that would drift.
 
   Fragments provided:
-    head(title)                     — the shell <head>: viewport, Pico, app.css, htmx, the theme switch script.
+    headContents(title, product)    — everything every page loads; for a console adding its own <head> extras.
+    head(title, product)            — the shell <head>: viewport, Pico, app.css, htmx, theme + console scripts,
+                                      and the CSRF meta pair where the page has a token. `product` names the
+                                      edition in the tab title; both consoles render this one head.
     pageHeader(title)               — a page header with just a title.
     pageHeaderCrumbs(title, crumbs) — a page header with a breadcrumb (crumbs: List<Map{href,label}>, last is current).
     empty(message)                  — the one empty-state treatment.
@@ -17,20 +20,36 @@
     field(label, name, value, help) — a labelled text input with inline help text.
     alert(message, kind)            — a flash/outcome banner; kind ∈ {pass,warn,danger} or null for info.
     themeSelect                     — the light/dark/auto switch (wired by /js/theme.js, persisted per browser).
+    dangerButton(label, confirm)    — a destructive submit: the danger treatment plus its confirmation, together.
 
   Kept in sync with app.css (the tokens/styles); each fragment documents itself below.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 
-<head th:fragment="head(title)">
+<!-- The shared <head>, in two shapes for the two ways a console needs it.
+
+     `headContents` is everything every page loads; `head` is that wrapped in a <head> for a console with nothing
+     to add. A console that does need something of its own - the enterprise shell has one stylesheet - writes its
+     own <head>, includes the contents, and adds its extra, so there is still exactly one list of what a page
+     loads. Keeping two whole <head>s in step by hand is what failed before: a script added to one was missing
+     from the other until something noticed. -->
+<th:block th:fragment="headContents(title, product)">
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="${title} + ' · jenesis-repository'">jenesis-repository</title>
+    <title th:text="${title} + ' \u00b7 ' + ${product}">Jenesis</title>
     <link rel="stylesheet" th:href="@{/css/pico.min.css}">
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <!-- Rendered only where a CSRF token exists, so one head serves a console that has one and a page that does not. -->
+    <meta th:if="${_csrf != null}" name="_csrf" th:content="${_csrf.token}">
+    <meta th:if="${_csrf != null}" name="_csrf_header" th:content="${_csrf.headerName}">
     <!-- Deliberately not deferred: a stored dark/light choice must apply before the first paint. -->
     <script th:src="@{/js/theme.js}"></script>
     <script th:src="@{/js/htmx.min.js}" defer></script>
+    <script th:src="@{/js/console.js}" defer></script>
+</th:block>
+
+<head th:fragment="head(title, product)">
+    <th:block th:replace="~{base :: headContents(${title}, ${product})}"></th:block>
 </head>
 
 <body>
@@ -90,6 +109,19 @@
 <p th:fragment="alert(message, kind)" class="app-alert"
    th:classappend="${kind} != null ? 'app-alert--' + ${kind} : ''"
    th:attr="role=${kind == 'danger'} ? 'alert' : 'status'" th:text="${message}">message</p>
+
+<!-- Destructive submit button: the danger treatment and the confirmation in one place.
+
+     Both halves exist because either alone is insufficient. Styling without a prompt still lets one click destroy
+     something; a prompt without styling gives no warning until after the click, and a dialog that appears
+     unexpectedly is dismissed reflexively. Bundling them means a screen cannot add the button and forget the
+     guard - the only way to render a destructive control is to say what it will do.
+
+     `confirm` is the question, and it should name the consequence rather than the verb: "Discard this artifact?
+     It cannot be recovered." tells the reader what they lose, where "Are you sure?" tells them nothing they did
+     not already know. -->
+<button th:fragment="dangerButton(label, confirm)" type="submit" class="secondary outline app-danger"
+        th:attr="data-confirm=${confirm}" th:text="${label}">delete</button>
 
 <!-- Theme switch: a compact labelled select the shell nav carries. /js/theme.js (loaded by the head fragment)
      applies the stored choice before first paint and wires every [data-theme-select]; "auto" follows the OS. -->
