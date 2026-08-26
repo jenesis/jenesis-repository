@@ -438,3 +438,62 @@ figure {
         padding-bottom: var(--app-space-2);
     }
 }
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Destructive actions.
+
+   A control that removes or destroys had no treatment of its own, so screens reached for Pico's `secondary
+   outline` - which says *less important*, the opposite of what a destructive control needs to say. The result was
+   a quarantine row offering `release` as a solid primary button and `discard` as a quieter one directly beside it:
+   the irreversible action rendered as the calmer of the two, one target width from the safe one.
+
+   `.app-danger` is that missing treatment, built from the status palette already defined above, so it themes with
+   everything else and never hard-codes a colour. Colour is not the only signal - the label always says what will
+   happen, and a destructive control is expected to carry a confirmation as well; this makes it *look* like what it
+   is, which is what stops the hand before the dialog has to.
+   --------------------------------------------------------------------------------------------------------------- */
+.app-danger,
+button.app-danger,
+[type="submit"].app-danger {
+    background: transparent;
+    border-color: var(--app-status-danger-fg);
+    color: var(--app-status-danger-fg);
+}
+
+.app-danger:hover,
+button.app-danger:hover,
+[type="submit"].app-danger:hover {
+    background: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-fg);
+    color: var(--app-status-danger-fg);
+}
+
+/* The row-level action group: a gap wide enough that a safe action and a destructive one are not neighbouring
+   targets. `flex-wrap` keeps both reachable when the column is narrow instead of pushing one out of view. */
+.app-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--app-space-4);
+    flex-wrap: wrap;
+}
+
+/* The destructive member of an action group sits apart from the safe ones, with a hairline between, so the eye
+   registers a boundary before the hand crosses it. */
+.app-actions__danger {
+    margin-left: auto;
+    padding-left: var(--app-space-4);
+    border-left: 1px solid var(--pico-muted-border-color);
+}
+
+@media (max-width: 480px) {
+    /* Stacked on a phone the `margin-left:auto` separation collapses, so the boundary becomes a top rule and the
+       destructive control keeps its own line rather than sitting flush against the safe one. */
+    .app-actions__danger {
+        margin-left: 0;
+        padding-left: 0;
+        padding-top: var(--app-space-2);
+        border-left: 0;
+        border-top: 1px solid var(--pico-muted-border-color);
+        width: 100%;
+    }
+}
