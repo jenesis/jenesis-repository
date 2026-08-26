@@ -570,3 +570,32 @@ button.app-danger:hover,
 
 /* The muted badge deliberately carries no mark. It is the "nothing to say" state, and a shape on it would give
    the eye something to catch on exactly where there is nothing to report. */
+
+/* ---------------------------------------------------------------------------------------------------------------
+   A section that is its own disclosure.
+
+   A hub screen that lists everything at once is the shape that overwhelms: the repository hub carried twelve
+   sections, so a healthy repository and one needing attention looked identical - both a wall - and the reader had
+   to check every heading to find out which. Each section is now a <details> whose default state is driven by
+   whether it holds anything to act on, so a quiet repository reads as a short list of headings and a busy one
+   opens exactly where the work is.
+
+   <details> because it is native: keyboard-operable, announced as expanded or collapsed, and needing no script.
+   Nothing is hidden - every section is one keystroke away and still named while closed.
+   --------------------------------------------------------------------------------------------------------------- */
+.app-section > summary {
+    cursor: pointer;
+}
+
+/* The heading is the control. Inline so the disclosure marker sits beside it rather than being pushed onto its
+   own line by a block-level <h2>, and unmargined so a closed section is one tidy row. */
+.app-section > summary > h2 {
+    display: inline;
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+/* Breathing room only once open, so a column of closed sections stays tight. */
+.app-section[open] > summary {
+    margin-bottom: var(--app-space-3);
+}
