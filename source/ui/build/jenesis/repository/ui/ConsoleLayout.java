@@ -38,9 +38,6 @@ public final class ConsoleLayout {
     /** An inline notice, taking the message and its kind. */
     public static final String ALERT = "alert";
 
-    /** A status pill, taking the label and its kind. */
-    public static final String BADGE = "badge";
-
     /** The product brand block, taking the name, its link and the logo. */
     public static final String BRAND = "brand";
 
@@ -55,7 +52,7 @@ public final class ConsoleLayout {
 
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
-            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BADGE, BRAND, THEME_SELECT, HEAD_CONTENTS,
+            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BRAND, THEME_SELECT, HEAD_CONTENTS,
             DANGER_BUTTON);
 
     private ConsoleLayout() {

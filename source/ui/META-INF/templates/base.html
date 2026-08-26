@@ -16,7 +16,6 @@
     pageHeader(title)               — a page header with just a title.
     pageHeaderCrumbs(title, crumbs) — a page header with a breadcrumb (crumbs: List<Map{href,label}>, last is current).
     empty(message)                  — the one empty-state treatment.
-    badge(label, kind)              — a status pill; kind ∈ {pass,warn,danger,info,muted}.
     field(label, name, value, help) — a labelled text input with inline help text.
     alert(message, kind)            — a flash/outcome banner; kind ∈ {pass,warn,danger} or null for info.
     themeSelect                     — the light/dark/auto switch (wired by /js/theme.js, persisted per browser).
@@ -92,9 +91,13 @@
     <p th:text="${message}" style="margin:0">Nothing here yet.</p>
 </div>
 
-<!-- Status badge / pill: the label always carries the meaning, so colour is never the only signal. -->
-<span th:fragment="badge(label, kind)" class="app-badge"
-      th:classappend="'app-badge--' + (${kind} ?: 'muted')" th:text="${label}">status</span>
+<!-- There is no badge fragment. A status pill is the `.app-badge` class plus one of `--pass`, `--warn`,
+     `--danger`, `--info` or `--muted`, written directly - which is what all sixty-nine of them already did, while
+     the two-argument fragment that used to sit here was rendered by nothing at all. It could not have served them
+     anyway: a badge routinely carries a `th:if`, a `title`, or composed content, none of which a fixed pair of
+     parameters expresses. What actually needed to be shared was the appearance, and that lives in app.css, where
+     the kind now carries its own icon - so two badges meaning the same thing look the same without any template
+     naming one. A fragment nobody renders, documented as though they did, is worse than no fragment. -->
 
 <!-- Form field with inline help: label, control, help text — the atom the config page composes from. -->
 <div th:fragment="field(label, name, value, help)" class="app-field">
