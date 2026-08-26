@@ -14,6 +14,7 @@ import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Withheld;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import build.jenesis.repository.format.OciTags;
 
 /**
  * The OCI / Docker registry format (the {@code /v2/} Distribution API), so {@code docker push} and
@@ -538,7 +539,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return;
         }
         if (exchange.method().equals("PUT")) {
-            if (!reference.startsWith("sha256:") && !isTag(reference)) {
+            if (!reference.startsWith("sha256:") && !OciTags.isTag(reference)) {
                 // A manifest is pushed either by digest (sha256:...) or by tag; a reference that is neither a digest
                 // nor a well-formed tag would land as an oci/<name>/tags/<ref> store key, so a '/'- or '..'-laced
                 // reference could aim the write at a neighbouring key space - refuse it before storing anything, the
@@ -606,7 +607,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         if (reference.startsWith("sha256:")) {
             hex = reference.substring("sha256:".length());
         } else {
-            if (!isTag(reference)) {
+            if (!OciTags.isTag(reference)) {
                 exchange.respond(404);                          // a '/'- or '..'-laced tag names no pointer (symmetric
                 return;                                         // with the PUT path's guard - never a raw store key)
             }
@@ -661,7 +662,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         String parameter = exchange.queryParameter("last");
         String last = parameter == null || parameter.isEmpty() ? null : parameter;   // ?last= is "from the beginning"
-        if (last != null && !isTag(last)) {
+        if (last != null && !OciTags.isTag(last)) {
             exchange.respond(400);
             return;
         }
@@ -846,7 +847,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         //     digest to check against, so this falls back to trusting the upstream response, as before - no fabricated
         //     check. The addressed digest is still recomputed and recorded by ingest() below, and a later by-digest
         //     re-pull of the same content is verified against it.
-        if (!reference.startsWith("sha256:") && !isTag(reference)) {
+        if (!reference.startsWith("sha256:") && !OciTags.isTag(reference)) {
             return false; // a non-tag reference must not become a tags/ store key - let the local 404 stand
         }
         // Screen a proxied manifest through the same OCI choke point a push takes (EPIC 26): a withheld upstream
@@ -1238,28 +1239,6 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return true;
     }
 
-    /** Whether a manifest reference is a well-formed OCI tag - the Distribution grammar {@code
-     *  [a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}}. Refusing anything else before it becomes the {@code oci/<name>/tags/<ref>}
-     *  store key keeps a {@code /}- or {@code ..}-laced reference from resolving to a neighbouring key space - the
-     *  tag-side counterpart of {@link #isDigestHex} on the blob path (a bare {@code ..} is rejected as a leading dot,
-     *  and any {@code /} is rejected outright, so no reference can traverse out of the tag namespace). */
-    private static boolean isTag(String reference) {
-        int length = reference.length();
-        if (length == 0 || length > 128) {
-            return false;
-        }
-        for (int index = 0; index < length; index++) {
-            char character = reference.charAt(index);
-            boolean alphanumeric = (character >= 'a' && character <= 'z')
-                    || (character >= 'A' && character <= 'Z')
-                    || (character >= '0' && character <= '9');
-            if (index == 0 ? !alphanumeric && character != '_'
-                    : !alphanumeric && character != '_' && character != '.' && character != '-') {
-                return false;
-            }
-        }
-        return true;
-    }
 
     /**
      * Whether an image name may become the {@code oci/<name>/...} key it addresses: the free store's own path rule
