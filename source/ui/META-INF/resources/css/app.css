@@ -29,6 +29,14 @@
     --app-space-5: 1.5rem;
     --app-space-6: 2rem;
 
+    /* The icon set, as mask sources. Stroke-drawn on one 24x24 grid with round caps so they read as a family
+       rather than four separately-chosen symbols; the stroke colour in the source is irrelevant, since a
+       mask uses only the alpha and the paint comes from currentColor. */
+    --app-icon-check: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>');
+    --app-icon-warn: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 1.7 21h20.6z"/><path d="M12 9v5"/><path d="M12 17.5v.5"/></svg>');
+    --app-icon-cross: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>');
+    --app-icon-info: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 11v6"/><path d="M12 7.5v.5"/></svg>');
+
     /* Radii. */
     --app-radius-sm: 0.25rem;
     --app-radius-md: 0.5rem;
@@ -497,3 +505,68 @@ button.app-danger:hover,
         width: 100%;
     }
 }
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Icons.
+
+   The console had no icon set. What it had was a handful of literal glyphs typed into whichever template wanted
+   one - a filled circle for installed, a hollow one for disabled, a cross, a warning sign, a refresh arrow - on
+   some badges and not others, so two badges meaning the same thing on two screens did not look the same. Arrows
+   were spelled both `&rarr;` and the literal character, in roughly equal numbers.
+
+   These are masks rather than characters or images, which settles three things at once. A mask is painted with
+   `currentColor`, so an icon is theme-safe for free and inverts with its badge. It is decorative by construction -
+   a background is never announced, where a `::before` character is read aloud, and every one of these sits beside
+   a text label that already carries the meaning. And attaching it to the *kind* rather than to the call site means
+   a badge of a given kind carries the same mark on every screen without any template naming an icon at all.
+
+   Colour is still never the only signal, and now neither is shape: the label says it, the shape shows it, and the
+   colour reinforces it.
+   --------------------------------------------------------------------------------------------------------------- */
+.app-icon,
+.app-badge--pass::before,
+.app-badge--warn::before,
+.app-badge--danger::before,
+.app-badge--info::before {
+    content: "";
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    margin-right: 0.35em;
+    vertical-align: -0.05em;
+    background-color: currentColor;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    flex: none;
+}
+
+/* A check: this passed, is installed, is enabled. */
+.app-badge--pass::before {
+    -webkit-mask-image: var(--app-icon-check);
+    mask-image: var(--app-icon-check);
+}
+
+/* An exclamation in a triangle: attention, but not a failure. */
+.app-badge--warn::before {
+    -webkit-mask-image: var(--app-icon-warn);
+    mask-image: var(--app-icon-warn);
+}
+
+/* A cross: refused, failed, held. */
+.app-badge--danger::before {
+    -webkit-mask-image: var(--app-icon-cross);
+    mask-image: var(--app-icon-cross);
+}
+
+/* An 'i': context rather than a verdict. */
+.app-badge--info::before {
+    -webkit-mask-image: var(--app-icon-info);
+    mask-image: var(--app-icon-info);
+}
+
+/* The muted badge deliberately carries no mark. It is the "nothing to say" state, and a shape on it would give
+   the eye something to catch on exactly where there is nothing to report. */
