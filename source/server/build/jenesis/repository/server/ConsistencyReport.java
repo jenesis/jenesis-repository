@@ -131,7 +131,8 @@ public record ConsistencyReport(List<NodeView> nodes, List<NodeDivergence> diver
             boolean nodeLive = node.heartbeatAgeMillis(now) <= settings.deadAfterMillis();
             boolean stale = node.heartbeatAgeMillis(now) > settings.stalenessWindowMillis();
             views.add(new NodeView(node.nodeId(), node.heartbeatAgeMillis(now), nodeLive, stale, node.indexCursor(),
-                    node.snapshotVersion(), node.configGeneration(), node.inventoryTotal(), node.quotaUsed()));
+                    node.snapshotVersion(), node.configGeneration(), node.inventoryTotal(), node.quotaUsed(),
+                    node.tenantCount()));
         }
         return new ConsistencyReport(views, divergences, live.size());
     }
@@ -159,6 +160,7 @@ public record ConsistencyReport(List<NodeView> nodes, List<NodeDivergence> diver
 
     /** One node's published numbers, for the per-node view - what the console page and the metrics render. */
     public record NodeView(String nodeId, long heartbeatAgeMillis, boolean live, boolean stale, long indexCursor,
-                           String snapshotVersion, long configGeneration, long inventoryTotal, long quotaUsed) {
+                           String snapshotVersion, long configGeneration, long inventoryTotal, long quotaUsed,
+                           long tenantCount) {
     }
 }

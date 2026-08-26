@@ -58,7 +58,7 @@ class MultiNodeConsistencyTest {
 
     /** A fingerprint that is fresh (heartbeat and cursor-advance at {@code NOW}) - a converged, up-to-date node. */
     private static NodeFingerprint fresh(String id, long cursor, long generation) {
-        return new NodeFingerprint(id, NOW, NOW, cursor, "", generation, 0L, 0L, Map.of());
+        return new NodeFingerprint(id, NOW, NOW, cursor, "", generation, 0L, 0L, 0L, Map.of());
     }
 
     @Test
@@ -82,7 +82,7 @@ class MultiNodeConsistencyTest {
         // node-a is furthest advanced; node-b lags AND its cursor has been frozen past the sweep-interval budget.
         over(store).publish(fresh("node-a", 500, generation));
         long stalledPast = NOW - (SETTINGS.stuckAfterMillis() + 1);
-        over(store).publish(new NodeFingerprint("node-b", NOW, stalledPast, 100, "", generation, 0L, 0L, Map.of()));
+        over(store).publish(new NodeFingerprint("node-b", NOW, stalledPast, 100, "", generation, 0L, 0L, 0L, Map.of()));
 
         ConsistencyReport report = over(store).report(NOW);
         assertThat(report.converged()).as("a stuck node diverges").isFalse();
@@ -100,7 +100,7 @@ class MultiNodeConsistencyTest {
         over(store).publish(fresh("node-a", 500, generation));
         // node-b lags on cursor but its cursor advanced recently (within the staleness window) - benign lag, not stuck.
         long advancedRecently = NOW - (SETTINGS.stuckAfterMillis() / 2);
-        over(store).publish(new NodeFingerprint("node-b", NOW, advancedRecently, 100, "", generation, 0L, 0L, Map.of()));
+        over(store).publish(new NodeFingerprint("node-b", NOW, advancedRecently, 100, "", generation, 0L, 0L, 0L, Map.of()));
 
         ConsistencyReport report = over(store).report(NOW);
         assertThat(report.converged()).as("benign lag within the window is not a divergence").isTrue();
@@ -116,7 +116,7 @@ class MultiNodeConsistencyTest {
         long generation = NodeFingerprint.configGeneration(Map.of("k", "v"));
         over(store).publish(fresh("node-a", 500, generation));
         long stalledExactly = NOW - SETTINGS.stuckAfterMillis();   // stalledFor == stuckAfterMillis, not strictly over
-        over(store).publish(new NodeFingerprint("node-b", NOW, stalledExactly, 100, "", generation, 0L, 0L, Map.of()));
+        over(store).publish(new NodeFingerprint("node-b", NOW, stalledExactly, 100, "", generation, 0L, 0L, 0L, Map.of()));
 
         ConsistencyReport report = over(store).report(NOW);
         assertThat(report.converged()).as("a stall of exactly the budget is benign lag, not stuck").isTrue();
@@ -132,12 +132,10 @@ class MultiNodeConsistencyTest {
         long generation = NodeFingerprint.configGeneration(Map.of("k", "v"));
         String hashA = "a".repeat(64);
         String hashB = "b".repeat(64);
-        over(store).publish(new NodeFingerprint("node-a", NOW, NOW, 100, "", generation, 0L, 0L,
-                Map.of("publish/raw/p", hashA)));
+        over(store).publish(new NodeFingerprint("node-a", NOW, NOW, 100, "", generation, 0L, 0L, 0L, Map.of("publish/raw/p", hashA)));
         // node-b is live but its heartbeat is a touch older, so node-a is the reference; it resolves the shared pointer
         // to different content.
-        over(store).publish(new NodeFingerprint("node-b", NOW - 1000, NOW - 1000, 100, "", generation, 0L, 0L,
-                Map.of("publish/raw/p", hashB)));
+        over(store).publish(new NodeFingerprint("node-b", NOW - 1000, NOW - 1000, 100, "", generation, 0L, 0L, 0L, Map.of("publish/raw/p", hashB)));
 
         ConsistencyReport report = over(store).report(NOW);
         assertThat(report.converged()).as("a pointer split diverges the fleet").isFalse();
@@ -228,7 +226,7 @@ class MultiNodeConsistencyTest {
         over(store).publish(fresh("live-node", 100, 1L));
         // A node last heard from long past the dead-after window is reported but never marks the fleet diverged.
         long longAgo = NOW - (SETTINGS.deadAfterMillis() + Duration.ofMinutes(10).toMillis());
-        over(store).publish(new NodeFingerprint("dead-node", longAgo, longAgo, 0, "", 999L, 0L, 0L, Map.of()));
+        over(store).publish(new NodeFingerprint("dead-node", longAgo, longAgo, 0, "", 999L, 0L, 0L, 0L, Map.of()));
 
         ConsistencyReport report = over(store).report(NOW);
         assertThat(report.liveCount()).as("only the live node counts").isEqualTo(1);
@@ -243,10 +241,10 @@ class MultiNodeConsistencyTest {
         ArtifactStore store = filesystem(root);
         // A host that left the fleet two days ago: dead long since, and past the day after which it is forgotten.
         long gone = NOW - Duration.ofDays(2).toMillis();
-        stored(store, new NodeFingerprint("gone-node", gone, gone, 0, "", 1L, 0L, 0L, Map.of()));
+        stored(store, new NodeFingerprint("gone-node", gone, gone, 0, "", 1L, 0L, 0L, 0L, Map.of()));
         // A host silent for an hour: dead, but still remembered - the report keeps showing it for visibility.
         long silent = NOW - Duration.ofHours(1).toMillis();
-        stored(store, new NodeFingerprint("silent-node", silent, silent, 0, "", 1L, 0L, 0L, Map.of()));
+        stored(store, new NodeFingerprint("silent-node", silent, silent, 0, "", 1L, 0L, 0L, 0L, Map.of()));
         assertThat(over(store).report(NOW).nodes()).as("a read forgets nothing").hasSize(2);
 
         NodeConsistency live = over(store);
@@ -318,12 +316,12 @@ class MultiNodeConsistencyTest {
                 "jenreg.store", "filesystem", "jenreg.filesystem.root", root.toString()));
 
         over(store).publish(new NodeFingerprint("node-a", System.currentTimeMillis(), System.currentTimeMillis(),
-                100, "", 1L, 0L, 0L, Map.of()));
+                100, "", 1L, 0L, 0L, 0L, Map.of()));
         assertThat(new NodeDivergenceAdvisor().advise(config))
                 .as("a single node raises no divergence advisory").isEmpty();
 
         over(store).publish(new NodeFingerprint("node-b", System.currentTimeMillis(), System.currentTimeMillis(),
-                100, "", 2L, 0L, 0L, Map.of()));
+                100, "", 2L, 0L, 0L, 0L, Map.of()));
         assertThat(new NodeDivergenceAdvisor().advise(config))
                 .as("two live nodes on different config generations surface a critical advisory")
                 .anySatisfy(advisory -> {
@@ -337,13 +335,13 @@ class MultiNodeConsistencyTest {
         ArtifactStore store = filesystem(root);
         NodeConsistencyObservability single = new NodeConsistencyObservability(over(store));
         over(store).publish(new NodeFingerprint("solo", System.currentTimeMillis(), System.currentTimeMillis(),
-                1, "", 1L, 0L, 0L, Map.of()));
+                1, "", 1L, 0L, 0L, 0L, Map.of()));
         assertThat(single.healthChecks()).singleElement()
                 .satisfies(check -> assertThat(check.status()).as("single node is healthy").isEqualTo(Health.UP));
 
         // Add a diverging second live node: the divergence health degrades (detect-only, never a failure).
         over(store).publish(new NodeFingerprint("split", System.currentTimeMillis(), System.currentTimeMillis(),
-                1, "", 2L, 0L, 0L, Map.of()));
+                1, "", 2L, 0L, 0L, 0L, Map.of()));
         NodeConsistencyObservability fleet = new NodeConsistencyObservability(over(store));
         assertThat(fleet.healthChecks()).extracting(HealthCheck::status).containsExactly(Health.DEGRADED);
         assertThat(fleet.metrics()).extracting(Metric::name)

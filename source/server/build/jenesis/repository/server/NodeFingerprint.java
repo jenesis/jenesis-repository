@@ -25,7 +25,7 @@ import module java.base;
  */
 public record NodeFingerprint(String nodeId, long heartbeatMillis, long cursorAdvancedMillis, long indexCursor,
                               String snapshotVersion, long configGeneration, long inventoryTotal, long quotaUsed,
-                              Map<String, String> pointers) {
+                              long tenantCount, Map<String, String> pointers) {
 
     public NodeFingerprint {
         nodeId = Objects.requireNonNull(nodeId, "nodeId");
