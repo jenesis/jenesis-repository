@@ -1,16 +1,11 @@
 /**
- * The S3-compatible artifact-store backend (AWS S3, GCS via the XML API, MinIO, LocalStack). A pure
- * storage provider: it implements the {@code ArtifactStore} SPI and is discovered through {@code provides},
- * so the server adds it to its module graph at deploy time and selects it with
- * {@code jenreg.store=s3}, with no compile-time dependency from the server. The version token
- * is the object ETag, giving a true cross-node compare-and-set on conditional writes (see
- * {@code S3ArtifactStore}). The rest of the AWS SDK closure resolves transitively through Maven (no
- * exclusions are possible under the module resolver, so the full closure is pulled and pinned here).
+ * The listing half of the S3-compatible object-store backends, shared by {@code s3} and {@code gcs}.
+ *
+ * <p>Both speak the same S3 API through the same modular AWS SDK client; they differ only in the version token and
+ * in how a conditional write is expressed. This module owns what they share so a fix to paging, scanning or
+ * reading lands in both at once.
  *
  * @jenesis.release 25
- * @jenesis.pin com.google.code.findbugs/jsr305 3.0.2 SHA-256/766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7
- * @jenesis.pin com.google.code.gson/gson 2.8.9 SHA-256/d3999291855de495c94c743761b8ab5176cfeabe281a5ab0d8e8d45326fd703e
- * @jenesis.pin commons-io/commons-io 2.20.0 SHA-256/df90bba0fe3cb586b7f164e78fe8f8f4da3f2dd5c27fa645f888100ccc25dd72
  * @jenesis.pin io.netty/netty-buffer 4.1.135.Final SHA-256/2a194f99fc93d07c4d442d04ac71bd2dc56d3188cd0e4270cdc2a953d1956bf9
  * @jenesis.pin io.netty/netty-codec 4.1.135.Final SHA-256/7252171264dbb5bb8ed38e77f89643b31e3cabc96144ec27b6882435d718a61e
  * @jenesis.pin io.netty/netty-codec-http 4.1.135.Final SHA-256/4018529d3d6aecf4044b98c75d9a90c91839ddf49c7aa484c5ac81c90a15da02
@@ -21,16 +16,7 @@
  * @jenesis.pin io.netty/netty-transport 4.1.135.Final SHA-256/6bde734d1ec073142eed31b1e68cd5d68fbf241e060b37f07a164e5ecb15631c
  * @jenesis.pin io.netty/netty-transport-classes-epoll 4.1.135.Final SHA-256/9d9537ab9e15164c9f0dc0748884c148814a18d78ac6dfa65cf4b3d06068ce01
  * @jenesis.pin io.netty/netty-transport-native-unix-common 4.1.135.Final SHA-256/a7895075f112611d1640a596c2678a28aab92d5681c1c14755b109b8998f995e
- * @jenesis.pin net.bytebuddy/byte-buddy 1.12.10 SHA-256/1a1ac9ce65eddcea54ead958387bb0b3863d02a2ffe856ab6a57ac79737c19cf
- * @jenesis.pin net.bytebuddy/byte-buddy-agent 1.12.10 SHA-256/5e8606d14a844c1ec70d2eb8f50c4009fb16138905dee8ca50a328116c041257
- * @jenesis.pin org.apache.httpcomponents.client5/httpclient5 5.6.1 SHA-256/1e3d8444c3c27772e4b9d42a790f06b3345a8ece4fd16d00981f2f2460e1e772
- * @jenesis.pin org.apache.httpcomponents.core5/httpcore5 5.4.2 SHA-256/7c34a25506e7207b6748cef9e91163ed03081bee805cef930d82e1d8761d62f1
- * @jenesis.pin org.apache.httpcomponents.core5/httpcore5-h2 5.4 SHA-256/2e0f4ace15db2d1609c2b06eca6012e7582afe4a99ad8d15073f62dd8edb3460
- * @jenesis.pin org.apiguardian/apiguardian-api 1.1.2 SHA-256/b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38
- * @jenesis.pin org.javassist 3.32.0-GA
- * @jenesis.pin org.javassist/javassist 3.32.0-GA SHA-256/712ef75bc3406782bb4529b0408cce8155b53f2124c6ae03d2c5fbfa13d62c1c
  * @jenesis.pin org.reactivestreams/reactive-streams 1.0.4 SHA-256/f75ca597789b3dac58f61857b9ac2e1034a68fa672db35055a8fb4509e325f28
- * @jenesis.pin org.reflections/reflections 0.10.2 SHA-256/938a2d08fe54050d7610b944d8ddc3a09355710d9e6be0aac838dbc04e9a2825
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
  * @jenesis.pin software.amazon.awssdk.auth 2.46.17
  * @jenesis.pin software.amazon.awssdk.core 2.46.17
@@ -70,16 +56,9 @@
  * @jenesis.pin software.amazon.awssdk/utils-lite 2.46.17 SHA-256/1d5bcc1929c7adb9d82d3f66e95b410602bd567c7704f8c73aca4e62c35ab5dd
  * @jenesis.pin software.amazon.eventstream/eventstream 1.0.1 SHA-256/0c37d8e696117f02c302191b8110b0d0eb20fa412fce34c3a269ec73c16ce822
  */
-module build.jenesis.repository.store.s3 {
-    exports build.jenesis.repository.store.s3 to build.jenesis.repository.store.s3.test,
-            build.jenesis.repository.store.backends.e2e;
+module build.jenesis.repository.store.s3compatible {
     requires build.jenesis.repository.store;
-    requires build.jenesis.repository.store.s3compatible;
     requires software.amazon.awssdk.services.s3;
     requires software.amazon.awssdk.core;
-    requires software.amazon.awssdk.regions;
-    requires software.amazon.awssdk.auth;
-    requires software.amazon.awssdk.http.urlconnection;
-    provides build.jenesis.repository.store.ArtifactStoreProvider
-            with build.jenesis.repository.store.s3.S3ArtifactStoreProvider;
+    exports build.jenesis.repository.store.s3compatible;
 }
