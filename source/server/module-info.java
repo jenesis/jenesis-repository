@@ -13,6 +13,19 @@
  * ServiceLoader-discovered formats over the framework-neutral core. Open so Spring can reflect over the beans and
  * controller.
  *
+ * <p><b>Why {@code tomcat-embed-el} is excluded from the Jetty starter.</b> Spring Boot's
+ * {@code spring-boot-starter-jetty} declares {@code org.apache.tomcat.embed:tomcat-embed-el} at compile scope -
+ * it wants an Expression Language implementation and reaches for Tomcat's, even though the container is Jetty.
+ * That jar is the automatic module {@code org.apache.tomcat.embed.el} and it exports {@code jakarta.el}, which
+ * the real {@code jakarta.el} module also exports. On a classpath the duplicate is invisible; on a module path
+ * the boot layer refuses to resolve, with {@code ResolutionException: Modules jakarta.el and
+ * org.apache.tomcat.embed.el export package jakarta.el}.
+ *
+ * <p>Measured 2026-08-26 by removing the exclusion from all five modules that carry it and booting the console's
+ * tests. <b>Removing it from one module proves nothing:</b> an exclusion is inherited by consumers, so a single
+ * module's copy is masked by its siblings' and the build stays green - which is exactly the misreading that lets
+ * a redundant-looking line survive unexamined. All five have to go before the failure appears.
+ *
  * @jenesis.release 25
  * @jenesis.exclude spring.boot.starter.jetty org.apache.tomcat.embed/tomcat-embed-el
  * @jenesis.main build.jenesis.repository.server.RepositoryApplication
@@ -134,6 +147,7 @@
  * @jenesis.pin tools.jackson.core/jackson-core 3.2.0 SHA-256/5e353ce53c6901105dfcbf183e3220c17072e334e552b818a4bb1b99decea596
  * @jenesis.pin tools.jackson.core/jackson-databind 3.2.0 SHA-256/3ef94a3dddeafc247c50230fad0315981b2ce4ae6e91cfb4368a86f328904e4f
  * @jenesis.pin tools.jackson.databind 3.2.0
+ *
  */
 open module build.jenesis.repository.server {
     requires transitive build.jenesis.repository.server.spi;
