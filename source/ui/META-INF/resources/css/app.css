@@ -587,6 +587,14 @@ button.app-danger:hover,
     cursor: pointer;
 }
 
+/* A closed section skips the layout of its contents, so a wide table inside one is not being held by its
+   scrolling <figure> - nothing lays it out, and its intrinsic width reaches the document instead. The page then
+   scrolls sideways because of a table nobody can see. `clip` contains that without becoming a scroll container
+   itself (so the figures inside still scroll as they should) and without touching the vertical axis. */
+.app-section {
+    overflow-x: clip;
+}
+
 /* The heading is the control. Inline so the disclosure marker sits beside it rather than being pushed onto its
    own line by a block-level <h2>, and unmargined so a closed section is one tidy row. */
 .app-section > summary > h2 {
