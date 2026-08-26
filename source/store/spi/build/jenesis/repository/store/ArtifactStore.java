@@ -172,11 +172,33 @@ public interface ArtifactStore {
      * {@code .scans} internal spaces) is allowed. Each backend's {@code scope} runs the argument through this.
      */
     static String segment(String segment) {
-        if (segment == null || segment.isEmpty() || segment.equals(".") || segment.equals("..")
-                || segment.indexOf('/') >= 0 || segment.indexOf('\\') >= 0) {
+        if (!safeSegment(segment)) {
             throw new IllegalArgumentException("Not a traversal-free scope segment: " + segment);
         }
         return segment;
+    }
+
+    /**
+     * Whether {@code value} is a single traversal-free segment: non-empty, neither {@code .} nor {@code ..}, and
+     * carrying no path separator ({@code /} or {@code \}) and no control character.
+     *
+     * <p>The predicate behind {@link #segment(String)}, public because callers outside the write path ask the same
+     * question and need an answer rather than an exception - a format deciding whether to store a version under a
+     * key, an inspector deciding whether a segment read out of a request path is one the repository could hold.
+     * Three copies of this rule existed and had already drifted: both callers rejected control characters and the
+     * store's own guard did not.
+     */
+    static boolean safeSegment(String value) {
+        if (value == null || value.isEmpty() || value.equals(".") || value.equals("..")) {
+            return false;
+        }
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (character == '/' || character == '\\' || character < 0x20) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

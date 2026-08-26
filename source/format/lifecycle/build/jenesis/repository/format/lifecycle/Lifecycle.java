@@ -233,19 +233,10 @@ public final class Lifecycle {
         return State.parse(stateName.strip()).map(state -> new Flag(state, message)).orElse(null);
     }
 
-    /** A version (or any single key segment) must be non-empty, not a {@code .}/{@code ..} traversal, and free of a
-     *  path separator or control character, so it cannot steer a write outside the {@code lifecycle/} subtree. */
+    /** A version (or any single key segment) must be traversal-free so it cannot steer a write outside the
+     *  {@code lifecycle/} subtree. */
     private static boolean safeSegment(String value) {
-        if (value == null || value.isEmpty() || value.equals(".") || value.equals("..")) {
-            return false;
-        }
-        for (int index = 0; index < value.length(); index++) {
-            char c = value.charAt(index);
-            if (c == '/' || c == '\\' || c < 0x20) {
-                return false;
-            }
-        }
-        return true;
+        return ArtifactStore.safeSegment(value);
     }
 
     /** A coordinate may carry {@code /} (an npm scope, a Cargo {@code <registry>/<crate>}), so it is validated
