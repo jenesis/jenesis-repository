@@ -79,6 +79,7 @@ module build.jenesis.repository.store.gcs {
     exports build.jenesis.repository.store.gcs to build.jenesis.repository.store.gcs.test,
             build.jenesis.repository.store.backends.e2e;
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.store.s3compatible;
     requires software.amazon.awssdk.services.s3;
     requires software.amazon.awssdk.core;
     requires software.amazon.awssdk.awscore;
