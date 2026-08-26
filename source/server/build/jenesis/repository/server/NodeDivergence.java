@@ -37,9 +37,9 @@ public record NodeDivergence(String nodeId, Kind kind, String detail) {
     }
 
     public static NodeDivergence config(String nodeId, long generation, long referenceGeneration) {
-        return new NodeDivergence(nodeId, Kind.CONFIG_MISMATCH, "config generation " + Long.toHexString(generation)
+        return new NodeDivergence(nodeId, Kind.CONFIG_MISMATCH, "config/tenant generation " + Long.toHexString(generation)
                 + " differs from the fleet's " + Long.toHexString(referenceGeneration)
-                + " - this node missed a config change or is split from the others");
+                + " - this node missed a config or tenant change, or is split from the others");
     }
 
     public static NodeDivergence pointer(String nodeId, String pointer) {

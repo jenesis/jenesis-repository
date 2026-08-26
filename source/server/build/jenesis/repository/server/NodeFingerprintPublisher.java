@@ -85,7 +85,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
     /** This node's current fingerprint - the config generation fixed at boot, the counters read cheaply now. */
     NodeFingerprint fingerprint() {
         long now = System.currentTimeMillis();
-        return new NodeFingerprint(nodeId, now, now, 0L, "", configGeneration, 0L, quotaUsed(), Map.of());
+        return new NodeFingerprint(nodeId, now, now, 0L, "", configGeneration, 0L, quotaUsed(), 0L, Map.of());
     }
 
     /** The bytes counted against the quota where the store meters them, else zero - a counter already in memory, never

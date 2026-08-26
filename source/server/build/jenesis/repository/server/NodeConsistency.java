@@ -172,7 +172,7 @@ public final class NodeConsistency {
         return new NodeFingerprint(id, asLong(map.get("heartbeatMillis")), asLong(map.get("cursorAdvancedMillis")),
                 asLong(map.get("indexCursor")), asString(map.get("snapshotVersion")),
                 asLong(map.get("configGeneration")), asLong(map.get("inventoryTotal")), asLong(map.get("quotaUsed")),
-                pointers);
+                asLong(map.get("tenantCount")), pointers);
     }
 
     private static long asLong(Object value) {
