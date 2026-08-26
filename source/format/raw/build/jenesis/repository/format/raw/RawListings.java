@@ -8,6 +8,7 @@ import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.ScreenedNames;
 
 import module java.base;
+import build.jenesis.repository.format.Listings;
 
 /**
  * The raw format's directory pages as stored listings: one page per folder, its entries the folder's servable
@@ -67,7 +68,7 @@ final class RawListings {
     }
 
     private static byte[] link(String child) {
-        return ("<a href=\"" + escape(child) + "\">" + escape(child) + "</a><br/>").getBytes(StandardCharsets.UTF_8);
+        return ("<a href=\"" + Listings.html(child) + "\">" + Listings.html(child) + "</a><br/>").getBytes(StandardCharsets.UTF_8);
     }
 
     /** A file was published, removed, held or released: re-decide its entry in its folder's page, and the folder's
@@ -113,20 +114,6 @@ final class RawListings {
         return true;
     }
 
-    static String escape(String text) {
-        StringBuilder escaped = new StringBuilder(text.length());
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            switch (c) {
-                case '&' -> escaped.append("&amp;");
-                case '<' -> escaped.append("&lt;");
-                case '>' -> escaped.append("&gt;");
-                case '"' -> escaped.append("&quot;");
-                default -> escaped.append(c);
-            }
-        }
-        return escaped.toString();
-    }
 
     static String unescape(String text) {
         if (text.indexOf('&') < 0) {
