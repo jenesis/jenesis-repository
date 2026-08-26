@@ -91,7 +91,7 @@ public final class Lifecycle {
      * so a crafted lookup can never read outside the {@code lifecycle/} subtree).
      */
     public static Optional<Flag> read(ArtifactStore store, String coordinate, String version) throws IOException {
-        if (!safeCoordinate(coordinate) || !safeSegment(version)) {
+        if (!safeCoordinate(coordinate) || !ArtifactStore.safeSegment(version)) {
             return Optional.empty();
         }
         Optional<ArtifactStore.Versioned> stored = store.readVersioned(key(coordinate, version));
@@ -176,7 +176,7 @@ public final class Lifecycle {
         if (!safeCoordinate(coordinate)) {
             throw new IllegalArgumentException("Not a traversal-safe coordinate: " + coordinate);
         }
-        if (!safeSegment(version)) {
+        if (!ArtifactStore.safeSegment(version)) {
             throw new IllegalArgumentException("Not a traversal-safe version: " + version);
         }
         byte[] content = encode(flag);
@@ -196,7 +196,7 @@ public final class Lifecycle {
     /** Clear a coordinate/version's mark; {@code true} when one was present, {@code false} when there was nothing to
      *  clear (or the names are not traversal-safe). */
     public static boolean clear(ArtifactStore store, String coordinate, String version) throws IOException {
-        if (!safeCoordinate(coordinate) || !safeSegment(version)) {
+        if (!safeCoordinate(coordinate) || !ArtifactStore.safeSegment(version)) {
             return false;
         }
         String key = key(coordinate, version);
@@ -233,11 +233,6 @@ public final class Lifecycle {
         return State.parse(stateName.strip()).map(state -> new Flag(state, message)).orElse(null);
     }
 
-    /** A version (or any single key segment) must be traversal-free so it cannot steer a write outside the
-     *  {@code lifecycle/} subtree. */
-    private static boolean safeSegment(String value) {
-        return ArtifactStore.safeSegment(value);
-    }
 
     /** A coordinate may carry {@code /} (an npm scope, a Cargo {@code <registry>/<crate>}), so it is validated
      *  segment-by-segment: every {@code /}-delimited part is a safe segment and none is empty ({@code //}). */
@@ -246,7 +241,7 @@ public final class Lifecycle {
             return false;
         }
         for (String segment : coordinate.split("/", -1)) {
-            if (!safeSegment(segment)) {
+            if (!ArtifactStore.safeSegment(segment)) {
                 return false;
             }
         }

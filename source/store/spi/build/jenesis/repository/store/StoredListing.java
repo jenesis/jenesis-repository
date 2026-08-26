@@ -545,7 +545,7 @@ public final class StoredListing {
                 return true;
             }
             CONFLICTS.increment();
-            backoff(attempt);
+            Retries.backoff(attempt);
         }
         return false;
     }
@@ -634,7 +634,7 @@ public final class StoredListing {
                 return document;
             }
             CONFLICTS.increment();
-            backoff(attempt);
+            Retries.backoff(attempt);
         }
         throw new IOException("could not rebuild " + key + " after " + ATTEMPTS + " version conflicts");
     }
@@ -798,7 +798,7 @@ public final class StoredListing {
                 return true;
             }
             CONFLICTS.increment();
-            backoff(attempt);
+            Retries.backoff(attempt);
         }
         LOGGER.warn("listing {} could not be updated after {} version conflicts; regenerating it in place", key,
                 ATTEMPTS);
@@ -858,9 +858,6 @@ public final class StoredListing {
         }
     }
 
-    private static void backoff(int attempt) {
-        Retries.backoff(attempt);
-    }
 
     // ---- framing ----
 
