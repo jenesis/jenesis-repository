@@ -27,7 +27,16 @@ class HttpFetcherFetchCapTest {
 
     private static final int MAX_FETCH_BODY = 64 * 1024 * 1024;
 
-    private final HttpFetcher fetcher = new HttpFetcher(Duration.ofSeconds(30), host -> false);
+    /**
+     * Generous on purpose, and not the subject. These cases move 64 MiB through a loopback WireMock, which is
+     * quick on an idle machine and can be far from quick on one running the whole build - and a fetch that runs
+     * out of time comes back empty, exactly as a fetch that was refused does. So a too-tight window here does not
+     * report "slow", it reports the cap behaving wrongly. The cap is what is under test; the clock is incidental,
+     * so it is sized for a saturated machine.
+     */
+    private static final Duration UNHURRIED = Duration.ofMinutes(5);
+
+    private final HttpFetcher fetcher = new HttpFetcher(UNHURRIED, host -> false);
 
     @Test
     void a_body_over_the_cap_is_refused_with_a_fetch_limit_error() {
@@ -48,11 +57,13 @@ class HttpFetcherFetchCapTest {
     void a_body_exactly_at_the_cap_is_served_whole() throws IOException {
         WireMockServer server = serving(MAX_FETCH_BODY); // exactly the ceiling - the last size that is allowed
         try {
-            ProxyFormat.Fetched fetched = fetcher.fetch(
-                    URI.create("http://127.0.0.1:" + server.port() + "/index"), Map.of()).orElseThrow();
+            Optional<ProxyFormat.Fetched> answer = fetcher.fetch(
+                    URI.create("http://127.0.0.1:" + server.port() + "/index"), Map.of());
 
-            assertThat(fetched.status()).isEqualTo(200);
-            assertThat(fetched.body()).as("a body exactly at the cap is not clipped").hasSize(MAX_FETCH_BODY);
+            assertThat(answer).as("a body at the cap is fetched, not refused - an empty answer here is either the"
+                    + " cap rejecting a body it should allow, or the fetch running out of time").isPresent();
+            assertThat(answer.get().status()).isEqualTo(200);
+            assertThat(answer.get().body()).as("a body exactly at the cap is not clipped").hasSize(MAX_FETCH_BODY);
         } finally {
             server.stop();
         }
