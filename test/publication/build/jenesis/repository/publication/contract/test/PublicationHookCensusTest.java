@@ -105,14 +105,9 @@ class PublicationHookCensusTest {
         // hook without a fixture. This module is where the kit's own archetypes are declared, so the census has a
         // non-empty population to verify while the shipped one is empty. The day a source module provides a hook, the
         // static leg grows and the runtime leg fails until this module requires it: gate 1, working as intended.
-        List<Provider> providers = new ArrayList<>(shipped());
-        providers.addAll(ContractCensus.declaredProviders(
-                repositoryRoot().resolve("test").resolve("publication"), PublicationObserver.class));
-        return List.copyOf(providers);
-    }
-
-    private static List<Provider> shipped() throws IOException {
-        return ContractCensus.declaredProviders(repositoryRoot().resolve("source"), PublicationObserver.class);
+        // One call, where there were two: the resolved graph carries the shipped observers and this module's own
+        // fixture alike, so there is no source root to name and no way for the two halves to disagree.
+        return ContractCensus.declaredProviders(PublicationObserver.class);
     }
 
     private static List<Provider> discovered() {
@@ -147,6 +142,13 @@ class PublicationHookCensusTest {
                 .as("every shipped hook is keyed to a fixture")
                 .allSatisfy(implementation -> assertThat(FIXTURES).extracting(PublicationHookFixture::providerClass)
                         .contains(implementation));
+    }
+
+
+    /** The hooks the PRODUCT ships: every declared observer except the ones a test module contributes. */
+    private static List<Provider> shipped() {
+        return ContractCensus.declaredProviders(PublicationObserver.class,
+                module -> !module.getName().endsWith(".test"));
     }
 
     // --- the role split, derived three ways --------------------------------------------------------------------

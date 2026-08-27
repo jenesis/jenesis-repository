@@ -5,17 +5,26 @@ import module java.base;
 /**
  * Completeness ratchet shared by parameterized SPI contract suites.
  *
- * <p>A valid census has three independent sources of truth: provider classes parsed from source
- * {@code provides ... with ...} clauses, provider instances visible in the runtime module graph, and fixture or
- * reason-bearing exemption registrations. {@link #of} compares all three and throws {@link AssertionError} with every
- * discovered mismatch, keeping this helper independent of JUnit and assertion libraries.
+ * <p>A valid census has three independent sources of truth: the providers modules DECLARE, the provider instances
+ * the runtime graph DISCOVERS, and fixture or reason-bearing exemption registrations. {@link #of} compares all three
+ * and throws {@link AssertionError} with every discovered mismatch, keeping this helper independent of JUnit and
+ * assertion libraries.
+ *
+ * <p><b>Declared is read from the resolved module graph, not from source text.</b> It used to walk every
+ * {@code module-info.java} under a source root and regex out the {@code provides ... with ...} clauses. That was a
+ * parser that did not understand the language reimplementing a fact the compiler had already recorded: it needed the
+ * service's fully-qualified name to appear literally, so an {@code import} in a module descriptor would have made it
+ * silently match nothing and report a clean census over zero providers. {@link ModuleLayer#boot()} carries the same
+ * clauses as compiled {@code ModuleDescriptor.Provides}, exactly and by construction.
+ *
+ * <p>What that changes about scope, and why it is the right change: the source walk asked "what does this TREE
+ * declare", which is a question no deployment ever asks. The graph asks "what does THIS DEPLOYMENT declare", which
+ * is the question the runtime and fixture halves were already asking - so all three sides now share one scope, and a
+ * census can no longer disagree with itself about which providers exist. Whether a module belongs in that scope is a
+ * separate question, answered where it can be: by the drive census, rooted on the assemblies this product ships.
  */
 public final class ContractCensus {
 
-    private static final int MODULE_DESCRIPTOR_LIMIT = 1_000_000;
-    private static final Pattern PROVIDES = Pattern.compile(
-            "\\bprovides\\s+([\\w.$]+)\\s+with\\s+([^;]+);", Pattern.DOTALL);
-    private static final Pattern COMMENTS = Pattern.compile("//[^\\r\\n]*|/\\*.*?\\*/", Pattern.DOTALL);
 
     /**
      * One provider identified by its stable selection name and implementation class name.
@@ -83,49 +92,40 @@ public final class ContractCensus {
     }
 
     /**
-     * Parses every provider class declared for {@code service} below {@code sourceRoot}. Provider names initially use
-     * the implementation class name; a suite with a domain selection name may replace them before calling {@link #of}.
-     * Multiline provider lists are supported.
+     * Every provider class declared for {@code service} by a module in the resolved graph, read from the compiled
+     * {@code provides} clauses. Provider names initially use the implementation class name; a suite with a domain
+     * selection name may replace them before calling {@link #of}.
      */
-    public static List<Provider> declaredProviders(Path sourceRoot, Class<?> service) throws IOException {
-        Objects.requireNonNull(sourceRoot, "sourceRoot");
+    public static List<Provider> declaredProviders(Class<?> service) {
+        return declaredProviders(service, module -> true);
+    }
+
+    /**
+     * The same, restricted to the modules {@code scope} accepts - so a census that distinguishes what the product
+     * SHIPS from what a test module contributes can still say so. That distinction used to be a directory ("source"
+     * versus "test/ui"); here it is a property of the module itself, which is what it always was.
+     */
+    public static List<Provider> declaredProviders(Class<?> service, Predicate<Module> scope) {
         Objects.requireNonNull(service, "service");
-        if (!Files.isDirectory(sourceRoot)) {
-            throw new IOException("SPI census source root is not a directory: " + sourceRoot);
-        }
+        Objects.requireNonNull(scope, "scope");
         List<Provider> providers = new ArrayList<>();
-        try (Stream<Path> files = Files.walk(sourceRoot)) {
-            for (Path file : (Iterable<Path>) files
-                    .filter(path -> path.getFileName().toString().equals("module-info.java"))::iterator) {
-                Matcher matcher = PROVIDES.matcher(COMMENTS.matcher(readModuleDescriptor(file)).replaceAll(""));
-                while (matcher.find()) {
-                    if (!matcher.group(1).equals(service.getName())) {
-                        continue;
-                    }
-                    for (String implementation : matcher.group(2).split(",")) {
-                        String className = implementation.strip();
-                        providers.add(new Provider(className, className));
-                    }
+        for (Module module : ModuleLayer.boot().modules()) {
+            if (!scope.test(module)) {
+                continue;
+            }
+            ModuleDescriptor descriptor = module.getDescriptor();
+            if (descriptor == null) {
+                continue;                       // an unnamed module declares nothing
+            }
+            for (ModuleDescriptor.Provides provides : descriptor.provides()) {
+                if (provides.service().equals(service.getName())) {
+                    provides.providers().forEach(implementation ->
+                            providers.add(new Provider(implementation, implementation)));
                 }
             }
         }
         providers.sort(Comparator.comparing(Provider::implementation));
         return List.copyOf(providers);
-    }
-
-    private static String readModuleDescriptor(Path file) throws IOException {
-        StringBuilder descriptor = new StringBuilder();
-        char[] buffer = new char[8_192];
-        try (Reader reader = Files.newBufferedReader(file)) {
-            for (int read; (read = reader.read(buffer)) != -1; ) {
-                if (descriptor.length() + read > MODULE_DESCRIPTOR_LIMIT) {
-                    throw new IOException("module descriptor exceeds " + MODULE_DESCRIPTOR_LIMIT + " characters: "
-                            + file);
-                }
-                descriptor.append(buffer, 0, read);
-            }
-        }
-        return descriptor.toString();
     }
 
     public Class<?> service() {

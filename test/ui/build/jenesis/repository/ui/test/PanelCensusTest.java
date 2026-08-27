@@ -52,14 +52,12 @@ class PanelCensusTest {
 
     /** Two roots, and the pair is the point: {@code source/} is the shipped inventory that must never grow a panel
      *  nobody registered, and this module declares the always-failing fixture the booted console renders. */
-    private static List<Provider> declared() throws IOException {
-        List<Provider> providers = new ArrayList<>(shipped());
-        providers.addAll(ContractCensus.declaredProviders(repositoryRoot().resolve("test").resolve("ui"), Panel.class));
-        return List.copyOf(providers);
-    }
-
-    private static List<Provider> shipped() throws IOException {
-        return ContractCensus.declaredProviders(repositoryRoot().resolve("source"), Panel.class);
+    private static List<Provider> declared() {
+        // One call, where there were two. Reading the resolved graph rather than two source roots means the shipped
+        // panels and this module's own always-failing fixture arrive together, because both are modules this test
+        // JVM resolved - the split into "source" and "test/ui" existed only because a directory walk had to be told
+        // where to look.
+        return ContractCensus.declaredProviders(Panel.class);
     }
 
     /** The runtime leg, keyed by the panel's own id - so a duplicate id IS a duplicate provider name to the census. */
