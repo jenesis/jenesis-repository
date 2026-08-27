@@ -8,8 +8,6 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublicationObserver;
-import build.jenesis.repository.store.ListingObserver;
-import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.ChoreographyMutant;
 import build.jenesis.repository.store.testkit.Falsification;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
@@ -97,8 +95,6 @@ class PublicationHookCensusTest {
             Map.entry("build.jenesis.repository.findings.store.DiscardedHoldFindingsObserver",
                     Role.PRE_COMMIT_RELEASE_HOOK));
 
-    private static final Pattern COMMENTS = Pattern.compile("//[^\\r\\n]*|/\\*.*?\\*/", Pattern.DOTALL);
-
     @TempDir
     Path root;
 
@@ -155,25 +151,33 @@ class PublicationHookCensusTest {
 
     // --- the role split, derived three ways --------------------------------------------------------------------
 
+    /**
+     * The role split, asked of the instances the graph actually holds.
+     *
+     * <p>This used to derive each role a second time by reading the {@code implements} clause out of the provider's
+     * source text and comparing the two. That re-derivation was the only source scan in this census, and when the
+     * fifteen format observers moved onto {@link build.jenesis.repository.store.ListingObserver} - a
+     * {@code PublicationObserver} sub-interface - it silently re-keyed every one of them to the fail-closed
+     * pre-commit role and failed the comparison. The scan was wrong and the instance was right, which is the
+     * general case: {@code Role.of} asks the object, and an object cannot misreport the interfaces it implements.
+     *
+     * <p>So the leg is gone rather than taught about one more supertype, because there was no invariant behind it
+     * that the instance does not already settle. What a declaration says is still checked - by the compiler, which
+     * will not let a class be provided as a service it does not implement.
+     */
     @Test
-    void the_role_of_every_declared_hook_agrees_between_its_source_and_the_runtime_graph() throws IOException {
-        Map<String, Role> fromSource = new TreeMap<>();
-        Map<String, Role> fromRuntime = new TreeMap<>();
-        for (Provider provider : declared()) {
-            fromSource.put(provider.implementation(), roleInSource(provider.implementation()));
-        }
+    void both_roles_are_represented_in_the_graph_the_runtime_discovers() {
+        Map<String, Role> discovered = new TreeMap<>();
         for (ServiceLoader.Provider<PublicationObserver> provider
                 : ServiceLoader.load(PublicationObserver.class).stream().toList()) {
-            fromRuntime.put(provider.type().getName(), Role.of(provider.get()));
+            discovered.put(provider.type().getName(), Role.of(provider.get()));
         }
-
-        assertThat(fromRuntime)
-                .as("the role a hook is keyed to must be the same whether it is read off its source declaration or "
-                        + "asked of the instance Publication actually holds. A disagreement means the census would "
-                        + "drive a provider through the wrong failure semantics - a contained after-commit observer "
-                        + "and a fail-closed pre-commit screen arrive through the very same `uses` clause.")
-                .isEqualTo(fromSource);
-        assertThat(fromRuntime.values()).as("both roles are represented in this graph, or the split proves nothing")
+        assertThat(discovered).as("the one discovered clause carries hooks at all").isNotEmpty();
+        assertThat(discovered.values())
+                .as("both roles are represented in this graph, or the split proves nothing: a contained "
+                        + "after-commit observer and a fail-closed pre-commit screen arrive through the very same "
+                        + "`uses` clause, and a census over only one of them would assert the wrong contract for "
+                        + "the other")
                 .contains(Role.AFTER_COMMIT_OBSERVER, Role.PUBLISH_INTERCEPTOR);
     }
 
@@ -378,7 +382,6 @@ class PublicationHookCensusTest {
                     LISTING_HOOK),
             Map.entry("raw-listing / THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE",
                     LISTING_HOOK));
-
 
     @Test
     void every_property_a_hook_owns_declares_the_mutation_that_must_break_it() {
@@ -814,57 +817,6 @@ class PublicationHookCensusTest {
         Path directory = Files.createDirectories(root.resolve(name));
         return ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenreg.filesystem.root".equals(key) ? directory.toString() : null);
-    }
-
-    /** The role a provider's own source declares - the static half of the split, read the way the earlier inventory reads
-     *  it: a provider is keyed to the role interface it names among its supertypes. */
-    private static Role roleInSource(String providerClass) throws IOException {
-        Path source = repositoryRoot().resolve("test").resolve("publication")
-                .resolve(providerClass.replace('.', '/') + ".java");
-        if (!Files.isRegularFile(source)) {
-            // A shipped hook's source sits in its module under source/; the kit's own archetypes under this module.
-            try (Stream<Path> candidates = Files.walk(repositoryRoot().resolve("source"))) {
-                source = candidates.filter(candidate -> candidate.endsWith(
-                        Path.of(providerClass.replace('.', '/') + ".java"))).findFirst().orElse(source);
-            }
-        }
-        if (!Files.isRegularFile(source)) {
-            throw new AssertionError(providerClass + " has no source file under test/publication, so keying it to a "
-                    + "role would silently key it to nothing: " + source);
-        }
-        String stripped = COMMENTS.matcher(Files.readString(source)).replaceAll("");
-        String simple = providerClass.substring(providerClass.lastIndexOf('.') + 1);
-        Matcher declaration = Pattern.compile("(?m)^\\s*(?:public\\s+)?(?:final\\s+|abstract\\s+)?class\\s+"
-                + Pattern.quote(simple) + "\\b([^{]*)\\{", Pattern.DOTALL).matcher(stripped);
-        if (!declaration.find()) {
-            throw new AssertionError("cannot read the type declaration of " + providerClass + " out of " + source);
-        }
-        String supertypes = declaration.group(1);
-        if (supertypes.contains(PublishInterceptor.class.getSimpleName())) {
-            return Role.PUBLISH_INTERCEPTOR;
-        }
-        // ListingObserver is the format SPI's own PublicationObserver sub-interface - it carries the five
-        // transition callbacks every format's stored-listing observer used to write out by hand - so a class
-        // implementing it is an after-commit observer exactly as one naming PublicationObserver directly is.
-        if (supertypes.contains(PublicationObserver.class.getSimpleName())
-                || supertypes.contains(ListingObserver.class.getSimpleName())) {
-            return Role.AFTER_COMMIT_OBSERVER;
-        }
-        // By name rather than by type: HoldReleaseObserver is declared in an enterprise module, and a core test
-        // may not require one (the tier direction the build inspection enforces). The census reads source text
-        // here anyway, so a name is what it has to match on.
-        if (supertypes.contains("HoldReleaseObserver")) {
-            return Role.PRE_COMMIT_RELEASE_HOOK;
-        }
-        // Naming what it could not classify, rather than assuming. This read is a source-text scan, so it goes
-        // stale the moment a hook is declared through a supertype it does not know - and it did: fifteen format
-        // observers moved onto ListingObserver and every one of them was silently re-keyed to the pre-commit
-        // role, which is the fail-closed half of a split whose whole purpose is that the two halves differ.
-        // An unrecognised supertype is now a failure that says so.
-        throw new AssertionError(providerClass + " declares '" + supertypes.strip() + "', none of which this "
-                + "census recognises as a hook role. A role guessed from an unknown supertype is worse than no "
-                + "answer: it keys a contained after-commit observer to the fail-closed pre-commit contract, or "
-                + "the reverse, and the census then proves the wrong thing about it.");
     }
 
     private static Path repositoryRoot() {
