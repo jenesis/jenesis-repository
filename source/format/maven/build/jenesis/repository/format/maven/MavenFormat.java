@@ -157,14 +157,6 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     @Override
     public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
-        // RepositoryFormat clause 6: a request path carrying a . or .. segment addresses nothing under /maven/, so it
-        // is refused here - before Publication.link would hand it to the store's key screen, which throws (an unmapped
-        // 500 where the truth is "no such artifact"). Same screen, same shapes, stated once in ArtifactStore; this is
-        // the in-format seam OciFormat has always carried through isImageName/isTag/isDigestHex (§13 parity).
-        if (!ArtifactStore.traversalFree(path)) {
-            exchange.respond(404);
-            return;
-        }
         if (exchange.method().equals("PUT")) {
             // (1): a maven-metadata.xml (and its checksum siblings) is stored verbatim like any artifact rather
             // than dropped, so a publisher-authored document round-trips even when the server does not derive one.
@@ -324,8 +316,10 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {
         String path = exchange.path();
-        // The proxy leg carries the same clause-6 screen as handle(): a traversal-shaped path is no proxy target
-        // either, so it never reaches the upstream and never lays a fetched body out under a path the store refuses.
+        // The proxy leg carries the same clause-6 screen as the request seam: a traversal-shaped path
+        // is no proxy target either, so it never reaches the upstream and never lays a fetched body out
+        // under a path the store refuses. (The enterprise legs get this from ProxyLeg, which screens
+        // harder still - see the worklist entry on unifying the two.)
         if (!path.startsWith("/maven/") || !ArtifactStore.traversalFree(path)) {
             return false;
         }

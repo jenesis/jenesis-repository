@@ -47,14 +47,6 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
     @Override
     public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
-        // RepositoryFormat clause 6: a request path carrying a . or .. segment addresses nothing under /raw/, so it is
-        // refused here rather than reaching the store's key screen, which throws (an unmapped 500 where the truth is
-        // "no such file"). One screen, stated in ArtifactStore, applied at the format seam exactly as OciFormat has
-        // always applied its own (§13 parity).
-        if (!ArtifactStore.traversalFree(path)) {
-            exchange.respond(404);
-            return;
-        }
         Publication publication = new Publication(store);
         switch (exchange.method()) {
             case "PUT" -> {
@@ -112,8 +104,10 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {
         String path = exchange.path();
-        // The proxy leg carries the same clause-6 screen as handle(): a traversal-shaped path is no proxy target
-        // either, so it never reaches the upstream and never lays a fetched body out under a path the store refuses.
+        // The proxy leg carries the same clause-6 screen as the request seam: a traversal-shaped path
+        // is no proxy target either, so it never reaches the upstream and never lays a fetched body out
+        // under a path the store refuses. (The enterprise legs get this from ProxyLeg, which screens
+        // harder still - see the worklist entry on unifying the two.)
         if (!path.startsWith("/raw/") || path.endsWith("/") || !ArtifactStore.traversalFree(path)) {
             return false;
         }

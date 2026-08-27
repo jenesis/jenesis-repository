@@ -123,14 +123,6 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
     @Override
     public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
-        // RepositoryFormat clause 6: a request path carrying a . or .. segment addresses nothing under /module/ or
-        // /artifact/, so it is refused here rather than reaching the store's key screen, which throws (an unmapped 500
-        // where the truth is "no such artifact"). One screen, stated in ArtifactStore, applied at the format seam
-        // exactly as OciFormat has always applied its own (§13 parity).
-        if (!ArtifactStore.traversalFree(path)) {
-            exchange.respond(404);
-            return;
-        }
         Publication publication = new Publication(store);
         if (exchange.method().equals("PUT")) {
             // Layout-only (EPIC 26): screening rides the ingress edge, which screens the body to ACCEPT and restreams
