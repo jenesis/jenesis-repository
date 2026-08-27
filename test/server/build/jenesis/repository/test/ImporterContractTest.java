@@ -197,7 +197,7 @@ class ImporterContractTest {
                 .toList();
 
         ContractCensus.of(RepositoryImporter.class,
-                ContractCensus.declaredProviders(repositoryRoot().resolve("source"), RepositoryFormat.class),
+                ContractCensus.declaredProviders(RepositoryFormat.class),
                 runtime,
                 fixtures,
                 List.of(new Exemption(JENREG_FORMAT,
