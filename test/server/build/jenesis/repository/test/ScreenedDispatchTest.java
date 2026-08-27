@@ -59,7 +59,7 @@ public class ScreenedDispatchTest {
         }
 
         @Override
-        public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
+        public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
             if ("PUT".equals(exchange.method()) || "POST".equals(exchange.method())
                     || "PATCH".equals(exchange.method())) {
                 try (InputStream in = exchange.requestStream()) {
@@ -222,7 +222,7 @@ public class ScreenedDispatchTest {
             }
 
             @Override
-            public void handle(FormatExchange exchange, ArtifactStore store) {
+            public void serve(FormatExchange exchange, ArtifactStore store) {
             }
         };
         assertThat(plain.screened()).as("a format is edge-screened by default").isTrue();

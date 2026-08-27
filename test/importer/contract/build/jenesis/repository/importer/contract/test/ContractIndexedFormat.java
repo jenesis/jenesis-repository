@@ -35,7 +35,7 @@ public final class ContractIndexedFormat implements RepositoryFormat, ProxyForma
     }
 
     @Override
-    public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
+    public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         exchange.respond(404);
     }
 

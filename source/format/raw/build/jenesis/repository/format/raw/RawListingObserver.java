@@ -2,7 +2,7 @@ package build.jenesis.repository.format.raw;
 
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 import module java.base;
@@ -12,32 +12,18 @@ import module java.base;
  * off the publish path - a hold on a file and its release, a removal - by re-deciding the one entry. A transition
  * that names no path rebuilds every page in place.
  */
-public final class RawListingObserver implements PublicationObserver, StoredListing.Rebuilder {
+public final class RawListingObserver implements ListingObserver {
 
     public RawListingObserver() {
     }
 
     @Override
-    public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) {
-        // The publish writes its own entries; nothing to do after the fact.
+    public void onMarked(ArtifactDescriptor subject, ArtifactStore store) {
+        // The raw layout carries no lifecycle module: a mark changes nothing a directory listing shows.
     }
 
     @Override
-    public void onDeleted(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-        transition(artifact, store);
-    }
-
-    @Override
-    public void onWithheld(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
-        transition(subject, store);
-    }
-
-    @Override
-    public void onWithholdCleared(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
-        transition(subject, store);
-    }
-
-    private void transition(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
+    public void transition(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
         if (subject.path() != null) {
             if (subject.path().startsWith("/raw/") && !subject.path().endsWith("/")) {
                 new RawListings(store).refresh(subject.path());

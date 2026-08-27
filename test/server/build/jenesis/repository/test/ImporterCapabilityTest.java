@@ -49,7 +49,7 @@ class ImporterCapabilityTest {
         }
 
         @Override
-        public void handle(FormatExchange exchange, ArtifactStore store) {
+        public void serve(FormatExchange exchange, ArtifactStore store) {
         }
     }
 
@@ -71,7 +71,7 @@ class ImporterCapabilityTest {
         }
 
         @Override
-        public void handle(FormatExchange exchange, ArtifactStore store) {
+        public void serve(FormatExchange exchange, ArtifactStore store) {
         }
 
         // ArtifactLayout.describe(String) - the coordinate behind a request path.

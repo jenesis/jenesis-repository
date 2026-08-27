@@ -8,6 +8,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.ChoreographyMutant;
 import build.jenesis.repository.store.testkit.Falsification;
@@ -842,10 +843,28 @@ class PublicationHookCensusTest {
         if (supertypes.contains(PublishInterceptor.class.getSimpleName())) {
             return Role.PUBLISH_INTERCEPTOR;
         }
-        if (supertypes.contains(PublicationObserver.class.getSimpleName())) {
+        // ListingObserver is the format SPI's own PublicationObserver sub-interface - it carries the five
+        // transition callbacks every format's stored-listing observer used to write out by hand - so a class
+        // implementing it is an after-commit observer exactly as one naming PublicationObserver directly is.
+        if (supertypes.contains(PublicationObserver.class.getSimpleName())
+                || supertypes.contains(ListingObserver.class.getSimpleName())) {
             return Role.AFTER_COMMIT_OBSERVER;
         }
-        return Role.PRE_COMMIT_RELEASE_HOOK;
+        // By name rather than by type: HoldReleaseObserver is declared in an enterprise module, and a core test
+        // may not require one (the tier direction the build inspection enforces). The census reads source text
+        // here anyway, so a name is what it has to match on.
+        if (supertypes.contains("HoldReleaseObserver")) {
+            return Role.PRE_COMMIT_RELEASE_HOOK;
+        }
+        // Naming what it could not classify, rather than assuming. This read is a source-text scan, so it goes
+        // stale the moment a hook is declared through a supertype it does not know - and it did: fifteen format
+        // observers moved onto ListingObserver and every one of them was silently re-keyed to the pre-commit
+        // role, which is the fail-closed half of a split whose whole purpose is that the two halves differ.
+        // An unrecognised supertype is now a failure that says so.
+        throw new AssertionError(providerClass + " declares '" + supertypes.strip() + "', none of which this "
+                + "census recognises as a hook role. A role guessed from an unknown supertype is worse than no "
+                + "answer: it keys a contained after-commit observer to the fail-closed pre-commit contract, or "
+                + "the reverse, and the census then proves the wrong thing about it.");
     }
 
     private static Path repositoryRoot() {

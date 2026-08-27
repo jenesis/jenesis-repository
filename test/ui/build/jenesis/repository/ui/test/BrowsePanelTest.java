@@ -142,7 +142,7 @@ class BrowsePanelTest {
         }
 
         @Override
-        public void handle(FormatExchange exchange, ArtifactStore store) {
+        public void serve(FormatExchange exchange, ArtifactStore store) {
             throw new UnsupportedOperationException("the browse panel never dispatches a request");
         }
 
