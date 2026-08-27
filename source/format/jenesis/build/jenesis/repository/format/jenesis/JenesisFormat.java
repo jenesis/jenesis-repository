@@ -121,7 +121,7 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
     }
 
     @Override
-    public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
+    public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
         // RepositoryFormat clause 6: a request path carrying a . or .. segment addresses nothing under /module/ or
         // /artifact/, so it is refused here rather than reaching the store's key screen, which throws (an unmapped 500

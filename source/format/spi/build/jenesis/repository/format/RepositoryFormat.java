@@ -203,10 +203,33 @@ public interface RepositoryFormat extends IconContributor {
     /** Whether this format owns the given request path (the repository prefix already stripped). */
     boolean handles(String path);
 
+    /**
+     * The request entry point every caller uses. It screens the path for traversal and then delegates to
+     * {@link #serve}; a format implements {@code serve} and never this.
+     *
+     * <p><b>Why the screen is here rather than in each format.</b> A request path carrying a {@code .} or
+     * {@code ..} segment addresses nothing in any format's namespace, so it is a {@code 404} - and if it is not
+     * refused at the request seam it reaches the store's own key screen, where it surfaces as an
+     * {@code IllegalArgumentException} that escapes as an unmapped {@code 500}. Thirteen formats used to open
+     * {@code handle} with this same four-line screen, each with its own comment explaining that the request seam
+     * and the store's write screen must not disagree about which shapes are refused. That is two screens that have
+     * to agree, maintained in thirteen places, with no test asserting any of them - and a fourteenth format would
+     * have had to know to write it. One screen, applied by the seam every caller goes through, cannot be forgotten
+     * by a format that does not know it exists.
+     */
+    default void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
+        if (!ArtifactStore.traversalFree(exchange.path())) {
+            exchange.respond(404);
+            return;
+        }
+        serve(exchange, store);
+    }
+
     /** Serve or accept the request against the scoped store, writing the response through the exchange. Contract
      *  clauses 3-6 bind here: a path whose shape this format cannot address is a {@code 404}, an artifact body is
-     *  streamed rather than buffered, and every composed key stays inside the scoped store's own namespace. */
-    void handle(FormatExchange exchange, ArtifactStore store) throws IOException;
+     *  streamed rather than buffered, and every composed key stays inside the scoped store's own namespace. The
+     *  path has already been screened for traversal by {@link #handle}. */
+    void serve(FormatExchange exchange, ArtifactStore store) throws IOException;
 
     /**
      * Whether this format's single-body writes are screened at the ingress edge (the default). {@code true} means an

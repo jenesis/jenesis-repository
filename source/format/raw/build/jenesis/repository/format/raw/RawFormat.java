@@ -45,7 +45,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     @Override
-    public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
+    public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
         // RepositoryFormat clause 6: a request path carrying a . or .. segment addresses nothing under /raw/, so it is
         // refused here rather than reaching the store's key screen, which throws (an unmapped 500 where the truth is

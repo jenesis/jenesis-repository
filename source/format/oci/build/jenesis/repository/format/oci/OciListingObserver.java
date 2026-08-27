@@ -2,7 +2,7 @@ package build.jenesis.repository.format.oci;
 
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 import module java.base;
@@ -13,7 +13,7 @@ import module java.base;
  * every tag of the image, for a manifest addressed by digest). A transition that names no image rebuilds every OCI
  * listing in place.
  */
-public final class OciListingObserver implements PublicationObserver, StoredListing.Rebuilder {
+public final class OciListingObserver implements ListingObserver {
 
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(OciListingObserver.class);
 
@@ -21,26 +21,13 @@ public final class OciListingObserver implements PublicationObserver, StoredList
     }
 
     @Override
-    public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) {
-        // The push writes its own entry; nothing to do after the fact.
+    public void onMarked(ArtifactDescriptor subject, ArtifactStore store) {
+        // This format does not carry the lifecycle module: a mark changes nothing a Distribution client reads from a
+        // tag list or an image index.
     }
 
     @Override
-    public void onDeleted(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-        transition(artifact, store);
-    }
-
-    @Override
-    public void onWithheld(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
-        transition(subject, store);
-    }
-
-    @Override
-    public void onWithholdCleared(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
-        transition(subject, store);
-    }
-
-    private void transition(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
+    public void transition(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
         if (subject.ecosystem() != null && !subject.ecosystem().equals("oci")) {
             return;
         }

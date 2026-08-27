@@ -145,7 +145,7 @@ public class PullThroughHooksTest {
         }
 
         @Override
-        public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
+        public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
             handles.incrementAndGet();
             byte[] body = local.get(exchange.path());
             if (body == null) {

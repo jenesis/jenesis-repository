@@ -155,7 +155,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     @Override
-    public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
+    public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
         // RepositoryFormat clause 6: a request path carrying a . or .. segment addresses nothing under /maven/, so it
         // is refused here - before Publication.link would hand it to the store's key screen, which throws (an unmapped

@@ -104,7 +104,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     @Override
-    public void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
+    public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
         if (path.equals("/v2") || path.equals("/v2/")) {
             exchange.setResponseHeader("Docker-Distribution-Api-Version", "registry/2.0");
