@@ -86,26 +86,40 @@
 </header>
 
 <!-- Empty / loading / error state: one consistent treatment, never a blank screen. -->
-<!--/* The console's header: brand, the links this deployment offers, the theme switch and sign-out. Every
-     screen renders the same one, so moving between screens - and between editions - changes the page under it and
-     nothing around it. A screen passes the path it is on so the shell can mark it, rather than each screen
-     repeating the markup and drifting from the others. */-->
-<header th:fragment="shell(active)" class="container">
-    <nav class="app-nav">
+<!--/* The console header, and the only one: every screen and every edition renders this, so moving between
+     screens - or from one edition to the other - changes the page under it and nothing around it.
+
+     The brand is a parameter because that is edition identity rather than a difference to erase, and `extras` is a
+     slot for the items an edition has and the other does not (a licence badge belongs to whoever has licensing, and
+     naming it here would put one edition's vocabulary in the other's shell). Pass `~{}` when there are none.
+
+     Everything else is model-driven and null-safe: a console that publishes no tenant, no posture badge and no
+     signed-in user renders none of those, so the same markup serves a single-tenant console and a multi-tenant one
+     without asking which it is. */-->
+<th:block th:fragment="shell(brandName, brandHref, brandLogo, extras)">
+    <a class="app-skip-link" href="#main">Skip to content</a>
+    <nav class="container app-nav" aria-label="Primary">
         <ul>
-            <li th:insert="~{base :: brand('jenesis-repository', @{/}, 'jenesis-repository')}"></li>
+            <li th:insert="~{base :: brand(${brandName}, ${brandHref}, ${brandLogo})}"></li>
         </ul>
         <ul>
             <th:block th:insert="~{base :: navLinks(${navEntries}, ${adminNav})}"></th:block>
+            <li th:if="${tenant != null and showTenant}">
+                <small>Tenant <strong th:text="${tenant}">default</strong></small></li>
+            <li th:if="${postureBadge != null and postureBadge.visible()}">
+                <a th:href="@{/posture}" class="secondary"
+                   th:title="${postureBadge.title()}" th:text="${postureBadge.label()}">posture</a></li>
+            <th:block th:replace="${extras}"></th:block>
+            <li th:if="${currentUser}"><small>Signed in as <span th:text="${currentUser}">user</span></small></li>
             <li><select th:replace="~{base :: themeSelect}"></select></li>
-            <li>
-                <form th:action="@{/logout}" method="post" style="display:inline;margin:0">
-                    <button type="submit" class="secondary outline">Sign out</button>
+            <li th:if="${currentUser}">
+                <form method="post" th:action="@{/logout}" style="display:inline; margin:0">
+                    <button class="secondary outline" type="submit">Sign out</button>
                 </form>
             </li>
         </ul>
     </nav>
-</header>
+</th:block>
 
 <!--/* The links every installed console module contributes, rendered identically wherever the console runs.
      Two sections rather than one flat bar: a deployment with several modules installed puts the three or four
@@ -180,3 +194,24 @@
 
 </body>
 </html>
+
+<!--/* Deployment-wide notices, on the shared alert treatment: announced as status/alert and tinted from the status
+     palette in both themes, never a hard-coded colour. th:if sits on a wrapping block because fragment inclusion
+     (precedence 100) would otherwise run before the conditional (300). */-->
+<div th:fragment="messages">
+    <th:block th:if="${readOnly}"><p th:replace="~{base :: alert('This instance is in read-only mode - every write is refused.', 'warn')}"></p></th:block>
+    <th:block th:if="${anonymousRights != null and !anonymousRights.isEmpty()}"><p th:replace="~{base :: alert('Anonymous access is enabled (' + ${anonymousRights} + ') - a request with no credential is served against that grant.', 'warn')}"></p></th:block>
+    <th:block th:if="${message}"><p th:replace="~{base :: alert(${message}, null)}"></p></th:block>
+    <th:block th:if="${error}"><p th:replace="~{base :: alert(${error}, 'danger')}"></p></th:block>
+</div>
+
+<!--/* The scoped-error panel for ONE subsection of a page. When a subsection's data could not be derived or parsed -
+     which is not the same as genuinely empty - the caller renders this in that subsection's place while every
+     sibling and the rest of the page render normally: a failure in one panel must never 500 or blank the whole
+     view. One reusable wrapper on the shared alert treatment, so the error state is uniform rather than a bespoke
+     per-panel hack. */-->
+<article th:fragment="subsectionError(title, message, detail)" class="app-subsection-error" aria-live="polite">
+    <h2 th:text="${title}">Subsection</h2>
+    <p th:replace="~{base :: alert(${message}, 'warn')}">could not derive this subsection</p>
+    <p th:if="${detail}"><small th:text="${detail}">cause</small></p>
+</article>

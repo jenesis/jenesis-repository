@@ -1,5 +1,6 @@
 package build.jenesis.repository.ui.test;
 
+import build.jenesis.repository.ui.PostureBadge;
 import build.jenesis.repository.ui.ConsoleAdvice;
 import module org.junit.jupiter.api;
 import org.springframework.core.env.MapPropertySource;
@@ -50,19 +51,23 @@ class ConsoleAdviceTest {
     }
 
     @Test
-    void posture_count_reflects_the_advisories_the_effective_config_raises() {
-        // postureCount collects through PostureReport.discover(Configuration.of(environment::getProperty)) - so it must
-        // read the config through the environment. Only the core SecurityPosture seeder is on this module path, so the
-        // count is deterministic: a fully-hardened config raises nothing; disabling authorization adds exactly the
-        // jenreg.auth.open advisory. A positive delta proves the count is read from the environment, not fabricated.
-        int hardened = advice(Map.of(
+    void the_posture_badge_reflects_the_advisories_the_effective_config_raises() {
+        // The badge collects through PostureReport.discover(Configuration.of(environment::getProperty)), so it must
+        // read the config through the environment. Only the core SecurityPosture seeder is on this module path, so
+        // the count is deterministic: a fully-hardened config raises nothing; disabling authorization adds exactly
+        // the jenreg.auth.open advisory. A positive delta proves the count is read, not fabricated.
+        PostureBadge hardened = advice(Map.of(
                 "jenreg.auth", "true",
-                "jenreg.rate-limit", "600")).postureCount();
-        int open = advice(Map.of(
+                "jenreg.rate-limit", "600")).postureBadge();
+        PostureBadge open = advice(Map.of(
                 "jenreg.auth", "false",
-                "jenreg.rate-limit", "600")).postureCount();
+                "jenreg.rate-limit", "600")).postureBadge();
 
-        assertThat(hardened).as("a hardened deployment raises no posture advisory - no badge").isZero();
-        assertThat(open).as("disabling authorization raises exactly one more advisory").isEqualTo(hardened + 1);
+        assertThat(hardened.count()).as("a hardened deployment raises no posture advisory").isZero();
+        assertThat(hardened.visible()).as("so the header shows no badge at all").isFalse();
+        assertThat(open.count()).as("disabling authorization raises exactly one more advisory")
+                .isEqualTo(hardened.count() + 1);
+        assertThat(open.visible()).as("and that one is worth showing").isTrue();
+        assertThat(open.known()).as("a collected report is known, which is not the same as a clean one").isTrue();
     }
 }

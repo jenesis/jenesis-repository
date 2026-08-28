@@ -57,10 +57,16 @@ public final class ConsoleLayout {
     /** The console header every screen renders: brand, links, theme switch, sign-out. */
     public static final String SHELL = "shell";
 
+    /** The deployment-wide notices a screen shows above its content (read-only, anonymous access, flash messages). */
+    public static final String MESSAGES = "messages";
+
+    /** The scoped-error panel one subsection renders in its own place, leaving the rest of the page intact. */
+    public static final String SUBSECTION_ERROR = "subsectionError";
+
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BRAND, THEME_SELECT, HEAD_CONTENTS,
-            DANGER_BUTTON, NAV_LINKS, SHELL);
+            DANGER_BUTTON, NAV_LINKS, SHELL, MESSAGES, SUBSECTION_ERROR);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

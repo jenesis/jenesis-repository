@@ -49,9 +49,24 @@ public class ConsoleAdvice {
 
     /** The number of security-posture advisories the deployment currently raises - the count the header badge shows;
      *  zero renders no badge. Collected once through {@link PostureReport#discover} over the effective configuration. */
-    @ModelAttribute("postureCount")
-    public int postureCount() {
-        return PostureReport.discover(Configuration.of(environment::getProperty)).count();
+    /**
+     * The header's posture indicator. A report that cannot be collected is {@linkplain PostureBadge#unknown
+     * unknown} rather than zero, because reporting a clean posture nobody established is the one answer worse than
+     * saying nothing.
+     */
+    @ModelAttribute("postureBadge")
+    public PostureBadge postureBadge() {
+        try {
+            return PostureBadge.of(PostureReport.discover(Configuration.of(environment::getProperty)).count());
+        } catch (RuntimeException uncollectable) {
+            return PostureBadge.unknown();
+        }
+    }
+
+    /** Who is signed in, for the header to greet and to hang sign-out on; absent when nobody is. */
+    @ModelAttribute("currentUser")
+    public String currentUser(Authentication authentication) {
+        return authentication == null ? null : authentication.getName();
     }
 
     /**
