@@ -6,35 +6,19 @@
 </head>
 <body>
 <a class="app-skip-link" href="#main">Skip to content</a>
-<header class="container">
-    <nav class="app-nav">
-        <ul>
-            <li th:insert="~{base :: brand('jenesis-repository', @{/}, 'jenesis-repository')}"></li>
-        </ul>
-        <ul>
-            <!--/* A panel that failed to render keeps its navigation entry - it must not read as a panel with nothing
-                 to say - and is marked here so the failure is visible without scrolling to its card. */-->
-            <li th:each="panel : ${panels}">
-                <a th:href="'#' + ${panel.id}"
-                   th:text="${panel.failed} ? ${panel.title} + ' ⚠' : ${panel.title}">Panel</a>
-            </li>
-            <!--/* Every installed console module's links, through the shared fragment the admin console uses too:
-                 a module contributed to this console is reachable from it, not merely registered in it. */-->
-            <th:block th:insert="~{base :: navLinks(${navEntries}, ${adminNav})}"></th:block>
-            <li th:if="${postureCount > 0}">
-                <a th:href="@{/posture}" class="secondary" title="Security-posture advisories"
-                   th:text="'⚠ ' + ${postureCount}">⚠ 0</a>
-            </li>
-            <li><select th:replace="~{base :: themeSelect}"></select></li>
-            <li>
-                <form th:action="@{/logout}" method="post" style="display:inline;margin:0">
-                    <button type="submit" class="secondary outline">Sign out</button>
-                </form>
-            </li>
-        </ul>
-    </nav>
-</header>
+<!--/* The shared console header, with this page's panel anchors passed into its edition slot: while the
+     overview is still a single page of cards, its own in-page navigation belongs to it and not to every screen. */-->
+<th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{:: panelAnchors})}"></th:block>
+<th:block th:fragment="panelAnchors">
+    <!--/* A panel that failed to render keeps its entry - it must not read as a panel with nothing to say - and is
+         marked here so the failure is visible without scrolling to its card. */-->
+    <li th:each="panel : ${panels}">
+        <a th:href="'#' + ${panel.id}"
+           th:text="${panel.failed} ? ${panel.title} + ' \u26a0' : ${panel.title}">Panel</a>
+    </li>
+</th:block>
 <main id="main" class="container">
+    <div th:replace="~{base :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Repository console')}"></header>
     <th:block th:if="${readOnly}">
         <p th:replace="~{base :: alert('This instance is in read-only mode - every write is refused.', 'warn')}"></p>

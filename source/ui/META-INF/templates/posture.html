@@ -2,8 +2,10 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{base :: head('Security posture', 'jenesis-repository')}"></head>
 <body>
-<th:block th:replace="~{base :: shell('/posture')}"></th:block>
-<main class="container">
+<th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{})}"></th:block>
+
+<main id="main" class="container">
+    <div th:replace="~{base :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Security posture')}"></header>
     <p>Every potentially-unsafe configuration this deployment reports about itself, in one plain overview - each with
         why it is unsafe, a suggested safer alternative and the exact <code>jenreg.*</code> setting that fixes it.

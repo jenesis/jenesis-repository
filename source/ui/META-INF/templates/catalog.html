@@ -2,8 +2,10 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{base :: head('Installed providers', 'jenesis-repository')}"></head>
 <body>
-<th:block th:replace="~{base :: shell('/catalog')}"></th:block>
-<main class="container">
+<th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{})}"></th:block>
+
+<main id="main" class="container">
+    <div th:replace="~{base :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Installed providers')}"></header>
     <p>Every capability this repository carries is a discovered <strong>SPI</strong> (a plug-in contract) with one or
         more installed <strong>implementations</strong>. This is a read-only view of the whole plug-in surface,
