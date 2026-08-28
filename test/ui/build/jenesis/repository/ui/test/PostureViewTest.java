@@ -4,7 +4,7 @@ import build.jenesis.repository.posture.PostureReport;
 import build.jenesis.repository.posture.Scope;
 import build.jenesis.repository.posture.SecurityAdvisory;
 import build.jenesis.repository.posture.Severity;
-import build.jenesis.repository.ui.PostureController;
+import build.jenesis.repository.ui.PostureScreenController;
 import org.junit.jupiter.api.Test;
 
 import module java.base;
@@ -33,7 +33,7 @@ class PostureViewTest {
                 advisory("a", Severity.CRITICAL), advisory("b", Severity.WARN),
                 advisory("c", Severity.WARN), advisory("d", Severity.INFO)));
 
-        PostureController.View view = PostureController.View.of(report);
+        PostureScreenController.View view = PostureScreenController.View.of(report);
 
         assertThat(view.critical()).isEqualTo(1);
         assertThat(view.warn()).isEqualTo(2);
@@ -43,7 +43,7 @@ class PostureViewTest {
 
     @Test
     void a_clean_deployment_has_nothing_to_show_rather_than_an_empty_table() {
-        PostureController.View view = PostureController.View.of(new PostureReport(List.of()));
+        PostureScreenController.View view = PostureScreenController.View.of(new PostureReport(List.of()));
 
         assertThat(view.advisories()).isEmpty();
         assertThat(view.critical() + view.warn() + view.info())
@@ -55,7 +55,7 @@ class PostureViewTest {
     void it_lists_the_deployment_scope_only() {
         PostureReport report = new PostureReport(List.of(advisory("a", Severity.WARN)));
 
-        assertThat(PostureController.View.of(report).advisories())
+        assertThat(PostureScreenController.View.of(report).advisories())
                 .as("a tenant-scoped advisory belongs to a tenant's own view, not the deployment screen")
                 .containsExactlyElementsOf(report.scoped(Scope.DEPLOYMENT));
     }

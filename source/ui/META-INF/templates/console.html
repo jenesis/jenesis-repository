@@ -14,7 +14,7 @@
          marked here so the failure is visible without scrolling to its card. */-->
     <li th:each="panel : ${panels}">
         <a th:href="'#' + ${panel.id}"
-           th:text="${panel.failed} ? ${panel.title} + ' \u26a0' : ${panel.title}">Panel</a>
+           th:text="${panel.failed} ? ${panel.title} + ' ⚠' : ${panel.title}">Panel</a>
     </li>
 </th:block>
 <main id="main" class="container">

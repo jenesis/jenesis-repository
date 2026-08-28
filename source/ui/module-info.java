@@ -193,7 +193,6 @@ open module build.jenesis.repository.ui {
     uses build.jenesis.repository.ui.ConsoleLayout.Extension;
     provides build.jenesis.repository.ui.Panel
             with build.jenesis.repository.ui.BrowsePanel,
-                    build.jenesis.repository.ui.ObservabilityPanel,
                     build.jenesis.repository.ui.LogPanel,
                     build.jenesis.repository.ui.ConsistencyPanel,
                     build.jenesis.repository.ui.CredentialsPanel;

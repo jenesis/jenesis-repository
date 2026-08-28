@@ -40,7 +40,6 @@ class PanelCensusTest {
             "build.jenesis.repository.ui.ConsistencyPanel",
             "build.jenesis.repository.ui.CredentialsPanel",
             "build.jenesis.repository.ui.LogPanel",
-            "build.jenesis.repository.ui.ObservabilityPanel",
             "build.jenesis.repository.ui.test.FailingPanel");
 
     /** No panel is exempt; the argument stays wired so an exemption is a visible, reason-bearing edit. */

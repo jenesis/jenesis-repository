@@ -21,11 +21,11 @@ import module java.base;
  * advisory prints a secret value.
  */
 @Controller
-public class PostureController {
+public class PostureScreenController {
 
     private final Environment environment;
 
-    public PostureController(Environment environment) {
+    public PostureScreenController(Environment environment) {
         this.environment = environment;
     }
 
@@ -44,6 +44,6 @@ public class PostureController {
     @GetMapping("/posture")
     public String posture(Model model) {
         model.addAttribute("posture", View.of(PostureReport.discover(Configuration.of(environment::getProperty))));
-        return "posture";
+        return "console/posture";
     }
 }
