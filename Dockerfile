@@ -40,8 +40,13 @@ RUN java build/jenesis/Project.java +source+bundle build \
 
 FROM ${BASE}
 COPY --from=build /opt/app /opt/app
+# JENREG_STORE names the backend, which is a safe default because it can no longer be a silent one: the
+# filesystem backend requires JENREG_FILESYSTEM_ROOT and there is deliberately no default for it here. An image
+# told nothing about where its data goes must fail to start rather than write into the container's own writable
+# layer, which is what /data was before the volume is mounted - and which is gone on the next `docker rm`, with
+# every published artifact in it. Whoever runs the image says where the store is: the chart sets it beside the
+# PersistentVolumeClaim it mounts, and a plain `docker run` passes -e JENREG_FILESYSTEM_ROOT=/data with -v.
 ENV JENREG_STORE=filesystem \
-    JENREG_FILESYSTEM_ROOT=/data \
     MAINMODULE=build.jenesis.repository.bundle \
     MAINCLASS=build.jenesis.repository.bundle.AllInOne \
     PORT=8080
