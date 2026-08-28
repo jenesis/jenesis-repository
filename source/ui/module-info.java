@@ -188,6 +188,7 @@ open module build.jenesis.repository.ui {
     requires spring.boot.starter.oauth2.client;
     exports build.jenesis.repository.ui;
     uses build.jenesis.repository.ui.Panel;
+    uses build.jenesis.repository.ui.ConsoleModuleProvider;
     uses build.jenesis.repository.ui.ConsoleLayout.Extension;
     provides build.jenesis.repository.ui.Panel
             with build.jenesis.repository.ui.BrowsePanel,
