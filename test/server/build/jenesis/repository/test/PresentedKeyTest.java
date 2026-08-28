@@ -84,6 +84,43 @@ class PresentedKeyTest {
                 .isGranted()).as("a foreign bearer token is a keyless request, which an enforcing server refuses").isFalse();
     }
 
+    @Test
+    void the_user_name_of_a_basic_credential_is_readable_separately() {
+        String basic = "Basic " + Base64.getEncoder()
+                .encodeToString(("demo:" + KEY).getBytes(StandardCharsets.UTF_8));
+
+        assertThat(PresentedKey.from(null, basic))
+                .as("the password is the key, as it always was")
+                .isEqualTo(KEY);
+        assertThat(PresentedKey.user(basic))
+                .as("and the user name is now readable, because Basic is structurally two slots and a client "
+                        + "configurable with nothing else has no other way to send a second value - the cache "
+                        + "reads it as the project a Gradle build stores under")
+                .isEqualTo("demo");
+
+        assertThat(PresentedKey.user("Bearer " + KEY))
+                .as("a bearer token carries no user name")
+                .isNull();
+        assertThat(PresentedKey.user((String) null)).as("and neither does an absent header").isNull();
+        assertThat(PresentedKey.user("Basic ~not-base64~"))
+                .as("a malformed credential is no user name rather than an exception")
+                .isNull();
+        assertThat(PresentedKey.user("Basic " + Base64.getEncoder()
+                .encodeToString("nocolon".getBytes(StandardCharsets.UTF_8))))
+                .as("RFC 7617 makes the colon mandatory, so a credential without one is malformed")
+                .isNull();
+
+        String anonymous = "Basic " + Base64.getEncoder()
+                .encodeToString((":" + KEY).getBytes(StandardCharsets.UTF_8));
+        assertThat(PresentedKey.user(anonymous))
+                .as("an empty user name is returned as sent - nothing here decides what it means, and the "
+                        + "caller that gave the slot a meaning is the one that rejects it")
+                .isEmpty();
+        assertThat(PresentedKey.from(null, anonymous))
+                .as("and it does not disturb the key")
+                .isEqualTo(KEY);
+    }
+
     private static HttpServletRequest request(String key, String authorization, Map<String, Object> attributes) {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getMethod()).thenReturn("GET");
