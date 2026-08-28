@@ -9,7 +9,6 @@ import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
-import org.springframework.security.oauth2.client.registration.ClientRegistrations;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 
 import module java.base;
@@ -81,7 +80,7 @@ public class OAuth2ClientConfig {
         }
         UiProperties.Oidc oidc = properties.getOidc();
         if (!oidc.getIssuerUri().isBlank() && !oidc.getClientId().isBlank()) {
-            registrations.add(ClientRegistrations.fromIssuerLocation(oidc.getIssuerUri().trim())
+            registrations.add(OidcDiscovery.fromIssuerLocation(oidc.getIssuerUri().trim())
                     .registrationId("oidc")
                     .clientId(oidc.getClientId().trim())
                     .clientSecret(oidc.getClientSecret().trim())

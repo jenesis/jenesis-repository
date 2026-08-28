@@ -33,10 +33,7 @@
  * @jenesis.pin com.fasterxml.jackson.core/jackson-databind 2.18.7 SHA-256/aa3c034534fce966b6dbd706b1f466b8a15c266127e5a15f96522091093dbd9b
  * @jenesis.pin com.fasterxml.jackson.datatype/jackson-datatype-jsr310 2.18.7 SHA-256/29b8f1f8e055653297b07c3844a056541bdbf5c8199517598d9fa6edbefcc82e
  * @jenesis.pin com.github.stephenc.jcip/jcip-annotations 1.0-1 SHA-256/4fccff8382aafc589962c4edb262f6aa595e34f1e11e61057d1c6a96e8fc7323
- * @jenesis.pin com.nimbusds/content-type 2.3 SHA-256/60349793e006fba96b532cb0c21e10e969fe0db8d87f91c3b9eaf82ba2998895
- * @jenesis.pin com.nimbusds/lang-tag 1.7 SHA-256/e8c1c594e2425bdbea2d860de55c69b69fc5d59454452449a0f0913c2a5b8a31
  * @jenesis.pin com.nimbusds/nimbus-jose-jwt 10.9 SHA-256/64d613d91140bad0dab8f0c41960f919ec8705a9ced9418146598b4b3ae71349
- * @jenesis.pin com.nimbusds/oauth2-oidc-sdk 11.37.2 SHA-256/b66e74746dcf516d77f20344e6fbcbcffe1b483b5cf1ad41ea81cec83cb27b3c
  * @jenesis.pin commons-logging/commons-logging 1.3.5 SHA-256/6d7a744e4027649fbb50895df9497d109f98c766a637062fe8d2eabbb3140ba4
  * @jenesis.pin io.micrometer/micrometer-commons 1.17.0 SHA-256/03919dc71e2417ec4b5c254c4ba924963c972e124190f73cdcb68ed51c6eede6
  * @jenesis.pin io.micrometer/micrometer-core 1.17.0 SHA-256/73503e701a377fafeaf33b71b9b8910a8d7884cbba88ab27971b33b3753b65aa
