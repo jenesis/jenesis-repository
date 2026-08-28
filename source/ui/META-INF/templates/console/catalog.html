@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{base :: head('Installed providers', 'jenesis-repository')}"></head>
 <body>
@@ -7,23 +7,52 @@
 <main id="main" class="container">
     <div th:replace="~{base :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Installed providers')}"></header>
-    <p>Every capability this repository carries is a discovered <strong>SPI</strong> (a plug-in contract) with one or
-        more installed <strong>implementations</strong>. This is a read-only view of the whole plug-in surface,
-        grouped by SPI; whether an implementation is active is configured with its <code>jenreg.&lt;feature&gt;</code>
-        key.</p>
-    <div th:if="${catalog.services().isEmpty()}"
-         th:replace="~{base :: empty('No SPIs are installed.')}"></div>
-    <article th:each="service : ${catalog.services()}">
-        <header>
-            <h4 th:text="${service.simpleName()}">Service</h4>
-            <p><small><code th:text="${service.name()}">build.jenesis.repository.Spi</code></small></p>
-        </header>
-        <ul>
-            <li th:each="implementation : ${service.implementations()}">
-                <strong th:text="${implementation.simpleName()}">Implementation</strong>
-                &mdash; <code th:text="${implementation.module()}">module</code>
-            </li>
-        </ul>
+    <p><small>Every capability this deployment carries is a discovered <strong>SPI</strong> (a plug-in contract) with
+        one or more installed <strong>implementations</strong>. This screen lists them grouped by SPI. Each
+        implementation shows the <strong>module</strong> it comes from, whether it is <strong>enabled</strong>, the
+        <code>jenreg.*</code> key that toggles it, and the settings its module reads. It is read-only: what an
+        operator can change about an implementation is changed where that setting lives.</small></p>
+
+    <div th:if="${spis.isEmpty()}" th:replace="~{base :: empty('No SPIs are installed.')}"></div>
+
+    <article th:each="spi : ${spis}">
+        <div class="module-head">
+            <div>
+                <strong class="setting-module" th:text="${spi.simpleName()}">Spi</strong>
+                <br><code class="setting-doc" th:text="${spi.spi}">build.jenesis.repository.x.Provider</code>
+            </div>
+            <div class="module-badges">
+                <span class="app-badge" th:text="${#lists.size(spi.implementations)} + ' implementation(s)'">0</span>
+            </div>
+        </div>
+        <div class="module-card" th:each="impl : ${spi.implementations}">
+            <div class="module-head">
+                <div>
+                    <strong th:text="${impl.simpleName()}">Impl</strong>
+                    &mdash; <code class="setting-module" th:text="${impl.module}">module</code>
+                </div>
+                <!--/* "always on" and "enabled" are different statements and the screen must not collapse them: the
+                     first says the module carries no gate, the second that a gate it does carry is open. A
+                     deployment that reads no stored configuration reports every installed module as the first. */-->
+                <div class="module-badges">
+                    <span class="app-badge app-badge--pass" th:if="${impl.installed}">installed</span>
+                    <span class="app-badge app-badge--danger" th:unless="${impl.installed}">not installed</span>
+                    <th:block th:if="${impl.installed and impl.gated()}">
+                        <span class="app-badge app-badge--pass" th:if="${impl.enabled}">enabled</span>
+                        <span class="app-badge" th:unless="${impl.enabled}">&#9675; disabled</span>
+                        <code class="setting-doc" th:text="'jenreg.' + ${impl.enableKey}">key</code>
+                    </th:block>
+                    <span class="app-badge" th:if="${impl.installed and !impl.gated()}"
+                          title="This implementation has no enable flag; it is active whenever it is installed.">always on</span>
+                </div>
+            </div>
+            <ul class="module-settings" th:unless="${impl.settings.isEmpty()}">
+                <li th:each="setting : ${impl.settings}">
+                    <code th:text="${setting.key}">key</code>
+                    <span th:text="${setting.label}">Label</span>
+                </li>
+            </ul>
+        </div>
     </article>
 </main>
 </body>

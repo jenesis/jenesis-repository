@@ -607,3 +607,57 @@ button.app-danger:hover,
 .app-section[open] > summary {
     margin-bottom: var(--app-space-3);
 }
+
+/* ---------------------------------------------------------------------------------------------------------------
+   The installed-providers card.
+
+   One card per implementation - its badges on the right, the settings its module contributes beneath - and the two
+   muted, monospace treatments a row uses for provenance: the module a thing came from, and the key that toggles it.
+   These live here rather than in a console's own <style> because both consoles render the same screen, and a screen
+   that looks different depending on which console served it is a screen that will drift in behaviour too.
+   --------------------------------------------------------------------------------------------------------------- */
+.module-card {
+    padding: .8rem 0;
+    border-top: 1px solid var(--pico-muted-border-color);
+}
+
+.module-card:first-of-type {
+    border-top: 0;
+}
+
+.module-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+}
+
+.module-badges {
+    display: flex;
+    gap: .4rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.module-settings {
+    margin: .4rem 0 0;
+    font-size: .82rem;
+}
+
+.module-settings li {
+    margin: .1rem 0;
+}
+
+/* Provenance, not a control: the JPMS module a setting or an implementation is attributed to. */
+.setting-module {
+    color: var(--pico-muted-color);
+    font-family: var(--pico-font-family-monospace);
+    font-size: .72rem;
+}
+
+/* The documentation or the key beneath a row's heading. */
+.setting-doc {
+    margin: .25rem 0;
+    color: var(--pico-muted-color);
+}
