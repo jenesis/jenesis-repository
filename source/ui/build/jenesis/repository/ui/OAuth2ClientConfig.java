@@ -6,8 +6,6 @@ import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.type.AnnotatedTypeMetadata;
-import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
-import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 
@@ -68,25 +66,15 @@ public class OAuth2ClientConfig {
     @Bean
     @Conditional(AnyProviderConfigured.class)
     public ClientRegistrationRepository clientRegistrationRepository(UiProperties properties) {
-        List<ClientRegistration> registrations = new ArrayList<>();
         UiProperties.Github github = properties.getGithub();
-        if (!github.getClientId().isBlank()) {
-            registrations.add(CommonOAuth2Provider.GITHUB
-                    .getBuilder("github")
-                    .clientId(github.getClientId().trim())
-                    .clientSecret(github.getClientSecret().trim())
-                    .scope("read:user")
-                    .build());
-        }
         UiProperties.Oidc oidc = properties.getOidc();
-        if (!oidc.getIssuerUri().isBlank() && !oidc.getClientId().isBlank()) {
-            registrations.add(OidcDiscovery.fromIssuerLocation(oidc.getIssuerUri().trim())
-                    .registrationId("oidc")
-                    .clientId(oidc.getClientId().trim())
-                    .clientSecret(oidc.getClientSecret().trim())
-                    .clientName(oidc.getName().trim())
-                    .build());
-        }
-        return new InMemoryClientRegistrationRepository(registrations);
+        // openid alone: this console identifies a user by the sub claim and renders no display name, so it asks for
+        // nothing further. Discovery sets that scope itself; naming it here keeps the request explicit.
+        return new InMemoryClientRegistrationRepository(Stream.of(
+                        ConsoleClientRegistrations.github(github.getClientId(), github.getClientSecret()),
+                        ConsoleClientRegistrations.oidc(oidc.getIssuerUri(), oidc.getClientId(),
+                                oidc.getClientSecret(), oidc.getName(), List.of("openid")))
+                .flatMap(Optional::stream)
+                .toList());
     }
 }
