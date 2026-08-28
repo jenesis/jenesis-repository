@@ -25,7 +25,12 @@ import module java.base;
  * {@link DevSecurityConfig} replaces it with local form login, and a downstream deployment can replace it by
  * contributing its own {@link SecurityFilterChain}.
  */
-@Configuration
+/*
+ * An explicit bean name, because a merged node scans this package alongside the console's and three classes in
+ * this product are called SecurityConfig. Spring derives a bean name from the simple class name, so two of them in
+ * one context is a ConflictingBeanDefinitionException at startup - loud, but only once something merges them.
+ */
+@Configuration("consoleSecurityConfig")
 @EnableWebSecurity
 public class SecurityConfig {
 
