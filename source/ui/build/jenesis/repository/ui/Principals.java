@@ -12,10 +12,11 @@ import module java.base;
  * unconfigured deployment denies writes (a POST/PUT/DELETE needs {@code ROLE_ADMIN}) rather than silently granting
  * full admin to whoever signs in - matching the downstream console. Opening the console to every authenticated user
  * (the old single-tenant convenience) is an <em>explicit opt-out</em>: list {@code *} in {@code jenreg.ui.admins}.
- * A deployment that needs a richer tenant-and-role membership model replaces this by contributing its own bean; the
- * seam is the same. This deliberately stays single-tenant and carries no multi-tenant machinery.
+ * A deployment that needs a richer membership model contributes its own {@link LoginAuthorities} instead of this
+ * one; the seam is the same and every login mechanism goes through it either way. This deliberately stays
+ * single-tenant and carries no multi-tenant machinery.
  */
-public class Principals {
+public class Principals implements LoginAuthorities {
 
     /** The wildcard admin id: an explicit opt-out that grants {@code ADMIN} to every authenticated user, restoring
      *  the old open single-tenant behaviour without reintroducing the empty-list-grants-everyone footgun. */
@@ -30,8 +31,12 @@ public class Principals {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** The authorities granted to the user with this provider-qualified id. */
-    public List<GrantedAuthority> authorities(String id) {
+    /**
+     * The authorities granted to the user with this provider-qualified id. The display name is not consulted: this
+     * policy decides from the id alone, and a name a user can change must never move an authority.
+     */
+    @Override
+    public Collection<GrantedAuthority> authorities(String id, String displayName) {
         List<GrantedAuthority> authorities = new ArrayList<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
         // Deny by default: ADMIN only for a configured id (or when the deployment explicitly opts every user in with
