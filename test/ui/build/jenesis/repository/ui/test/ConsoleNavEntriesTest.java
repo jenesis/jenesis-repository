@@ -47,7 +47,7 @@ class ConsoleNavEntriesTest {
                 .containsExactlyInAnyOrder("Overview", "Everyone", "Admins", "Operators");
         assertThat(labels(advice.adminNav(user("ROLE_USER", "ROLE_ADMIN"))))
                 .as("the console's own administration screen sits with the contributed ones")
-                .containsExactly("Installed providers", "Settings");
+                .containsExactly("Installed providers", "Security posture", "Settings");
     }
 
     @Test

@@ -77,6 +77,8 @@ public class ConsoleAdvice {
     private static final List<NavEntry> OWN = List.of(
             new NavEntry("Overview", "/console"),
             new NavEntry("Installed providers", "/catalog", NavEntry.Access.ADMIN,
+                    NavEntry.Section.ADMINISTRATION),
+            new NavEntry("Security posture", "/posture", NavEntry.Access.ADMIN,
                     NavEntry.Section.ADMINISTRATION));
 
     private List<NavEntry> entries(Authentication authentication, NavEntry.Section section) {

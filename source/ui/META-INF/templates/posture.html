@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{base :: head('Security posture', 'jenesis-repository')}"></head>
+<body>
+<th:block th:replace="~{base :: shell('/posture')}"></th:block>
+<main class="container">
+    <header th:replace="~{base :: pageHeader('Security posture')}"></header>
+    <p>Every potentially-unsafe configuration this deployment reports about itself, in one plain overview - each with
+        why it is unsafe, a suggested safer alternative and the exact <code>jenreg.*</code> setting that fixes it.
+        Read-only: observing posture never changes it, and no advisory prints a secret value.</p>
+
+    <div th:if="${posture.advisories().isEmpty()}"
+         th:replace="~{base :: empty('No security-posture advisories - the effective configuration raises none.')}"></div>
+
+    <th:block th:unless="${posture.advisories().isEmpty()}">
+        <p>Overall:
+            <strong th:text="${posture.critical()} + ' critical'">0 critical</strong>,
+            <span th:text="${posture.warn()} + ' warn'">0 warn</span>,
+            <span th:text="${posture.info()} + ' info'">0 info</span>.</p>
+
+        <article class="app-card" th:each="advisory : ${posture.advisories()}">
+            <header>
+                <strong th:text="'[' + ${advisory.severity()} + '] ' + ${advisory.title()}">[WARN] Title</strong>
+                <small><code th:text="${advisory.id()}">jenreg.advisory.id</code></small>
+            </header>
+            <p><strong>Why:</strong> <span th:text="${advisory.why()}">Why this is unsafe.</span></p>
+            <p><strong>Fix:</strong> <span th:text="${advisory.fix()}">What to do instead.</span>
+                <code th:if="${!advisory.settingKey().isEmpty()}"
+                      th:text="${advisory.settingKey()} + '=' + ${advisory.settingValue()}">jenreg.key=value</code></p>
+            <p th:if="${!advisory.docs().isEmpty()}">
+                <a th:href="${advisory.docs()}" rel="noopener noreferrer" target="_blank">Documentation</a></p>
+        </article>
+    </th:block>
+</main>
+</body>
+</html>
