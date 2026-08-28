@@ -63,10 +63,17 @@ public final class ConsoleLayout {
     /** The scoped-error panel one subsection renders in its own place, leaving the rest of the page intact. */
     public static final String SUBSECTION_ERROR = "subsectionError";
 
+    /** The artifact browse's tree body, taking the rows, whether the level was cut short and what to say when it
+     *  was - so a whole-store browse and a repository-scoped one draw one tree. */
+    public static final String BROWSE_ROWS = "browseRows";
+
+    /** The browse's up-one-level row, taking where it goes. */
+    public static final String BROWSE_UP = "browseUp";
+
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BRAND, THEME_SELECT, HEAD_CONTENTS,
-            DANGER_BUTTON, NAV_LINKS, SHELL, MESSAGES, SUBSECTION_ERROR);
+            DANGER_BUTTON, NAV_LINKS, SHELL, MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

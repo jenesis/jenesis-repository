@@ -205,6 +205,44 @@
     <th:block th:if="${error}"><p th:replace="~{base :: alert(${error}, 'danger')}"></p></th:block>
 </div>
 
+<!--/* The artifact browse's rows: the tree body both consoles draw.
+
+     A row's links are the only thing that differs between a whole-store browse and a repository-scoped one, so the
+     row carries them (BrowseRow) and everything else - the indent, the expand control, the type and size columns,
+     the truncation note - is here once. It was here twice, and the two copies had already drifted.
+
+     `rows` is the list of BrowseRow, `truncated` whether the level was cut short, and `note` what to say when it
+     was, since one console can offer a search to reach the rest and the other cannot. */-->
+<th:block th:fragment="browseRows(rows, truncated, note)">
+    <tr th:each="row : ${rows}">
+        <td class="app-list__name"
+            th:style="${row.depth} > 0 ? 'padding-left:calc(var(--app-space-4) * ' + ${row.depth} + ')' : null">
+            <button th:if="${row.expandable()}" type="button" class="app-tree-toggle"
+                    th:attr="hx-get=${row.childrenHref}"
+                    hx-target="closest tr" hx-swap="afterend" hx-trigger="click once"
+                    aria-label="Expand folder">&#9656;</button>
+            <a th:if="${row.linked()}" th:href="${row.href}"
+               th:text="${row.folder} ? ${row.name} + '/' : ${row.name}">entry</a>
+            <span th:unless="${row.linked()}" th:text="${row.name}">entry</span>
+        </td>
+        <td th:text="${row.folder} ? 'folder' : 'artifact'">type</td>
+        <td class="app-list__num" th:text="${row.size}">&mdash;</td>
+    </tr>
+    <!--/* A bound that is reached is always shown: a silently capped listing reads as a complete one. */-->
+    <tr th:if="${truncated}">
+        <td colspan="3"><small th:text="${note}">Showing the first entries in this folder.</small></td>
+    </tr>
+</th:block>
+
+<!--/* The row that walks back up a level, above the tree body. */-->
+<th:block th:fragment="browseUp(href)">
+    <tr>
+        <td class="app-list__name"><a th:href="${href}" aria-label="Up one level">&larr; ..</a></td>
+        <td>up</td>
+        <td class="app-list__num">&mdash;</td>
+    </tr>
+</th:block>
+
 <!--/* The scoped-error panel for ONE subsection of a page. When a subsection's data could not be derived or parsed -
      which is not the same as genuinely empty - the caller renders this in that subsection's place while every
      sibling and the rest of the page render normally: a failure in one panel must never 500 or blank the whole

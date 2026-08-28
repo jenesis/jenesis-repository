@@ -4,9 +4,11 @@
 
   Rendered by BrowseController against the ArtifactStore listing seam. Every level lists only its immediate children;
   a folder's children are fetched on demand (the `rows` fragment, served by /browse/children and swapped in by htmx on
-  expand, or reached by navigating into the folder), so the browse never scans or buffers a whole tree. It composes
-  the shared design-system base (base.html fragments + app.css .app-list / .app-breadcrumb), so it is one visual
-  language with the rest of the console.
+  expand, or reached by navigating into the folder), so the browse never scans or buffers a whole tree.
+
+  The tree body itself is `base :: browseRows`, shared with the repository-scoped browse the admin console serves: the
+  two drew the same tree in ninety lines of near-identical markup each, and had already drifted. What differs is where
+  a row links, and a row carries its own links (BrowseRow).
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{base :: head('Browse', 'jenesis-repository')}">
@@ -14,28 +16,13 @@
     <title>Browse · jenesis-repository</title>
 </head>
 <body>
-<a class="app-skip-link" href="#main">Skip to content</a>
-<header class="container">
-    <nav class="app-nav">
-        <ul>
-            <li th:insert="~{base :: brand('jenesis-repository', @{/}, 'jenesis-repository')}"></li>
-        </ul>
-        <ul>
-            <li><a th:href="@{/console}">Console</a></li>
-            <li><select th:replace="~{base :: themeSelect}"></select></li>
-            <li>
-                <form th:action="@{/logout}" method="post" style="display:inline;margin:0">
-                    <button type="submit" class="secondary outline">Sign out</button>
-                </form>
-            </li>
-        </ul>
-    </nav>
-</header>
+<!--/* The shared shell, so this screen carries the same nav, tenant chrome, posture badge and sign-out as every
+     other. It used to hand-roll a two-item nav of its own, which is how a screen stops looking like the console
+     it is part of. */-->
+<th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{})}"></th:block>
 <main id="main" class="container">
+    <div th:replace="~{base :: messages}"></div>
     <header th:replace="~{base :: pageHeaderCrumbs('Browse', ${crumbs})}"></header>
-    <th:block th:if="${readOnly}">
-        <p th:replace="~{base :: alert('This instance is in read-only mode - every write is refused.', 'warn')}"></p>
-    </th:block>
 
     <p>
         <a th:href="@{/assets}" role="button" class="secondary" download="assets.ndjson">Download asset listing (NDJSON) &darr;</a>
@@ -55,33 +42,14 @@
         </tr>
         </thead>
         <tbody>
-        <tr th:if="${hasParent}">
-            <td class="app-list__name">
-                <a th:href="@{/browse(path=${parent})}" aria-label="Up one level">⌂ ..</a>
-            </td>
-            <td>up</td>
-            <td class="app-list__num">—</td>
-        </tr>
+        <th:block th:if="${hasParent}">
+            <tr th:replace="~{base :: browseUp(@{/browse(path=${parent})})}"></tr>
+        </th:block>
+        <!--/* Named so htmx can fetch just this block for a folder's children; it delegates, so the lazy rows and
+             the first-level rows are the same rows. */-->
         <th:block th:fragment="rows">
-            <tr th:each="e : ${entries}">
-                <td class="app-list__name" th:style="'padding-left:calc(var(--app-space-4) * ' + ${e.depth} + ')'">
-                    <button th:if="${e.folder}" type="button" class="app-tree-toggle"
-                            th:attr="hx-get=@{/browse/children(path=${e.path})}"
-                            hx-target="closest tr" hx-swap="afterend" hx-trigger="click once"
-                            aria-label="Expand folder">▸</button>
-                    <a th:if="${e.folder}" th:href="@{/browse(path=${e.path})}"
-                       th:text="${e.name} + '/'">folder/</a>
-                    <span th:unless="${e.folder}" th:text="${e.name}">artifact</span>
-                </td>
-                <td th:text="${e.folder} ? 'folder' : 'artifact'">type</td>
-                <td class="app-list__num" th:text="${e.size}">—</td>
-            </tr>
-            <tr th:if="${truncated}">
-                <td colspan="3" th:text="'Showing the first ' + ${cap}
-                        + ' entries in this folder; navigate into a subfolder to see more.'">
-                    Showing the first entries in this folder.
-                </td>
-            </tr>
+            <th:block th:replace="~{base :: browseRows(${entries}, ${truncated},
+                    'Showing the first ' + ${cap} + ' entries in this folder; navigate into a subfolder to see more.')}"></th:block>
         </th:block>
         </tbody>
     </table>
