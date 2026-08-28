@@ -8,6 +8,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 
@@ -28,11 +29,25 @@ import module java.base;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    /**
+     * The console's chain, scoped to the console's own paths.
+     *
+     * <p>Named, ordered and matched so it sits BESIDE the repository's rather than replacing it. The repository
+     * chain backs off for a bean named {@code securityFilterChain}, so an unnamed catch-all here would take its
+     * place - and in a bundle running both, an artifact request would then be governed by a browser-session chain
+     * and answered with a redirect to {@code /login} instead of being authenticated by its key. Two unordered
+     * catch-alls in one context also have no defined precedence between them, so which governed what would be an
+     * accident of registration order.
+     *
+     * <p>The matcher is {@link ConsoleUrlSpace}, checked against the routes this console actually maps.
+     */
     @Bean
+    @Order(2)
     @Profile("!dev")
-    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+    public SecurityFilterChain consoleSecurityFilterChain(HttpSecurity http,
                                                    ObjectProvider<LoginContributor> loginContributors) throws Exception {
         http
+                .securityMatcher(ConsoleUrlSpace.PATTERNS.toArray(String[]::new))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/error", "/favicon.ico").permitAll()
                         .requestMatchers("/css/**", "/js/**").permitAll()

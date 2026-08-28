@@ -9,6 +9,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
@@ -22,9 +23,12 @@ import org.springframework.security.web.SecurityFilterChain;
 @Profile("dev")
 public class DevSecurityConfig {
 
+    /** Scoped exactly as the production chain is, or dev would prove a topology nothing ships. */
     @Bean
+    @Order(2)
     public SecurityFilterChain devSecurityFilterChain(HttpSecurity http) throws Exception {
         http
+                .securityMatcher(ConsoleUrlSpace.PATTERNS.toArray(String[]::new))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/error", "/favicon.ico").permitAll()
                         .requestMatchers("/css/**", "/js/**").permitAll()
