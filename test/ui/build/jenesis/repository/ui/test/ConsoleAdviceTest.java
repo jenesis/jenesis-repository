@@ -1,5 +1,6 @@
 package build.jenesis.repository.ui.test;
 
+import build.jenesis.repository.ui.PostureSource;
 import build.jenesis.repository.ui.PostureBadge;
 import build.jenesis.repository.ui.ConsoleAdvice;
 import module org.junit.jupiter.api;
@@ -21,7 +22,7 @@ class ConsoleAdviceTest {
     private static ConsoleAdvice advice(Map<String, String> properties) {
         StandardEnvironment environment = new StandardEnvironment();
         environment.getPropertySources().addFirst(new MapPropertySource("test", new HashMap<String, Object>(properties)));
-        return new ConsoleAdvice(environment);
+        return new ConsoleAdvice(environment, PostureSource.ofEnvironment(environment::getProperty), () -> "default");
     }
 
     @Test

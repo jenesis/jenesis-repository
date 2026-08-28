@@ -1,5 +1,6 @@
 package build.jenesis.repository.ui.test;
 
+import build.jenesis.repository.ui.PostureSource;
 import build.jenesis.repository.ui.ConsoleAdvice;
 import build.jenesis.repository.ui.NavEntry;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ConsoleNavEntriesTest {
 
-    private final ConsoleAdvice advice = new ConsoleAdvice(new StandardEnvironment());
+    private static final StandardEnvironment ENVIRONMENT = new StandardEnvironment();
+
+    private final ConsoleAdvice advice = new ConsoleAdvice(ENVIRONMENT,
+            PostureSource.ofEnvironment(ENVIRONMENT::getProperty), () -> "default");
 
     private static Authentication user(String... roles) {
         return new TestingAuthenticationToken("octocat", "n/a", roles);
