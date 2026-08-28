@@ -4,7 +4,8 @@
  * extends this shell rather than forking it. It is an open module (Spring needs reflective access) and requires the
  * Spring modules its code compiles against plus the Spring Boot starters that root the runtime closure (embedded
  * Jetty, Thymeleaf, Jackson, Security, OAuth2 client). Built as an open shell with a panel-registration SPI
- * ({@code uses Panel}) discovered with ServiceLoader and bridged into Spring, so additional panels are registered by
+ * ({@code uses Panel}) - this console's own overview page, not the GUI extension seam, which is
+ * {@code ConsoleModuleProvider} - discovered with ServiceLoader and bridged into Spring, so additional panels are registered by
  * adding modules to the graph, with no fork of the console. Login mechanisms plug in the same way through the
  * {@code LoginContributor} bean seam.
  *

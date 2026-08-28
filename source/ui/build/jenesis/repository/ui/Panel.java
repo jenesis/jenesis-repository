@@ -5,12 +5,24 @@ import build.jenesis.repository.store.ArtifactStore;
 import module java.base;
 
 /**
- * A console panel, discovered with {@code ServiceLoader} and bridged into Spring by {@link UiConfig}. The shell ships
- * the core panels; additional panels are registered by adding a provider module to the graph, with no fork of
- * the console. Each panel contributes a navigation entry and renders its body against the repository's
- * {@link ArtifactStore}, so a panel provider stays free of any Spring dependency while still reading real repository
- * data. The rendered body is a trusted HTML fragment the console drops into its Thymeleaf shell, so an implementation
+ * A card on this console's overview page: how that one page is composed, discovered with {@code ServiceLoader} and
+ * bridged into Spring by {@link UiConfig}. Each panel renders its body against the repository's
+ * {@link ArtifactStore}, so a panel stays free of any Spring dependency while still reading real repository data.
+ * The rendered body is a trusted HTML fragment the console drops into its Thymeleaf shell, so an implementation
  * escapes any repository-derived text it includes.
+ *
+ * <p><b>This is not how the GUI is extended.</b> {@link ConsoleModuleProvider} is, and it is the only seam for it:
+ * a module contributed through it registers its own screens and menu entries and renders through the shared layout,
+ * so it looks and behaves the same in every console this product ships. A panel does not travel that way - it needs
+ * a host page to be a card on, and only this console has one - so a contribution written as a panel would work in
+ * one edition and not the other, which is the boundary the extension seam exists to not have.
+ *
+ * <p>The two are also not equally safe to hand to a contributor. A panel returns raw HTML as a {@code String}, so
+ * escaping is the implementor's job with only {@link #escape} to help, and it is handed the deployment's whole
+ * artifact store to draw a card. A module declares the beans it wants and renders through a template. Panels
+ * therefore stay what they are: this console's own page, extended deliberately and from close range - which is also
+ * why they remain {@code ServiceLoader}-discovered, since a test that proves a failing panel is contained has to be
+ * able to inject one.
  *
  * <h2>Contract</h2>
  * <ol>
