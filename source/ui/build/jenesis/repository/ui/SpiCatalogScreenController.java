@@ -11,11 +11,11 @@ import org.springframework.web.bind.annotation.GetMapping;
  * safe on the request path and costs the same however large the repository is.
  */
 @Controller
-public class SpiCatalogController {
+public class SpiCatalogScreenController {
 
     @GetMapping("/catalog")
     public String catalog(Model model) {
         model.addAttribute("catalog", SpiCatalog.current());
-        return "catalog";
+        return "console/catalog";
     }
 }

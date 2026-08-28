@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{base :: head('Metrics overview', 'jenesis-repository')}"></head>
+<body>
+<header th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{})}"></header>
+<main id="main" class="container">
+    <div th:replace="~{base :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Metrics overview')}"></header>
+    <p><small>Every metric, health state and background-task status this deployment reports, in one plain overview —
+        current values, health and task status, each with the <strong>description from its registration</strong>. No
+        graphs: a metric with a limit shows <em>used vs available</em> as a plain number and bar. This screen is
+        read-only and surfaces the same collected report the <code>/api/admin/observability</code> admin API and the
+        <code>/actuator/observability</code> Actuator read return. A disabled or absent source contributes nothing, so
+        it is simply not listed.</small></p>
+
+    <p>Overall health: <strong class="app-badge"
+            th:classappend="${report.overall().name() == 'UP'} ? 'app-badge--pass'
+                            : (${report.overall().name() == 'DOWN'} ? 'app-badge--danger' : '')"
+            th:text="${report.overall().name()}">UP</strong></p>
+
+    <div th:with="empty=${report.healthChecks().isEmpty() and report.metrics().isEmpty() and report.tasks().isEmpty()}">
+        <p th:if="${empty}"><small class="setting-nomatch">No observability sources are installed, so there is nothing
+            to report yet. Install a plugin that reports health, metrics or task status and it appears here.</small></p>
+
+        <label th:unless="${empty}">Search
+            <input type="search" id="observability-filter"
+                   aria-label="Filter signals by name or description"
+                   placeholder="Filter by signal name or description">
+        </label>
+
+        <th:block th:unless="${empty}">
+            <h3>Health</h3>
+            <p th:if="${report.healthChecks().isEmpty()}"><small class="setting-nomatch">No health checks reported.</small></p>
+            <article class="module-card observability-item" th:each="check : ${report.healthChecks()}"
+                     th:attr="data-search=${check.name() + ' ' + check.description() + ' ' + check.status().name()}">
+                <div class="module-head">
+                    <div>
+                        <strong th:text="${check.name()}">jenreg.feature.check</strong>
+                        <br><small class="setting-doc" th:text="${check.description()}">What this check means.</small>
+                        <br><small th:if="${!check.detail().isEmpty()}"><code th:text="${check.detail()}">detail</code></small>
+                    </div>
+                    <div class="module-badges">
+                        <span class="app-badge" th:text="${check.status().name()}"
+                              th:classappend="${check.status().name() == 'UP'} ? 'app-badge--pass'
+                                              : (${check.status().name() == 'DOWN'} ? 'app-badge--danger' : '')">UP</span>
+                    </div>
+                </div>
+            </article>
+
+            <h3>Metrics</h3>
+            <p th:if="${report.metrics().isEmpty()}"><small class="setting-nomatch">No metrics reported.</small></p>
+            <article class="module-card observability-item" th:each="metric : ${report.metrics()}"
+                     th:attr="data-search=${metric.name() + ' ' + metric.description() + ' ' + metric.unit()}">
+                <div class="module-head">
+                    <div>
+                        <strong th:text="${metric.name()}">jenreg.feature.signal</strong>
+                        <br><small class="setting-doc" th:text="${metric.description()}">What this metric means.</small>
+                    </div>
+                    <div class="module-badges">
+                        <span class="app-badge">
+                            <strong th:text="${metric.value()}">0</strong>
+                            <span th:if="${!metric.unit().isEmpty()}" th:text="${metric.unit()}">unit</span>
+                        </span>
+                        <span class="app-badge" th:text="${metric.kind().name().toLowerCase()}">gauge</span>
+                    </div>
+                </div>
+                <div th:if="${metric.limit().isPresent() and metric.usage().isPresent()}">
+                    <small th:with="pct=${metric.usage().getAsDouble() * 100}">
+                        <span th:text="${metric.value()}">0</span> of
+                        <span th:text="${metric.limit().getAsDouble()}">0</span> used —
+                        <span th:text="${#numbers.formatDecimal(pct, 1, 0)} + '%'">0%</span>
+                    </small>
+                    <!-- A plain bar of the fraction of the limit occupied right now, never a time-series graph. -->
+                    <div><progress max="100"
+                            th:value="${metric.usage().getAsDouble() >= 1.0 ? 100 : (metric.usage().getAsDouble() * 100)}"></progress></div>
+                </div>
+            </article>
+
+            <h3>Background tasks</h3>
+            <p th:if="${report.tasks().isEmpty()}"><small class="setting-nomatch">No background tasks reported.</small></p>
+            <article class="module-card observability-item" th:each="task : ${report.tasks()}"
+                     th:attr="data-search=${task.name() + ' ' + task.description() + ' ' + task.state().name()}">
+                <div class="module-head">
+                    <div>
+                        <strong th:text="${task.name()}">jenreg.feature.task</strong>
+                        <br><small class="setting-doc" th:text="${task.description()}">What this task does.</small>
+                        <br><small th:if="${task.everRan()}">last run
+                            <span th:text="${task.lastRun()}">time</span>
+                            <span th:if="${task.lastDuration() != null}" th:text="'(' + ${task.lastDuration()} + ')'">(dur)</span>
+                            <span th:if="${!task.outcome().isEmpty()}" th:text="'— ' + ${task.outcome()}">— outcome</span>
+                        </small>
+                    </div>
+                    <div class="module-badges">
+                        <span class="app-badge" th:text="${task.state().name()}"
+                              th:classappend="${task.state().name() == 'FAILED'} ? 'app-badge--danger'
+                                              : (${task.state().name() == 'IDLE' or task.state().name() == 'RUNNING'} ? 'app-badge--pass' : '')">IDLE</span>
+                    </div>
+                </div>
+            </article>
+        </th:block>
+    </div>
+</main>
+<!-- A purely in-memory filter over the rendered items, matching each item's data-search (name + description + state),
+     like the settings screen's option filter - no request wiring. -->
+<script th:inline="none">
+    (function () {
+        var input = document.getElementById('observability-filter');
+        if (!input) {
+            return;
+        }
+        input.addEventListener('input', function () {
+            var q = input.value.trim().toLowerCase();
+            document.querySelectorAll('.observability-item').forEach(function (el) {
+                var hay = (el.getAttribute('data-search') || '').toLowerCase();
+                el.style.display = (!q || hay.indexOf(q) >= 0) ? '' : 'none';
+            });
+        });
+    })();
+</script>
+</body>
+</html>

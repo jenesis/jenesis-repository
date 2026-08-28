@@ -35,6 +35,7 @@ public final class ConsoleUrlSpace {
             "/",
             "/catalog",
             "/posture",
+            "/observability",
             "/error",
             "/favicon.ico",
             "/login", "/login/**",

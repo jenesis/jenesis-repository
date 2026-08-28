@@ -94,6 +94,8 @@ public class ConsoleAdvice {
             new NavEntry("Installed providers", "/catalog", NavEntry.Access.ADMIN,
                     NavEntry.Section.ADMINISTRATION),
             new NavEntry("Security posture", "/posture", NavEntry.Access.ADMIN,
+                    NavEntry.Section.ADMINISTRATION),
+            new NavEntry("Metrics", "/observability", NavEntry.Access.ADMIN,
                     NavEntry.Section.ADMINISTRATION));
 
     private List<NavEntry> entries(Authentication authentication, NavEntry.Section section) {
