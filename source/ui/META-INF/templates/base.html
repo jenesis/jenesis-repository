@@ -86,6 +86,27 @@
 </header>
 
 <!-- Empty / loading / error state: one consistent treatment, never a blank screen. -->
+<!--/* The console's header: brand, the links this deployment offers, the theme switch and sign-out. Every
+     screen renders the same one, so moving between screens - and between editions - changes the page under it and
+     nothing around it. A screen passes the path it is on so the shell can mark it, rather than each screen
+     repeating the markup and drifting from the others. */-->
+<header th:fragment="shell(active)" class="container">
+    <nav class="app-nav">
+        <ul>
+            <li th:insert="~{base :: brand('jenesis-repository', @{/}, 'jenesis-repository')}"></li>
+        </ul>
+        <ul>
+            <th:block th:insert="~{base :: navLinks(${navEntries}, ${adminNav})}"></th:block>
+            <li><select th:replace="~{base :: themeSelect}"></select></li>
+            <li>
+                <form th:action="@{/logout}" method="post" style="display:inline;margin:0">
+                    <button type="submit" class="secondary outline">Sign out</button>
+                </form>
+            </li>
+        </ul>
+    </nav>
+</header>
+
 <!--/* The links every installed console module contributes, rendered identically wherever the console runs.
      Two sections rather than one flat bar: a deployment with several modules installed puts the three or four
      links that get daily use somewhere in the middle of the settings-shaped ones, and someone who visits

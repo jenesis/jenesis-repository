@@ -33,8 +33,8 @@ class ConsoleNavEntriesTest {
     @Test
     void a_signed_in_user_sees_the_links_open_to_everyone_and_no_others() {
         assertThat(labels(advice.navEntries(user("ROLE_USER"))))
-                .as("the primary bar carries what this user may reach, and nothing above their floor")
-                .containsExactly("Everyone");
+                .as("the console's own screens lead the bar, then what this user may reach of the contributed ones")
+                .containsExactly("Overview", "Everyone");
         assertThat(advice.adminNav(user("ROLE_USER")))
                 .as("so the administration dropdown is empty and the layout renders none of it")
                 .isEmpty();
@@ -44,9 +44,10 @@ class ConsoleNavEntriesTest {
     void an_admin_sees_the_admin_links_too_in_the_section_each_declared() {
         assertThat(labels(advice.navEntries(user("ROLE_USER", "ROLE_ADMIN"))))
                 .as("primary keeps its own section only, so the bar does not swallow the dropdown's contents")
-                .containsExactlyInAnyOrder("Everyone", "Admins", "Operators");
+                .containsExactlyInAnyOrder("Overview", "Everyone", "Admins", "Operators");
         assertThat(labels(advice.adminNav(user("ROLE_USER", "ROLE_ADMIN"))))
-                .containsExactly("Settings");
+                .as("the console's own administration screen sits with the contributed ones")
+                .containsExactly("Installed providers", "Settings");
     }
 
     @Test
