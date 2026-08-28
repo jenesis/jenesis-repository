@@ -1,5 +1,6 @@
 package build.jenesis.repository.ui;
 
+import build.jenesis.repository.posture.ConsoleAdmins;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
@@ -18,17 +19,10 @@ import module java.base;
  */
 public class Principals implements LoginAuthorities {
 
-    /** The wildcard admin id: an explicit opt-out that grants {@code ADMIN} to every authenticated user, restoring
-     *  the old open single-tenant behaviour without reintroducing the empty-list-grants-everyone footgun. */
-    private static final String EVERYONE = "*";
-
     private final Set<String> admins;
 
     public Principals(UiProperties properties) {
-        this.admins = Arrays.stream(properties.getAdmins().split(","))
-                .map(String::trim)
-                .filter(value -> !value.isEmpty())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+        this.admins = ConsoleAdmins.parse(properties.getAdmins());
     }
 
     /**
@@ -42,7 +36,7 @@ public class Principals implements LoginAuthorities {
         // Deny by default: ADMIN only for a configured id (or when the deployment explicitly opts every user in with
         // the * wildcard). An empty admins list therefore grants no ADMIN, so an unconfigured console cannot be
         // written to by an arbitrary sign-in.
-        if (admins.contains(EVERYONE) || admins.contains(id)) {
+        if (ConsoleAdmins.grantsEveryone(admins) || admins.contains(id)) {
             authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
         }
         return authorities;

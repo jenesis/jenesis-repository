@@ -62,11 +62,10 @@ public final class SecurityPosture implements SafetyAdvisor {
         }
 
         // 4. Wildcard console admins: '*' makes every authenticated user a console admin (the explicit open-console
-        //    opt-out) instead of naming the operators who should hold admin. Parse the value exactly as Principals does
-        //    - comma-split and trim - so 'alice,*' (which Principals honours as the wildcard, granting everyone admin)
-        //    raises the advisory too; matching only the whole-value "*" would fail open on a wildcard hidden in a list.
-        if (Arrays.stream(config.optional("jenreg.ui.admins").orElse("").split(","))
-                .map(String::trim).anyMatch("*"::equals)) {
+        //    opt-out) instead of naming the operators who should hold admin. Read through the one shared rule rather
+        //    than parsing the value a third time here - this comment used to say "exactly as Principals does" while
+        //    a third reader had already diverged from both.
+        if (ConsoleAdmins.grantsEveryone(ConsoleAdmins.parse(config.optional("jenreg.ui.admins").orElse("")))) {
             advisories.add(SecurityAdvisory.deployment("jenreg.console.wildcard", Severity.WARN,
                     "The admin console grants admin to every signed-in user",
                     "jenreg.ui.admins=* makes every authenticated user a console admin, so anyone who can sign in can "
