@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<!--/*
+     The bodies of the overview's cards.
+
+     Every card is a fragment here, taking the one value its ConsoleCard prepared. Nothing on this page builds
+     markup in Java: a card contributes a fragment name and a value, and Thymeleaf escapes what it interpolates,
+     so a namespace named `<script>` is text on the page rather than a script in an operator's browser. The four
+     bodies were StringBuilder and text blocks before, each with its own hand-written escape, which is the shape
+     that produces stored cross-site scripting on an admin surface exactly once.
+
+     The three API-reading cards carry no behaviour here either - /js/cards.js does, loaded once by the page.
+*/-->
+<body>
+
+<!--/* Browse. The only card that reads the store: its namespaces are prepared by BrowseCard. */-->
+<div th:fragment="browse(model)">
+    <p>Browse the repository's published artifacts as a breadcrumbed, navigable tree.</p>
+    <p><a th:href="@{/browse}" role="button" class="secondary">Open the repository browser &rarr;</a></p>
+    <th:block th:if="${model.namespaces.isEmpty()}">
+        <p>The repository is empty. Publish an artifact to see it here.</p>
+    </th:block>
+    <th:block th:unless="${model.namespaces.isEmpty()}">
+        <p>Published namespaces:</p>
+        <ul>
+            <!--/* A namespace this deployment has no format for is an orphan, not a hole: the artifacts are still
+                 stored and still listed, and the dashed mark plus the "not installed" note is what says the format
+                 module that served them is gone. The mark is inline SVG built from module constants and geometry -
+                 never from a name - which is why it is the one value here rendered unescaped. */-->
+            <li th:each="namespace : ${model.namespaces}">
+                <span class="app-mark" th:classappend="${namespace.installed} ? '' : 'app-mark--orphaned'"
+                      th:title="${namespace.markTitle}" role="img" th:aria-label="${namespace.markTitle}"
+                      th:utext="${namespace.markSvg}"></span>
+                <a th:href="@{/browse(path=${namespace.name})}" th:text="${namespace.name}">namespace</a>
+                <small th:unless="${namespace.installed}">&mdash; no installed format serves this namespace</small>
+            </li>
+        </ul>
+    </th:block>
+</div>
+
+<!--/* Logs. Live process state, so the browser fetches it after the page is delivered (clause 7). */-->
+<div th:fragment="logs(model)" data-jenesis-card="logs">
+    <p>The instance's most recent log entries from the in-memory ring (<code>GET /api/logs</code>). The read is
+        key-gated: paste a credential carrying <code>repository:read</code>. Level filters at that level or higher;
+        search matches the logger or message; Tail polls for new entries past the last cursor.</p>
+    <div class="grid">
+        <label>Level
+            <select id="jlogs-level">
+                <option value="">all</option>
+                <option>INFO</option>
+                <option>WARN</option>
+                <option>ERROR</option>
+            </select>
+        </label>
+        <label>Search <input id="jlogs-q" placeholder="text in logger or message"></label>
+        <label>Key <input id="jlogs-key" placeholder="tenant.secret" type="password"></label>
+    </div>
+    <p>
+        <button class="secondary" id="jlogs-refresh">Refresh</button>
+        <button class="secondary" id="jlogs-tail">Start tail</button>
+        <span id="jlogs-status"></span>
+    </p>
+    <div id="jlogs-out"></div>
+</div>
+
+<!--/* Consistency. Live node fingerprints, fetched by the browser for the same reason. */-->
+<div th:fragment="consistency(model)" data-jenesis-card="consistency">
+    <p>The nodes sharing this store and whether they agree (<code>GET /api/consistency</code>). Each node publishes a
+        lightweight fingerprint of its derived state (index cursor, config generation, counters, a sampled pointer set)
+        on a heartbeat; the check tells benign lag from a node <strong>stuck diverged</strong>. The read is key-gated:
+        paste a credential carrying <code>repository:read</code>. It detects and reports - it never blocks - and
+        degrades to single-node (one node, no divergence).</p>
+    <div class="grid">
+        <label>Key <input id="jcon-key" placeholder="tenant.secret" type="password"></label>
+    </div>
+    <p>
+        <button class="secondary" id="jcon-refresh">Refresh</button>
+        <button class="secondary" id="jcon-tail">Start auto-refresh</button>
+        <span id="jcon-status"></span>
+    </p>
+    <div id="jcon-summary"></div>
+    <div id="jcon-nodes"></div>
+    <div id="jcon-divergences"></div>
+</div>
+
+<!--/* Credentials. Reads nothing from the store: rendering keys here would duplicate the API's authorization. */-->
+<div th:fragment="credentials(model)" data-jenesis-card="credentials">
+    <p>Issue and revoke the keys this deployment authorizes with. The read and the mutations are key-gated at
+        deployment scope, so paste a credential carrying <code>manage:write</code> - the bootstrap key
+        (<code>jenreg.bootstrap-key</code>) carries it. A minted secret is shown <strong>once</strong>: only its hash
+        is stored, so a lost key is re-issued rather than recovered.</p>
+    <div class="grid">
+        <label>Key <input id="jcred-key" placeholder="jenk_tenant.secret" type="password"></label>
+        <label>Label <input id="jcred-label" placeholder="ci-publisher"></label>
+    </div>
+    <p>
+        <button class="secondary" id="jcred-refresh">Refresh</button>
+        <button id="jcred-mint">Issue a key</button>
+        <span id="jcred-status"></span>
+    </p>
+    <div id="jcred-minted"></div>
+    <div id="jcred-list"></div>
+</div>
+
+</body>
+</html>

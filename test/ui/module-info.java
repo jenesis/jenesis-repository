@@ -188,14 +188,14 @@ open module build.jenesis.repository.ui.test {
     requires org.junit.jupiter;
     requires org.assertj.core;
     requires org.mockito;
-    // The Panel census loads the service itself rather than only through UiConfig: the runtime discovery leg and the
+    // The card census loads the service itself rather than only through UiConfig: the runtime discovery leg and the
     // rendered-set leg are separate assertions, and a `uses` clause is what lets this module make the first one.
-    uses build.jenesis.repository.ui.Panel;
+    uses build.jenesis.repository.ui.ConsoleCard;
     // A panel that always throws, discovered exactly like a real one, so the booted console in ConsoleE2ETest serves a
     // page that really contains a contained failure - the shell's rendering of it is not provable any other way.
     provides build.jenesis.repository.ui.ConsoleModuleProvider
             with build.jenesis.repository.ui.test.NavigatingConsoleModule;
-    provides build.jenesis.repository.ui.Panel with build.jenesis.repository.ui.test.FailingPanel;
+    provides build.jenesis.repository.ui.ConsoleCard with build.jenesis.repository.ui.test.FailingCard;
     // A format declaring a mark, discovered the same way, so the booted console resolves a namespace's mark through
     // the panel's own ServiceLoader path rather than only through a lookup a unit test hands in. No format module is
     // otherwise on the console's graph.

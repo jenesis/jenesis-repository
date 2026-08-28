@@ -10,7 +10,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
-import build.jenesis.repository.ui.BrowsePanel;
+import build.jenesis.repository.ui.BrowseCard;
 import module org.junit.jupiter.api;
 
 import module java.base;
@@ -18,18 +18,23 @@ import module java.base;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The free console's use of the shared mark resolution, over a real store. The browse panel marks each published
+ * The free console's use of the shared mark resolution, over a real store. The browse card marks each published
  * namespace with the mark of the format that owns it, and all three answers are reachable here from stored data
  * rather than from a fixture: a format that ships a mark, a format that ships none (which is every format this
  * repository bundles today), and a namespace <em>no installed format claims</em> - a repository that still holds
  * what a format module used to serve.
  *
- * <p>That last row is the one the panel could not previously say anything about. It is also the reason
+ * <p>That last row is the one the card could not previously say anything about. It is also the reason
  * {@code FormatMarks} answers "no format claims this" rather than deciding what to draw: the same emptiness means
  * "render nothing" for a bookkeeping bucket and "this is orphaned" for published content, and only the caller knows
  * which it is holding.
+ *
+ * <p>These assert on the value the card prepares, not on a rendered page, and that is the point of the card no
+ * longer producing markup: the decision - which mark, whether the format is installed - is what this test is about,
+ * and it used to be reachable only by substring-matching the HTML the card had built. How that value reaches the
+ * page is the template's business and is proved by the booted console downstream, which renders it for real.
  */
-class BrowsePanelTest {
+class BrowseCardTest {
 
     private static final String OCI_MARK =
             "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><g/></svg>";
@@ -54,36 +59,38 @@ class BrowsePanelTest {
         publish("/maven/com/example/a-1.0.jar");
         publish("/npm/left-pad/-/left-pad-1.3.0.tgz");
 
-        String body = new BrowsePanel(new FormatMarks(List.of(
+        List<BrowseCard.Namespace> namespaces = new BrowseCard(new FormatMarks(List.of(
                 new StubFormat("oci", "/oci/", OCI_MARK),
-                new StubFormat("maven", "/maven/", null)))).render(store);
+                new StubFormat("maven", "/maven/", null)))).model(store).namespaces();
 
-        // The format that ships a mark renders its own document, byte for byte.
-        assertThat(body).contains(OCI_MARK);
-        // The format that ships none renders its generated figure - a real, stable identity for that format, not a
-        // repeat of the neutral box. This is what a page of unbranded formats looks like, and it is why the free
+        // The format that ships a mark contributes its own document, byte for byte.
+        assertThat(mark(namespaces, "oci")).isEqualTo(OCI_MARK);
+        // The format that ships none contributes its generated figure - a real, stable identity for that format, not
+        // a repeat of the neutral box. This is what a page of unbranded formats looks like, and it is why the free
         // console proves the promoted scheme rather than only hosting it.
-        assertThat(body).contains(Marks.generated("maven").svg());
-        assertThat(body).doesNotContain(Marks.neutral());
+        assertThat(mark(namespaces, "maven")).isEqualTo(Marks.generated("maven").svg());
+        assertThat(namespaces).extracting(BrowseCard.Namespace::markSvg).doesNotContain(Marks.neutral());
         // And the namespace nothing serves is drawn as the orphan it is.
-        assertThat(body).contains(Marks.orphaned("npm").svg());
+        assertThat(mark(namespaces, "npm")).isEqualTo(Marks.orphaned("npm").svg());
     }
 
     @Test
     void a_namespace_no_installed_format_claims_says_so_without_relying_on_a_colour() throws IOException {
-        // The distinction that must survive a monochrome display and a screen reader: the orphan's mark is already a
-        // different drawing (a dashed tile), the row carries the state in its title and aria-label, and it says in
-        // words that nothing serves the namespace. The stylesheet's dimming is a third cue on top, never the only
-        // one - which is the constraint the downstream console's colour treatment sits on.
+        // The distinction that must survive a monochrome display and a screen reader, decided here: the orphan's
+        // mark is a different drawing (a dashed tile) and its title - which the template renders into both the
+        // title attribute and the aria-label - names the state in words. The row's "no installed format serves this
+        // namespace" note and the dimming the stylesheet adds hang off `installed` being false, and the booted
+        // console asserts that they reach the page.
         publish("/gem/rack/rack-3.0.0.gem");
 
-        String body = new BrowsePanel(new FormatMarks(List.of())).render(store);
+        BrowseCard.Namespace orphan = new BrowseCard(new FormatMarks(List.of())).model(store)
+                .namespaces().getFirst();
 
-        assertThat(body).contains("stroke-dasharray")
-                .contains("title=\"gem (not installed)\"")
-                .contains("aria-label=\"gem (not installed)\"")
-                .contains("no installed format serves this namespace")
-                .contains("app-mark--orphaned");
+        assertThat(orphan.name()).isEqualTo("gem");
+        assertThat(orphan.installed()).as("nothing serves it, and that is what the row must say").isFalse();
+        assertThat(orphan.markSvg()).as("a different drawing, not a differently coloured one")
+                .contains("stroke-dasharray");
+        assertThat(orphan.markTitle()).isEqualTo("gem (not installed)");
     }
 
     @Test
@@ -93,35 +100,39 @@ class BrowsePanelTest {
         // off a plug-in that is running.
         publish("/maven/com/example/a-1.0.jar");
 
-        String body = new BrowsePanel(new FormatMarks(List.of(new StubFormat("maven", "/maven/", null))))
-                .render(store);
+        BrowseCard.Namespace served = new BrowseCard(new FormatMarks(List.of(new StubFormat("maven", "/maven/", null))))
+                .model(store).namespaces().getFirst();
 
-        assertThat(body).doesNotContain("stroke-dasharray")
-                .doesNotContain("app-mark--orphaned")
-                .doesNotContain("not installed")
-                .contains("title=\"maven\"");
+        assertThat(served.installed()).isTrue();
+        assertThat(served.markSvg()).doesNotContain("stroke-dasharray");
+        assertThat(served.markTitle()).isEqualTo("maven").doesNotContain("not installed");
     }
 
     @Test
-    void the_marks_are_the_same_on_every_render_so_a_console_page_is_stable() throws IOException {
-        // A panel renders once per GET and marks are memoized per namespace behind FormatMarks; two renders of
-        // unchanged state must produce the same body, which is the panel contract's idempotency clause and the
+    void the_marks_are_the_same_on_every_read_so_a_console_page_is_stable() throws IOException {
+        // A card prepares its value once per GET and marks are memoized per namespace behind FormatMarks; two reads
+        // of unchanged state must produce the same value, which is the card contract's idempotency clause and the
         // property that lets the page be cached and revalidated at all.
         publish("/maven/com/example/a-1.0.jar");
         publish("/pypi/simple/requests/requests-2.0.tar.gz");
 
-        BrowsePanel panel = new BrowsePanel(new FormatMarks(List.of(new StubFormat("maven", "/maven/", null))));
+        BrowseCard card = new BrowseCard(new FormatMarks(List.of(new StubFormat("maven", "/maven/", null))));
 
-        assertThat(panel.render(store)).isEqualTo(panel.render(store));
+        assertThat(card.model(store)).isEqualTo(card.model(store));
     }
 
     @Test
-    void an_empty_repository_renders_no_marks_at_all() throws IOException {
-        // Nothing published means nothing to attribute: the panel keeps its empty state rather than inventing a row
-        // with a neutral box on it.
-        assertThat(new BrowsePanel(new FormatMarks(List.of())).render(store))
-                .contains("The repository is empty")
-                .doesNotContain("app-mark");
+    void an_empty_repository_offers_no_namespaces_at_all() throws IOException {
+        // Nothing published means nothing to attribute: the card answers no rows, so the fragment shows its empty
+        // state rather than a row with a neutral box on it.
+        assertThat(new BrowseCard(new FormatMarks(List.of())).model(store).namespaces()).isEmpty();
+    }
+
+    /** The mark one namespace carries, so a claim about attribution reads as one. */
+    private static String mark(List<BrowseCard.Namespace> namespaces, String name) {
+        return namespaces.stream().filter(namespace -> namespace.name().equals(name)).findFirst()
+                .orElseThrow(() -> new AssertionError("no namespace " + name + " in " + namespaces))
+                .markSvg();
     }
 
     private void publish(String path) {
@@ -143,7 +154,7 @@ class BrowsePanelTest {
 
         @Override
         public void serve(FormatExchange exchange, ArtifactStore store) {
-            throw new UnsupportedOperationException("the browse panel never dispatches a request");
+            throw new UnsupportedOperationException("the browse card never dispatches a request");
         }
 
         @Override

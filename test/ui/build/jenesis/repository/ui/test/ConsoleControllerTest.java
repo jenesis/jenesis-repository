@@ -1,9 +1,9 @@
 package build.jenesis.repository.ui.test;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.ui.ConsoleCard;
 import build.jenesis.repository.ui.ConsoleController;
-import build.jenesis.repository.ui.ConsoleController.RenderedPanel;
-import build.jenesis.repository.ui.Panel;
+import build.jenesis.repository.ui.ConsoleController.RenderedCard;
 import org.springframework.ui.ExtendedModelMap;
 import module org.junit.jupiter.api;
 
@@ -12,37 +12,46 @@ import module java.base;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * What the console does with a panel that throws. One panel must never decide whether the console exists: the render
- * loop contains a panel's failure to that panel's own card, so every other panel renders, the failed panel keeps its
- * navigation entry and its anchor, and the card says it failed rather than looking like a panel with nothing to show.
+ * What the console does with a card that throws. One card must never decide whether the console exists: the loop
+ * contains a card's failure to that card, so every other card renders, the failed one keeps its navigation entry and
+ * its anchor, and its place says it failed rather than looking like a card with nothing to show.
  *
- * <p>The panels here read no artifact data, so a null store is fine (the pattern the live-API panel tests already
- * use).
+ * <p>The cards here read no artifact data, so a null store is fine (the pattern the live-API card tests already use).
  */
 class ConsoleControllerTest {
 
-    /** The message a failing panel's exception carries - uncontrolled text the console must not render. */
+    /** The message a failing card's exception carries - uncontrolled text the console must not render. */
     private static final String SECRET = "cannot read /srv/store/acme/secret-key.pem";
 
-    private record HealthyPanel(String id, String title) implements Panel {
+    private record HealthyCard(String id, String title) implements ConsoleCard {
 
         @Override
-        public String render(ArtifactStore store) {
-            return "<p>" + id + " rendered</p>";
+        public String fragment() {
+            return "console/cards :: " + id;
+        }
+
+        @Override
+        public Object model(ArtifactStore store) {
+            return id + " model";
         }
     }
 
-    /** A panel that declares itself but cannot render - the common case (a store read that failed). */
-    private record BrokenPanel(String id, String title) implements Panel {
+    /** A card that declares itself but cannot prepare its value - the common case (a store read that failed). */
+    private record BrokenCard(String id, String title) implements ConsoleCard {
 
         @Override
-        public String render(ArtifactStore store) throws IOException {
+        public String fragment() {
+            return "console/cards :: " + id;
+        }
+
+        @Override
+        public Object model(ArtifactStore store) throws IOException {
             throw new IOException(SECRET);
         }
     }
 
-    /** A panel that cannot even declare itself: nothing about it is usable, and it still may not 500 the console. */
-    private static final class UndeclarablePanel implements Panel {
+    /** A card that cannot even declare itself: nothing about it is usable, and it still may not 500 the console. */
+    private static final class UndeclarableCard implements ConsoleCard {
 
         @Override
         public String id() {
@@ -55,68 +64,76 @@ class ConsoleControllerTest {
         }
 
         @Override
-        public String render(ArtifactStore store) {
-            throw new IllegalStateException("no body");
+        public String fragment() {
+            throw new IllegalStateException("no fragment");
+        }
+
+        @Override
+        public Object model(ArtifactStore store) {
+            throw new IllegalStateException("no model");
         }
     }
 
     @SuppressWarnings("unchecked")
-    private static List<RenderedPanel> render(List<Panel> panels) {
+    private static List<RenderedCard> render(List<ConsoleCard> cards) {
         ExtendedModelMap model = new ExtendedModelMap();
-        // Before containment this loop propagated, so a single throwing panel made GET /console a 500 - and this call
+        // Before containment this loop propagated, so a single throwing card made GET /console a 500 - and this call
         // threw right here.
-        assertThat(new ConsoleController(panels, null).console(model)).isEqualTo("console");
-        return (List<RenderedPanel>) model.getAttribute("panels");
+        assertThat(new ConsoleController(cards, null).console(model)).isEqualTo("console");
+        return (List<RenderedCard>) model.getAttribute("cards");
     }
 
     @Test
-    void one_failing_panel_neither_ends_the_page_nor_hides_the_panels_around_it() {
-        List<RenderedPanel> rendered = render(List.of(
-                new HealthyPanel("first", "First"),
-                new BrokenPanel("broken", "Broken"),
-                new HealthyPanel("last", "Last")));
+    void one_failing_card_neither_ends_the_page_nor_hides_the_cards_around_it() {
+        List<RenderedCard> rendered = render(List.of(
+                new HealthyCard("first", "First"),
+                new BrokenCard("broken", "Broken"),
+                new HealthyCard("last", "Last")));
 
-        assertThat(rendered).extracting(RenderedPanel::getId)
-                .as("every panel keeps its place; a failed panel that vanished would read as one with nothing to say")
+        assertThat(rendered).extracting(RenderedCard::getId)
+                .as("every card keeps its place; a failed card that vanished would read as one with nothing to say")
                 .containsExactly("first", "broken", "last");
-        assertThat(rendered).extracting(RenderedPanel::getBody)
-                .as("both healthy panels rendered their real bodies")
-                .containsExactly("<p>first rendered</p>", "", "<p>last rendered</p>");
-        assertThat(rendered).extracting(RenderedPanel::isFailed).containsExactly(false, true, false);
+        assertThat(rendered).extracting(RenderedCard::getModel)
+                .as("both healthy cards prepared their real values, and the failed one prepared none")
+                .containsExactly("first model", null, "last model");
+        assertThat(rendered).extracting(RenderedCard::isFailed).containsExactly(false, true, false);
     }
 
     @Test
-    void the_failed_panel_keeps_its_navigation_entry_and_says_why_its_card_is_empty() {
-        RenderedPanel failed = render(List.of(new BrokenPanel("broken", "Broken"))).getFirst();
+    void the_failed_card_keeps_its_navigation_entry_and_says_why_its_place_is_empty() {
+        RenderedCard failed = render(List.of(new BrokenCard("broken", "Broken"))).getFirst();
 
         assertThat(failed.getId()).as("the anchor a bookmark points at survives the failure").isEqualTo("broken");
         assertThat(failed.getTitle()).as("and so does the navigation title").isEqualTo("Broken");
-        assertThat(failed.getBody()).as("no half-rendered body is served").isEmpty();
+        assertThat(failed.getFragment())
+                .as("no fragment is named, so a half-prepared body cannot be resolved and rendered").isEmpty();
         assertThat(failed.getFailure())
-                .as("the notice names the panel that failed and the kind of failure")
-                .contains(BrokenPanel.class.getName()).contains("IOException")
-                .contains("Every other panel is unaffected");
+                .as("the notice names the card that failed and the kind of failure")
+                .contains(BrokenCard.class.getName()).contains("IOException")
+                .contains("Every other card is unaffected");
         assertThat(failed.getFailure())
-                .as("a panel's exception message is uncontrolled text dropped onto an operator's page; the log has it")
+                .as("a card's exception message is uncontrolled text dropped onto an operator's page; the log has it")
                 .doesNotContain(SECRET).doesNotContain("secret-key");
     }
 
     @Test
-    void a_panel_that_cannot_even_declare_itself_is_filed_under_its_class_rather_than_dropped() {
-        RenderedPanel failed = render(List.of(new UndeclarablePanel())).getFirst();
+    void a_card_that_cannot_even_declare_itself_is_filed_under_its_class_rather_than_dropped() {
+        RenderedCard failed = render(List.of(new UndeclarableCard())).getFirst();
 
         assertThat(failed.getId()).as("a class-derived anchor, so the card is still reachable")
-                .isEqualTo("undeclarablepanel");
+                .isEqualTo("undeclarablecard");
         assertThat(failed.getTitle()).as("a blank title is as unusable as a thrown one")
-                .isEqualTo(UndeclarablePanel.class.getName());
+                .isEqualTo(UndeclarableCard.class.getName());
         assertThat(failed.isFailed()).isTrue();
     }
 
     @Test
-    void a_panel_answering_null_is_a_failure_rather_than_an_empty_card() {
+    void a_card_naming_no_fragment_is_a_failure_rather_than_an_empty_card() {
         // An empty card reads as "nothing to report", which is exactly the wrong thing to tell an operator about a
-        // panel that answered nothing at all.
-        RenderedPanel failed = render(List.of(new Panel() {
+        // card that named nothing to render at all. A null MODEL is legal - three of the four bundled cards answer
+        // one - so the strictness has to sit on the fragment, which is the field that decides whether there is a
+        // body to resolve.
+        RenderedCard failed = render(List.of(new ConsoleCard() {
             @Override
             public String id() {
                 return "nullish";
@@ -128,7 +145,12 @@ class ConsoleControllerTest {
             }
 
             @Override
-            public String render(ArtifactStore store) {
+            public String fragment() {
+                return null;
+            }
+
+            @Override
+            public Object model(ArtifactStore store) {
                 return null;
             }
         })).getFirst();
@@ -138,8 +160,40 @@ class ConsoleControllerTest {
     }
 
     @Test
-    void a_console_with_only_healthy_panels_carries_no_failure_marker() {
-        assertThat(render(List.of(new HealthyPanel("a", "A"), new HealthyPanel("b", "B"))))
-                .extracting(RenderedPanel::getFailure).containsExactly("", "");
+    void a_card_needing_no_value_is_not_treated_as_one_that_failed() {
+        // The logs, consistency and credentials cards all answer null: their bodies are controls the browser binds,
+        // so there is nothing for the fragment to read. Reading that as a failure would mark three of the four
+        // bundled cards broken on every render.
+        RenderedCard rendered = render(List.of(new ConsoleCard() {
+            @Override
+            public String id() {
+                return "valueless";
+            }
+
+            @Override
+            public String title() {
+                return "Valueless";
+            }
+
+            @Override
+            public String fragment() {
+                return "console/cards :: logs";
+            }
+
+            @Override
+            public Object model(ArtifactStore store) {
+                return null;
+            }
+        })).getFirst();
+
+        assertThat(rendered.isFailed()).isFalse();
+        assertThat(rendered.getFragment()).isEqualTo("console/cards :: logs");
+        assertThat(rendered.getModel()).isNull();
+    }
+
+    @Test
+    void a_console_with_only_healthy_cards_carries_no_failure_marker() {
+        assertThat(render(List.of(new HealthyCard("a", "A"), new HealthyCard("b", "B"))))
+                .extracting(RenderedCard::getFailure).containsExactly("", "");
     }
 }

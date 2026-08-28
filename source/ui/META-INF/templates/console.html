@@ -1,20 +1,24 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{base :: head('Console', 'jenesis-repository')}">
-    <meta charset="utf-8">
-    <title>jenesis-repository</title>
+<!--/* Everything every page loads, plus the one script only this page needs: the cards that read the key-gated
+     JSON API bind their controls from it. It is loaded here rather than from `headContents` because no other page
+     carries those cards, and a script that runs on a page with nothing to bind is a script nobody will notice
+     has stopped working. */-->
+<head>
+    <th:block th:replace="~{base :: headContents('Console', 'jenesis-repository')}"></th:block>
+    <script th:src="@{/js/cards.js}" defer></script>
 </head>
 <body>
 <a class="app-skip-link" href="#main">Skip to content</a>
-<!--/* The shared console header, with this page's panel anchors passed into its edition slot: while the
+<!--/* The shared console header, with this page's card anchors passed into its edition slot: while the
      overview is still a single page of cards, its own in-page navigation belongs to it and not to every screen. */-->
-<th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{:: panelAnchors})}"></th:block>
-<th:block th:fragment="panelAnchors">
-    <!--/* A panel that failed to render keeps its entry - it must not read as a panel with nothing to say - and is
-         marked here so the failure is visible without scrolling to its card. */-->
-    <li th:each="panel : ${panels}">
-        <a th:href="'#' + ${panel.id}"
-           th:text="${panel.failed} ? ${panel.title} + ' ⚠' : ${panel.title}">Panel</a>
+<th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{:: cardAnchors})}"></th:block>
+<th:block th:fragment="cardAnchors">
+    <!--/* A card that failed to render keeps its entry - it must not read as a card with nothing to say - and is
+         marked here so the failure is visible without scrolling to it. */-->
+    <li th:each="card : ${cards}">
+        <a th:href="'#' + ${card.id}"
+           th:text="${card.failed} ? ${card.title} + ' ⚠' : ${card.title}">Card</a>
     </li>
 </th:block>
 <main id="main" class="container">
@@ -28,17 +32,28 @@
     </th:block>
     <!--/* th:if must sit on a wrapping block: on the same element, th:replace (precedence 100) runs BEFORE
          th:if (300), so the empty state would render unconditionally. */-->
-    <th:block th:if="${panels.isEmpty()}">
-        <div th:replace="~{base :: empty('No panels are registered.')}"></div>
+    <th:block th:if="${cards.isEmpty()}">
+        <div th:replace="~{base :: empty('No cards are registered.')}"></div>
     </th:block>
-    <article th:each="panel : ${panels}" th:id="${panel.id}" class="app-card">
-        <header><h2 th:text="${panel.title}">Panel</h2></header>
-        <!--/* A contained panel failure renders here in the failed panel's own card: th:text escapes the notice, so
-             a failing panel contributes no markup at all, and the body it never produced is not rendered. */-->
-        <th:block th:if="${panel.failed}">
-            <p th:replace="~{base :: alert(${panel.failure}, 'danger')}"></p>
+    <article th:each="card : ${cards}" th:id="${card.id}" class="app-card">
+        <header><h2 th:text="${card.title}">Card</h2></header>
+        <!--/* A contained card failure renders here in the failed card's own place: th:text escapes the notice, so
+             a failing card contributes no markup at all, and the fragment it named is not resolved. */-->
+        <th:block th:if="${card.failed}">
+            <p th:replace="~{base :: alert(${card.failure}, 'danger')}"></p>
         </th:block>
-        <div th:unless="${panel.failed}" th:utext="${panel.body}">panel body</div>
+        <!--/* The card named its fragment; preprocessing (__${...}__) resolves the name before the fragment
+             expression is parsed, and the card's value is passed to it positionally. This is the whole of what the
+             console does with a card's body - it composes the page and renders none of it.
+
+             The th:unless sits on a WRAPPING block rather than on the same element, for the reason the empty state
+             above gives: th:replace (precedence 100) runs BEFORE th:unless (300), so a failed card - which names no
+             fragment - would have its empty fragment expression resolved anyway, and an unresolvable fragment is a
+             500 for the whole page. That is the containment this loop exists to provide, defeated by an attribute
+             order. */-->
+        <th:block th:unless="${card.failed}">
+            <div th:replace="~{__${card.fragment}__(${card.model})}">card body</div>
+        </th:block>
     </article>
 </main>
 </body>

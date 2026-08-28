@@ -3,13 +3,15 @@
  * (Spring Boot on embedded Jetty, Thymeleaf views, Spring Security with OAuth2/OIDC login) so a downstream distribution
  * extends this shell rather than forking it. It is an open module (Spring needs reflective access) and requires the
  * Spring modules its code compiles against plus the Spring Boot starters that root the runtime closure (embedded
- * Jetty, Thymeleaf, Jackson, Security, OAuth2 client). Built as an open shell with a panel-registration SPI
- * ({@code uses Panel}) - this console's own overview page, not the GUI extension seam, which is
- * {@code ConsoleModuleProvider} - discovered with ServiceLoader and bridged into Spring, so additional panels are registered by
- * adding modules to the graph, with no fork of the console. Login mechanisms plug in the same way through the
+ * Jetty, Thymeleaf, Jackson, Security, OAuth2 client). Built as an open shell with a card-registration SPI
+ * ({@code uses ConsoleCard}) - this console's own overview page, not the GUI extension seam, which is
+ * {@code ConsoleModuleProvider} - discovered with ServiceLoader and bridged into Spring, so additional cards are
+ * registered by adding modules to the graph, with no fork of the console. A card names the Thymeleaf fragment its
+ * body renders through and prepares the value that fragment reads, so no contribution to this console produces
+ * markup. Login mechanisms plug in the same way through the
  * {@code LoginContributor} bean seam.
  *
- * <p>It requires the format SPI for one reason: the browse panel marks each published namespace with the mark of the
+ * <p>It requires the format SPI for one reason: the browse card marks each published namespace with the mark of the
  * format that owns it, resolved through the shared {@code Marks} every contributing plug-in family renders through,
  * so a namespace no installed format claims is shown as the orphan it is rather than as an ordinary row. That is an
  * SPI dependency, not a plugin one - the console still requires no concrete format and discovers them all through
@@ -188,12 +190,12 @@ open module build.jenesis.repository.ui {
     requires spring.boot.starter.security;
     requires spring.boot.starter.oauth2.client;
     exports build.jenesis.repository.ui;
-    uses build.jenesis.repository.ui.Panel;
+    uses build.jenesis.repository.ui.ConsoleCard;
     uses build.jenesis.repository.ui.ConsoleModuleProvider;
     uses build.jenesis.repository.ui.ConsoleLayout.Extension;
-    provides build.jenesis.repository.ui.Panel
-            with build.jenesis.repository.ui.BrowsePanel,
-                    build.jenesis.repository.ui.LogPanel,
-                    build.jenesis.repository.ui.ConsistencyPanel,
-                    build.jenesis.repository.ui.CredentialsPanel;
+    provides build.jenesis.repository.ui.ConsoleCard
+            with build.jenesis.repository.ui.BrowseCard,
+                    build.jenesis.repository.ui.LogCard,
+                    build.jenesis.repository.ui.ConsistencyCard,
+                    build.jenesis.repository.ui.CredentialsCard;
 }
