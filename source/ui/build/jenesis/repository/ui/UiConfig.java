@@ -91,4 +91,17 @@ public class UiConfig {
     public PostureSource postureSource(Environment environment) {
         return PostureSource.ofEnvironment(environment::getProperty);
     }
+
+    /**
+     * The installed-providers screen's catalogue.
+     *
+     * <p>The default reports the module graph undecorated, because a deployment with no stored configuration has
+     * nothing that could have switched an installed implementation off. One that reads stored settings contributes
+     * its own and this backs off - which is what replaced the second, richer copy of this screen.
+     */
+    @Bean
+    @ConditionalOnMissingBean(SpiCatalogSource.class)
+    public SpiCatalogSource spiCatalogSource() {
+        return SpiCatalogSource.ofModuleGraph();
+    }
 }
