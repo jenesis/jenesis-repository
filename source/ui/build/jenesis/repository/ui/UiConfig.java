@@ -27,7 +27,6 @@ public class UiConfig {
         // The Security-posture panel is config-aware, so it is contributed here with the deployment
         // configuration lookup (the Spring Environment) rather than ServiceLoader-discovered no-arg, so its body reads
         // the same effective configuration the header badge (ConsoleAdvice) counts.
-        panels.add(new PosturePanel(environment::getProperty));
         return panels;
     }
 

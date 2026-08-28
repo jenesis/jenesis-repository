@@ -85,8 +85,6 @@ class PanelCensusTest {
                 .as("an id is the navigation key and the in-page anchor: two panels sharing one render two "
                         + "indistinguishable nav entries and two identically-anchored cards. Rename one.")
                 .doesNotHaveDuplicates();
-        assertThat(ids).as("the bean-contributed panel is in the rendered set too, and no ServiceLoader census would "
-                + "have seen it").contains("posture");
         assertThat(ids).allSatisfy(id -> assertThat(id)
                 .as("an id reaches the page as a URL fragment and an anchor").matches(ID));
     }
