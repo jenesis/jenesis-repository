@@ -51,4 +51,26 @@ class ArtifactStoreProviderTest {
                 .hasMessageContaining("filesystem")
                 .hasMessageContaining("needy");
     }
+
+    @Test
+    void a_selected_backend_whose_required_configuration_is_unset_fails_naming_the_key() {
+        // An exclusive SPI must not self-disable the way an optional capability may: a store that cannot be
+        // configured has to fail at resolution, not quietly persist somewhere else. The message names the key, so
+        // the person reading it knows what to set.
+        assertThatThrownBy(() -> ArtifactStoreProvider.resolve("filesystem", key -> null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("filesystem")
+                .hasMessageContaining("jenreg.filesystem.root");
+    }
+
+    @Test
+    void an_unselected_deployment_is_validated_too_rather_than_getting_an_invented_root() {
+        // The load-bearing half. The fallback is validated exactly as an explicit selection is, which is what lets
+        // filesystem stay the default CHOICE without being a silent one: an operator who configures nothing is
+        // told what to set instead of getting a store at a path nobody picked - which, in a container, is the
+        // writable layer, and gone on the next restart.
+        assertThatThrownBy(() -> ArtifactStoreProvider.resolve(null, key -> null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("jenreg.filesystem.root");
+    }
 }
