@@ -261,4 +261,60 @@ class FilesystemArtifactStoreTest {
         assertThatThrownBy(() -> store.exists("../escape"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    /**
+     * A file that vanishes mid-walk must not abort a scan.
+     *
+     * <p>The walk reads a directory and then stats each name it found, and a write closes that gap constantly: an
+     * atomic write creates a {@code .upload*.tmp} and renames it into place, so a name this store's own visitor
+     * would have FILTERED OUT is gone by the time it is stat-ed. That aborted the whole scan, which meant a sweep
+     * racing any publish did not run at all - measured by the cache soak, whose reaper logged "cache reaper sweep
+     * failed; retrying next interval" and so stopped enforcing the cap it exists to enforce, under exactly the
+     * load that needs it enforced.
+     *
+     * <p><b>Why this reproduces it and a dangling symlink does not.</b> The obvious deterministic trick - a link
+     * whose target is missing - does not work here, because the walk does not follow links and a link's own
+     * attributes read perfectly well; it is reported as an ordinary file. The gap is only reachable by really
+     * removing a name between the directory read and the stat, so the test does that: writers publish into the
+     * prefix while scans run over it. The window is a few microseconds per file, which is why the scan is over
+     * thousands of them and repeated - one file would almost never land in it, and the cache soak needed three
+     * minutes at seventy publishes a second to hit it twice.
+     *
+     * <p>The assertion is one-sided on purpose: it says the scan does not THROW. With the fix that can never
+     * happen; without it, it happens whenever the race is won, which at this scale is nearly every run.
+     */
+    @Test
+    void a_file_that_vanishes_during_a_scan_does_not_abort_it() throws Exception {
+        int files = 4000;
+        for (int index = 0; index < files; index++) {
+            store.write("shelf/" + String.format("%06d", index) + ".bin", bytes("x"));
+        }
+        AtomicBoolean stop = new AtomicBoolean();
+        AtomicReference<Throwable> broke = new AtomicReference<>();
+        List<Thread> writers = new ArrayList<>();
+        for (int writer = 0; writer < 4; writer++) {
+            int base = writer;
+            writers.add(Thread.ofVirtual().start(() -> {
+                for (int index = 0; !stop.get() && index < 20_000; index++) {
+                    try {
+                        store.write("shelf/" + String.format("%06d", base * 100_000 + index) + ".bin", bytes("y"));
+                    } catch (IOException writing) {
+                        broke.compareAndSet(null, writing);
+                        return;
+                    }
+                }
+            }));
+        }
+        try {
+            for (int round = 0; round < 40; round++) {
+                store.scan("shelf", "", 50, _ -> { });
+            }
+        } finally {
+            stop.set(true);
+            for (Thread writer : writers) {
+                writer.join(Duration.ofSeconds(30));
+            }
+        }
+        assertThat(broke.get()).as("the writers themselves must not have failed, or the scan raced nothing").isNull();
+    }
 }
