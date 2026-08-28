@@ -65,6 +65,13 @@ public class ConsoleSecurityConfig {
         for (LoginContributor contributor : contributors) {
             contributor.configure(http);
         }
+        // No contributor means nobody can sign in - never that nobody has to. What makes that true is above: every
+        // request this chain matches needs authentication, and nothing here enables a credential path, so with no
+        // mechanism installed there is simply none to use. These two disables are belt-and-braces rather than the
+        // load-bearing part (a manually declared chain does not get form login or basic by default, so removing them
+        // changes no behaviour today) - they are kept so that a later edit enabling either one outside a contributor
+        // cannot quietly open a way in on a deployment that installed no mechanism. Authentication is relaxed only by
+        // an explicit choice - the dev profile, a setting an operator sets - never by a mechanism being absent.
         if (contributors.isEmpty()) {
             http.formLogin(AbstractHttpConfigurer::disable);
             http.httpBasic(AbstractHttpConfigurer::disable);
