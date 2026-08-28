@@ -73,4 +73,37 @@ class ArtifactStoreProviderTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("jenreg.filesystem.root");
     }
+
+    @Test
+    void a_second_fully_configured_backend_is_refused_rather_than_quietly_ignored(@TempDir Path root) {
+        // A deployment has exactly one store. Configuring a second one means the operator believes something untrue
+        // about where their bytes go, and the failure it prevents is silent: the repository serves and persists
+        // happily against the selected backend while everything the operator expects to find is in the bucket they
+        // also configured and nothing reads.
+        assertThatThrownBy(() -> ArtifactStoreProvider.resolve("filesystem", key -> switch (key) {
+            case "jenreg.filesystem.root" -> root.toString();
+            case "NEEDY_BUCKET" -> "a-bucket-that-was-meant";
+            default -> null;
+        }))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("filesystem")
+                .hasMessageContaining("needy")
+                .hasMessageContaining("NEEDY_BUCKET")
+                .hasMessageContaining("exactly one store");
+    }
+
+    @Test
+    void a_rival_backend_that_is_merely_present_but_unconfigured_is_not_a_mix(@TempDir Path root) throws IOException {
+        // The other half, and the reason the rule is "every required key" rather than "any key". The shipped
+        // properties files declare every backend's keys so relaxed binding can reach them, and several carry real
+        // defaults; a rule that fired on a present-but-blank key would refuse to start on every deployment there
+        // is. Blank and absent both mean unconfigured.
+        ArtifactStore store = ArtifactStoreProvider.resolve("filesystem", key -> switch (key) {
+            case "jenreg.filesystem.root" -> root.toString();
+            case "NEEDY_BUCKET" -> "   ";
+            default -> null;
+        });
+        store.write("a", new ByteArrayInputStream("x".getBytes(StandardCharsets.UTF_8)));
+        assertThat(store.exists("a")).isTrue();
+    }
 }
