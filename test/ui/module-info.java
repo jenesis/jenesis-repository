@@ -6,6 +6,7 @@
  * browse panel rendering the store's real published contents.
  *
  * @jenesis.release 25
+ * @jenesis.exclude spring.security.oauth2.client com.nimbusds/oauth2-oidc-sdk
  * @jenesis.test build.jenesis.repository.ui
  * @jenesis.attach org.mockito
  * @jenesis.pin ch.qos.logback/logback-classic 1.5.34 SHA-256/b65e05076a5c1aadb659b4fe4bc5fee31cb26cd70390292eb03e4a7a24cff10f
@@ -13,10 +14,7 @@
  * @jenesis.pin com.fasterxml.jackson.annotation 2.22
  * @jenesis.pin com.fasterxml.jackson.core/jackson-annotations 2.22 SHA-256/21ddb598807d3a51a876704eb979d9296e1c6a6f47ab1826ff88c6d6a127a2d0
  * @jenesis.pin com.github.stephenc.jcip/jcip-annotations 1.0-1 SHA-256/4fccff8382aafc589962c4edb262f6aa595e34f1e11e61057d1c6a96e8fc7323
- * @jenesis.pin com.nimbusds/content-type 2.3 SHA-256/60349793e006fba96b532cb0c21e10e969fe0db8d87f91c3b9eaf82ba2998895
- * @jenesis.pin com.nimbusds/lang-tag 1.7 SHA-256/e8c1c594e2425bdbea2d860de55c69b69fc5d59454452449a0f0913c2a5b8a31
  * @jenesis.pin com.nimbusds/nimbus-jose-jwt 10.9 SHA-256/64d613d91140bad0dab8f0c41960f919ec8705a9ced9418146598b4b3ae71349
- * @jenesis.pin com.nimbusds/oauth2-oidc-sdk 11.37.2 SHA-256/b66e74746dcf516d77f20344e6fbcbcffe1b483b5cf1ad41ea81cec83cb27b3c
  * @jenesis.pin commons-logging/commons-logging 1.3.5 SHA-256/6d7a744e4027649fbb50895df9497d109f98c766a637062fe8d2eabbb3140ba4
  * @jenesis.pin io.micrometer/micrometer-commons 1.17.0 SHA-256/03919dc71e2417ec4b5c254c4ba924963c972e124190f73cdcb68ed51c6eede6
  * @jenesis.pin io.micrometer/micrometer-core 1.17.0 SHA-256/73503e701a377fafeaf33b71b9b8910a8d7884cbba88ab27971b33b3753b65aa
@@ -184,6 +182,7 @@ open module build.jenesis.repository.ui.test {
     requires spring.web;
     requires jakarta.servlet;
     requires spring.security.core;
+    requires jdk.httpserver;
     requires spring.security.oauth2.client;
     requires spring.security.oauth2.core;
     requires org.junit.jupiter;
