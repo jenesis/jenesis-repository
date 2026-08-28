@@ -2,37 +2,127 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{base :: head('Security posture', 'jenesis-repository')}"></head>
 <body>
-<th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{})}"></th:block>
-
+<header th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{})}"></header>
 <main id="main" class="container">
     <div th:replace="~{base :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Security posture')}"></header>
-    <p>Every potentially-unsafe configuration this deployment reports about itself, in one plain overview - each with
-        why it is unsafe, a suggested safer alternative and the exact <code>jenreg.*</code> setting that fixes it.
-        Read-only: observing posture never changes it, and no advisory prints a secret value.</p>
+    <p><small>Every potentially-unsafe configuration this deployment currently carries, in one place — each advisory
+        names <strong>why</strong> it is unsafe and the <strong>safer alternative</strong> (the exact
+        <code>jenreg.*</code> setting to change), grounded in best practice. This screen is <strong>read-only</strong>
+        — observing posture never changes it — and it <strong>names the risk, never a secret value</strong>. It surfaces
+        the same list the <code>/api/admin/posture</code> admin API returns. A clean deployment raises nothing, so an
+        empty screen is the healthy state.</small></p>
+    <p th:if="${posture.scoped()}"><small>Advisories are grouped by whose they are to fix: the ones raised against
+        <strong>this tenant's</strong> own settings, which affect no other tenant, and the
+        <strong>deployment-wide</strong> ones, which apply to every tenant and are the operator's. Another tenant's
+        advisories are never shown here, and are not in the counts.</small></p>
 
-    <div th:if="${posture.advisories().isEmpty()}"
-         th:replace="~{base :: empty('No security-posture advisories - the effective configuration raises none.')}"></div>
-
-    <th:block th:unless="${posture.advisories().isEmpty()}">
-        <p>Overall:
-            <strong th:text="${posture.critical()} + ' critical'">0 critical</strong>,
+    <p>Advisories: <strong class="app-badge"
+            th:classappend="${posture.count() == 0} ? 'app-badge--pass' : 'app-badge--danger'"
+            th:text="${posture.count()}">0</strong>
+        <span th:if="${posture.count() > 0}"><small>
+            <span th:text="${posture.critical()} + ' critical'">0 critical</span>,
             <span th:text="${posture.warn()} + ' warn'">0 warn</span>,
-            <span th:text="${posture.info()} + ' info'">0 info</span>.</p>
+            <span th:text="${posture.info()} + ' info'">0 info</span>
+        </small></span>
+    </p>
 
-        <article class="app-card" th:each="advisory : ${posture.advisories()}">
-            <header>
-                <strong th:text="'[' + ${advisory.severity()} + '] ' + ${advisory.title()}">[WARN] Title</strong>
-                <small><code th:text="${advisory.id()}">jenreg.advisory.id</code></small>
-            </header>
-            <p><strong>Why:</strong> <span th:text="${advisory.why()}">Why this is unsafe.</span></p>
-            <p><strong>Fix:</strong> <span th:text="${advisory.fix()}">What to do instead.</span>
-                <code th:if="${!advisory.settingKey().isEmpty()}"
-                      th:text="${advisory.settingKey()} + '=' + ${advisory.settingValue()}">jenreg.key=value</code></p>
-            <p th:if="${!advisory.docs().isEmpty()}">
-                <a th:href="${advisory.docs()}" rel="noopener noreferrer" target="_blank">Documentation</a></p>
+    <!-- Principle 10 / D-144: this collection is memoised for a few seconds, because the header badge counts exactly
+         these rows and therefore collects on every console view; the as-of instant keeps that honest rather than
+         passing a memoised report off as a live one. A change made through this console drops the memo at once, so
+         only a change made through the API, the CLI or another node can be this stale. -->
+    <p th:if="${postureCollectedAt != null}"><small>Collected as of
+        <span th:text="${postureCollectedAt}">-</span> — the same collection the header badge counts, refreshed at
+        most once every few seconds rather than on every page, so a change made outside this console may take that
+        long to appear. Your own settings changes appear immediately.</small></p>
+
+    <p th:if="${posture.empty()}"><small class="setting-nomatch">No security-posture advisories — this deployment's
+        configuration<span th:if="${posture.scoped()}">, and this tenant's,</span> raise<span
+        th:unless="${posture.scoped()}">s</span> no known footguns. New warnings appear here as configuration
+        changes.</small></p>
+
+    <label th:unless="${posture.empty()}">Search
+        <input type="search" id="posture-filter"
+               aria-label="Filter advisories by name, reason or setting"
+               placeholder="Filter by title, id, reason or setting">
+    </label>
+
+    <!-- This tenant's own advisories: raised at Scope.TENANT against this tenant's effective configuration and
+         selected through PostureReport#forTenant. Shown only when the session carries a tenant; a single-tenant
+         deployment always does (its one tenant is selected implicitly). -->
+    <section th:if="${posture.scoped() and !posture.empty()}">
+        <h2>This tenant — <span th:text="${posture.tenant()}">acme</span></h2>
+        <p th:if="${posture.own().isEmpty()}"><small class="setting-nomatch">This tenant's own settings raise no
+            advisories. Its admission policy and other tenant-overridable settings are at safe values.</small></p>
+        <article class="module-card posture-item" th:each="advisory : ${posture.own()}"
+                 th:attr="data-search=${advisory.id() + ' ' + advisory.title() + ' ' + advisory.why() + ' ' + advisory.settingKey() + ' ' + advisory.severity().name() + ' tenant ' + advisory.tenant()}">
+            <div class="module-head">
+                <div>
+                    <strong th:text="${advisory.title()}">This tenant admits packages known to be malicious</strong>
+                    <br><code class="setting-doc" th:text="${advisory.id()}">jenreg.feature.signal</code>
+                    <small>— tenant <strong th:text="${advisory.tenant()}">acme</strong></small>
+                </div>
+                <div class="module-badges">
+                    <span class="app-badge" title="Raised against this tenant's own settings; other tenants are unaffected">tenant</span>
+                    <span class="app-badge" th:text="${advisory.severity().name()}"
+                          th:classappend="${advisory.severity().name() == 'CRITICAL'} ? 'app-badge--danger'
+                                          : (${advisory.severity().name() == 'WARN'} ? 'app-badge--warn' : '')">WARN</span>
+                </div>
+            </div>
+            <p><small th:text="${advisory.why()}">Why this configuration is unsafe.</small></p>
+            <p><small><strong>Suggested fix:</strong> <span th:text="${advisory.fix()}">The safer alternative.</span></small></p>
+            <p th:if="${!advisory.settingKey().isEmpty()}"><small>Set
+                <code th:text="${advisory.settingKey()} + '=' + ${advisory.settingValue()}">jenreg.key=value</code>
+                for this tenant on the <a href="/settings/tenant">tenant settings</a> screen</small></p>
+            <p th:if="${!advisory.docs().isEmpty()}"><small><a th:href="${advisory.docs()}" rel="noopener noreferrer"
+                target="_blank">Read more &rarr;</a></small></p>
         </article>
-    </th:block>
+    </section>
+
+    <!-- The deployment-wide advisories: the operator's to fix, and true for every tenant. -->
+    <section th:unless="${posture.empty()}">
+        <h2 th:if="${posture.scoped()}">Deployment-wide</h2>
+        <p th:if="${posture.scoped() and posture.deployment().isEmpty()}"><small class="setting-nomatch">The
+            deployment's own configuration raises no advisories.</small></p>
+        <article class="module-card posture-item" th:each="advisory : ${posture.deployment()}"
+                 th:attr="data-search=${advisory.id() + ' ' + advisory.title() + ' ' + advisory.why() + ' ' + advisory.settingKey() + ' ' + advisory.severity().name() + ' deployment'}">
+            <div class="module-head">
+                <div>
+                    <strong th:text="${advisory.title()}">The instance is fully open</strong>
+                    <br><code class="setting-doc" th:text="${advisory.id()}">jenreg.feature.signal</code>
+                </div>
+                <div class="module-badges">
+                    <span class="app-badge" title="A property of the whole deployment; it applies to every tenant">deployment</span>
+                    <span class="app-badge" th:text="${advisory.severity().name()}"
+                          th:classappend="${advisory.severity().name() == 'CRITICAL'} ? 'app-badge--danger'
+                                          : (${advisory.severity().name() == 'WARN'} ? 'app-badge--warn' : '')">WARN</span>
+                </div>
+            </div>
+            <p><small th:text="${advisory.why()}">Why this configuration is unsafe.</small></p>
+            <p><small><strong>Suggested fix:</strong> <span th:text="${advisory.fix()}">The safer alternative.</span></small></p>
+            <p th:if="${!advisory.settingKey().isEmpty()}"><small>Set
+                <code th:text="${advisory.settingKey()} + '=' + ${advisory.settingValue()}">jenreg.key=value</code></small></p>
+            <p th:if="${!advisory.docs().isEmpty()}"><small><a th:href="${advisory.docs()}" rel="noopener noreferrer"
+                target="_blank">Read more &rarr;</a></small></p>
+        </article>
+    </section>
 </main>
+<!-- A purely in-memory filter over the rendered advisories, matching each item's data-search (id + title + why +
+     setting + severity + scope), like the metrics-overview and settings screens - no request wiring. -->
+<script th:inline="none">
+    (function () {
+        var input = document.getElementById('posture-filter');
+        if (!input) {
+            return;
+        }
+        input.addEventListener('input', function () {
+            var q = input.value.trim().toLowerCase();
+            document.querySelectorAll('.posture-item').forEach(function (el) {
+                var hay = (el.getAttribute('data-search') || '').toLowerCase();
+                el.style.display = (!q || hay.indexOf(q) >= 0) ? '' : 'none';
+            });
+        });
+    })();
+</script>
 </body>
 </html>

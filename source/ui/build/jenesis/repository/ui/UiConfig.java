@@ -73,4 +73,16 @@ public class UiConfig {
             }
         };
     }
+
+    /**
+     * Where this console reads posture from when nothing else supplies it: the environment this process started
+     * with. A deployment that keeps stored settings layers those over it and contributes its own source, which
+     * this steps aside for - the report is the same report either way, discovered against a different view of the
+     * effective configuration.
+     */
+    @Bean
+    @ConditionalOnMissingBean(PostureSource.class)
+    public PostureSource postureSource(Environment environment) {
+        return PostureSource.ofEnvironment(environment::getProperty);
+    }
 }

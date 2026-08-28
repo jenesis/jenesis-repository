@@ -25,8 +25,14 @@ public class ConsoleAdvice {
 
     private final Environment environment;
 
-    public ConsoleAdvice(Environment environment) {
+    private final PostureSource source;
+
+    private final CurrentTenant current;
+
+    public ConsoleAdvice(Environment environment, PostureSource source, CurrentTenant current) {
         this.environment = environment;
+        this.source = source;
+        this.current = current;
     }
 
     @ModelAttribute("readOnly")
@@ -57,8 +63,9 @@ public class ConsoleAdvice {
     @ModelAttribute("postureBadge")
     public PostureBadge postureBadge() {
         try {
-            return PostureBadge.of(PostureReport.discover(Configuration.of(environment::getProperty)).count());
-        } catch (RuntimeException uncollectable) {
+            // The same source the screen reads, so the badge and its own destination cannot name different numbers.
+            return PostureBadge.of(source.collect(current.name()).report().count());
+        } catch (IOException | RuntimeException uncollectable) {
             return PostureBadge.unknown();
         }
     }
