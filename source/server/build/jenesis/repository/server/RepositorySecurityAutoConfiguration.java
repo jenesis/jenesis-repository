@@ -63,8 +63,27 @@ public class RepositorySecurityAutoConfiguration {
         return new RateLimitFilter(rateLimiter, authorization, RateLimitFilter.liveDefault(Features.lookup(), properties.getRateLimit()));
     }
 
+    /**
+     * The repository's chain, backed off only by a bean of THIS NAME.
+     *
+     * <p>By name, not by type, and the distinction is the whole point. A bare {@code @ConditionalOnMissingBean}
+     * matches the method's return type, so ANY {@link SecurityFilterChain} in the context suppressed this one -
+     * including the ordered, path-matched chains that plainly exist to sit BESIDE it. SCIM's
+     * {@code scimSecurityFilterChain} is {@code @Order(1)} over {@code /scim/**} and the cache's is the same shape
+     * over {@code /cache/**}: neither is a replacement for the artifact chain, and both silently were one.
+     *
+     * <p>What that cost is a node that maps {@code /repository/**} and answers it from a browser-session chain.
+     * The admin console requires this module, so auto-configuration registers the repository's controller into its
+     * context - and with this chain suppressed by the console's own, an artifact request there was bounced to
+     * {@code /login} instead of being authenticated by its key.
+     *
+     * <p>Replacing this chain outright is still available, and is still how a fork-free deployment does it: define
+     * a bean named {@code securityFilterChain}. Contributing to it - extra open routes, an extra filter, a richer
+     * authorization manager - needs no replacement at all and rides the {@link SecurityChainCustomizer} seam, which
+     * is what the class comment above recommends and what enterprise actually does.
+     */
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(name = "securityFilterChain")
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    @Qualifier("repositoryAuthorizationManager")
                                                    AuthorizationManager<RequestAuthorizationContext> authorizationManager,
