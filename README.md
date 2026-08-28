@@ -1,8 +1,8 @@
 jenesis-repository
 ==================
 
-[![release](https://img.shields.io/github/v/release/raphw/jenesis-repository?label=release)](https://github.com/raphw/jenesis-repository/releases/latest)
-![build](https://github.com/raphw/jenesis-repository/actions/workflows/build.yml/badge.svg)
+[![release](https://img.shields.io/github/v/release/jenesis/jenesis-repository?label=release)](https://github.com/jenesis/jenesis-repository/releases/latest)
+![build](https://github.com/jenesis/jenesis-repository/actions/workflows/build.yml/badge.svg)
 
 > ### [Jenesis](https://jenesis.build) - a modern Java build tool
 > _Java-native config, plugin-free, with `module-info.java` treated as a feature, not an afterthought._
