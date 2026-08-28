@@ -12,6 +12,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import module java.base;
 
@@ -165,7 +166,13 @@ public class BrowseController {
     }
 
     /** A page of immediate children under a browse path plus whether the directory held more than the render cap. */
-    private record Listing(List<Map<String, Object>> entries, boolean truncated) {
+    private record Listing(List<BrowseRow> entries, boolean truncated) {
+    }
+
+    /** A browse link with the path as a properly encoded query parameter - the row carries its own links, so this is
+     *  where the encoding happens rather than in the template that used to build each href with {@code @{}}. */
+    private static String link(String base, String path) {
+        return UriComponentsBuilder.fromPath(base).queryParam("path", path).toUriString();
     }
 
     /** The most immediate children a single browse renders. A directory with an enormous fan-out (a repo with a
@@ -186,7 +193,7 @@ public class BrowseController {
     private Listing children(String path) throws IOException {
         String prefix = path.isEmpty() ? ROOT : ROOT + "/" + path;
         int depth = path.isEmpty() ? 1 : path.split("/").length + 1;
-        List<Map<String, Object>> entries = new ArrayList<>();
+        List<BrowseRow> entries = new ArrayList<>();
         // The browse is produced by the shared screened enumeration: ScreenedNames pages the immediate children AND
         // applies the servable-name screen under HIDE_WITHHELD_AND_GONE (published, blob present, not withheld) in one
         // call, so this controller never holds an unscreened child name and cannot page-then-forget the screen. It is
@@ -219,13 +226,12 @@ public class BrowseController {
                         long bytes = store.size(located.get());
                         size = bytes < 0 ? "—" : humanSize(bytes);
                     }
-                    Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("name", name);
-                    entry.put("path", childPath);
-                    entry.put("folder", folder);
-                    entry.put("depth", depth);
-                    entry.put("size", size);
-                    entries.add(entry);
+                    // The row carries its own links, because that is the only thing a repository-scoped browse
+                    // draws differently. A leaf here is text rather than a link: this console has no artifact
+                    // detail page to send a reader to.
+                    entries.add(new BrowseRow(name, folder, size, depth,
+                            folder ? link("/browse", childPath) : null,
+                            folder ? link("/browse/children", childPath) : null));
                 });
         return new Listing(entries, scanned.truncated());
     }

@@ -4,6 +4,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.ui.BrowseController;
+import build.jenesis.repository.ui.BrowseRow;
 import module org.junit.jupiter.api;
 import org.springframework.ui.ConcurrentModel;
 import org.springframework.ui.Model;
@@ -49,12 +50,12 @@ class BrowseControllerTest {
         Model model = new ConcurrentModel();
         controller.browse("com/example", model);
 
-        List<Map<String, Object>> entries = (List<Map<String, Object>>) model.getAttribute("entries");
-        assertThat(entries).extracting(e -> e.get("name")).containsExactlyInAnyOrder("a-1.0.jar", "nested");
-        assertThat(entries).filteredOn(e -> e.get("name").equals("nested")).singleElement()
-                .satisfies(e -> assertThat(e.get("folder")).isEqualTo(true));
-        assertThat(entries).filteredOn(e -> e.get("name").equals("a-1.0.jar")).singleElement()
-                .satisfies(e -> assertThat(e.get("folder")).isEqualTo(false));
+        List<BrowseRow> entries = (List<BrowseRow>) model.getAttribute("entries");
+        assertThat(entries).extracting(BrowseRow::name).containsExactlyInAnyOrder("a-1.0.jar", "nested");
+        assertThat(entries).filteredOn(e -> e.name().equals("nested")).singleElement()
+                .satisfies(e -> assertThat(e.folder()).isTrue());
+        assertThat(entries).filteredOn(e -> e.name().equals("a-1.0.jar")).singleElement()
+                .satisfies(e -> assertThat(e.folder()).isFalse());
         assertThat(model.getAttribute("truncated")).isEqualTo(false);
         assertThat(counting.lists())
                 .as("children are paged and folders probed by a bounded page - never a full list()").isZero();
@@ -78,8 +79,8 @@ class BrowseControllerTest {
         Model model = new ConcurrentModel();
         controller.browse("com/example", model);
 
-        List<Map<String, Object>> entries = (List<Map<String, Object>>) model.getAttribute("entries");
-        assertThat(entries).extracting(e -> e.get("name"))
+        List<BrowseRow> entries = (List<BrowseRow>) model.getAttribute("entries");
+        assertThat(entries).extracting(BrowseRow::name)
                 .as("the dangling leaf is screened out; the live leaf and the sub-directory stay")
                 .containsExactlyInAnyOrder("live-1.0.jar", "nested");
     }
@@ -95,7 +96,7 @@ class BrowseControllerTest {
         Model model = new ConcurrentModel();
         controller.browse("big", model);
 
-        List<Map<String, Object>> entries = (List<Map<String, Object>>) model.getAttribute("entries");
+        List<BrowseRow> entries = (List<BrowseRow>) model.getAttribute("entries");
         assertThat(entries).as("the render is capped so a huge directory cannot OOM the console").hasSize(1000);
         assertThat(model.getAttribute("truncated")).as("and the cap is surfaced, not silent").isEqualTo(true);
     }
