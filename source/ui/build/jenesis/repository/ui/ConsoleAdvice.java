@@ -73,10 +73,18 @@ public class ConsoleAdvice {
         return entries(authentication, NavEntry.Section.ADMINISTRATION);
     }
 
+    /** This console's own screens, ahead of anything contributed - so the product's own objects lead the bar. */
+    private static final List<NavEntry> OWN = List.of(
+            new NavEntry("Overview", "/console"),
+            new NavEntry("Installed providers", "/catalog", NavEntry.Access.ADMIN,
+                    NavEntry.Section.ADMINISTRATION));
+
     private List<NavEntry> entries(Authentication authentication, NavEntry.Section section) {
         boolean admin = authority(authentication, "ROLE_ADMIN");
-        return ConsoleModuleProvider.enabled(Features.namespaced(environment::getProperty)).stream()
-                .flatMap(module -> module.navEntries().stream())
+        return Stream.concat(
+                        OWN.stream(),
+                        ConsoleModuleProvider.enabled(Features.namespaced(environment::getProperty)).stream()
+                                .flatMap(module -> module.navEntries().stream()))
                 .filter(entry -> entry.section() == section)
                 .filter(entry -> permitted(entry, authentication != null, admin))
                 .toList();

@@ -33,6 +33,7 @@ public final class ConsoleUrlSpace {
      */
     public static final List<String> PATTERNS = List.of(
             "/",
+            "/catalog",
             "/error",
             "/favicon.ico",
             "/login", "/login/**",

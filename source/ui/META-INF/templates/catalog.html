@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{base :: head('Installed providers', 'jenesis-repository')}"></head>
+<body>
+<th:block th:replace="~{base :: shell('/catalog')}"></th:block>
+<main class="container">
+    <header th:replace="~{base :: pageHeader('Installed providers')}"></header>
+    <p>Every capability this repository carries is a discovered <strong>SPI</strong> (a plug-in contract) with one or
+        more installed <strong>implementations</strong>. This is a read-only view of the whole plug-in surface,
+        grouped by SPI; whether an implementation is active is configured with its <code>jenreg.&lt;feature&gt;</code>
+        key.</p>
+    <div th:if="${catalog.services().isEmpty()}"
+         th:replace="~{base :: empty('No SPIs are installed.')}"></div>
+    <article th:each="service : ${catalog.services()}">
+        <header>
+            <h4 th:text="${service.simpleName()}">Service</h4>
+            <p><small><code th:text="${service.name()}">build.jenesis.repository.Spi</code></small></p>
+        </header>
+        <ul>
+            <li th:each="implementation : ${service.implementations()}">
+                <strong th:text="${implementation.simpleName()}">Implementation</strong>
+                &mdash; <code th:text="${implementation.module()}">module</code>
+            </li>
+        </ul>
+    </article>
+</main>
+</body>
+</html>

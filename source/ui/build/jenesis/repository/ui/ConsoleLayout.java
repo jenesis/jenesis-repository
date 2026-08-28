@@ -54,10 +54,13 @@ public final class ConsoleLayout {
      *  the same way by every console so a module's {@code NavEntry} looks right wherever it is installed. */
     public static final String NAV_LINKS = "navLinks";
 
+    /** The console header every screen renders: brand, links, theme switch, sign-out. */
+    public static final String SHELL = "shell";
+
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BRAND, THEME_SELECT, HEAD_CONTENTS,
-            DANGER_BUTTON, NAV_LINKS);
+            DANGER_BUTTON, NAV_LINKS, SHELL);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();
