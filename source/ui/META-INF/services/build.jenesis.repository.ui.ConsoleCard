@@ -1,0 +1,4 @@
+build.jenesis.repository.ui.BrowseCard
+build.jenesis.repository.ui.LogCard
+build.jenesis.repository.ui.ConsistencyCard
+build.jenesis.repository.ui.CredentialsCard

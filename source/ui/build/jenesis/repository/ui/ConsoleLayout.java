@@ -8,7 +8,7 @@ import java.util.Set;
  * <p>It exists to make an edge visible that the language could not see. The admin console extends this console
  * entirely through Thymeleaf: all of its templates {@code th:replace="~{base :: ...}"} against {@code base.html}, and
  * {@code requires build.jenesis.repository.ui} is what puts that file on the module path. Nothing in Java crossed the
- * boundary - no import, no type, no {@code Panel} - so the dependency was real, load-bearing, and invisible to a
+ * boundary - no import, no type, no {@code ConsoleCard} - so the dependency was real, load-bearing, and invisible to a
  * module-graph tool and to a reader. Deleting the {@code requires} broke nothing a compiler could report; it broke
  * every page at render time.
  *
