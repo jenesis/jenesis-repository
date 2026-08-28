@@ -168,14 +168,30 @@ public final class OidcDiscovery {
     private static Map<String, Object> metadata(JsonNode document) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         document.propertyNames().forEach(name -> metadata.put(name, plain(document.get(name))));
-        return Map.copyOf(metadata);
+        return Collections.unmodifiableMap(metadata);
     }
 
+    /**
+     * One metadata value as a plain JDK type. Every JSON shape has to be handled, including the ones this product
+     * never reads: the whole document is carried through to {@code ClientRegistration.providerConfigurationMetadata},
+     * so a shape that falls through here fails the entire discovery rather than the one field. A real provider's
+     * document contains nested objects - Keycloak publishes {@code mtls_endpoint_aliases} - and an object reaching
+     * the string branch is a coercion failure that takes the login with it.
+     *
+     * <p>The collections are wrapped rather than copied for the same reason: JSON null maps to a null value, and
+     * {@code List.copyOf}/{@code Map.copyOf} reject those, so a document with an explicit null would have failed the
+     * same way for a different reason.
+     */
     private static Object plain(JsonNode node) {
         if (node.isArray()) {
             List<Object> values = new ArrayList<>();
             node.forEach(entry -> values.add(plain(entry)));
-            return List.copyOf(values);
+            return Collections.unmodifiableList(values);
+        }
+        if (node.isObject()) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            node.propertyNames().forEach(name -> values.put(name, plain(node.get(name))));
+            return Collections.unmodifiableMap(values);
         }
         if (node.isBoolean()) {
             return node.asBoolean();

@@ -125,6 +125,40 @@ class OidcDiscoveryTest {
                 .hasMessageContaining(".well-known/oauth-authorization-server");
     }
 
+    @Test
+    void a_document_carrying_a_nested_object_or_a_null_is_still_discovered() {
+        // Keycloak publishes mtls_endpoint_aliases, an object. The whole document is carried through to the
+        // registration's provider metadata, so a shape the parser does not handle fails the entire discovery rather
+        // than the one field it appears in - and the login with it. This is a real document's shape, and it broke
+        // SSO against a real provider while every unit test here passed, because none of them had a nested object.
+        documents.put("/.well-known/openid-configuration", """
+                {
+                  "issuer": "%1$s",
+                  "authorization_endpoint": "%1$s/authorize",
+                  "token_endpoint": "%1$s/token",
+                  "jwks_uri": "%1$s/jwks",
+                  "mtls_endpoint_aliases": {
+                    "token_endpoint": "%1$s/mtls/token",
+                    "revocation_endpoint": "%1$s/mtls/revoke",
+                    "nested_again": {"depth": 2}
+                  },
+                  "backchannel_logout_session_supported": null,
+                  "response_types_supported": ["code", null]
+                }
+                """.formatted(issuer));
+
+        ClientRegistration registration = OidcDiscovery.fromIssuerLocation(issuer)
+                .registrationId("oidc")
+                .clientId("client")
+                .clientSecret("secret")
+                .build();
+
+        assertThat(registration.getProviderDetails().getTokenUri()).isEqualTo(issuer + "/token");
+        assertThat(registration.getProviderDetails().getConfigurationMetadata())
+                .as("the nested object is carried through as a map rather than coerced or dropped")
+                .containsKey("mtls_endpoint_aliases");
+    }
+
     private static String document(String declaredIssuer) {
         return """
                 {
