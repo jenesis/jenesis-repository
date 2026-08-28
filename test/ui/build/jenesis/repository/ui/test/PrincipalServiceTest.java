@@ -52,7 +52,11 @@ class PrincipalServiceTest {
                 .isEqualTo("github/octocat");
         assertThat(roles(user)).as("that id is the configured admin, so it maps to ADMIN")
                 .contains("ROLE_USER", "ROLE_ADMIN");
-        assertThat(user.getName()).isEqualTo("octocat");
+        assertThat(user.getName())
+                .as("the principal reports the id the authorities were decided on, not the provider's raw one - "
+                        + "otherwise every later reader either re-derives the qualified form or keys itself by an "
+                        + "id that is unique only within one provider")
+                .isEqualTo("github/octocat");
     }
 
     @Test
@@ -89,7 +93,7 @@ class PrincipalServiceTest {
     /** The provider-qualified id the service asked {@link Principals} about (the last, if asked more than once). */
     private static String captured(Principals principals) {
         ArgumentCaptor<String> id = ArgumentCaptor.forClass(String.class);
-        verify(principals, atLeastOnce()).authorities(id.capture());
+        verify(principals, atLeastOnce()).authorities(id.capture(), any());
         return id.getValue();
     }
 

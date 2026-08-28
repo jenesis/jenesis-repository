@@ -44,6 +44,6 @@ class PrincipalsTest {
     }
 
     private static List<String> roles(Principals principals, String id) {
-        return principals.authorities(id).stream().map(GrantedAuthority::getAuthority).toList();
+        return principals.authorities(id, "").stream().map(GrantedAuthority::getAuthority).toList();
     }
 }
