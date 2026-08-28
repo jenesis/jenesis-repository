@@ -341,8 +341,24 @@ public final class FilesystemArtifactStore implements ArtifactStore {
 
             @Override
             public FileVisitResult visitFileFailed(Path path, IOException failure) throws IOException {
-                // NOT skipped: a short scan is how a sweep learns a prefix is drained, so a file that cannot be
-                // examined must fail the call rather than silently shorten it into a claim of completeness.
+                // A file that VANISHED is not a file that could not be examined. The walk reads a directory and
+                // then stats each name it found, and a concurrent write closes that gap constantly: the temp this
+                // very visitor filters out is renamed into place between the two, and the stat then fails. An
+                // enumeration that omits a file which no longer exists is not short - it is correct, because a
+                // deleted file is exactly what a listing is entitled not to report.
+                //
+                // Measured by the cache soak before this was so: under sustained publishing the reaper's project
+                // walk aborted on a NoSuchFileException for a .upload*.tmp and logged "cache reaper sweep failed;
+                // retrying next interval" - so the sweep was skipped whenever a write was in flight, which under
+                // continuous load is every interval. The cap then stops being enforced by the mechanism whose
+                // whole job is to enforce it, silently, with nothing but a warning to say so.
+                //
+                // Every other failure still throws, and for the original reason: a short scan is how a sweep
+                // learns a prefix is drained, so a file that is THERE and cannot be read must fail the call rather
+                // than silently shorten it into a claim of completeness.
+                if (failure instanceof NoSuchFileException) {
+                    return FileVisitResult.CONTINUE;
+                }
                 throw failure;
             }
         });
