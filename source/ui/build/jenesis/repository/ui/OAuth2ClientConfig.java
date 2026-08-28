@@ -18,7 +18,7 @@ import module java.base;
  * {@code jenreg.ui.github.client-id} is set, and a generic OpenID Connect provider - its endpoints and JWK set
  * discovered from {@code jenreg.ui.oidc.issuer-uri} - when that issuer and a client id are set (so any OIDC identity
  * provider, e.g. Google, Keycloak, Okta, Azure AD, works). Every bean here exists only when at least one provider is
- * configured, so the app still starts with login disabled ({@link SecurityConfig} shows a notice) rather than failing,
+ * configured, so the app still starts with login disabled ({@link ConsoleSecurityConfig} shows a notice) rather than failing,
  * and Spring Boot's property auto-configuration, which rejects a blank client id, is avoided. Discovery makes a network
  * call to the issuer at startup. The login is contributed to the core chain as a {@link LoginContributor}, mapping the
  * signed-in user to authorities through {@link Principals}.
