@@ -50,10 +50,14 @@ public final class ConsoleLayout {
     /** A destructive submit: the danger treatment and its confirmation together, so neither can be forgotten. */
     public static final String DANGER_BUTTON = "dangerButton";
 
+    /** The links installed console modules contribute: the primary bar and the administration dropdown, rendered
+     *  the same way by every console so a module's {@code NavEntry} looks right wherever it is installed. */
+    public static final String NAV_LINKS = "navLinks";
+
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BRAND, THEME_SELECT, HEAD_CONTENTS,
-            DANGER_BUTTON);
+            DANGER_BUTTON, NAV_LINKS);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

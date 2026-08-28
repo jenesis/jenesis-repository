@@ -86,6 +86,29 @@
 </header>
 
 <!-- Empty / loading / error state: one consistent treatment, never a blank screen. -->
+<!--/* The links every installed console module contributes, rendered identically wherever the console runs.
+     Two sections rather than one flat bar: a deployment with several modules installed puts the three or four
+     links that get daily use somewhere in the middle of the settings-shaped ones, and someone who visits
+     occasionally has to re-read the whole bar every time. The administration group is a plain <details>
+     dropdown - Pico styles it, it needs no script, and a native disclosure is keyboard- and screen-reader-
+     operable without a line of ARIA. Nothing is hidden; it is one keystroke away and grouped by what it is.
+
+     Both lists are null-safe: an error page renders this shell outside the controller advice, so every model
+     attribute is absent there. th:each tolerates a null quietly; an expression asking a list its size does not. */-->
+<th:block th:fragment="navLinks(navEntries, adminNav)">
+    <li th:each="entry : ${navEntries}" th:if="${entry.section.name() == 'PRIMARY'}">
+        <a th:href="${entry.path}" th:text="${entry.label}">Nav</a></li>
+    <li th:if="${adminNav != null and !adminNav.isEmpty()}">
+        <details class="dropdown app-nav-group">
+            <summary>Administration</summary>
+            <ul dir="rtl">
+                <li th:each="entry : ${adminNav}">
+                    <a th:href="${entry.path}" th:text="${entry.label}">Nav</a></li>
+            </ul>
+        </details>
+    </li>
+</th:block>
+
 <div th:fragment="empty(message)" class="app-empty" role="status">
     <div class="app-empty__icon" aria-hidden="true">∅</div>
     <p th:text="${message}" style="margin:0">Nothing here yet.</p>

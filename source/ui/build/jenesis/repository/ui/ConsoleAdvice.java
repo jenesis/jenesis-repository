@@ -2,9 +2,13 @@ package build.jenesis.repository.ui;
 
 import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.PostureReport;
+import build.jenesis.repository.store.Features;
 import org.springframework.core.env.Environment;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
+
+import module java.base;
 
 /**
  * Publishes deployment-wide flags every console view reads to the model, so a template shows them without each
@@ -48,5 +52,51 @@ public class ConsoleAdvice {
     @ModelAttribute("postureCount")
     public int postureCount() {
         return PostureReport.discover(Configuration.of(environment::getProperty)).count();
+    }
+
+    /**
+     * The links installed console modules contribute, for the primary bar - resolved to the ones this user may see,
+     * so the shell renders them with a loop and names no module's screens.
+     *
+     * <p>A module contributed to this console has to be reachable <em>from</em> it. Registering its configuration
+     * puts its screens on the server; without this they are routes a user can only reach by typing the path, which
+     * is not an extension point anybody can use.
+     */
+    @ModelAttribute("navEntries")
+    public List<NavEntry> navEntries(Authentication authentication) {
+        return entries(authentication, NavEntry.Section.PRIMARY);
+    }
+
+    /** The same, for the administration group the layout renders as a dropdown. */
+    @ModelAttribute("adminNav")
+    public List<NavEntry> adminNav(Authentication authentication) {
+        return entries(authentication, NavEntry.Section.ADMINISTRATION);
+    }
+
+    private List<NavEntry> entries(Authentication authentication, NavEntry.Section section) {
+        boolean admin = authority(authentication, "ROLE_ADMIN");
+        return ConsoleModuleProvider.enabled(Features.namespaced(environment::getProperty)).stream()
+                .flatMap(module -> module.navEntries().stream())
+                .filter(entry -> entry.section() == section)
+                .filter(entry -> permitted(entry, authentication != null, admin))
+                .toList();
+    }
+
+    /**
+     * Whether this user clears the entry's access floor. This console is single-tenant and has two tiers, so
+     * {@code SUPERADMIN} resolves to the same authority as {@code ADMIN}: with one tenant, "administers this
+     * deployment" and "administers the tenant" name the same person, and hiding such a link instead would leave a
+     * module's own administration screen unreachable on the very deployment that installed it.
+     */
+    private static boolean permitted(NavEntry entry, boolean authenticated, boolean admin) {
+        return switch (entry.access()) {
+            case USER -> authenticated;
+            case ADMIN, SUPERADMIN -> admin;
+        };
+    }
+
+    private static boolean authority(Authentication authentication, String role) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(granted -> role.equals(granted.getAuthority()));
     }
 }
