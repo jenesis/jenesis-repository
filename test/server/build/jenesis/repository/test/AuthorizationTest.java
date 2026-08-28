@@ -1,5 +1,6 @@
 package build.jenesis.repository.test;
 
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -454,7 +455,7 @@ class AuthorizationTest {
     void a_concurrent_use_flush_is_merged_not_silently_overwritten() throws IOException {
         String key = Authorization.mint("acme");
         String hash = Authorization.hash(key);
-        RacingStore racing = new RacingStore(store, "auth/acme/" + hash + "/metadata");
+        RacingStore racing = new RacingStore(store, Scopes.space(Scopes.AUTH) + "/acme/" + hash + "/metadata");
         Authorization raced = Authorization.enforcing(racing);
         raced.provision("acme", hash, "k", null);
 
@@ -507,7 +508,7 @@ class AuthorizationTest {
 
         // A metadata write that loses every compare-and-set: recordUsed spends all USE_COUNT_RETRIES attempts and
         // forfeits, returning false and leaving no partial write, so the caller keeps the delta for the next flush.
-        ConflictingStore conflicting = new ConflictingStore(store, "auth/acme/" + hash + "/metadata");
+        ConflictingStore conflicting = new ConflictingStore(store, Scopes.space(Scopes.AUTH) + "/acme/" + hash + "/metadata");
         Authorization contended = Authorization.enforcing(conflicting);
         assertThat(contended.recordUsed("acme", hash, Instant.parse("2026-07-01T09:00:00Z"), "10.0.0.2", 9))
                 .as("a write that loses every attempt forfeits the increment").isFalse();

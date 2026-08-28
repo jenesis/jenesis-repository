@@ -202,6 +202,7 @@
  * @jenesis.pin tools.jackson.databind 3.2.0
  */
 open module build.jenesis.repository.test {
+    requires build.jenesis.repository.scope;
     requires build.jenesis.repository.contract.testkit;
     // The shared traversal probe vectors: ImporterContractTest probes every discovered importer with the same list the
     // format kit probes every format with, so the importer seam cannot rot into its own private set of shapes.

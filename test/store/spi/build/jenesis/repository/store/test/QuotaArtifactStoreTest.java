@@ -1,5 +1,6 @@
 package build.jenesis.repository.store.test;
 
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
@@ -249,7 +250,7 @@ class QuotaArtifactStoreTest {
         // the read path - used() parses it back to 0, the safe floor the next recompute reconcile corrects, and the
         // observability read degrades to "0 used" rather than throwing through the non-throwing metrics() call.
         ArtifactStore raw = delegate();
-        raw.writeVersioned("quota/used", "not-a-number".getBytes(StandardCharsets.UTF_8), null);
+        raw.writeVersioned(Scopes.space(Scopes.QUOTA) + "/used", "not-a-number".getBytes(StandardCharsets.UTF_8), null);
         QuotaArtifactStore store = new QuotaArtifactStore(raw, 1000);
 
         assertThat(store.used()).as("a corrupt counter floors to zero").isZero();
@@ -272,7 +273,7 @@ class QuotaArtifactStoreTest {
         // store(total) retries the compare-and-set, but if contention never clears it forfeits rather than spinning:
         // the stale counter stands until the next reconcile corrects it - the documented drift model, never a hang.
         ArtifactStore raw = delegate();
-        raw.writeVersioned("quota/used", "700".getBytes(StandardCharsets.UTF_8), null);
+        raw.writeVersioned(Scopes.space(Scopes.QUOTA) + "/used", "700".getBytes(StandardCharsets.UTF_8), null);
         QuotaArtifactStore store = new QuotaArtifactStore(new ConflictingCounterStore(raw), 5000);
 
         store.store(4321);   // every counter compare-and-set conflicts
@@ -303,7 +304,7 @@ class QuotaArtifactStoreTest {
 
         @Override
         public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            if (key.equals("quota/used")) {
+            if (key.equals(Scopes.space(Scopes.QUOTA) + "/used")) {
                 return false;
             }
             return delegate.writeVersioned(key, content, expected);

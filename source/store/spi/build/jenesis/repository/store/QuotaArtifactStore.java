@@ -1,5 +1,7 @@
 package build.jenesis.repository.store;
 
+import build.jenesis.repository.scope.Scopes;
+
 import module java.base;
 
 import build.jenesis.repository.observation.Health;
@@ -59,7 +61,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     // A deliberate, documented cross-format coupling - the same key-convention sharing the formats already lean on -
     // rather than let staged bytes bypass the cap until (if ever) they are finalized into a blob.
     private static final String UPLOADS = "oci/uploads/";
-    private static final String USED = "quota/used";
+    private static final String USED = Scopes.space(Scopes.QUOTA) + "/used";
     private static final int PAGE = 1000;
 
     private final ArtifactStore delegate;
