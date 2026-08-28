@@ -1,5 +1,7 @@
 package build.jenesis.repository.server.spi;
 
+import build.jenesis.repository.scope.Scopes;
+
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 
@@ -22,6 +24,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * This class is the single store for all of them; each surface reads the same key against the same grants.
  */
 public final class Authorization {
+
+    /** The credential space, deployment-wide: {@code .system/auth/<tenant>/...}. */
+    private static final String AUTH = Scopes.space(Scopes.AUTH);
+
 
     public static final String CACHE_READ = "cache:read";
 
@@ -631,7 +637,7 @@ public final class Authorization {
         if (store == null) {
             return List.of();
         }
-        return store.list("auth/" + tenant);
+        return store.list(AUTH + "/" + tenant);
     }
 
     /** One page of a tenant's credential hashes, in key order: at most {@code limit} names strictly after
@@ -643,7 +649,7 @@ public final class Authorization {
             return new CredentialPage(List.of(), null);
         }
         List<String> names = new ArrayList<>();
-        store.page("auth/" + tenant, after == null ? "" : after, ArtifactStore.oneMoreThan(limit), names::add);
+        store.page(AUTH + "/" + tenant, after == null ? "" : after, ArtifactStore.oneMoreThan(limit), names::add);
         boolean more = names.size() > limit;
         List<String> page = more ? names.subList(0, limit) : names;
         return new CredentialPage(List.copyOf(page), more ? page.getLast() : null);
@@ -1052,30 +1058,30 @@ public final class Authorization {
     }
 
     private static String grantsPath(String tenant, String hash) {
-        return "auth/" + tenant + "/" + hash + "/grants";
+        return AUTH + "/" + tenant + "/" + hash + "/grants";
     }
 
     private static String metadataPath(String tenant, String hash) {
-        return "auth/" + tenant + "/" + hash + "/metadata";
+        return AUTH + "/" + tenant + "/" + hash + "/metadata";
     }
 
     private static String policyPath(String tenant) {
-        return "auth/" + tenant + "/policy";
+        return AUTH + "/" + tenant + "/policy";
     }
 
     private static String quotaPath(String tenant) {
-        return "auth/" + tenant + "/quota";
+        return AUTH + "/" + tenant + "/quota";
     }
 
     private static String rateLimitPath(String tenant) {
-        return "auth/" + tenant + "/ratelimit";
+        return AUTH + "/" + tenant + "/ratelimit";
     }
 
     private static String oidcPath(String tenant) {
-        return "auth/" + tenant + "/oidc";
+        return AUTH + "/" + tenant + "/oidc";
     }
 
     private static String rolesPath(String tenant) {
-        return "auth/" + tenant + "/roles";
+        return AUTH + "/" + tenant + "/roles";
     }
 }

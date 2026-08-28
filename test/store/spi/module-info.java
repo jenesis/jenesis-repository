@@ -39,6 +39,7 @@
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
  */
 open module build.jenesis.repository.store.test {
+    requires build.jenesis.repository.scope;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.store.testkit;

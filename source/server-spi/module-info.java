@@ -24,6 +24,7 @@
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
  */
 module build.jenesis.repository.server.spi {
+    requires build.jenesis.repository.scope;
     requires transitive build.jenesis.repository.store;
     exports build.jenesis.repository.server.spi;
     uses build.jenesis.repository.server.spi.CapabilityContributor;
