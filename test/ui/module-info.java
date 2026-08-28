@@ -193,6 +193,8 @@ open module build.jenesis.repository.ui.test {
     uses build.jenesis.repository.ui.Panel;
     // A panel that always throws, discovered exactly like a real one, so the booted console in ConsoleE2ETest serves a
     // page that really contains a contained failure - the shell's rendering of it is not provable any other way.
+    provides build.jenesis.repository.ui.ConsoleModuleProvider
+            with build.jenesis.repository.ui.test.NavigatingConsoleModule;
     provides build.jenesis.repository.ui.Panel with build.jenesis.repository.ui.test.FailingPanel;
     // A format declaring a mark, discovered the same way, so the booted console resolves a namespace's mark through
     // the panel's own ServiceLoader path rather than only through a lookup a unit test hands in. No format module is
