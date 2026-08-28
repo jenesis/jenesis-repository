@@ -14,7 +14,6 @@
  * <p>{@link build.jenesis.repository.bundle.AllInOne} boots the repository server under the config name
  * {@code allinone} ({@code allinone.properties} in this module), because with the server and the console both on
  * the module path two root {@code application.properties} would be ambiguous;
- * {@link build.jenesis.repository.bundle.Console} boots the web console the same way ({@code allinone-console}),
  * so the one image also runs the console node via {@code MAINMODULE}/{@code MAINCLASS}.
  *
  * @jenesis.release 25
