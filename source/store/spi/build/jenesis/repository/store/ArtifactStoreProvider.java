@@ -84,13 +84,59 @@ public interface ArtifactStoreProvider {
      *  stays here, with the {@code uses} clause: the primitive resolves over the loader it is handed.
  */
     static ArtifactStore resolve(String name, UnaryOperator<String> config) {
+        List<ArtifactStoreProvider> discovered = ServiceLoader.load(ArtifactStoreProvider.class).stream()
+                .map(ServiceLoader.Provider::get)
+                .toList();
         return Providers.exclusiveWithDefault("store",
-                ServiceLoader.load(ArtifactStoreProvider.class),
+                discovered,
                 ArtifactStoreProvider::name,
                 Optional.ofNullable(name),
                 "filesystem",
-                provider -> Features.missing(provider.requiredConfig(), config),
+                provider -> {
+                    rejectConfiguredRivals(provider, discovered, config);
+                    return Features.missing(provider.requiredConfig(), config);
+                },
                 provider -> provider.create(config));
+    }
+
+    /**
+     * Refuse to start when a backend that was <em>not</em> selected is nonetheless fully configured.
+     *
+     * <p>A deployment has exactly one store, so configuration belonging to a second one means the operator believes
+     * something untrue about where their bytes are going - and storage is the one thing a wrong answer loses rather
+     * than merely misconfigures. The failure mode this prevents is silent: a deployment carrying a bucket and its
+     * credentials, with the selection left unset or pointing elsewhere, serves and persists happily against the
+     * other backend while every artifact the operator expects to find is somewhere nobody reads.
+     *
+     * <p><b>Why "fully configured" and not "any key present".</b> Probing for any stray key would fire constantly
+     * and for nothing: the shipped properties files declare every backend's keys so relaxed binding can reach them,
+     * several with real defaults ({@code jenreg.s3.region=us-east-1}, an Azure container name), so those keys are
+     * always set on any Spring deployment. A backend is taken as configured only when every key of its
+     * {@link #requiredConfig()} is present - a bucket, a connection string - which is precisely the set an operator
+     * cannot supply by accident and which the shipped files leave empty. Ambient cloud credentials are not
+     * consulted at all: the check reads this product's own keys, never {@code AWS_*}, so a CI box or a laptop with
+     * a default credential chain is unaffected.
+     */
+    private static void rejectConfiguredRivals(ArtifactStoreProvider chosen,
+                                               List<ArtifactStoreProvider> discovered,
+                                               UnaryOperator<String> config) {
+        List<String> rivals = new ArrayList<>();
+        for (ArtifactStoreProvider rival : discovered) {
+            if (rival.name().equalsIgnoreCase(chosen.name()) || rival.requiredConfig().isEmpty()) {
+                continue;
+            }
+            if (Features.missing(rival.requiredConfig(), config).isEmpty()) {
+                rivals.add(rival.name() + " (" + String.join(", ", new TreeSet<>(rival.requiredConfig())) + ")");
+            }
+        }
+        if (!rivals.isEmpty()) {
+            Collections.sort(rivals);
+            throw new IllegalStateException("The '" + chosen.name() + "' store backend is selected, but another"
+                    + " backend is fully configured as well: " + String.join("; ", rivals) + ". A deployment has"
+                    + " exactly one store, so this is a misconfiguration rather than a preference - and one that"
+                    + " loses data quietly, by writing where nobody is looking. Select the backend you mean with"
+                    + " jenreg.store and remove the other's configuration.");
+        }
     }
 
     /**
