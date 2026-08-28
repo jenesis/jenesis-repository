@@ -113,3 +113,9 @@ optional `sha` input names the commit (default: the head it runs on) and the opt
 ## License
 
 Apache License 2.0 - see [LICENSE](LICENSE). Copyright Rafael Winterhalter.
+
+The console ships two third-party assets under `source/ui/META-INF/resources/`, which keep the terms their
+own authors chose. [Pico CSS](https://picocss.com) 2.1.1 (`css/pico.min.css`) is MIT, and its notice ships
+beside it in `css/pico.LICENSE.txt` because MIT asks that it accompany every copy.
+[htmx](https://htmx.org) 2.0.4 (`js/htmx.min.js`) is 0BSD, which requires no notice and carries no copyright
+line of its own.
