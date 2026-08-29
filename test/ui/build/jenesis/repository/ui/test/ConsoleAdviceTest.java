@@ -22,7 +22,8 @@ class ConsoleAdviceTest {
     private static ConsoleAdvice advice(Map<String, String> properties) {
         StandardEnvironment environment = new StandardEnvironment();
         environment.getPropertySources().addFirst(new MapPropertySource("test", new HashMap<String, Object>(properties)));
-        return new ConsoleAdvice(environment, PostureSource.ofEnvironment(environment::getProperty), () -> "default");
+        return new ConsoleAdvice(environment, PostureSource.ofEnvironment(environment::getProperty), () -> "default",
+                List.of());
     }
 
     @Test

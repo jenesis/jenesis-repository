@@ -29,10 +29,14 @@ public class ConsoleAdvice {
 
     private final CurrentTenant current;
 
-    public ConsoleAdvice(Environment environment, PostureSource source, CurrentTenant current) {
+    private final List<PrincipalNameResolver> principalNames;
+
+    public ConsoleAdvice(Environment environment, PostureSource source, CurrentTenant current,
+                         List<PrincipalNameResolver> principalNames) {
         this.environment = environment;
         this.source = source;
         this.current = current;
+        this.principalNames = principalNames;
     }
 
     /**
@@ -88,9 +92,16 @@ public class ConsoleAdvice {
     }
 
     /** Who is signed in, for the header to greet and to hang sign-out on; absent when nobody is. */
+    /**
+     * Who is signed in, as the header greets them.
+     *
+     * <p>It reads the mechanisms' {@link PrincipalNameResolver}s rather than {@code authentication.getName()},
+     * which answers the provider-qualified identity: correct, and not a name. The two consoles rendered different
+     * things for the same signed-in user until this read the same seam.
+     */
     @ModelAttribute("currentUser")
     public String currentUser(Authentication authentication) {
-        return authentication == null ? null : authentication.getName();
+        return PrincipalNameResolver.resolve(principalNames, authentication);
     }
 
     /**
