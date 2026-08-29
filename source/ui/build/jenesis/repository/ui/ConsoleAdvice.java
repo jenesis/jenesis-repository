@@ -35,6 +35,23 @@ public class ConsoleAdvice {
         this.current = current;
     }
 
+    /**
+     * The product this console is, and what it is for - the brand on the sign-in page.
+     *
+     * <p>It is a model attribute rather than a literal in the template because the sign-in page is shared: there were
+     * two, each hardcoding its own name, which is why one of them still called itself by a module name.
+     */
+    @ModelAttribute("product")
+    public String product() {
+        return "jenesis-repository";
+    }
+
+    /** One line under the product name, saying what a visitor is signing in to. */
+    @ModelAttribute("tagline")
+    public String tagline() {
+        return "Repository console";
+    }
+
     @ModelAttribute("readOnly")
     public boolean readOnly() {
         return environment.getProperty("jenreg.read-only", Boolean.class, false);
