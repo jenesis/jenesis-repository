@@ -41,19 +41,25 @@ The server discovers whatever is on its module path at startup, so a narrower de
 whose `requires` name only the modules it should speak. Authentication is enforced by default; a real
 deployment starts from `JENREG_BOOTSTRAP_KEY` (a well-formed `jenk_<tenant>.<secret><checksum>` key the
 server provisions at boot) and issues its keys through `/api/credentials`, while `JENREG_AUTH=false` is the
-shortcut for local work. The web console is a second
-process on port 8081 - the `dev` profile swaps its OAuth sign-in for a built-in `admin`/`admin` form login:
+shortcut for local work. **The web console runs in that same process**, on the same port: the launcher
+above scans it in, so `/` and `/console` are served beside the repository's own routes. It used to be a
+second entry point on port 8081, which is why an older reading of this file describes one. The `dev`
+profile swaps its OAuth sign-in for a built-in `admin`/`admin` form login:
 
 ```bash
-PORT=8081 SPRING_PROFILES_ACTIVE=dev JENREG_UI_SECURE_COOKIE=false \
+SPRING_PROFILES_ACTIVE=dev JENREG_UI_SECURE_COOKIE=false \
 JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
-  java -Djenesis.execute.module=source+bundle \
-       -Djenesis.execute.mainClass=build.jenesis.repository.bundle.Console build/jenesis/Execute.java
+  java -Djenesis.execute.module=source+bundle build/jenesis/Execute.java
 ```
 
-`Dockerfile` builds the all-in-one image: `source/bundle` requires every implementation, and its
-`bundle=true` packaging emits the resolved runtime closure that the image consumes, so a deployment is
-trimmed by configuration rather than rebuilt.
+The image is built by the build rather than by a hand-written `Dockerfile`: `source/bundle` requires every
+implementation, its `bundle=true` packaging emits the resolved runtime closure, and its `docker=` packaging
+line makes `stage` write a ready-to-build context. `script/build-images.sh` in the enterprise repository
+builds and tags it `jenesis-repository:free`. There was a `Dockerfile` here that re-ran the whole build
+inside Docker - a second mechanism for a job the shared one does - and the deployment settings it carried
+(`JENREG_FILESYSTEM_ROOT=/data`, a `VOLUME`) belong to the Helm chart, which can make them conditional on
+the storage backend where an image cannot: a baked-in `VOLUME` cannot be un-declared by a consumer, so an
+object-store deployment would create an anonymous volume on every run that it never writes to.
 
 ## Module layout
 
