@@ -1,13 +1,13 @@
 package build.jenesis.repository.bundle;
 
 import build.jenesis.repository.server.RepositoryApplication;
+import build.jenesis.repository.ui.ConsoleNode;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.FilterType;
+import org.springframework.context.annotation.Import;
 
 /**
  * Boots the repository AND the console as one application, off the all-in-one module path.
@@ -33,12 +33,10 @@ import org.springframework.context.annotation.FilterType;
 @SpringBootConfiguration
 @EnableAutoConfiguration
 @ConfigurationPropertiesScan(basePackages = "build.jenesis.repository.ui")
-@ComponentScan(basePackages = "build.jenesis.repository.ui",
-        // The console's own entry point, which this class replaces. A full class name, and it must track the
-        // package: the combined app once left these patterns naming a package that no longer existed, matched
-        // nothing, and scanned both @SpringBootApplication classes back in.
-        excludeFilters = @ComponentScan.Filter(type = FilterType.REGEX,
-                pattern = "build\\.jenesis\\.repository\\.ui\\.Application"))
+// The console arrives as one importable thing that knows its own gate, rather than as a scan this launcher spells
+// out. A launcher cannot make its own @ComponentScan conditional, so a console that could be switched off had to
+// become a configuration that can be.
+@Import(ConsoleNode.class)
 public class AllInOne {
 
     private AllInOne() {
