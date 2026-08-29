@@ -4,20 +4,20 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
-import org.springframework.core.annotation.Order;
-import org.springframework.security.web.SecurityFilterChain;
+
+import module java.base;
 
 /**
- * Local-only security used when the {@code dev} profile is active (run with {@code SPRING_PROFILES_ACTIVE=dev}). It
- * replaces OAuth login with form/basic login backed by in-memory accounts - {@code admin}/{@code admin} (an admin) and
- * {@code viewer}/{@code viewer} (a reader) - so both tiers can be exercised without an identity provider. The same
- * write-needs-admin authorization rules as production apply. Never enabled in production (the production chain is
- * {@code @Profile("!dev")}).
+ * This console's half of the development sign-in: the URL space it guards, the authorization matrix it applies and
+ * the accounts it offers - {@code admin}/{@code admin} (an admin) and {@code viewer}/{@code viewer} (a reader), so
+ * both tiers can be exercised without an identity provider.
+ *
+ * <p>The chain itself is {@link DevConsoleSecurity}, shared with every other console. That is the whole of what is
+ * here: this used to declare a chain of its own, and what it had drifted into was a form login pointing at a page
+ * with no credential form on it - so nobody could sign in to this console under the dev profile at all.
  */
 @Configuration
 @Profile("dev")
@@ -25,22 +25,29 @@ public class DevSecurityConfig {
 
     /** Scoped exactly as the production chain is, or dev would prove a topology nothing ships. */
     @Bean
-    @Order(2)
-    public SecurityFilterChain devSecurityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .securityMatcher(ConsoleUrlSpace.space().toArray(String[]::new))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/error", "/favicon.ico").permitAll()
+    public DevConsolePolicy devConsolePolicy() {
+        return new DevConsolePolicy() {
+
+            @Override
+            public List<String> space() {
+                return ConsoleUrlSpace.space();
+            }
+
+            @Override
+            public void rules(org.springframework.security.config.annotation.web.configurers
+                                      .AuthorizeHttpRequestsConfigurer<org.springframework.security.config.annotation
+                                      .web.builders.HttpSecurity>.AuthorizationManagerRequestMatcherRegistry auth) {
+                auth
+                        .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/login/**",
+                                "/error", "/favicon.ico").permitAll()
                         .requestMatchers("/css/**", "/js/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/logout").permitAll()
                         .requestMatchers(HttpMethod.POST, "/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/**").hasRole("ADMIN")
-                        .anyRequest().authenticated())
-                .formLogin(form -> form.loginPage("/login").permitAll())
-                .httpBasic(Customizer.withDefaults())
-                .logout(logout -> logout.logoutSuccessUrl("/login?logout").permitAll());
-        return http.build();
+                        .anyRequest().authenticated();
+            }
+        };
     }
 
     @Bean

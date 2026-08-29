@@ -1,0 +1,39 @@
+<!doctype html>
+<!--
+  dev-login.html — the development profile's credential form.
+
+  A mechanism owns its own form page and the shared sign-in page links to it; this is that page for the dev
+  profile, and it is deliberately the same shape as the key-login one rather than a second idea about how a
+  credential form should look.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{base :: head('Sign in', ${product})}">
+    <meta charset="utf-8">
+    <title>Sign in</title>
+</head>
+<body>
+<main class="container">
+    <article class="app-card" style="max-width:32rem;margin:4rem auto">
+        <hgroup>
+            <h1 th:text="${product}">jenesis</h1>
+            <p>Sign in with a username and password</p>
+        </hgroup>
+        <th:block th:if="${param.error}">
+            <p th:replace="~{base :: alert('Sign-in failed, or your account belongs to no tenant.', 'danger')}"></p>
+        </th:block>
+        <form method="post" th:action="@{/login/dev}">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" autocomplete="username" autofocus required/>
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" autocomplete="current-password" required/>
+            <button type="submit">Sign in</button>
+        </form>
+        <p style="margin-top:1rem; font-size:0.85rem; opacity:0.75">
+            This form is the <strong>development profile's</strong> sign-in and ships switched off. A production
+            deployment signs in through an installed mechanism - single sign-on, or a login key.
+        </p>
+        <p><a th:href="@{/login}">&larr; Back to sign-in options</a></p>
+    </article>
+</main>
+</body>
+</html>
