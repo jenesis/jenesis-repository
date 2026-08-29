@@ -33,3 +33,8 @@ target/
 
 ### Agent specification ###
 .claude/
+
+# terraform provider binaries, downloaded by `terraform init` - never committed (the google provider
+# alone is 125 MB, which GitHub refuses outright). The lock file beside them IS committed: it pins the
+# provider versions a template was validated against.
+.terraform/

@@ -59,15 +59,31 @@ resource "google_secret_manager_secret_version" "hmac" {
   secret_data = google_storage_hmac_key.storage.secret
 }
 
+# The licence, stored the same way the store credential is, and created only when one was supplied - a free
+# deployment provisions no secret it will never read.
+resource "google_secret_manager_secret" "license" {
+  count     = var.license_key == "" ? 0 : 1
+  secret_id = "${var.name}-license-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "license" {
+  count       = var.license_key == "" ? 0 : 1
+  secret      = google_secret_manager_secret.license[0].id
+  secret_data = var.license_key
+}
+
 # The store selection and its settings. The default "gcs" backend reads the JENREG_GCS_* keys; the
 # "s3" fallback drives the same bucket through GCS's S3-compatible endpoint with the same HMAC pair.
 locals {
   store_env = var.store == "gcs" ? {
-    JENREG_STORE  = "gcs"
+    JENREG_STORE             = "gcs"
     JENREG_GCS_BUCKET        = google_storage_bucket.repository.name
     JENREG_GCS_ACCESS_KEY_ID = google_storage_hmac_key.storage.access_id
     } : {
-    JENREG_STORE  = "s3"
+    JENREG_STORE            = "s3"
     JENREG_S3_ENDPOINT      = "https://storage.googleapis.com"
     JENREG_S3_BUCKET        = google_storage_bucket.repository.name
     JENREG_S3_REGION        = var.region
@@ -85,6 +101,15 @@ resource "google_service_account" "run" {
 
 resource "google_secret_manager_secret_iam_member" "run" {
   secret_id = google_secret_manager_secret.hmac.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.run.email}"
+}
+
+# The service account can read the licence too - without this the container starts and the secret is
+# unreadable, which Cloud Run reports as a startup failure rather than as "unlicensed".
+resource "google_secret_manager_secret_iam_member" "license" {
+  count     = var.license_key == "" ? 0 : 1
+  secret_id = google_secret_manager_secret.license[0].id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.run.email}"
 }
@@ -119,10 +144,24 @@ resource "google_cloud_run_v2_service" "repository" {
           }
         }
       }
+      # The licence, when there is one. Absent it, the container simply starts unlicensed - which warns
+      # and gates nothing - so this block is conditional rather than the deployment being.
+      dynamic "env" {
+        for_each = toset(var.license_key == "" ? [] : ["JENREG_LICENSE_KEY"])
+        content {
+          name = env.value
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.license[0].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
     }
   }
 
-  depends_on = [google_secret_manager_secret_iam_member.run]
+  depends_on = [google_secret_manager_secret_iam_member.run, google_secret_manager_secret_iam_member.license]
 }
 
 # Public exposure is OPT-IN. allow_unauthenticated defaults to false, so a stock apply leaves the

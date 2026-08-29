@@ -61,3 +61,16 @@ In **Producer Portal**, create a product with a **Terraform-based** deployment (
 or a Cloud Run / GKE delivery. Pricing rides on the customer's Google Cloud bill and draws down their
 committed use. **Requires your accounts:** a Google Cloud Marketplace producer/seller account and an
 Artifact Registry repo for the image.
+
+Licence
+-------
+
+The enterprise edition reads its licence from `JENREG_LICENSE_KEY`. This template takes it as an input and
+passes it through; the free edition needs none.
+
+**An unlicensed enterprise deployment still runs.** It warns on every start and gates nothing - no capability
+is switched off and it does not refuse to serve - so a missing or expired key is never why a deployment fails
+to come up. That is deliberate: enforcement is commercial rather than technical.
+
+Where the key comes from depends on how the deployment was bought: a marketplace purchase assigns one, and a
+direct purchase is handed one.

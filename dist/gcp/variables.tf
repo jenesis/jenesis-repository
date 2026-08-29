@@ -53,3 +53,19 @@ variable "allow_unauthenticated" {
     allow_unauthenticated = true.
   EOT
 }
+
+variable "license_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = <<-EOT
+    The enterprise licence key (JENREG_LICENSE_KEY). Leave empty for the free edition, and for an
+    enterprise deployment that has not been licensed yet: an unlicensed enterprise image warns on every
+    start and degrades nothing - no capability is gated and it does not refuse to serve - so this is
+    never the reason a deployment will not come up.
+
+    It is stored in Secret Manager rather than passed as a plain environment value, because it is a
+    credential. Where the key comes from depends on how the deployment was bought: a marketplace purchase
+    assigns one, and a direct purchase is handed one.
+  EOT
+}

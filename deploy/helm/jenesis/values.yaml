@@ -80,6 +80,11 @@ secrets:
   azureConnectionString: ""   # JENREG_AZURE_BLOB_CONNECTION_STRING (azure-blob backend)
   githubClientSecret: ""      # JENREG_UI_GITHUB_CLIENT_SECRET
   oidcClientSecret: ""        # JENREG_UI_OIDC_CLIENT_SECRET
+  # The enterprise licence (JENREG_LICENSE_KEY). Free deployments leave it empty and nothing changes; an
+  # enterprise one without it runs unlicensed, which warns and degrades nothing - no capability is gated and
+  # the deployment does not refuse to start. It is here rather than in `repository:` because it is a
+  # credential: it belongs in the Secret, not in a plainly-readable env value on the Deployment.
+  licenseKey: ""
   # Further secret env vars, verbatim - the switch for the credential-switched features, e.g.
   #   JENREG_SNYK_TOKEN: "..."     # supplying the credential enables the feed
   #   JENREG_AI_KEY: "..."         # enables the AI gateway
