@@ -3,6 +3,8 @@ package build.jenesis.repository.server;
 import build.jenesis.repository.store.ArtifactStore;
 import jakarta.servlet.http.HttpServletRequest;
 
+import module java.base;
+
 /**
  * The fixed-tenant {@link RepositoryRouting}: every request addresses the one configured artifact space -
  * {@code jenreg.tenant} / {@code jenreg.repository}, each {@code default} by default - so
@@ -32,5 +34,18 @@ public final class FixedTenantRouting implements RepositoryRouting {
         String uri = request.getRequestURI();
         String path = uri.equals(PREFIX) || uri.startsWith(PREFIX + "/") ? uri.substring(PREFIX.length()) : uri;
         return new Route(tenant, repository, store, path.isEmpty() ? "/" : path);
+    }
+
+    /**
+     * The one configured space, when the caller names it and nothing else. A deployment with one tenant and one
+     * repository can answer this without a request - there is nothing to resolve - so an in-process publish is
+     * routed here exactly as a request would be, and refused when it names anything else rather than silently
+     * publishing into the configured space under another name.
+     */
+    @Override
+    public Optional<Route> route(String tenant, String repository, String path) {
+        return this.tenant.equals(tenant) && this.repository.equals(repository)
+                ? Optional.of(new Route(tenant, repository, store, path))
+                : Optional.empty();
     }
 }

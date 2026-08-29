@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui;
 
+import build.jenesis.repository.observation.Contributions;
+
 import module java.base;
 
 /**
@@ -48,10 +50,57 @@ public final class ConsoleUrlSpace {
     private ConsoleUrlSpace() {
     }
 
-    /** This space plus an edition's own paths, in one list ready for {@code securityMatcher}. */
+    /**
+     * The paths installed console modules contribute, taken from the nav entries they declare.
+     *
+     * <p>A module contributed through {@link ConsoleModuleProvider} registers screens, and a screen is a path the
+     * console must answer - so it has to be inside the console's chain, or it falls through to the repository's and
+     * an operator's screen answers {@code 401} to a browser. The module already declares that path, in the
+     * {@link NavEntry} it contributes; taking it from there is what keeps the two from being two.
+     *
+     * <p>They used to be. Every module's paths were also written into an edition's own list by hand - the SCIM
+     * module's {@code /scim-token} among them - which is a declaration restated in a place that cannot see the
+     * original. The restatement is what drifts, and it drifts silently: a module whose path nobody copied is
+     * installed, discovered, mapped, and unreachable.
+     *
+     * <p>Each entry contributes its exact path and the subtree beneath it, because a screen that posts to
+     * {@code /deploy} today will have {@code /deploy/something} tomorrow and the module is not going to be told to
+     * come back here. A module that is installed but switched off contributes its path too: nothing maps it, so it
+     * is a {@code 404} from the console rather than a {@code 401} from the repository, which is the honest answer
+     * for a screen that is not installed.
+     */
+    public static List<String> contributed() {
+        List<String> paths = new ArrayList<>();
+        for (ConsoleModuleProvider module : ConsoleModuleProvider.installed()) {
+            // A module whose nav declaration throws contributes no paths rather than taking the console down with
+            // it. This runs while the security chain is being built, which is the worst possible place for an
+            // uncontained fan-out: one broken plugin would fail the context and there would be no console at all,
+            // rather than one screen that cannot be reached.
+            for (NavEntry entry : Contributions.declared(module, ConsoleModuleProvider::navEntries,
+                    List.<NavEntry>of())) {
+                String path = entry.path();
+                if (path == null || !path.startsWith("/") || path.equals("/")) {
+                    continue;
+                }
+                paths.add(path);
+                paths.add(path.endsWith("/") ? path + "**" : path + "/**");
+            }
+        }
+        return List.copyOf(paths);
+    }
+
+    /** This console's own space plus what the installed modules contribute - what a console with no edition of its
+     *  own hands to {@code securityMatcher}. */
+    public static List<String> space() {
+        return with(List.of());
+    }
+
+    /** This space plus an edition's own paths and the installed modules' contributions, in one list ready for
+     *  {@code securityMatcher}. */
     public static List<String> with(List<String> additional) {
         List<String> composed = new ArrayList<>(PATTERNS);
         composed.addAll(additional);
+        composed.addAll(contributed());
         return List.copyOf(composed);
     }
 

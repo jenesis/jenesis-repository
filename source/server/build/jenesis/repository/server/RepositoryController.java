@@ -206,6 +206,44 @@ public class RepositoryController {
         }
     }
 
+    /**
+     * Publish one artifact in process, through this controller's own ingress edge.
+     *
+     * <p>It exists so that a surface with no request behind it - the admin console's deploy screen - publishes the
+     * way a client does rather than around it. Everything a {@code PUT} to {@code /repository/**} passes through is
+     * passed through here: the routing decides the store and whether the target accepts a write, the discovered
+     * interceptor chain screens the body exactly once, an accepted blob is restreamed into the claiming format for
+     * layout, and a held or refused body answers as it would on the wire. The alternative - a screen that scopes a
+     * store and writes blobs - is a hole in the gate rather than a feature, which is why there is no way to do that
+     * from here.
+     *
+     * <p>The routing is asked for a route it can resolve without a request, and <b>a routing that cannot say refuses
+     * the publish</b>: the answer is a {@code 404} rather than a guess, because a guessed route is one whose
+     * writability nobody checked.
+     *
+     * @param tenant     the tenant to publish into.
+     * @param repository the repository within it.
+     * @param path       the format-facing path the artifact lands at, as a request would carry it after routing.
+     * @param body       the artifact's bytes; streamed, never buffered, and not closed here.
+     * @return the status the edge answered: {@code 2xx} laid out, {@code 202} held for review, {@code 422} refused
+     *         by the gate, {@code 404} claimed by no format or no route, {@code 405} a target that takes no write.
+     */
+    public int publish(String tenant, String repository, String path, InputStream body) throws IOException {
+        Optional<RepositoryRouting.Route> resolved = routing.route(tenant, repository, path);
+        if (resolved.isEmpty()) {
+            return 404;
+        }
+        RepositoryRouting.Route route = resolved.get();
+        if (!route.writable()) {
+            return 405;
+        }
+        CapturingExchange exchange = new CapturingExchange(route.path(), body);
+        if (!screened.dispatch(exchange, route.store())) {
+            return 404;
+        }
+        return exchange.status();
+    }
+
     private static boolean isRead(String method) {
         return "GET".equals(method) || "HEAD".equals(method);
     }
