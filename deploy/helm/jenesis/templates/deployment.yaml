@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jenreg.fullname" . }}
+  labels:
+    {{- include "jenreg.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  {{- if eq .Values.store.backend "filesystem" }}
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "jenreg.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "jenreg.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- if not .Values.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "jenreg.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: jenesis
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            {{- include "jenreg.storeEnv" . | nindent 12 }}
+            {{- range $key, $value := .Values.repository }}
+            - name: {{ include "jenreg.repositoryEnvName" $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- include "jenreg.uiEnv" . | nindent 12 }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "jenreg.secretName" . }}
+                optional: true
+          # Writable mounts under the read-only root filesystem: /tmp always (upload spool /
+          # java.io.tmpdir / embedded server work dir), plus the /data store volume for the
+          # filesystem backend.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if eq .Values.store.backend "filesystem" }}
+            - name: data
+              mountPath: /data
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        # Writable scratch under the read-only root filesystem (upload spool / java.io.tmpdir /
+        # embedded server work dir).
+        - name: tmp
+          emptyDir: {}
+        {{- if eq .Values.store.backend "filesystem" }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.store.filesystem.persistence.existingClaim | default (printf "%s-data" (include "jenreg.fullname" .)) }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

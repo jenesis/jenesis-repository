@@ -1,0 +1,19 @@
+apiVersion: v2
+name: jenesis
+description: |
+  Jenesis - a content-addressed artifact repository with a web console on one stateless process.
+  Deploys the all-in-one repository image: every SPI implementation aboard, trimmed at runtime by
+  configuration (JENREG_* keys) instead of rebuilt. The same chart deploys the free and
+  the enterprise edition - only the image tag differs (jenesis-repository:free / :enterprise). No
+  database; state is the object store (a PersistentVolume, S3, GCS or Azure Blob).
+type: application
+version: 0.2.0
+appVersion: "enterprise"
+keywords:
+  - artifact-repository
+  - maven
+  - npm
+  - docker
+home: https://github.com/jenesis/jenesis-repository
+sources:
+  - https://github.com/jenesis/jenesis-repository
