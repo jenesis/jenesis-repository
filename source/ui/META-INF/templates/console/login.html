@@ -1,0 +1,40 @@
+<!doctype html>
+<!--
+  login.html — the sign-in page, for every console.
+
+  It lists what the installed mechanism modules offer (LoginOptions), each button linking into the URL space that
+  mechanism owns, and says so plainly when none is installed: a sign-in page with no buttons and no explanation is
+  indistinguishable from a broken one. There were two of these, and only one of them could say that.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{base :: head('Sign in', ${product})}">
+    <meta charset="utf-8">
+    <title>Sign in</title>
+</head>
+<body>
+<main class="container">
+    <article class="app-card" style="max-width:32rem;margin:4rem auto">
+        <hgroup>
+            <h1 th:text="${product}">jenesis</h1>
+            <p th:text="${tagline}">Repository console</p>
+        </hgroup>
+        <th:block th:if="${param.error}">
+            <p th:replace="~{base :: alert('Sign-in failed, or your account belongs to no tenant.', 'danger')}"></p>
+        </th:block>
+        <p th:if="${param.logout}" role="status">You have signed out.</p>
+        <div th:if="${loginConfigured}">
+            <a th:each="option : ${loginOptions}" role="button" style="display:block;margin-bottom:0.5rem"
+               th:href="@{${option.href()}}"
+               th:text="'Sign in with ' + ${option.label()}">Sign in</a>
+        </div>
+        <!--/* Not an error state and not an empty one: a deployment that installed no mechanism cannot be signed
+             into at all, and the page says which of the two it is so nobody debugs a missing button. */-->
+        <div th:unless="${loginConfigured}">
+            <p><strong>No sign-in module is installed or configured.</strong></p>
+            <p>Install an authentication module and configure it (see its documentation), then restart to
+                enable sign-in.</p>
+        </div>
+    </article>
+</main>
+</body>
+</html>

@@ -1,10 +1,7 @@
 package build.jenesis.repository.ui;
 
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.client.registration.ClientRegistration;
-import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,18 +9,22 @@ import org.springframework.web.bind.annotation.GetMapping;
 import module java.base;
 
 /**
- * The sign-in page. It lists the configured OAuth2/OIDC providers (each linking to Spring Security's authorization
- * endpoint) when a {@link ClientRegistrationRepository} is present, and otherwise shows a local username/password form
- * (which the {@code dev} profile's form login processes) or, in production with no provider configured, a "not
- * configured" notice. An already-authenticated visitor is sent to the console.
+ * The sign-in page: the choices the installed mechanism modules offer, each linking into the URL space that mechanism
+ * owns, and with none installed a notice saying so rather than an empty page. An already-authenticated visitor is
+ * sent to the console.
+ *
+ * <p>It reads {@link LoginOptions}, which is what every console does. This one used to enumerate Spring Security's
+ * {@code ClientRegistrationRepository} itself, so it could only show OAuth2 and OIDC: a mechanism that is not an
+ * OAuth2 client appeared on one console's sign-in page and not on the other's. Whether a mechanism can be signed in
+ * with is the mechanism's statement, not a console's guess at what kind it is.
  */
 @Controller
 public class LoginController {
 
-    private final ObjectProvider<ClientRegistrationRepository> clientRegistrations;
+    private final List<LoginOptions> mechanisms;
 
-    public LoginController(ObjectProvider<ClientRegistrationRepository> clientRegistrations) {
-        this.clientRegistrations = clientRegistrations;
+    public LoginController(List<LoginOptions> mechanisms) {
+        this.mechanisms = mechanisms;
     }
 
     @GetMapping("/login")
@@ -31,16 +32,13 @@ public class LoginController {
         if (authenticated(authentication)) {
             return "redirect:/console";
         }
-        List<Map<String, String>> registrations = new ArrayList<>();
-        if (clientRegistrations.getIfAvailable() instanceof Iterable<?> available) {
-            for (Object entry : available) {
-                ClientRegistration registration = (ClientRegistration) entry;
-                registrations.add(Map.of("id", registration.getRegistrationId(), "name", registration.getClientName()));
-            }
+        List<LoginOptions.LoginOption> options = new ArrayList<>();
+        for (LoginOptions mechanism : mechanisms) {
+            options.addAll(mechanism.options());
         }
-        model.addAttribute("registrations", registrations);
-        model.addAttribute("oauthConfigured", !registrations.isEmpty());
-        return "login";
+        model.addAttribute("loginConfigured", !options.isEmpty());
+        model.addAttribute("loginOptions", options);
+        return "console/login";
     }
 
     private static boolean authenticated(Authentication authentication) {
