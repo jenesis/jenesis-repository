@@ -61,6 +61,11 @@ inside Docker - a second mechanism for a job the shared one does - and the deplo
 the storage backend where an image cannot: a baked-in `VOLUME` cannot be un-declared by a consumer, so an
 object-store deployment would create an anonymous volume on every run that it never writes to.
 
+`deploy/helm/jenesis` is the chart, and it deploys **either edition**: the tag selects one
+(`jenesis-repository:free` or `:enterprise`) and every value is identical for both. It lives here rather than
+beside the enterprise edition because that is what it is - shared mechanism, with nothing edition-specific in it -
+and two charts would be two things to keep in step for one value. An edition ships its own values file.
+
 ## Module layout
 
 Every module is a Java module under `source/`, and the split into `spi` and implementations is the extension

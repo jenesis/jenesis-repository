@@ -1,0 +1,135 @@
+# Default deployment: the all-in-one repository image (jenesis-repository), which carries every SPI
+# implementation and is trimmed by configuration instead of rebuilt. The tag selects the edition -
+# "enterprise" (multi-tenant, compliance gate, licensed feeds, AI gateway) or "free" - the chart and
+# every value below are identical for both.
+image:
+  repository: jenesis-repository
+  tag: enterprise      # "enterprise" or "free" (or your registry path's tag)
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# The app is one stateless process over one object store. >1 replica needs a shared store
+# (store.backend s3, gcs or azure-blob); the filesystem backend is single-writer (ReadWriteOnce),
+# so keep replicaCount at 1 with it.
+replicaCount: 1
+
+# The artifact store - ALL durable state lives here (JENREG_STORE selects the backend;
+# there is no database). Credentials for a cloud backend come from the rendered Secret below or from
+# a pod identity (IRSA / workload identity) on the service account.
+store:
+  # filesystem | s3 | gcs | azure-blob
+  backend: filesystem
+  filesystem:
+    # The chart sets JENREG_FILESYSTEM_ROOT=/data and mounts the claim there. The image does not default
+    # it - a deployment that says nothing about where its data goes fails to start rather than filling
+    # the container's writable layer - so this chart is what makes the path a real one.
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""
+      accessMode: ReadWriteOnce
+      existingClaim: ""
+  s3:
+    bucket: ""
+    region: us-east-1
+    endpoint: ""        # set for an S3-compatible store (e.g. MinIO); leave empty for AWS
+  gcs:
+    bucket: ""
+    endpoint: ""        # default https://storage.googleapis.com; set for an emulator
+    region: ""          # SigV4 scope region, default "auto"
+  # backend: azure-blob (the key is camelCase because a Helm value is reached by dot notation)
+  azureBlob:
+    container: jenesis-repository
+
+# jenreg.* configuration, rendered as JENREG_* environment variables (Spring
+# relaxed binding; dots/dashes become underscores). Everything the image carries is ON until
+# configured off: a feature toggle ("<feature>": "false") degrades that implementation exactly like a
+# missing module, an exclusive selection ("<spi>": "<impl>") picks among installed implementations,
+# and any other jenreg.* setting pins that key deployment-wide. Examples:
+#   repository:
+#     auth: "false"             # opt out of per-credential auth (ON by default; server logs a loud boot warning)
+#     maven: "false"            # drop the Maven layout as if its module were absent
+#     scheduled-scan: "false"   # -> JENREG_SCHEDULED_SCAN=false
+#     retention: cleaner        # exclusive selection of the retention engine
+# Credential-bearing features (the licensed feeds, the AI gateway) need no toggle here - they
+# self-disable until secrets.extra supplies their credential.
+repository: {}
+
+# Console / single sign-on (JENREG_UI_*). Both editions serve the console on the main port under
+# /console, in the same process as the repository; admins is a comma-separated list of GitHub/OIDC
+# logins granted admin. Set jenreg.console=false through `repository` below to run without one.
+ui:
+  admins: ""
+  secureCookie: true    # set false only for plain-HTTP local testing
+  github:
+    clientId: ""
+  oidc:
+    issuerUri: ""
+    clientId: ""
+    name: "Single sign-on"
+
+# Sensitive values. Either set them here (rendered into a Secret) or point existingSecret at a Secret
+# that already holds the same keys. With a cloud store backend and a pod IAM role (IRSA / workload
+# identity), leave the cloud credentials empty and annotate the service account instead.
+secrets:
+  existingSecret: ""
+  s3AccessKeyId: ""           # JENREG_S3_ACCESS_KEY_ID (s3 backend; empty = the AWS chain / IRSA)
+  s3SecretAccessKey: ""       # JENREG_S3_SECRET_ACCESS_KEY
+  gcsAccessKeyId: ""          # JENREG_GCS_ACCESS_KEY_ID (gcs backend HMAC pair)
+  gcsSecretAccessKey: ""      # JENREG_GCS_SECRET_ACCESS_KEY
+  azureConnectionString: ""   # JENREG_AZURE_BLOB_CONNECTION_STRING (azure-blob backend)
+  githubClientSecret: ""      # JENREG_UI_GITHUB_CLIENT_SECRET
+  oidcClientSecret: ""        # JENREG_UI_OIDC_CLIENT_SECRET
+  # Further secret env vars, verbatim - the switch for the credential-switched features, e.g.
+  #   JENREG_SNYK_TOKEN: "..."     # supplying the credential enables the feed
+  #   JENREG_AI_KEY: "..."         # enables the AI gateway
+  extra: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: jenreg.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}      # e.g. eks.amazonaws.com/role-arn for S3 via IRSA
+
+# Free-form extra environment variables passed straight through.
+extraEnv: []
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+# The container runs with a read-only root filesystem by default (fail-safe hardening). The chart
+# supplies the writable mounts the app needs: an emptyDir at /tmp (upload spooling / JVM java.io.tmpdir
+# / embedded server work dir) for every pod, plus the /data store volume when store.backend is
+# "filesystem". If you must revert to a writable root, set readOnlyRootFilesystem: false.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jenreg.fullname" . }}
+  labels:
+    {{- include "jenreg.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "jenreg.selectorLabels" . | nindent 4 }}
+  ports:
+    # One port. The console is served in the same process as the repository, on this port under
+    # /console, so there is no second port to publish - there used to be, when the console was a
+    # second container off the same image.
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP

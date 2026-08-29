@@ -1,0 +1,36 @@
+Jenesis ({{ .Values.image.tag | default .Chart.AppVersion }} edition, {{ .Values.store.backend }} store) is deploying as {{ include "jenreg.fullname" . }}.
+
+The all-in-one repository image serves every installed capability on one port, the console under
+/console; trim it through the `repository:` values (jenreg.* keys) instead of changing images. Reach it:
+
+{{- if .Values.ingress.enabled }}
+  {{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+  {{- end }}
+{{- else }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "jenreg.fullname" . }} 8080:{{ .Values.service.port }}
+  # then open http://localhost:8080
+{{- end }}
+
+Health: /actuator/health (liveness and readiness probe groups are wired).
+
+{{- if and (eq .Values.store.backend "filesystem") (gt (int .Values.replicaCount) 1) }}
+
+WARNING: replicaCount is {{ .Values.replicaCount }} but store.backend is "filesystem", which is
+single-writer (ReadWriteOnce). Use store.backend "s3", "gcs" or "azure-blob" for more than one replica.
+{{- end }}
+
+{{- if eq (get .Values.repository "auth" | toString) "false" }}
+
+WARNING: repository.auth is "false" - the repository API is running ANONYMOUS/OPEN. Per-credential
+authorization is ENFORCED BY DEFAULT; remove this override (or set repository.auth "true") to re-enable it.
+The server also logs a loud boot warning while auth is disabled. Use ui.admins to grant console admins via SSO.
+{{- else }}
+
+The repository API enforces per-credential authorization by default (jenreg.auth defaults to
+true). Set repository.auth "false" to opt into anonymous/open mode, and ui.admins to grant console admins via SSO.
+{{- end }}
+
+Credential-switched features (the licensed advisory feeds, the AI gateway) stay self-disabled until
+secrets.extra supplies their key (e.g. JENREG_SNYK_TOKEN); everything else the image
+carries is on until configured off.
