@@ -3,7 +3,7 @@ GCP (Google Cloud Marketplace) packaging
 
 Deploys the **all-in-one repository image** (`jenesis-repository:free` or `:enterprise` - one template,
 the tag selects the edition; built by
-`script/build-images.sh` in the enterprise repository, which builds and tags both editions; the free edition is the same image shape from the
+`java build/Build.java images` in the enterprise repository, which builds and tags both editions; the free edition is the same image shape from the
 free repo, only the tag differs) on **Cloud Run**, defaulting the exclusive store selection to GCP's
 native object store: `JENREG_STORE=gcs` against a bucket the Terraform provisions. The
 `gcs` backend speaks GCS's XML API, which authenticates with an **HMAC key pair** — Terraform issues
