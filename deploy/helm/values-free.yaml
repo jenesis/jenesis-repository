@@ -1,0 +1,16 @@
+# The free edition's values for the shared chart.
+#
+# The chart is not split by edition: it deploys either image off one value, and contains nothing
+# either edition owns alone, so two chart sources would be two things to keep in step for one word.
+# What an edition owns is its values, which is this file.
+#
+#   helm install jenesis deploy/helm/jenesis -f deploy/helm/values-free.yaml
+#
+# It is also what the published jenesis-free chart is rendered through before it is packaged, so a
+# value that would not template is a build failure rather than a customer's.
+#
+# Everything omitted takes the chart's default. The only thing this file has to say is which image
+# to run, and the free edition is the chart's own default - so it says it explicitly rather than
+# relying on that, because the default is the half of a pair that silently follows the other.
+image:
+  tag: free
