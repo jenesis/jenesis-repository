@@ -24,7 +24,7 @@ class ConsoleNavEntriesTest {
     private static final StandardEnvironment ENVIRONMENT = new StandardEnvironment();
 
     private final ConsoleAdvice advice = new ConsoleAdvice(ENVIRONMENT,
-            PostureSource.ofEnvironment(ENVIRONMENT::getProperty), () -> "default");
+            PostureSource.ofEnvironment(ENVIRONMENT::getProperty), () -> "default", List.of());
 
     private static Authentication user(String... roles) {
         return new TestingAuthenticationToken("octocat", "n/a", roles);
