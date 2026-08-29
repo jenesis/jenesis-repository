@@ -28,7 +28,7 @@ public class DevSecurityConfig {
     @Order(2)
     public SecurityFilterChain devSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher(ConsoleUrlSpace.PATTERNS.toArray(String[]::new))
+                .securityMatcher(ConsoleUrlSpace.space().toArray(String[]::new))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/error", "/favicon.ico").permitAll()
                         .requestMatchers("/css/**", "/js/**").permitAll()

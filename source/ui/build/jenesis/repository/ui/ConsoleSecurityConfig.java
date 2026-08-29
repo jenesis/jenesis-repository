@@ -47,7 +47,7 @@ public class ConsoleSecurityConfig {
     public SecurityFilterChain consoleSecurityFilterChain(HttpSecurity http,
                                                    ObjectProvider<LoginContributor> loginContributors) throws Exception {
         http
-                .securityMatcher(ConsoleUrlSpace.PATTERNS.toArray(String[]::new))
+                .securityMatcher(ConsoleUrlSpace.space().toArray(String[]::new))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/error", "/favicon.ico").permitAll()
                         .requestMatchers("/css/**", "/js/**").permitAll()

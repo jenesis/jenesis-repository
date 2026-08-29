@@ -5,6 +5,8 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import module java.base;
 
+import module java.base;
+
 /**
  * The seam that resolves an incoming request to the artifact space and format path the {@link FormatDispatcher}
  * serves it against, so one shared {@link RepositoryController} drives both the fixed-tenant deployment and a
@@ -31,6 +33,30 @@ public interface RepositoryRouting {
 
     /** Resolve the request to a {@link Route}; never {@code null}. */
     Route route(HttpServletRequest request);
+
+    /**
+     * Resolve a route for a caller that has no request: a publish issued <em>in process</em>, naming its target
+     * rather than carrying it in a URI.
+     *
+     * <p>It exists so that such a caller gets the routing's own answer - which store, and whether the target accepts
+     * a write - instead of assembling a {@link Route} itself. Assembling one is the failure this is here to prevent:
+     * a caller that scopes a store by hand has bypassed the writability decision, so a publish into a proxy or a
+     * group view or a read-only repository would land where a request would have been refused with a {@code 405}.
+     *
+     * <p><b>The default answers empty, and empty means "this routing cannot say".</b> Not "no such repository" and
+     * not "not writable" - a routing that resolves a tenant from the request itself (from a host name, a path
+     * prefix, or a key) has nothing to resolve when there is no request, and saying so is the only honest answer.
+     * A caller treats empty as a refusal to publish, never as permission: fail-closed is the direction, because the
+     * alternative is a publish that skipped a check nobody can see was skipped.
+     *
+     * @param tenant     the tenant to publish into.
+     * @param repository the repository within it.
+     * @param path       the format-facing path, as {@link Route#path} would carry it.
+     * @return the route, or empty when this routing cannot resolve one without a request.
+     */
+    default Optional<Route> route(String tenant, String repository, String path) {
+        return Optional.empty();
+    }
 
     /**
      * The resolved artifact space for a request: the {@code tenant} and {@code repository} it addresses (never

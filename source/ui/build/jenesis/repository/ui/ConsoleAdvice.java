@@ -2,6 +2,7 @@ package build.jenesis.repository.ui;
 
 import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.PostureReport;
+import build.jenesis.repository.observation.Contributions;
 import build.jenesis.repository.store.Features;
 import org.springframework.core.env.Environment;
 import org.springframework.security.core.Authentication;
@@ -137,8 +138,12 @@ public class ConsoleAdvice {
         boolean admin = authority(authentication, "ROLE_ADMIN");
         return Stream.concat(
                         OWN.stream(),
+                        // Contained for the same reason the URL space is: a module whose nav declaration throws
+                        // costs its own links, never the page. The admin console's fan-out has been contained
+                        // since a hostile-module fixture proved it had to be; this one had not.
                         ConsoleModuleProvider.enabled(Features.namespaced(environment::getProperty)).stream()
-                                .flatMap(module -> module.navEntries().stream()))
+                                .flatMap(module -> Contributions.declared(module,
+                                        ConsoleModuleProvider::navEntries, List.<NavEntry>of()).stream()))
                 .filter(entry -> entry.section() == section)
                 .filter(entry -> permitted(entry, authentication != null, admin))
                 .toList();
