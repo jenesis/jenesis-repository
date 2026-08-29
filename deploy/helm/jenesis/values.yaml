@@ -3,8 +3,13 @@
 # "enterprise" (multi-tenant, compliance gate, licensed feeds, AI gateway) or "free" - the chart and
 # every value below are identical for both.
 image:
+  # The registry namespace the images are published under, e.g. "docker.io/<org>". Required: an
+  # unqualified name resolves to docker.io/library, where these images are not.
+  registry: ""
   repository: jenesis-repository
-  tag: enterprise      # "enterprise" or "free" (or your registry path's tag)
+  # Empty means "the edition this chart was packaged for", which is Chart.yaml's appVersion. Set it
+  # only to pin a specific published tag, e.g. "enterprise-1.2.0".
+  tag: ""
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 

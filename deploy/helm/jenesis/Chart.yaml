@@ -6,9 +6,15 @@ description: |
   configuration (JENREG_* keys) instead of rebuilt. The same chart deploys the free and
   the enterprise edition - only the image tag differs (jenesis-repository:free / :enterprise). No
   database; state is the object store (a PersistentVolume, S3, GCS or Azure Blob).
+  Published per edition as jenesis-free and jenesis-enterprise, packaged from this one source: an
+  image carries its edition in the tag, and a chart cannot, because Helm's OCI tag is the chart
+  version.
 type: application
 version: 0.2.0
-appVersion: "enterprise"
+# The edition this chart deploys, and the image tag it falls back to when image.tag is left empty.
+# Packaging stamps it per edition; a chart installed straight out of this directory is the free one,
+# which is what a reader of the free repository should get.
+appVersion: "free"
 keywords:
   - artifact-repository
   - maven
@@ -17,3 +23,11 @@ keywords:
 home: https://github.com/jenesis/jenesis-repository
 sources:
   - https://github.com/jenesis/jenesis-repository
+# Artifact Hub reads these off the packaged chart; it indexes rather than hosts, so what it shows of
+# a chart is whatever the chart says about itself.
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/links: |
+    - name: source
+      url: https://github.com/jenesis/jenesis-repository
