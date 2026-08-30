@@ -42,7 +42,7 @@ public final class OciListingObserver implements ListingObserver {
             reference = subject.path().substring(manifests + "/manifests/".length());
         }
         if (name != null) {
-            if (store.list("oci/" + name + "/tags").isEmpty()) {
+            if (store.isEmpty("oci/" + name + "/tags")) {
                 return;
             }
             OciListings listings = new OciListings(store);
@@ -53,7 +53,7 @@ public final class OciListingObserver implements ListingObserver {
             }
             return;
         }
-        if (store.list("oci").isEmpty()) {
+        if (store.isEmpty("oci")) {
             return;
         }
         LOGGER.info("OCI listings regenerated in place: a hold transition named only a content hash");

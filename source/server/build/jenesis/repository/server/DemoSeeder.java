@@ -68,8 +68,11 @@ public final class DemoSeeder {
      * or the other). Configuration ({@code config/settings/...}) is not artifact content and so does not count - a
      * demo gate config already layered in does not make the space non-empty.
      */
-    public static boolean empty(ArtifactStore store) {
-        return store.list("blobs").isEmpty() && store.list("publish").isEmpty();
+    public static boolean empty(ArtifactStore store) throws IOException {
+        // Two bounded probes, not two listings. This asked its question with list("blobs").isEmpty(), which
+        // materialises one string per blob in the pool to decide whether there are any - on a busy repository,
+        // millions of them, to answer no.
+        return store.isEmpty("blobs") && store.isEmpty("publish");
     }
 
     /**
