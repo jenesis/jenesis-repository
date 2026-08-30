@@ -3,6 +3,7 @@ package build.jenesis.repository.ui;
 import module java.base;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Providers;
+import build.jenesis.repository.icon.IconContributor;
 
 /**
  * One removable console module, discovered with {@link java.util.ServiceLoader}: it names the Spring
@@ -60,7 +61,7 @@ import build.jenesis.repository.store.Providers;
  *     instantiated once and asked for its declarations once per pass. Nothing blocks and no timeout applies.</li>
  * </ol>
  */
-public interface ConsoleModuleProvider {
+public interface ConsoleModuleProvider extends IconContributor {
 
     /** The SPI's selection key, the {@code <spi>} every diagnostic points at. */
     String SPI = "console-module";

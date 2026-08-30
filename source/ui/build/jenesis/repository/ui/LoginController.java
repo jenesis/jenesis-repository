@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui;
 
+import build.jenesis.repository.icon.Mark;
+import build.jenesis.repository.icon.Marks;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
@@ -32,13 +34,28 @@ public class LoginController {
         if (authenticated(authentication)) {
             return "redirect:/console";
         }
-        List<LoginOptions.LoginOption> options = new ArrayList<>();
+        List<Choice> options = new ArrayList<>();
         for (LoginOptions mechanism : mechanisms) {
-            options.addAll(mechanism.options());
+            for (LoginOptions.LoginOption option : mechanism.options()) {
+                options.add(choice(option));
+            }
         }
         model.addAttribute("loginConfigured", !options.isEmpty());
         model.addAttribute("loginOptions", options);
         return "console/login";
+    }
+
+    /** One button, with its mark resolved: the mechanism's own drawing where it ships one, and otherwise the figure
+     *  computed from its id - the same resolution every other console surface makes, so a sign-in button is marked
+     *  the way the rest of the console is rather than being the one bare list. */
+    private static Choice choice(LoginOptions.LoginOption option) {
+        Mark mark = Marks.of(option);
+        return new Choice(option.label(), option.href(), mark.svg(), mark.title(), ConsoleMarks.tint(mark));
+    }
+
+    /** What the template renders per button. The mark is resolved here rather than in the template for the same
+     *  reason it is everywhere else: a template cannot call {@code Marks} and must not learn how a mark is chosen. */
+    public record Choice(String label, String href, String markSvg, String markTitle, String markTint) {
     }
 
     private static boolean authenticated(Authentication authentication) {

@@ -23,9 +23,16 @@
         </th:block>
         <p th:if="${param.logout}" role="status">You have signed out.</p>
         <div th:if="${loginConfigured}">
+            <!--/* The mark is inline SVG built from module constants and geometry - never from a name - which is
+                 why it is the one value here rendered unescaped. A mechanism that ships its own drawing renders
+                 that instead; the resolution is made in the controller, as it is on every other console surface. */-->
             <a th:each="option : ${loginOptions}" role="button" style="display:block;margin-bottom:0.5rem"
-               th:href="@{${option.href()}}"
-               th:text="'Sign in with ' + ${option.label()}">Sign in</a>
+               th:href="@{${option.href()}}">
+                <span class="app-mark" th:classappend="${option.markTint()}"
+                      th:title="${option.markTitle()}" role="img" th:aria-label="${option.markTitle()}"
+                      th:utext="${option.markSvg()}"></span>
+                <span th:text="'Sign in with ' + ${option.label()}">Sign in</span>
+            </a>
         </div>
         <!--/* Not an error state and not an empty one: a deployment that installed no mechanism cannot be signed
              into at all, and the page says which of the two it is so nobody debugs a missing button. */-->

@@ -1,6 +1,7 @@
 package build.jenesis.repository.store;
 
 import module java.base;
+import build.jenesis.repository.icon.IconContributor;
 
 /**
  * A named factory for an {@link ArtifactStore} backend, discovered at runtime with {@link ServiceLoader}.
@@ -61,7 +62,7 @@ import module java.base;
  *     config.</li>
  * </ol>
  */
-public interface ArtifactStoreProvider {
+public interface ArtifactStoreProvider extends IconContributor {
 
     /** The backend name this provider answers to, e.g. {@code filesystem}, {@code s3}, {@code gcs}, {@code azure-blob}. */
     String name();

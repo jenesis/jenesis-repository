@@ -35,4 +35,9 @@ module build.jenesis.repository.store {
     provides build.jenesis.repository.observation.ObservabilitySource
             with build.jenesis.repository.store.QuotaObservability,
                  build.jenesis.repository.store.StoredListing.Observability;
+
+    // The family extends IconContributor, so every implementation gains the optional mark seam and
+    // the console resolves one answer for all of them. Transitive: an implementation overriding
+    // icon() names IconResource in its own signature.
+    requires transitive build.jenesis.repository.icon;
 }

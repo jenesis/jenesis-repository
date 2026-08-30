@@ -101,9 +101,12 @@ public class OAuth2ClientConfig {
             if (registrations instanceof Iterable<?> available) {
                 for (Object entry : available) {
                     ClientRegistration registration = (ClientRegistration) entry;
+                    // No mark: the registration id is chosen by whoever configured the client, so there is
+                    // nothing here to look a drawing up by. The figure computed from that id is the honest answer.
                     options.add(new LoginOptions.LoginOption(registration.getRegistrationId(),
                             registration.getClientName(),
-                            "/oauth2/authorization/" + registration.getRegistrationId()));
+                            "/oauth2/authorization/" + registration.getRegistrationId(),
+                            Optional.empty()));
                 }
             }
             return options;
