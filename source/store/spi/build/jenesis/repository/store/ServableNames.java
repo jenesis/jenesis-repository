@@ -283,7 +283,9 @@ public final class ServableNames {
      *  convention every hold writer uses: {@code Publication.screen}'s QUARANTINE branch and the retroactive sweeps
      *  link {@code /quarantine<servedPath>} per served path), or (b) a hold covers any of the
      *  folder's leaves, up to the {@value #PROBE_CAP}-leaf bound past which it fails CLOSED (a folder wider than the
-     *  bound is screened, since its unprobed leaves cannot be proven un-held). It never stats a blob, so a fake-hash /
+     *  bound is screened, since its unprobed leaves cannot be proven un-held). The bound holds over the <em>read</em>
+     *  as well as the probing: the leaf names are paged one past the cap, so a pathologically wide folder is rejected
+     *  without ever being materialised. It never stats a blob, so a fake-hash /
      *  no-blob / non-jar version keeps listing; with the free (empty) chain and no quarantine pointer a folder within
      *  the bound always lists. Fail-closed on a hostile folder name.
      *
@@ -300,7 +302,7 @@ public final class ServableNames {
         try {
             // (a) The review-pointer convention: a held version has >=1 /quarantine<servedPath> pointer under it, so
             // any child under publish/quarantine<folder> means at least part of the version is held.
-            if (!store.list(Publication.quarantineKey(folder)).isEmpty()) {
+            if (!store.isEmpty(Publication.quarantineKey(folder))) {
                 return false;
             }
             // (b) A leaf of the version is held - by the interceptor chain, or by a withheld/<hash> marker on the
@@ -309,7 +311,12 @@ public final class ServableNames {
             // fan-out, and a fail-OPEN past the bound would leak the version name of an interceptor-only-withheld leaf
             // sitting beyond the probed prefix. The bound is well above any legitimate version folder, so this screens
             // only pathologically wide folders; every real release is probed in full by the exact loop below.
-            List<String> leaves = store.list("publish" + folder);
+            // Read one more than the cap rather than the folder: the bound below is a decision about how many
+            // leaves may be probed, and taking the whole listing first to count it defeats the bound on exactly the
+            // pathological folder it exists for - a million-leaf folder was materialised into a million strings and
+            // only then rejected.
+            List<String> leaves = new ArrayList<>();
+            store.page("publish" + folder, "", ArtifactStore.oneMoreThan(PROBE_CAP), leaves::add);
             if (leaves.size() > PROBE_CAP) {
                 return false;
             }

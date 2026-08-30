@@ -473,7 +473,66 @@ class ServableNamesTest {
                 .as("a folder wider than the raised probe bound is screened (fail-closed past the cap)").isFalse();
     }
 
+
+    @Test
+    void a_folder_wider_than_the_cap_is_rejected_without_being_materialised() throws IOException {
+        // The sibling above proves the VERDICT past the cap; this proves the COST of reaching it, which is a separate
+        // claim and was the one that did not hold. The bound read the folder whole and counted it afterwards, so the
+        // pathologically wide folder the cap exists for was the one folder guaranteed to be materialised in full - a
+        // million-leaf folder became a million strings and was then rejected. Against a store that pages natively
+        // (every shipped backend does; MapStore alone inherits the materialising fallback) the leaf names are now
+        // taken one past the cap, so the read is bounded whatever the folder holds.
+        PagingStore store = new PagingStore();
+        for (int leaf = 0; leaf < 5000; leaf++) {
+            store.pointer(String.format("publish/maven/g/a/9/leaf-%04d.jar", leaf), HASH_A);
+        }
+        store.blob(HASH_A);
+        ServableNames names = new ServableNames(store);
+
+        assertThat(names.disclosableVersionFolder("/maven/g/a/9"))
+                .as("still fail-closed past the cap - the verdict is unchanged").isFalse();
+        assertThat(store.listedWhole)
+                .as("and the wide folder was never listed whole to decide it").doesNotContain("publish/maven/g/a/9");
+        assertThat(store.namesServed)
+                .as("no more names read than the cap needs to know it was exceeded")
+                .isLessThanOrEqualTo(513);
+    }
+
     // ---- doubles -----------------------------------------------------------------------------------------------
+
+    /** A {@link MapStore} that pages natively and records what was asked of it - the shape every shipped backend has
+     *  and the plain map double does not. It matters here: {@code MapStore} inherits {@code page}'s materialising
+     *  fallback, so against it a bounded read and an unbounded one are indistinguishable, and a test written on it
+     *  would pass with the defect present. */
+    private static final class PagingStore extends MapStore {
+
+        final List<String> listedWhole = new ArrayList<>();
+
+        int namesServed;
+
+        @Override
+        public List<String> list(String prefix) {
+            listedWhole.add(prefix);
+            List<String> all = super.list(prefix);
+            namesServed += all.size();
+            return all;
+        }
+
+        @Override
+        public void page(String prefix, String startAfter, int limit, java.util.function.Consumer<String> consumer) {
+            int served = 0;
+            for (String name : super.list(prefix)) {
+                if (served == limit) {
+                    return;
+                }
+                if (startAfter == null || startAfter.isEmpty() || name.compareTo(startAfter) > 0) {
+                    namesServed++;
+                    served++;
+                    consumer.accept(name);
+                }
+            }
+        }
+    }
 
     /** An interceptor that withholds exactly the request paths it is constructed with - the free chain is empty, so
      *  this is how a test drives the WITHHELD leg without a downstream compliance gate on the module path. */
