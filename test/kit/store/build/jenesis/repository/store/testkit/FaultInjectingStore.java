@@ -457,5 +457,15 @@ public final class FaultInjectingStore implements ArtifactStore {
             }
             return written;
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return scoped.scan(prefix, startAfter, limit, consumer);
+    }
+}
+
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return delegate.scan(prefix, startAfter, limit, consumer);
     }
 }

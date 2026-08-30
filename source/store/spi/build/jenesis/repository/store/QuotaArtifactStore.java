@@ -376,6 +376,26 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
         return delegate.list(prefix);
     }
 
+    /**
+     * Delegate the scan, for the same reason {@link #page} is delegated and with the same consequence for getting it
+     * wrong.
+     *
+     * <p>The SPI's inherited {@code scan} is {@code scanByListing}, which walks {@code list} recursively into heap
+     * and then refuses past ten thousand keys - a deliberate bound, because a fallback that buffered a namespace to
+     * answer one page would be worse than one that says it cannot. A decorator that forgets this method does not
+     * merely lose performance: it *replaces* the backend's native, genuinely bounded prefix listing with that
+     * fallback, so a bounded question asked through the decorator becomes an unbounded one.
+     *
+     * <p>Measured rather than reasoned: this was missing from every decorator at once, and the all-in-one image
+     * stopped booting over a store holding more than ten thousand keys. A tenant existence probe - already written
+     * as a point read with a page limit of one - reached this fallback through the decorator and materialised
+     * 10,001 keys to answer it.
+     */
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return delegate.scan(prefix, startAfter, limit, consumer);
+    }
+
     @Override
     public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
         delegate.page(prefix, startAfter, limit, consumer);

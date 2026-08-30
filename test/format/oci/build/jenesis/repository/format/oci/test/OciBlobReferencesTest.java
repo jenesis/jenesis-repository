@@ -277,7 +277,12 @@ class OciBlobReferencesTest {
         public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
             return delegate.writeVersioned(key, content, expected);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 
     @Test
     void a_manifest_blob_that_is_already_gone_lends_only_itself() throws IOException {

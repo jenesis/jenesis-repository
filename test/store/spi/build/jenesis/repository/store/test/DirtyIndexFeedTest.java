@@ -333,7 +333,12 @@ class DirtyIndexFeedTest {
         public List<String> list(String prefix) {
             return delegate.list(prefix);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 
     /**
      * An {@link ArtifactStore} decorator that counts the enumeration and small-object reads a sweep issues, so a test
@@ -432,5 +437,10 @@ class DirtyIndexFeedTest {
         public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
             return delegate.writeVersioned(key, content, expected);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return delegate.scan(prefix, startAfter, limit, consumer);
     }
+}
 }

@@ -106,4 +106,9 @@ final class MemoryStore implements ArtifactStore {
     public String writeBlob(InputStream in) {
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
+    }
 }

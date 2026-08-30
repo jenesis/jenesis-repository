@@ -591,7 +591,12 @@ class AuthorizationTest {
         public Optional<Versioned> readVersioned(String key) throws IOException {
             return delegate.readVersioned(key);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return delegate.scan(prefix, startAfter, limit, consumer);
     }
+}
 
     /** A store decorator whose first compare-and-set write to the credential's metadata simulates another node
      *  committing a competing use increment and an operator's IP-allowlist first (so this flush's token is now stale)
@@ -681,7 +686,12 @@ class AuthorizationTest {
         public Optional<Versioned> readVersioned(String key) throws IOException {
             return delegate.readVersioned(key);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return delegate.scan(prefix, startAfter, limit, consumer);
     }
+}
 
     /**
      * The two deployment-wide lifetime dials are reachable from configuration.
