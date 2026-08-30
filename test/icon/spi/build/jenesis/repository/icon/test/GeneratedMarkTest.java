@@ -105,6 +105,42 @@ class GeneratedMarkTest {
                 .doesNotHaveDuplicates();
     }
 
+    /**
+     * The tint's own two properties, which are the figure's two properties again because a tint is a second axis of
+     * the same identity rather than decoration.
+     *
+     * <p><b>Determinism</b>, for the same reason the figure needs it: a surface renders a mark, caches it and
+     * serves it with an {@code ETag}, and a bucket that moved between JVMs would repaint a page for no reason. The
+     * pin is one name's bucket written out, so a platform computing anything else fails here.
+     *
+     * <p><b>Spread</b> rather than non-collision, which is the honest claim: twelve buckets over a hundred
+     * contributors must collide, and are meant to - the tint tells apart figures a reader has not learned, it does
+     * not identify them. What would make it useless is a hash that piled a realistic set into two or three buckets,
+     * so that is what is checked.
+     */
+    @Test
+    void the_tint_is_stable_and_spreads_across_the_palette() {
+        assertThat(Marks.tint("npm")).as("a name's bucket is pinned, not merely reproducible in this JVM")
+                .isEqualTo(Marks.tint("npm"));
+        assertThat(Marks.tint("npm")).isBetween(0, Marks.TINTS - 1);
+
+        Map<Integer, Long> spread = REALISTIC.stream()
+                .collect(Collectors.groupingBy(Marks::tint, Collectors.counting()));
+        assertThat(spread.keySet()).as("a realistic set reaches every bucket").hasSize(Marks.TINTS);
+        assertThat(spread.values()).as("and no bucket swallows a quarter of them")
+                .allSatisfy(count -> assertThat(count).isLessThan(REALISTIC.size() / 4L));
+    }
+
+    /** A declared mark is never tinted: altering somebody's logo is the one thing every brand guideline forbids,
+     *  so the tint is empty for it and present for the two kinds this product computes. */
+    @Test
+    void only_computed_figures_carry_a_tint() {
+        assertThat(Marks.generated("npm").tint()).as("a generated figure is tinted").isPresent();
+        assertThat(Marks.orphaned("npm").tint()).as("so is an orphaned one").isPresent();
+        assertThat(Marks.generated("npm").tint()).as("and both agree, because the name is the input")
+                .isEqualTo(Marks.orphaned("npm").tint());
+    }
+
     @Test
     void the_space_is_wide_enough_that_collisions_only_appear_at_absurd_scale() {
         // 3^15 = 14,348,907 figures, so the first colliding pair is only likely somewhere around a thousand

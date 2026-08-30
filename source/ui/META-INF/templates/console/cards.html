@@ -28,7 +28,8 @@
                  module that served them is gone. The mark is inline SVG built from module constants and geometry -
                  never from a name - which is why it is the one value here rendered unescaped. */-->
             <li th:each="namespace : ${model.namespaces}">
-                <span class="app-mark" th:classappend="${namespace.installed} ? '' : 'app-mark--orphaned'"
+                <span class="app-mark"
+                      th:classappend="${namespace.markTint} + (${namespace.installed} ? '' : ' app-mark--orphaned')"
                       th:title="${namespace.markTitle}" role="img" th:aria-label="${namespace.markTitle}"
                       th:utext="${namespace.markSvg}"></span>
                 <a th:href="@{/browse(path=${namespace.name})}" th:text="${namespace.name}">namespace</a>

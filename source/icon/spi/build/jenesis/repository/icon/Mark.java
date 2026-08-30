@@ -55,6 +55,21 @@ public record Mark(String name, Kind kind, String svg) {
         }
     }
 
+    /**
+     * The palette bucket this mark is tinted with, or empty for a {@link Kind#DECLARED} one.
+     *
+     * <p>Empty is the point: a declared mark is the contributor's own drawing, and tinting somebody's logo is
+     * exactly the alteration every brand guideline forbids. Only the figures this product computes carry a colour,
+     * which is also the only place a colour adds anything - a page of computed figures is what needed a second axis
+     * to be told apart at a glance.
+     *
+     * <p>Colour is still never the only cue. The figure differs by <em>shape</em>, so a monochrome display, a
+     * high-contrast theme and a screen reader lose nothing; this is the same rule the dashed orphan tile follows.
+     */
+    public OptionalInt tint() {
+        return kind == Kind.DECLARED ? OptionalInt.empty() : OptionalInt.of(Marks.tint(name));
+    }
+
     /** Whether a contributor answering to {@link #name()} is on this deployment - false only for {@link
      *  Kind#ORPHANED}, so a surface can screen or badge orphaned rows without reading the kind. */
     public boolean installed() {
