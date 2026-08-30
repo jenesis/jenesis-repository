@@ -198,4 +198,9 @@ open module build.jenesis.repository.ui {
                     build.jenesis.repository.ui.LogCard,
                     build.jenesis.repository.ui.ConsistencyCard,
                     build.jenesis.repository.ui.CredentialsCard;
+
+    // The family extends IconContributor, so every implementation gains the optional mark seam and
+    // the console resolves one answer for all of them. Transitive: an implementation overriding
+    // icon() names IconResource in its own signature.
+    requires transitive build.jenesis.repository.icon;
 }

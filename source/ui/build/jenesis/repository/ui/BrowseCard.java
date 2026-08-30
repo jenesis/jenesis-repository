@@ -86,18 +86,9 @@ public final class BrowseCard implements ConsoleCard {
             // which is why FormatMarks answers empty rather than deciding - and the browse listing it walks has
             // already screened the reserved plumbing out, so what reaches here is published content.
             Mark mark = marks.forNamespace(name).orElseGet(() -> Marks.orphaned(name));
-            namespaces.add(new Namespace(name, mark.svg(), mark.title(), mark.installed(), tint(mark)));
+            namespaces.add(new Namespace(name, mark.svg(), mark.title(), mark.installed(), ConsoleMarks.tint(mark)));
         }
         return new View(List.copyOf(namespaces));
-    }
-
-    /** The stylesheet class for a computed mark's tint, or empty for a contributor's own drawing - which is never
-     *  tinted, because altering somebody's logo is what every brand guideline forbids. Built here rather than in
-     *  the template so the class name has one spelling, and as a class rather than an inline style because a
-     *  strict content-security policy blocks inline styles. */
-    private static String tint(Mark mark) {
-        return mark.tint().stream().mapToObj(bucket -> String.format("app-mark--t%02d", bucket))
-                .findFirst().orElse("");
     }
 
     /** What the fragment renders: the namespaces, in the order the screened enumeration produced them. */

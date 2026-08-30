@@ -18,4 +18,9 @@
 module build.jenesis.repository.importer {
     requires transitive build.jenesis.repository.format;
     exports build.jenesis.repository.importer;
+
+    // The family extends IconContributor, so every implementation gains the optional mark seam and
+    // the console resolves one answer for all of them. Transitive: an implementation overriding
+    // icon() names IconResource in its own signature.
+    requires transitive build.jenesis.repository.icon;
 }

@@ -63,7 +63,8 @@ public class DevConsoleSecurity {
     /** The "a username and password" entry on the shared sign-in page. */
     @Bean
     public LoginOptions devLoginOptions() {
-        return () -> List.of(new LoginOptions.LoginOption("dev", "a username and password", PATH));
+        return () -> List.of(new LoginOptions.LoginOption("dev", "a username and password", PATH,
+                Optional.empty()));
     }
 
     /** Marker for the {@link #devLoopbackGuard} bean; its construction validating the bind is the guard. */

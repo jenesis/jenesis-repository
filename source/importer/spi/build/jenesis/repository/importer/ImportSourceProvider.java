@@ -3,6 +3,7 @@ package build.jenesis.repository.importer;
 import build.jenesis.repository.format.ProxyFormat;
 
 import module java.base;
+import build.jenesis.repository.icon.IconContributor;
 
 /**
  * Discovers and builds an {@link ImportSource} for a named incumbent. A source implementation ships as its own module
@@ -60,7 +61,7 @@ import module java.base;
  *     truncated asset list - a migration that quietly stopped half way looks exactly like a complete one.</li>
  * </ol>
  */
-public interface ImportSourceProvider {
+public interface ImportSourceProvider extends IconContributor {
 
     /** The stable source name this provider answers to (for example {@code "nexus"}, {@code "artifactory"}), so a
      *  console or client can enumerate the installed sources instead of hardcoding them. */

@@ -1,5 +1,6 @@
 package build.jenesis.repository.ui.test;
 
+import build.jenesis.repository.icon.IconResource;
 import build.jenesis.repository.ui.LoginController;
 import build.jenesis.repository.ui.LoginOptions;
 import module org.junit.jupiter.api;
@@ -29,26 +30,72 @@ class LoginControllerTest {
     @SuppressWarnings("unchecked")
     void it_lists_every_installed_mechanisms_options_and_flags_that_sign_in_is_possible() {
         LoginController controller = new LoginController(List.of(
-                mechanism(new LoginOptions.LoginOption("github", "GitHub", "/oauth2/authorization/github")),
+                mechanism(option("github", "GitHub", "/oauth2/authorization/github")),
                 // A second mechanism, and deliberately not an OAuth2 one: the page flattens what the mechanisms
                 // offer rather than asking one framework what it knows about.
-                mechanism(new LoginOptions.LoginOption("saml", "Single sign-on", "/saml2/authenticate/idp"),
-                        new LoginOptions.LoginOption("key", "An access key", "/login/key"))));
+                mechanism(option("saml", "Single sign-on", "/saml2/authenticate/idp"),
+                        option("key", "An access key", "/login/key"))));
 
         Model model = new ConcurrentModel();
         String view = controller.login(anonymous(), model);
 
         assertThat(view).isEqualTo("console/login");
         assertThat(model.getAttribute("loginConfigured")).isEqualTo(true);
-        List<LoginOptions.LoginOption> options =
-                (List<LoginOptions.LoginOption>) model.getAttribute("loginOptions");
-        assertThat(options).extracting(LoginOptions.LoginOption::id)
-                .containsExactly("github", "saml", "key");
-        assertThat(options).extracting(LoginOptions.LoginOption::label)
+        List<LoginController.Choice> options =
+                (List<LoginController.Choice>) model.getAttribute("loginOptions");
+        assertThat(options).extracting(LoginController.Choice::label)
                 .containsExactly("GitHub", "Single sign-on", "An access key");
-        assertThat(options).extracting(LoginOptions.LoginOption::href)
+        assertThat(options).extracting(LoginController.Choice::href)
                 .as("a mechanism owns its own URL space, so the page links where it says rather than deriving it")
                 .containsExactly("/oauth2/authorization/github", "/saml2/authenticate/idp", "/login/key");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void a_mechanism_with_no_mark_of_its_own_is_rendered_with_the_computed_figure_and_a_tint() {
+        LoginController controller = new LoginController(List.of(
+                mechanism(option("saml", "Single sign-on", "/saml2/authenticate/idp"))));
+
+        Model model = new ConcurrentModel();
+        controller.login(anonymous(), model);
+
+        List<LoginController.Choice> options =
+                (List<LoginController.Choice>) model.getAttribute("loginOptions");
+        assertThat(options).singleElement().satisfies(choice -> {
+            assertThat(choice.markSvg()).as("a button is marked like every other console row, not left bare")
+                    .contains("<svg");
+            assertThat(choice.markTint())
+                    .as("and the computed figure carries its tint class, which is the second axis of identity")
+                    .matches("app-mark--t\\d\\d");
+        });
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void a_mechanism_that_ships_its_own_mark_renders_it_untinted() {
+        // The rule this pins is the one every brand guideline states: a contributor's own drawing is rendered as
+        // given and never recoloured. It is the reason the seam carries an icon at all - on a sign-in button the
+        // computed figure can be the non-compliant answer, because Google's guidelines prescribe their mark there.
+        String own = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><title>x</title></svg>";
+        LoginController controller = new LoginController(List.of(
+                mechanism(new LoginOptions.LoginOption("vendor", "Vendor SSO", "/vendor",
+                        Optional.of(IconResource.svg(own))))));
+
+        Model model = new ConcurrentModel();
+        controller.login(anonymous(), model);
+
+        List<LoginController.Choice> options =
+                (List<LoginController.Choice>) model.getAttribute("loginOptions");
+        assertThat(options).singleElement().satisfies(choice -> {
+            assertThat(choice.markSvg()).as("the mechanism's own drawing, rendered as given").isEqualTo(own);
+            assertThat(choice.markTint())
+                    .as("and no tint class - tinting somebody's logo is what the guidelines forbid").isEmpty();
+        });
+    }
+
+    /** A mechanism's option with no mark of its own - the ordinary case, and the one the computed figure serves. */
+    private static LoginOptions.LoginOption option(String id, String label, String href) {
+        return new LoginOptions.LoginOption(id, label, href, Optional.empty());
     }
 
     @Test
