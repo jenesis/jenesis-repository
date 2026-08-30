@@ -433,6 +433,27 @@ public interface ArtifactStore {
     }
 
     /**
+     * Whether nothing at all is stored under {@code prefix} - <b>one child answers it</b>, and the probe stops
+     * there.
+     *
+     * <p>It exists because the obvious spelling is a trap that this repository has now paid for three times:
+     * {@code list(prefix).isEmpty()} materialises a container's whole child set to answer a yes/no question, so
+     * asking whether the blob pool is empty costs one string per blob. A console browse once listed a namespace
+     * per row to draw a folder icon; a tenant existence probe reached the scan fallback and stopped the all-in-one
+     * image booting over ten thousand keys.
+     *
+     * <p>So the point of this method is not that it is faster. It is that <em>the correct form is now shorter than
+     * the incorrect one</em>, which is the only version of this rule that survives contact with people. A reviewer
+     * spotting {@code list(..).isEmpty()} is a rule; a method that reads better and cannot be unbounded is a
+     * mechanism.
+     */
+    default boolean isEmpty(String prefix) throws IOException {
+        boolean[] any = {false};
+        page(prefix, "", 1, _ -> any[0] = true);
+        return !any[0];
+    }
+
+    /**
      * The immediate child names under a key prefix (for the console browse and metadata maintenance). A prefix names
      * a container with or without a trailing slash - {@code a/b} and {@code a/b/} are the same one, here and for
      * {@link #page}, {@link #pageListed} and {@link #scan}; a backend normalises it with {@link #container} before it

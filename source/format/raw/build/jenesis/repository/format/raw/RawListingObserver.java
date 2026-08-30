@@ -33,7 +33,7 @@ public final class RawListingObserver implements ListingObserver {
         if (subject.ecosystem() != null && !subject.ecosystem().equals("raw")) {
             return;
         }
-        if (store.list("publish/raw").isEmpty()) {
+        if (store.isEmpty("publish/raw")) {
             return;
         }
         StoredListing.rebuildUnder(store, "raw/", this);

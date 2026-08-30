@@ -37,14 +37,14 @@ class DemoSeederTest {
     private ArtifactStore store;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         store = ArtifactStoreProvider.resolve("filesystem",
                         key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("default");
     }
 
     @Test
-    void collectsSuggestionsPerFormat() {
+    void collectsSuggestionsPerFormat() throws Exception {
         DemoSeeder seeder = new DemoSeeder(List.of(new MavenFormat(), new FakeFormat()), ProxyFormat.Fetcher.NONE);
         assertThat(seeder.suggestions())
                 .containsExactly(LOG4J_POM, LOG4J_JAR, COMMONS_COLLECTIONS_JAR, "/fake/demo/example-1.0.bin");
@@ -82,7 +82,7 @@ class DemoSeederTest {
     }
 
     @Test
-    void triggerIsANoOpWhenTheFlagIsOff() {
+    void triggerIsANoOpWhenTheFlagIsOff() throws Exception {
         StubFetcher fetcher = new StubFetcher(Map.of());
         AtomicInteger beforeSeed = new AtomicInteger();
         DemoSeeding seeding = new DemoSeeding(false, new DemoSeeder(List.of(new MavenFormat()), fetcher),
