@@ -261,6 +261,29 @@
     width: 100%;
     height: 100%;
 }
+/* The computed marks' palette. A mark this product GENERATES from a name carries a tint as a second axis of
+   identity, so a page of computed figures can be told apart at a glance rather than only by shape. A DECLARED mark
+   - a contributor's own drawing - never gets one: tinting somebody's logo is the alteration every brand guideline
+   forbids, which is why Mark.tint() is empty for it.
+   The bucket comes from the name (Marks.tint) and the colour lives here, one definition per bucket per theme, so
+   lightness is a presentation concern and each theme can be held to its own contrast floor - a colour baked into
+   the SVG would fix one lightness for both and change the bytes every ETag is computed over.
+   Twelve hues rather than the whole wheel: the bands around pure red and pure green are skipped because the status
+   palette above owns them, and a mark that lands on red should not read as an error. Saturation is deliberately
+   modest - these are identity tints on a line figure, not status fills. */
+.app-mark--t00 { color: hsl(25, 42%, 32%); }
+.app-mark--t01 { color: hsl(50, 42%, 32%); }
+.app-mark--t02 { color: hsl(75, 42%, 32%); }
+.app-mark--t03 { color: hsl(95, 42%, 32%); }
+.app-mark--t04 { color: hsl(150, 42%, 32%); }
+.app-mark--t05 { color: hsl(175, 42%, 32%); }
+.app-mark--t06 { color: hsl(200, 42%, 32%); }
+.app-mark--t07 { color: hsl(225, 42%, 32%); }
+.app-mark--t08 { color: hsl(250, 42%, 32%); }
+.app-mark--t09 { color: hsl(280, 42%, 32%); }
+.app-mark--t10 { color: hsl(310, 42%, 32%); }
+.app-mark--t11 { color: hsl(340, 42%, 32%); }
+
 /* A mark whose contributor is no longer installed. The dimming is the SECOND cue, never the only one: the figure
    itself is already drawn in a dashed tile by the generator, and the row carries a title/aria-label saying "not
    installed" - so the state survives a monochrome display, a high-contrast theme and a screen reader alike. */
@@ -660,4 +683,38 @@ button.app-danger:hover,
 .setting-doc {
     margin: .25rem 0;
     color: var(--pico-muted-color);
+}
+
+/* The computed marks' palette, dark. Same buckets, lighter tints - the figure is a stroke on a dark ground, so the
+   direction reverses while the bucket a name maps to does not. Both blocks, because the console honours an explicit
+   [data-theme=dark] choice as well as the system preference. */
+[data-theme="dark"] {
+    .app-mark--t00 { color: hsl(25, 46%, 72%); }
+    .app-mark--t01 { color: hsl(50, 46%, 72%); }
+    .app-mark--t02 { color: hsl(75, 46%, 72%); }
+    .app-mark--t03 { color: hsl(95, 46%, 72%); }
+    .app-mark--t04 { color: hsl(150, 46%, 72%); }
+    .app-mark--t05 { color: hsl(175, 46%, 72%); }
+    .app-mark--t06 { color: hsl(200, 46%, 72%); }
+    .app-mark--t07 { color: hsl(225, 46%, 72%); }
+    .app-mark--t08 { color: hsl(250, 46%, 72%); }
+    .app-mark--t09 { color: hsl(280, 46%, 72%); }
+    .app-mark--t10 { color: hsl(310, 46%, 72%); }
+    .app-mark--t11 { color: hsl(340, 46%, 72%); }
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+    .app-mark--t00 { color: hsl(25, 46%, 72%); }
+    .app-mark--t01 { color: hsl(50, 46%, 72%); }
+    .app-mark--t02 { color: hsl(75, 46%, 72%); }
+    .app-mark--t03 { color: hsl(95, 46%, 72%); }
+    .app-mark--t04 { color: hsl(150, 46%, 72%); }
+    .app-mark--t05 { color: hsl(175, 46%, 72%); }
+    .app-mark--t06 { color: hsl(200, 46%, 72%); }
+    .app-mark--t07 { color: hsl(225, 46%, 72%); }
+    .app-mark--t08 { color: hsl(250, 46%, 72%); }
+    .app-mark--t09 { color: hsl(280, 46%, 72%); }
+    .app-mark--t10 { color: hsl(310, 46%, 72%); }
+    .app-mark--t11 { color: hsl(340, 46%, 72%); }
+    }
 }

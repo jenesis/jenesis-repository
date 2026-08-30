@@ -22,8 +22,9 @@
  * <p><strong>The core stays mark-agnostic.</strong> A brand mark lives in the module that contributes it, with its
  * source and licence recorded next to that module. The only documents this module holds are the two that belong to
  * no contributor: the <em>neutral</em> fallback rendered where nothing markable was identified at all, and the
- * <em>generated</em> mark derived from a contributor's own name, whose provenance is recorded in this module's
- * {@code ICONS.md}.
+ * <em>generated</em> mark derived from a contributor's own name. Both are original CC0 line glyphs drawn for this
+ * project - a claim that stands on its own, where a pointer to a file would be a reference with a scheduled
+ * expiry.
  *
  * @jenesis.release 25
  */

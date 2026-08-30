@@ -92,7 +92,7 @@ public final class Marks {
      * ecosystem no installed plug-in declares, a row whose subject has no contributor to attribute it to - so a
      * surface degrades to one uniform glyph rather than to a hole or a broken image. It is the only document here
      * that stands for nobody, which is why it is not a {@link Mark}: a {@link Mark} always names a contributor.
-     * An original CC0 line glyph, recorded in this module's {@code ICONS.md}; it lives with the resolution rather
+     * An original CC0 line glyph drawn for this project; it lives with the resolution rather
      * than in any contributing module precisely because it belongs to no contributor.
      */
     private static final String NEUTRAL = """
@@ -147,6 +147,31 @@ public final class Marks {
         return declared
                 .map(icon -> new Mark(named(name), Mark.Kind.DECLARED, render(icon)))
                 .orElseGet(() -> generated(name));
+    }
+
+    /** How many tints the palette holds. A constant rather than a knob: changing it renumbers every mark, so it
+     *  belongs to the golden test rather than to configuration. */
+    public static final int TINTS = 12;
+
+    /** The digest's top bits, which the geometry never reaches - fifteen base-three digits consume about
+     *  twenty-four bits from the low end, so a tint taken from the high end varies independently of the figure. */
+    private static final int TINT_SHIFT = 232;
+
+    /**
+     * The palette bucket a name is tinted with - a second axis of identity on top of the figure, so two
+     * contributors whose figures a reader has not learned yet are still told apart at a glance.
+     *
+     * <p>Deterministic across processes exactly as the figure is, and for the same reason: a surface renders a
+     * mark, caches it and serves it with an {@code ETag}. Same name, same bucket, on every JVM and platform.
+     *
+     * <p><b>It is a bucket rather than a colour</b>, and that is the whole design. The colour itself lives in the
+     * console's stylesheet, one definition per bucket <em>per theme</em>, so lightness is a presentation concern
+     * where it belongs and both themes can be held to their contrast floor. Baking a colour into the document
+     * would fix one lightness for both themes and change the bytes every {@code ETag} is computed over.
+     */
+    public static int tint(String name) {
+        return new BigInteger(1, sha256(named(name)))
+                .shiftRight(TINT_SHIFT).mod(BigInteger.valueOf(TINTS)).intValue();
     }
 
     /**
