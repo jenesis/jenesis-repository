@@ -27,6 +27,7 @@
  * a redundant-looking line survive unexamined. All five have to go before the failure appears.
  *
  * @jenesis.release 25
+ * @jenesis.alias hdrhistogram org.hdrhistogram/HdrHistogram
  * @jenesis.exclude spring.boot.starter.jetty org.apache.tomcat.embed/tomcat-embed-el
  * @jenesis.main build.jenesis.repository.server.RepositoryApplication
  *
@@ -160,6 +161,9 @@ open module build.jenesis.repository.server {
     requires tools.jackson.databind;
     requires jakarta.servlet;
     requires micrometer.observation;
+    // Micrometer's histogram backing, adopted under a name so it reaches the module path: it carries neither a
+    // module descriptor nor an Automatic-Module-Name, which is the only reason it was on the class path.
+    requires hdrhistogram;
     requires org.slf4j;
     requires ch.qos.logback.classic;
     requires ch.qos.logback.core;
