@@ -104,7 +104,12 @@ public class RepositoryAuthorizationManagerFailClosedTest {
         public boolean writeVersioned(String key, byte[] content, Object expected) {
             throw new UnsupportedOperationException();
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 
     private static HttpServletRequest request(String key, Map<String, Object> attributes) {
         HttpServletRequest request = mock(HttpServletRequest.class);

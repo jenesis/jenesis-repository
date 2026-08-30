@@ -161,7 +161,12 @@ class PublicationTest {
         public Optional<Versioned> readVersioned(String key) throws IOException {
             return delegate.readVersioned(key);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return delegate.scan(prefix, startAfter, limit, consumer);
     }
+}
 
     @Test
     void unpublish_removes_the_pointer_and_located_reflects_a_missing_blob() throws IOException {

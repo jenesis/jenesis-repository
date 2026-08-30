@@ -339,7 +339,12 @@ class StoreWalkTest {
         public String writeBlob(InputStream in) {
             throw new UnsupportedOperationException();
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 
     @Test
     void the_provider_reads_its_settings_and_rejects_garbage_loudly() {

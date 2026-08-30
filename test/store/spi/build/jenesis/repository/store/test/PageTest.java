@@ -30,6 +30,12 @@ class PageTest {
     private static ArtifactStore fallback(ArtifactStore delegate) {
         return new ArtifactStore() {
             @Override
+            public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer)
+                    throws IOException {
+                return delegate.scan(prefix, startAfter, limit, consumer);
+            }
+
+            @Override
             public ArtifactStore scope(String tenant) {
                 return delegate.scope(tenant);
             }
@@ -151,6 +157,14 @@ class PageTest {
      *  the interface's {@code page} fallback - the shape of a backend that never overrode it. */
     private static ArtifactStore listingOnly(int size) {
         return new ArtifactStore() {
+            @Override
+            public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+                // Named explicitly, which is the point of the change that made scan abstract: the listing walk is
+                // still available to a store whose key space is already materialised, but nothing inherits it by
+                // accident any more.
+                return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
+            }
+
             @Override
             public List<String> list(String prefix) {
                 List<String> names = new ArrayList<>(size);

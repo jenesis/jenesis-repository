@@ -97,5 +97,10 @@ class PublishedAssetsDepthTest {
         public boolean writeVersioned(String key, byte[] content, Object expected) {
             return false;
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 }

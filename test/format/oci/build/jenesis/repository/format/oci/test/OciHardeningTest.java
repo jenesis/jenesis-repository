@@ -142,5 +142,10 @@ class OciHardeningTest {
         public Optional<Versioned> readVersioned(String key) throws IOException {
             return delegate.readVersioned(key);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return delegate.scan(prefix, startAfter, limit, consumer);
     }
+}
 }

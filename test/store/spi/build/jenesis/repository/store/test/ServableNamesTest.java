@@ -569,7 +569,12 @@ class ServableNamesTest {
         public String writeBlob(InputStream in) {
             throw new UnsupportedOperationException();
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 
     /** A {@link MapStore} that counts every {@code exists}/{@code size} probe of a {@code blobs/} object, so a test can
      *  assert {@link Policy#HIDE_WITHHELD} touched no blob at all. */

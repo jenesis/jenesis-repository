@@ -647,12 +647,27 @@ public interface ArtifactStore {
      * back to {@link #size}, {@link #delete} or {@link #readVersioned}, so a scan that reported names would make
      * every caller re-compose them. {@code startAfter} is one of those keys, handed back verbatim.
      *
+     * <p><strong>Abstract, deliberately, and this used to be a default.</strong> The default was
+     * {@link #scanByListing}, which walks {@link #list} recursively into heap and refuses past
+     * {@link #MAX_INHERITED_CHILDREN} keys. That is a reasonable <em>fallback</em> and it was a terrible
+     * <em>default</em>: a store that did not think about scanning silently got the materialising one, and the
+     * failure only appears once a prefix is large - by which time it is a deployment, not a test.
+     *
+     * <p>It cost exactly that. Three decorators - metering, quota and read-only - each overrode {@code page} for
+     * this very reason and each forgot {@code scan}, so all three replaced their backend's native bounded listing
+     * with the fallback. A tenant existence probe, already written as a point read with a page limit of one,
+     * reached it through the metering decorator, materialised 10,001 keys and refused - and the all-in-one image
+     * stopped booting over any store holding more than ten thousand keys.
+     *
+     * <p>Made abstract, none of that can recur quietly: a store that does not implement this does not compile, and
+     * a decorator that forgets it does not compile either. What a decorator wants is one line delegating to what it
+     * wraps; what a store whose key space is already materialised wants is {@link #scanByListing}, named out loud.
+     * A test double that never scans wants whichever is shorter - and either way it had to decide.
+     *
      * @throws IllegalArgumentException when {@code limit} is not positive - an empty page would read as a drained
      *                                  prefix, and a scan may not answer in the vocabulary of completeness by accident
      */
-    default Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return scanByListing(this, prefix, startAfter, limit, consumer);
-    }
+    Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException;
 
     /**
      * Scan {@code store} by walking {@link #list} recursively - the explicit, named form of the fallback {@link #scan}

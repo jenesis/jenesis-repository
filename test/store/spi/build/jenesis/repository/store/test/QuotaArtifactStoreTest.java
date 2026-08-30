@@ -364,7 +364,12 @@ class QuotaArtifactStoreTest {
         public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
             delegate.page(prefix, startAfter, limit, consumer);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 
     /** Forwards to a real store but fails {@link ArtifactStore#delete} for one key, standing in for a delete that
      *  the backend rejects (a permission error, a transient outage), so the counter can be asserted to hold when the
@@ -433,7 +438,12 @@ class QuotaArtifactStoreTest {
         public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
             return delegate.writeVersioned(key, content, expected);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 
     /** Forwards to a real store but tallies every {@link ArtifactStore#write} per key, so a test can prove an
      *  already-stored content blob is deduped away rather than re-uploaded (its key stays at a single write). */
@@ -508,7 +518,12 @@ class QuotaArtifactStoreTest {
         public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
             return delegate.writeVersioned(key, content, expected);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 
     /** Forwards to a real store but fails {@link ArtifactStore#list} outright, so the recompute provably streams
      *  through the ordered {@link ArtifactStore#page} primitive - a millions-entry {@code blobs/} never materialises
@@ -575,5 +590,10 @@ class QuotaArtifactStoreTest {
         public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
             return delegate.writeVersioned(key, content, expected);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 }

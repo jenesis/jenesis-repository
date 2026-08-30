@@ -173,5 +173,10 @@ class QuotaArtifactStoreObservabilityTest {
         public List<String> list(String prefix) {
             return delegate.list(prefix);
         }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
+}
 }

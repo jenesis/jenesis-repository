@@ -201,4 +201,9 @@ public final class WitnessStore implements ArtifactStore {
                     + "metadata may be materialised; an artifact streams through write/writeBlob (§1).");
         }
     }
+
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return delegate.scan(prefix, startAfter, limit, consumer);
+    }
 }
