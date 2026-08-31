@@ -88,7 +88,7 @@ final class MavenMetadataListing {
         String artifactId = slash < 0 ? coordinatePath : coordinatePath.substring(slash + 1);
         String groupId = slash < 0 ? "" : coordinatePath.substring(0, slash).replace('/', '.');
         StoredListing.Codec codec = codec(groupId, artifactId);
-        return StoredListing.Spec.of(listing(coordinatePath), codec, () -> generate(coordinatePath, codec))
+        return StoredListing.Spec.materialising(listing(coordinatePath), codec, () -> generate(coordinatePath, codec))
                 .deriving(document -> {
                     StoredListing.derive(store, listing(coordinatePath) + ".sha1", document.header().seq(),
                             MavenMetadata.hex("SHA-1", document.body()).getBytes(StandardCharsets.UTF_8));

@@ -48,7 +48,7 @@ final class RawListings {
     }
 
     StoredListing.Spec spec(String folder) {
-        return StoredListing.Spec.of(page(folder), PAGE, () -> generate(folder));
+        return StoredListing.Spec.materialising(page(folder), PAGE, () -> generate(folder));
     }
 
     private SortedMap<String, byte[]> generate(String folder) throws IOException {
