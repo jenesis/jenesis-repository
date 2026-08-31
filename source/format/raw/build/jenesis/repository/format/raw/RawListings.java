@@ -48,17 +48,33 @@ final class RawListings {
     }
 
     StoredListing.Spec spec(String folder) {
-        return StoredListing.Spec.materialising(page(folder), PAGE, () -> generate(folder));
+        return StoredListing.Spec.of(page(folder), PAGE, sink -> generate(folder, sink));
     }
 
-    private SortedMap<String, byte[]> generate(String folder) throws IOException {
-        SortedMap<String, byte[]> entries = new TreeMap<>();
+    /**
+     * Emit a link per served child, in the order the scan yields them.
+     *
+     * <p>The scan was already paged - a thousand names at a time, by cursor - so the names were never all in hand;
+     * what was, until this emitted instead of collecting, is the <em>page</em>: an entry per child of the folder,
+     * held in a map until the last one arrived. A raw folder has no bound on its children, and this generator runs
+     * on the first read of a folder page that does not exist yet, so that map was the whole folder on a request
+     * path. Emitting hands each link to the codec, which writes it and lets it go.
+     *
+     * <p>The scan's order is the sink's order, which is what the contract requires: the cursor it pages by is only
+     * meaningful over one, so ascending is what it already yields.
+     */
+    private void generate(String folder, StoredListing.Generator.Sink sink) throws IOException {
         String prefix = ServableNames.PUBLISHED + folder.substring(0, folder.length() - 1);
         ScreenedNames.paths(names, ServableNames.Policy.HIDE_WITHHELD_AND_GONE)
                 .containers(childKey -> hasChild(childKey))
                 .scanning(BoundedChildren.bounded().entries(Integer.MAX_VALUE).page(1000))
-                .scan(store, prefix, (child, _) -> entries.put(child, link(child)));
-        return entries;
+                .scan(store, prefix, (child, _) -> {
+                    try {
+                        sink.accept(child, link(child));
+                    } catch (IOException cause) {
+                        throw new UncheckedIOException(cause);
+                    }
+                });
     }
 
     private boolean hasChild(String prefix) {
