@@ -29,7 +29,23 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class OidcExchangeTest {
 
     /** Discovery attempts the fixture makes before giving up; a starved box can lose one to a read timeout. */
-    private static final int WARM_ATTEMPTS = 3;
+    private static final int WARM_ATTEMPTS = 6;
+
+    /**
+     * How long to wait after a failed warm-up before trying again, doubling from here.
+     *
+     * <p><b>Why there is a wait at all, and why it is this long.</b> The loop below used to retry three times with
+     * no pause between them, which is close to not retrying: the failure it recovers from is a read timeout on a
+     * saturated machine, and three attempts fired within microseconds all meet the same saturation. Measured
+     * 2026-08-31 on a cold full lane - 153 suites, ~59 forked JVMs - this suite failed exactly that way while
+     * passing on the next run of the same tree.
+     *
+     * <p>Deliberately not {@code Retries.backoff}, which caps at a hundred milliseconds: that one is tuned for a
+     * lost compare-and-set, where the peer is expected to be gone almost immediately. This waits for a load spike
+     * to pass, which is a different timescale - 250 ms doubling to four seconds, about eight seconds in total
+     * across all attempts, paid only when the machine is genuinely too busy to answer a localhost GET.
+     */
+    private static final long WARM_BACKOFF_MILLIS = 250;
 
     @TempDir
     Path root;
@@ -87,7 +103,9 @@ class OidcExchangeTest {
      * asserting something else (clock-skew tolerance, in that instance).
      *
      * <p>So the round-trip moves here, where it is what it actually is: fixture setup, and legitimately retryable
-     * because a slow local stub is not a claim about the product. Afterwards the decoder is cached for the issuer
+     * because a slow local stub is not a claim about the product. The retry <em>backs off</em>, which it did not
+     * originally: three immediate tries meet the same saturation that caused the timeout, so they recovered about
+     * as often as one did. Afterwards the decoder is cached for the issuer
      * and every assertion below runs against a warm one, so none of them can time out on discovery at all. This is
      * structural rather than a mitigation - it removes the dependency instead of making it less likely.
      *
@@ -104,6 +122,16 @@ class OidcExchangeTest {
                 return;
             } catch (IOException slow) {
                 last = slow;
+                if (attempt < WARM_ATTEMPTS) {
+                    try {
+                        // Backed off, not bunched. Without this the retries all land inside the same load spike
+                        // that caused the timeout, so three tries recover about as often as one.
+                        Thread.sleep(WARM_BACKOFF_MILLIS << (attempt - 1));
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("interrupted while warming the decoder", interrupted);
+                    }
+                }
             }
         }
         throw new IllegalStateException("the issuer stub did not answer OIDC discovery in " + WARM_ATTEMPTS
