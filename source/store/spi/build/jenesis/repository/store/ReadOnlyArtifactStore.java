@@ -114,4 +114,11 @@ public final class ReadOnlyArtifactStore implements ArtifactStore {
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
         throw new ReadOnlyException();
     }
+
+    /** Refused like every other write, and refused <em>before</em> the stream is read: the inherited body would
+     *  buffer the whole content into heap and only then throw. */
+    @Override
+    public boolean writeVersioned(String key, InputStream content, long length, Object expected) {
+        throw new ReadOnlyException();
+    }
 }

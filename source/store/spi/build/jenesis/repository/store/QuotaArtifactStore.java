@@ -410,4 +410,11 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
         return delegate.writeVersioned(key, content, expected);
     }
+
+    /** Delegated rather than inherited: the inherited body buffers, which would turn a streaming backend into a
+     *  buffering one for every deployment that meters a quota. */
+    @Override
+    public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
+        return delegate.writeVersioned(key, content, length, expected);
+    }
 }
