@@ -77,7 +77,7 @@ final class OciListings {
     }
 
     StoredListing.Spec tagsSpec(String name) {
-        return StoredListing.Spec.of(tags(name), TAGS, () -> generateTags(name)).deriving(document -> {
+        return StoredListing.Spec.materialising(tags(name), TAGS, () -> generateTags(name)).deriving(document -> {
             if (TAGS.split(document.body()).isEmpty()) {
                 StoredListing.remove(store, catalogSpec(), name);
             } else {
@@ -87,7 +87,7 @@ final class OciListings {
     }
 
     StoredListing.Spec catalogSpec() {
-        return StoredListing.Spec.of(CATALOG, REPOSITORIES, this::generateCatalog);
+        return StoredListing.Spec.materialising(CATALOG, REPOSITORIES, this::generateCatalog);
     }
 
     private SortedMap<String, byte[]> generateTags(String name) throws IOException {
@@ -116,7 +116,7 @@ final class OciListings {
             String childName = name.isEmpty() ? child : name + "/" + child;
             if (child.equals("tags") && !name.isEmpty()) {
                 Optional<StoredListing.Document> document = StoredListing.read(store,
-                        StoredListing.Spec.of(tags(name), TAGS, () -> generateTags(name)));
+                        StoredListing.Spec.materialising(tags(name), TAGS, () -> generateTags(name)));
                 if (document.isPresent() && !TAGS.split(document.get().body()).isEmpty()) {
                     entries.put(name, JsonMembers.quote(name).getBytes(StandardCharsets.UTF_8));
                 }

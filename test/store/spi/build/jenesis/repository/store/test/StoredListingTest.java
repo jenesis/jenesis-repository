@@ -26,6 +26,54 @@ class StoredListingTest {
                 "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null).scope("acme");
     }
 
+    @Test
+    void a_streaming_generator_writes_the_same_document_as_a_materialising_one() throws IOException {
+        // The equivalence that makes converting a generator safe. Every repository-wide listing has to move from
+        // returning its map to emitting into a sink, and the only thing that makes those changes reviewable one at
+        // a time is that the two shapes are indistinguishable in the store.
+        SortedMap<String, byte[]> content = entries("a 1", "b 2", "c 3");
+
+        StoredListing.read(store, lines("collected", () -> content));
+        StoredListing.read(store, StoredListing.Spec.of("streamed", LINES, sink -> {
+            for (Map.Entry<String, byte[]> entry : content.entrySet()) {
+                sink.accept(entry.getKey(), entry.getValue());
+            }
+        }));
+
+        assertThat(body("streamed")).isEqualTo(body("collected"));
+    }
+
+    @Test
+    void a_streaming_generator_never_has_the_whole_listing_in_hand() throws IOException {
+        // The point of the seam, asserted on the generator's own side: entries leave it one at a time, so what it
+        // holds does not grow with the repository. A generator that built a map and then emitted it would fail
+        // this - the count would already be at its maximum when the first entry arrived.
+        int total = 500;
+        List<Integer> liveWhenEmitted = new ArrayList<>();
+        AtomicInteger live = new AtomicInteger();
+
+        StoredListing.read(store, StoredListing.Spec.of("streamed", LINES, sink -> {
+            for (int each = 0; each < total; each++) {
+                live.incrementAndGet();
+                sink.accept(String.format("%04d", each), (each + " x").getBytes(StandardCharsets.UTF_8));
+                liveWhenEmitted.add(live.getAndSet(0));   // handed over and released
+            }
+        }));
+
+        assertThat(liveWhenEmitted).hasSize(total).containsOnly(1);
+    }
+
+    @Test
+    void the_materialising_adapter_preserves_order_and_content() throws IOException {
+        // The adapter is what the unconverted generators run through, so it has to be exactly transparent.
+        SortedMap<String, byte[]> content = entries("b 2", "a 1", "c 3");
+        List<String> seen = new ArrayList<>();
+
+        StoredListing.Generator.materialising(() -> content).generate((id, entry) -> seen.add(id));
+
+        assertThat(seen).containsExactly("a", "b", "c");
+    }
+
     private static SortedMap<String, byte[]> entries(String... lines) {
         SortedMap<String, byte[]> entries = new TreeMap<>();
         for (String line : lines) {
@@ -34,8 +82,8 @@ class StoredListingTest {
         return entries;
     }
 
-    private static StoredListing.Spec lines(String listing, StoredListing.Generator generator) {
-        return StoredListing.Spec.of(listing, LINES, generator);
+    private static StoredListing.Spec lines(String listing, StoredListing.Generator.Materialising generator) {
+        return StoredListing.Spec.materialising(listing, LINES, generator);
     }
 
     private static StoredListing.Spec lines(String listing) {
@@ -51,7 +99,7 @@ class StoredListingTest {
     void materialises_on_first_read_and_serves_the_document_afterwards() throws IOException {
         AtomicInteger generated = new AtomicInteger();
         AtomicInteger derived = new AtomicInteger();
-        StoredListing.Generator generator = () -> {
+        StoredListing.Generator.Materialising generator = () -> {
             generated.incrementAndGet();
             return entries("b 2", "a 1");
         };
@@ -83,7 +131,7 @@ class StoredListingTest {
     @Test
     void updates_are_incremental_over_the_stored_document() throws IOException {
         AtomicInteger generated = new AtomicInteger();
-        StoredListing.Generator generator = () -> {
+        StoredListing.Generator.Materialising generator = () -> {
             generated.incrementAndGet();
             return entries("a 1");
         };
@@ -141,7 +189,7 @@ class StoredListingTest {
         // (the wrapper's own, so no lane is shared) writing straight through the same root.
         ArtifactStore other = FaultInjectingStore.wrap(store);
         assertThat(other.identity()).isNotEqualTo(store.identity());
-        StoredListing.Generator racing = () -> {
+        StoredListing.Generator.Materialising racing = () -> {
             StoredListing.put(other, lines("raced"), "z", "z 26".getBytes());
             return new TreeMap<>();
         };
@@ -239,7 +287,7 @@ class StoredListingTest {
      *  per entry. Measured over a Packages-shaped listing of 300-byte stanzas. */
     @Test
     void a_put_costs_the_document_it_rewrites_and_not_more() throws IOException {
-        StoredListing.Spec spec = StoredListing.Spec.of("scale/Packages",
+        StoredListing.Spec spec = StoredListing.Spec.materialising("scale/Packages",
                 StoredListing.Codec.delimited("\n\n", stanza -> stanza.substring(9, stanza.indexOf('\n'))),
                 TreeMap::new);
         String filler = "x".repeat(260);

@@ -82,6 +82,35 @@ public final class StoredListing {
         byte[] join(SortedMap<String, byte[]> entries);
 
         /**
+         * A writer that encodes entries into {@code out} as they arrive, in ascending id order.
+         *
+         * <p>The counterpart of {@link #join}: same document, without holding the entries that produced it. The
+         * default buffers into a map and joins at close, which is correct for any codec that has not implemented
+         * streaming and no worse than what it did before - so a codec is never wrong for lacking this, only slower.
+         */
+        default Appender append(OutputStream out) {
+            SortedMap<String, byte[]> entries = new TreeMap<>();
+            return new Appender() {
+                @Override
+                public void append(String id, byte[] entry) {
+                    entries.put(id, entry);
+                }
+
+                @Override
+                public void close() throws IOException {
+                    out.write(join(entries));
+                }
+            };
+        }
+
+        /** Encodes a document one entry at a time. Entries arrive in ascending id order; the document is complete
+         *  once it is closed. */
+        interface Appender extends Closeable {
+
+            void append(String id, byte[] entry) throws IOException;
+        }
+
+        /**
          * A codec for a document that is its fragments joined by {@code delimiter} - a Debian {@code Packages} file's
          * stanzas ({@code "\n\n"}), a list's lines ({@code "\n"}) - with {@code idOf} naming each fragment. An empty
          * document has no entries; a trailing delimiter is tolerated on split and written on join, so a file that is
@@ -113,6 +142,23 @@ public final class StoredListing {
                         from = at + separator.length;
                     }
                     return entries;
+                }
+
+                @Override
+                public Appender append(OutputStream out) {
+                    // Nothing is retained: the id is what ORDERS the entries and the fragment already carries it,
+                    // which is why join() only ever reads values() and this only ever writes them.
+                    return new Appender() {
+                        @Override
+                        public void append(String id, byte[] entry) throws IOException {
+                            out.write(entry);
+                            out.write(separator);
+                        }
+
+                        @Override
+                        public void close() {
+                        }
+                    };
                 }
 
                 @Override
@@ -162,14 +208,104 @@ public final class StoredListing {
                 out.writeBytes(footer.getBytes(StandardCharsets.UTF_8));
                 return out.toByteArray();
             }
+
+            @Override
+            public Appender append(OutputStream out) {
+                Appender delegate;
+                try {
+                    out.write(header.getBytes(StandardCharsets.UTF_8));
+                    delegate = inner.append(out);
+                } catch (IOException cause) {
+                    throw new UncheckedIOException(cause);
+                }
+                return new Appender() {
+                    @Override
+                    public void append(String id, byte[] entry) throws IOException {
+                        delegate.append(id, entry);
+                    }
+
+                    @Override
+                    public void close() throws IOException {
+                        delegate.close();
+                        out.write(footer.getBytes(StandardCharsets.UTF_8));
+                    }
+                };
+            }
         };
     }
 
-    /** The format's enumeration of a listing from the store - the first-materialisation and repair path. */
+    /**
+     * The format's enumeration of a listing from the store - the first-materialisation and repair path.
+     *
+     * <h2>Why this emits rather than returns</h2>
+     *
+     * <p>A generator for a repository-wide listing - a catalogue, a Simple index, a compact-index {@code versions}
+     * file - enumerates every package in the repository. Returning that as a {@link SortedMap} means the map, its
+     * keys, a {@code byte[]} per entry and (for the generators that read each package's own document on the way)
+     * every one of those documents are all live at the same moment, and only then is anything written. That peak is
+     * proportional to the repository, and it is reached on two paths a deployment cannot avoid: the daily
+     * {@code listing-rebuild} pass, and the first read of a listing that does not exist yet, which materialises
+     * inline.
+     *
+     * <p>Emitting into a {@link Sink} lets the writer encode and release each entry as it arrives, so the peak is
+     * the encoded document rather than the document plus the whole map that produced it.
+     *
+     * <h2>Order is the generator's obligation</h2>
+     *
+     * <p><b>Entries must be emitted in ascending id order.</b> A {@link SortedMap} used to supply that for free and
+     * now nothing does. The store's paged faces are the way to keep it: {@link ArtifactStore#page} takes a cursor,
+     * and a cursor is only meaningful over a total order, so paging a prefix yields its children in order without
+     * holding them - which is precisely what {@link ArtifactStore#list} cannot offer, since it sorts by
+     * materialising everything.
+     */
     @FunctionalInterface
     public interface Generator {
 
-        SortedMap<String, byte[]> generate() throws IOException;
+        /** Emit every entry of the listing, in ascending id order. */
+        void generate(Sink sink) throws IOException;
+
+        /**
+         * Everything this generator emits, collected into a map.
+         *
+         * <p>For the incremental-update path, which applies a batch of changes to the entries and therefore needs
+         * random access. That path materialises whatever it touches either way - it splits the stored document into
+         * a map to mutate it - so collecting here costs nothing it was not already paying.
+         */
+        default SortedMap<String, byte[]> collect() throws IOException {
+            SortedMap<String, byte[]> entries = new TreeMap<>();
+            generate(entries::put);
+            return entries;
+        }
+
+        /**
+         * Adapts a generator that builds the whole listing before returning it.
+         *
+         * <p>This is the shape being migrated away from, and it is a named adapter rather than an overload of
+         * {@code generate} so that every site still paying the full peak says so in its own source. A per-package
+         * listing is legitimately this shape - its map is one package's versions - and is not debt; a
+         * repository-wide one is.
+         */
+        static Generator materialising(Materialising generator) {
+            return sink -> {
+                for (Map.Entry<String, byte[]> entry : generator.generate().entrySet()) {
+                    sink.accept(entry.getKey(), entry.getValue());
+                }
+            };
+        }
+
+        /** A generator that returns its listing whole. */
+        @FunctionalInterface
+        interface Materialising {
+
+            SortedMap<String, byte[]> generate() throws IOException;
+        }
+
+        /** Where a generator's entries go. */
+        @FunctionalInterface
+        interface Sink {
+
+            void accept(String id, byte[] entry) throws IOException;
+        }
     }
 
     /** What a writer does once its change has landed - writing the document's derived twins, usually. */
@@ -196,6 +332,19 @@ public final class StoredListing {
 
         public static Spec of(String listing, Codec codec, Generator generator) {
             return new Spec(listing, codec, generator, ignored -> { }, false);
+        }
+
+        /**
+         * The same, for a generator that builds its listing whole before anything is written.
+         *
+         * <p><b>Deliberately a different name rather than an overload.</b> An overload is ambiguous for a method
+         * reference - {@code TreeMap::new} is inexact, so javac cannot choose between the two shapes and rejects
+         * the call before it looks at what the reference returns. A distinct name also puts the cost in the
+         * source: a per-package listing is legitimately this shape, since its map is one package's versions, while
+         * a repository-wide one paying it is the thing to convert.
+         */
+        public static Spec materialising(String listing, Codec codec, Generator.Materialising generator) {
+            return of(listing, codec, Generator.materialising(generator));
         }
 
         public Spec deriving(Derivation derivation) {
@@ -625,8 +774,18 @@ public final class StoredListing {
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
             Optional<ArtifactStore.Versioned> current = readStored(store, key);
             long seq = current.isPresent() ? parse(current.get().content(), key).header().seq() : 0L;
-            SortedMap<String, byte[]> generated = spec.generator().generate();
-            Document document = document(seq, spec.codec().join(generated), spec.md5(), generated.size());
+            // Streamed, like the first materialisation: this is the daily repair pass, and it regenerates a
+            // repository-wide listing whole. Rebuilt per attempt rather than hoisted, because a lost
+            // compare-and-set below means the store moved and the document has to be produced against it again.
+            ByteArrayOutputStream body = new ByteArrayOutputStream();
+            Counter counter = new Counter();
+            try (Codec.Appender appender = spec.codec().append(body)) {
+                spec.generator().generate((id, entry) -> {
+                    appender.append(id, entry);
+                    counter.count++;
+                });
+            }
+            Document document = document(seq, body.toByteArray(), spec.md5(), counter.count);
             if (store.writeVersioned(key, frame(document.header(), document.body()),
                     current.map(ArtifactStore.Versioned::token).orElse(null))) {
                 MATERIALISED.increment();
@@ -768,7 +927,7 @@ public final class StoredListing {
                 if (onlyRemovals) {
                     return true;   // nothing to take out of a document that does not exist: it is not created for it
                 }
-                entries = new TreeMap<>(spec.generator().generate());
+                entries = new TreeMap<>(spec.generator().collect());
                 seq = 0L;
             }
             for (Pending pending : batch) {
@@ -850,14 +1009,31 @@ public final class StoredListing {
     }
 
     private static void materialise(ArtifactStore store, Spec spec) throws IOException {
-        SortedMap<String, byte[]> generated = spec.generator().generate();
-        Document document = document(0L, spec.codec().join(generated), spec.md5(), generated.size());
+        // Streamed rather than collected: this runs on the first READ of a listing that does not exist yet, so a
+        // repository-wide generator that returned its map would put the whole repository in heap on a request path.
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        long entries = 0L;
+        try (Codec.Appender appender = spec.codec().append(body)) {
+            Counter counter = new Counter();
+            spec.generator().generate((id, entry) -> {
+                appender.append(id, entry);
+                counter.count++;
+            });
+            entries = counter.count;
+        }
+        Document document = document(0L, body.toByteArray(), spec.md5(), entries);
         if (store.writeVersioned(spec.key(), frame(document.header(), document.body()), null)) {
             MATERIALISED.increment();
             derive(spec.key(), document, spec.derivation());
         }
     }
 
+
+    /** A count a {@link Generator.Sink} lambda can raise; a local cannot be captured mutably. */
+    private static final class Counter {
+
+        private long count;
+    }
 
     // ---- framing ----
 
@@ -868,6 +1044,15 @@ public final class StoredListing {
         return new Document(Header.of(seq, body, md5, entries), body);
     }
 
+    /**
+     * The header and body as one array.
+     *
+     * <p><b>This holds the document twice for the length of the copy</b>, and there is no way around it while
+     * {@link ArtifactStore#writeVersioned} takes a {@code byte[]}: a listing needs compare-and-set, and the
+     * streaming {@link ArtifactStore#write(String, InputStream)} has none. The copy is therefore the floor rather
+     * than an oversight, and it is worth knowing which of the two is the peak - for a repository-wide index the
+     * body dominates, so a deployment sizing its heap against the largest listing should budget twice it.
+     */
     private static byte[] frame(Header header, byte[] body) {
         byte[] head = (MAGIC + "\nseq=" + header.seq() + "\nsize=" + header.size() + "\nmd5=" + header.md5()
                 + "\nsha256=" + header.sha256() + "\nentries=" + header.entries()
