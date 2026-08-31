@@ -190,14 +190,28 @@ public final class GcsArtifactStore extends S3CompatibleArtifactStore {
         }
     }
 
+        /**
+     * The streaming compare-and-set: the same {@code x-goog-if-generation-match} precondition over a stream of
+     * known length. GCS needs the length to start the upload.
+     */
+    @Override
+    public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
+        return put(key, RequestBody.fromInputStream(content, length), expected);
+    }
+
     @Override
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
+        return put(key, RequestBody.fromBytes(content), expected);
+    }
+
+    /** Both conditional writes; the generation precondition is identical, only the body differs. */
+    private boolean put(String key, RequestBody body, Object expected) throws IOException {
         ArtifactStore.key(key);
         String generation = expected == null ? "0" : (String) expected;
         try {
             s3.putObject(b -> b.bucket(bucket).key(keyPrefix + key)
                             .overrideConfiguration(c -> c.putHeader(IF_GENERATION_MATCH, generation)),
-                    RequestBody.fromBytes(content));
+                    body);
             return true;
         } catch (S3Exception e) {
             // A bucket-level 404 (NoSuchBucket) is a misconfiguration or outage, not a CAS conflict: mapping it to a

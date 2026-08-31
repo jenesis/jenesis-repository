@@ -498,4 +498,46 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             return true;
         }
     }
+
+    /**
+     * The streaming compare-and-set: the same read-compare-then-rename, with the temporary file filled from the
+     * stream rather than from an array.
+     *
+     * <p>The comparison happens before a byte is written and the atomicity comes from the move, so nothing about
+     * the condition depends on holding the content - which is why this backend needs no more than a different way
+     * of filling the file it was already writing. The length is unused here, and is a parameter because the object
+     * stores cannot begin a conditional upload without one.
+     */
+    @Override
+    public boolean writeVersioned(String key, InputStream content, long length, Object expected)
+            throws IOException {
+        Path path = resolve(ArtifactStore.key(key));
+        synchronized (LOCKS[Math.floorMod(path.hashCode(), LOCKS.length)]) {
+            boolean present = Files.isRegularFile(path);
+            long modified = present ? Files.getLastModifiedTime(path).toMillis() : -1L;
+            Object current = present ? token(modified, Files.readAllBytes(path)) : null;
+            if (!Objects.equals(current, expected)) {
+                return false;
+            }
+            // The same .upload*.tmp shape a keyed write spools through, so list()'s in-flight filter hides this
+            // temp file too and an aborted write never leaves it behind; createUploadTemp re-creates the parent if a
+            // concurrent delete tidied it away.
+            Path temp = createUploadTemp(path.getParent());
+            try {
+                Files.copy(content, temp, StandardCopyOption.REPLACE_EXISTING);
+                Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                // The token must advance on every successful update, including a re-write of byte-identical content
+                // (which the digest half of the token cannot distinguish): two writes inside one clock tick would
+                // otherwise leave it unchanged, and a third writer holding the pre-update token would still pass
+                // the compare - a stale write disguised as a fresh one.
+                if (present && Files.getLastModifiedTime(path).toMillis() <= modified) {
+                    Files.setLastModifiedTime(path, FileTime.fromMillis(modified + 1));
+                }
+            } catch (IOException e) {
+                Files.deleteIfExists(temp);
+                throw e;
+            }
+            return true;
+        }
+    }
 }

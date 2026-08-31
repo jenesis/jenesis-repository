@@ -94,6 +94,7 @@ public final class StoreContract {
         VERSIONED_UPDATE_IF_UNCHANGED,
         /** The version token is opaque and per-version: never {@code null}, never interpreted by the caller, changed
          *  by every successful write, and refused once superseded. Absence reads as {@code Optional.empty()}. */
+        VERSIONED_STREAMED_OBEYS_THE_SAME_CONDITION,
         VERSION_TOKEN_OPAQUE,
         /** The version token identifies the stored <em>incarnation</em>, not the instant of the write: a key deleted
          *  and re-created with different content never re-issues a token a reader of the previous incarnation holds,
@@ -196,6 +197,9 @@ public final class StoreContract {
         checks.add(new Check(Property.VERSIONED_UPDATE_IF_UNCHANGED,
                 "writeVersioned against a token is update-if-unchanged",
                 StoreContract::versionedUpdateIfUnchanged));
+        checks.add(new Check(Property.VERSIONED_STREAMED_OBEYS_THE_SAME_CONDITION,
+                "the streaming writeVersioned obeys the same create-if-absent and update-if-unchanged rules",
+                StoreContract::versionedStreamedObeysTheSameCondition));
         checks.add(new Check(Property.VERSION_TOKEN_OPAQUE,
                 "the version token is opaque, per-version and refused once superseded",
                 StoreContract::versionTokenOpaque));
@@ -586,6 +590,41 @@ public final class StoreContract {
                 "the same token no longer passes once it has been superseded - a lost update is impossible");
         equal(content(store, key), "v2", "the refused write left the stored content untouched");
         store.delete(key);
+    }
+
+    /**
+     * The streaming compare-and-set is the buffered one with a different body, and this is what holds it to that.
+     *
+     * <p>The failure it exists for is silent: a backend whose streaming upload drops the precondition still writes,
+     * still returns true, and differs from a correct one only when two writers race - which no single-threaded test
+     * notices. So both refusals are asserted, and the stored content is read back after each, because "returned
+     * false" and "did not write" are separate claims and only the second one matters.
+     */
+    private static void versionedStreamedObeysTheSameCondition(ArtifactStore store) throws Exception {
+        String key = "kit/versioned/streamed";
+        equal(store.readVersioned(key).isPresent(), false, "an absent object reads as Optional.empty()");
+        isTrue(streamed(store, key, "one", null), "create-if-absent lands against a null expectation");
+        isFalse(streamed(store, key, "two", null),
+                "create-if-absent is refused while the object exists, rather than overwriting it");
+        equal(content(store, key), "one", "the refused streaming write left the stored content untouched");
+
+        Object token = store.readVersioned(key).orElseThrow().token();
+        isTrue(streamed(store, key, "v2", token), "update-if-unchanged lands against the current token");
+        isFalse(streamed(store, key, "v3", token),
+                "the same token no longer passes once superseded - a streamed lost update is impossible too");
+        equal(content(store, key), "v2", "the refused streaming write left the stored content untouched");
+
+        // The two forms have to agree about what they wrote, not merely about whether they were allowed to.
+        isTrue(store.writeVersioned(key, utf8("v3"), store.readVersioned(key).orElseThrow().token()),
+                "the buffered form still lands after a streamed one");
+        equal(content(store, key), "v3", "a streamed write leaves an object the buffered form can update");
+        store.delete(key);
+    }
+
+    private static boolean streamed(ArtifactStore store, String key, String content, Object expected)
+            throws IOException {
+        byte[] bytes = utf8(content);
+        return store.writeVersioned(key, new ByteArrayInputStream(bytes), bytes.length, expected);
     }
 
     private static void versionTokenOpaque(ArtifactStore store) throws Exception {

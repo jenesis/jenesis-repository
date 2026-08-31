@@ -312,6 +312,15 @@ public final class StoredListing {
     @FunctionalInterface
     public interface Derivation {
 
+        /**
+         * No twins to write.
+         *
+         * <p>A named constant rather than an anonymous lambda because the writer asks whether it is this one: a
+         * document written from a temporary file need never be read back into heap when nothing is going to look
+         * at its bytes, and identity is the only honest way to know that.
+         */
+        Derivation NONE = ignored -> { };
+
         void after(Document document) throws IOException;
     }
 
@@ -331,7 +340,7 @@ public final class StoredListing {
         }
 
         public static Spec of(String listing, Codec codec, Generator generator) {
-            return new Spec(listing, codec, generator, ignored -> { }, false);
+            return new Spec(listing, codec, generator, Derivation.NONE, false);
         }
 
         /**
@@ -392,6 +401,11 @@ public final class StoredListing {
         /** The same, carrying the entry count the writer counted while it joined the document. */
         public static Header of(long seq, byte[] body, boolean md5, long entries) {
             return new Header(seq, body.length, md5 ? digest("MD5", body) : "", digest("SHA-256", body), entries);
+        }
+
+        /** The same, for a body that was rendered somewhere other than heap and digested as it went. */
+        static Header of(long seq, long size, String md5, String sha256, long entries) {
+            return new Header(seq, size, md5, sha256, entries);
         }
 
         /** The entry count when one was recorded, empty when it was not - so a caller has to decide what an unknown
@@ -1008,23 +1022,86 @@ public final class StoredListing {
         }
     }
 
+    /**
+     * First materialisation: render the document to a temporary file and write it conditionally from there.
+     *
+     * <p>This runs on the first READ of a listing that does not exist yet, so it is a request path, and the
+     * document can be proportional to the repository. Nothing of it is held: the generator emits, the codec
+     * encodes into the file, the digests are taken as the bytes go past, and the write streams the header and the
+     * file into the store's compare-and-set.
+     *
+     * <p>The one case that still pays is a spec with a {@link Derivation}: a derived twin is written from the
+     * document's bytes, so those bytes have to exist. A spec with {@link Derivation#NONE} - which is every spec
+     * built by {@link Spec#of} and {@link Spec#materialising} without one - never reads the file back.
+     */
     private static void materialise(ArtifactStore store, Spec spec) throws IOException {
-        // Streamed rather than collected: this runs on the first READ of a listing that does not exist yet, so a
-        // repository-wide generator that returned its map would put the whole repository in heap on a request path.
-        ByteArrayOutputStream body = new ByteArrayOutputStream();
-        long entries = 0L;
-        try (Codec.Appender appender = spec.codec().append(body)) {
-            Counter counter = new Counter();
+        Rendered rendered = render(spec);
+        try {
+            Header header = Header.of(Math.max(1L, System.currentTimeMillis()),
+                    rendered.size, rendered.md5, rendered.sha256, rendered.entries);
+            if (write(store, spec.key(), header, rendered, null)) {
+                MATERIALISED.increment();
+                derived(store, spec, header, rendered);
+            }
+        } finally {
+            Files.deleteIfExists(rendered.file);
+        }
+    }
+
+    /** A document rendered outside heap, with what its header needs already computed. */
+    private record Rendered(Path file, long size, String md5, String sha256, long entries) {
+    }
+
+    /** Render {@code spec}'s generator into a temporary file, digesting as it goes. */
+    private static Rendered render(Spec spec) throws IOException {
+        Path file = Files.createTempFile("jenreg-listing", ".tmp");
+        Counter counter = new Counter();
+        MessageDigest sha256 = digest("SHA-256");
+        MessageDigest md5 = spec.md5() ? digest("MD5") : null;
+        long size;
+        try (OutputStream out = Files.newOutputStream(file);
+             OutputStream digesting = digesting(out, sha256, md5);
+             Codec.Appender appender = spec.codec().append(digesting)) {
             spec.generator().generate((id, entry) -> {
                 appender.append(id, entry);
                 counter.count++;
             });
-            entries = counter.count;
+        } catch (IOException | RuntimeException failed) {
+            Files.deleteIfExists(file);
+            throw failed;
         }
-        Document document = document(0L, body.toByteArray(), spec.md5(), entries);
-        if (store.writeVersioned(spec.key(), frame(document.header(), document.body()), null)) {
-            MATERIALISED.increment();
-            derive(spec.key(), document, spec.derivation());
+        size = Files.size(file);
+        return new Rendered(file, size, md5 == null ? "" : hex(md5.digest()), hex(sha256.digest()), counter.count);
+    }
+
+    /** The conditional write of a rendered document: its header and its bytes, streamed, never joined in heap. */
+    private static boolean write(ArtifactStore store, String key, Header header, Rendered rendered, Object expected)
+            throws IOException {
+        byte[] head = head(header);
+        try (InputStream body = Files.newInputStream(rendered.file);
+             InputStream framed = new SequenceInputStream(new ByteArrayInputStream(head), body)) {
+            return store.writeVersioned(key, framed, head.length + rendered.size, expected);
+        }
+    }
+
+    /** Read the rendered body back only when something is going to look at it. */
+    private static void derived(ArtifactStore store, Spec spec, Header header, Rendered rendered) throws IOException {
+        if (spec.derivation() == Derivation.NONE) {
+            return;
+        }
+        derive(spec.key(), new Document(header, Files.readAllBytes(rendered.file)), spec.derivation());
+    }
+
+    private static OutputStream digesting(OutputStream out, MessageDigest sha256, MessageDigest md5) {
+        OutputStream digested = new DigestOutputStream(out, sha256);
+        return md5 == null ? digested : new DigestOutputStream(digested, md5);
+    }
+
+    private static MessageDigest digest(String algorithm) {
+        try {
+            return MessageDigest.getInstance(algorithm);
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(algorithm + " is required of every JDK", impossible);
         }
     }
 
@@ -1053,10 +1130,19 @@ public final class StoredListing {
      * than an oversight, and it is worth knowing which of the two is the peak - for a repository-wide index the
      * body dominates, so a deployment sizing its heap against the largest listing should budget twice it.
      */
-    private static byte[] frame(Header header, byte[] body) {
-        byte[] head = (MAGIC + "\nseq=" + header.seq() + "\nsize=" + header.size() + "\nmd5=" + header.md5()
+    /** The header bytes a document is stored behind - the half of {@link #frame} a streamed write needs on its own. */
+    private static byte[] head(Header header) {
+        return (MAGIC + "\nseq=" + header.seq() + "\nsize=" + header.size() + "\nmd5=" + header.md5()
                 + "\nsha256=" + header.sha256() + "\nentries=" + header.entries()
                 + "\n\n").getBytes(StandardCharsets.US_ASCII);
+    }
+
+    private static String hex(byte[] digest) {
+        return HexFormat.of().formatHex(digest);
+    }
+
+    private static byte[] frame(Header header, byte[] body) {
+        byte[] head = head(header);
         byte[] framed = new byte[head.length + body.length];
         System.arraycopy(head, 0, framed, 0, head.length);
         System.arraycopy(body, 0, framed, head.length, body.length);
