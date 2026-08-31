@@ -70,8 +70,9 @@ public final class Lifecycle {
     }
 
     /**
-     * A per-coordinate/version disclosure decision the {@linkplain #all(ArtifactStore, Disclosure) flat listing} routes
-     * each mark through - the servable-name enumeration seam face (typically
+     * A per-coordinate/version disclosure decision the
+     * {@linkplain #page(ArtifactStore, Disclosure, String, int) flat listing} routes each mark through - the
+     * servable-name enumeration seam face (typically
      * {@code inventory.disclosableDisplay(coordinate + ":" + version, HIDE_WITHHELD)}) the operator surface supplies, so
      * a withheld version's mark is not disclosed on the served view (plan &sect;8 Q3, served-view parity). It is injected
      * rather than reached for here so this dependency-minimal, pure-JDK helper stays free of the inventory: the decision
@@ -114,32 +115,63 @@ public final class Lifecycle {
     }
 
     /**
-     * Every flagged version across the repository's store that {@code disclosure} discloses - the flat listing an
-     * operator surface renders, with each mark routed through the servable-name enumeration seam so a withheld
-     * version's mark is not disclosed on the served view (plan &sect;8 Q3). The {@link Disclosure} is supplied by the
-     * caller (the {@code lifecycle-web} adapter passes
+     * One page of the flagged versions across the repository's store that {@code disclosure} discloses - the flat
+     * listing an operator surface renders, with each mark routed through the servable-name enumeration seam so a
+     * withheld version's mark is not disclosed on the served view. The {@link Disclosure} is supplied by the caller
+     * (the {@code lifecycle-web} adapter passes
      * {@code (coordinate, version) -> inventory.disclosableDisplay(coordinate + ":" + version, HIDE_WITHHELD)}) so this
      * helper stays inventory-free; a mark the seam classifies held is dropped, every other mark is kept.
+     *
+     * <p>This used to answer the whole repository at once, following the walk's cursor to exhaustion and accumulating
+     * every disclosed mark. The marks are one per deprecated or yanked version, so that container is sized by how much
+     * the repository holds and by nothing the operator sets - the same shape that made the NOTICE fail at 200,000
+     * versions. The walk was already paged underneath; only the answer was not.
      */
-    public static List<Entry> all(ArtifactStore store, Disclosure disclosure) throws IOException {
+    public static Page page(ArtifactStore store, Disclosure disclosure, String after, int limit) throws IOException {
         List<Entry> disclosed = new ArrayList<>();
-        String cursor = null;
-        while (true) {
-            Traversal.Result result = MARKS.walk(store, ROOT, cursor, key -> mark(store, key, disclosure, disclosed));
+        String cursor = after == null || after.isEmpty() ? null : after;
+        long examined = 0;
+        while (disclosed.size() < limit && examined < EXAMINED) {
+            // Capped at the room left in the page, so a call can never deliver more marks than the caller asked for.
+            // That is what makes the cursor honest: everything delivered is kept, so the cursor the walk hands back
+            // resumes strictly after the last entry in the page, and nothing is trimmed away and then skipped.
+            Traversal.Result result = MARKS.entries(limit - disclosed.size())
+                    .walk(store, ROOT, cursor, key -> mark(store, key, disclosure, disclosed));
+            examined += result.delivered();
             if (result.exhausted()) {
-                return disclosed;
+                return new Page(List.copyOf(disclosed), null);
             }
             cursor = result.cursor().orElseThrow();
         }
+        return new Page(List.copyOf(disclosed), cursor);
     }
 
-    /** The bounds the mark listing descends {@code lifecycle/} under. An operator surface that silently dropped marks
-     *  past a cap would show a yanked version as live, so the entry cap is only the per-call continuation
-     *  {@link #all} follows to exhaustion; the binding bound is the step budget - one {@link ArtifactStore#exists}
-     *  probe per opened node - which raises a named {@link build.jenesis.repository.walk.TraversalException} rather
-     *  than answering short, and the depth ceiling stays the store's own {@link ArtifactStore#MAX_SEGMENTS} write
-     *  cap, so a key deeper than the store would accept fails by name where the previous recursion silently stopped
-     *  at 64 levels. */
+    /**
+     * One page of disclosed marks and the cursor that continues it.
+     *
+     * <p>{@code next} is {@code null} only when the walk provably reached the end. A page that is short of the
+     * caller's limit but still carries a cursor is the {@link #EXAMINED} case, not the end of the repository - a
+     * caller that stops on a short page stops early, which is the bug this record's shape exists to prevent.
+     */
+    public record Page(List<Entry> entries, String next) {
+    }
+
+    /**
+     * How many stored marks one call may open before it answers short.
+     *
+     * <p>Disclosure filters after the walk delivers, so a repository whose marks are nearly all withheld would walk
+     * arbitrarily far to fill one page. That is the unbounded read this bound exists to stop; when it is reached the
+     * page comes back short <em>with</em> its cursor, so the caller continues rather than concluding it has seen
+     * everything.
+     */
+    private static final int EXAMINED = 10_000;
+
+    /** The bounds the mark listing descends {@code lifecycle/} under. The per-call entry cap is set by
+     *  {@link #page} to the room left in the page; the binding bound here is the step budget - one
+     *  {@link ArtifactStore#exists} probe per opened node - which raises a named
+     *  {@link build.jenesis.repository.walk.TraversalException} rather than answering short, and the depth ceiling
+     *  stays the store's own {@link ArtifactStore#MAX_SEGMENTS} write cap, so a key deeper than the store would
+     *  accept fails by name where the previous recursion silently stopped at 64 levels. */
     private static final PagedTreeWalk MARKS = PagedTreeWalk.bounded().steps(1_000_000);
 
     /** Decode one stored mark and add it to {@code disclosed} when the seam discloses it. The key's last segment is the
