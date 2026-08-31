@@ -97,9 +97,10 @@ public final class FormatContract {
         /** A proxied artifact goes from the network into the content-addressed store without being materialised, and
          *  arrives byte-exact ({@code ProxyFormat} clause 3). */
         PROXY_STREAMS_UPSTREAM_BODY,
-        /** A generated document arrives through the buffered response overload, is a pure function of the stored state
-         *  it renders, revalidates to {@code 304} against its own validator, and stops doing so once the state moves
-         *  (clause 12). */
+        /** A generated document carries a content-derived validator, is a pure function of the stored state it
+         *  renders, revalidates to {@code 304} against that validator, and stops doing so once the state moves
+         *  (clause 12). It may be handed over whole or streamed against a length; a streamed one attaches its own
+         *  validator, since the dispatcher cannot derive one from bytes it never held. */
         GENERATED_INDEX_IS_REVALIDATABLE,
         /** Every absolute URL a generated document emits back at this deployment carries the scheme the request
          *  arrived on. A document that tells a client to fetch over {@code http} from a deployment serving TLS
@@ -158,7 +159,7 @@ public final class FormatContract {
                         "a proxied artifact is never materialised and arrives byte-exact",
                         FormatContract::proxyStreamsUpstreamBody),
                 new Check(Property.GENERATED_INDEX_IS_REVALIDATABLE,
-                        "a generated document is buffered, deterministic and conditionally revalidatable",
+                        "a generated document is deterministic and conditionally revalidatable",
                         FormatContract::generatedIndexIsRevalidatable),
                 new Check(Property.GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME,
                         "a generated document's absolute URLs carry the scheme the request arrived on",
@@ -630,12 +631,21 @@ public final class FormatContract {
         fixture.serving().handle(first, store);
         equal(first.status(), 200, fixture, "the generated document renders");
         isTrue(first.responseLength() > 0, fixture, "the generated document is not empty");
-        isTrue(first.buffered(), fixture,
-                "the generated document is handed over whole (respond(status, byte[])), not streamed against a "
-                        + "length. A streamed response carries no content-derived validator, so a client polling this "
-                        + "index could never be answered 304 however stable the bytes are.");
+        // Both shapes are allowed, and each owes the same thing by a different route. A buffered answer lets the
+        // dispatcher derive the validator from the bytes it was handed. A streamed one cannot be validated that
+        // way - the dispatcher never holds the bytes - so the format attaches its own, which a StoredListing can
+        // because its header records the document's sha256 without the document being materialised to read it.
+        //
+        // This used to require the buffered shape outright, on the reasoning that a streamed response carries no
+        // content-derived validator. That was true of every format when it was written and is not a property of
+        // streaming: it forced a folder page to be held whole in heap to earn an ETag it could already prove. What
+        // a polling client actually needs is asserted directly here and below - a validator, stable bytes behind
+        // it, a 304 when it matches and a 200 once it does not.
         String validator = first.responseHeader("ETag");
-        notNull(validator, fixture, "a buffered document carries a validator derived from its own bytes");
+        notNull(validator, fixture, first.buffered()
+                ? "a buffered document carries a validator derived from its own bytes"
+                : "a streamed document attaches its own content-derived validator, since the dispatcher cannot "
+                        + "derive one from bytes it never held");
 
         // Determinism is the property the format actually owns: a document re-rendered from unchanged stored state
         // must be byte-identical, or its content-derived validator changes on every poll and revalidation never
