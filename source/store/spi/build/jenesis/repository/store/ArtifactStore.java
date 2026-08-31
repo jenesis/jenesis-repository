@@ -782,6 +782,39 @@ public interface ArtifactStore {
      */
     boolean writeVersioned(String key, byte[] content, Object expected) throws IOException;
 
+    /**
+     * The same compare-and-set, over a stream of known length, for an object too big to hold.
+     *
+     * <h2>Why this exists</h2>
+     *
+     * <p>Every listing this product serves is a single object written under compare-and-set, and some of them are
+     * proportional to the repository - a catalogue, a Simple index, a folder page. Writing those through
+     * {@link #writeVersioned(String, byte[], Object)} means the whole document in heap, and in practice more than
+     * once: a growing buffer, the array it is copied into, and the framed copy that carries the header. That is
+     * the peak a large listing reaches, and no amount of streaming on the producing side removes it while the
+     * write itself takes an array.
+     *
+     * <h2>Why the length is a parameter</h2>
+     *
+     * <p>Not decoration: two of the four shipped backends cannot start a conditional upload without it. S3 and
+     * Azure both take a stream and a length, and the multipart alternative that avoids the length is a different
+     * request whose interaction with the precondition is not the same. So the caller commits to a length, which
+     * for a rendered document means rendering it somewhere measurable first - a temporary file rather than heap.
+     *
+     * <h2>The condition is exactly the buffered one</h2>
+     *
+     * <p>{@code null} requires the object be absent; a token requires it be unchanged; {@code false} means the
+     * caller should re-read and retry. The backends implement it with the same precondition they already use -
+     * an {@code If-Match} on the ETag, a generation match, or the read-compare-then-rename the filesystem does -
+     * so this adds a body shape and no new semantics. The store contract holds both forms to the same two rules.
+     *
+     * <p>The inherited body buffers, which is correct and is what a backend without a streaming upload should do;
+     * it is exactly the call it replaces, so nothing is worse for not overriding this.
+     */
+    default boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
+        return writeVersioned(key, content.readAllBytes(), expected);
+    }
+
     /** One compare-and-set write in a {@link #writeBatch} batch: exactly the arguments of
      *  {@link #writeVersioned(String, byte[], Object)} - store {@code content} at {@code key} only while the stored
      *  version still matches {@code expected} ({@code null} requires the key be absent). */

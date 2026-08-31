@@ -202,14 +202,29 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
         }
     }
 
+        /**
+     * The streaming compare-and-set: the same {@code If-Match} / {@code If-None-Match} precondition, with the body
+     * as a stream of known length rather than an array. S3 needs the length to start the upload, which is why the
+     * caller supplies one.
+     */
+    @Override
+    public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
+        return put(key, RequestBody.fromInputStream(content, length), expected);
+    }
+
     @Override
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
+        return put(key, RequestBody.fromBytes(content), expected);
+    }
+
+    /** Both conditional writes, which differ only in how the body is carried. */
+    private boolean put(String key, RequestBody body, Object expected) throws IOException {
         ArtifactStore.key(key);
         try {
             if (expected == null) {
-                s3.putObject(b -> encrypt(b.bucket(bucket).key(keyPrefix + key).ifNoneMatch("*"), kmsKeyId), RequestBody.fromBytes(content));
+                s3.putObject(b -> encrypt(b.bucket(bucket).key(keyPrefix + key).ifNoneMatch("*"), kmsKeyId), body);
             } else {
-                s3.putObject(b -> encrypt(b.bucket(bucket).key(keyPrefix + key).ifMatch((String) expected), kmsKeyId), RequestBody.fromBytes(content));
+                s3.putObject(b -> encrypt(b.bucket(bucket).key(keyPrefix + key).ifMatch((String) expected), kmsKeyId), body);
             }
             return true;
         } catch (S3Exception e) {

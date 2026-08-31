@@ -422,6 +422,20 @@ public final class AzureArtifactStore implements ArtifactStore {
 
     @Override
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
+        return put(key, BinaryData.fromBytes(content), expected);
+    }
+
+    /**
+     * The streaming compare-and-set: the same {@code If-Match} / {@code If-None-Match} condition over a stream of
+     * known length. Azure needs the length to start the upload, which is why the caller supplies one.
+     */
+    @Override
+    public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
+        return put(key, BinaryData.fromStream(content, length), expected);
+    }
+
+    /** Both conditional writes; only the body differs. */
+    private boolean put(String key, BinaryData body, Object expected) throws IOException {
         ArtifactStore.key(key);
         BlobRequestConditions conditions = new BlobRequestConditions();
         if (expected == null) {
@@ -429,7 +443,7 @@ public final class AzureArtifactStore implements ArtifactStore {
         } else {
             conditions.setIfMatch((String) expected);
         }
-        BlockBlobSimpleUploadOptions options = new BlockBlobSimpleUploadOptions(BinaryData.fromBytes(content))
+        BlockBlobSimpleUploadOptions options = new BlockBlobSimpleUploadOptions(body)
                 .setRequestConditions(conditions);
         try {
             container.getBlobClient(keyPrefix + key).getBlockBlobClient().uploadWithResponse(options, null, Context.NONE);
