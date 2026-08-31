@@ -41,25 +41,36 @@ public final class GcsArtifactStore extends S3CompatibleArtifactStore {
 
     private final S3Presigner presigner;
 
+    /** Whether a conditional write may stream its body; see {@code GcsArtifactStoreProvider}. */
+    private final boolean streamingWrites;
+
     public GcsArtifactStore(S3Client s3, String bucket) {
-        this(s3, null, bucket, "");
+        this(s3, null, bucket, "", true);
     }
 
     /** As {@link #GcsArtifactStore(S3Client, String)} but with a {@link S3Presigner} - built by the provider from the
      *  same region, credentials and endpoint as {@code s3} - so {@link #presign} can mint a direct-fetch GET URL.
      *  GCS's S3-compatible XML API signs identically to S3, so this is the same presigner path. */
     public GcsArtifactStore(S3Client s3, S3Presigner presigner, String bucket) {
-        this(s3, presigner, bucket, "");
+        this(s3, presigner, bucket, "", true);
     }
 
-    private GcsArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String keyPrefix) {
+    /** The provider's constructor, the only one that decides {@code streamingWrites}. */
+    public GcsArtifactStore(S3Client s3, S3Presigner presigner, String bucket, boolean streamingWrites) {
+        this(s3, presigner, bucket, "", streamingWrites);
+    }
+
+    private GcsArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String keyPrefix,
+                             boolean streamingWrites) {
         super(s3, bucket, keyPrefix);
         this.presigner = presigner;
+        this.streamingWrites = streamingWrites;
     }
 
     @Override
     public ArtifactStore scope(String tenant) {
-        return new GcsArtifactStore(s3, presigner, bucket, keyPrefix + ArtifactStore.segment(tenant) + "/");
+        return new GcsArtifactStore(s3, presigner, bucket, keyPrefix + ArtifactStore.segment(tenant) + "/",
+                streamingWrites);
     }
 
     @Override
@@ -196,7 +207,9 @@ public final class GcsArtifactStore extends S3CompatibleArtifactStore {
      */
     @Override
     public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
-        return put(key, RequestBody.fromInputStream(content, length), expected);
+        return streamingWrites
+                ? put(key, RequestBody.fromInputStream(content, length), expected)
+                : put(key, RequestBody.fromBytes(content.readAllBytes()), expected);
     }
 
     @Override

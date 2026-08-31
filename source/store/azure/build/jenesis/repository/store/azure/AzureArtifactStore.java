@@ -39,18 +39,28 @@ public final class AzureArtifactStore implements ArtifactStore {
     private final BlobContainerClient container;
     private final String keyPrefix;
 
+    /** Whether a conditional write may stream its body; see {@code AzureArtifactStoreProvider}. */
+    private final boolean streamingWrites;
+
     public AzureArtifactStore(BlobContainerClient container) {
-        this(container, "");
+        this(container, "", true);
     }
 
-    private AzureArtifactStore(BlobContainerClient container, String keyPrefix) {
+    /** The provider's constructor, the only one that decides {@code streamingWrites}. */
+    public AzureArtifactStore(BlobContainerClient container, boolean streamingWrites) {
+        this(container, "", streamingWrites);
+    }
+
+    private AzureArtifactStore(BlobContainerClient container, String keyPrefix, boolean streamingWrites) {
         this.container = container;
         this.keyPrefix = keyPrefix;
+        this.streamingWrites = streamingWrites;
     }
 
     @Override
     public ArtifactStore scope(String tenant) {
-        return new AzureArtifactStore(container, keyPrefix + ArtifactStore.segment(tenant) + "/");
+        return new AzureArtifactStore(container, keyPrefix + ArtifactStore.segment(tenant) + "/",
+                streamingWrites);
     }
 
     @Override
@@ -431,7 +441,9 @@ public final class AzureArtifactStore implements ArtifactStore {
      */
     @Override
     public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
-        return put(key, BinaryData.fromStream(content, length), expected);
+        return streamingWrites
+                ? put(key, BinaryData.fromStream(content, length), expected)
+                : put(key, BinaryData.fromBytes(content.readAllBytes()), expected);
     }
 
     /** Both conditional writes; only the body differs. */

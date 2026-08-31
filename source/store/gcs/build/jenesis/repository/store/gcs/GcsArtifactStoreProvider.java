@@ -41,6 +41,17 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
      *  Composed through {@link Features#key} rather than written out, so the namespace has a single definition. */
     public static final String BUCKET_KEY = Features.key("gcs.bucket");
 
+    /**
+     * Whether a conditional write may stream its body ({@code true} by default).
+     *
+     * <p><b>Setting this to {@code false} restores a heap cost, and that is the whole of what it does.</b> A
+     * listing is one object written under compare-and-set, and some listings are proportional to the repository.
+     * Streaming the write is what keeps such a document out of memory; buffering puts it back, whole, on the path
+     * that writes it. Turn this off to work around a storage implementation, never for anything else, and expect
+     * the repository's memory ceiling to fall with it.
+     */
+    public static final String STREAMING_WRITES_KEY = Features.key("gcs.streaming-writes");
+
     /** The config key a {@code gcs} endpoint is read from - named here so the screen's refusal and the resolution
      *  that applies it cannot drift into naming different keys. */
     public static final String ENDPOINT_KEY = Features.key("gcs.endpoint");
@@ -97,7 +108,8 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
             // credentials may not permit creation; the operations below surface a clear error if the
             // bucket is truly unusable.
         }
-        return new GcsArtifactStore(s3, presigner, bucket);
+        return new GcsArtifactStore(s3, presigner, bucket,
+                !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)));
     }
 
     /**
