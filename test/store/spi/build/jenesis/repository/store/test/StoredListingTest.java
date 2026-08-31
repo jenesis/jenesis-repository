@@ -222,8 +222,11 @@ class StoredListingTest {
         assertThat(StoredListing.present(store, "r")).isFalse();
         assertThat(body("r")).isEmpty();
         StoredListing.put(store, lines("r"), "stale", "stale 0".getBytes());
-        StoredListing.Document rebuilt = StoredListing.rebuild(store, lines("r", () -> entries("fresh 1")));
-        assertThat(new String(rebuilt.body(), StandardCharsets.UTF_8)).isEqualTo("fresh 1\n");
+        // rebuild writes the document without ever holding it, so it answers with the header rather than the
+        // bytes - the count and the digest are what it can report for free, and the document itself is read back
+        // by whoever needs it.
+        StoredListing.Header rebuilt = StoredListing.rebuild(store, lines("r", () -> entries("fresh 1")));
+        assertThat(rebuilt.count()).hasValue(1L);
         assertThat(body("r")).isEqualTo("fresh 1\n");
     }
 

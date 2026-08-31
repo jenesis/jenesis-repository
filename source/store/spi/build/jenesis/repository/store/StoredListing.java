@@ -522,6 +522,18 @@ public final class StoredListing {
      * answers no entries and the listing is still absent after the create - which the caller reads as "nothing to
      * list", as it would an empty document.
      */
+    /**
+     * The stored document alone, opened for streaming, without generating one that is absent.
+     *
+     * <p>The counterpart of {@link #open} for a reader that must not walk. A repository-wide listing's generator
+     * enumerates the whole store, and &sect;10 puts that off the request path - so a read that would otherwise
+     * materialise answers "not built yet" instead and leaves the work to the rebuild pass. Absent here means
+     * absent, never "about to be expensive".
+     */
+    public static Optional<Served> served(ArtifactStore store, String listing) throws IOException {
+        return openStored(store, key(listing));
+    }
+
     public static Optional<Served> open(ArtifactStore store, Spec spec) throws IOException {
         String key = spec.key();
         for (int attempt = 0; attempt < 3; attempt++) {
@@ -783,7 +795,7 @@ public final class StoredListing {
      * incremental writer is not lost: the replace is a compare-and-set against the document the generation started
      * from, so a change that landed meanwhile makes this regenerate again.
      */
-    public static Document rebuild(ArtifactStore store, Spec spec) throws IOException {
+    public static Header rebuild(ArtifactStore store, Spec spec) throws IOException {
         String key = spec.key();
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
             Optional<ArtifactStore.Versioned> current = readStored(store, key);
@@ -791,20 +803,23 @@ public final class StoredListing {
             // Streamed, like the first materialisation: this is the daily repair pass, and it regenerates a
             // repository-wide listing whole. Rebuilt per attempt rather than hoisted, because a lost
             // compare-and-set below means the store moved and the document has to be produced against it again.
-            ByteArrayOutputStream body = new ByteArrayOutputStream();
-            Counter counter = new Counter();
-            try (Codec.Appender appender = spec.codec().append(body)) {
-                spec.generator().generate((id, entry) -> {
-                    appender.append(id, entry);
-                    counter.count++;
-                });
-            }
-            Document document = document(seq, body.toByteArray(), spec.md5(), counter.count);
-            if (store.writeVersioned(key, frame(document.header(), document.body()),
-                    current.map(ArtifactStore.Versioned::token).orElse(null))) {
-                MATERIALISED.increment();
-                derive(key, document, spec.derivation());
-                return document;
+            // Rendered outside heap, exactly as the first materialisation is. This is the DAILY pass's path for
+            // every listing in the deployment, so it is the one that meets the largest documents most often - and
+            // it was the half left buffering when materialise() was streamed, which is a defect the attribution
+            // build found by never finishing: a repository-wide rebuild simply ran out of memory on its own thread,
+            // where the only symptom a reader sees is a document that never appears.
+            Rendered rendered = render(spec);
+            try {
+                Header header = Header.of(Math.max(seq + 1, System.currentTimeMillis()),
+                        rendered.size, rendered.md5, rendered.sha256, rendered.entries);
+                if (write(store, key, header, rendered,
+                        current.map(ArtifactStore.Versioned::token).orElse(null))) {
+                    MATERIALISED.increment();
+                    derived(store, spec, header, rendered);
+                    return header;
+                }
+            } finally {
+                Files.deleteIfExists(rendered.file);
             }
             CONFLICTS.increment();
             Retries.backoff(attempt);
