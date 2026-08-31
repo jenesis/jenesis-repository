@@ -31,6 +31,17 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
      *  from, named here so the screen's refusal and the resolution that applies it cannot drift apart. */
     public static final String CONNECTION_STRING_KEY = Features.key("azure-blob.connection-string");
 
+    /**
+     * Whether a conditional write may stream its body ({@code true} by default).
+     *
+     * <p><b>Setting this to {@code false} restores a heap cost, and that is the whole of what it does.</b> A
+     * listing is one object written under compare-and-set, and some listings are proportional to the repository.
+     * Streaming the write is what keeps such a document out of memory; buffering puts it back, whole, on the path
+     * that writes it. Turn this off to work around a storage implementation, never for anything else, and expect
+     * the repository's memory ceiling to fall with it.
+     */
+    public static final String STREAMING_WRITES_KEY = Features.key("azure-blob.streaming-writes");
+
     /** The blob container, defaulted when unset. */
     public static final String CONTAINER_KEY = Features.key("azure-blob.container");
 
@@ -66,7 +77,8 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
             // The container may already exist or the credentials may not permit creation; the operations
             // below surface a clear error if the container is truly unusable.
         }
-        return new AzureArtifactStore(container);
+        return new AzureArtifactStore(container,
+                !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)));
     }
 
     /**

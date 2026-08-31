@@ -37,36 +37,49 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
     /** The KMS key id for {@code aws:kms} encryption, or {@code null} for the SSE-S3 (AES256) default. */
     private final String kmsKeyId;
 
+    /** Whether a conditional write may stream its body; see {@code S3ArtifactStoreProvider}. */
+    private final boolean streamingWrites;
+
     public S3ArtifactStore(S3Client s3, String bucket) {
-        this(s3, null, bucket, "", null);
+        this(s3, null, bucket, "", null, true);
     }
 
     /** As {@link #S3ArtifactStore(S3Client, String)} but with a {@link S3Presigner} - built by the provider from the
      *  same region, credentials and endpoint as {@code s3} - so {@link #presign} can mint a direct-fetch GET URL. */
     public S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket) {
-        this(s3, presigner, bucket, "", null);
+        this(s3, presigner, bucket, "", null, true);
     }
 
     /** As {@link #S3ArtifactStore(S3Client, String)} but with an {@code aws:kms} key id for server-side encryption. */
     public S3ArtifactStore(S3Client s3, String bucket, String kmsKeyId) {
-        this(s3, null, bucket, "", kmsKeyId);
+        this(s3, null, bucket, "", kmsKeyId, true);
     }
 
     /** Full store: a {@link S3Presigner} for direct-fetch GET URLs ({@link #presign}) and an {@code aws:kms} key id
      *  for server-side encryption ({@link #encrypt}). Either may be {@code null} to fall back to streaming / SSE-S3. */
     public S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String kmsKeyId) {
-        this(s3, presigner, bucket, "", kmsKeyId);
+        this(s3, presigner, bucket, "", kmsKeyId, true);
     }
 
-    private S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String keyPrefix, String kmsKeyId) {
+    /** The provider's constructor, which is the only one that decides {@code streamingWrites}; the public ones
+     *  above take the default, since a caller building a store by hand is not the case the switch exists for. */
+    public S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String kmsKeyId,
+                           boolean streamingWrites) {
+        this(s3, presigner, bucket, "", kmsKeyId, streamingWrites);
+    }
+
+    private S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String keyPrefix, String kmsKeyId,
+                            boolean streamingWrites) {
         super(s3, bucket, keyPrefix);
         this.presigner = presigner;
         this.kmsKeyId = kmsKeyId;
+        this.streamingWrites = streamingWrites;
     }
 
     @Override
     public ArtifactStore scope(String tenant) {
-        return new S3ArtifactStore(s3, presigner, bucket, keyPrefix + ArtifactStore.segment(tenant) + "/", kmsKeyId);
+        return new S3ArtifactStore(s3, presigner, bucket, keyPrefix + ArtifactStore.segment(tenant) + "/", kmsKeyId,
+                streamingWrites);
     }
 
     @Override
@@ -209,7 +222,9 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
      */
     @Override
     public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
-        return put(key, RequestBody.fromInputStream(content, length), expected);
+        return streamingWrites
+                ? put(key, RequestBody.fromInputStream(content, length), expected)
+                : put(key, RequestBody.fromBytes(content.readAllBytes()), expected);
     }
 
     @Override

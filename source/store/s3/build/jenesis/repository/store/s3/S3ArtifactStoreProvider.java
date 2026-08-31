@@ -46,6 +46,21 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
     /** The config key that opts {@link #ENDPOINT_KEY} out of the https-only transport screen. */
     public static final String ALLOW_INSECURE_KEY = Features.key("s3.allow-insecure-endpoint");
 
+    /**
+     * Whether a conditional write may stream its body ({@code true} by default).
+     *
+     * <p><b>Setting this to {@code false} restores a heap cost, and that is the whole of what it does.</b> A
+     * listing is one object written under compare-and-set, and some listings are proportional to the repository -
+     * a catalogue, a Simple index, a folder page. Streaming the write is what keeps such a document out of memory;
+     * buffering puts it back, whole, on the path that writes it. Turn this off to work around a storage
+     * implementation, never to change anything else, and expect the repository's memory ceiling to fall with it.
+     *
+     * <p>It exists because "S3-compatible" is a spectrum. AWS, MinIO and Azurite are all proven against the store
+     * contract's streamed compare-and-set, but Ceph, Wasabi and older MinIO builds implement the conditional
+     * headers to varying degrees, and an operator meeting one of those needs a way past it that is not a fork.
+     */
+    public static final String STREAMING_WRITES_KEY = Features.key("s3.streaming-writes");
+
     @Override
     public String name() {
         return "s3";
@@ -93,7 +108,8 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
         // key when s3.sse-kms-key-id is supplied. There is no key that turns encryption off. The presigner
         // rides alongside so this store can also mint direct-fetch GET URLs (RD-1 presign).
         String kmsKeyId = config.apply(Features.key("s3.sse-kms-key-id"));
-        return new S3ArtifactStore(s3, presigner, bucket, kmsKeyId);
+        return new S3ArtifactStore(s3, presigner, bucket, kmsKeyId,
+                !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)));
     }
 
     /**
