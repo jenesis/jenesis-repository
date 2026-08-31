@@ -808,8 +808,16 @@ public interface ArtifactStore {
      * an {@code If-Match} on the ETag, a generation match, or the read-compare-then-rename the filesystem does -
      * so this adds a body shape and no new semantics. The store contract holds both forms to the same two rules.
      *
-     * <p>The inherited body buffers, which is correct and is what a backend without a streaming upload should do;
-     * it is exactly the call it replaces, so nothing is worse for not overriding this.
+     * <p>The inherited body buffers, which is correct for a <em>backend</em> without a streaming upload: it is
+     * exactly the call it replaces, so such a backend is no worse for not overriding this.
+     *
+     * <p><b>It is not correct for a decorator, and this is a trap that has already been sprung.</b> A store that
+     * wraps another one and inherits this body silently converts a streaming backend into a buffering one - the
+     * whole document into heap, on the delegate's behalf, defeating the override the backend does have. Four
+     * decorators inherited it and a folder page of a hundred thousand entries died of it under a bounded heap,
+     * naming this method in the stack. So a decorator overrides this and delegates; if it genuinely holds content
+     * by design, it overrides it anyway and says so, because otherwise nothing distinguishes the deliberate case
+     * from the accident.
      */
     default boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
         return writeVersioned(key, content.readAllBytes(), expected);

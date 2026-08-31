@@ -160,7 +160,12 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                 return;
             }
             exchange.setResponseHeader("Content-Type", "text/html");
-            exchange.respond(200, page.bytes());
+            // Streamed rather than handed over as bytes. The document is the size of the folder, so materialising
+            // it here put the whole page in heap on the request path - a folder of a hundred thousand children
+            // died exactly here, in Served.bytes, once the write side stopped being the first thing to run out.
+            try (OutputStream out = exchange.respond(200, page.header().size())) {
+                page.body().transferTo(out);
+            }
         }
     }
 
