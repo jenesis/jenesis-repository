@@ -48,6 +48,21 @@ final class MavenMetadataListing {
                 return entries;
             }
 
+            /**
+             * <b>This one collects, and no appender can replace it.</b>
+             *
+             * <p>Two reasons, either of which would be enough. The document lists versions in <em>semantic</em>
+             * order ({@link MavenMetadata#compareVersions}), which is not the ascending id order a {@code Sink}
+             * delivers, so the order is a function of every entry and unknown until the last arrives. And the
+             * surrounding XML is itself an entry - {@link #TEMPLATE}, carrying the document with a hole where the
+             * versions go - so the frame is not known when the first version is written either.
+             *
+             * <p>{@code StoredListing.spooling} does not rescue this: a spool defers the opening bytes, it does
+             * not reorder the body. The document is one coordinate's versions, so what is held is bounded by a
+             * coordinate rather than by the repository - which is why this is acceptable and why it is written
+             * down, since a codec silently lacking an appender is the defect that made a streaming generator
+             * write into a buffer in six other formats.
+             */
             @Override
             public byte[] join(SortedMap<String, byte[]> entries) {
                 List<String> versions = new ArrayList<>(entries.keySet());
