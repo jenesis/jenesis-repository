@@ -3,6 +3,7 @@ package build.jenesis.repository.format.oci;
 import module java.base;
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -12,6 +13,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Withheld;
+import tools.jackson.core.JsonGenerator;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import build.jenesis.repository.format.OciTags;
@@ -670,6 +672,10 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         // Streamed out of the stored listing and stopped at the window's edge. Reading it whole and splitting it
         // into a map of every tag made a request for a hundred names cost a repository's worth of them.
         Optional<StoredListing.Served> served = StoredListing.open(store, new OciListings(store).tagsSpec(name));
+        if (exchange.queryParameter("n") == null) {
+            stream(exchange, served, "tags", name);
+            return;
+        }
         List<String> tags = new ArrayList<>();
         boolean[] more = {false};
         if (served.isPresent()) {
@@ -697,6 +703,56 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         exchange.setResponseHeader("Content-Type", "application/json");
         exchange.respond(200, JSON.writeValueAsString(body).getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * The whole of a stored name listing, written to the socket as the names arrive.
+     *
+     * <p>This is the answer to an <b>unqualified</b> {@code tags/list} or {@code _catalog}. The Distribution
+     * specification says those return every name, so the response is legitimately the size of the repository and
+     * nothing here can bound it - but it is also the one case where nothing has to be decided before the body
+     * starts, because a complete answer has no next page to name in a {@code Link}. The windowed branch above may
+     * therefore gather its names, since it gathers at most the {@code n} the client chose; this one may not, and
+     * gathering was what it did - once as a list of every name and again as the JSON string of that list.
+     *
+     * <p>{@code name} is the image the tags belong to, written as the document's {@code name} member; the catalog
+     * names no subject and passes {@code null}.
+     */
+    private static void stream(FormatExchange exchange, Optional<StoredListing.Served> served, String member,
+                               String name) throws IOException {
+        if (served.isEmpty()) {
+            // Nothing stored, so there is no header to validate against and no names to stream. The answer is the
+            // empty document, small enough to hand over whole - which also leaves the dispatcher deriving its
+            // validator from the bytes, exactly as it did before any of this streamed.
+            Map<String, Object> body = new LinkedHashMap<>();
+            if (name != null) {
+                body.put("name", name);
+            }
+            body.put(member, List.of());
+            exchange.setResponseHeader("Content-Type", "application/json");
+            exchange.respond(200, JSON.writeValueAsString(body).getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        // Through Listings.serve, whose second form exists for exactly this: the answer is rendered from the
+        // stored document rather than copied out of it, so the length is not known ahead of the write, but the
+        // validator is - it is the stored document's sha256, which changes exactly when this answer does.
+        try (StoredListing.Served document = served.get()) {
+            Listings.serve(exchange, document, "application/json", -1L, out -> {
+                try (JsonGenerator json = JSON.createGenerator(out)) {
+                    json.writeStartObject();
+                    if (name != null) {
+                        json.writeStringProperty("name", name);
+                    }
+                    json.writeArrayPropertyStart(member);
+                    OciListings.names(document.body(), member, entry -> {
+                        json.writeString(entry);
+                        return true;
+                    });
+                    json.writeEndArray();
+                    json.writeEndObject();
+                }
+            });
+        }
     }
 
     /** Parse the Distribution {@code n} page-size query parameter shared by {@code tags/list} and {@code _catalog}:
@@ -735,6 +791,10 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         // the client's n/last window is cut from it here, never walked out of the name tree.
         // Streamed, and stopped at the window's edge - see tags/list for why reading it whole was the defect.
         Optional<StoredListing.Served> served = StoredListing.open(store, new OciListings(store).catalogSpec());
+        if (exchange.queryParameter("n") == null) {
+            stream(exchange, served, "repositories", null);
+            return;
+        }
         List<String> repositories = new ArrayList<>();
         boolean[] more = {false};
         if (served.isPresent()) {
