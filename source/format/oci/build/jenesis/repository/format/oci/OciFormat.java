@@ -667,25 +667,30 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return;
         }
         // The tag list is a stored listing every tag push maintains; the client's n/last window is cut from it here.
-        Optional<StoredListing.Document> document = StoredListing.read(store, new OciListings(store).tagsSpec(name));
+        // Streamed out of the stored listing and stopped at the window's edge. Reading it whole and splitting it
+        // into a map of every tag made a request for a hundred names cost a repository's worth of them.
+        Optional<StoredListing.Served> served = StoredListing.open(store, new OciListings(store).tagsSpec(name));
         List<String> tags = new ArrayList<>();
-        boolean more = false;
-        if (document.isPresent()) {
-            for (String tag : OciListings.TAGS.split(document.get().body()).keySet()) {
-                if (last != null && tag.compareTo(last) <= 0) {
-                    continue;
-                }
-                if (tags.size() == limit) {
-                    more = true;
-                    break;
-                }
-                tags.add(tag);
+        boolean[] more = {false};
+        if (served.isPresent()) {
+            try (StoredListing.Served document = served.get()) {
+                OciListings.names(document.body(), "tags", tag -> {
+                    if (last != null && tag.compareTo(last) <= 0) {
+                        return true;                            // still before the client's window
+                    }
+                    if (tags.size() == limit) {
+                        more[0] = true;
+                        return false;                           // the window is full - stop reading here
+                    }
+                    tags.add(tag);
+                    return true;
+                });
             }
         }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("name", name);
         body.put("tags", tags);
-        if (more) {
+        if (more[0]) {
             String size = exchange.queryParameter("n") == null ? "" : "n=" + limit + "&";
             exchange.setResponseHeader("Link", "</v2/" + name + "/tags/list?" + size + "last="
                     + URLEncoder.encode(tags.getLast(), StandardCharsets.UTF_8) + ">; rel=\"next\"");
@@ -728,22 +733,26 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         String last = exchange.queryParameter("last");
         // The catalog is a stored listing every tag push maintains (an image is listed while it has a listed tag);
         // the client's n/last window is cut from it here, never walked out of the name tree.
-        Optional<StoredListing.Document> document = StoredListing.read(store, new OciListings(store).catalogSpec());
+        // Streamed, and stopped at the window's edge - see tags/list for why reading it whole was the defect.
+        Optional<StoredListing.Served> served = StoredListing.open(store, new OciListings(store).catalogSpec());
         List<String> repositories = new ArrayList<>();
-        boolean more = false;
-        if (document.isPresent()) {
-            for (String name : OciListings.REPOSITORIES.split(document.get().body()).keySet()) {
-                if (last != null && !last.isEmpty() && name.compareTo(last) <= 0) {
-                    continue;
-                }
-                if (repositories.size() == limit) {
-                    more = true;
-                    break;
-                }
-                repositories.add(name);
+        boolean[] more = {false};
+        if (served.isPresent()) {
+            try (StoredListing.Served document = served.get()) {
+                OciListings.names(document.body(), "repositories", name -> {
+                    if (last != null && !last.isEmpty() && name.compareTo(last) <= 0) {
+                        return true;                            // still before the client's window
+                    }
+                    if (repositories.size() == limit) {
+                        more[0] = true;
+                        return false;                           // the window is full - stop reading here
+                    }
+                    repositories.add(name);
+                    return true;
+                });
             }
         }
-        if (more) {
+        if (more[0]) {
             exchange.setResponseHeader("Link", "</v2/_catalog?n=" + limit + "&last="
                     + URLEncoder.encode(repositories.getLast(), StandardCharsets.UTF_8) + ">; rel=\"next\"");
         }

@@ -6,6 +6,9 @@ import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.StoredListing;
 
 import module java.base;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * An OCI registry's enumerations as stored listings: one tag list per image ({@code tags/list}, entries by tag) and
@@ -20,6 +23,46 @@ final class OciListings {
     static final String CATALOG = "oci/_catalog";
 
     /** A tag list or the catalog: a JSON array of quoted names under one member. */
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** Told a name; answers whether the walk should carry on. */
+    interface NameVisitor {
+
+        boolean accept(String name) throws IOException;
+    }
+
+    /**
+     * Hand each name in the document's {@code member} array to {@code visitor}, in stored order, stopping as soon
+     * as it answers {@code false}.
+     *
+     * <p>The document is consumed in the parser's bounded read buffer and never materialised. That is the whole
+     * point: {@code tags/list} and {@code _catalog} answer a window of a few names, and the code that cut that
+     * window used to read the entire document into a byte array and split it into a map of every name in it - so
+     * a repository with half a million tags paid for all of them to answer a request for a hundred. A visitor that
+     * stops also means the parse ends at the window rather than at the end of the document.
+     */
+    static void names(InputStream body, String member, NameVisitor visitor) throws IOException {
+        try (JsonParser parser = JSON.createParser(body)) {
+            if (parser.nextToken() != JsonToken.START_OBJECT) {
+                return;                                          // not the expected listing object
+            }
+            while (parser.nextToken() == JsonToken.PROPERTY_NAME) {
+                boolean wanted = member.equals(parser.currentName());
+                parser.nextToken();                              // advance onto the field's value
+                if (wanted && parser.currentToken() == JsonToken.START_ARRAY) {
+                    JsonToken token;
+                    while ((token = parser.nextToken()) != null && token != JsonToken.END_ARRAY) {
+                        if (token == JsonToken.VALUE_STRING && !visitor.accept(parser.getString())) {
+                            return;
+                        }
+                    }
+                    return;
+                }
+                parser.skipChildren();                           // scalar (no-op) or an unrelated subtree
+            }
+        }
+    }
+
     static StoredListing.Codec names(String member) {
         return new StoredListing.Codec() {
             @Override
