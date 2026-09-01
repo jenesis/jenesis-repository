@@ -278,6 +278,77 @@ public final class StoredListing {
     }
 
     /**
+     * An appender for a document whose opening bytes depend on the entries that follow - an RPM
+     * {@code primary.xml} whose root element carries the package count, an index that names its own bounds.
+     *
+     * <p>Such a document cannot be written in one forward pass, and that is <b>not</b> a reason to hold it. The
+     * entries are spooled to a temporary file as they arrive and copied out behind the prologue once the count is
+     * known, so heap stays at one entry however wide the document. The alternative is the inherited appender,
+     * which collects every entry into a map and calls {@code join} - the whole document in heap, on the publish
+     * path, which is what the rest of this class exists to avoid.
+     *
+     * <p>It is one mechanism rather than one private inner class per codec because the shape recurs: a count in a
+     * root element, a summarising header, a pair of sections that split the arrival order. Each of those is the
+     * same two-pass write over a spool.
+     *
+     * <p>The spool is created on the first entry, so a codec's {@code append} may build this without declaring a
+     * checked exception, and it is deleted whether the close succeeds or throws.
+     */
+    public static Codec.Appender spooling(OutputStream out, Written written, Prologue prologue, byte[] epilogue) {
+        return new Codec.Appender() {
+
+            private Path spool;
+
+            private OutputStream body;
+
+            private long entries;
+
+            @Override
+            public void append(String id, byte[] entry) throws IOException {
+                open();
+                written.write(body, id, entry);
+                entries++;
+            }
+
+            @Override
+            public void close() throws IOException {
+                open();                                 // an empty document still has its prologue and epilogue
+                try {
+                    body.close();
+                    out.write(prologue.of(entries));
+                    try (InputStream spooled = new BufferedInputStream(Files.newInputStream(spool))) {
+                        spooled.transferTo(out);
+                    }
+                    out.write(epilogue);
+                } finally {
+                    Files.deleteIfExists(spool);
+                }
+            }
+
+            private void open() throws IOException {
+                if (spool == null) {
+                    spool = Files.createTempFile("jenreg-listing-spool", ".tmp");
+                    body = new BufferedOutputStream(Files.newOutputStream(spool));
+                }
+            }
+        };
+    }
+
+    /** How one entry is written into the spooled body - the per-entry half of a {@link #spooling} appender. */
+    @FunctionalInterface
+    public interface Written {
+
+        void write(OutputStream body, String id, byte[] entry) throws IOException;
+    }
+
+    /** The document's opening bytes, given how many entries turned out to follow them. */
+    @FunctionalInterface
+    public interface Prologue {
+
+        byte[] of(long entries) throws IOException;
+    }
+
+    /**
      * A codec for a document that wraps another codec's body in a fixed header and footer - an HTML page around its
      * links, an XML root around its elements. The header and footer are stripped before the inner split and written
      * around the inner join; a document without them is split as a bare body.
