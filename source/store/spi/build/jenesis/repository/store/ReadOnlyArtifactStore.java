@@ -95,6 +95,12 @@ public final class ReadOnlyArtifactStore implements ArtifactStore {
         return delegate.readVersioned(key);
     }
 
+    /** Delegated rather than inherited: the default asks the delegate for the whole object to keep its token. */
+    @Override
+    public Optional<Object> version(String key) throws IOException {
+        return delegate.version(key);
+    }
+
     @Override
     public void write(String key, InputStream in) throws IOException {
         throw new ReadOnlyException();

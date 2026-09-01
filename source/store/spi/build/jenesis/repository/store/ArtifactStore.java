@@ -768,8 +768,14 @@ public interface ArtifactStore {
      * {@code readVersioned} pays for the bytes it then throws away.
      *
      * <p>The inherited body is exactly that mistake, made explicit and correct: it reads the object and keeps the
-     * token. It is the right answer for a backend with no cheaper probe, and the wrong one for all four shipped
-     * backends, which override it - the store kit holds them to it.
+     * token. It is the right answer only for a backend that has no cheaper probe and holds its objects in memory
+     * anyway, and the wrong one for everything else - <b>including a store that merely wraps another</b>, where the
+     * default silently converts a delegate's metadata request back into a download. All four shipped backends
+     * override it and so do the wrapping stores; a new implementation of either kind must.
+     *
+     * <p>The store kit checks that this token is the one {@link #readVersioned} pairs with the body and that a write
+     * moves it on. It cannot check that no body was transferred - that is invisible from the SPI - so the claim above
+     * is a review question, and the thing that presses it is a canary publishing into a listing too large to hold.
      */
     default Optional<Object> version(String key) throws IOException {
         return readVersioned(key).map(Versioned::token);

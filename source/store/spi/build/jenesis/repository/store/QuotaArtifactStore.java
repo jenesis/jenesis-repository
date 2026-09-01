@@ -406,6 +406,12 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
         return delegate.readVersioned(key);
     }
 
+    /** Delegated rather than inherited: the default asks the delegate for the whole object to keep its token. */
+    @Override
+    public Optional<Object> version(String key) throws IOException {
+        return delegate.version(key);
+    }
+
     @Override
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
         return delegate.writeVersioned(key, content, expected);

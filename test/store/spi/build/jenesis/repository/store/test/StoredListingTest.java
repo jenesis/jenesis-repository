@@ -316,4 +316,59 @@ class StoredListingTest {
     void the_store_key_is_under_the_listing_root() {
         assertThat(StoredListing.key("debian/main/Packages")).isEqualTo("listing/debian/main/Packages");
     }
+
+    /**
+     * The streaming reader agrees with {@code split}, entry for entry and byte for byte.
+     *
+     * <p>This is the property the listing update rests on: it merges a stored document by reading it through
+     * {@code Codec.read} instead of splitting it, so a reader that disagreed with {@code split} would write a
+     * document missing or mangling entries - and it would do so on the publish path, where the damage is a lost
+     * artifact rather than a slow screen.
+     *
+     * <p>The awkward cases are the ones a hand-rolled scan gets wrong, so they are the ones listed: a delimiter
+     * with a repeated prefix, a fragment that contains a partial delimiter, an empty document, one entry, a
+     * conventionally terminated document and an unterminated one.
+     */
+    @Test
+    void the_streaming_reader_yields_exactly_what_split_yields() throws Exception {
+        StoredListing.Codec lines = StoredListing.Codec.delimited("\n", line -> line.split(" ")[0]);
+        StoredListing.Codec stanzas = StoredListing.Codec.delimited("\n\n",
+                stanza -> stanza.substring(0, stanza.indexOf('\n') < 0 ? stanza.length() : stanza.indexOf('\n')));
+        StoredListing.Codec page = StoredListing.framed("<html>\n", "</html>\n", lines);
+
+        List<Map.Entry<StoredListing.Codec, String>> documents = List.of(
+                Map.entry(lines, ""),
+                Map.entry(lines, "alpha one\n"),
+                Map.entry(lines, "alpha one\nbeta two\ngamma three\n"),
+                Map.entry(lines, "alpha one\nbeta two"),                    // unterminated
+                Map.entry(stanzas, "alpha\n one\n\nbeta\n two\n\n"),
+                Map.entry(stanzas, "alpha\n one\nstill-alpha\n\nbeta\n two"),   // a lone \n inside a stanza
+                Map.entry(stanzas, ""),
+                Map.entry(page, "<html>\nalpha one\nbeta two\n</html>\n"),
+                Map.entry(page, "alpha one\nbeta two\n"));                  // stored without its frame
+
+        for (Map.Entry<StoredListing.Codec, String> each : documents) {
+            StoredListing.Codec codec = each.getKey();
+            byte[] document = each.getValue().getBytes(StandardCharsets.UTF_8);
+            SortedMap<String, byte[]> expected = codec.split(document);
+
+            SortedMap<String, byte[]> streamed = new TreeMap<>();
+            try (StoredListing.Codec.Reader reader =
+                         codec.read(new ByteArrayInputStream(document), document.length)) {
+                for (Optional<Map.Entry<String, byte[]>> entry = reader.next();
+                     entry.isPresent(); entry = reader.next()) {
+                    streamed.put(entry.get().getKey(), entry.get().getValue());
+                }
+            }
+
+            assertThat(streamed.keySet())
+                    .as("the same ids, in the same order, for <%s>", each.getValue())
+                    .containsExactlyElementsOf(expected.keySet());
+            for (String id : expected.keySet()) {
+                assertThat(streamed.get(id))
+                        .as("the same bytes for id <%s> of <%s>", id, each.getValue())
+                        .isEqualTo(expected.get(id));
+            }
+        }
+    }
 }
