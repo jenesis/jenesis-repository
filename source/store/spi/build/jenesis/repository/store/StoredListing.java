@@ -111,6 +111,37 @@ public final class StoredListing {
         }
 
         /**
+         * Read the entries of a stored document of {@code length} bytes out of {@code in}, one at a time.
+         *
+         * <p>The counterpart of {@link #split}: the same entries, in the same order, without the document. The
+         * default reads the stream whole and splits it - exactly what the caller did before this existed - so a
+         * codec that has not implemented streaming is never wrong for it, only as heavy as it always was.
+         *
+         * <p>{@code length} is the document's stored size. A framed codec needs it to know where its footer
+         * begins, since a stream cannot be read from the end; a codec that does not need it ignores it.
+         */
+        default Reader read(InputStream in, long length) throws IOException {
+            Iterator<Map.Entry<String, byte[]>> entries = split(in.readAllBytes()).entrySet().iterator();
+            return new Reader() {
+                @Override
+                public Optional<Map.Entry<String, byte[]>> next() {
+                    return entries.hasNext() ? Optional.of(entries.next()) : Optional.empty();
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+
+        /** Decodes a document one entry at a time, in the ascending id order it is stored in. */
+        interface Reader extends Closeable {
+
+            /** The next entry, or empty once the document is exhausted. */
+            Optional<Map.Entry<String, byte[]>> next() throws IOException;
+        }
+
+        /**
          * A codec for a document that is its fragments joined by {@code delimiter} - a Debian {@code Packages} file's
          * stanzas ({@code "\n\n"}), a list's lines ({@code "\n"}) - with {@code idOf} naming each fragment. An empty
          * document has no entries; a trailing delimiter is tolerated on split and written on join, so a file that is
@@ -162,6 +193,71 @@ public final class StoredListing {
                 }
 
                 @Override
+                public Reader read(InputStream in, long ignored) {
+                    // Searches a filled window for the delimiter rather than testing the stream a byte at a time,
+                    // and the difference is not a nicety: the byte-at-a-time form is a virtual call and a bounds
+                    // check per byte, and the suite that measures a put against a growing document turned it into
+                    // minutes. Only the tail that could still be the start of a delimiter is carried across a
+                    // refill, so a delimiter straddling the window boundary is found exactly as split finds it.
+                    // Empty fragments are skipped as split skips them, so a conventionally terminated document
+                    // yields the same entries either way.
+                    return new Reader() {
+
+                        private final byte[] window = new byte[8192];
+
+                        private final ByteArrayOutputStream fragment = new ByteArrayOutputStream();
+
+                        private int position, limit;
+
+                        private boolean drained;
+
+                        @Override
+                        public Optional<Map.Entry<String, byte[]>> next() throws IOException {
+                            while (!drained) {
+                                int found = indexOf(window, position, limit, separator);
+                                if (found >= 0) {
+                                    fragment.write(window, position, found - position);
+                                    position = found + separator.length;
+                                    Optional<Map.Entry<String, byte[]>> entry = take();
+                                    if (entry.isPresent()) {
+                                        return entry;
+                                    }
+                                    continue;   // an empty fragment between two delimiters, as split drops it
+                                }
+                                // Nothing complete in the window: keep back only what could still be a delimiter's
+                                // opening bytes, hand the rest to the fragment, and refill behind it.
+                                int keep = Math.min(separator.length - 1, limit - position);
+                                fragment.write(window, position, limit - position - keep);
+                                System.arraycopy(window, limit - keep, window, 0, keep);
+                                position = 0;
+                                limit = keep;
+                                int read = in.read(window, limit, window.length - limit);
+                                if (read < 0) {
+                                    fragment.write(window, position, limit - position);
+                                    drained = true;
+                                    return take();
+                                }
+                                limit += read;
+                            }
+                            return Optional.empty();
+                        }
+
+                        /** The fragment gathered so far, emptied - or nothing, when it is empty. */
+                        private Optional<Map.Entry<String, byte[]>> take() {
+                            byte[] bytes = fragment.toByteArray();
+                            fragment.reset();
+                            return bytes.length == 0 ? Optional.empty() : Optional.of(Map.entry(
+                                    idOf.apply(new String(bytes, StandardCharsets.UTF_8)), bytes));
+                        }
+
+                        @Override
+                        public void close() throws IOException {
+                            in.close();
+                        }
+                    };
+                }
+
+                @Override
                 public byte[] join(SortedMap<String, byte[]> entries) {
                     int length = 0;
                     for (byte[] fragment : entries.values()) {
@@ -198,6 +294,25 @@ public final class StoredListing {
                     text = text.substring(0, text.length() - footer.length());
                 }
                 return inner.split(text.getBytes(StandardCharsets.UTF_8));
+            }
+
+            @Override
+            public Reader read(InputStream in, long length) throws IOException {
+                // A stream cannot be read from the end, so the footer's position is derived from the stored
+                // length rather than found. The header is checked and consumed if present and pushed back if
+                // not - a document stored without the frame is read as a bare body, exactly as split reads one -
+                // and the frame is written as a pair, so a document carrying the header carries the footer.
+                byte[] head = header.getBytes(StandardCharsets.UTF_8);
+                byte[] tail = footer.getBytes(StandardCharsets.UTF_8);
+                PushbackInputStream source = new PushbackInputStream(in, Math.max(1, head.length));
+                byte[] first = source.readNBytes(head.length);
+                long body = length;
+                if (Arrays.equals(first, head)) {
+                    body = Math.max(0L, length - head.length - tail.length);
+                } else {
+                    source.unread(first);
+                }
+                return inner.read(limited(source, body), body);
             }
 
             @Override
@@ -263,19 +378,6 @@ public final class StoredListing {
 
         /** Emit every entry of the listing, in ascending id order. */
         void generate(Sink sink) throws IOException;
-
-        /**
-         * Everything this generator emits, collected into a map.
-         *
-         * <p>For the incremental-update path, which applies a batch of changes to the entries and therefore needs
-         * random access. That path materialises whatever it touches either way - it splits the stored document into
-         * a map to mutate it - so collecting here costs nothing it was not already paying.
-         */
-        default SortedMap<String, byte[]> collect() throws IOException {
-            SortedMap<String, byte[]> entries = new TreeMap<>();
-            generate(entries::put);
-            return entries;
-        }
 
         /**
          * Adapts a generator that builds the whole listing before returning it.
@@ -810,8 +912,8 @@ public final class StoredListing {
             // where the only symptom a reader sees is a document that never appears.
             Rendered rendered = render(spec);
             try {
-                Header header = Header.of(Math.max(seq + 1, System.currentTimeMillis()),
-                        rendered.size, rendered.md5, rendered.sha256, rendered.entries);
+                Header header = Header.of(sequence(seq), rendered.size, rendered.md5, rendered.sha256,
+                        rendered.entries);
                 if (write(store, key, header, rendered,
                         current.map(ArtifactStore.Versioned::token).orElse(null))) {
                     MATERIALISED.increment();
@@ -941,57 +1043,73 @@ public final class StoredListing {
 
     private static boolean apply(ArtifactStore store, Spec spec, List<Pending> batch) throws IOException {
         String key = spec.key();
-        Codec codec = spec.codec();
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
-            Optional<ArtifactStore.Versioned> current = readStored(store, key);
-            SortedMap<String, byte[]> entries;
-            long seq;
-            byte[] before = null;   // the stored body, kept for the no-op comparison below rather than re-parsed
-            if (current.isPresent()) {
-                Document document = parse(current.get().content(), key);
-                before = document.body();
-                entries = codec.split(before);
-                seq = document.header().seq();
-            } else {
+            // The token is read BEFORE the body, and the order carries the correctness. If the document moves
+            // between the two reads, the compare-and-set below is made against the older token, fails, and this
+            // attempt retries. Reading the body first would let a newer token authorise a write of a merge
+            // computed from older bytes - a lost update rather than a conflict, and a silent one.
+            Object token = store.version(key).orElse(null);
+            Optional<Served> stored = token == null ? Optional.empty() : openStored(store, key);
+            if (stored.isEmpty()) {
                 boolean onlyRemovals = batch.stream().allMatch(pending ->
                         pending.changes().values().stream().noneMatch(Optional::isPresent));
                 if (onlyRemovals) {
                     return true;   // nothing to take out of a document that does not exist: it is not created for it
                 }
-                entries = new TreeMap<>(spec.generator().collect());
-                seq = 0L;
-            }
-            for (Pending pending : batch) {
-                for (String prefix : pending.prefixes()) {
-                    entries.keySet().removeIf(id -> id.startsWith(prefix));
+                // Generated and changed in ONE write. Materialising first and merging on the next attempt would
+                // be tidier to read and wrong to watch: it publishes two documents where a first publish always
+                // published one, so every derivation downstream fires twice and the sequence advances twice. So
+                // the generator is rendered to a temporary file and the batch merged over that - the same merge
+                // the stored path runs, against the document that is about to exist rather than one that does.
+                // Holding the generated entries instead would put a first publish into a repository big enough to
+                // need this back on the heap the rest of the method exists to stay off.
+                Rendered generated = render(spec);
+                Rendered created;
+                try (InputStream body = new BufferedInputStream(Files.newInputStream(generated.file));
+                     Served source = new Served(Header.of(0L, generated.size, generated.md5, generated.sha256,
+                             generated.entries), body)) {
+                    created = merge(spec, source, batch);
+                } finally {
+                    Files.deleteIfExists(generated.file);
                 }
-                for (Map.Entry<String, Optional<byte[]>> change : pending.changes().entrySet()) {
-                    if (change.getValue().isPresent()) {
-                        entries.put(change.getKey(), change.getValue().get());
-                    } else {
-                        entries.remove(change.getKey());
+                try {
+                    Header header = Header.of(sequence(0L), created.size, created.md5, created.sha256,
+                            created.entries);
+                    if (write(store, key, header, created, null)) {
+                        UPDATES.increment();
+                        MATERIALISED.increment();
+                        derived(store, spec, header, created);
+                        return true;
                     }
+                    CONFLICTS.increment();
+                    Retries.backoff(attempt);
+                } finally {
+                    Files.deleteIfExists(created.file);
                 }
+                continue;
             }
-            byte[] joined = codec.join(entries);
-            // Compared against the body parsed at the top of this attempt rather than parsing the stored bytes a
-            // second time. On a listing sized by the repository that second parse was another whole copy of the
-            // document, taken on the publish path to answer a question the first parse had already loaded.
-            if (before != null && Arrays.equals(joined, before)) {
-                return true;   // the changes leave the document as it is: nothing to write, nothing to derive
+            Header header;
+            Rendered rendered;
+            try (Served document = stored.get()) {
+                header = document.header();
+                rendered = merge(spec, document, batch);
             }
-            Document updated = document(seq, joined, spec.md5(), entries.size());
-            if (store.writeVersioned(key, frame(updated.header(), updated.body()),
-                    current.map(ArtifactStore.Versioned::token).orElse(null))) {
-                UPDATES.increment();
-                if (current.isEmpty()) {
-                    MATERIALISED.increment();
+            try {
+                if (rendered.sha256.equals(header.sha256())) {
+                    return true;   // the changes leave the document as it is: nothing to write, nothing to derive
                 }
-                derive(key, updated, spec.derivation());
-                return true;
+                Header updated = Header.of(sequence(header.seq()), rendered.size, rendered.md5,
+                        rendered.sha256, rendered.entries);
+                if (write(store, key, updated, rendered, token)) {
+                    UPDATES.increment();
+                    derived(store, spec, updated, rendered);
+                    return true;
+                }
+                CONFLICTS.increment();
+                Retries.backoff(attempt);
+            } finally {
+                Files.deleteIfExists(rendered.file);
             }
-            CONFLICTS.increment();
-            Retries.backoff(attempt);
         }
         LOGGER.warn("listing {} could not be updated after {} version conflicts; regenerating it in place", key,
                 ATTEMPTS);
@@ -1057,8 +1175,8 @@ public final class StoredListing {
     private static void materialise(ArtifactStore store, Spec spec) throws IOException {
         Rendered rendered = render(spec);
         try {
-            Header header = Header.of(Math.max(1L, System.currentTimeMillis()),
-                    rendered.size, rendered.md5, rendered.sha256, rendered.entries);
+            Header header = Header.of(sequence(0L), rendered.size, rendered.md5, rendered.sha256,
+                    rendered.entries);
             if (write(store, spec.key(), header, rendered, null)) {
                 MATERIALISED.increment();
                 derived(store, spec, header, rendered);
@@ -1079,7 +1197,7 @@ public final class StoredListing {
         MessageDigest sha256 = digest("SHA-256");
         MessageDigest md5 = spec.md5() ? digest("MD5") : null;
         long size;
-        try (OutputStream out = Files.newOutputStream(file);
+        try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(file));
              OutputStream digesting = digesting(out, sha256, md5);
              Codec.Appender appender = spec.codec().append(digesting)) {
             spec.generator().generate((id, entry) -> {
@@ -1092,6 +1210,72 @@ public final class StoredListing {
         }
         size = Files.size(file);
         return new Rendered(file, size, md5 == null ? "" : hex(md5.digest()), hex(sha256.digest()), counter.count);
+    }
+
+    /**
+     * Render the stored document with {@code batch} applied, holding neither.
+     *
+     * <p>The counterpart of {@link #render}: same output, same temporary file, but the entries come from the
+     * stored document rather than from the generator. Both sequences are in ascending id order - the reader
+     * because a stored document is, the changes because they are collected into a sorted map - so applying one to
+     * the other is a single linear merge, and the update costs a buffer rather than the repository.
+     *
+     * <p>The batch is replayed rather than unioned, because order is meaningful within it: a prefix removal in one
+     * pending change can take out an entry an earlier one added, and a later change can re-add under a prefix an
+     * earlier removal cleared. Replaying gives the final state of every id the batch mentions; a stored id the
+     * batch never mentions can only be affected by a prefix removal, so those are applied to it directly.
+     */
+    private static Rendered merge(Spec spec, Served stored, List<Pending> batch) throws IOException {
+        SortedMap<String, Optional<byte[]>> resolved = new TreeMap<>();
+        List<String> prefixes = new ArrayList<>();
+        for (Pending pending : batch) {
+            for (String prefix : pending.prefixes()) {
+                prefixes.add(prefix);
+                resolved.replaceAll((id, value) -> id.startsWith(prefix) ? Optional.empty() : value);
+            }
+            resolved.putAll(pending.changes());
+        }
+        Path file = Files.createTempFile("jenreg-listing", ".tmp");
+        Counter counter = new Counter();
+        MessageDigest sha256 = digest("SHA-256");
+        MessageDigest md5 = spec.md5() ? digest("MD5") : null;
+        try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(file));
+             OutputStream digesting = digesting(out, sha256, md5);
+             Codec.Appender appender = spec.codec().append(digesting);
+             Codec.Reader reader = spec.codec().read(stored.body(), stored.header().size())) {
+            Iterator<Map.Entry<String, Optional<byte[]>>> changes = resolved.entrySet().iterator();
+            Map.Entry<String, Optional<byte[]>> change = changes.hasNext() ? changes.next() : null;
+            Optional<Map.Entry<String, byte[]>> entry = reader.next();
+            while (entry.isPresent() || change != null) {
+                int order = entry.isEmpty() ? 1
+                        : change == null ? -1
+                        : entry.get().getKey().compareTo(change.getKey());
+                if (order < 0) {
+                    // A stored entry the batch never names: it survives unless a prefix removal covers it.
+                    String id = entry.get().getKey();
+                    if (prefixes.stream().noneMatch(id::startsWith)) {
+                        appender.append(id, entry.get().getValue());
+                        counter.count++;
+                    }
+                    entry = reader.next();
+                } else {
+                    // The batch's own answer for this id, which already accounts for every prefix removal in it.
+                    if (change.getValue().isPresent()) {
+                        appender.append(change.getKey(), change.getValue().get());
+                        counter.count++;
+                    }
+                    if (order == 0) {
+                        entry = reader.next();   // the change replaced or removed the stored entry
+                    }
+                    change = changes.hasNext() ? changes.next() : null;
+                }
+            }
+        } catch (IOException | RuntimeException failed) {
+            Files.deleteIfExists(file);
+            throw failed;
+        }
+        return new Rendered(file, Files.size(file), md5 == null ? "" : hex(md5.digest()), hex(sha256.digest()),
+                counter.count);
     }
 
     /** The conditional write of a rendered document: its header and its bytes, streamed, never joined in heap. */
@@ -1110,6 +1294,54 @@ public final class StoredListing {
             return;
         }
         derive(spec.key(), new Document(header, Files.readAllBytes(rendered.file)), spec.derivation());
+    }
+
+    /** The first offset in {@code buffer[from, to)} where {@code pattern} occurs whole, or {@code -1}. Leftmost,
+     *  like the scan {@code split} performs, so a delimiter whose prefix repeats matches at the same place. */
+    private static int indexOf(byte[] buffer, int from, int to, byte[] pattern) {
+        outer:
+        for (int at = from; at <= to - pattern.length; at++) {
+            for (int index = 0; index < pattern.length; index++) {
+                if (buffer[at + index] != pattern[index]) {
+                    continue outer;
+                }
+            }
+            return at;
+        }
+        return -1;
+    }
+
+    /** {@code in} cut off after {@code limit} bytes - what lets a framed codec hand its inner codec the body
+     *  without the footer, when the end of the body is known by arithmetic rather than by looking. */
+    private static InputStream limited(InputStream in, long limit) {
+        return new FilterInputStream(in) {
+
+            private long left = limit;
+
+            @Override
+            public int read() throws IOException {
+                if (left <= 0) {
+                    return -1;
+                }
+                int read = super.read();
+                if (read >= 0) {
+                    left--;
+                }
+                return read;
+            }
+
+            @Override
+            public int read(byte[] buffer, int offset, int length) throws IOException {
+                if (left <= 0) {
+                    return -1;
+                }
+                int read = super.read(buffer, offset, (int) Math.min(length, left));
+                if (read > 0) {
+                    left -= read;
+                }
+                return read;
+            }
+        };
     }
 
     private static OutputStream digesting(OutputStream out, MessageDigest sha256, MessageDigest md5) {
@@ -1134,11 +1366,11 @@ public final class StoredListing {
 
     // ---- framing ----
 
-    private static Document document(long priorSeq, byte[] body, boolean md5, long entries) {
-        // Monotone per document, and past any sequence a forgotten predecessor could have reached (a wall-clock
-        // floor), so a derived document written against the old sequence never outranks the regenerated one.
-        long seq = Math.max(priorSeq + 1, System.currentTimeMillis());
-        return new Document(Header.of(seq, body, md5, entries), body);
+    /** The sequence a document written after {@code priorSeq} carries. Monotone per document, and past any
+     *  sequence a forgotten predecessor could have reached (a wall-clock floor), so a derived document written
+     *  against the old sequence never outranks the regenerated one. A first write passes {@code 0}. */
+    private static long sequence(long priorSeq) {
+        return Math.max(priorSeq + 1, System.currentTimeMillis());
     }
 
     /**

@@ -433,6 +433,31 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     /**
+     * The token without the body, which on this backend means the file read through the checksums rather than into
+     * an array.
+     *
+     * <p>The inherited body is {@code readVersioned(key).map(Versioned::token)}, and the SPI names all four shipped
+     * backends as overriding it. This one did not, so every caller here paid the whole object to learn its version -
+     * including {@code StoredListing}, which asks for the token of a document it is about to update <em>in order not
+     * to hold it</em>.
+     */
+    @Override
+    public Optional<Object> version(String key) throws IOException {
+        Path path = resolve(key);
+        if (!regularFile(path)) {
+            return Optional.empty();
+        }
+        try {
+            // Stamp before content, for the reason readVersioned states: a write landing in between pairs the OLD
+            // stamp with NEW bytes, so a compare-and-set from this token loses and retries - the safe direction.
+            long modified = Files.getLastModifiedTime(path).toMillis();
+            return Optional.of(token(modified, path));
+        } catch (NoSuchFileException | FileNotFoundException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * The opaque version token: the last-modified stamp <em>and</em> a digest of the stored bytes, so it identifies
      * the object incarnation rather than the tick it was written in.
      *
@@ -463,8 +488,37 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         crc.update(content);
         CRC32C crcc = new CRC32C();
         crcc.update(content);
-        return modified + ":" + content.length + ":" + Long.toHexString(crc.getValue()) + ":"
-                + Long.toHexString(crcc.getValue());
+        return token(modified, content.length, crc.getValue(), crcc.getValue());
+    }
+
+    /**
+     * The same token, computed over the file rather than over an array of its bytes.
+     *
+     * <p>Every component of the token is streamable - a stamp, a length and two rolling checksums - so the array the
+     * other overload takes was never the token's requirement, only its caller's. It is this one that the paths which
+     * do not want the object use: {@link #version}, and the compare half of both {@link #writeVersioned} overloads,
+     * where the <em>stored</em> document is what gets hashed and can be a listing sized by the whole repository. Read
+     * through an array those paths cost the stored object in heap however small the thing being written is, which is
+     * what made a one-file publish into a large folder fail on a server that could serve that folder perfectly well.
+     */
+    private static Object token(long modified, Path path) throws IOException {
+        CRC32 crc = new CRC32();
+        CRC32C crcc = new CRC32C();
+        long length = 0;
+        byte[] buffer = new byte[16 * 1024];
+        try (InputStream content = Files.newInputStream(path)) {
+            for (int read = content.read(buffer); read != -1; read = content.read(buffer)) {
+                crc.update(buffer, 0, read);
+                crcc.update(buffer, 0, read);
+                length += read;
+            }
+        }
+        return token(modified, length, crc.getValue(), crcc.getValue());
+    }
+
+    /** The one rendering both overloads agree on - the token is its text, so there is exactly one place it is made. */
+    private static Object token(long modified, long length, long crc, long crcc) {
+        return modified + ":" + length + ":" + Long.toHexString(crc) + ":" + Long.toHexString(crcc);
     }
 
     @Override
@@ -473,7 +527,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         synchronized (LOCKS[Math.floorMod(path.hashCode(), LOCKS.length)]) {
             boolean present = Files.isRegularFile(path);
             long modified = present ? Files.getLastModifiedTime(path).toMillis() : -1L;
-            Object current = present ? token(modified, Files.readAllBytes(path)) : null;
+            Object current = present ? token(modified, path) : null;
             if (!Objects.equals(current, expected)) {
                 return false;
             }
@@ -515,7 +569,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         synchronized (LOCKS[Math.floorMod(path.hashCode(), LOCKS.length)]) {
             boolean present = Files.isRegularFile(path);
             long modified = present ? Files.getLastModifiedTime(path).toMillis() : -1L;
-            Object current = present ? token(modified, Files.readAllBytes(path)) : null;
+            Object current = present ? token(modified, path) : null;
             if (!Objects.equals(current, expected)) {
                 return false;
             }
