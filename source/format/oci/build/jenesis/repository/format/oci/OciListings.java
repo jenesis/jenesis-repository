@@ -143,6 +143,19 @@ final class OciListings {
         return entries;
     }
 
+    /**
+     * <b>This one collects deliberately, and the sorted map is doing real work.</b> Every other
+     * repository-wide generator streams into a {@code Sink}, which owes its entries in ascending key
+     * order and takes that order from the scan.
+     *
+     * <p>That does not hold here: {@link #collect} walks the name tree <em>recursively</em>, composing
+     * {@code name + "/" + child} - so the nesting, and the same ordering mismatch a two-level scan has, is
+     * hidden inside the recursion rather than visible as a loop.
+     *
+     * <p>So the map is what puts these entries in order. Removing it would write a misordered
+     * document - which the codecs and the cursor paging both assume is ascending, and which nothing
+     * would report.
+     */
     private SortedMap<String, byte[]> generateCatalog() throws IOException {
         SortedMap<String, byte[]> entries = new TreeMap<>();
         collect("oci", "", entries);
