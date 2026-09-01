@@ -946,9 +946,11 @@ public final class StoredListing {
             Optional<ArtifactStore.Versioned> current = readStored(store, key);
             SortedMap<String, byte[]> entries;
             long seq;
+            byte[] before = null;   // the stored body, kept for the no-op comparison below rather than re-parsed
             if (current.isPresent()) {
                 Document document = parse(current.get().content(), key);
-                entries = codec.split(document.body());
+                before = document.body();
+                entries = codec.split(before);
                 seq = document.header().seq();
             } else {
                 boolean onlyRemovals = batch.stream().allMatch(pending ->
@@ -972,7 +974,10 @@ public final class StoredListing {
                 }
             }
             byte[] joined = codec.join(entries);
-            if (current.isPresent() && Arrays.equals(joined, parse(current.get().content(), key).body())) {
+            // Compared against the body parsed at the top of this attempt rather than parsing the stored bytes a
+            // second time. On a listing sized by the repository that second parse was another whole copy of the
+            // document, taken on the publish path to answer a question the first parse had already loaded.
+            if (before != null && Arrays.equals(joined, before)) {
                 return true;   // the changes leave the document as it is: nothing to write, nothing to derive
             }
             Document updated = document(seq, joined, spec.md5(), entries.size());
