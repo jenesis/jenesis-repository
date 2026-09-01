@@ -494,7 +494,7 @@ public final class StoredListing {
          */
         Derivation NONE = ignored -> { };
 
-        void after(Document document) throws IOException;
+        void after(Derived document) throws IOException;
     }
 
     /**
@@ -577,7 +577,15 @@ public final class StoredListing {
         }
 
         /** The same, for a body that was rendered somewhere other than heap and digested as it went. */
-        static Header of(long seq, long size, String md5, String sha256, long entries) {
+        /**
+         * The header of a body that was never held: the caller digested it as it wrote it.
+         *
+         * <p>The other factories take the bytes and digest them, which is right for a document small enough to
+         * have in hand and wrong for a twin of one that is not - a compressed package index is produced by a
+         * stream through a compressor into a file, and its digests fall out of that pass. Asking for them again
+         * would mean reading it back, which is the hold the streaming {@link #derive} exists to avoid.
+         */
+        public static Header of(long seq, long size, String md5, String sha256, long entries) {
             return new Header(seq, size, md5, sha256, entries);
         }
 
@@ -596,8 +604,46 @@ public final class StoredListing {
         }
     }
 
+    /**
+     * The document a {@link Derivation} was handed: its header, and its body to read.
+     *
+     * <h2>Contract</h2>
+     *
+     * <ol>
+     *   <li><b>Lifetime.</b> The body is readable only for the duration of {@link Derivation#after}. The write
+     *       that produced it renders to a temporary file and deletes that file when it returns, so a derivation
+     *       that hands the document to another thread - {@link #later} - must take its own copy <em>inside</em>
+     *       {@code after} before it queues. Reading it afterwards is reading a deleted file.</li>
+     *   <li><b>Re-openable.</b> {@link #open()} may be called more than once within that window; each call
+     *       returns a fresh stream positioned at the first byte.</li>
+     *   <li><b>Bounded reads only.</b> {@link #body()} materialises, and is the right answer for a twin computed
+     *       from a document bounded by something other than the repository - one coordinate's versions, a
+     *       manifest of one line per index. A twin of a repository-wide document (a compressed package index, a
+     *       whole-subdir repodata) must use {@link #open()}: holding it is the peak this class exists to avoid.</li>
+     * </ol>
+     */
+    public interface Derived {
+
+        Header header();
+
+        /** A fresh stream over the body, positioned at its first byte. */
+        InputStream open() throws IOException;
+
+        /** The body, materialised - only for a document clause 3 allows to be held. */
+        default byte[] body() throws IOException {
+            try (InputStream body = open()) {
+                return body.readAllBytes();
+            }
+        }
+    }
+
     /** A stored document, whole. */
-    public record Document(Header header, byte[] body) {
+    public record Document(Header header, byte[] body) implements Derived {
+
+        @Override
+        public InputStream open() {
+            return new ByteArrayInputStream(body);
+        }
     }
 
     /** A stored document opened for streaming: the header, and the body positioned at its first byte. */
@@ -1225,7 +1271,7 @@ public final class StoredListing {
 
     /** A derived twin that could not be written leaves the listing itself correct and is re-derived by the next
      *  write or the rebuild pass, so its failure is logged rather than failing the publish that already landed. */
-    private static void derive(String key, Document document, Derivation derivation) {
+    private static void derive(String key, Derived document, Derivation derivation) {
         try {
             derivation.after(document);
         } catch (IOException | RuntimeException e) {
@@ -1393,12 +1439,30 @@ public final class StoredListing {
         }
     }
 
-    /** Read the rendered body back only when something is going to look at it. */
-    private static void derived(ArtifactStore store, Spec spec, Header header, Rendered rendered) throws IOException {
+    /**
+     * Hand the document just written to its derivation, as a file rather than as bytes.
+     *
+     * <p>{@link Derivation#NONE} is still short-circuited, so a spec with no twin touches nothing. What changed is
+     * the spec that HAS one: this used to read the rendered file back whole, which put a document sized by the
+     * repository into heap immediately after taking the trouble not to. The file is the caller's and is deleted
+     * when the write returns - which is clause 1 of {@link Derived}, and why a deferring derivation copies first.
+     */
+    private static void derived(ArtifactStore store, Spec spec, Header header, Rendered rendered) {
         if (spec.derivation() == Derivation.NONE) {
             return;
         }
-        derive(spec.key(), new Document(header, Files.readAllBytes(rendered.file)), spec.derivation());
+        derive(spec.key(), new Derived() {
+
+            @Override
+            public Header header() {
+                return header;
+            }
+
+            @Override
+            public InputStream open() throws IOException {
+                return new BufferedInputStream(Files.newInputStream(rendered.file));
+            }
+        }, spec.derivation());
     }
 
     /** The first offset in {@code buffer[from, to)} where {@code pattern} occurs whole, or {@code -1}. Leftmost,
