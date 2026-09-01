@@ -881,21 +881,55 @@ public final class StoredListing {
     /** {@link #derive(ArtifactStore, String, long, byte[])} with the header the caller already computed for the
      *  body - a caller that publishes the twin's digests computes them once, here, and not again. */
     public static boolean derive(ArtifactStore store, String derived, Header header, byte[] body) throws IOException {
+        return derive(store, derived, header, body.length, () -> new ByteArrayInputStream(body));
+    }
+
+    /**
+     * The same, over a body too large to hold - a compressed twin of a listing sized by the repository.
+     *
+     * <p>{@code body} is opened once per attempt, so it must be re-openable: a temporary file, not a stream
+     * already consumed. The header is the caller's, computed as the bytes were produced, because a twin's digests
+     * are what the manifest naming it carries and computing them twice means holding it twice.
+     */
+    public static boolean derive(ArtifactStore store, String derived, Header header, long size, Body body)
+            throws IOException {
         long seq = header.seq();
         String key = key(derived);
-        byte[] framed = frame(header, body);
+        byte[] head = head(header);
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
-            Optional<ArtifactStore.Versioned> current = readStored(store, key);
-            if (current.isPresent() && parse(current.get().content(), key).header().seq() >= seq) {
-                return false;
+            // The token and the stored SEQUENCE, not the stored document. This used to read the existing twin
+            // whole to compare one number in its header - so writing a compressed index re-read the previous
+            // compressed index in full, every time, on a document sized by the repository.
+            Object token = store.version(key).orElse(null);
+            if (token != null) {
+                Optional<Served> current = openStored(store, key);
+                if (current.isPresent()) {
+                    long stored;
+                    try (Served document = current.get()) {
+                        stored = document.header().seq();
+                    }
+                    if (stored >= seq) {
+                        return false;
+                    }
+                }
             }
-            if (store.writeVersioned(key, framed, current.map(ArtifactStore.Versioned::token).orElse(null))) {
-                return true;
+            try (InputStream content = body.open();
+                 InputStream framed = new SequenceInputStream(new ByteArrayInputStream(head), content)) {
+                if (store.writeVersioned(key, framed, head.length + size, token)) {
+                    return true;
+                }
             }
             CONFLICTS.increment();
             Retries.backoff(attempt);
         }
         return false;
+    }
+
+    /** A re-openable body - a derived twin is written under compare-and-set, so a lost attempt reads it again. */
+    @FunctionalInterface
+    public interface Body {
+
+        InputStream open() throws IOException;
     }
 
     /**
