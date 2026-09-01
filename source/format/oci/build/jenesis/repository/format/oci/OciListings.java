@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.oci;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.store.JsonMembers;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.StoredListing;
@@ -15,8 +16,9 @@ import tools.jackson.databind.json.JsonMapper;
  * the catalog ({@code _catalog}, entries by image name), the latter re-derived from each image's tag list on every
  * write, so a push costs one rewrite of the image's tag list and one of the catalog, never a walk of the name tree.
  * A tag is listed exactly when the manifest it points at is not withheld - the screen the on-read enumeration
- * applied per tag - and an image exactly when it has a listed tag. Both documents are stored whole and paged in
- * memory for a client's {@code n}/{@code last} window.
+ * applied per tag - and an image exactly when it has a listed tag. A client's {@code n}/{@code last} window is cut
+ * from the stored document as it streams, and an unqualified request - which the Distribution specification says
+ * answers every name - is written to the socket as the names arrive; neither holds the document.
  */
 final class OciListings {
 
@@ -42,23 +44,13 @@ final class OciListings {
      * stops also means the parse ends at the window rather than at the end of the document.
      */
     static void names(InputStream body, String member, NameVisitor visitor) throws IOException {
-        try (JsonParser parser = JSON.createParser(body)) {
-            if (parser.nextToken() != JsonToken.START_OBJECT) {
-                return;                                          // not the expected listing object
-            }
-            while (parser.nextToken() == JsonToken.PROPERTY_NAME) {
-                boolean wanted = member.equals(parser.currentName());
-                parser.nextToken();                              // advance onto the field's value
-                if (wanted && parser.currentToken() == JsonToken.START_ARRAY) {
-                    JsonToken token;
-                    while ((token = parser.nextToken()) != null && token != JsonToken.END_ARRAY) {
-                        if (token == JsonToken.VALUE_STRING && !visitor.accept(parser.getString())) {
-                            return;
-                        }
-                    }
+        // The codec's own reader, driven to exhaustion rather than to a window: one parser, two shapes, so the
+        // walk a request makes and the read an update makes cannot decode the same document differently.
+        try (StoredListing.Codec.Reader reader = names(member).read(body, -1L)) {
+            for (Optional<Map.Entry<String, byte[]>> entry = reader.next(); entry.isPresent(); entry = reader.next()) {
+                if (!visitor.accept(entry.get().getKey())) {
                     return;
                 }
-                parser.skipChildren();                           // scalar (no-op) or an unrelated subtree
             }
         }
     }
@@ -100,6 +92,91 @@ final class OciListings {
                 }
                 return json.append("]}").toString().getBytes(StandardCharsets.UTF_8);
             }
+
+            /**
+             * The same document, written as the entries arrive.
+             *
+             * <p>Without this the inherited appender collects every entry into a map and calls {@link #join} at
+             * close - so a streaming generator above it streamed into a buffer, and a tag push rewrote the whole
+             * document in heap. A registry with 200,000 tags died in {@code join}'s {@code StringBuilder}, which
+             * is the one place all of that ends up.
+             */
+            @Override
+            public Appender append(OutputStream out) {
+                return new Appender() {
+
+                    private boolean opened, written;
+
+                    @Override
+                    public void append(String id, byte[] entry) throws IOException {
+                        open();
+                        if (written) {
+                            out.write(',');
+                        }
+                        written = true;
+                        out.write(entry);
+                    }
+
+                    @Override
+                    public void close() throws IOException {
+                        open();                                  // an empty document is still {"member":[]}
+                        out.write("]}".getBytes(StandardCharsets.UTF_8));
+                    }
+
+                    private void open() throws IOException {
+                        if (!opened) {
+                            out.write(("{" + JsonMembers.quote(member) + ":[").getBytes(StandardCharsets.UTF_8));
+                            opened = true;
+                        }
+                    }
+                };
+            }
+
+            /** The entries of a stored document, pulled one at a time out of the parser's bounded buffer. The
+             *  length is not consulted: the array's end is a token, not an offset. */
+            @Override
+            public Reader read(InputStream in, long ignored) throws IOException {
+                JsonParser parser = JSON.createParser(in);
+                boolean found = false;
+                if (parser.nextToken() == JsonToken.START_OBJECT) {
+                    while (!found && parser.nextToken() == JsonToken.PROPERTY_NAME) {
+                        boolean wanted = member.equals(parser.currentName());
+                        parser.nextToken();                      // advance onto the field's value
+                        if (wanted && parser.currentToken() == JsonToken.START_ARRAY) {
+                            found = true;
+                        } else {
+                            parser.skipChildren();               // scalar (no-op) or an unrelated subtree
+                        }
+                    }
+                }
+                boolean inArray = found;
+                return new Reader() {
+
+                    private boolean drained = !inArray;
+
+                    @Override
+                    public Optional<Map.Entry<String, byte[]>> next() throws IOException {
+                        while (!drained) {
+                            JsonToken token = parser.nextToken();
+                            if (token == null || token == JsonToken.END_ARRAY) {
+                                drained = true;
+                                return Optional.empty();
+                            }
+                            if (token == JsonToken.VALUE_STRING) {
+                                String name = parser.getString();
+                                return Optional.of(Map.entry(name,
+                                        JsonMembers.quote(name).getBytes(StandardCharsets.UTF_8)));
+                            }
+                        }
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public void close() {
+                        parser.close();
+                    }
+                };
+            }
         };
     }
 
@@ -120,8 +197,11 @@ final class OciListings {
     }
 
     StoredListing.Spec tagsSpec(String name) {
-        return StoredListing.Spec.materialising(tags(name), TAGS, () -> generateTags(name)).deriving(document -> {
-            if (TAGS.split(document.body()).isEmpty()) {
+        return StoredListing.Spec.of(tags(name), TAGS, sink -> generateTags(name, sink)).deriving(document -> {
+            // The header already counts the entries, so this asks it rather than splitting the body into a map of
+            // every tag to see whether the map is empty - a whole document parsed, on every tag push, to answer a
+            // question that is one field of the header the same write just computed.
+            if (document.header().entries() == 0) {
                 StoredListing.remove(store, catalogSpec(), name);
             } else {
                 StoredListing.put(store, catalogSpec(), name, JsonMembers.quote(name).getBytes(StandardCharsets.UTF_8));
@@ -133,14 +213,21 @@ final class OciListings {
         return StoredListing.Spec.materialising(CATALOG, REPOSITORIES, this::generateCatalog);
     }
 
-    private SortedMap<String, byte[]> generateTags(String name) throws IOException {
-        SortedMap<String, byte[]> entries = new TreeMap<>();
-        for (String tag : store.list("oci/" + name + "/tags")) {
-            if (servable(name, tag)) {
-                entries.put(tag, JsonMembers.quote(tag).getBytes(StandardCharsets.UTF_8));
-            }
-        }
-        return entries;
+    /**
+     * Every servable tag of one image, emitted as the store pages them.
+     *
+     * <p>Paged rather than {@code list}ed, and emitted rather than collected: a tag list is bounded by nothing but
+     * how many tags a user has pushed at one image, so the map this used to build was sized by that and so was the
+     * {@code list} that filled it. The scan hands back children in the store's lexicographic order, which is the
+     * ascending order a {@code Sink} owes and the order the codec and the cursor paging both read the document in.
+     */
+    private void generateTags(String name, StoredListing.Generator.Sink sink) throws IOException {
+        BoundedChildren.bounded().entries(Integer.MAX_VALUE).page(1_000)
+                .scan(store, "oci/" + name + "/tags", tag -> {
+                    if (servable(name, tag)) {
+                        sink.accept(tag, JsonMembers.quote(tag).getBytes(StandardCharsets.UTF_8));
+                    }
+                });
     }
 
     /**
@@ -171,10 +258,18 @@ final class OciListings {
             }
             String childName = name.isEmpty() ? child : name + "/" + child;
             if (child.equals("tags") && !name.isEmpty()) {
-                Optional<StoredListing.Document> document = StoredListing.read(store,
-                        StoredListing.Spec.materialising(tags(name), TAGS, () -> generateTags(name)));
-                if (document.isPresent() && !TAGS.split(document.get().body()).isEmpty()) {
-                    entries.put(name, JsonMembers.quote(name).getBytes(StandardCharsets.UTF_8));
+                // The image is catalogued when its tag list has an entry, and the header counts them - so the tag
+                // list is materialised if absent and then not read. Splitting its body into a map of every tag to
+                // ask whether the map is empty made building the catalogue cost every tag in the registry.
+                // Deliberately not tagsSpec(name): that one derives the catalogue, which is what is being built.
+                Optional<StoredListing.Served> document = StoredListing.open(store,
+                        StoredListing.Spec.of(tags(name), TAGS, sink -> generateTags(name, sink)));
+                if (document.isPresent()) {
+                    try (StoredListing.Served served = document.get()) {
+                        if (served.header().entries() > 0) {
+                            entries.put(name, JsonMembers.quote(name).getBytes(StandardCharsets.UTF_8));
+                        }
+                    }
                 }
                 continue;
             }

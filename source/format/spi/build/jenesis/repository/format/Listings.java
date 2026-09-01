@@ -33,6 +33,29 @@ public final class Listings {
      */
     public static void serve(FormatExchange exchange, StoredListing.Served document, String contentType)
             throws IOException {
+        serve(exchange, document, contentType, document.header().size(), out -> document.body().transferTo(out));
+    }
+
+    /** Writes a response body that is rendered from a stored document rather than copied out of it. */
+    @FunctionalInterface
+    public interface Body {
+
+        void writeTo(OutputStream out) throws IOException;
+    }
+
+    /**
+     * The same revalidation, over a body the format renders from the document instead of streaming it verbatim.
+     *
+     * <p>An OCI {@code tags/list} is the case: the stored document is the names, and the answer wraps them in a
+     * document of its own, so there are no stored bytes to copy - but the validator is still the stored document's
+     * sha256, because that is what changes exactly when the answer does. Going through here is what stops such a
+     * format from silently losing revalidation the moment it stops buffering, which is the defect recorded above
+     * and has now happened three times.
+     *
+     * @param length the response's length, or {@code -1} when it is only known once the body has been written.
+     */
+    public static void serve(FormatExchange exchange, StoredListing.Served document, String contentType,
+                             long length, Body body) throws IOException {
         String etag = '"' + document.header().sha256() + '"';
         exchange.setResponseHeader("ETag", etag);
         if (etag.equals(exchange.requestHeader("If-None-Match"))) {
@@ -43,12 +66,14 @@ public final class Listings {
             exchange.setResponseHeader("Content-Type", contentType);
         }
         if (exchange.method().equals("HEAD")) {
-            exchange.setResponseHeader("Content-Length", Long.toString(document.header().size()));
+            if (length >= 0) {
+                exchange.setResponseHeader("Content-Length", Long.toString(length));
+            }
             exchange.respond(200, -1L).close();
             return;
         }
-        try (OutputStream out = exchange.respond(200, document.header().size())) {
-            document.body().transferTo(out);
+        try (OutputStream out = exchange.respond(200, length)) {
+            body.writeTo(out);
         }
     }
 
