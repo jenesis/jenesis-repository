@@ -2,7 +2,6 @@ package build.jenesis.repository.format.oci;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.BoundedChildren;
-import build.jenesis.repository.store.JsonMembers;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.StoredListing;
 
@@ -60,28 +59,20 @@ final class OciListings {
             @Override
             public SortedMap<String, byte[]> split(byte[] document) {
                 SortedMap<String, byte[]> entries = new TreeMap<>();
-                String array = JsonMembers.split(new String(document, StandardCharsets.UTF_8)).get(member);
-                if (array != null) {
-                    int at = array.indexOf('[') + 1;
-                    while (true) {
-                        while (at < array.length() && " \t\r\n,".indexOf(array.charAt(at)) >= 0) {
-                            at++;
-                        }
-                        if (at >= array.length() || array.charAt(at) == ']') {
-                            break;
-                        }
-                        int end = JsonMembers.valueEnd(array, at);
-                        String element = array.substring(at, end);
-                        entries.put(JsonMembers.unquote(element), element.getBytes(StandardCharsets.UTF_8));
-                        at = end;
+                try (Reader reader = read(new ByteArrayInputStream(document), document.length)) {
+                    for (Optional<Map.Entry<String, byte[]>> entry = reader.next();
+                         entry.isPresent(); entry = reader.next()) {
+                        entries.put(entry.get().getKey(), entry.get().getValue());
                     }
+                } catch (IOException unreadable) {
+                    throw new UncheckedIOException(unreadable);
                 }
                 return entries;
             }
 
             @Override
             public byte[] join(SortedMap<String, byte[]> entries) {
-                StringBuilder json = new StringBuilder("{").append(JsonMembers.quote(member)).append(":[");
+                StringBuilder json = new StringBuilder("{").append(quoted(member)).append(":[");
                 boolean first = true;
                 for (byte[] entry : entries.values()) {
                     if (!first) {
@@ -125,7 +116,7 @@ final class OciListings {
 
                     private void open() throws IOException {
                         if (!opened) {
-                            out.write(("{" + JsonMembers.quote(member) + ":[").getBytes(StandardCharsets.UTF_8));
+                            out.write(("{" + quoted(member) + ":[").getBytes(StandardCharsets.UTF_8));
                             opened = true;
                         }
                     }
@@ -165,7 +156,7 @@ final class OciListings {
                             if (token == JsonToken.VALUE_STRING) {
                                 String name = parser.getString();
                                 return Optional.of(Map.entry(name,
-                                        JsonMembers.quote(name).getBytes(StandardCharsets.UTF_8)));
+                                        quoted(name).getBytes(StandardCharsets.UTF_8)));
                             }
                         }
                         return Optional.empty();
@@ -178,6 +169,18 @@ final class OciListings {
                 };
             }
         };
+    }
+
+    /**
+     * One JSON string, quoted and escaped by Jackson.
+     *
+     * <p>An entry of these documents is a bare name, and a document is those names in an array - so the fragment
+     * stored per entry is the name as a JSON string. It is written by the mapper rather than by wrapping quotes
+     * around it, because escaping is exactly the part a hand-rolled version gets wrong on the one input nobody
+     * tested with.
+     */
+    private static String quoted(String value) {
+        return JSON.writeValueAsString(value);
     }
 
     static final StoredListing.Codec TAGS = names("tags");
@@ -204,7 +207,7 @@ final class OciListings {
             if (document.header().entries() == 0) {
                 StoredListing.remove(store, catalogSpec(), name);
             } else {
-                StoredListing.put(store, catalogSpec(), name, JsonMembers.quote(name).getBytes(StandardCharsets.UTF_8));
+                StoredListing.put(store, catalogSpec(), name, quoted(name).getBytes(StandardCharsets.UTF_8));
             }
         });
     }
@@ -227,7 +230,7 @@ final class OciListings {
                     // disclosable, not servable: the scan just delivered this name out of the tag container, so
                     // the pointer is there by construction and re-reading it to learn that is pure cost.
                     if (disclosable(name, tag)) {
-                        sink.accept(tag, JsonMembers.quote(tag).getBytes(StandardCharsets.UTF_8));
+                        sink.accept(tag, quoted(tag).getBytes(StandardCharsets.UTF_8));
                     }
                 });
     }
@@ -269,7 +272,7 @@ final class OciListings {
                 if (document.isPresent()) {
                     try (StoredListing.Served served = document.get()) {
                         if (served.header().entries() > 0) {
-                            entries.put(name, JsonMembers.quote(name).getBytes(StandardCharsets.UTF_8));
+                            entries.put(name, quoted(name).getBytes(StandardCharsets.UTF_8));
                         }
                     }
                 }
@@ -371,7 +374,7 @@ final class OciListings {
     /** Re-decide one tag's membership from the store's current state - after a push, a hold or a release. */
     void refresh(String name, String tag) throws IOException {
         if (servable(name, tag)) {
-            StoredListing.put(store, tagsSpec(name), tag, JsonMembers.quote(tag).getBytes(StandardCharsets.UTF_8));
+            StoredListing.put(store, tagsSpec(name), tag, quoted(tag).getBytes(StandardCharsets.UTF_8));
         } else {
             StoredListing.remove(store, tagsSpec(name), tag);
         }
@@ -382,7 +385,7 @@ final class OciListings {
         StoredListing.Changes changes = new StoredListing.Changes();
         for (String tag : store.list("oci/" + name + "/tags")) {
             if (servable(name, tag)) {
-                changes.put(tag, JsonMembers.quote(tag).getBytes(StandardCharsets.UTF_8));
+                changes.put(tag, quoted(tag).getBytes(StandardCharsets.UTF_8));
             } else {
                 changes.remove(tag);
             }
