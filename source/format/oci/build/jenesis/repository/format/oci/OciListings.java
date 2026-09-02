@@ -231,7 +231,7 @@ final class OciListings {
      * the generator streams exactly as intended. It was the guard around the streaming that could not go that far.
      */
     private void generateTags(String name, StoredListing.Generator.Sink sink) throws IOException {
-        BoundedChildren.draining(1_000)
+        BoundedChildren.draining()
                 .scan(store, "oci/" + name + "/tags", tag -> {
                     // disclosable, not servable: the scan just delivered this name out of the tag container, so
                     // the pointer is there by construction and re-reading it to learn that is pure cost.
