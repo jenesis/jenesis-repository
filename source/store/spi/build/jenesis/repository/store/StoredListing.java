@@ -1534,15 +1534,19 @@ public final class StoredListing {
 
     /** The first offset in {@code buffer[from, to)} where {@code pattern} occurs whole, or {@code -1}. Leftmost,
      *  like the scan {@code split} performs, so a delimiter whose prefix repeats matches at the same place. */
-    private static int indexOf(byte[] buffer, int from, int to, byte[] pattern) {
-        outer:
+    /**
+     * The first occurrence of {@code pattern} in {@code buffer} between {@code from} and {@code to}, or {@code -1}.
+     *
+     * <p>Public because every codec that reads a listing document in windows needs it - scanning a buffer for the
+     * delimiter that ends an entry is what a windowed read <em>is</em> - and it had been written out a second time,
+     * identically, in the RPM codec. {@link Arrays#mismatch} does the comparison rather than a nested loop with a
+     * labelled continue: it is an intrinsic, so this is faster as well as shorter.
+     */
+    public static int indexOf(byte[] buffer, int from, int to, byte[] pattern) {
         for (int at = from; at <= to - pattern.length; at++) {
-            for (int index = 0; index < pattern.length; index++) {
-                if (buffer[at + index] != pattern[index]) {
-                    continue outer;
-                }
+            if (Arrays.mismatch(buffer, at, at + pattern.length, pattern, 0, pattern.length) < 0) {
+                return at;
             }
-            return at;
         }
         return -1;
     }
