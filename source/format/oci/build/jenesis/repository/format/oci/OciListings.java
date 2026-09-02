@@ -223,9 +223,15 @@ final class OciListings {
      * how many tags a user has pushed at one image, so the map this used to build was sized by that and so was the
      * {@code list} that filled it. The scan hands back children in the store's lexicographic order, which is the
      * ascending order a {@code Sink} owes and the order the codec and the cursor paging both read the document in.
+     *
+     * <p><b>It drains, and saying so is the fix for a ceiling nobody had written down.</b> Unbounding the entry cap
+     * alone left the default thousand round-trips in place, so a thousand pages of a thousand names put a hard stop
+     * at a million tags - and the stop was a {@code STEPS} traversal failure surfacing as a 500, not a short answer.
+     * Memory was never the problem: the canary that found this reported no {@code OutOfMemoryError} at all, because
+     * the generator streams exactly as intended. It was the guard around the streaming that could not go that far.
      */
     private void generateTags(String name, StoredListing.Generator.Sink sink) throws IOException {
-        BoundedChildren.bounded().entries(Integer.MAX_VALUE).page(1_000)
+        BoundedChildren.draining(1_000)
                 .scan(store, "oci/" + name + "/tags", tag -> {
                     // disclosable, not servable: the scan just delivered this name out of the tag container, so
                     // the pointer is there by construction and re-reading it to learn that is pure cost.
