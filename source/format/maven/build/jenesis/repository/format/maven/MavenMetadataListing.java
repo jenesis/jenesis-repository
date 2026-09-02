@@ -3,6 +3,7 @@ package build.jenesis.repository.format.maven;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.store.StoredListing;
 
 import module java.base;
@@ -113,9 +114,9 @@ final class MavenMetadataListing {
         return StoredListing.Spec.materialising(listing(coordinatePath), codec, () -> generate(coordinatePath, codec))
                 .deriving(document -> {
                     StoredListing.derive(store, listing(coordinatePath) + ".sha1", document.header().seq(),
-                            MavenMetadata.hex("SHA-1", document.body()).getBytes(StandardCharsets.UTF_8));
+                            Checksums.hex("SHA-1", document.body()).getBytes(StandardCharsets.UTF_8));
                     StoredListing.derive(store, listing(coordinatePath) + ".md5", document.header().seq(),
-                            MavenMetadata.hex("MD5", document.body()).getBytes(StandardCharsets.UTF_8));
+                            Checksums.hex("MD5", document.body()).getBytes(StandardCharsets.UTF_8));
                 });
     }
 
