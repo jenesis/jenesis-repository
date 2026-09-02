@@ -23,9 +23,16 @@ import module java.base;
 final class MavenMetadataListing {
 
     private static final String TEMPLATE = "";
-    private static final String VERSIONS_HOLE = "versions";
-    private static final String LATEST_HOLE = "latest";
-    private static final String RELEASE_HOLE = "release";
+
+    /**
+     * The places the template keeps for the sections a write substitutes. A control character delimits them because
+     * no Maven metadata document can contain one, so a hole cannot be spelled by the content it stands in for. They
+     * are written as escapes deliberately - as raw bytes they made this file {@code data} rather than text, which
+     * silently excluded it from every recursive search of the tree.
+     */
+    private static final String VERSIONS_HOLE = "\u0001versions\u0001";
+    private static final String LATEST_HOLE = "\u0001latest\u0001";
+    private static final String RELEASE_HOLE = "\u0001release\u0001";
 
     /** The document's codec for one coordinate: the versions as entries, the rest as the template. */
     static StoredListing.Codec codec(String groupId, String artifactId) {

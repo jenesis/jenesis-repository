@@ -246,11 +246,7 @@ public final class FeedSnapshots {
 
     private static String digest(byte[] content) {
         try {
-            StringBuilder hex = new StringBuilder(64);
-            for (byte value : MessageDigest.getInstance("SHA-256").digest(content)) {
-                hex.append(Character.forDigit(value >> 4 & 0xF, 16)).append(Character.forDigit(value & 0xF, 16));
-            }
-            return hex.toString();
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is required of every JVM", e);
         }
