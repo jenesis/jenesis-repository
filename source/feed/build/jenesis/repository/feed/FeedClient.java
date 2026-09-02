@@ -99,7 +99,7 @@ import module org.slf4j;
  */
 public final class FeedClient {
 
-    private static final Logger LOG = LoggerFactory.getLogger(FeedClient.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(FeedClient.class);
 
     private final String feed;
     private final FeedTransport transport;
@@ -270,7 +270,7 @@ public final class FeedClient {
             if (policy.failMode() == FeedPolicy.FailMode.CLOSED) {
                 throw oversized;
             }
-            LOG.warn("The {} feed degraded: {}", feed, oversized.getMessage());
+            LOGGER.warn("The {} feed degraded: {}", feed, oversized.getMessage());
             return Answer.degraded(oversized);
         }
         try {
@@ -282,7 +282,7 @@ public final class FeedClient {
             if (policy.failMode() == FeedPolicy.FailMode.CLOSED) {
                 throw failure;
             }
-            LOG.warn("The {} feed degraded: {}", feed, failure.getMessage());
+            LOGGER.warn("The {} feed degraded: {}", feed, failure.getMessage());
             return Answer.degraded(failure);
         }
     }
@@ -412,7 +412,7 @@ public final class FeedClient {
         if (policy.failMode() == FeedPolicy.FailMode.CLOSED) {
             throw raised;
         }
-        LOG.warn("The {} feed degraded: {}", feed, raised.getMessage(), raised);
+        LOGGER.warn("The {} feed degraded: {}", feed, raised.getMessage(), raised);
         return Answer.degraded(raised);
     }
 

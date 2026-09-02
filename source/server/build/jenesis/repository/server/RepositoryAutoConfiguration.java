@@ -27,10 +27,9 @@ import org.springframework.context.annotation.Conditional;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 import io.micrometer.observation.ObservationRegistry;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import module java.base;
+import module org.slf4j;
 
 /**
  * Publishes the repository as Spring Boot auto-configuration so a downstream distribution can consume it with a plain
@@ -344,11 +343,11 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public LogRingAppender logRingAppender(LogRingBuffer buffer) {
         LogRingAppender appender = new LogRingAppender(buffer);
-        org.slf4j.ILoggerFactory factory = org.slf4j.LoggerFactory.getILoggerFactory();
+        ILoggerFactory factory = LoggerFactory.getILoggerFactory();
         if (factory instanceof ch.qos.logback.classic.LoggerContext context) {
             appender.setContext(context);
             appender.start();
-            context.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).addAppender(appender);
+            context.getLogger(Logger.ROOT_LOGGER_NAME).addAppender(appender);
         }
         return appender;
     }

@@ -1,6 +1,7 @@
 package build.jenesis.repository.server;
 
 import module java.base;
+import module org.slf4j;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.importer.ImportSource;
@@ -38,8 +39,8 @@ import build.jenesis.repository.store.Publication;
  */
 public final class RepositoryImport {
 
-    private static final org.slf4j.Logger LOGGER =
-            org.slf4j.LoggerFactory.getLogger(RepositoryImport.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(RepositoryImport.class);
 
     private final List<RepositoryImporter> importers;
 

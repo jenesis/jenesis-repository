@@ -5,6 +5,7 @@ import build.jenesis.repository.store.QuotaArtifactStore;
 import build.jenesis.repository.store.TenantsProvider;
 
 import module java.base;
+import module org.slf4j;
 
 /**
  * Publishes this node's {@link NodeFingerprint} to the shared store on a heartbeat. A stable node id is
@@ -23,7 +24,7 @@ import module java.base;
  */
 public final class NodeFingerprintPublisher implements AutoCloseable {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(NodeFingerprintPublisher.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(NodeFingerprintPublisher.class);
 
     private final NodeConsistency consistency;
     private final ArtifactStore store;

@@ -58,7 +58,7 @@ import module org.slf4j;
  */
 public final class FeedSnapshots {
 
-    private static final Logger LOG = LoggerFactory.getLogger(FeedSnapshots.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(FeedSnapshots.class);
 
     /** The pointer object's name under the namespace - the one compare-and-set object of a feed. */
     private static final String POINTER = "current";
@@ -179,7 +179,7 @@ public final class FeedSnapshots {
             // it rather than overwriting: the loser's body is unreferenced and the winner's next prune collects it.
             Optional<Stamp> winner = current();
             if (winner.isPresent()) {
-                LOG.debug("A concurrent {} refresh committed generation {} first; adopting it",
+                LOGGER.debug("A concurrent {} refresh committed generation {} first; adopting it",
                         feed, winner.get().generation());
                 return winner.get();
             }
@@ -231,7 +231,7 @@ public final class FeedSnapshots {
         } catch (IOException | RuntimeException e) {
             // An orphan body wastes space and can never change what is served, so a failed cleanup must not fail a
             // commit that already succeeded (clause 5). The next successful commit tries again.
-            LOG.warn("Could not prune superseded {} feed snapshots under {}; they will be collected on the next"
+            LOGGER.warn("Could not prune superseded {} feed snapshots under {}; they will be collected on the next"
                     + " successful refresh", feed, namespace, e);
         }
     }

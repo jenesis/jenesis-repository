@@ -1,10 +1,10 @@
 package build.jenesis.repository.server;
 
+import module org.slf4j;
+
 import io.micrometer.common.KeyValue;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The logging pillar of the Observation API, in one place beside {@link Observations}: it logs each of this server's

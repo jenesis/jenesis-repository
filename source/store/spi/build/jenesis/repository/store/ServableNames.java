@@ -2,6 +2,7 @@ package build.jenesis.repository.store;
 
 import build.jenesis.repository.store.Publication;
 import module java.base;
+import module org.slf4j;
 
 /**
  * The one servable-name enumeration screen: every surface that materialises published NAMES (children, versions,
@@ -89,7 +90,7 @@ import module java.base;
  */
 public final class ServableNames {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(ServableNames.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ServableNames.class);
 
     /** The reserved review subtree name under {@code publish/} - owned here once (today duplicated as an inline
      *  {@code "quarantine"} constant in the free {@code BrowseController}, {@code PublishedAssets}, {@code BrowsePanel}

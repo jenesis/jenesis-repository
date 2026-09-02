@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.maven;
 
 import module java.base;
+import module org.slf4j;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.format.ArtifactLayout;
@@ -12,8 +13,6 @@ import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.format.java.bridge.ModuleView;
 import build.jenesis.repository.store.ArtifactStore;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The Maven layout ({@code /maven/...}): a {@code PUT} stores the blob content-addressed through the shared
@@ -396,7 +395,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                     // turns verification off for that pull. So the fill is refused exactly as a mismatch is: nothing
                     // linked, nothing served, the local 404 standing so a later pull re-hits the upstream and reads
                     // the sibling again.
-                    LOG.warn("Refusing to cache the proxied artifact {} unverified: {}. Nothing was cached or served; "
+                    LOGGER.warn("Refusing to cache the proxied artifact {} unverified: {}. Nothing was cached or served; "
                             + "the local 404 stands so a later pull re-hits the upstream.", prefix + rest,
                             expected.unreadable());
                     return resolvedAgainstAbsence(rest)
@@ -408,7 +407,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                     // this is the one outcome on this leg that says something happened to the bytes between the
                     // upstream and here, and a silent `false` (which is all a resolver sees - the local 404) would
                     // leave an operator with no way to tell a tampered mirror from an artifact nobody published.
-                    LOG.warn("Refusing to cache the proxied artifact {}: it does not match the SHA-1 {} the upstream "
+                    LOGGER.warn("Refusing to cache the proxied artifact {}: it does not match the SHA-1 {} the upstream "
                             + "publishes for it. Nothing was cached or served; the local 404 stands.", prefix + rest,
                             expected.hex());
                     return resolvedAgainstAbsence(rest)
@@ -434,7 +433,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      * though this one had genuinely answered. Clause 2 states the rule and why it is only this shape.
      */
     private static boolean unanswered(String target, FormatExchange exchange, String reason) throws IOException {
-        LOG.warn("Refusing to answer the Maven metadata request {} as an empty version list: {}. Nothing was served; "
+        LOGGER.warn("Refusing to answer the Maven metadata request {} as an empty version list: {}. Nothing was served; "
                 + "the local 404 would have been read by the resolver as the upstream's own answer.", target, reason);
         exchange.respond(502);
         return true;
@@ -463,14 +462,14 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     /** Refuse visibly on a path whose absence is itself an answer: the client is told this repository could not
      *  decide, rather than being handed a miss it would read as the upstream's own answer. */
     private static boolean undecided(String target, FormatExchange exchange, String reason) throws IOException {
-        LOG.warn("Refusing to answer the proxied descriptor {} as an absent descriptor: {}. Nothing was served; the "
+        LOGGER.warn("Refusing to answer the proxied descriptor {} as an absent descriptor: {}. Nothing was served; the "
                 + "local 404 would have been read by the client as \"this component publishes no module metadata\", "
                 + "and it would have resolved a different variant without an error.", target, reason);
         exchange.respond(502);
         return true;
     }
 
-    private static final Logger LOG = LoggerFactory.getLogger(MavenFormat.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MavenFormat.class);
 
     /** A Maven checksum or signature sibling - itself the integrity token, so it is proxied as-is, not re-verified. */
     private static boolean isChecksum(String rest) {

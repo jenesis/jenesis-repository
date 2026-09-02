@@ -6,6 +6,7 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 import module java.base;
+import module org.slf4j;
 
 /**
  * Keeps the OCI {@linkplain OciListings stored tag lists and catalog} in step with the transitions that happen off
@@ -15,7 +16,7 @@ import module java.base;
  */
 public final class OciListingObserver implements ListingObserver {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(OciListingObserver.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(OciListingObserver.class);
 
     public OciListingObserver() {
     }

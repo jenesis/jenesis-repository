@@ -1,6 +1,7 @@
 package build.jenesis.repository.store;
 
 import module java.base;
+import module org.slf4j;
 
 /**
  * The config-driven enable/disable convention for every discovered SPI implementation, defined once here in the
@@ -42,7 +43,7 @@ import module java.base;
  */
 public final class Features {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(Features.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(Features.class);
 
     /** Namespace shared with the Spring property schema; a feature toggle is {@code jenreg.<feature>}. */
     private static final String NAMESPACE = "jenreg.";

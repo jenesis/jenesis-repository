@@ -13,6 +13,7 @@ import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkProvider;
 
 import module java.base;
+import module org.slf4j;
 
 /**
  * The free edition's scheduled driver of the shared {@link RebuildPass}: on a cadence it joins the pass over the
@@ -27,7 +28,7 @@ import module java.base;
  */
 public final class RebuildScheduler implements AutoCloseable {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(RebuildScheduler.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RebuildScheduler.class);
 
     /** The cadence setting: an ISO-8601 duration ({@code PT6H}), a simple one ({@code 6h}, {@code 30m}), or
      *  {@code off}/{@code 0}. */
