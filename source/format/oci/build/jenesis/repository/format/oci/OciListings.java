@@ -292,23 +292,26 @@ final class OciListings {
      * has nothing to claim, and the first {@code tags/list} generates the document inline: measured at 200,000
      * tags, <b>35 seconds</b> on a request thread against 186 ms once it exists.
      *
-     * <p>Reads nothing it does not need: an image whose tag list is already stored is skipped on a header probe,
-     * so a converged registry does no work here and the pass stays read-first.
+     * <p>Under {@link StoredListing.Rebuilder.Scope#MISSING} an image whose tag list is already stored is skipped
+     * on a header probe, so a converged registry does no work and the repair pass stays read-first. Under
+     * {@code ALL} every tag list is regenerated, which is what an import needs: it laid the pointers out without
+     * the observers, so a read that raced the walk may have left a document that exists and is short.
      */
-    int materialise() throws IOException {
+    int materialise(StoredListing.Rebuilder.Scope scope) throws IOException {
         List<String> images = new ArrayList<>();
         images(store, "oci", "", images);
-        int created = 0;
+        int built = 0;
         for (String name : images) {
-            if (StoredListing.header(store, tags(name)).isEmpty()) {
+            if (scope == StoredListing.Rebuilder.Scope.ALL
+                    || StoredListing.header(store, tags(name)).isEmpty()) {
                 StoredListing.rebuild(store, tagsSpec(name));
-                created++;
+                built++;
             }
         }
-        if (created > 0 || StoredListing.header(store, CATALOG).isEmpty()) {
+        if (built > 0 || StoredListing.header(store, CATALOG).isEmpty()) {
             StoredListing.rebuild(store, catalogSpec());
         }
-        return created;
+        return built;
     }
 
     /** Every image name under the {@code oci/} tree - a name is a node carrying a {@code tags} container. */

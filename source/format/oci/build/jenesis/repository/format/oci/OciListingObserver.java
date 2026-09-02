@@ -66,7 +66,7 @@ public final class OciListingObserver implements ListingObserver {
     }
 
     @Override
-    public int materialise(ArtifactStore store) throws IOException {
-        return new OciListings(store).materialise();
+    public int materialise(ArtifactStore store, StoredListing.Rebuilder.Scope scope) throws IOException {
+        return new OciListings(store).materialise(scope);
     }
 }

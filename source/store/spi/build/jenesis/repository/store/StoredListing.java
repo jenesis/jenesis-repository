@@ -1690,8 +1690,27 @@ public final class StoredListing {
          * of a format's namespace belongs; a format whose content only ever arrives by publish through itself has
          * nothing to add and inherits the empty default.
          */
-        default int materialise(ArtifactStore store) throws IOException {
+        default int materialise(ArtifactStore store, Scope scope) throws IOException {
             return 0;
+        }
+
+        /**
+         * Which of the implied listings a caller wants built.
+         *
+         * <p>The two callers differ, and the difference is a wrong answer rather than a slow one. The repair pass
+         * wants {@link #MISSING}: it regenerates every stored document in its second phase anyway, so building
+         * one that already exists here would be work done twice. An import wants {@link #ALL}, because it laid
+         * content out <em>without</em> the observers that maintain listings - so a read that raced the walk may
+         * have generated a document from the content that existed at that instant, and that document exists, is
+         * short, and would be skipped by a probe for absence.
+         */
+        enum Scope {
+
+            /** Only listings that do not exist yet. */
+            MISSING,
+
+            /** Every listing the content implies, whether stored or not. */
+            ALL
         }
     }
 
@@ -1705,7 +1724,8 @@ public final class StoredListing {
         for (Rebuilder rebuilder : rebuilders) {
             // Absent listings first: a document created here is then walked below like any other, so an imported
             // repository converges in one pass rather than needing a second to repair what the first invented.
-            created += rebuilder.materialise(store);
+            // MISSING, because the walk below regenerates everything that already exists.
+            created += rebuilder.materialise(store, Rebuilder.Scope.MISSING);
         }
         List<String> keys = new ArrayList<>();
         collect(store, ROOT.substring(0, ROOT.length() - 1), keys);
