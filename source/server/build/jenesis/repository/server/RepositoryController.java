@@ -66,72 +66,41 @@ public class RepositoryController {
      *  memoized seams use; a benign race logs the same report twice and never loses one. */
     private volatile List<String> reportedCapabilityProblems = List.of();
 
+    /**
+     * The free single-tenant entry point: routing, dispatch, import sources and a pull-through fetcher, with every
+     * optional concern left off - no batch ingestion, no deployment settings, no un-scoped root, no routed serving
+     * and no edition hooks. It is the shape a deployment that configures none of those gets.
+     */
     public RepositoryController(RepositoryRouting routing,
                                 FormatDispatcher dispatcher,
                                 List<ImportSourceProvider> importSources,
                                 ProxyFormat.Fetcher fetcher) {
-        this(routing, dispatcher, importSources, fetcher, null);
+        this(routing, dispatcher, importSources, fetcher, null, key -> null, null, RoutedServing.NONE, EdgeHooks.NONE);
     }
 
-    /** As above, with batch archive ingestion wired in: a {@code PUT}/{@code POST} carrying the explode header is
-     *  exploded into per-entry publishes through the same {@link FormatDispatcher} when {@code batch} claims it.
-     *  A {@code null} {@code batch} leaves the feature off (the header is then an inert plain upload). */
-    public RepositoryController(RepositoryRouting routing,
-                                FormatDispatcher dispatcher,
-                                List<ImportSourceProvider> importSources,
-                                ProxyFormat.Fetcher fetcher,
-                                BatchIngestion batch) {
-        this(routing, dispatcher, importSources, fetcher, batch, key -> null);
-    }
-
-    /** As above, resolving each request's {@link build.jenesis.repository.format.FormatExchange#setting(String)}
-     *  through {@code settings} (a bare setting key to its effective value, {@code null} when unset), so a format can
-     *  read a deployment toggle - the Maven metadata computation opt-in, say - off the exchange. A deployment builds
-     *  it from its configuration; {@code key -> null} keeps every format on its shipped default. */
-    public RepositoryController(RepositoryRouting routing,
-                                FormatDispatcher dispatcher,
-                                List<ImportSourceProvider> importSources,
-                                ProxyFormat.Fetcher fetcher,
-                                BatchIngestion batch,
-                                UnaryOperator<String> settings) {
-        this(routing, dispatcher, importSources, fetcher, batch, settings, null);
-    }
-
-    /** As above, holding the un-scoped {@code root} {@link ArtifactStore} so the {@code /api/assets} enumeration can
-     *  scope to an explicitly named {@code repo} within the request's tenant ({@code root.scope(tenant).scope(repo)},
-     *  the same chain {@link RepositoryRouting} resolves). A {@code null} {@code root} leaves the enumeration on the
-     *  request's own routed space, so the convenience constructors above still serve the fixed-tenant deployment. */
-    public RepositoryController(RepositoryRouting routing,
-                                FormatDispatcher dispatcher,
-                                List<ImportSourceProvider> importSources,
-                                ProxyFormat.Fetcher fetcher,
-                                BatchIngestion batch,
-                                UnaryOperator<String> settings,
-                                ArtifactStore root) {
-        this(routing, dispatcher, importSources, fetcher, batch, settings, root, RoutedServing.NONE);
-    }
-
-    /** As above, consulting {@code routed} on a read ({@code GET}/{@code HEAD}) so a repository defined as a
-     *  read-through proxy or a group view serves across its backings rather than only its own hosted store; a plain
-     *  hosted repository is dispatched normally, keeping the format-level pull-through. {@link RoutedServing#NONE}
-     *  (the default the convenience constructors pass) leaves every repository on its own store, so the free
-     *  single-tenant edition is unchanged. */
-    public RepositoryController(RepositoryRouting routing,
-                                FormatDispatcher dispatcher,
-                                List<ImportSourceProvider> importSources,
-                                ProxyFormat.Fetcher fetcher,
-                                BatchIngestion batch,
-                                UnaryOperator<String> settings,
-                                ArtifactStore root,
-                                RoutedServing routed) {
-        this(routing, dispatcher, importSources, fetcher, batch, settings, root, routed, EdgeHooks.NONE);
-    }
-
-    /** As above, threading an edition's {@link EdgeHooks} into the shared screening edge so a paid edition plugs its
-     *  ingress concerns (tenant binding, a release-immutability {@code 409}, a quarantine-dispatch record, deploy
-     *  observation) into the one free {@link ScreenedDispatch} rather than forking a second deploy controller.
-     *  {@link EdgeHooks#NONE} (the default every convenience constructor above passes) is the free no-op, so the free
-     *  edition's write choreography is byte-for-byte unchanged. */
+    /**
+     * Every concern a deployment can wire in, each with a documented "off" value - which is what the four
+     * intermediate constructors between this and the convenience one above used to express, one argument at a time.
+     * Counting their callers is what settled it: a deployment builds this full form and a test builds the bare one,
+     * and the four in between had none, so each existed only to be delegated to by the next. What they carried that
+     * was worth keeping was the account of what each argument turns on, which is here instead.
+     *
+     * @param batch     explodes a {@code PUT}/{@code POST} carrying the explode header into per-entry publishes
+     *                  through the same dispatcher when it claims the archive; {@code null} leaves the header an
+     *                  inert plain upload.
+     * @param settings  resolves each request's {@link build.jenesis.repository.format.FormatExchange#setting(String)}
+     *                  - a bare setting key to its effective value, {@code null} when unset - so a format can read a
+     *                  deployment toggle off the exchange; {@code key -> null} keeps every format on its shipped
+     *                  default.
+     * @param root      the un-scoped store, so the {@code /api/assets} enumeration can scope to an explicitly named
+     *                  {@code repo} within the request's tenant; {@code null} leaves it on the request's own routed
+     *                  space.
+     * @param routed    consulted on a read so a repository defined as a read-through proxy or a group view serves
+     *                  across its backings; {@link RoutedServing#NONE} leaves every repository on its own store.
+     * @param hooks     an edition's ingress concerns - tenant binding, release-immutability, quarantine dispatch,
+     *                  deploy observation - threaded into the one shared screening edge rather than forked into a
+     *                  second deploy controller; {@link EdgeHooks#NONE} is the free no-op.
+     */
     public RepositoryController(RepositoryRouting routing,
                                 FormatDispatcher dispatcher,
                                 List<ImportSourceProvider> importSources,
