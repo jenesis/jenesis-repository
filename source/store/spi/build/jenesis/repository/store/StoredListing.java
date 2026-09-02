@@ -986,9 +986,36 @@ public final class StoredListing {
      * meanwhile serves the previous one. The work itself runs {@code derivation} and is expected to call
      * {@link #derive}.
      */
+    /**
+     * Deferred work that holds something until it runs - and must be told when it will not.
+     *
+     * <p>Named for the mechanism rather than the timing, because {@code Deferred} beside it is the container's
+     * shutdown handle and means something else entirely.
+     *
+     * <p>{@link #later} coalesces per derived key: a derivation queued while an older one for the same twin still
+     * waits <em>replaces</em> it, and the replaced one is dropped without running. A derivation that only reads
+     * the store loses nothing by that. One that copied the document first - which a deferred derivation must,
+     * since the body it was handed is readable only for the length of the call that queued it - loses the copy,
+     * and the file stays on disk forever.
+     */
+    public interface Coalesced extends Runnable {
+
+        /** Called instead of {@link #run()} when a newer derivation of the same twin has replaced this one. */
+        void superseded();
+    }
+
     public static void later(String derived, Runnable derivation) {
+        Runnable superseded;
         synchronized (LATER) {
-            LATER.put(derived, derivation);
+            superseded = LATER.put(derived, derivation);
+        }
+        // A replaced derivation never runs, so anything it was holding on the queue's behalf is released here.
+        // This is not housekeeping: a deferred derivation may hold a COPY of the document, because the body it was
+        // handed is only readable for the length of the call that queued it (Derived, clause 1) - so discarding
+        // the runnable silently without this leaks that copy, once per coalesced write. Conda's twin does exactly
+        // that, and four such files were found on a machine after an evening of test runs.
+        if (superseded instanceof Coalesced coalesced) {
+            coalesced.superseded();
         }
         LATER_EXECUTOR.execute(() -> {
             Runnable work;
