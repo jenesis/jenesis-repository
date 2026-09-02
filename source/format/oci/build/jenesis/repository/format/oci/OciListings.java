@@ -282,6 +282,53 @@ final class OciListings {
         }
     }
 
+    /**
+     * Create the tag lists this registry's stored pointers imply but which do not exist yet, and the catalogue
+     * over them.
+     *
+     * <p>The case this exists for is a <b>migration</b>. {@link OciImporter} lays a source registry out directly -
+     * a tag becomes an {@code oci/<name>/tags/<tag>} pointer without a push through this format - so after an
+     * import every pointer is present and no tag list is. The repair pass regenerates listings that exist and so
+     * has nothing to claim, and the first {@code tags/list} generates the document inline: measured at 200,000
+     * tags, <b>35 seconds</b> on a request thread against 186 ms once it exists.
+     *
+     * <p>Reads nothing it does not need: an image whose tag list is already stored is skipped on a header probe,
+     * so a converged registry does no work here and the pass stays read-first.
+     */
+    int materialise() throws IOException {
+        List<String> images = new ArrayList<>();
+        images(store, "oci", "", images);
+        int created = 0;
+        for (String name : images) {
+            if (StoredListing.header(store, tags(name)).isEmpty()) {
+                StoredListing.rebuild(store, tagsSpec(name));
+                created++;
+            }
+        }
+        if (created > 0 || StoredListing.header(store, CATALOG).isEmpty()) {
+            StoredListing.rebuild(store, catalogSpec());
+        }
+        return created;
+    }
+
+    /** Every image name under the {@code oci/} tree - a name is a node carrying a {@code tags} container. */
+    private static void images(ArtifactStore store, String prefix, String name, List<String> images)
+            throws IOException {
+        for (String child : store.list(prefix)) {
+            if (child.equals("uploads") || child.equals("upload-sessions") || child.equals("types")
+                    || child.equals("manifests")) {
+                continue;
+            }
+            if (child.equals("tags")) {
+                if (!name.isEmpty()) {
+                    images.add(name);
+                }
+                continue;
+            }
+            images(store, prefix + "/" + child, name.isEmpty() ? child : name + "/" + child, images);
+        }
+    }
+
     /** Regenerate the listing at this key if it is an OCI one: an image's tag list or the catalog. */
     boolean rebuild(String listing) throws IOException {
         if (listing.equals(CATALOG)) {

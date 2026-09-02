@@ -2,7 +2,9 @@ package build.jenesis.repository.format.oci.test;
 
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.oci.OciFormat;
+import build.jenesis.repository.format.oci.OciListingObserver;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -715,6 +717,41 @@ class OciFormatTest {
             hits.incrementAndGet();
             return Optional.of(response);
         };
+    }
+
+    /**
+     * A migrated registry's tag lists are built by the repair pass, not by whoever asks first.
+     *
+     * <p>{@code OciImporter} lays a source registry out directly - a tag becomes an
+     * {@code oci/<name>/tags/<tag>} pointer with no push through this format - so after an import every pointer
+     * exists and no tag list does. The repair pass regenerates listings that <em>exist</em>, so it had nothing to
+     * claim, and the first {@code tags/list} generated the document inline: 35 seconds at 200,000 tags, on a
+     * request thread, once per image.
+     *
+     * <p>This seeds exactly that state - a pointer with no listing - and asserts the pass creates it. The
+     * assertion that it is <b>absent beforehand</b> is what makes the test bite: without it the pass would appear
+     * to work simply because the read materialises what it finds missing, which is the defect.
+     */
+    @Test
+    void the_repair_pass_creates_a_tag_list_a_migration_left_absent() throws IOException {
+        // As an import lays it out: the manifest by digest, its type sidecar, and the tag pointer - no push.
+        String manifest = "{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\"}";
+        String digest = "sha256:" + sha256(manifest.getBytes(StandardCharsets.UTF_8));
+        store.write("blobs/" + digest.substring("sha256:".length()),
+                new ByteArrayInputStream(manifest.getBytes(StandardCharsets.UTF_8)));
+        store.writeVersioned("oci/types/" + digest.substring("sha256:".length()),
+                "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/imported/tags/1.0", digest.getBytes(StandardCharsets.UTF_8), null);
+
+        assertThat(StoredListing.header(store, "oci/imported/tags/list"))
+                .as("a migration leaves the pointer and no listing - which is the whole defect")
+                .isEmpty();
+
+        int created = StoredListing.rebuildAll(store, List.of(new OciListingObserver()));
+
+        assertThat(created).as("the pass created the absent tag list").isPositive();
+        assertThat(StoredListing.header(store, "oci/imported/tags/list"))
+                .as("and it is stored, so no request has to generate it").isPresent();
     }
 
     @Test
