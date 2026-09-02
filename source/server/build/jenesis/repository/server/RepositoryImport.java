@@ -151,22 +151,24 @@ public final class RepositoryImport {
         if (rebuilders.isEmpty()) {
             return;
         }
-        try {
-            // rebuildAll, not materialise: creating the absent ones is not enough here, and the difference is a
-            // wrong answer rather than a slow one. A consumer reading DURING the walk finds the listing absent and
-            // generates it inline - from the tags laid out so far - so by the time the walk ends there is a
-            // document that exists and is short. Create-if-absent probes its header, finds it present and leaves
-            // it that way, and the registry serves an incomplete tag list until some later pass regenerates it.
-            // The walk laid content out without the observers that maintain listings, so every listing its content
-            // implies is suspect, not only the missing ones.
-            int rebuilt = StoredListing.rebuildAll(store, rebuilders);
-            if (rebuilt > 0) {
-                LOGGER.info("Import built or regenerated {} listing(s) the migrated content implies, so no read "
-                        + "has to and none is left short by a read that raced the walk", rebuilt);
+        int rebuilt = 0;
+        for (StoredListing.Rebuilder rebuilder : rebuilders) {
+            try {
+                // Scope.ALL, and only what this format's own content implies. ALL rather than MISSING because a
+                // consumer reading DURING the walk finds the listing absent and generates it inline from the
+                // content laid out so far - so by the time the walk ends there is a document that exists and is
+                // short, which a probe for absence would skip and leave served. And the format's own walk rather
+                // than rebuildAll, which regenerates every listing in the store: a small import into a large
+                // repository has no business rewriting listings it never touched.
+                rebuilt += rebuilder.materialise(store, StoredListing.Rebuilder.Scope.ALL);
+            } catch (IOException | RuntimeException e) {
+                LOGGER.warn("A listing the imported content implies could not be built; the repair pass builds it, "
+                        + "and a read of it meanwhile pays for it or sees it short", e);
             }
-        } catch (IOException | RuntimeException e) {
-            LOGGER.warn("The listings the imported content implies could not all be built; the repair pass builds "
-                    + "them, and a read of one meanwhile pays for it or sees it short", e);
+        }
+        if (rebuilt > 0) {
+            LOGGER.info("Import built {} listing(s) the migrated content implies, so no read has to and none is "
+                    + "left short by a read that raced the walk", rebuilt);
         }
     }
 

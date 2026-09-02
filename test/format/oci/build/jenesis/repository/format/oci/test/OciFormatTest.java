@@ -764,7 +764,8 @@ class OciFormatTest {
         // The walk lays out the rest.
         store.writeVersioned("oci/racing/tags/2.0", digest.getBytes(StandardCharsets.UTF_8), null);
 
-        StoredListing.rebuildAll(store, List.of(new OciListingObserver()));
+        // What the import does at completion, which is the path under test.
+        new OciListingObserver().materialise(store, StoredListing.Rebuilder.Scope.ALL);
 
         FakeExchange after = new FakeExchange("GET", "/v2/racing/tags/list");
         format.handle(after, store);
