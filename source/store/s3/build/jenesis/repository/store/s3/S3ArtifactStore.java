@@ -50,17 +50,6 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
         this(s3, presigner, bucket, "", null, true);
     }
 
-    /** As {@link #S3ArtifactStore(S3Client, String)} but with an {@code aws:kms} key id for server-side encryption. */
-    public S3ArtifactStore(S3Client s3, String bucket, String kmsKeyId) {
-        this(s3, null, bucket, "", kmsKeyId, true);
-    }
-
-    /** Full store: a {@link S3Presigner} for direct-fetch GET URLs ({@link #presign}) and an {@code aws:kms} key id
-     *  for server-side encryption ({@link #encrypt}). Either may be {@code null} to fall back to streaming / SSE-S3. */
-    public S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String kmsKeyId) {
-        this(s3, presigner, bucket, "", kmsKeyId, true);
-    }
-
     /** The provider's constructor, which is the only one that decides {@code streamingWrites}; the public ones
      *  above take the default, since a caller building a store by hand is not the case the switch exists for. */
     public S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String kmsKeyId,
