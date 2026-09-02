@@ -1645,6 +1645,27 @@ public final class StoredListing {
         /** Regenerate the listing at this key if it is one of this rebuilder's; {@code false} when it is not. A
          *  derived twin is regenerated with its source and answers {@code true} without work of its own. */
         boolean rebuild(String listing, ArtifactStore store) throws IOException;
+
+        /**
+         * Create the listings this format's stored content implies but which do not exist yet. Returns how many
+         * were created; the default creates none, so a format is never wrong for not implementing this.
+         *
+         * <p><b>Why this is not covered by {@link #rebuild}.</b> The repair pass walks the listing namespace and
+         * asks each rebuilder to claim what it finds, so it regenerates documents that <em>exist</em>. That was
+         * held to be sufficient because a format's listing is created by a publish through that format - and it is
+         * not: a <em>migration</em> lays content out directly. After an import from an incumbent manager the tag
+         * pointers are all there and the tag list is not, so the daily pass has nothing to claim and the first
+         * client request generates it inline. Measured at 200,000 tags: <b>35 seconds</b> on a request thread,
+         * against 186 ms once the document exists.
+         *
+         * <p>So this is &sect;5's clause said for stored listings - derived state converges from the durable store
+         * rather than being paid for by whoever asks first. It runs on the maintenance pass, which is where a walk
+         * of a format's namespace belongs; a format whose content only ever arrives by publish through itself has
+         * nothing to add and inherits the empty default.
+         */
+        default int materialise(ArtifactStore store) throws IOException {
+            return 0;
+        }
     }
 
     /**
@@ -1653,6 +1674,12 @@ public final class StoredListing {
      * rebuilder owns is left as it is. Returns how many documents were regenerated.
      */
     public static int rebuildAll(ArtifactStore store, List<? extends Rebuilder> rebuilders) throws IOException {
+        int created = 0;
+        for (Rebuilder rebuilder : rebuilders) {
+            // Absent listings first: a document created here is then walked below like any other, so an imported
+            // repository converges in one pass rather than needing a second to repair what the first invented.
+            created += rebuilder.materialise(store);
+        }
         List<String> keys = new ArrayList<>();
         collect(store, ROOT.substring(0, ROOT.length() - 1), keys);
         int rebuilt = 0;
@@ -1665,7 +1692,7 @@ public final class StoredListing {
                 }
             }
         }
-        return rebuilt;
+        return rebuilt + created;
     }
 
     // ---- observability ----

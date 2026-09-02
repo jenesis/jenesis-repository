@@ -64,4 +64,9 @@ public final class OciListingObserver implements ListingObserver {
     public boolean rebuild(String listing, ArtifactStore store) throws IOException {
         return new OciListings(store).rebuild(listing);
     }
+
+    @Override
+    public int materialise(ArtifactStore store) throws IOException {
+        return new OciListings(store).materialise();
+    }
 }
