@@ -760,10 +760,50 @@ public final class StoredListing {
             if (served.isPresent()) {
                 return served;
             }
-            materialise(store, spec);
+            materialiseOnce(store, spec, key);
         }
         return Optional.empty();
     }
+
+    /**
+     * Materialise the document, or wait for the materialisation another caller is already running.
+     *
+     * <p>A listing is absent exactly when nobody has read or written it yet - which is when a burst of readers is
+     * most likely, because whatever made the repository interesting just happened. Ten of them arriving together
+     * used to run ten generations of the same document: each probed, found nothing, and walked the store. One
+     * write won the compare-and-set and the other nine were thrown away, having cost the same as the winner. On a
+     * document that takes tens of seconds to generate, that is the difference between one slow request and ten.
+     *
+     * <p>So the first caller builds and the rest wait on it. They are not given the result - they return to the
+     * loop above and probe the store again, which is what they would have done anyway and keeps this function's
+     * only job the suppression of duplicate work. A build that fails is rethrown to the caller that ran it and
+     * swallowed by the waiters, whose next probe finds nothing and lets one of them try again.
+     */
+    private static void materialiseOnce(ArtifactStore store, Spec spec, String key) throws IOException {
+        LaneKey lane = new LaneKey(store.identity(), key);
+        CompletableFuture<Void> mine = new CompletableFuture<>();
+        CompletableFuture<Void> running = MATERIALISING.putIfAbsent(lane, mine);
+        if (running == null) {
+            try {
+                materialise(store, spec);
+                mine.complete(null);
+            } catch (IOException | RuntimeException failure) {
+                mine.completeExceptionally(failure);
+                throw failure;
+            } finally {
+                MATERIALISING.remove(lane, mine);
+            }
+            return;
+        }
+        try {
+            running.join();
+        } catch (CancellationException | CompletionException failedForSomeoneElse) {
+            // Their build, their exception. This caller re-probes and may become the one that tries next.
+        }
+    }
+
+    /** One materialisation per absent document, so a burst of first readers does the work once. */
+    private static final ConcurrentMap<LaneKey, CompletableFuture<Void>> MATERIALISING = new ConcurrentHashMap<>();
 
     /** Open a stored document as a stream - through the store's stream face, or, for a backend that answers a
      *  versioned write only through its versioned read, from the whole versioned read. */

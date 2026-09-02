@@ -312,6 +312,53 @@ class StoredListingTest {
                 .isLessThan(25);
     }
 
+    /**
+     * A burst of first readers generates the document once, not once each.
+     *
+     * <p>A listing is absent exactly when nobody has read or written it yet, which is when a burst is most
+     * likely - whatever made the repository interesting just happened. Without suppression each reader probes,
+     * finds nothing and walks the store, and all but one of those walks is thrown away by the compare-and-set
+     * having already been won. They cost the same as the winner, so on a document that takes tens of seconds the
+     * difference is one slow request against ten.
+     *
+     * <p>The generator counts its own invocations, which is the only honest way to ask this: the answer every
+     * reader gets is identical either way, so a test that checked the answers would pass with the defect in.
+     */
+    @Test
+    void concurrent_first_readers_generate_the_document_once() throws Exception {
+        AtomicInteger generated = new AtomicInteger();
+        StoredListing.Spec spec = StoredListing.Spec.of("burst/list",
+                StoredListing.Codec.delimited("\n", line -> line),
+                sink -> {
+                    generated.incrementAndGet();
+                    try {
+                        Thread.sleep(150);      // long enough that the others arrive while this one is building
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    sink.accept("only", "only".getBytes(StandardCharsets.UTF_8));
+                });
+
+        int readers = 8;
+        CountDownLatch together = new CountDownLatch(1);
+        List<Future<Boolean>> answers = new ArrayList<>();
+        try (ExecutorService pool = Executors.newFixedThreadPool(readers)) {
+            for (int each = 0; each < readers; each++) {
+                answers.add(pool.submit(() -> {
+                    together.await();
+                    try (StoredListing.Served served = StoredListing.open(store, spec).orElseThrow()) {
+                        return new String(served.body().readAllBytes(), StandardCharsets.UTF_8).contains("only");
+                    }
+                }));
+            }
+            together.countDown();
+            for (Future<Boolean> answer : answers) {
+                assertThat(answer.get(30, TimeUnit.SECONDS)).as("every reader is served the document").isTrue();
+            }
+        }
+        assertThat(generated).as("eight readers, one generation").hasValue(1);
+    }
+
     @Test
     void the_store_key_is_under_the_listing_root() {
         assertThat(StoredListing.key("debian/main/Packages")).isEqualTo("listing/debian/main/Packages");
