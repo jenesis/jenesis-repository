@@ -152,9 +152,21 @@ public record BoundedChildren(int steps, int entries, int page) {
      * predicts.
      *
      * <p>So a drain trades memory it can afford for scans it cannot: {@value #DRAIN_PAGE} names in hand instead of
-     * {@value #PAGE} cuts the scans by the same factor. It does not make the walk linear - only a store that can
-     * seek, or a single-pass enumeration, does that - and the javadoc on the filesystem store's paging is where
-     * that larger fix belongs.
+     * {@value #PAGE} cuts the scans by the same factor. Measured on the OCI tag canary at a million tags, on one
+     * warm machine, changing nothing else: <b>834 s at a {@value #PAGE} page, 188 s at {@value #DRAIN_PAGE}</b>.
+     *
+     * <p><b>A single pass was built and then thrown away, which is the more useful half of the measurement.</b>
+     * The obvious next step is for the store to drain in one sweep - read the directory once, spill sorted runs,
+     * merge them - and that was implemented and measured at the same million tags: <b>198 s</b>, against 188 for
+     * simply paging ten times wider. No better, and a k-way merge and a spool file worse to own. The reason is
+     * arithmetic: at a {@value #DRAIN_PAGE} page a million names is only a hundred scans, so the quadratic term has
+     * already stopped dominating and the remaining time is the work the walk feeds, not the walk.
+     *
+     * <p>That is a statement about <em>this</em> size, not about the shape. The term is still quadratic, so it
+     * returns: at ten million names a {@value #DRAIN_PAGE} page is a thousand scans of ten million, and a single
+     * pass would win by orders of magnitude. The fix to reach for then is a store that drains in one sweep - and
+     * it should be reached for when a canary shows the quadratic biting again, not before, which is why the code
+     * is not carried in the meantime.
      */
     public static final int DRAIN_PAGE = 10_000;
 
