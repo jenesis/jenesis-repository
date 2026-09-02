@@ -440,7 +440,7 @@ public class RepositoryAutoConfiguration {
         // the /api/assets enumeration can scope to an explicitly named repo within the request's tenant. The routed
         // serving seam (NONE here, a router in a multi-repository distribution) drives a read of a proxy/group repo.
         return new RepositoryController(routing, dispatcher, importSources, fetcher, batch,
-                key -> environment.getProperty(Features.key(key)), store, routed);
+                key -> environment.getProperty(Features.key(key)), store, routed, EdgeHooks.NONE);
     }
 
     /**
