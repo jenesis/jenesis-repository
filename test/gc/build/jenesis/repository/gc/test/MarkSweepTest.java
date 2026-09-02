@@ -1,5 +1,8 @@
 package build.jenesis.repository.gc.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
@@ -12,10 +15,6 @@ import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkSegment;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

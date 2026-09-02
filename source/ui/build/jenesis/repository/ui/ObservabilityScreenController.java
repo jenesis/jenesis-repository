@@ -1,11 +1,11 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import build.jenesis.repository.observation.ObservabilityReport;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-
-import module java.base;
 
 /**
  * The metrics overview: every metric, health state and background-task status this deployment reports, each with the

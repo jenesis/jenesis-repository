@@ -1,16 +1,15 @@
 package build.jenesis.repository.ui.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.ui.BrowseController;
 import build.jenesis.repository.ui.BrowseRow;
-import module org.junit.jupiter.api;
 import org.springframework.ui.ConcurrentModel;
 import org.springframework.ui.Model;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;

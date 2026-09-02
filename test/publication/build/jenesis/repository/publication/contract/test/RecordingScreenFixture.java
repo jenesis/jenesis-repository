@@ -1,11 +1,11 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
-
-import module java.base;
 
 /** The {@link RecordingScreen} fixture: the screen that can reach every disposition from durable state, so it is the
  *  one that drives the verdict legs and the "does not degrade to ACCEPT when its own store is down" clause. */

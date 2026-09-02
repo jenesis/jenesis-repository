@@ -1,9 +1,9 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import tools.jackson.databind.json.JsonMapper;
-
-import module java.base;
 
 /**
  * The multi-node consistency engine: it publishes this node's {@link NodeFingerprint} to the shared

@@ -1,8 +1,9 @@
 package build.jenesis.repository.server;
 
-import build.jenesis.repository.store.Publication;
 import module java.base;
 import module org.slf4j;
+
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;

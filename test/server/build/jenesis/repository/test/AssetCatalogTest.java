@@ -1,5 +1,8 @@
 package build.jenesis.repository.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.maven.MavenFormat;
@@ -7,10 +10,6 @@ import build.jenesis.repository.server.AssetCatalog;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

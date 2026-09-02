@@ -1,8 +1,8 @@
 package build.jenesis.repository.server;
 
-import build.jenesis.repository.format.FormatExchange;
-
 import module java.base;
+
+import build.jenesis.repository.format.FormatExchange;
 
 /**
  * A {@link FormatExchange} that wraps a real request/response exchange but restreams its request body from an

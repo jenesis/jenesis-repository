@@ -1,5 +1,7 @@
 package build.jenesis.repository.feed.test;
 
+import module java.base;
+
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
@@ -8,12 +10,9 @@ import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedSnapshots;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-
-import module java.base;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

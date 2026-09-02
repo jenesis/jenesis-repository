@@ -1,12 +1,12 @@
 package build.jenesis.repository.format;
 
+import module java.base;
+
 import build.jenesis.repository.icon.IconContributor;
 import build.jenesis.repository.icon.Marks;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Providers;
-
-import module java.base;
 
 /**
  * A repository protocol over the shared {@link ArtifactStore}: it claims a set of request paths and serves and

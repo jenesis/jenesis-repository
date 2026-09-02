@@ -1,11 +1,10 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import jakarta.servlet.http.HttpServletRequest;
-
-import module java.base;
-
-import module java.base;
 
 /**
  * The seam that resolves an incoming request to the artifact space and format path the {@link FormatDispatcher}

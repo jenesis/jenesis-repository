@@ -1,11 +1,10 @@
 package build.jenesis.repository.walk.test;
 
-import build.jenesis.repository.store.Features;
-import build.jenesis.repository.walk.WalkConsumer;
 import module org.junit.jupiter.api;
-
 import module java.base;
 
+import build.jenesis.repository.store.Features;
+import build.jenesis.repository.walk.WalkConsumer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

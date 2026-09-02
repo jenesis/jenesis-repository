@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -7,8 +9,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
-
-import module java.base;
 
 /**
  * This console's half of the development sign-in: the URL space it guards, the authorization matrix it applies and

@@ -1,10 +1,10 @@
 package build.jenesis.repository.store;
 
-import build.jenesis.repository.observation.Metric;
-import build.jenesis.repository.observation.ObservabilitySource;
-
 import module java.base;
 import module org.slf4j;
+
+import build.jenesis.repository.observation.Metric;
+import build.jenesis.repository.observation.ObservabilitySource;
 
 /**
  * A listing a format serves as stored bytes and maintains on its write path: a Debian {@code Packages} file, a conda

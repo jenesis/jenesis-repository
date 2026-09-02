@@ -1,9 +1,9 @@
 package build.jenesis.repository.walk.store;
 
+import module java.base;
+
 import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.WalkProvider;
-
-import module java.base;
 
 /**
  * Provides the {@link StoreArtifactWalk} reference implementation as {@code paged-descent} - the default selection

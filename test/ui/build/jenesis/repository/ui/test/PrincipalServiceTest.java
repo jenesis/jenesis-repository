@@ -1,10 +1,12 @@
 package build.jenesis.repository.ui.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.ui.OAuth2PrincipalService;
 import build.jenesis.repository.ui.OidcPrincipalService;
 import build.jenesis.repository.ui.Principals;
 import build.jenesis.repository.ui.UiProperties;
-import module org.junit.jupiter.api;
 import org.mockito.ArgumentCaptor;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.RequestEntity;
@@ -19,9 +21,6 @@ import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.client.RestOperations;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;

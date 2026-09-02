@@ -1,10 +1,10 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import build.jenesis.repository.posture.ConsoleAdmins;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-
-import module java.base;
 
 /**
  * The single-tenant authority model: every signed-in user is a {@code USER}; a user whose provider-qualified id

@@ -1,12 +1,12 @@
 package build.jenesis.repository.observation.test;
 
+import module java.base;
+
 import build.jenesis.repository.observation.Health;
 import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
-
-import module java.base;
 
 /**
  * A {@code provides}-declared {@link ObservabilitySource} standing in for a real plugin, so the

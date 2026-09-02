@@ -1,9 +1,9 @@
 package build.jenesis.repository.format.test;
 
+import module java.base;
+
 import build.jenesis.repository.format.FetcherProvider;
 import build.jenesis.repository.format.ProxyFormat;
-
-import module java.base;
 
 /** A stub fetcher provider whose {@code create} always declines (empty): its config never enables it. Unselected and
  *  alone it is the absence that degrades to {@code Fetcher.NONE}; <em>selected</em> by name it is the §9 case that

@@ -1,12 +1,12 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
 import io.micrometer.observation.ObservationRegistry;
-
-import module java.base;
 
 /**
  * The framework-neutral core of the repository dispatch: it offers a {@link FormatExchange} to the

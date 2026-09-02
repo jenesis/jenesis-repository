@@ -1,15 +1,14 @@
 package build.jenesis.repository.importer.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.importer.ImportFailure;
 import build.jenesis.repository.importer.ImportRequest;
 import build.jenesis.repository.importer.ImportScreen;
 import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.importer.ImportSourceProvider;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

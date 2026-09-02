@@ -1,9 +1,9 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import jakarta.servlet.http.HttpServletRequest;
-
-import module java.base;
 
 /**
  * The fixed-tenant {@link RepositoryRouting}: every request addresses the one configured artifact space -

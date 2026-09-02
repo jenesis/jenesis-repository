@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import build.jenesis.repository.format.FormatMarks;
 import build.jenesis.repository.icon.Mark;
 import build.jenesis.repository.icon.Marks;
@@ -7,8 +9,6 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.ScreenedNames;
-
-import module java.base;
 
 /**
  * The bundled browse card: the console's entry point into the generic artifact browse ({@link BrowseController} at

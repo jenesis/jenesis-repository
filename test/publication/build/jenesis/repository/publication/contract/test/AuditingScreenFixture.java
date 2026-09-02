@@ -1,11 +1,11 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
-
-import module java.base;
 
 /** The {@link AuditingScreen} fixture: the screen that also overrides the inherited observer leg, so it is the one
  *  that puts a propagating {@code committed} and a contained {@code onPublished} on the same instance. */

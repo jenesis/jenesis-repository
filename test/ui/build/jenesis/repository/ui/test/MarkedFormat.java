@@ -1,11 +1,11 @@
 package build.jenesis.repository.ui.test;
 
+import module java.base;
+
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.icon.IconResource;
 import build.jenesis.repository.store.ArtifactStore;
-
-import module java.base;
 
 /**
  * A format claiming {@code /maven/} and declaring a mark of its own, discovered exactly like a real one so that the

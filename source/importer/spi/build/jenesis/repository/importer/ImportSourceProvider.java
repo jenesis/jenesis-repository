@@ -1,8 +1,8 @@
 package build.jenesis.repository.importer;
 
-import build.jenesis.repository.format.ProxyFormat;
-
 import module java.base;
+
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.icon.IconContributor;
 
 /**

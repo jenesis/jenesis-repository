@@ -1,15 +1,14 @@
 package build.jenesis.repository.posture.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.PostureReport;
 import build.jenesis.repository.posture.SafetyAdvisor;
 import build.jenesis.repository.posture.Scope;
 import build.jenesis.repository.posture.SecurityAdvisory;
 import build.jenesis.repository.posture.Severity;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

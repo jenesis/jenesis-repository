@@ -1,15 +1,14 @@
 package build.jenesis.repository.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+import module java.net.http;
+
 import build.jenesis.repository.server.RepositoryApplication;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
-import module org.junit.jupiter.api;
-
-import module java.base;
-import module java.net.http;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse.BodyHandlers;
-
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;

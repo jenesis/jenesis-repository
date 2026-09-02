@@ -1,8 +1,8 @@
 package build.jenesis.repository.observation.test;
 
-import build.jenesis.repository.observation.Signals;
 import module org.junit.jupiter.api;
 
+import build.jenesis.repository.observation.Signals;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

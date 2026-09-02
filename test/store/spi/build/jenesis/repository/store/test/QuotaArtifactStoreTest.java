@@ -1,14 +1,13 @@
 package build.jenesis.repository.store.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
 import build.jenesis.repository.store.QuotaExceededException;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

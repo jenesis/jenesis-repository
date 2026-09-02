@@ -1,9 +1,9 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
-
-import module java.base;
 
 /** Key shapes and small store idioms the synthetic hooks share, so each archetype is only its own behaviour. */
 final class Keys {

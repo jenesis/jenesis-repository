@@ -1,10 +1,10 @@
 package build.jenesis.repository.walk;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Features;
-
-import module java.base;
 
 /**
  * The walk half of the two-route derived-metadata contract. A plugin keeps its derived state correct by exactly two

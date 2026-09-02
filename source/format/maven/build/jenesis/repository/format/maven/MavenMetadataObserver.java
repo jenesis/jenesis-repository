@@ -1,11 +1,11 @@
 package build.jenesis.repository.format.maven;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.StoredListing;
-
-import module java.base;
 
 /**
  * Keeps a coordinate's computed {@code maven-metadata.xml} ({@link MavenMetadataListing}) in step with the

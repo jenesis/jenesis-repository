@@ -1,15 +1,14 @@
 package build.jenesis.repository.format.maven.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.format.maven.MavenFormat;
 import build.jenesis.repository.format.maven.MavenMetadata;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.Withheld;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

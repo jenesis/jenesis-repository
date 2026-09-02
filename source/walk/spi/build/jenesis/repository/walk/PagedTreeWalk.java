@@ -1,8 +1,8 @@
 package build.jenesis.repository.walk;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * A bounded, resumable descent of one store subtree - the shared primitive every serving surface that must enumerate

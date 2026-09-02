@@ -1,10 +1,10 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-
-import module java.base;
 
 /**
  * The installed-providers screen: every SPI this deployment carries, what answers it, and - where the deployment can

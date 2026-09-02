@@ -1,11 +1,11 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import build.jenesis.repository.posture.PostureReport;
 import build.jenesis.repository.posture.Scope;
 import build.jenesis.repository.posture.SecurityAdvisory;
 import build.jenesis.repository.posture.Severity;
-
-import module java.base;
 
 /**
  * One collected {@link PostureReport} as a <em>single tenant's view</em> of it - the model the console's

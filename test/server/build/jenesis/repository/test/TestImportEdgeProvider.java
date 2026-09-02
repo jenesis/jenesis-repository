@@ -1,8 +1,8 @@
 package build.jenesis.repository.test;
 
-import build.jenesis.repository.server.spi.ImportEdgeProvider;
-
 import module java.base;
+
+import build.jenesis.repository.server.spi.ImportEdgeProvider;
 
 /**
  * A test {@link ImportEdgeProvider} registered through this test module's {@code module-info} {@code provides} clause,

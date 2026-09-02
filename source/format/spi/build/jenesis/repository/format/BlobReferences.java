@@ -1,9 +1,9 @@
 package build.jenesis.repository.format;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Features;
-
-import module java.base;
 
 /**
  * The optional reference-scan capability of a {@link RepositoryFormat} that serves its artifacts out of the shared

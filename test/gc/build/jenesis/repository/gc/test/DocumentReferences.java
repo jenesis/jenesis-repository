@@ -1,9 +1,9 @@
 package build.jenesis.repository.gc.test;
 
+import module java.base;
+
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.store.ArtifactStore;
-
-import module java.base;
 
 /**
  * A stand-in for the blobs-namespace format whose served blobs are reachable only through a stored <em>document</em> -

@@ -1,10 +1,10 @@
 package build.jenesis.repository.format;
 
+import module java.base;
+
 import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Providers;
-
-import module java.base;
 
 /**
  * A named factory for the upstream {@link ProxyFormat.Fetcher}, discovered at runtime with {@link ServiceLoader} -

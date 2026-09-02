@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.PublishedAssets;
@@ -13,8 +15,6 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.util.UriComponentsBuilder;
-
-import module java.base;
 
 /**
  * The generic artifact browse: a breadcrumbed, lazy tree over any repository's published namespace, read through the

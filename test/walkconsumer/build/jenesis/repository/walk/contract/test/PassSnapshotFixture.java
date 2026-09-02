@@ -1,9 +1,9 @@
 package build.jenesis.repository.walk.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.testkit.WalkConsumerFixture;
-
-import module java.base;
 
 /**
  * The {@link PassSnapshotConsumer} fixture. Its declared projection is one committed document parsed back into a

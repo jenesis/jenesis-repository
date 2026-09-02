@@ -1,9 +1,9 @@
 package build.jenesis.repository.test;
 
-import build.jenesis.repository.server.spi.ImportEdgeProvider;
-import build.jenesis.repository.store.Features;
 import module org.junit.jupiter.api;
 
+import build.jenesis.repository.server.spi.ImportEdgeProvider;
+import build.jenesis.repository.store.Features;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

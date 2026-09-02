@@ -1,14 +1,13 @@
 package build.jenesis.repository.store.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Tenants;
 import build.jenesis.repository.store.TenantsProvider;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

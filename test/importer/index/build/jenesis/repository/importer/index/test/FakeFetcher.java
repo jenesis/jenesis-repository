@@ -1,8 +1,8 @@
 package build.jenesis.repository.importer.index.test;
 
-import build.jenesis.repository.format.ProxyFormat;
-
 import module java.base;
+
+import build.jenesis.repository.format.ProxyFormat;
 
 /**
  * A canned in-memory {@link ProxyFormat.Fetcher}: answers from a fixed URL-to-response map (an unmapped URL is a

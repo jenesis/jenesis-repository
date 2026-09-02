@@ -1,8 +1,8 @@
 package build.jenesis.repository.gc;
 
-import build.jenesis.repository.store.Known;
-
 import module java.base;
+
+import build.jenesis.repository.store.Known;
 
 /**
  * The outcome of a garbage-collection pass or dry run - computed before anything is deleted, so it can be

@@ -1,10 +1,10 @@
 package build.jenesis.repository.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
-
-import module java.base;
 
 /**
  * A test-only after-commit observer, discovered like a real one, that records the {@link ArtifactDescriptor} of every

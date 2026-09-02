@@ -1,5 +1,8 @@
 package build.jenesis.repository.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.format.maven.MavenFormat;
 import build.jenesis.repository.format.maven.ModuleViewRebuild;
 import build.jenesis.repository.store.ArtifactStore;
@@ -9,10 +12,6 @@ import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.walk.RebuildPass;
 import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

@@ -1,9 +1,9 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
-
-import module java.base;
 
 /**
  * Builds the console's OAuth2/OIDC client registrations from configuration values.

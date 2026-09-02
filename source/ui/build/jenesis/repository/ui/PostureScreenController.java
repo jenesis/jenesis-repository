@@ -1,10 +1,10 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-
-import module java.base;
 
 /**
  * The security-posture screen: every potentially-unsafe configuration this deployment reports about itself, each

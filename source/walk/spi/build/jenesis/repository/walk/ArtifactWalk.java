@@ -1,8 +1,8 @@
 package build.jenesis.repository.walk;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * A totally ordered, resumable, range-segmented stream of store keys under root prefixes - the one shared

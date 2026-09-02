@@ -1,9 +1,9 @@
 package build.jenesis.repository.server.spi;
 
+import module java.base;
+
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Providers;
-
-import module java.base;
 
 /**
  * A named factory for a {@link RateLimiter}, discovered at runtime with {@link ServiceLoader} - so the metering

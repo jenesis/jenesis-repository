@@ -1,10 +1,10 @@
 package build.jenesis.repository.feed.test;
 
+import module java.base;
+
 import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
-
-import module java.base;
 
 /**
  * A {@link FeedTransport} answering from a scripted list of steps, recording every request it was handed and the

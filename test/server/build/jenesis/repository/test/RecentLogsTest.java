@@ -1,16 +1,15 @@
 package build.jenesis.repository.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.server.LogEntry;
 import build.jenesis.repository.server.LogRingAppender;
 import build.jenesis.repository.server.LogRingBuffer;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
-import module org.junit.jupiter.api;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

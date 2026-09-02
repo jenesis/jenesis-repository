@@ -1,11 +1,11 @@
 package build.jenesis.repository.feed.test;
 
+import module java.base;
+
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
-
-import module java.base;
 
 /** The shared doubles and fixtures every feed-client test drives: a hand-advanced clock, a recording pause, a
  *  transport that must never be called, and a body-collecting reader. */

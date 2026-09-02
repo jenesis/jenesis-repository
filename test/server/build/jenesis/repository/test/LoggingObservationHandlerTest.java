@@ -1,10 +1,10 @@
 package build.jenesis.repository.test;
 
+import module org.junit.jupiter.api;
+
 import build.jenesis.repository.server.LoggingObservationHandler;
 import io.micrometer.common.KeyValue;
 import io.micrometer.observation.Observation;
-import module org.junit.jupiter.api;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

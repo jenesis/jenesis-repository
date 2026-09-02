@@ -1,10 +1,10 @@
 package build.jenesis.repository.format.java;
 
+import module java.base;
+
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
-
-import module java.base;
 
 /**
  * The primitives the Maven layout needs to cross-publish into the Jenesis module layout: reading the module name a jar

@@ -1,11 +1,11 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+import module org.slf4j;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.QuotaArtifactStore;
 import build.jenesis.repository.store.TenantsProvider;
-
-import module java.base;
-import module org.slf4j;
 
 /**
  * Publishes this node's {@link NodeFingerprint} to the shared store on a heartbeat. A stable node id is

@@ -1,8 +1,8 @@
 package build.jenesis.repository.server;
 
-import build.jenesis.repository.server.spi.Authorization;
-
 import module java.base;
+
+import build.jenesis.repository.server.spi.Authorization;
 
 /**
  * What a deployment may vary about the credential surface, so that the surface itself exists only once.

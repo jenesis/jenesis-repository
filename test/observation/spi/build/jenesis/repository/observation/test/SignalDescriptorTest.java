@@ -1,13 +1,12 @@
 package build.jenesis.repository.observation.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.observation.Health;
 import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.TaskStatus;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

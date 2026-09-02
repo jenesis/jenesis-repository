@@ -1,8 +1,8 @@
 package build.jenesis.repository.walk;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * A bounded, resumable enumeration of <em>one container's</em> immediate child names - the flat sibling of

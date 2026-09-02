@@ -1,8 +1,8 @@
 package build.jenesis.repository.ui;
 
-import build.jenesis.repository.observation.Contributions;
-
 import module java.base;
+
+import build.jenesis.repository.observation.Contributions;
 
 /**
  * Every path the console serves, declared once, so a node running the console alongside the repository can tell

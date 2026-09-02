@@ -1,8 +1,8 @@
 package build.jenesis.repository.walk;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The shared outcome vocabulary of every bounded store traversal - {@link PagedTreeWalk} (a subtree) and

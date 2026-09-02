@@ -1,5 +1,7 @@
 package build.jenesis.repository.gc.store;
 
+import module java.base;
+
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GarbageCollector;
 import build.jenesis.repository.gc.GcPlan;
@@ -11,8 +13,6 @@ import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.WalkPass;
-
-import module java.base;
 
 /**
  * The reference {@link GarbageCollector}, riding the shared artifact walk - never its own listing loop - so both

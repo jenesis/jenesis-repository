@@ -1,9 +1,9 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
-
-import module java.base;
 
 /**
  * The one place the Observation API is opened, so every observed <em>operation</em> in the product wraps the same

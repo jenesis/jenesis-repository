@@ -1,11 +1,11 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
-
-import module java.base;
 
 /** The fixture for {@link FeedSplittingObserver}: the one subject in the kit that can exhibit a conflated feed, and
  *  therefore the one that makes {@code A_PUBLISH_ROW_FROM_THE_WITHHOLD_LEG} falsifiable. */

@@ -1,9 +1,9 @@
 package build.jenesis.repository.observation.test;
 
+import module java.base;
+
 import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.ObservabilitySource;
-
-import module java.base;
 
 /**
  * A source that breaks the contract in the way a real one breaks it: it throws out of {@link #healthChecks()} - the

@@ -1,10 +1,9 @@
 package build.jenesis.repository.format.test;
 
-import build.jenesis.repository.format.ProxyFormat;
-
 import module java.base;
 import module org.junit.jupiter.api;
 
+import build.jenesis.repository.format.ProxyFormat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

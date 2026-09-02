@@ -1,10 +1,10 @@
 package build.jenesis.repository.importer.index.test;
 
+import module java.base;
+
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
-
-import module java.base;
 
 /** A fake hosted-only format (no {@code ProxyFormat}), so a test proves the connector refuses a format that
  *  cannot enumerate an upstream. */

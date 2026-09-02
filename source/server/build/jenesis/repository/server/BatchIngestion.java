@@ -1,12 +1,12 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
-
-import module java.base;
 
 /**
  * Batch archive ingestion: a single publish request carrying an archive and the {@value #EXPLODE_HEADER} header is

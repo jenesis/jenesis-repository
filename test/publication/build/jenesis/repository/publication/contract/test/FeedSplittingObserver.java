@@ -1,10 +1,10 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
-
-import module java.base;
 
 /**
  * An observer that records on <em>both</em> feeds and keeps them apart - the shape needed to prove that a hook

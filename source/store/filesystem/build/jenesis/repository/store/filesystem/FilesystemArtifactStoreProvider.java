@@ -1,9 +1,9 @@
 package build.jenesis.repository.store.filesystem;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-
-import module java.base;
 
 /**
  * The {@code filesystem} provider: a store rooted at {@code jenreg.filesystem.root}, which is <em>required</em>.

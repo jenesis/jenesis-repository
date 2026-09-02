@@ -1,12 +1,11 @@
 package build.jenesis.repository.importer.maven.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.importer.maven.MavenSource;
 import build.jenesis.repository.importer.testkit.MavenIndexChunk;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

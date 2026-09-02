@@ -1,12 +1,12 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import build.jenesis.repository.observation.Contributions;
 import build.jenesis.repository.store.ArtifactStore;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-
-import module java.base;
 
 /**
  * Renders the console: it asks each registered {@link ConsoleCard} which fragment renders it and what value that

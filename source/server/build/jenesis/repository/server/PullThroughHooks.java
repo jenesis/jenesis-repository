@@ -1,11 +1,11 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
-
-import module java.base;
 
 /**
  * The pull-through serve seam an edition contributes its screening through - the proxy-leg twin of the deploy edge's

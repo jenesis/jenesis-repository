@@ -1,8 +1,8 @@
 package build.jenesis.repository.server;
 
-import build.jenesis.repository.format.FormatExchange;
-
 import module java.base;
+
+import build.jenesis.repository.format.FormatExchange;
 
 /**
  * A {@link FormatExchange} synthesized for a publish that has no request behind it: a {@code PUT} of one body at one

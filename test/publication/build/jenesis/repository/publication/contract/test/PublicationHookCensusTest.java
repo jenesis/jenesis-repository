@@ -1,5 +1,8 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.contract.testkit.ContractCensus;
 import build.jenesis.repository.contract.testkit.ContractCensus.Exemption;
 import build.jenesis.repository.contract.testkit.ContractCensus.Provider;
@@ -17,10 +20,6 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.Delivery;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.ObserverLeg;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

@@ -1,8 +1,8 @@
 package build.jenesis.repository.format.oci.test;
 
-import build.jenesis.repository.format.FormatExchange;
-
 import module java.base;
+
+import build.jenesis.repository.format.FormatExchange;
 
 /**
  * An in-memory {@link FormatExchange} for driving a format's {@code handle}/{@code proxy} without an HTTP server: it

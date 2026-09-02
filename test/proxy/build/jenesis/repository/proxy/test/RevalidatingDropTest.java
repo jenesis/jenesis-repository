@@ -1,12 +1,11 @@
 package build.jenesis.repository.proxy.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.proxy.RevalidatingFetcher;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

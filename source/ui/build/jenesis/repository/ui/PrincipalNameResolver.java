@@ -1,8 +1,8 @@
 package build.jenesis.repository.ui;
 
-import org.springframework.security.core.Authentication;
-
 import module java.base;
+
+import org.springframework.security.core.Authentication;
 
 /**
  * Resolves a signed-in principal's display name for the layout.

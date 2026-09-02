@@ -1,5 +1,8 @@
 package build.jenesis.repository.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.oidc.OidcExchange;
 import build.jenesis.repository.server.spi.TokenExchange;
@@ -7,13 +10,9 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
-import module org.junit.jupiter.api;
-
-import module java.base;
 import java.security.Signature;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;

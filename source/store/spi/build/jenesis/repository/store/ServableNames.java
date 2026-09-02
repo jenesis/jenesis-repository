@@ -1,8 +1,9 @@
 package build.jenesis.repository.store;
 
-import build.jenesis.repository.store.Publication;
 import module java.base;
 import module org.slf4j;
+
+import build.jenesis.repository.store.Publication;
 
 /**
  * The one servable-name enumeration screen: every surface that materialises published NAMES (children, versions,

@@ -1,12 +1,12 @@
 package build.jenesis.repository.format.maven;
 
+import module java.base;
+
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.store.StoredListing;
-
-import module java.base;
 
 /**
  * The computed {@code maven-metadata.xml} of a coordinate as a stored listing, under the opt-in

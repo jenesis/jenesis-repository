@@ -1,5 +1,7 @@
 package build.jenesis.repository.walk.store;
 
+import module java.base;
+
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
@@ -8,8 +10,6 @@ import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.Trees;
 import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkSegment;
-
-import module java.base;
 
 /**
  * The reference {@link ArtifactWalk} over the store's own key layout. Enumeration is a depth-first descent that

@@ -1,10 +1,10 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
-
-import module java.base;
 
 /**
  * The read-side archetype: a screen whose verdict lives on {@code withheld} rather than on {@code assess} - the

@@ -1,10 +1,10 @@
 package build.jenesis.repository.store.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
-
-import module java.base;
 
 /**
  * A ServiceLoader-discovered {@link PublicationObserver} that records the withhold-change feed's transition events

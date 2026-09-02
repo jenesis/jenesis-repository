@@ -1,9 +1,9 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
-
-import module java.base;
 
 /**
  * The seam that lets a deployment serve a <em>routed</em> repository - one defined as a read-through proxy of an

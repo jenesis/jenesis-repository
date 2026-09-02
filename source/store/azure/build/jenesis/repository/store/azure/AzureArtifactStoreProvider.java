@@ -1,5 +1,7 @@
 package build.jenesis.repository.store.azure;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Endpoints;
@@ -8,8 +10,6 @@ import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.models.BlobStorageException;
-
-import module java.base;
 
 /**
  * The {@code azure-blob} artifact-store backend over an Azure Blob Storage container. Selected with

@@ -1,9 +1,9 @@
 package build.jenesis.repository.feed;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
 import module org.slf4j;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The durable half of a mirrored feed: one catalogue snapshot and the staleness stamp that says when it was fetched,

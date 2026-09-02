@@ -1,10 +1,10 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
-
-import module java.base;
 
 /**
  * The best-effort archetype: a derived index of served paths, written inline from the callback and healed by a sweep

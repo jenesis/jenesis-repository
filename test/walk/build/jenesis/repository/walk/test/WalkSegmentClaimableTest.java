@@ -1,10 +1,9 @@
 package build.jenesis.repository.walk.test;
 
-import build.jenesis.repository.walk.WalkSegment;
 import module org.junit.jupiter.api;
-
 import module java.base;
 
+import build.jenesis.repository.walk.WalkSegment;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

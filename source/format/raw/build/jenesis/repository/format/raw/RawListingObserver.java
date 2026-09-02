@@ -1,11 +1,11 @@
 package build.jenesis.repository.format.raw;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
-
-import module java.base;
 
 /**
  * Keeps the raw format's {@linkplain RawListings stored directory pages} in step with the transitions that happen

@@ -1,9 +1,9 @@
 package build.jenesis.repository.walk.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.testkit.WalkConsumerFixture;
-
-import module java.base;
 
 /**
  * The shared half of the two row-per-artifact archetypes: both hold one small object per retained pointer, keyed by

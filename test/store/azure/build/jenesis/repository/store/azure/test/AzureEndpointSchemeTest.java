@@ -1,10 +1,9 @@
 package build.jenesis.repository.store.azure.test;
 
-import build.jenesis.repository.store.azure.AzureArtifactStoreProvider;
 import module org.junit.jupiter.api;
-
 import module java.base;
 
+import build.jenesis.repository.store.azure.AzureArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

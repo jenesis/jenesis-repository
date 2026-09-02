@@ -1,10 +1,10 @@
 package build.jenesis.repository.walk.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServedAliases;
 import build.jenesis.repository.walk.testkit.WalkConsumerFixture;
-
-import module java.base;
 
 /**
  * The fixture for the first <em>shipped</em> walk consumer: the Maven format's {@code ModuleViewRebuild}, which

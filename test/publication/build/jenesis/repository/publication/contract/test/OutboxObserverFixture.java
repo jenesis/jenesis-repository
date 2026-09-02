@@ -1,11 +1,11 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
-
-import module java.base;
 
 /** The {@link OutboxObserver} fixture: durable-after-enqueue, so its projection is the <em>drained</em> surface and
  *  its enqueued notes are a separate, independently readable state - which is exactly what the kit compares to tell

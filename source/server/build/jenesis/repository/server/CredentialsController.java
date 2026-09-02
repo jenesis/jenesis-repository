@@ -1,7 +1,8 @@
 package build.jenesis.repository.server;
 
-import build.jenesis.repository.server.spi.Authorization;
+import module java.base;
 
+import build.jenesis.repository.server.spi.Authorization;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -12,8 +13,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
-
-import module java.base;
 
 /**
  * The credential surface: how an operator issues, scopes and revokes the keys this deployment authorizes with.

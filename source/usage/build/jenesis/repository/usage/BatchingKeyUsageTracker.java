@@ -1,5 +1,7 @@
 package build.jenesis.repository.usage;
 
+import module java.base;
+
 import build.jenesis.repository.observation.Health;
 import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;
@@ -7,8 +9,6 @@ import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
-
-import module java.base;
 
 /**
  * Opt-in usage tracking for credentials, off the request path on its own worker thread - started and stopped

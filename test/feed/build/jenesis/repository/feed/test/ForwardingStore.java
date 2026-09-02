@@ -1,8 +1,8 @@
 package build.jenesis.repository.feed.test;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * A store decorator the snapshot tests bend one method of at a time: to prove the feed client never scopes a store

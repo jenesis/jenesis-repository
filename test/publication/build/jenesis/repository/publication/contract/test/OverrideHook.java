@@ -1,9 +1,9 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
-
-import module java.base;
 
 /**
  * The pre-commit hold-release archetype, modelled on downstream's {@code KevHold} / {@code LicenseHold} release

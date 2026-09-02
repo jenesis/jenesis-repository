@@ -1,11 +1,10 @@
 package build.jenesis.repository.ui.test;
 
+import module java.base;
+
 import build.jenesis.repository.ui.ConsoleClientRegistrations;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
