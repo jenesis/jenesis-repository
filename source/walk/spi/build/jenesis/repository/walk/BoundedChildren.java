@@ -133,6 +133,36 @@ public record BoundedChildren(int steps, int entries, int page) {
         return new BoundedChildren(Integer.MAX_VALUE, Integer.MAX_VALUE, page);
     }
 
+    /**
+     * The page a drain should use when it has no reason to prefer another, and it is deliberately far larger than
+     * {@link #PAGE}.
+     *
+     * <p><b>Why a drain wants a big page and a request-time read does not.</b> A page costs one
+     * {@link ArtifactStore#page} round-trip, and what a round-trip costs depends entirely on the backend. An
+     * object store seeks: it is handed the cursor as {@code startAfter} and answers in time proportional to the
+     * page. A filesystem cannot seek a directory, so it scans the whole of it and keeps the smallest {@code page}
+     * names past the cursor - bounded in memory, as its javadoc says, but linear in the directory <em>every
+     * time</em>. Draining a container of N names therefore costs N/page scans of N entries: quadratic, and only on
+     * a filesystem.
+     *
+     * <p>That is not a small effect at the sizes the canaries reach. Attribution's materialisation walks the
+     * inventory in {@value #PAGE}-name pages; at a million versions that is a thousand scans of a million entries.
+     * Measured, its convergence went from under 6.4 minutes at 400,000 versions to over 35.3 at 1,000,000 - more
+     * than five and a half times the work for two and a half times the versions, against the 6.25x a quadratic
+     * predicts.
+     *
+     * <p>So a drain trades memory it can afford for scans it cannot: {@value #DRAIN_PAGE} names in hand instead of
+     * {@value #PAGE} cuts the scans by the same factor. It does not make the walk linear - only a store that can
+     * seek, or a single-pass enumeration, does that - and the javadoc on the filesystem store's paging is where
+     * that larger fix belongs.
+     */
+    public static final int DRAIN_PAGE = 10_000;
+
+    /** {@link #draining(int)} at the default {@link #DRAIN_PAGE}. */
+    public static BoundedChildren draining() {
+        return draining(DRAIN_PAGE);
+    }
+
     /** The same bounds with a different round-trip budget. */
     public BoundedChildren steps(int steps) {
         return new BoundedChildren(steps, entries, page);
