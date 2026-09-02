@@ -1,10 +1,10 @@
 package build.jenesis.repository.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
-
-import module java.base;
 
 /**
  * The ingress census's after-commit probe: a discovered {@link PublicationObserver}, inert for every path that does not

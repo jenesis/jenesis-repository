@@ -1,11 +1,11 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
-
-import module java.base;
 
 /**
  * An OIDC user whose name is the provider-qualified id rather than the bare {@code sub} claim.

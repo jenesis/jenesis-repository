@@ -1,9 +1,9 @@
 package build.jenesis.repository.format;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-
-import module java.base;
 
 /**
  * The optional migration-import capability of a {@link RepositoryFormat}: a format that also implements this can

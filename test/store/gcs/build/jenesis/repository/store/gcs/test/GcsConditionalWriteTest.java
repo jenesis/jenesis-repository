@@ -1,8 +1,9 @@
 package build.jenesis.repository.store.gcs.test;
 
-import com.github.tomakehurst.wiremock.client.WireMock;
 import module java.base;
 import module org.junit.jupiter.api;
+
+import com.github.tomakehurst.wiremock.client.WireMock;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.gcs.GcsArtifactStoreProvider;
@@ -12,7 +13,6 @@ import com.github.tomakehurst.wiremock.extension.ResponseDefinitionTransformerV2
 import com.github.tomakehurst.wiremock.http.RequestMethod;
 import com.github.tomakehurst.wiremock.http.ResponseDefinition;
 import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
-
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;

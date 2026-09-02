@@ -1,6 +1,7 @@
 package build.jenesis.repository.server;
-import build.jenesis.repository.server.spi.Authorization;
+import module java.base;
 
+import build.jenesis.repository.server.spi.Authorization;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
@@ -8,8 +9,6 @@ import org.springframework.security.authorization.AuthorizationResult;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.web.util.UriUtils;
-
-import module java.base;
 
 /**
  * Authorizes a request against the {@link Authorization} credential model. An anonymous deployment (the

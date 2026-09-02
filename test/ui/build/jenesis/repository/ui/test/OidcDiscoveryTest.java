@@ -1,14 +1,12 @@
 package build.jenesis.repository.ui.test;
 
-import build.jenesis.repository.ui.OidcDiscovery;
-
-import com.sun.net.httpserver.HttpServer;
-import org.springframework.security.oauth2.client.registration.ClientRegistration;
-import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
-
 import module java.base;
 import module org.junit.jupiter.api;
 
+import build.jenesis.repository.ui.OidcDiscovery;
+import com.sun.net.httpserver.HttpServer;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

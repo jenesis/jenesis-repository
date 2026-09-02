@@ -1,6 +1,7 @@
 package build.jenesis.repository.server;
-import build.jenesis.repository.server.spi.Authorization;
+import module java.base;
 
+import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.format.ProxyFormat;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.SpringBootConfiguration;
@@ -8,8 +9,6 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
-
-import module java.base;
 
 /**
  * The Spring Boot entry point for the dual-layout repository. The framework-neutral logic - the dual layout, the

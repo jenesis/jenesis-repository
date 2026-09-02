@@ -1,11 +1,10 @@
 package build.jenesis.repository.store.test;
 
-import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.ArtifactStoreProvider;
-
 import module java.base;
 import module org.junit.jupiter.api;
 
+import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

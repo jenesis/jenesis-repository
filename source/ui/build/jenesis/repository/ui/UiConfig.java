@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import build.jenesis.repository.store.TenantsProvider;
 import build.jenesis.repository.store.Tenants;
 import build.jenesis.repository.store.ArtifactStore;
@@ -8,8 +10,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
-
-import module java.base;
 
 /**
  * Bridges the framework-neutral console primitives into Spring: the {@link ConsoleCard} plugins (discovered with

@@ -1,14 +1,13 @@
 package build.jenesis.repository.ui.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.ui.PostureSource;
 import build.jenesis.repository.ui.PostureBadge;
 import build.jenesis.repository.ui.ConsoleAdvice;
-import module org.junit.jupiter.api;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

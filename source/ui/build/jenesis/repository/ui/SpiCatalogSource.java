@@ -1,8 +1,8 @@
 package build.jenesis.repository.ui;
 
-import build.jenesis.repository.observation.SpiCatalog;
-
 import module java.base;
+
+import build.jenesis.repository.observation.SpiCatalog;
 
 /**
  * Where the installed-providers screen gets its catalogue.

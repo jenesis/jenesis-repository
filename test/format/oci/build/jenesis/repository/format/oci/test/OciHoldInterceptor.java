@@ -1,9 +1,9 @@
 package build.jenesis.repository.format.oci.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
-
-import module java.base;
 
 /**
  * A test-only, ServiceLoader-discovered screen that stands a <em>retroactive</em> withhold's review pointer on any

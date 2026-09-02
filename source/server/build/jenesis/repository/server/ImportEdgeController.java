@@ -1,7 +1,8 @@
 package build.jenesis.repository.server;
+import module java.base;
+
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.ImportEdgeProvider;
-
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.importer.ImportRequest;
 import build.jenesis.repository.importer.ImportScreen;
@@ -19,8 +20,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
-
-import module java.base;
 
 /**
  * The free single-tenant import edge: the repo-less {@code /repository/admin/import} migration trigger and its status

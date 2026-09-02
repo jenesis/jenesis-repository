@@ -1,9 +1,9 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
-
-import module java.base;
 
 /**
  * What an edition supplies to the one development sign-in chain: the URL space that chain guards, and the

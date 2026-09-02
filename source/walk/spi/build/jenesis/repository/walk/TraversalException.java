@@ -1,8 +1,8 @@
 package build.jenesis.repository.walk;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The named failure a bounded store traversal raises rather than returning a plausible but incomplete answer - the

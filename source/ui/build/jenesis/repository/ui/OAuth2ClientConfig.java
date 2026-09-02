@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Condition;
@@ -11,8 +13,6 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.security.oauth2.core.user.OAuth2User;
-
-import module java.base;
 
 /**
  * Builds the OAuth2/OIDC client registrations from configuration: the built-in GitHub provider when

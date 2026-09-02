@@ -1,11 +1,11 @@
 package build.jenesis.repository.importer.index.test;
 
+import module java.base;
+
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
-
-import module java.base;
 
 /**
  * A fake enumerable format, provided by this test module so the connector's {@code installed} lookup discovers it:

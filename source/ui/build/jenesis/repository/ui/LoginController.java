@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import build.jenesis.repository.icon.Mark;
 import build.jenesis.repository.icon.Marks;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -7,8 +9,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-
-import module java.base;
 
 /**
  * The sign-in page: the choices the installed mechanism modules offer, each linking into the URL space that mechanism

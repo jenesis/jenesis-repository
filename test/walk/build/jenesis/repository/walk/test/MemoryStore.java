@@ -1,8 +1,8 @@
 package build.jenesis.repository.walk.test;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * A minimal in-memory {@link ArtifactStore} for driving the traversal primitives over a synthetic key tree of any

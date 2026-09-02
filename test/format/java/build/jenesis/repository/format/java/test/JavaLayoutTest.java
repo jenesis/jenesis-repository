@@ -1,14 +1,13 @@
 package build.jenesis.repository.format.java.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.Features;
-import module org.junit.jupiter.api;
-
-import module java.base;
 import java.util.jar.Attributes;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

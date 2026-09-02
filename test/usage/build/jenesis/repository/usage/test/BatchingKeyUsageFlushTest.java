@@ -1,13 +1,12 @@
 package build.jenesis.repository.usage.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.usage.BatchingKeyUsageTracker;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

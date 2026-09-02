@@ -1,9 +1,9 @@
 package build.jenesis.repository.ui.test;
 
+import module java.base;
+
 import build.jenesis.repository.ui.ConsoleModuleProvider;
 import build.jenesis.repository.ui.NavEntry;
-
-import module java.base;
 
 /** A console module contributing one link at each access floor and section, so the nav rule has something to filter. */
 public final class NavigatingConsoleModule implements ConsoleModuleProvider {

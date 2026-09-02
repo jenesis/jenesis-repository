@@ -1,5 +1,8 @@
 package build.jenesis.repository.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.server.PresentedKey;
 import build.jenesis.repository.server.RepositoryAuthorizationManager;
 import build.jenesis.repository.server.RepositoryRouting;
@@ -7,11 +10,7 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import jakarta.servlet.http.HttpServletRequest;
-import module org.junit.jupiter.api;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;

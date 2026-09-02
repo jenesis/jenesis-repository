@@ -1,8 +1,8 @@
 package build.jenesis.repository.test;
 
-import build.jenesis.repository.server.RepositoryProperties;
 import module org.junit.jupiter.api;
 
+import build.jenesis.repository.server.RepositoryProperties;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

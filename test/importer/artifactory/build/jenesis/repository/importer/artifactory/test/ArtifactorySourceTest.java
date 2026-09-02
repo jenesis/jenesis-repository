@@ -1,11 +1,10 @@
 package build.jenesis.repository.importer.artifactory.test;
 
-import build.jenesis.repository.format.ProxyFormat;
-import build.jenesis.repository.importer.artifactory.ArtifactorySource;
 import module org.junit.jupiter.api;
-
 import module java.base;
 
+import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.importer.artifactory.ArtifactorySource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

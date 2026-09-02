@@ -1,5 +1,8 @@
 package build.jenesis.repository.walk.contract.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
@@ -9,9 +12,6 @@ import build.jenesis.repository.walk.store.StoreArtifactWalk;
 import build.jenesis.repository.walk.testkit.WalkConsumerContract;
 import build.jenesis.repository.walk.testkit.WalkConsumerFixture;
 import build.jenesis.repository.walk.testkit.WalkHarness;
-import module org.junit.jupiter.api;
-
-import module java.base;
 
 /**
  * The JUnit driver for one consumer's leg of the shared {@code WalkConsumer} contract. Everything consumer-specific

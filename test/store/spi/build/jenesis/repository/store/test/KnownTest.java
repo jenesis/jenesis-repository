@@ -1,11 +1,10 @@
 package build.jenesis.repository.store.test;
 
-import build.jenesis.repository.store.Known;
-import build.jenesis.repository.store.UnknownAnswerException;
-
 import module java.base;
 import module org.junit.jupiter.api;
 
+import build.jenesis.repository.store.Known;
+import build.jenesis.repository.store.UnknownAnswerException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

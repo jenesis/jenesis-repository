@@ -1,14 +1,13 @@
 package build.jenesis.repository.ui.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.ui.ConsoleCard;
 import build.jenesis.repository.ui.ConsoleController;
 import build.jenesis.repository.ui.ConsoleController.RenderedCard;
 import org.springframework.ui.ExtendedModelMap;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

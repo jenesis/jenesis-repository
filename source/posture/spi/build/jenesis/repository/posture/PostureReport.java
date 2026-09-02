@@ -1,8 +1,8 @@
 package build.jenesis.repository.posture;
 
-import build.jenesis.repository.observation.Contributions;
-
 import module java.base;
+
+import build.jenesis.repository.observation.Contributions;
 
 /**
  * The single collected view every consumer reads - the console's Security-posture panel, the admin API and the boot log

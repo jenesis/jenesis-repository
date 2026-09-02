@@ -1,14 +1,13 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+import module java.net.http;
+
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
-
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
-
-import module java.base;
-import module java.net.http;
 
 /**
  * OpenID Connect / RFC 8414 provider discovery: fetch the issuer's configuration document and turn it into a

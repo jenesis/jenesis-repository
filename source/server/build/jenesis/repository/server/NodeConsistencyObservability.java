@@ -1,11 +1,11 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import build.jenesis.repository.observation.Health;
 import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
-
-import module java.base;
 
 /**
  * The observability face of the multi-node consistency check: the fleet's per-node numbers reported as

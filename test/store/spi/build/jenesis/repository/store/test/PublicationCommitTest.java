@@ -1,5 +1,8 @@
 package build.jenesis.repository.store.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -9,10 +12,6 @@ import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.store.testkit.StoreInvariants;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

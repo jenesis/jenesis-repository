@@ -1,12 +1,11 @@
 package build.jenesis.repository.ui.test;
 
-import build.jenesis.repository.ui.Principals;
-import build.jenesis.repository.ui.UiProperties;
 import module org.junit.jupiter.api;
-import org.springframework.security.core.GrantedAuthority;
-
 import module java.base;
 
+import build.jenesis.repository.ui.Principals;
+import build.jenesis.repository.ui.UiProperties;
+import org.springframework.security.core.GrantedAuthority;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

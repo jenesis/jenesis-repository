@@ -1,9 +1,8 @@
 package build.jenesis.repository.server;
-import build.jenesis.repository.server.spi.Authorization;
-
-import org.springframework.boot.context.properties.ConfigurationProperties;
-
 import module java.base;
+
+import build.jenesis.repository.server.spi.Authorization;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * The configuration of the Spring repository server, bound from {@code jenreg.*}: the artifact-store

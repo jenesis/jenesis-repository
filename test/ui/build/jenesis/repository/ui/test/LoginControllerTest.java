@@ -1,18 +1,17 @@
 package build.jenesis.repository.ui.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.icon.IconResource;
 import build.jenesis.repository.ui.LoginController;
 import build.jenesis.repository.ui.LoginOptions;
-import module org.junit.jupiter.api;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.ui.ConcurrentModel;
 import org.springframework.ui.Model;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

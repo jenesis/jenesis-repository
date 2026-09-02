@@ -1,10 +1,10 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import org.springframework.context.ApplicationContext;
 import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
 import org.thymeleaf.templatemode.TemplateMode;
-
-import module java.base;
 
 /**
  * The template resolver a console module contributes for its own screens.

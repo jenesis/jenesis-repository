@@ -1,10 +1,9 @@
 package build.jenesis.repository.format.test;
 
-import build.jenesis.repository.net.PrivateHosts;
 import module org.junit.jupiter.api;
-
 import module java.base;
 
+import build.jenesis.repository.net.PrivateHosts;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

@@ -1,10 +1,10 @@
 package build.jenesis.repository.store.s3.test;
 
-import build.jenesis.repository.store.s3.S3ArtifactStore;
 import module org.junit.jupiter.api;
+
+import build.jenesis.repository.store.s3.S3ArtifactStore;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

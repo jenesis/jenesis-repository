@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui.test;
 
+import module java.base;
+
 import build.jenesis.repository.ui.PostureSource;
 import build.jenesis.repository.ui.ConsoleAdvice;
 import build.jenesis.repository.ui.NavEntry;
@@ -7,9 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.env.StandardEnvironment;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

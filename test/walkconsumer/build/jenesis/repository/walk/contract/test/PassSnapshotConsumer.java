@@ -1,11 +1,11 @@
 package build.jenesis.repository.walk.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
-
-import module java.base;
 
 /**
  * The <b>pass snapshot</b> archetype: the whole view is accumulated in memory and committed as <em>one</em> object

@@ -1,5 +1,7 @@
 package build.jenesis.repository.store.s3;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Endpoints;
@@ -15,8 +17,6 @@ import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-
-import module java.base;
 
 /**
  * The {@code s3} artifact-store backend over any S3-compatible bucket (AWS S3, GCS via the XML API,

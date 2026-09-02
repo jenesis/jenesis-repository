@@ -1,13 +1,13 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.SafetyAdvisor;
 import build.jenesis.repository.posture.SecurityAdvisory;
 import build.jenesis.repository.posture.Severity;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-
-import module java.base;
 
 /**
  * The "node divergence" security-posture advisor: it reads every node's published

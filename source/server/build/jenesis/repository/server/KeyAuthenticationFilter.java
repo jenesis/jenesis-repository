@@ -1,6 +1,7 @@
 package build.jenesis.repository.server;
-import build.jenesis.repository.server.spi.Authorization;
+import module java.base;
 
+import build.jenesis.repository.server.spi.Authorization;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -8,8 +9,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
-
-import module java.base;
 
 /**
  * Lifts a request's presented key ({@link PresentedKey}) into the Spring Security context, so a keyed request is seen

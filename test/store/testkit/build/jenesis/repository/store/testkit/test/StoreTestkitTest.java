@@ -1,12 +1,12 @@
 package build.jenesis.repository.store.testkit.test;
 
 import module java.base;
+import module org.junit.jupiter.api;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.store.testkit.StoreInvariants;
-import module org.junit.jupiter.api;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThatCode;

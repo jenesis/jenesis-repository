@@ -1,5 +1,8 @@
 package build.jenesis.repository.format.oci.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.oci.OciFormat;
 import build.jenesis.repository.format.oci.OciListingObserver;
@@ -8,10 +11,6 @@ import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

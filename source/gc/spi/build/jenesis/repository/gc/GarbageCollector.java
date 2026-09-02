@@ -1,9 +1,9 @@
 package build.jenesis.repository.gc;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Known;
-
-import module java.base;
 
 /**
  * Reclaims content blobs ({@code blobs/<hash>}) that no live pointer references any more - the residue of a

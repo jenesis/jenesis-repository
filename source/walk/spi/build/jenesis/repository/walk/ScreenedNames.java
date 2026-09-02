@@ -1,9 +1,9 @@
 package build.jenesis.repository.walk;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
-
-import module java.base;
 
 /**
  * The screened enumeration: one call that <em>lists and screens</em> a container's child names, so a serving surface

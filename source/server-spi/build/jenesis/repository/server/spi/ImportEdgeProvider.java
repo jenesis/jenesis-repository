@@ -1,9 +1,9 @@
 package build.jenesis.repository.server.spi;
 
+import module java.base;
+
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Providers;
-
-import module java.base;
 
 /**
  * A core signal SPI through which a richer distribution claims ownership of the import edge - the repo-less

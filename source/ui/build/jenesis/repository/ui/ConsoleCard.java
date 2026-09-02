@@ -1,8 +1,8 @@
 package build.jenesis.repository.ui;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * A card on this console's overview page: how that one page is composed, discovered with {@code ServiceLoader} and

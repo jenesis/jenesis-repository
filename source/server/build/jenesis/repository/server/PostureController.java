@@ -1,5 +1,7 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.posture.PostureReport;
@@ -10,8 +12,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import module java.base;
 
 /**
  * The security-posture read - {@code GET /api/posture}, the console / CLI / headless-agent read of the

@@ -1,5 +1,8 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+import module org.slf4j;
+
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
@@ -11,9 +14,6 @@ import build.jenesis.repository.walk.RebuildPass;
 import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkProvider;
-
-import module java.base;
-import module org.slf4j;
 
 /**
  * The free edition's scheduled driver of the shared {@link RebuildPass}: on a cadence it joins the pass over the

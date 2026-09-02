@@ -1,14 +1,13 @@
 package build.jenesis.repository.oidc;
 
+import module java.base;
+
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.TokenExchange;
-
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtException;
-
-import module java.base;
 
 /**
  * Exchanges a workload's OIDC id-token for a short-lived Jenesis credential, so a CI job authenticates with the token

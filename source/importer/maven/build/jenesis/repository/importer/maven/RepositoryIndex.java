@@ -1,8 +1,8 @@
 package build.jenesis.repository.importer.maven;
 
-import build.jenesis.repository.store.ArchiveInflation;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArchiveInflation;
 
 /**
  * A streaming reader for the legacy Nexus / Maven-Indexer repository index that Nexus-style servers publish under

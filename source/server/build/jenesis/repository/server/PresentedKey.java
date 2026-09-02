@@ -1,10 +1,9 @@
 package build.jenesis.repository.server;
 
-import build.jenesis.repository.server.spi.Authorization;
-
-import jakarta.servlet.http.HttpServletRequest;
-
 import module java.base;
+
+import build.jenesis.repository.server.spi.Authorization;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * Where a request carries its repository key. The server's own header is {@code Jenesis-Repository-Key}, but most

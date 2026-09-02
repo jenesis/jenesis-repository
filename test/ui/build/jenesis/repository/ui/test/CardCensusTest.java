@@ -1,14 +1,13 @@
 package build.jenesis.repository.ui.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.contract.testkit.ContractCensus;
 import build.jenesis.repository.contract.testkit.ContractCensus.Exemption;
 import build.jenesis.repository.contract.testkit.ContractCensus.Provider;
 import build.jenesis.repository.ui.ConsoleCard;
 import build.jenesis.repository.ui.UiConfig;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

@@ -1,8 +1,8 @@
 package build.jenesis.repository.format;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The optional pull-through capability of a {@link RepositoryFormat}: a format that also implements this serves a

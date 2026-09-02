@@ -1,11 +1,10 @@
 package build.jenesis.repository.proxy.test;
 
-import build.jenesis.repository.format.ProxyFormat;
-import build.jenesis.repository.proxy.NegativeCachingFetcher;
 import module org.junit.jupiter.api;
-
 import module java.base;
 
+import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.proxy.NegativeCachingFetcher;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

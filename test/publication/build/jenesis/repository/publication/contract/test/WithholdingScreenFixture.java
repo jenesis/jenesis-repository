@@ -1,11 +1,11 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
-
-import module java.base;
 
 /** The {@link WithholdingScreen} fixture: the screen whose verdict lives on the read side, so it is the one that
  *  drives the retraction and read-purity clauses and the fail-closed direction of an unanswerable hold probe. */

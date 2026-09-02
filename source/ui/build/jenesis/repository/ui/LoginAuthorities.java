@@ -1,8 +1,8 @@
 package build.jenesis.repository.ui;
 
-import org.springframework.security.core.GrantedAuthority;
-
 import module java.base;
+
+import org.springframework.security.core.GrantedAuthority;
 
 /**
  * What a signed-in user may do: the console's authorization policy, asked once per sign-in.

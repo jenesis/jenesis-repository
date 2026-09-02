@@ -1,10 +1,10 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
-
-import module java.base;
 
 /**
  * The verdict archetype: a screen that votes from durable state and records both what it saw and what the chain

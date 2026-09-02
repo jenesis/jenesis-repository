@@ -1,8 +1,8 @@
 package build.jenesis.repository.publication.contract.test;
 
-import build.jenesis.repository.store.PublicationObserver;
-
 import module java.base;
+
+import build.jenesis.repository.store.PublicationObserver;
 
 /** How a fixture reaches its hook: through {@code ServiceLoader}, the way {@code Publication} reaches it, rather than
  *  by construction - a fixture holding its own instance would test a hook the deployment never resolves. A fresh load

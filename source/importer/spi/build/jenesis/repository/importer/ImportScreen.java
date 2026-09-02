@@ -1,9 +1,9 @@
 package build.jenesis.repository.importer;
 
+import module java.base;
+
 import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
-
-import module java.base;
 
 /**
  * The one screen a migration's outbound requests pass, in two shapes over one set of rules: the <em>edge</em> shape

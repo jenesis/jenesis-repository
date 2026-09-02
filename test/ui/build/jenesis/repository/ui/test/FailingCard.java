@@ -1,9 +1,9 @@
 package build.jenesis.repository.ui.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.ui.ConsoleCard;
-
-import module java.base;
 
 /**
  * A {@code provides}-declared card that always fails, so the booted console in {@code ConsoleE2ETest} (downstream)

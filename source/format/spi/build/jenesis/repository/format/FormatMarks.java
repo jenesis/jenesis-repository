@@ -1,9 +1,9 @@
 package build.jenesis.repository.format;
 
+import module java.base;
+
 import build.jenesis.repository.icon.Mark;
 import build.jenesis.repository.icon.Marks;
-
-import module java.base;
 
 /**
  * The format family's own mark lookup: given a repository's top-level storage namespace, or the ecosystem a browse

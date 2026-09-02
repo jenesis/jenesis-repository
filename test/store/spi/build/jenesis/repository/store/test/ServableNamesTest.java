@@ -1,5 +1,8 @@
 package build.jenesis.repository.store.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
@@ -7,10 +10,6 @@ import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.ServableNames.Policy;
 import build.jenesis.repository.store.ServableNames.State;
 import build.jenesis.repository.store.Withheld;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 

@@ -1,8 +1,8 @@
 package build.jenesis.repository.store.filesystem;
 
-import build.jenesis.repository.store.ArtifactStore;
-
 import module java.base;
+
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The default {@link ArtifactStore}: blobs under a mounted root directory, keyed by their object path.

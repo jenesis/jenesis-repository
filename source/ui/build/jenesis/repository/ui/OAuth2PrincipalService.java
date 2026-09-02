@@ -1,13 +1,13 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
-
-import module java.base;
 
 /**
  * Turns a plain OAuth2 sign-in - GitHub, which is not OIDC - into a console principal: the provider's user-name

@@ -1,12 +1,12 @@
 package build.jenesis.repository.format.oci;
 
+import module java.base;
+import module org.slf4j;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
-
-import module java.base;
-import module org.slf4j;
 
 /**
  * Keeps the OCI {@linkplain OciListings stored tag lists and catalog} in step with the transitions that happen off

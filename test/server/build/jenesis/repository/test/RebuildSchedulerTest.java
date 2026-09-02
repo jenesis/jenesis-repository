@@ -1,5 +1,8 @@
 package build.jenesis.repository.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.server.RebuildScheduler;
 import build.jenesis.repository.server.RepositoryAutoConfiguration;
 import build.jenesis.repository.server.RepositoryProperties;
@@ -10,11 +13,7 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkProvider;
-import module org.junit.jupiter.api;
 import org.springframework.core.env.StandardEnvironment;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

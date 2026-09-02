@@ -1,13 +1,13 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.testkit.PublicationHookContract.Property;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
-
-import module java.base;
 
 /**
  * The fixture of a format's stored-listing observer - the after-commit hook that keeps a {@link StoredListing} in

@@ -1,5 +1,8 @@
 package build.jenesis.repository.format.oci.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.format.oci.OciFormat;
 import build.jenesis.repository.gc.GcPlan;
@@ -8,10 +11,6 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

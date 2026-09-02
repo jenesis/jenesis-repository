@@ -1,15 +1,14 @@
 package build.jenesis.repository.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.server.AuthFailures;
 import build.jenesis.repository.server.RepositoryAuthorizationEntryPoint;
 import build.jenesis.repository.server.spi.Authorization;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import module org.junit.jupiter.api;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;

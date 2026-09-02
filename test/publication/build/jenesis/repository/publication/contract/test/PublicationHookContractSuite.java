@@ -1,14 +1,14 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.store.testkit.Falsification;
 import build.jenesis.repository.store.testkit.Mutant;
 import build.jenesis.repository.store.testkit.PublicationHookContract;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
-import module org.junit.jupiter.api;
-
-import module java.base;
 
 /**
  * The JUnit driver for one hook's leg of the shared publication-hook contract. Everything hook-specific lives in the

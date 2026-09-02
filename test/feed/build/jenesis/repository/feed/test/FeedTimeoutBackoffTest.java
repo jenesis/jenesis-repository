@@ -1,14 +1,13 @@
 package build.jenesis.repository.feed.test;
 
+import module java.base;
+
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
 import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedTransport;
-
-import module java.base;
 import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

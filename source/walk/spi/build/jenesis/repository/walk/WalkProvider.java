@@ -1,9 +1,9 @@
 package build.jenesis.repository.walk;
 
+import module java.base;
+
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Providers;
-
-import module java.base;
 
 /**
  * A named factory for the shared {@link ArtifactWalk}, discovered at runtime with {@link ServiceLoader} - the API is

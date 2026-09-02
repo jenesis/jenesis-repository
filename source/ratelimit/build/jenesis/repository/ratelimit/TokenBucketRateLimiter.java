@@ -1,11 +1,11 @@
 package build.jenesis.repository.ratelimit;
 
+import module java.base;
+
 import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.server.spi.RateLimiter;
-
-import module java.base;
 
 /**
  * An in-memory token-bucket rate limiter, keyed by an arbitrary string (a tenant, or a credential hash). Each key

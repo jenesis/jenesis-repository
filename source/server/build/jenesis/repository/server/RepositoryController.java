@@ -1,8 +1,10 @@
 package build.jenesis.repository.server;
+import module java.base;
+import module org.slf4j;
+
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CapabilityContributor;
 import build.jenesis.repository.server.spi.ImportEdgeProvider;
-
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.importer.ImportSourceProvider;
@@ -18,9 +20,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
-
-import module java.base;
-import module org.slf4j;
 
 /**
  * The HTTP surface of the free repository, mirroring {@link RepositoryApplication}'s framework-neutral

@@ -1,10 +1,9 @@
 package build.jenesis.repository.test;
 
-import build.jenesis.repository.ratelimit.TokenBucketRateLimiter;
 import module org.junit.jupiter.api;
-
 import module java.base;
 
+import build.jenesis.repository.ratelimit.TokenBucketRateLimiter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

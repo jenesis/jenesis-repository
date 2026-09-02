@@ -1,10 +1,10 @@
 package build.jenesis.repository.posture.test;
 
+import module java.base;
+
 import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.SafetyAdvisor;
 import build.jenesis.repository.posture.SecurityAdvisory;
-
-import module java.base;
 
 /**
  * An advisor that breaks the contract the way a real one breaks it - a condition it cannot parse, a lookup that blows

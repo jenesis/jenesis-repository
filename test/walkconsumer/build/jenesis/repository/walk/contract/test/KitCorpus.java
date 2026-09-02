@@ -1,9 +1,9 @@
 package build.jenesis.repository.walk.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.testkit.WalkConsumerFixture;
-
-import module java.base;
 
 /**
  * The corpus every archetype fixture seeds: {@code n} retained serving pointers under one pointer root, each naming a

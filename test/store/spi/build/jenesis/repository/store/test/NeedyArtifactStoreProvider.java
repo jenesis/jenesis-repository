@@ -1,9 +1,9 @@
 package build.jenesis.repository.store.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-
-import module java.base;
 
 /** A backend that declares required configuration it never receives, so the fail-loud resolve path is testable. */
 public final class NeedyArtifactStoreProvider implements ArtifactStoreProvider {

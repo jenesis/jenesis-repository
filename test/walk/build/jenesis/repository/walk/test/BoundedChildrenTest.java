@@ -1,12 +1,11 @@
 package build.jenesis.repository.walk.test;
 
+import module org.junit.jupiter.api;
+import module java.base;
+
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.Traversal;
 import build.jenesis.repository.walk.TraversalException;
-import module org.junit.jupiter.api;
-
-import module java.base;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

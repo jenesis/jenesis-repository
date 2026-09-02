@@ -1,9 +1,9 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.PostureReport;
-
-import module java.base;
 
 /**
  * Where the security-posture screen gets its report, and when it was taken.

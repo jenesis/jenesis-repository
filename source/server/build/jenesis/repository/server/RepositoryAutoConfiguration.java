@@ -1,9 +1,11 @@
 package build.jenesis.repository.server;
+import module java.base;
+import module org.slf4j;
+
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.spi.RateLimiterProvider;
 import build.jenesis.repository.server.spi.ImportEdgeProvider;
-
 import build.jenesis.repository.format.FetcherProvider;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -27,9 +29,6 @@ import org.springframework.context.annotation.Conditional;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 import io.micrometer.observation.ObservationRegistry;
-
-import module java.base;
-import module org.slf4j;
 
 /**
  * Publishes the repository as Spring Boot auto-configuration so a downstream distribution can consume it with a plain

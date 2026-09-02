@@ -1,11 +1,11 @@
 package build.jenesis.repository.publication.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
-
-import module java.base;
 
 /** The {@link IndexObserver} fixture: a best-effort derived index whose repair leg is a real sweep over the durable
  *  {@code publish/} pointer namespace, re-presenting every retained artifact exactly as the walk's {@code onRetained}

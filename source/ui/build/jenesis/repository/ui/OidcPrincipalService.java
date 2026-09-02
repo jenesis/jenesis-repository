@@ -1,12 +1,12 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
-
-import module java.base;
 
 /**
  * Turns an OpenID Connect sign-in into a console principal: the {@code sub} claim, qualified by the registration it

@@ -1,10 +1,10 @@
 package build.jenesis.repository.walk.contract.test;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.WalkConsumer;
-
-import module java.base;
 
 /**
  * The <b>stride durable</b> archetype: deliveries are batched in memory and flushed from

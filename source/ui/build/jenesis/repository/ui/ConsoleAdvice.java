@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.PostureReport;
 import build.jenesis.repository.observation.Contributions;
@@ -8,8 +10,6 @@ import org.springframework.core.env.Environment;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
-
-import module java.base;
 
 /**
  * Publishes deployment-wide flags every console view reads to the model, so a template shows them without each

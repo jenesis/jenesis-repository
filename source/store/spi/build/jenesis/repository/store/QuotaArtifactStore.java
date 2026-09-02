@@ -1,10 +1,9 @@
 package build.jenesis.repository.store;
 
-import build.jenesis.repository.scope.Scopes;
-
 import module java.base;
 import module org.slf4j;
 
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.observation.Health;
 import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;

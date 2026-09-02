@@ -1,15 +1,13 @@
 package build.jenesis.repository.proxy.test;
 
-import build.jenesis.repository.format.ProxyFormat;
-import build.jenesis.repository.proxy.HttpFetcher;
 import module org.junit.jupiter.api;
-
 import module java.base;
 
+import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.proxy.HttpFetcher;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.http.RequestMethod;
-
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.head;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;

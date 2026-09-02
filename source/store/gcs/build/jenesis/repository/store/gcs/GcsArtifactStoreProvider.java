@@ -1,5 +1,7 @@
 package build.jenesis.repository.store.gcs;
 
+import module java.base;
+
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Endpoints;
@@ -16,8 +18,6 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-
-import module java.base;
 
 /**
  * The {@code gcs} artifact-store backend over a Google Cloud Storage bucket, through GCS's

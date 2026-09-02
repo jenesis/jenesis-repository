@@ -1,11 +1,11 @@
 package build.jenesis.repository.server;
 
+import module java.base;
+
 import tools.jackson.databind.json.JsonMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import module java.base;
 
 /**
  * The multi-node consistency read - {@code GET /api/consistency}, the console / CLI / API read of the fleet's

@@ -1,11 +1,11 @@
 package build.jenesis.repository.gc.store;
 
+import module java.base;
+
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GarbageCollector;
 import build.jenesis.repository.gc.GarbageCollectorProvider;
 import build.jenesis.repository.walk.WalkProvider;
-
-import module java.base;
 
 /**
  * Provides the {@link MarkSweepGarbageCollector} as {@code mark-sweep} - the default selection when no

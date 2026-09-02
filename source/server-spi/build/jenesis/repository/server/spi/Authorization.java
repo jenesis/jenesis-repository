@@ -1,8 +1,8 @@
 package build.jenesis.repository.server.spi;
 
-import build.jenesis.repository.scope.Scopes;
-
 import module java.base;
+
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
