@@ -732,6 +732,47 @@ class OciFormatTest {
      * assertion that it is <b>absent beforehand</b> is what makes the test bite: without it the pass would appear
      * to work simply because the read materialises what it finds missing, which is the defect.
      */
+    /**
+     * A read that races a migration must not leave the tag list short.
+     *
+     * <p>The sequence is the one an operator meets and no unit test had: the walk lays a tag out directly, a
+     * consumer asks for {@code tags/list} <em>while it is still running</em> and generates the document inline
+     * from what exists so far, and the walk then lays out the rest. The document now exists and is wrong.
+     *
+     * <p>That is why the import regenerates rather than creating what is missing. Create-if-absent probes the
+     * header, finds one, and leaves the short list in place - which is a wrong answer served to a client, not
+     * merely a slow one, and it would stand until some later pass happened to regenerate it.
+     */
+    @Test
+    void a_read_racing_a_migration_does_not_leave_the_tag_list_short() throws IOException {
+        String manifest = "{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\"}";
+        String digest = "sha256:" + sha256(manifest.getBytes(StandardCharsets.UTF_8));
+        store.write("blobs/" + digest.substring("sha256:".length()),
+                new ByteArrayInputStream(manifest.getBytes(StandardCharsets.UTF_8)));
+        store.writeVersioned("oci/types/" + digest.substring("sha256:".length()),
+                "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
+
+        // The walk has laid out one tag so far.
+        store.writeVersioned("oci/racing/tags/1.0", digest.getBytes(StandardCharsets.UTF_8), null);
+
+        // A consumer asks now, and the read materialises the document from what exists at this instant.
+        FakeExchange early = new FakeExchange("GET", "/v2/racing/tags/list");
+        format.handle(early, store);
+        assertThat(early.status()).isEqualTo(200);
+        assertThat(early.responseText()).contains("1.0").doesNotContain("2.0");
+
+        // The walk lays out the rest.
+        store.writeVersioned("oci/racing/tags/2.0", digest.getBytes(StandardCharsets.UTF_8), null);
+
+        StoredListing.rebuildAll(store, List.of(new OciListingObserver()));
+
+        FakeExchange after = new FakeExchange("GET", "/v2/racing/tags/list");
+        format.handle(after, store);
+        assertThat(after.responseText())
+                .as("the tag the read could not have seen is listed once the walk has finished")
+                .contains("1.0").contains("2.0");
+    }
+
     @Test
     void the_repair_pass_creates_a_tag_list_a_migration_left_absent() throws IOException {
         // As an import lays it out: the manifest by digest, its type sidecar, and the tag pointer - no push.
