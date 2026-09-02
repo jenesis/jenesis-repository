@@ -17,6 +17,7 @@ import tools.jackson.core.JsonGenerator;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import build.jenesis.repository.format.OciTags;
+import build.jenesis.repository.format.Checksums;
 
 /**
  * The OCI / Docker registry format (the {@code /v2/} Distribution API), so {@code docker push} and
@@ -898,7 +899,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return false;
         }
         byte[] body = fetched.get().body();
-        String hex = sha256(body);
+        String hex = Checksums.sha256(body);
         // Proxy-leg digest integrity: hold the received manifest to every digest that is knowable here, refusing
         // (letting the local 404 stand) on any mismatch rather than caching corrupted-in-transit bytes under the digest
         // or tag a client will later trust - the manifest counterpart of the blob check above.
@@ -1350,14 +1351,6 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             Retries.backoff(attempt);
         }
         throw new IOException("could not link " + key + " after repeated version conflicts");
-    }
-
-    private static String sha256(byte[] content) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     // --- RepositoryImporter capability (WSPI.2 (c)): delegated to OciImporter. importTarget returns empty - OCI owns

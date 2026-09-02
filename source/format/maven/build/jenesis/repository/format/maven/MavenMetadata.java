@@ -9,6 +9,7 @@ import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.walk.ScreenedNames;
 import build.jenesis.repository.walk.Traversal;
+import build.jenesis.repository.format.Checksums;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
@@ -97,7 +98,7 @@ public final class MavenMetadata {
         if (stored.isPresent() && Arrays.equals(stored.get(), document.get().body())) {
             return Optional.empty();   // the publisher's own document, byte for byte: its own checksum stands
         }
-        return Optional.of(hex(requestPath.endsWith(".sha1") ? "SHA-1" : "MD5", document.get().body())
+        return Optional.of(Checksums.hex(requestPath.endsWith(".sha1") ? "SHA-1" : "MD5", document.get().body())
                 .getBytes(StandardCharsets.UTF_8));
     }
 
@@ -137,7 +138,7 @@ public final class MavenMetadata {
                 return Optional.empty();
             }
             String algorithm = requestPath.endsWith(".sha1") ? "SHA-1" : "MD5";
-            return Optional.of(hex(algorithm, document.get()).getBytes(StandardCharsets.UTF_8));
+            return Optional.of(Checksums.hex(algorithm, document.get()).getBytes(StandardCharsets.UTF_8));
         }
         return computedDocument(requestPath);
     }
@@ -422,10 +423,10 @@ public final class MavenMetadata {
         }
         byte[] xml = metadata(groupId, artifactId, versions);
         if (requestPath.endsWith(".sha1")) {
-            return Optional.of(hex("SHA-1", xml).getBytes(StandardCharsets.UTF_8));
+            return Optional.of(Checksums.hex("SHA-1", xml).getBytes(StandardCharsets.UTF_8));
         }
         if (requestPath.endsWith(".md5")) {
-            return Optional.of(hex("MD5", xml).getBytes(StandardCharsets.UTF_8));
+            return Optional.of(Checksums.hex("MD5", xml).getBytes(StandardCharsets.UTF_8));
         }
         return Optional.of(xml);
     }
@@ -509,14 +510,6 @@ public final class MavenMetadata {
         writer.writeStartElement(name);
         writer.writeCharacters(text);
         writer.writeEndElement();
-    }
-
-    static String hex(String algorithm, byte[] content) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance(algorithm).digest(content));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     /** A Maven-style version order: numeric runs compared as numbers, qualifiers ranked (alpha &lt; ... &lt; snapshot &lt; release &lt; sp). */
