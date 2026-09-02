@@ -114,6 +114,25 @@ public record BoundedChildren(int steps, int entries, int page) {
         return new BoundedChildren(STEPS, ENTRIES, PAGE);
     }
 
+    /**
+     * Bounds for draining a whole container: no cap on names, no cap on round-trips, and {@code page} the only knob
+     * left.
+     *
+     * <p><b>Why this exists rather than two calls.</b> {@link #STEPS} is documented as "enough page round-trips to
+     * drain a container of {@link #ENTRIES} names at the default page size" - it is sized <em>for the default entry
+     * cap</em>. So raising {@code entries} without raising {@code steps} does not remove the ceiling, it moves it
+     * somewhere nobody wrote down: the walk now stops after {@code steps × page} names, and stopping is a
+     * {@link TraversalException.Reason#STEPS} rather than an answer.
+     *
+     * <p>That is not hypothetical. An OCI image with a million tags served fine on memory - the generator streams -
+     * and then failed with a 500, because {@code entries(MAX_VALUE).page(1_000)} left the default thousand steps in
+     * place and a thousand pages of a thousand names is exactly a million. The two knobs are coupled and were being
+     * set one at a time; naming the intent is what stops that.
+     */
+    public static BoundedChildren draining(int page) {
+        return new BoundedChildren(Integer.MAX_VALUE, Integer.MAX_VALUE, page);
+    }
+
     /** The same bounds with a different round-trip budget. */
     public BoundedChildren steps(int steps) {
         return new BoundedChildren(steps, entries, page);
