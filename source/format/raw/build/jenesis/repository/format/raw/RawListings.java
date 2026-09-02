@@ -67,7 +67,7 @@ final class RawListings {
         String prefix = ServableNames.PUBLISHED + folder.substring(0, folder.length() - 1);
         ScreenedNames.paths(names, ServableNames.Policy.HIDE_WITHHELD_AND_GONE)
                 .containers(childKey -> hasChild(childKey))
-                .scanning(BoundedChildren.bounded().entries(Integer.MAX_VALUE).page(1000))
+                .scanning(BoundedChildren.draining(1000))
                 .scan(store, prefix, (child, _) -> {
                     try {
                         sink.accept(child, link(child));
