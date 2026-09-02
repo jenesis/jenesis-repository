@@ -1,8 +1,8 @@
 package build.jenesis.repository.server;
 
+import module org.slf4j;
+
 import build.jenesis.repository.store.ArtifactStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The post-boot trigger for {@link DemoSeeder}: a shell wires one of these and calls {@link #start()} once the beans

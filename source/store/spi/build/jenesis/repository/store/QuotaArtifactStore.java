@@ -3,6 +3,7 @@ package build.jenesis.repository.store;
 import build.jenesis.repository.scope.Scopes;
 
 import module java.base;
+import module org.slf4j;
 
 import build.jenesis.repository.observation.Health;
 import build.jenesis.repository.observation.HealthCheck;
@@ -54,7 +55,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
         return Optional.ofNullable(INSTALLED.get());
     }
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(QuotaArtifactStore.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(QuotaArtifactStore.class);
 
     private static final String BLOBS = "blobs/";
     // The OCI chunked-upload staging: an un-finalized session's chunks are real stored content, so they count too.

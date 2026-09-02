@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.oci;
 
 import module java.base;
+import module org.slf4j;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Known;
@@ -44,7 +45,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 final class OciManifests {
 
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(OciManifests.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(OciManifests.class);
 
     private static final String OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
 
@@ -174,7 +175,7 @@ final class OciManifests {
                 // Not a courtesy arm: an Unknown does not fit Withheld.clear's parameter, so this is the only thing
                 // that compiles. Leaving a marker that should have cleared is the recoverable direction - the review
                 // flow releases it - where clearing one that should have stayed discloses held bytes.
-                LOG.warn("oci accept-clear: leaving withheld/{} in place for {} - {}", hex, path, unknown.detail());
+                LOGGER.warn("oci accept-clear: leaving withheld/{} in place for {} - {}", hex, path, unknown.detail());
                 return;
             }
             case Known.Determined<String> determined -> otherAlias = determined;

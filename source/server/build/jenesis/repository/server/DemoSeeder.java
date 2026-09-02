@@ -2,13 +2,12 @@ package build.jenesis.repository.server;
 
 import build.jenesis.repository.store.Publication;
 import module java.base;
+import module org.slf4j;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
 import io.micrometer.observation.ObservationRegistry;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Demo mode: flag-guarded seeding of a fresh, empty repository with real artifacts so an evaluator has data to look

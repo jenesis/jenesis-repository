@@ -4,6 +4,7 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 
 import module java.base;
+import module org.slf4j;
 
 /**
  * A listing a format serves as stored bytes and maintains on its write path: a Debian {@code Packages} file, a conda
@@ -46,7 +47,7 @@ import module java.base;
  */
 public final class StoredListing {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(StoredListing.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(StoredListing.class);
 
     /** The store root every listing document lives under; the key below it is the format's own, served-path-like key. */
     public static final String ROOT = "listing/";

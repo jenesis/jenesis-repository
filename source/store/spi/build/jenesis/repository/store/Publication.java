@@ -1,6 +1,7 @@
 package build.jenesis.repository.store;
 
 import module java.base;
+import module org.slf4j;
 
 /**
  * Decouples the artifact bytes from their publication, format-neutrally. Each uploaded blob is stored once,
@@ -112,7 +113,7 @@ import module java.base;
  */
 public final class Publication {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(Publication.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(Publication.class);
 
     /** The one discovered publication hook class, loaded once at class load like {@code MavenFormat.MODULE_VIEWS}:
      *  every {@link PublicationObserver} on the module path, the interceptors among them included - a

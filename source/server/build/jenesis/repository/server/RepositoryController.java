@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import module java.base;
+import module org.slf4j;
 
 /**
  * The HTTP surface of the free repository, mirroring {@link RepositoryApplication}'s framework-neutral
@@ -37,7 +38,7 @@ import module java.base;
 @RestController
 public class RepositoryController {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(RepositoryController.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryController.class);
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
