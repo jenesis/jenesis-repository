@@ -224,7 +224,9 @@ final class OciListings {
     private void generateTags(String name, StoredListing.Generator.Sink sink) throws IOException {
         BoundedChildren.bounded().entries(Integer.MAX_VALUE).page(1_000)
                 .scan(store, "oci/" + name + "/tags", tag -> {
-                    if (servable(name, tag)) {
+                    // disclosable, not servable: the scan just delivered this name out of the tag container, so
+                    // the pointer is there by construction and re-reading it to learn that is pure cost.
+                    if (disclosable(name, tag)) {
                         sink.accept(tag, JsonMembers.quote(tag).getBytes(StandardCharsets.UTF_8));
                     }
                 });
@@ -293,9 +295,27 @@ final class OciListings {
         return false;
     }
 
+    /**
+     * Whether a tag is listed: it is disclosable, and its pointer is there.
+     *
+     * <p>For a caller naming a tag that may not exist - a refresh after a push, a hold or a removal. A generator
+     * walking the tag container has already been told the name by the scan, so it uses {@link #disclosable}
+     * instead and does not pay to discover what the scan just said.
+     */
     private boolean servable(String name, String tag) throws IOException {
-        return names.disclosableKey("oci/" + name + "/tags/" + tag, ServableNames.Policy.HIDE_WITHHELD)
-                && store.readVersioned("oci/" + name + "/tags/" + tag).isPresent();
+        return disclosable(name, tag) && store.exists("oci/" + name + "/tags/" + tag);
+    }
+
+    /**
+     * The disclosure half alone, for a tag the caller already knows is stored.
+     *
+     * <p>Split out because the existence half was measurably not free: {@code readVersioned} reads the pointer's
+     * bytes to answer a question about its presence, and generation asked it once per tag over a container the
+     * scan had just enumerated - so an 800,000-tag image paid 800,000 whole-object reads to confirm 800,000
+     * names the store had already handed it. Serving that image's tag list took nine minutes.
+     */
+    private boolean disclosable(String name, String tag) throws IOException {
+        return names.disclosableKey("oci/" + name + "/tags/" + tag, ServableNames.Policy.HIDE_WITHHELD);
     }
 
     /** Re-decide one tag's membership from the store's current state - after a push, a hold or a release. */
