@@ -117,8 +117,27 @@ public final class DirtyIndexFeed {
      *  read a sweep does instead of enumerating the whole coordinate set: it lists only the {@code dirty/} prefix, so
      *  its cost is the number of pending changes, independent of the index size. */
     public List<Entry> pending() throws IOException {
+        return pending(Integer.MAX_VALUE);
+    }
+
+    /**
+     * At most {@code limit} of the marked coordinates - the same read, bounded.
+     *
+     * <p>"Independent of the index size" is not the same as bounded. The feed holds one marker per coordinate
+     * changed since the last sweep, so a bulk publish makes it as large as the publish: a sweep that reads the
+     * whole feed to apply a slice of it puts the burst in heap to do work it will not do. A caller that applies a
+     * batch at a time asks for a batch at a time, and takes the rest on its next round.
+     *
+     * <p>The bound is on the markers <em>read</em>, not on the names listed: a store's child listing is the
+     * primitive underneath, and stopping the read early is what keeps the decoded entries - and every marker body
+     * read to make them - proportional to the batch.
+     */
+    public List<Entry> pending(int limit) throws IOException {
         List<Entry> entries = new ArrayList<>();
         for (String name : store.list(dirtyPrefix)) {
+            if (entries.size() >= limit) {
+                break;
+            }
             Optional<ArtifactStore.Versioned> marker = store.readVersioned(dirtyPrefix + "/" + name);
             if (marker.isPresent()) {
                 entries.add(decode(marker.get()));
