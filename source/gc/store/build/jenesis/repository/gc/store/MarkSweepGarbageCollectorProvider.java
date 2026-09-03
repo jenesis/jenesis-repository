@@ -6,6 +6,7 @@ import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GarbageCollector;
 import build.jenesis.repository.gc.GarbageCollectorProvider;
 import build.jenesis.repository.walk.WalkProvider;
+import build.jenesis.repository.store.Durations;
 
 /**
  * Provides the {@link MarkSweepGarbageCollector} as {@code mark-sweep} - the default selection when no
@@ -56,9 +57,9 @@ public final class MarkSweepGarbageCollectorProvider implements GarbageCollector
         }
         Duration duration;
         try {
-            duration = Duration.parse(value.trim());
+            duration = Durations.parse(value);
         } catch (RuntimeException e) {
-            throw new IllegalArgumentException("Not an ISO-8601 duration: " + key + "=" + value, e);
+            throw new IllegalArgumentException("Not a duration (PT1H, 6h): " + key + "=" + value, e);
         }
         if (duration.isNegative()) {
             throw new IllegalArgumentException("Must not be negative: " + key + "=" + value);

@@ -1428,7 +1428,8 @@ public final class StoredListing {
             throw failed;
         }
         size = Files.size(file);
-        return new Rendered(file, size, md5 == null ? "" : hex(md5.digest()), hex(sha256.digest()), counter.count);
+        return new Rendered(file, size, md5 == null ? "" : HexFormat.of().formatHex(md5.digest()),
+                HexFormat.of().formatHex(sha256.digest()), counter.count);
     }
 
     /**
@@ -1493,8 +1494,8 @@ public final class StoredListing {
             Files.deleteIfExists(file);
             throw failed;
         }
-        return new Rendered(file, Files.size(file), md5 == null ? "" : hex(md5.digest()), hex(sha256.digest()),
-                counter.count);
+        return new Rendered(file, Files.size(file), md5 == null ? "" : HexFormat.of().formatHex(md5.digest()),
+                HexFormat.of().formatHex(sha256.digest()), counter.count);
     }
 
     /** The conditional write of a rendered document: its header and its bytes, streamed, never joined in heap. */
@@ -1628,10 +1629,6 @@ public final class StoredListing {
         return (MAGIC + "\nseq=" + header.seq() + "\nsize=" + header.size() + "\nmd5=" + header.md5()
                 + "\nsha256=" + header.sha256() + "\nentries=" + header.entries()
                 + "\n\n").getBytes(StandardCharsets.US_ASCII);
-    }
-
-    private static String hex(byte[] digest) {
-        return HexFormat.of().formatHex(digest);
     }
 
     private static byte[] frame(Header header, byte[] body) {

@@ -100,7 +100,7 @@ public final class CredentialsController {
         String minted = Authorization.mint(tenant);
         String hash = Authorization.hash(minted);
         Instant expires = authorization.mintExpiry(tenant,
-                request == null ? null : expiry(request.expires()),
+                request == null ? null : Authorization.expiry(request.expires()),
                 request != null && Boolean.TRUE.equals(request.nonExpiring()));
         authorization.provision(tenant, hash, request == null ? null : request.label(), expires);
         context.audit(key, "credential.mint", hash);
@@ -136,7 +136,8 @@ public final class CredentialsController {
                           @RequestBody(required = false) ExpiryRequest request,
                           HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.setExpiry(context.tenant(key), hashId(id), request == null ? null : expiry(request.expires()));
+        authorization.setExpiry(context.tenant(key), hashId(id),
+                request == null ? null : Authorization.expiry(request.expires()));
         context.audit(key, "credential.expiry", id);
         response.setStatus(200);
     }
@@ -163,7 +164,7 @@ public final class CredentialsController {
                          HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
         Authorization.Rotated rotated = authorization.rotate(context.tenant(key), hashId(id),
-                request == null ? null : overlap(request.overlap()));
+                request == null ? null : Authorization.lifetime(request.overlap()));
         context.audit(key, "credential.rotate", id + " -> " + Authorization.hash(rotated.key()));
         response.setStatus(201);
         return new Minted(Authorization.hash(rotated.key()), rotated.key(),
@@ -186,27 +187,11 @@ public final class CredentialsController {
         response.setStatus(200);
     }
 
-    /** A blank overlap applies the default week, so a rotation without one is still downtime-free. */
-    private static Duration overlap(String value) {
-        return value == null || value.isBlank() ? null : Duration.parse(value.trim());
-    }
-
     private static String hashId(String id) {
         if (id == null || !HASH.matcher(id).matches()) {
             throw new IllegalArgumentException("Invalid credential id");
         }
         return id;
-    }
-
-    /** Blank clears the expiry; a leading {@code P} is an ISO-8601 duration from now, else an absolute instant. */
-    private static Instant expiry(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.regionMatches(true, 0, "P", 0, 1)
-                ? Instant.now().plus(Duration.parse(trimmed))
-                : Instant.parse(trimmed);
     }
 
     private static CredentialView view(Authorization.Credential credential) {

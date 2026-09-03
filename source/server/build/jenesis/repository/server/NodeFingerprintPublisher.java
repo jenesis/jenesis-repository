@@ -5,6 +5,7 @@ import module org.slf4j;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.QuotaArtifactStore;
+import build.jenesis.repository.store.Tenants;
 import build.jenesis.repository.store.TenantsProvider;
 
 /**
@@ -12,37 +13,69 @@ import build.jenesis.repository.store.TenantsProvider;
  * derived once - the {@code jenreg.consistency.node-id} setting if given, else the hostname, else a generated
  * per-process id - and held as <em>instance</em> state on this bean (never a mutable static), so a fleet of in-process
  * nodes in a test each carry their own identity. A daemon scheduler re-publishes every heartbeat interval, so a node's
- * liveness (and its current config generation, cursor position and sampled counters) stays fresh for the fleet to
- * compare against; the write is a single compare-and-set on this node's own key, so it never contends with another node.
+ * liveness (and its current config and tenant generation, cursor position and sampled counters) stays fresh for the
+ * fleet to compare against; the write is a single compare-and-set on this node's own key, so it never contends with
+ * another node.
  *
- * <p>The fingerprint is cheap to build - the config generation is a hash over the must-match settings, the counters are
- * read from the store's own in-memory meter where present, and nothing walks the artifact namespace. Publishing is
- * best-effort: a write refused by a read-only deployment, or a transient store error, is logged at debug and retried on
- * the next heartbeat rather than failing the node. In the core the derived-index cursor is not maintained (there is
- * no background sweep here), so it is published as zero with the heartbeat as its advance time - honest for a single
- * hosted node; a distribution that runs a real index sweep publishes its live cursor and freeze time.
+ * <p>The fingerprint is cheap to build: the config generation is a hash over the must-match settings <em>and the
+ * tenant set</em>, read through the {@link Tenants} view on every heartbeat (a directory read, never a scan) so a node
+ * that missed a config or tenant change diverges rather than reporting the generation it booted with; the counters
+ * come from the store's own in-memory meter where present. Publishing is <strong>opt-in</strong> per deployment via
+ * {@code jenreg.consistency.enabled} - a single-node deployment writes nothing into an otherwise-clean store - and
+ * best-effort: a write refused by a read-only deployment, or a transient store error, is logged at debug and retried
+ * on the next heartbeat rather than failing the node. The derived-index cursor is not maintained here (there is no
+ * background sweep in the core), so it is published as zero with the heartbeat as its advance time - honest for a
+ * single hosted node; a distribution that runs a real index sweep publishes its live cursor and freeze time.
  */
 public final class NodeFingerprintPublisher implements AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NodeFingerprintPublisher.class);
 
+    /** The settings that must be byte-for-byte identical on every node, so a differing value on any is a real split:
+     *  the store backend, the routed and the default tenant and repository, the operator tenant, the authorization
+     *  mode and the read-only flag. Two editions used to fold two different subsets of this list, so the two peers of
+     *  one mechanism disagreed about what a split is; a setting unset on a deployment folds as blank on every node,
+     *  which is why the union costs nothing. */
+    static final List<String> MUST_MATCH = List.of("jenreg.store", "jenreg.tenant", "jenreg.repository",
+            "jenreg.operator-tenant", "jenreg.default-tenant", "jenreg.default-repository", "jenreg.auth",
+            "jenreg.read-only");
+
     private final NodeConsistency consistency;
     private final ArtifactStore store;
+    private final Tenants tenants;
     private final boolean enabled;
     private final String nodeId;
-    private final long configGeneration;
+    private final Map<String, String> mustMatch;
     private final long heartbeatMillis;
     private final ScheduledExecutorService scheduler;
+    /** The last tenant set read successfully, so a transient listing failure folds the set last seen rather than an
+     *  empty one that would report a false split. */
+    private volatile List<String> lastTenants;
 
+    /** Over a store: the tenant view is resolved through the same {@code TenantsProvider} seam the rest of the core
+     *  uses - the single configured tenant with no tenants module installed, the store-backed scopes with one - and the
+     *  quota counter is read from the store's meter when it carries one. */
     public NodeFingerprintPublisher(NodeConsistency consistency, ArtifactStore store, UnaryOperator<String> config) {
+        this(consistency, store, TenantsProvider.resolve(store, config, configuredTenant(config)), config);
+    }
+
+    /** Over an explicit tenant view and no store meter - the seam a test drives two in-process nodes through. */
+    public NodeFingerprintPublisher(NodeConsistency consistency, Tenants tenants, UnaryOperator<String> config) {
+        this(consistency, null, tenants, config);
+    }
+
+    private NodeFingerprintPublisher(NodeConsistency consistency, ArtifactStore store, Tenants tenants,
+                                     UnaryOperator<String> config) {
         this.consistency = Objects.requireNonNull(consistency, "consistency");
-        this.store = Objects.requireNonNull(store, "store");
+        this.store = store;
+        this.tenants = Objects.requireNonNull(tenants, "tenants");
         // Opt-in per deployment, like the other operational writers (demo seeding, batch ingestion): a single-node
         // deployment publishes nothing, so it never writes an operational key into an otherwise-clean store layout; a
         // multi-node deployment sets jenreg.consistency.enabled=true so its nodes publish and can be compared.
         this.enabled = "true".equalsIgnoreCase(String.valueOf(config.apply("jenreg.consistency.enabled")));
         this.nodeId = resolveNodeId(config);
-        this.configGeneration = NodeFingerprint.configGeneration(mustMatch(config), tenantSet(store, config));
+        this.mustMatch = mustMatch(config);
+        this.lastTenants = List.of(configuredTenant(config));
         this.heartbeatMillis = Math.max(1000L, millis(config, "jenreg.consistency.heartbeat",
                 consistency.settings().sweepIntervalMillis()));
         this.scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -83,10 +116,25 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         }
     }
 
-    /** This node's current fingerprint - the config generation fixed at boot, the counters read cheaply now. */
+    /** This node's current fingerprint: the config and tenant generation folded now, the counters read cheaply now. */
     NodeFingerprint fingerprint() {
         long now = System.currentTimeMillis();
-        return new NodeFingerprint(nodeId, now, now, 0L, "", configGeneration, 0L, quotaUsed(), 0L, Map.of());
+        List<String> tenantSet = tenantSet();
+        long generation = NodeFingerprint.configGeneration(mustMatch, tenantSet);
+        return new NodeFingerprint(nodeId, now, now, 0L, "", generation, 0L, quotaUsed(), tenantSet.size(), Map.of());
+    }
+
+    /** The current tenant set - a cheap directory read - or the last one read when the directory cannot be listed,
+     *  so the fold stays stable across a transient failure rather than reporting a split that is not there. */
+    private List<String> tenantSet() {
+        try {
+            List<String> listed = tenants.list();
+            lastTenants = listed;
+            return listed;
+        } catch (IOException | RuntimeException unreadable) {
+            LOGGER.debug("consistency tenant-set read kept the last set seen: {}", unreadable.toString());
+            return lastTenants;
+        }
     }
 
     /** The bytes counted against the quota where the store meters them, else zero - a counter already in memory, never
@@ -104,37 +152,18 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         scheduler.shutdownNow();
     }
 
-    /** The settings that must be byte-for-byte identical on every node, so a differing value on any is a real split -
-     *  the store backend, the routed tenant / repository, the authorization mode and the read-only flag. */
     private static Map<String, String> mustMatch(UnaryOperator<String> config) {
         Map<String, String> settings = new TreeMap<>();
-        for (String key : List.of("jenreg.store", "jenreg.tenant",
-                "jenreg.repository", "jenreg.auth", "jenreg.read-only")) {
+        for (String key : MUST_MATCH) {
             String value = config.apply(key);
             settings.put(key, value == null ? "" : value);
         }
         return settings;
     }
 
-    /** This deployment's tenant set, read once at boot through the same {@code TenantsProvider} seam the rest of the
-     *  core resolves the {@link build.jenesis.repository.store.Tenants} directory through: the single configured
-     *  tenant with no tenants module installed, the store-backed scopes with one. Folded into the config generation so
-     *  two nodes that route the same config but keep different tenant directories are caught as inconsistent,
-     *  with multi-tenancy riding this one seam rather than a parallel fingerprint. Best-effort like the heartbeat write:
-     *  if the directory cannot be listed, fall back to the single configured tenant so the fold stays stable rather than
-     *  failing the node. */
-    private static Collection<String> tenantSet(ArtifactStore store, UnaryOperator<String> config) {
+    private static String configuredTenant(UnaryOperator<String> config) {
         String tenant = config.apply("jenreg.tenant");
-        if (tenant == null || tenant.isBlank()) {
-            tenant = "default";
-        }
-        try {
-            return TenantsProvider.resolve(store, config, tenant).list();
-        } catch (IOException | RuntimeException unavailable) {
-            LOGGER.debug("consistency tenant-set read fell back to the configured tenant '{}': {}", tenant,
-                    unavailable.toString());
-            return List.of(tenant);
-        }
+        return tenant == null || tenant.isBlank() ? "default" : tenant;
     }
 
     /** A stable node id: the explicit setting, else the hostname, else a generated per-process id (with a warning that
@@ -159,7 +188,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         return generated;
     }
 
-    /** Reduce an id to a traversal-free key segment, so it is safe as the {@code consistency/nodes/<id>} key. */
+    /** Reduce an id to a traversal-free key segment, so it is safe as the node's fingerprint key. */
     private static String sanitize(String id) {
         String cleaned = id.replaceAll("[^A-Za-z0-9_.-]", "-");
         return cleaned.isBlank() || cleaned.equals(".") || cleaned.equals("..") ? "node" : cleaned;

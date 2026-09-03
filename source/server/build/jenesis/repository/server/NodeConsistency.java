@@ -2,27 +2,39 @@ package build.jenesis.repository.server;
 
 import module java.base;
 
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
  * The multi-node consistency engine: it publishes this node's {@link NodeFingerprint} to the shared
  * {@link ArtifactStore} and reads every node's fingerprint back to build a {@link ConsistencyReport}. Fingerprints live
- * under the fixed, internal key prefix {@code consistency/nodes/<id>} - the same store every node already shares - so a
- * node joins the comparison simply by publishing, and the check needs no registry, no coordinator and no cross-node RPC.
+ * under the fixed, internal key prefix {@code .system/config/consistency/nodes/<id>} - the product's own space in the
+ * same store every node already shares, deployment-global because a fingerprint describes a node and not a tenant -
+ * so a node joins the comparison simply by publishing, and the check needs no registry, no coordinator and no
+ * cross-node RPC.
  *
- * <p>The read is <strong>cheap by construction</strong>: {@link #report} lists exactly the {@code consistency/nodes/}
- * prefix (one directory of node ids, never the millions-entry artifact namespace) and reads one small object per node -
- * a cost bounded by the node count, not the store size. It never walks {@code blobs/} or any tenant space, so a
- * consistency check never turns into a full scan. Each node owns its own key, so a publish is an uncontended
- * compare-and-set on that one object; a node reads with {@link ArtifactStore#readVersioned} and writes with
- * {@link ArtifactStore#writeVersioned} on its own key's token, so a stale-token retry only ever races the same node.
+ * <p>The read is <strong>cheap by construction</strong>: {@link #report} lists exactly the node prefix (one directory
+ * of node ids, never the millions-entry artifact namespace) and reads one small object per node - a cost bounded by
+ * the node count, not the store size. It never walks {@code blobs/} or any tenant space, so a consistency check never
+ * turns into a full scan. Each node owns its own key, so a publish is an uncontended compare-and-set on that one
+ * object; a node reads with {@link ArtifactStore#readVersioned} and writes with {@link ArtifactStore#writeVersioned}
+ * on its own key's token, so a stale-token retry only ever races the same node.
+ *
+ * <p>This is the one engine. The enterprise telemetry module used to carry a second, wired beside this one under a
+ * different bean name, writing a {@code key=value} document to a different prefix - so one deployment heartbeated two
+ * disjoint node sets in two encodings and its posture advisor read one of them. The two differed in nothing but
+ * where they wrote and how; what the enterprise copy did better (folding the live tenant set on every heartbeat, a
+ * wider must-match set) is what the {@link NodeFingerprintPublisher} does now.
  */
 public final class NodeConsistency {
 
-    /** The internal key prefix every node publishes its fingerprint under - a fixed, hidden operational space beside
-     *  the store's other operational keys ({@code quota/}, {@code walks/}), never an artifact space. */
-    public static final String PREFIX = "consistency/nodes/";
+    /** The {@code .system/config/consistency} space, this class being its single composer: a distribution's storage
+     *  manifest declares this constant rather than re-spelling the literal. */
+    public static final String ROOT = Scopes.space(Scopes.CONFIG) + "/consistency";
+
+    /** The internal key prefix every node publishes its fingerprint under. */
+    public static final String PREFIX = ROOT + "/nodes/";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -156,6 +168,7 @@ public final class NodeConsistency {
         map.put("configGeneration", fingerprint.configGeneration());
         map.put("inventoryTotal", fingerprint.inventoryTotal());
         map.put("quotaUsed", fingerprint.quotaUsed());
+        map.put("tenantCount", fingerprint.tenantCount());
         map.put("pointers", new TreeMap<>(fingerprint.pointers()));
         return map;
     }

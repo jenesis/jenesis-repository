@@ -203,12 +203,8 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
      *  conflict so a concurrent {@link #adjust} cannot silently drop the recomputed total; if contention persists the
      *  stale counter stands until the next reconcile corrects it, which is the counter's documented drift model. */
     public void store(long total) throws IOException {
-        for (int attempt = 0; attempt < 8; attempt++) {
-            Object token = meter.readVersioned(USED).map(Versioned::token).orElse(null);
-            if (meter.writeVersioned(USED, Long.toString(total).getBytes(StandardCharsets.UTF_8), token)) {
-                return;
-            }
-        }
+        byte[] body = Long.toString(total).getBytes(StandardCharsets.UTF_8);
+        Retries.tryUpdate(meter, USED, current -> body);        // the next reconcile corrects a counter this lost
     }
 
     /** Whether a key names content that consumes the quota: a finished blob, or the in-flight chunks of an OCI
@@ -294,17 +290,14 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
      *  but a dropped delta is logged, so a counter drifting under sustained contention is visible to the operator
      *  before the periodic {@link #recompute reconcile} corrects it, not a silent surprise. */
     private void adjust(long delta) throws IOException {
-        for (int attempt = 0; attempt < 8; attempt++) {
-            Optional<Versioned> stored = meter.readVersioned(USED);
+        boolean landed = Retries.tryUpdate(meter, USED, stored -> {
             long current = stored.isEmpty() ? 0L : parse(stored.get().content());
-            long next = Math.max(0L, current + delta);
-            Object token = stored.map(Versioned::token).orElse(null);
-            if (meter.writeVersioned(USED, Long.toString(next).getBytes(StandardCharsets.UTF_8), token)) {
-                return;
-            }
+            return Long.toString(Math.max(0L, current + delta)).getBytes(StandardCharsets.UTF_8);
+        });
+        if (!landed) {
+            LOGGER.warn("quota counter update of " + delta + " bytes dropped after repeated conflicts; "
+                    + "the usage counter drifts until the next recompute");
         }
-        LOGGER.warn("quota counter update of " + delta + " bytes dropped after repeated conflicts; "
-                + "the usage counter drifts until the next recompute");
     }
 
     /** An owner-only ({@code rw-------}) blob-digest spool, mirroring the s3/gcs artifact stores: the quota decorator

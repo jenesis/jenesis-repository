@@ -18,8 +18,8 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * <p>These numbers are the very thing that makes the "these numbers are instance-specific; warn when multiple
  * nodes" caveat trustworthy: the overview can now say <em>how many</em> instances there are and whether they agree. A
  * single-node deployment reports one node and full health - no false divergence. Reading it is cheap: it runs the same
- * bounded {@link NodeConsistency#report} (the {@code consistency/nodes/} prefix plus one small object per node), never a
- * scan; a store it cannot read reports nothing rather than failing the overview.
+ * bounded {@link NodeConsistency#report} (the node prefix plus one small object per node), never a scan; a store it
+ * cannot read reports nothing rather than failing the overview.
  */
 public final class NodeConsistencyObservability implements ObservabilitySource {
 

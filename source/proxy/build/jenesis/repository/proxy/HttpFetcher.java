@@ -4,6 +4,7 @@ import module java.base;
 import module java.net.http;
 import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.store.Durations;
 
 /**
  * The upstream fetch over HTTP: request headers are forwarded; the status and response headers are returned.
@@ -21,8 +22,8 @@ import build.jenesis.repository.format.ProxyFormat;
  * artifact's body transfer is not clipped by it, and a body that ends short of its declared {@code Content-Length}
  * surfaces as an {@link IOException} on the read (buffered) or on the stream the caller copies into the store
  * (streamed), so a truncated response is never written as a complete cached artifact. The timeout defaults to a
- * minute and is overridable with the {@code jenreg.proxy.request-timeout} system property (ISO-8601 like
- * {@code PT30S}, or a plain number of seconds).
+ * minute and is overridable with the {@code jenreg.proxy.request-timeout} system property, a duration in the
+ * deployment's one grammar ({@code PT30S} or {@code 30s}).
  *
  * <p>Redirects are followed manually rather than by the JDK client's automatic {@code NORMAL} policy, because that
  * policy re-sends every request header - including {@code Authorization} - to the redirect target even across a
@@ -213,18 +214,11 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : "http".equalsIgnoreCase(uri.getScheme()) ? 80 : -1;
     }
 
-    /** The configured per-request timeout: {@code jenreg.proxy.request-timeout} (ISO-8601 or plain seconds), or a minute. */
+    /** The configured per-request timeout: {@code jenreg.proxy.request-timeout} ({@code PT30S}, {@code 30s}), or a
+     *  minute. */
     private static Duration requestTimeout() {
         String value = System.getProperty("jenreg.proxy.request-timeout");
-        if (value == null || value.isBlank()) {
-            return Duration.ofSeconds(60);
-        }
-        String trimmed = value.trim();
-        try {
-            return Duration.parse(trimmed);
-        } catch (DateTimeException _) {
-            return Duration.ofSeconds(Long.parseLong(trimmed));
-        }
+        return value == null || value.isBlank() ? Duration.ofSeconds(60) : Durations.parse(value);
     }
 
     private static Map<String, String> headers(HttpResponse<?> response) {

@@ -10,15 +10,16 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The multi-node consistency read - {@code GET /api/consistency}, the console / CLI / API read of the fleet's
  * per-node fingerprints and any divergence between them. It runs the same {@link NodeConsistency#report bounded check}
- * (the {@code consistency/nodes/} prefix plus one small object per node, never a scan) and returns the per-node numbers
- *, the divergences (each a stuck-cursor / config / pointer split with a value-free reason), and the
- * {@code converged} / {@code singleNode} flags - so a caller sees at a glance whether the nodes agree.
+ * (the node prefix plus one small object per node, never a scan) and returns the per-node numbers, the divergences
+ * (each a stuck-cursor / config / pointer split with a value-free reason), and the {@code converged} /
+ * {@code singleNode} flags - so a caller sees at a glance whether the nodes agree.
  *
  * <p>Read like every other {@code /api} surface - key-auth'd ({@code repository:read}) by
  * {@link RepositorySecurityAutoConfiguration}, read-only, never an anonymous backdoor and it never blocks a request; it
  * only observes. It <strong>degrades cleanly to single-node</strong>: one live node returns that node and no divergence,
- * a false positive impossible. The downstream edition mirrors this independently as an operator-gated
- * {@code /api/admin/consistency}. It names the risk (which node, how far behind), never a resolved hash or config value.
+ * a false positive impossible. It names the risk (which node, how far behind), never a resolved hash or config value.
+ * The enterprise edition's operator-gated {@code /api/admin/consistency} serves {@link #document the same document}
+ * over the same engine, with the divergence advisories added.
  */
 @RestController
 public final class ConsistencyController {
@@ -35,8 +36,18 @@ public final class ConsistencyController {
 
     @GetMapping("/api/consistency")
     public void consistency(HttpServletResponse response) throws IOException {
-        ConsistencyReport report = consistency.report(System.currentTimeMillis());
+        Map<String, Object> body = document(consistency.report(System.currentTimeMillis()), localNodeId);
+        response.setHeader("Content-Type", "application/json");
+        response.setStatus(200);
+        byte[] bytes = JSON.writeValueAsString(body).getBytes(StandardCharsets.UTF_8);
+        try (OutputStream out = response.getOutputStream()) {
+            out.write(bytes);
+        }
+    }
 
+    /** The report as the JSON document both editions serve: the per-node rows, the divergences and the flags, with
+     *  {@code localNodeId} marking the node that answered. */
+    public static Map<String, Object> document(ConsistencyReport report, String localNodeId) {
         List<Map<String, Object>> nodes = new ArrayList<>();
         for (ConsistencyReport.NodeView node : report.nodes()) {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -49,6 +60,7 @@ public final class ConsistencyController {
             row.put("configGeneration", Long.toHexString(node.configGeneration()));
             row.put("inventoryTotal", node.inventoryTotal());
             row.put("quotaUsed", node.quotaUsed());
+            row.put("tenantCount", node.tenantCount());
             row.put("local", node.nodeId().equals(localNodeId));
             nodes.add(row);
         }
@@ -71,12 +83,6 @@ public final class ConsistencyController {
         body.put("truncated", report.truncated());
         body.put("nodes", nodes);
         body.put("divergences", divergences);
-
-        response.setHeader("Content-Type", "application/json");
-        response.setStatus(200);
-        byte[] bytes = JSON.writeValueAsString(body).getBytes(StandardCharsets.UTF_8);
-        try (OutputStream out = response.getOutputStream()) {
-            out.write(bytes);
-        }
+        return body;
     }
 }

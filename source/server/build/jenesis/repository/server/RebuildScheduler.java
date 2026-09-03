@@ -14,6 +14,7 @@ import build.jenesis.repository.walk.RebuildPass;
 import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkProvider;
+import build.jenesis.repository.store.Durations;
 
 /**
  * The free edition's scheduled driver of the shared {@link RebuildPass}: on a cadence it joins the pass over the
@@ -184,29 +185,28 @@ public final class RebuildScheduler implements AutoCloseable {
         return roots;
     }
 
+    /**
+     * The driver's cadence, and its only switch: a day when unset; {@code off}, {@code 0} or {@code false} for no
+     * driver at all - which is how a distribution that drives the same pass another way stands this one down - and
+     * otherwise a duration in the deployment's one grammar ({@code PT6H}, {@code 6h}, {@code 30m}, {@code 1d}).
+     *
+     * <p>Zero disables here where a maintenance pass's cadence dial refuses it, and the difference is deliberate:
+     * those dials sit beside a separate on/off toggle per pass, so a zero cadence there would give one dial two
+     * meanings; this dial <em>is</em> the toggle, and has no other.
+     */
     public static Duration interval(String value) {
         if (value == null || value.isBlank()) {
             return Duration.ofDays(1);
         }
-        String text = value.trim().toLowerCase(Locale.ROOT);
-        if (text.equals("off") || text.equals("0") || text.equals("false")) {
+        String text = value.trim();
+        if (text.equalsIgnoreCase("off") || text.equals("0") || text.equalsIgnoreCase("false")) {
             return Duration.ZERO;
         }
         try {
-            if (text.startsWith("p")) {
-                return Duration.parse(text.toUpperCase(Locale.ROOT));
-            }
-            long amount = Long.parseLong(text.substring(0, text.length() - 1));
-            return switch (text.charAt(text.length() - 1)) {
-                case 's' -> Duration.ofSeconds(amount);
-                case 'm' -> Duration.ofMinutes(amount);
-                case 'h' -> Duration.ofHours(amount);
-                case 'd' -> Duration.ofDays(amount);
-                default -> throw new IllegalArgumentException(text);
-            };
-        } catch (RuntimeException unparseable) {
-            throw new IllegalArgumentException(INTERVAL + " must be an ISO-8601 duration (PT6H), a simple one "
-                    + "(6h, 30m, 1d) or 'off', not '" + value + "'");
+            return Durations.parse(text);
+        } catch (IllegalArgumentException unparseable) {
+            throw new IllegalArgumentException(INTERVAL + " must be a duration (PT6H, 6h, 30m, 1d) or 'off', not '"
+                    + value + "'", unparseable);
         }
     }
 

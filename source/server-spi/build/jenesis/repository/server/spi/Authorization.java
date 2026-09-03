@@ -3,6 +3,8 @@ package build.jenesis.repository.server.spi;
 import module java.base;
 
 import build.jenesis.repository.scope.Scopes;
+import build.jenesis.repository.store.Durations;
+import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
@@ -192,14 +194,42 @@ public final class Authorization {
         return configured;
     }
 
-    /** An ISO-8601 duration, or a refusal naming the key and what a well-formed value looks like. */
+    /** A duration in the deployment's one grammar, or a refusal naming the key and what a well-formed value looks
+     *  like. */
     private static Duration lifetime(String value, String key) {
         try {
-            return Duration.parse(value);
-        } catch (DateTimeParseException malformed) {
-            throw new IllegalArgumentException("jenreg." + key + " is not an ISO-8601 duration: '" + value
-                    + "'. Write it as P30D (thirty days), PT12H (twelve hours) or P1DT6H.", malformed);
+            return Durations.parse(value);
+        } catch (IllegalArgumentException malformed) {
+            throw new IllegalArgumentException("jenreg." + key + " is not a duration: '" + value
+                    + "'. Write it as P30D or 30d (thirty days), PT12H or 12h (twelve hours) or P1DT6H.", malformed);
         }
+    }
+
+    /**
+     * A credential lifetime, a rotation overlap or a trust's token ttl as an operator writes it on any surface:
+     * blank is none, so the caller's default applies; otherwise a duration in the deployment's one grammar
+     * ({@code P90D}, {@code 90d}, {@code PT12H}). The API, the console and the management surface used to carry
+     * one copy each of this line and of {@link #expiry}, which is how one of them came to accept a spelling the
+     * others refused.
+     */
+    public static Duration lifetime(String value) {
+        return value == null || value.isBlank() ? null : Durations.parse(value);
+    }
+
+    /**
+     * A credential expiry as an operator writes it: blank clears it; an absolute ISO-8601 instant
+     * ({@code 2027-01-01T00:00:00Z}) is taken as written; anything else is a duration from now ({@code P30D},
+     * {@code 30d}). The instant is the one form that carries a colon, which is what tells the two apart - a suffixed
+     * duration never does, and an ISO duration starts with a {@code P}.
+     */
+    public static Instant expiry(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.indexOf(':') >= 0 && !trimmed.regionMatches(true, 0, "P", 0, 1)
+                ? Instant.parse(trimmed)
+                : Instant.now().plus(Durations.parse(trimmed));
     }
 
     public Duration defaultLifetime() {
@@ -880,11 +910,11 @@ public final class Authorization {
     public boolean recordUsed(String tenant, String hash, Instant when, String address, long increment)
             throws IOException {
         require();
-        String path = metadataPath(tenant, hash);
-        for (int attempt = 0; attempt < USE_COUNT_RETRIES; attempt++) {
-            Optional<ArtifactStore.Versioned> current = store.readVersioned(path);
+        // Retries.tryUpdate, not update: the usage count is informational and the tracker keeps the delta on a loss
+        // and re-applies it on the next flush, so a contended write defers the increment rather than dropping it.
+        return Retries.tryUpdate(store, metadataPath(tenant, hash), current -> {
             if (current.isEmpty()) {
-                return true;                       // a revoked credential (no metadata) is settled - nothing to record
+                return null;                       // a revoked credential (no metadata) is settled - nothing to record
             }
             Properties metadata = new Properties();
             metadata.load(new ByteArrayInputStream(current.get().content()));
@@ -896,16 +926,9 @@ public final class Authorization {
                     Long.toString(Long.parseLong(metadata.getProperty("useCount", "0")) + increment));
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             metadata.store(bytes, null);
-            if (store.writeVersioned(path, bytes.toByteArray(), current.get().token())) {
-                return true;
-            }
-        }
-        return false;                              // lost the compare-and-set every attempt - the caller keeps the delta
+            return bytes.toByteArray();
+        });
     }
-
-    /** Bounded compare-and-set attempts for the accumulating {@link #recordUsed} counter before it forfeits the
-     *  increment - the usage count is informational and the tracker re-accumulates, so a contended write never spins. */
-    private static final int USE_COUNT_RETRIES = 5;
 
     /** Revoke a credential by hash: delete its grants and metadata, so the next request is forbidden. */
     public void revoke(String tenant, String hash) throws IOException {
