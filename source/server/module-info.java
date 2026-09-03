@@ -152,6 +152,7 @@
  */
 open module build.jenesis.repository.server {
     requires transitive build.jenesis.repository.server.spi;
+    requires build.jenesis.repository.scope;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.walk;

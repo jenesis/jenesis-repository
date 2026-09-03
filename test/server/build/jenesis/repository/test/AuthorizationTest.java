@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.scope.Scopes;
+import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -505,13 +506,14 @@ class AuthorizationTest {
                 .as("a settled increment returns true").isTrue();
         assertThat(authorization.credential("acme", hash).orElseThrow().useCount()).isEqualTo(4);
 
-        // A metadata write that loses every compare-and-set: recordUsed spends all USE_COUNT_RETRIES attempts and
-        // forfeits, returning false and leaving no partial write, so the caller keeps the delta for the next flush.
+        // A metadata write that loses every compare-and-set: recordUsed spends every try the one retry policy allows
+        // and forfeits, returning false and leaving no partial write, so the caller keeps the delta for the next flush.
         ConflictingStore conflicting = new ConflictingStore(store, Scopes.space(Scopes.AUTH) + "/acme/" + hash + "/metadata");
         Authorization contended = Authorization.enforcing(conflicting);
         assertThat(contended.recordUsed("acme", hash, Instant.parse("2026-07-01T09:00:00Z"), "10.0.0.2", 9))
                 .as("a write that loses every attempt forfeits the increment").isFalse();
-        assertThat(conflicting.attempts).as("every retry was spent before forfeiting").isEqualTo(5);
+        assertThat(conflicting.attempts).as("every retry was spent before forfeiting")
+                .isEqualTo(Retries.COMPARE_AND_SET);
 
         Authorization.Credential after = Authorization.enforcing(store).credential("acme", hash).orElseThrow();
         assertThat(after.useCount()).as("the forfeited delta left no partial write").isEqualTo(4);
@@ -718,10 +720,12 @@ class AuthorizationTest {
     }
 
     /** A malformed duration refuses, naming the key and a well-formed value. Falling back to 90 days instead is only
-     *  noticed when a key outlives what its operator believes it does. */
+     *  noticed when a key outlives what its operator believes it does. ({@code 30d} is no longer the example: the
+     *  suffixed spelling is part of the deployment's one grammar now, and what must refuse is a value in no
+     *  grammar.) */
     @Test
     void a_malformed_lifetime_dial_refuses_rather_than_falling_back() {
-        assertThatThrownBy(() -> authorization.withLifetimes("30d", null))
+        assertThatThrownBy(() -> authorization.withLifetimes("thirty days", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("credential-default-lifetime")
                 .hasMessageContaining("P30D");

@@ -3,6 +3,7 @@ package build.jenesis.repository.proxy;
 import module java.base;
 import build.jenesis.repository.format.FetcherProvider;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.store.Durations;
 
 /**
  * Discovers the HTTP upstream fetcher, composed with the proxy's caching behaviour: index revalidation is always
@@ -30,25 +31,16 @@ public final class HttpFetcherProvider implements FetcherProvider {
         return Optional.of(revalidating);
     }
 
-    /** Parse the negative-cache window: ISO-8601 ({@code PT90S}) or the simple style Spring binds ({@code 90s},
-     *  {@code 5m}); default one minute. */
+    /** The negative-cache window: a minute when unset, {@code 0} or {@code off} for no negative cache at all, and
+     *  otherwise a duration in the deployment's one grammar ({@code PT90S}, {@code 90s}, {@code 5m}). */
     private static Duration missTtl(String value) {
         if (value == null || value.isBlank()) {
             return Duration.ofSeconds(60);
         }
         String trimmed = value.trim();
-        try {
-            return Duration.parse(trimmed);
-        } catch (DateTimeException _) {
-            long amount = Long.parseLong(trimmed.replaceAll("\\D+$", ""));
-            return switch (trimmed.replaceAll("^\\d+", "").toLowerCase(Locale.ROOT)) {
-                case "ms" -> Duration.ofMillis(amount);
-                case "s", "" -> Duration.ofSeconds(amount);
-                case "m" -> Duration.ofMinutes(amount);
-                case "h" -> Duration.ofHours(amount);
-                case "d" -> Duration.ofDays(amount);
-                default -> throw new IllegalArgumentException("Cannot parse duration: " + value);
-            };
+        if (trimmed.equals("0") || trimmed.equalsIgnoreCase("off")) {
+            return Duration.ZERO;
         }
+        return Durations.parse(trimmed);
     }
 }

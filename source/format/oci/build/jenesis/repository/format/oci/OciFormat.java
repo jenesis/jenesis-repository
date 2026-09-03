@@ -143,7 +143,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     private void blob(String digest, ArtifactStore store, FormatExchange exchange) throws IOException {
         String hex = hex(digest);
-        if (!isDigestHex(hex)) {
+        if (!Checksums.isSha256Hex(hex)) {
             // A blob is addressed by its sha256 digest; a reference that is not 64 lowercase hex chars cannot name a
             // blob, and refusing it here stops a '..'-laced digest aiming the blobs/<hex> key at another key space.
             exchange.respond(404);
@@ -452,7 +452,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         String rest = key.substring("oci/".length());
         if (rest.startsWith("types/")) {
             String hex = rest.substring("types/".length());
-            return isDigestHex(hex) ? Optional.of(hex) : Optional.empty();
+            return Checksums.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
         }
         if (rest.startsWith("uploads/") || rest.startsWith("upload-sessions/")) {
             return Optional.empty();                            // staged chunks of a push that never became an image
@@ -466,7 +466,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         String hex = store.readVersioned(key)
                 .map(versioned -> hex(new String(versioned.content(), StandardCharsets.UTF_8).trim()))
                 .orElse(null);
-        return hex != null && isDigestHex(hex) ? Optional.of(hex) : Optional.empty();
+        return hex != null && Checksums.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
     }
 
     /** Read and parse a manifest blob for the reference scan, bounded by {@link #MAX_MANIFEST} exactly as ingest
@@ -518,7 +518,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return null;
         }
         String hex = hex(digest);
-        return isDigestHex(hex) ? hex : null;
+        return Checksums.isSha256Hex(hex) ? hex : null;
     }
 
     private void store(String digest, InputStream content, ArtifactStore store, String name, FormatExchange exchange)
@@ -546,7 +546,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 // A manifest is pushed either by digest (sha256:...) or by tag; a reference that is neither a digest
                 // nor a well-formed tag would land as an oci/<name>/tags/<ref> store key, so a '/'- or '..'-laced
                 // reference could aim the write at a neighbouring key space - refuse it before storing anything, the
-                // tag-side counterpart of the isDigestHex guard on the blob path.
+                // tag-side counterpart of the Checksums.isSha256Hex guard on the blob path.
                 exchange.respond(400);
                 return;
             }
@@ -621,7 +621,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             }
             hex = hex(new String(pointer.get().content(), StandardCharsets.UTF_8).trim());
         }
-        if (!isDigestHex(hex)) {
+        if (!Checksums.isSha256Hex(hex)) {
             exchange.respond(404);
             return;
         }
@@ -1292,23 +1292,6 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         int colon = digest.indexOf(':');
         return colon < 0 ? digest : digest.substring(colon + 1);
     }
-
-    /** Whether {@code hex} is exactly a 64-character lowercase sha256 hex string - the only shape that can name a
-     *  {@code blobs/<hex>} object, so a reference that is not (a tag typo, a {@code ..}-laced digest) is refused
-     *  before it becomes a store key rather than resolving to a neighbouring key space. */
-    private static boolean isDigestHex(String hex) {
-        if (hex.length() != 64) {
-            return false;
-        }
-        for (int index = 0; index < 64; index++) {
-            char character = hex.charAt(index);
-            if ((character < '0' || character > '9') && (character < 'a' || character > 'f')) {
-                return false;
-            }
-        }
-        return true;
-    }
-
 
     /**
      * Whether an image name may become the {@code oci/<name>/...} key it addresses: the free store's own path rule

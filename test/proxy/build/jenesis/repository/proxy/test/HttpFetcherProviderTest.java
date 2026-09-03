@@ -12,12 +12,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The {@link HttpFetcherProvider} composes the HTTP fetcher with index revalidation always on and the negative miss
- * cache installed when {@code proxy-miss-ttl} parses to a positive window. This covers the hand-rolled duration
- * parser - ISO-8601 ({@code PT90S}) and the simple style Spring binds ({@code 90s}, {@code 5m}, {@code 500ms}), a
- * blank value defaulting to a minute, and an unknown suffix throwing - and the {@code 0} branch that disables the
- * negative cache entirely, so {@code create} returns the plain revalidating fetcher with no miss cache wrapped around
- * it. The parsed window is only observable through which fetcher {@code create} composes, so the assertions read that
- * composition: a positive window installs the {@link NegativeCachingFetcher}, {@code 0} does not.
+ * cache installed when {@code proxy-miss-ttl} parses to a positive window. This covers the dial's reading of the
+ * deployment's one duration grammar - ISO-8601 ({@code PT90S}) and the suffixed style ({@code 90s}, {@code 5m},
+ * {@code 500ms}), a blank value defaulting to a minute, and an unknown suffix throwing - and the {@code 0} branch
+ * that disables the negative cache entirely, so {@code create} returns the plain revalidating fetcher with no miss
+ * cache wrapped around it. The parsed window is only observable through which fetcher {@code create} composes, so
+ * the assertions read that composition: a positive window installs the {@link NegativeCachingFetcher}, {@code 0}
+ * does not.
  */
 class HttpFetcherProviderTest {
 
@@ -34,8 +35,8 @@ class HttpFetcherProviderTest {
 
     @Test
     void a_positive_miss_ttl_in_every_accepted_spelling_installs_the_negative_cache() {
-        // Each spelling drives a distinct parse branch: PT90S the ISO path, 90s/5m/500ms the simple-suffix switch,
-        // and a blank/absent value the one-minute default - all of which are positive, so all install the miss cache.
+        // Each spelling drives a distinct branch of the shared grammar: PT90S the ISO path, 90s/5m/500ms the suffixed
+        // one, and a blank/absent value the one-minute default - all positive, so all install the miss cache.
         for (String missTtl : List.of("PT90S", "90s", "5m", "500ms", "")) {
             assertThat(create(missTtl))
                     .as("a positive proxy-miss-ttl (\"%s\") parses and installs the negative miss cache", missTtl)

@@ -22,7 +22,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
  * posture surface never advises about divergence that is not happening; and a store it cannot read (misconfigured,
  * absent, or a transient I/O error) yields no advisory rather than a failure - observing consistency never blocks. The
  * advisory names the risk, never a resolved hash or a config value, so this surface cannot leak one. The read is cheap
- * (the {@code consistency/nodes/} prefix plus one small object per node), never a scan.
+ * (the node prefix plus one small object per node), never a scan.
  */
 public final class NodeDivergenceAdvisor implements SafetyAdvisor {
 
@@ -66,12 +66,14 @@ public final class NodeDivergenceAdvisor implements SafetyAdvisor {
                             + "needs longer to catch up.",
                     "jenreg.consistency.sweep-intervals", "3", DOCS + "#jenreg.consistency.stuck");
             case CONFIG_MISMATCH -> SecurityAdvisory.deployment("jenreg.consistency.config", Severity.CRITICAL,
-                    "Node " + divergence.nodeId() + " disagrees on the deployment config",
-                    "Node " + divergence.nodeId() + " " + divergence.detail() + ". Config must be identical on every "
-                            + "node; a live node on a different generation missed a config change or is split from the "
-                            + "others, so it enforces different settings than the fleet.",
-                    "Reconcile this node's configuration with the fleet and confirm it reloaded - restart it if it did "
-                            + "not pick up the change. A persistent split points at a lost lease or a partitioned store.",
+                    "Node " + divergence.nodeId() + " disagrees on the deployment config or tenant set",
+                    "Node " + divergence.nodeId() + " " + divergence.detail() + ". Config and the tenant set must be "
+                            + "identical on every node; a live node on a different generation missed a config or "
+                            + "tenant change or is split from the others, so it enforces different settings than "
+                            + "the fleet.",
+                    "Reconcile this node's configuration and tenant view with the fleet and confirm it reloaded - "
+                            + "restart it if it did not. A persistent split points at a lost lease or a partitioned "
+                            + "store.",
                     "", "", DOCS + "#jenreg.consistency.config");
             case POINTER_MISMATCH -> SecurityAdvisory.deployment("jenreg.consistency.pointer", Severity.CRITICAL,
                     "Node " + divergence.nodeId() + " resolves a pointer differently",
