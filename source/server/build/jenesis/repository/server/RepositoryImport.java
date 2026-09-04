@@ -64,8 +64,20 @@ public final class RepositoryImport {
     }
 
     /** As {@link #run(ImportSource, ArtifactStore)}, reporting each imported and skipped asset and each resume
-     *  checkpoint to {@code listener} - the seam an async job uses to track progress and persist a resume cursor. */
+     *  checkpoint to {@code listener} - the seam an async job uses to track progress and persist a resume cursor.
+     *
+     *  <p>Runs under a listing batch: every artifact imported puts its entry into the same few repository-wide
+     *  listings (a Debian suite's index, an RPM repository's primary, a channel's repodata, the OCI catalog), and
+     *  one publish rewrites such a listing whole - a stated property of {@link StoredListing#update}, a second at a
+     *  hundred thousand entries. An import of N packages therefore cost N rewrites of a growing document; under the
+     *  batch each listing is written once per ten thousand collected entries instead. */
     public Result run(ImportSource source, ArtifactStore store, Listener listener) throws IOException {
+        return StoredListing.batching(() -> runUnbatched(source, store, listener));
+    }
+
+    /** The import itself, its listing writes deferred to the batch {@link #run(ImportSource, ArtifactStore, Listener)}
+     *  opened. */
+    private Result runUnbatched(ImportSource source, ArtifactStore store, Listener listener) throws IOException {
         AtomicInteger imported = new AtomicInteger();
         AtomicInteger skipped = new AtomicInteger();
         AtomicInteger held = new AtomicInteger();
