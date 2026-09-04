@@ -17,6 +17,10 @@ import build.jenesis.repository.store.TenantsProvider;
  * fleet to compare against; the write is a single compare-and-set on this node's own key, so it never contends with
  * another node.
  *
+ * <p>The heartbeat runs on this bean's own daemon scheduler, which it starts and closes: it is one of the two
+ * periodic drivers core/AGENTS.md names as keeping a private timer rather than riding the composition root's scheduler,
+ * because it owns its own lifecycle as a free-core bean.
+ *
  * <p>The fingerprint is cheap to build: the config generation is a hash over the must-match settings <em>and the
  * tenant set</em>, read through the {@link Tenants} view on every heartbeat (a directory read, never a scan) so a node
  * that missed a config or tenant change diverges rather than reporting the generation it booted with; the counters
