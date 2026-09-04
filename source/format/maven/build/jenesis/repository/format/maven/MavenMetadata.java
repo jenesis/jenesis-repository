@@ -451,7 +451,7 @@ public final class MavenMetadata {
         List<String> versions = new ArrayList<>();
         String prefix = ServableNames.PUBLISHED + "/maven/" + coordinatePath;
         Traversal.Result scanned = ScreenedNames.versionFolders(new ServableNames(store))
-                .scanning(BoundedChildren.bounded().entries(VERSION_SCAN))
+                .scanning(BoundedChildren.bounded().entries(VERSION_SCAN).page(BoundedChildren.DRAIN_PAGE))
                 .scan(store, prefix, (child, _) -> {
                     // The coordinate directory holds version folders alongside the artifact-level maven-metadata.xml
                     // and its sidecars. Skip the document and every sidecar it can carry - not just the .sha1/.md5/.asc
