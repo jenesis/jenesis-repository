@@ -20,7 +20,7 @@ import build.jenesis.repository.store.Durations;
  * The free edition's scheduled driver of the shared {@link RebuildPass}: on a cadence it joins the pass over the
  * deployment's one repository and streams every retained pointer to every discovered {@link WalkConsumer}, so a
  * consumer's view (a format's module index, a back-fill) converges on its own without an embedder driving it and
- * without waiting for the artifact to be republished. The cadence is {@code jenreg.rebuild.interval} (a day by
+ * without waiting for the artifact to be republished. It runs on its own single daemon scheduler because it is a free-core bean that owns its start/close lifecycle - one of the two periodic drivers core/AGENTS.md names as keeping a private timer rather than the composition root's scheduler. The cadence is {@code jenreg.rebuild.interval} (a day by
  * default; {@code off} or {@code 0} switches the driver off), the first pass runs a minute after boot. The driver is
  * inert - it logs one line and schedules nothing - when there is no walk with a consumer and no listing to repair, so
  * a deployment without either is byte-for-byte unchanged. One pass at a time: a cadence tick that finds the previous
