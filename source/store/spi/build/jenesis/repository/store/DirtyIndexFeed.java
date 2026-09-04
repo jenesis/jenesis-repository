@@ -117,13 +117,22 @@ public final class DirtyIndexFeed {
      * whole feed to apply a slice of it puts the burst in heap to do work it will not do. A caller that applies a
      * batch at a time asks for a batch at a time, and takes the rest on its next round.
      *
-     * <p>The bound is on the markers <em>read</em>, not on the names listed: a store's child listing is the
-     * primitive underneath, and stopping the read early is what keeps the decoded entries - and every marker body
-     * read to make them - proportional to the batch.
+     * <p>The bound is on the names listed as well as on the markers read: a bounded request pages the store's child
+     * listing for that many names, so neither the decoded entries nor the level they came from costs more than the
+     * batch - and a consumer that clears each batch before asking for the next drains the feed in pages of it.
      */
     public List<Entry> pending(int limit) throws IOException {
         List<Entry> entries = new ArrayList<>();
-        for (String name : store.list(dirtyPrefix)) {
+        // A bounded page asks the store for that page, never for the whole level cut short: a consumer that drains
+        // the feed a batch at a time applies a page, clears it, and asks again - so the feed's length never reaches
+        // heap, and on a filesystem the one directory scan a page costs is paid per batch rather than per marker.
+        List<String> names = new ArrayList<>();
+        if (limit == Integer.MAX_VALUE) {
+            names.addAll(store.list(dirtyPrefix));
+        } else {
+            store.page(dirtyPrefix, "", limit, names::add);
+        }
+        for (String name : names) {
             if (entries.size() >= limit) {
                 break;
             }
