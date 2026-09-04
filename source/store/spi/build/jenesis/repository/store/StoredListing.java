@@ -883,8 +883,22 @@ public final class StoredListing {
         return update(store, spec, new Changes(changes));
     }
 
-    /** {@link #update} with a change set, which may also remove every entry under an id prefix. */
+    /**
+     * {@link #update} with a change set, which may also remove every entry under an id prefix.
+     *
+     * <p><b>A stated property, not an accident:</b> one update rewrites the whole document, streamed, so its cost is
+     * the document's size - one second for a Debian index of a hundred thousand stanzas, eleven for a million,
+     * measured by the Debian rewrite canary. That is inherent to a listing a client fetches as one document whose
+     * entry must be visible before the publish answers; the lane above coalesces writers that arrive at once, and
+     * a caller that writes many entries at once - a rebuild, a migration - collects them under {@link #batching}
+     * so the document is written once per batch rather than once per entry.
+     */
     public static boolean update(ArtifactStore store, Spec spec, Changes changes) throws IOException {
+        Batch batch = BATCH.get();
+        if (batch != null && changes.prefixes.isEmpty()) {
+            batch.add(store, spec, changes);      // applied once, when the batch closes or a key fills
+            return true;
+        }
         LaneKey laneKey = new LaneKey(store.identity(), spec.key());
         Lane lane = LANES.computeIfAbsent(laneKey, ignored -> new Lane());
         Pending mine = new Pending(changes.asMap(), Set.copyOf(changes.prefixes), new CompletableFuture<>());
@@ -909,6 +923,114 @@ public final class StoredListing {
     }
 
     /** {@link #update} with one entry put. */
+    /**
+     * Updates made while a batch is open on the thread are collected per listing and applied once each, when the
+     * batch closes or a listing's collected entries reach {@link #BATCH_FLUSH}.
+     *
+     * <p>This exists for the rebuild pass. Rebuilding a per-package listing fires its derivation, and a derivation
+     * that keeps a repository-wide index (the OCI catalog, RubyGems' compact {@code versions}, NuGet's search
+     * document, winget's index) puts that package's one entry into it - so a pass over P packages rewrote a P-entry
+     * document P times. The listing-rebuild canary counts those rewrites through {@code jenreg.listing.updates} and
+     * was red at twenty thousand images before this: the pass now rewrites the index once per batch of entries.
+     *
+     * <p>Only single-entry changes are batched; a change carrying a prefix removal is applied at once, since a
+     * prefix's effect depends on its order against the puts around it and a merged batch has no order. A thread
+     * that is a lane's runner while its batch is open may also carry a concurrent caller's derivation into the
+     * batch, delaying that caller's derived entry until the batch flushes - a pass's length at most - which is the
+     * one visible cost of collecting on the thread rather than on the call.
+     */
+    private static final ThreadLocal<Batch> BATCH = new ThreadLocal<>();
+
+    /** Entries one listing collects before the batch writes it and starts again, so a batch's heap is bounded. */
+    static final int BATCH_FLUSH = 10_000;
+
+    private static final class Batch {
+
+        private final Map<LaneKey, Spec> specs = new LinkedHashMap<>();
+        private final Map<LaneKey, ArtifactStore> stores = new LinkedHashMap<>();
+        private final Map<LaneKey, Changes> collected = new LinkedHashMap<>();
+
+        void add(ArtifactStore store, Spec spec, Changes changes) throws IOException {
+            LaneKey key = new LaneKey(store.identity(), spec.key());
+            specs.putIfAbsent(key, spec);
+            stores.putIfAbsent(key, store);
+            Changes mine = collected.computeIfAbsent(key, ignored -> new Changes());
+            changes.asMap().forEach((id, fragment) -> {
+                if (fragment.isPresent()) {
+                    mine.put(id, fragment.get());
+                } else {
+                    mine.remove(id);
+                }
+            });
+            if (mine.changes.size() >= BATCH_FLUSH) {
+                flush(key);
+            }
+        }
+
+        void flush(LaneKey key) throws IOException {
+            Changes changes = collected.remove(key);
+            if (changes == null || changes.isEmpty()) {
+                return;
+            }
+            Batch open = BATCH.get();
+            BATCH.remove();                        // the write below is a real one, not another deferral
+            try {
+                update(stores.get(key), specs.get(key), changes);
+            } finally {
+                BATCH.set(open);
+            }
+        }
+
+        void close() throws IOException {
+            IOException failed = null;
+            for (LaneKey key : new ArrayList<>(collected.keySet())) {
+                try {
+                    flush(key);
+                } catch (IOException e) {
+                    if (failed == null) {
+                        failed = e;
+                    } else {
+                        failed.addSuppressed(e);
+                    }
+                }
+            }
+            if (failed != null) {
+                throw failed;
+            }
+        }
+    }
+
+    /** Run {@code work} with updates on this thread collected per listing and written once each at the end - the
+     *  rebuild pass's shape, and a migration import's, which publishes N packages into the same few indexes. */
+    public static <T> T batching(Callable<T> work) throws IOException {
+        if (BATCH.get() != null) {
+            try {
+                return work.call();                // already inside a batch: the outer one flushes
+            } catch (IOException | RuntimeException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new IOException(e);
+            }
+        }
+        Batch batch = new Batch();
+        BATCH.set(batch);
+        try {
+            T result;
+            try {
+                result = work.call();
+            } catch (IOException | RuntimeException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new IOException(e);
+            }
+            BATCH.remove();
+            batch.close();
+            return result;
+        } finally {
+            BATCH.remove();
+        }
+    }
+
     public static boolean put(ArtifactStore store, Spec spec, String id, byte[] fragment) throws IOException {
         return update(store, spec, Map.of(id, Optional.of(fragment)));
     }
@@ -1762,26 +1884,30 @@ public final class StoredListing {
      * rebuilder owns is left as it is. Returns how many documents were regenerated.
      */
     public static int rebuildAll(ArtifactStore store, List<? extends Rebuilder> rebuilders) throws IOException {
-        int created = 0;
-        for (Rebuilder rebuilder : rebuilders) {
-            // Absent listings first: a document created here is then walked below like any other, so an imported
-            // repository converges in one pass rather than needing a second to repair what the first invented.
-            // MISSING, because the walk below regenerates everything that already exists.
-            created += rebuilder.materialise(store, Rebuilder.Scope.MISSING);
-        }
-        List<String> keys = new ArrayList<>();
-        collect(store, ROOT.substring(0, ROOT.length() - 1), keys);
-        int rebuilt = 0;
-        for (String key : keys) {
-            String listing = key.substring(ROOT.length());
+        // Under a batch: every derivation's put into a repository-wide index is collected and the index written
+        // once per BATCH_FLUSH entries rather than once per listing rebuilt - see BATCH.
+        return batching(() -> {
+            int created = 0;
             for (Rebuilder rebuilder : rebuilders) {
-                if (rebuilder.rebuild(listing, store)) {
-                    rebuilt++;
-                    break;
+                // Absent listings first: a document created here is then walked below like any other, so an imported
+                // repository converges in one pass rather than needing a second to repair what the first invented.
+                // MISSING, because the walk below regenerates everything that already exists.
+                created += rebuilder.materialise(store, Rebuilder.Scope.MISSING);
+            }
+            List<String> keys = new ArrayList<>();
+            collect(store, ROOT.substring(0, ROOT.length() - 1), keys);
+            int rebuilt = 0;
+            for (String key : keys) {
+                String listing = key.substring(ROOT.length());
+                for (Rebuilder rebuilder : rebuilders) {
+                    if (rebuilder.rebuild(listing, store)) {
+                        rebuilt++;
+                        break;
+                    }
                 }
             }
-        }
-        return rebuilt + created;
+            return rebuilt + created;
+        });
     }
 
     // ---- observability ----
