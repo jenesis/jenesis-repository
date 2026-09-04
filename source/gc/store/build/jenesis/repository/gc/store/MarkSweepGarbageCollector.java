@@ -17,7 +17,9 @@ import build.jenesis.repository.walk.WalkPass;
 /**
  * The reference {@link GarbageCollector}, riding the shared artifact walk - never its own listing loop - so both
  * of its enumerations are ordered, resumable, segmented and multi-node-safe, and no phase ever holds the whole
- * store in memory:
+ * store in memory. Both are passes of their own rather than the shared rebuild pass: the mark must see every
+ * pointer, withheld ones included (a held artifact's blob is referenced, and a mark that took the rebuild's screened
+ * view would leave it for the sweep), and the sweep walks {@code blobs/}, which the rebuild never visits.
  *
  * <p><b>Mark, sharded.</b> One walk pass ({@code gc-mark}) over the caller's pointer roots reads each small leaf
  * object and keeps every hash it names, buffered in memory only up to the walk's checkpoint stride: the walk

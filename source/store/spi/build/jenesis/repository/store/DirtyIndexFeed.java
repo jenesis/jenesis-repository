@@ -58,9 +58,6 @@ import module java.base;
  */
 public final class DirtyIndexFeed {
 
-    /** How many compare-and-set attempts a marker write makes before giving up - a marker races only other writers
-     *  touching the <em>same</em> coordinate, so contention is low and a small bound suffices. */
-    private static final int MARK_ATTEMPTS = 8;
 
     private final ArtifactStore store;
     private final String dirtyPrefix;
@@ -98,19 +95,11 @@ public final class DirtyIndexFeed {
 
     private void mark(String coordinate, long version, boolean removed) throws IOException {
         Objects.requireNonNull(coordinate, "coordinate");
-        String key = keyFor(coordinate);
-        for (int attempt = 0; attempt < MARK_ATTEMPTS; attempt++) {
-            Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
-            if (current.isPresent() && decode(current.get()).version() > version) {
-                return; // a strictly newer change is already recorded; this stale mark adds nothing
-            }
-            Object expected = current.map(ArtifactStore.Versioned::token).orElse(null);
-            if (store.writeVersioned(key, encode(coordinate, version, removed), expected)) {
-                return;
-            }
-        }
-        throw new IOException("could not record dirty marker for " + coordinate
-                + " after " + MARK_ATTEMPTS + " attempts");
+        byte[] marker = encode(coordinate, version, removed);
+        Retries.update(store, keyFor(coordinate), current ->
+                current.isPresent() && decode(current.get()).version() > version
+                        ? null   // a strictly newer change is already recorded; this stale mark adds nothing
+                        : marker);
     }
 
     /** The coordinates currently marked dirty, each with its version, op and marker token. This is the O(&Delta;)
