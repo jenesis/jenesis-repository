@@ -228,6 +228,19 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         return slash < 0 ? key : key.substring(slash + 1);
     }
 
+    /**
+     * One page is one scan of the directory, whatever the page's width. A directory listing has no order and no
+     * seek, so selecting the {@code limit} names past {@code startAfter} reads every sibling and keeps the smallest
+     * {@code limit} of them: O(limit) memory however wide the level, and O(siblings) time per page, where an object
+     * store's listing is O(page). The bound is stated rather than fixed - an index that gave this store a seek would
+     * be a second store to keep consistent with the first - and what it decides for a caller is the page width. A
+     * request-path read that renders one window pays one scan whatever its width, so it keeps the default; a walk
+     * that drains a level - follows the continuation to exhaustion - pays one scan per page, the level's width
+     * squared over the page's, and takes {@code BoundedChildren.DRAIN_PAGE}, ten times the default. Measured by
+     * the refresh-walk canary over the findings ledger: a bounded read of twenty thousand entries from a
+     * million-entry level, a thousand a page, rescanned the directory some sixty times and answered in 29 s; at
+     * the drain width it is a handful of scans.
+     */
     @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         Path dir = resolve(prefix);
