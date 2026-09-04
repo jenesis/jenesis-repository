@@ -8,6 +8,7 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.BatchingWorker;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 
 /**
@@ -30,22 +31,19 @@ import build.jenesis.repository.server.spi.KeyUsageTracker;
  * switched off) reports nothing at all, consistent with the "a disabled plugin is not listed" rule; the same
  * distinction the health surface already draws between "installed but off" and a dead worker.
  */
-public final class BatchingKeyUsageTracker implements KeyUsageTracker, ObservabilitySource {
+public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsageTracker.Hit>
+        implements KeyUsageTracker, ObservabilitySource {
 
     private static final AtomicReference<BatchingKeyUsageTracker> INSTALLED = new AtomicReference<>();
 
-    /** Register {@code instance} as the live one the discovered {@link KeyUsageObservability} reports from; the production
-     *  construction site calls this once, and the last registration wins. */
     public static void install(BatchingKeyUsageTracker instance) {
         INSTALLED.set(Objects.requireNonNull(instance, "instance"));
     }
 
-    /** The installed live instance, if any - what {@link KeyUsageObservability} reports; empty before one is installed. */
     static Optional<BatchingKeyUsageTracker> installed() {
         return Optional.ofNullable(INSTALLED.get());
     }
 
-    /** A use worth recording: the tenant the key carries, the key's SHA-256 hash and the request's source address. */
     public record Hit(String tenant, String hash, String address) {
     }
 
@@ -56,90 +54,43 @@ public final class BatchingKeyUsageTracker implements KeyUsageTracker, Observabi
         private Instant when;
     }
 
-    /** The bounded queue depth: past it a hit is dropped rather than blocking a request, and this is the ceiling the
-     *  {@code jenreg.usage.queue} used-vs-available metric measures against. */
     private static final int QUEUE_CAPACITY = 100_000;
 
     private final Authorization authorization;
-    private final boolean enabled;
-    private final BlockingQueue<Hit> queue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
     private final Map<String, Pending> pending = new ConcurrentHashMap<>();
     private final Map<String, LocalDate> writtenDay = new ConcurrentHashMap<>();
-    private final AtomicLong dropped = new AtomicLong();
-    private volatile boolean running;
     private volatile Instant lastDrain;
-    private Thread thread;
 
     public BatchingKeyUsageTracker(Authorization authorization, boolean enabled) {
+        super("jenesis-repository-key-usage", enabled, QUEUE_CAPACITY);
         this.authorization = authorization;
-        this.enabled = enabled;
     }
 
-    @Override
-    public boolean enabled() {
-        return enabled;
-    }
-
-    /** Whether the worker thread is started and alive; an enabled tracker whose thread has died is unhealthy. */
-    @Override
-    public boolean alive() {
-        return thread != null && thread.isAlive();
-    }
-
-    /** Uses dropped because the in-memory queue was saturated - a back-pressure signal surfaced on health. */
-    @Override
-    public long dropped() {
-        return dropped.get();
-    }
-
-    /** Offer a use for tracking - non-blocking, a no-op when tracking is off, counted as dropped if the queue is full. */
     @Override
     public void record(String tenant, String hash, String address) {
-        if (enabled && tenant != null && hash != null && !queue.offer(new Hit(tenant, hash, address))) {
-            dropped.incrementAndGet();
+        if (tenant != null && hash != null) {
+            offer(new Hit(tenant, hash, address));
         }
     }
 
+    /**
+     * The worker has terminated (or was never started), so every Pending is quiescent: nothing mutates a count
+     * concurrently and this final pass is deterministic. Drain whatever the interrupted worker left queued (its
+     * blocking poll returns without draining on interrupt) so a clean shutdown forfeits no accepted hit, then flush
+     * every residual delta - including a credential already flushed once today, whose at-most-once-per-day gate
+     * would otherwise strand its same-day tail until the process ends.
+     *
+     * <p>A worker that did not stop within the grace window is still draining; flushing now would race its
+     * {@code count++} on a Pending and could mark a hit flushed without persisting it - the very loss the "no hit
+     * lost within a process lifetime" contract forbids. Its next drain flushes the tail instead.
+     */
     @Override
-    public void start() {
-        if (!enabled) {
+    protected void onClosed(boolean terminated) {
+        if (!terminated) {
             return;
         }
-        running = true;
-        thread = new Thread(this::loop, "jenesis-repository-key-usage");
-        thread.start();
-    }
-
-    @Override
-    public void close() {
-        running = false;
-        Thread worker = thread;
-        if (worker != null) {
-            worker.interrupt();
-            boolean terminated = false;
-            try {
-                worker.join(10_000L);
-                terminated = !worker.isAlive();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            if (!terminated) {
-                // The worker did not stop within the grace window and is still draining. Flushing now would race its
-                // count++ on a Pending and could mark a hit flushed without persisting it - the very loss the "no hit
-                // lost within a process lifetime" contract forbids. Leave the tail to the still-running worker (its
-                // next drain flushes it) rather than corrupt the counter here.
-                return;
-            }
-        }
-        // The worker has terminated (or was never started), so every Pending is now quiescent: nothing mutates a
-        // count concurrently and this final pass is deterministic. Drain whatever the interrupted worker left queued
-        // (its blocking poll returns without draining on interrupt) so a clean shutdown forfeits no accepted hit, then
-        // flush every residual delta - including a credential already flushed once today, whose at-most-once-per-day
-        // gate would otherwise strand its same-day tail until the process ends.
         Instant now = Instant.now();
-        List<Hit> tail = new ArrayList<>();
-        queue.drainTo(tail);
-        for (Hit hit : tail) {
+        for (Hit hit : drainQueue()) {
             accumulate(hit, now);
         }
         LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
@@ -148,27 +99,7 @@ public final class BatchingKeyUsageTracker implements KeyUsageTracker, Observabi
         }
     }
 
-    private void loop() {
-        while (running) {
-            try {
-                Hit first = queue.poll(1, TimeUnit.SECONDS);
-                if (first != null) {
-                    List<Hit> batch = new ArrayList<>();
-                    batch.add(first);
-                    queue.drainTo(batch);
-                    drain(batch, Instant.now());
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            } catch (RuntimeException e) {
-                // keep the worker alive across a failing iteration
-            }
-        }
-    }
-
-    /** Accumulate each hit into its credential's running count and last address, then flush each credential whose
-     *  delta has not been written today, at most one store write per credential per day. */
+    @Override
     public void drain(Collection<Hit> batch, Instant now) {
         for (Hit hit : batch) {
             accumulate(hit, now);
@@ -196,10 +127,6 @@ public final class BatchingKeyUsageTracker implements KeyUsageTracker, Observabi
         lastDrain = now;
     }
 
-    /** Fold one hit into its credential's accumulator - the count, the last address and the last-seen instant - under
-     *  the Pending's own monitor, so an increment and a {@link #flush} of the same credential can never interleave (a
-     *  flush reads the count and advances {@code flushed} under the same lock). Shared by the worker's {@link #drain}
-     *  and the deterministic drain-and-flush {@link #close} runs after the worker has stopped. */
     private void accumulate(Hit hit, Instant now) {
         Pending entry = pending.computeIfAbsent(hit.tenant() + "/" + hit.hash(), key -> new Pending());
         synchronized (entry) {
@@ -211,23 +138,20 @@ public final class BatchingKeyUsageTracker implements KeyUsageTracker, Observabi
         }
     }
 
-    /** The number of per-credential accumulators currently held: fully-flushed idle entries are dropped each drain,
-     *  so this is bounded by the credentials seen in the current day (plus any carrying an unflushed delta), not every
-     *  credential ever seen - a health/scale read can assert the map does not grow across day boundaries. */
     public int tracked() {
         return pending.size();
     }
 
     @Override
     public List<Metric> metrics() {
-        if (!enabled) {
+        if (!enabled()) {
             return List.of();
         }
         return List.of(
                 Metric.bounded("jenreg.usage.queue",
                         "Credential-use hits buffered off the request path waiting for the worker to drain them, "
                                 + "against the fixed queue bound past which a hit is dropped rather than blocking a request.",
-                        queue.size(), QUEUE_CAPACITY, "hits"),
+                        queueDepth(), capacity(), "hits"),
                 Metric.gauge("jenreg.usage.tracked",
                         "Per-credential accumulators currently held - bounded by the credentials seen in the current "
                                 + "UTC day (plus any carrying an unflushed delta), not every credential ever seen.",
@@ -240,7 +164,7 @@ public final class BatchingKeyUsageTracker implements KeyUsageTracker, Observabi
 
     @Override
     public List<HealthCheck> healthChecks() {
-        if (!enabled) {
+        if (!enabled()) {
             return List.of();
         }
         String description = "Credential-usage worker thread is started and draining hits off the request path.";
@@ -252,7 +176,7 @@ public final class BatchingKeyUsageTracker implements KeyUsageTracker, Observabi
 
     @Override
     public List<TaskStatus> taskStatuses() {
-        if (!enabled) {
+        if (!enabled()) {
             return List.of();
         }
         boolean alive = alive();
