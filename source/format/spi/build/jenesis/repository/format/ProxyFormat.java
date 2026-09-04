@@ -257,45 +257,18 @@ public interface ProxyFormat {
         Optional<Head> head(URI url, Map<String, String> requestHeaders) throws IOException;
 
         /**
-         * {@link #fetch} with a transport failure normalised to the empty answer clause 6 already defines it as.
-         *
-         * <p>A transport does not deliver that consistently on its own, and the gap is not cosmetic. The shipped
-         * {@code HttpFetcher} maps only a read timeout to the empty {@link Optional}; a refused connection, an
-         * unresolvable host or a dead route - the two or three commonest ways a public mirror is "down" - come back
-         * as a raw {@link IOException} indistinguishable at the catch site from "this index is malformed". A walk
-         * classifying on that would have called the most ordinary outage a format defect, which is the whole failure
-         * this split exists to prevent, so the normalisation belongs here rather than in each caller's catch.
-         *
-         * <p>It deliberately does <em>not</em> swallow a TLS failure: a handshake that will not complete is a
-         * misconfiguration a lane should see, not a mirror having a bad day.
-         */
-        static Optional<Fetched> answered(Fetcher fetcher, URI url) throws IOException {
-            try {
-                return fetcher.fetch(url, Map.of());
-            } catch (SocketException | UnknownHostException _) {
-                return Optional.empty();
-            }
-        }
-
-        /** {@link #download} under the same normalisation {@link #answered} applies to the buffered leg. */
-        static Optional<Download> downloaded(Fetcher fetcher, URI url) throws IOException {
-            try {
-                return fetcher.download(url, Map.of());
-            } catch (SocketException | UnknownHostException _) {
-                return Optional.empty();
-            }
-        }
-
-        /**
          * Fetch a document the walk cannot proceed without, raising {@link Unavailable} where the upstream did not
          * deliver one. It is the preamble every enumeration wrote out for itself - an empty answer, then a
          * non-{@code 200} - written once, so the classification clause 2 states cannot drift from one format to the
          * next. A leg that reads some status as an answer rather than a failure (a {@code 404} meaning "this package
-         * contributes nothing") keeps its own branch and calls {@link #answered} with the {@link Unavailable}
-         * factories directly.
+         * contributes nothing") keeps its own branch and calls the {@link Unavailable} factories directly.
+         *
+         * <p>It relies on clause 6 being kept: a transport that hands out an exception instead of the empty answer
+         * for a refused connection would arrive here as neither branch. The shipped {@code HttpFetcher} folds all of
+         * them, and an implementation that does not is in breach of the clause rather than of this method.
          */
         static Fetched required(Fetcher fetcher, URI url) throws IOException {
-            Optional<Fetched> fetched = answered(fetcher, url);
+            Optional<Fetched> fetched = fetcher.fetch(url, Map.of());
             if (fetched.isEmpty()) {
                 throw Unavailable.noResponse(url);
             }

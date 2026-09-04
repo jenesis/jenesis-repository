@@ -15,15 +15,16 @@ import build.jenesis.repository.store.Durations;
  * never opens its body ({@link ProxyFormat.Fetcher.Buffered} would fall back to a body-opening {@code download}).
  *
  * <p>Every request is bounded by a per-request timeout on top of the connect timeout, so a stalled upstream - one
- * that accepts the connection but never sends a response - cannot hang a proxy read or an import forever. A timeout
- * is reported as the contract's transport failure (an empty result), so the proxy lets the local {@code 404} stand
- * and an import is refused rather than a {@code 5xx} escaping. The timeout bounds the arrival of the response, for a
- * buffered {@link #fetch} (a small mutable index) and a streaming {@link #download} alike; a large
- * artifact's body transfer is not clipped by it, and a body that ends short of its declared {@code Content-Length}
- * surfaces as an {@link IOException} on the read (buffered) or on the stream the caller copies into the store
- * (streamed), so a truncated response is never written as a complete cached artifact. The timeout defaults to a
- * minute and is overridable with the {@code jenreg.proxy.request-timeout} system property, a duration in the
- * deployment's one grammar ({@code PT30S} or {@code 30s}).
+ * that accepts the connection but never sends a response - cannot hang a proxy read or an import forever. Every way
+ * the upstream can fail to answer at all - a timeout, a refused connection, an unresolvable host, a dead route - is
+ * reported as the contract's transport failure (an empty result) rather than as an exception, so a proxy leg reaches
+ * clause 2's classification and an import is refused rather than a {@code 5xx} escaping. The timeout bounds the
+ * arrival of the response, for a buffered {@link #fetch} (a small mutable index) and a streaming {@link #download}
+ * alike; a large artifact's body transfer is not clipped by it, and a body that ends short of its declared
+ * {@code Content-Length} surfaces as an {@link IOException} on the read (buffered) or on the stream the caller copies
+ * into the store (streamed), so a truncated response is never written as a complete cached artifact. The timeout
+ * defaults to a minute and is overridable with the {@code jenreg.proxy.request-timeout} system property, a duration
+ * in the deployment's one grammar ({@code PT30S} or {@code 30s}).
  *
  * <p>Redirects are followed manually rather than by the JDK client's automatic {@code NORMAL} policy, because that
  * policy re-sends every request header - including {@code Authorization} - to the redirect target even across a
@@ -93,19 +94,22 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         try {
             // Stream the buffered index body through a bounded read rather than ofByteArray(), so a hostile/oversized
             // upstream response is refused at MAX_FETCH_BODY instead of materialising a multi-GB byte[] on the heap.
-            HttpResponse<InputStream> response = send(url, requestHeaders, "GET",
+            // Only the exchange is folded to the empty answer: a body that ends short of its declared length still
+            // surfaces from the read below, so a truncated response is never mistaken for an upstream that was down.
+            Optional<HttpResponse<InputStream>> response = connect(url, requestHeaders, "GET",
                     HttpResponse.BodyHandlers.ofInputStream());
+            if (response.isEmpty()) {
+                return Optional.empty();
+            }
             byte[] body;
-            try (InputStream in = response.body()) {
+            try (InputStream in = response.get().body()) {
                 body = in.readNBytes(MAX_FETCH_BODY + 1);
             }
             if (body.length > MAX_FETCH_BODY) {
                 throw new IOException("Upstream index body from " + url + " exceeds the " + MAX_FETCH_BODY
                         + "-byte fetch limit - refused (a proxied index must be small metadata, not a bulk artifact).");
             }
-            return Optional.of(new ProxyFormat.Fetched(response.statusCode(), body, headers(response)));
-        } catch (HttpTimeoutException e) {
-            return Optional.empty();
+            return Optional.of(new ProxyFormat.Fetched(response.get().statusCode(), body, headers(response.get())));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while fetching " + url, e);
@@ -115,10 +119,8 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
     @Override
     public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) throws IOException {
         try {
-            HttpResponse<InputStream> response = send(url, requestHeaders, "GET", HttpResponse.BodyHandlers.ofInputStream());
-            return Optional.of(new ProxyFormat.Download(response.statusCode(), response.body(), headers(response)));
-        } catch (HttpTimeoutException e) {
-            return Optional.empty();
+            return connect(url, requestHeaders, "GET", HttpResponse.BodyHandlers.ofInputStream())
+                    .map(response -> new ProxyFormat.Download(response.statusCode(), response.body(), headers(response)));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while fetching " + url, e);
@@ -136,13 +138,41 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
     @Override
     public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
         try {
-            HttpResponse<Void> response = send(url, requestHeaders, "HEAD", HttpResponse.BodyHandlers.discarding());
-            return Optional.of(new ProxyFormat.Head(response.statusCode(), headers(response)));
-        } catch (HttpTimeoutException e) {
-            return Optional.empty();
+            return connect(url, requestHeaders, "HEAD", HttpResponse.BodyHandlers.discarding())
+                    .map(response -> new ProxyFormat.Head(response.statusCode(), headers(response)));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while fetching " + url, e);
+        }
+    }
+
+    /**
+     * Open the exchange, reporting every way the upstream can fail to answer as the contract's transport failure -
+     * clause 6's empty {@link Optional} - rather than as an exception.
+     *
+     * <p>This used to be a timeout and nothing else, and the gap it left was not academic. A refused connection, an
+     * unresolvable host and a dead route are the three commonest ways a public mirror is down, and each arrived as a
+     * raw {@link IOException} indistinguishable at a catch site from "this index is malformed" - so the one shape the
+     * contract asks every adapter to classify was the one shape it could not see. Clause 2's whole apparatus, and
+     * {@code ProxyRelay}'s enumeration-versus-pinned split with it, keys on the empty answer; a transport that hands
+     * out an exception instead routes around all of it. {@code github.com/pkg/errors} was served as a module with no
+     * versions because a five-second connect timeout did reach that split - and a connection refused a moment earlier
+     * would not have.
+     *
+     * <p>Deliberately narrow. It folds the failures of <em>establishing the exchange</em>, so a body that dies
+     * mid-transfer still throws from the caller's read and a truncated response is never cached as a whole one. A TLS
+     * handshake that will not complete is left to propagate too: that is a misconfiguration an operator must see, not
+     * a mirror having a bad afternoon. And the manual redirect chain's private-host refusal is a plain
+     * {@link IOException} by construction, so screening a hop to a loopback control plane stays visible rather than
+     * being quietly rendered as "the upstream did not answer".
+     */
+    private <T> Optional<HttpResponse<T>> connect(URI url, Map<String, String> requestHeaders, String method,
+                                                  HttpResponse.BodyHandler<T> handler)
+            throws IOException, InterruptedException {
+        try {
+            return Optional.of(send(url, requestHeaders, method, handler));
+        } catch (HttpTimeoutException | SocketException | UnknownHostException _) {
+            return Optional.empty();
         }
     }
 
