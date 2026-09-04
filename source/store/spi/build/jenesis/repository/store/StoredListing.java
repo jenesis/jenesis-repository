@@ -666,6 +666,29 @@ public final class StoredListing {
             return body;
         }
 
+        /**
+         * This document as the {@link Derived} a derivation reads - the header, and the body opened once, streaming.
+         * A rebuild-path re-derivation used to take {@link #read} and hand its {@link Document} over, which holds
+         * the whole body in heap; for a repository-wide index that is every package in the suite, and the
+         * debian-gzip canary measured the twin's derivation failing at three hundred thousand stanzas under 512 MiB.
+         * A derivation streams from {@link Derived#open}, so it reads this exactly as it reads a document written a
+         * moment ago, and holds a buffer.
+         */
+        public Derived derived() {
+            Served served = this;
+            return new Derived() {
+                @Override
+                public Header header() {
+                    return served.header();
+                }
+
+                @Override
+                public InputStream open() {
+                    return served.body();
+                }
+            };
+        }
+
         public void copyTo(OutputStream out) throws IOException {
             body.transferTo(out);
         }
@@ -1241,8 +1264,23 @@ public final class StoredListing {
     public static Header rebuild(ArtifactStore store, Spec spec) throws IOException {
         String key = spec.key();
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
-            Optional<ArtifactStore.Versioned> current = readStored(store, key);
-            long seq = current.isPresent() ? parse(current.get().content(), key).header().seq() : 0L;
+            // The token before the header, for the reason apply() gives: a document that moves between the two
+            // reads fails the compare-and-set below against the older token and this attempt retries. Neither read
+            // touches the body: the token is the store's version face and the sequence is the streamed header. This
+            // used to read the document whole for those two fields, which for a repository-wide index is every
+            // package in the suite - the debian-gzip canary measured the rebuild pass failing with an
+            // OutOfMemoryError at three hundred thousand stanzas under 512 MiB, after the twin's own read was
+            // streamed, and named this line.
+            Object token = store.version(key).orElse(null);
+            long seq = 0L;
+            if (token != null) {
+                Optional<Served> stored = openStored(store, key);
+                if (stored.isPresent()) {
+                    try (Served served = stored.get()) {
+                        seq = served.header().seq();
+                    }
+                }
+            }
             // Streamed, like the first materialisation: this is the daily repair pass, and it regenerates a
             // repository-wide listing whole. Rebuilt per attempt rather than hoisted, because a lost
             // compare-and-set below means the store moved and the document has to be produced against it again.
@@ -1255,8 +1293,7 @@ public final class StoredListing {
             try {
                 Header header = Header.of(sequence(seq), rendered.size, rendered.md5, rendered.sha256,
                         rendered.entries);
-                if (write(store, key, header, rendered,
-                        current.map(ArtifactStore.Versioned::token).orElse(null))) {
+                if (write(store, key, header, rendered, token)) {
                     MATERIALISED.increment();
                     derived(store, spec, header, rendered);
                     return header;
