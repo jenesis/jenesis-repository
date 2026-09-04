@@ -16,6 +16,18 @@ import build.jenesis.repository.store.ServableNames;
  * ({@code PublicationObserver.onPublished} / {@code onDeleted}), and this pass is the first-activation back-fill,
  * the periodic refresh and the self-heal - a consumer enabled late rebuilds its whole view from it.
  *
+ * <p><b>Which passes ride this walk, and which open their own.</b> "N rebuilders never mean N walks" is a promise
+ * about consumers that want <em>this</em> enumeration: every serving pointer, as a path and a hash, with the withheld
+ * screen applied. A pass opens a walk of its own exactly when one of three things differs, and says which in its own
+ * javadoc: its <em>roots</em> (the collector's sweep and the reverse-dependency index read {@code blobs/}, the
+ * reconcile's reverse leg reads the derived roots), its <em>granularity</em> (search and retention stream one row
+ * per published version with its coordinate, where this pass would hand them several pointers per version and no
+ * coordinate; the size roll-up folds directories post-order), or its <em>completeness rule</em> (the collector's
+ * mark and the two reconciles must see every pointer, withheld ones included - a mark that took this pass's screened
+ * view would leave a held artifact's blob unmarked and the sweep would reclaim it). What rides here today is the
+ * pointer-level consumers - a module view, a format's inventory backfill - and a new consumer that keys on pointers
+ * belongs here rather than on a walk of its own.
+ *
  * <p><b>What a consumer is handed.</b> Every leaf under the walked roots that is a serving pointer - a small object
  * naming a SHA-256, in either of the two dialects a stored pointer body uses (the bare lower-case hex the free
  * {@code publish/} and {@code blobs/} pointers carry, or the algorithm-qualified {@code sha256:<hex>} an OCI tag

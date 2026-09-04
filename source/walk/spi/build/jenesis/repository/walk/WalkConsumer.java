@@ -11,7 +11,9 @@ import build.jenesis.repository.store.Features;
  * routes, and a correct plugin implements <em>both</em>: <b>live events</b> ({@code PublicationObserver}'s
  * {@code onPublished} / {@code onDeleted}) for the steady state, and <b>the full walk</b> - this interface - for
  * first-activation back-fill, periodic refresh and self-heal. A scheduled walk pass ({@link RebuildPass}) drives
- * every discovered consumer from <em>one</em> enumeration, so N metadata rebuilders never mean N tree walks. The walk alone must be able to
+ * every discovered consumer from <em>one</em> enumeration, so N metadata rebuilders over the same serving pointers
+ * never mean N tree walks (a pass whose roots, granularity or completeness rule differ opens its own, and
+ * {@link RebuildPass} says which do). The walk alone must be able to
  * fully rebuild the plugin's derived state from the durable store wherever the truth model permits; where a surface
  * genuinely cannot be re-derived (a human decision, a point-in-time observation), the plugin's documentation names
  * it and the plugin degrades gracefully rather than serving a silently-incomplete view as if it were whole.

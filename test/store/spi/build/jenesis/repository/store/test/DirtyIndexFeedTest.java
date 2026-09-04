@@ -271,7 +271,7 @@ class DirtyIndexFeedTest {
         DirtyIndexFeed contended = new DirtyIndexFeed(new AlwaysConflictingStore(store), "index/search");
         assertThatThrownBy(() -> contended.touched("com.acme:app", 100))
                 .isInstanceOf(IOException.class)
-                .hasMessageContaining("could not record dirty marker");
+                .hasMessageContaining("lost the compare-and-set");
     }
 
     /** Forwards to a real store but reports every versioned write as a compare-and-set conflict, so a test can drive
