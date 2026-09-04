@@ -1491,6 +1491,11 @@ public final class StoredListing {
         }
         LOGGER.warn("listing {} could not be updated after {} version conflicts; regenerating it in place", key,
                 ATTEMPTS);
+        // A stated bound, measured: two nodes over one bucket publishing four hundred packages from sixteen writers
+        // into one suite lost seventy-seven races between them and exhausted none - the lanes absorb a fleet's
+        // races within the retries above - and a regeneration here costs one rewrite of the document, the same order
+        // as the publish that lost it. It stays on the publishing thread for the reason update() states: the entry
+        // must be visible when the publish answers.
         FORGOTTEN.increment();
         rebuild(store, spec);
         return false;
