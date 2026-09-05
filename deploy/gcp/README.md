@@ -5,9 +5,10 @@ Deploys the **all-in-one repository image** (`jenesis-repository:free` or `:ente
 the tag selects the edition; built by
 `java build/Build.java images` in the enterprise repository, which builds and tags both editions; the free edition is the same image shape from the
 free repo, only the tag differs) on **Cloud Run**, defaulting the exclusive store selection to GCP's
-native object store: `JENREG_STORE=gcs` against a bucket the Terraform provisions. The
-`gcs` backend speaks GCS's XML API, which authenticates with an **HMAC key pair** — Terraform issues
-one for a dedicated service account and stores the secret in Secret Manager, so no key is hand-set.
+native object store: `JENREG_STORE=gcs` against a bucket the Terraform provisions. The `gcs` backend
+speaks GCS's JSON API through **Application Default Credentials**: the Cloud Run service runs as a
+service account that holds `objectAdmin` on the bucket, the metadata server hands the backend its
+token, and no key is minted, stored or rotated.
 With nothing further set, every non-credentialed capability the image carries is on and the
 credential-switched ones (licensed feeds, the AI gateway) self-disable with a one-line log.
 
@@ -22,16 +23,13 @@ deployment-wide. See the configuration reference on the docs site for the full k
 What it provisions (`main.tf`)
 ------------------------------
 
-A GCS bucket; a service account with `storage.objectAdmin` on it and an **HMAC key** (secret stored
-in Secret Manager); and a Cloud Run service running the image with `JENREG_STORE=gcs`,
-`JENREG_GCS_BUCKET`, and the HMAC pair (`JENREG_GCS_ACCESS_KEY_ID` + the Secret-Manager-backed
-`JENREG_GCS_SECRET_ACCESS_KEY`).
+A GCS bucket; a runtime service account with `storage.objectAdmin` on it; and a Cloud Run service
+running the image as that account with `JENREG_STORE=gcs` and `JENREG_GCS_BUCKET`. The licence, when
+one is supplied, lives in Secret Manager and reaches the container as `JENREG_LICENSE_KEY`.
 
-Store fallback: `-var store=s3` drives the **same bucket** through GCS's S3-compatible endpoint
-(`JENREG_S3_*` keys, same HMAC pair) — the configuration shape is identical, only the selection
-value and key prefix change. It exists because the two are interchangeable against GCS, not because
-either image lacks a backend: every image carries all four and selects one at runtime.
-carrying the `gcs` backend aboard (the free image already carries it).
+There is deliberately no `s3` fallback through GCS's S3-compatible XML API: that surface evaluates
+`If-Match` on reads only, so the `s3` backend's compare-and-set would succeed unconditionally against it
+and two nodes would lose updates silently. The `gcs` backend's precondition is GCS's own.
 
 1) Build and push the image to Artifact Registry
 -------------------------------------------------

@@ -25,22 +25,6 @@ variable "image" {
   description = "The all-in-one repository image (the free edition differs only by tag), e.g. REGION-docker.pkg.dev/PROJECT/REPO/jenesis-repository:enterprise"
 }
 
-variable "store" {
-  type        = string
-  default     = "gcs"
-  description = <<-EOT
-    The exclusive store-backend selection (JENREG_STORE). Defaults to "gcs", the native
-    Google Cloud Storage backend. Set "s3" to drive the same bucket through GCS's S3-compatible XML
-    API instead: the two are interchangeable against GCS, and which one a deployment prefers is its
-    own call. Every image carries all four backends and selects one at runtime, so this is a
-    configuration choice rather than an image choice.
-  EOT
-  validation {
-    condition     = contains(["gcs", "s3"], var.store)
-    error_message = "store must be \"gcs\" or \"s3\"."
-  }
-}
-
 variable "allow_unauthenticated" {
   type        = bool
   default     = false
