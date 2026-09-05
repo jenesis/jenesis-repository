@@ -14,6 +14,7 @@ import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 import build.jenesis.repository.store.s3compatible.S3CompatibleArtifactStore;
+import build.jenesis.repository.store.OwnerOnly;
 
 /**
  * An {@link ArtifactStore} backed by a Google Cloud Storage bucket over GCS's S3-compatible XML API
@@ -36,9 +37,6 @@ public final class GcsArtifactStore extends S3CompatibleArtifactStore {
     private static final String GENERATION = "x-goog-generation";
     /** The GCS write precondition: proceed only if the stored generation matches ({@code 0} = absent). */
     private static final String IF_GENERATION_MATCH = "x-goog-if-generation-match";
-    /** Upload-spool permissions: readable and writable only by the owner, matching the {@code s3} backend. */
-    private static final Set<PosixFilePermission> OWNER_ONLY = PosixFilePermissions.fromString("rw-------");
-
     private final S3Presigner presigner;
 
     /** Whether a conditional write may stream its body; see {@code GcsArtifactStoreProvider}. */
@@ -144,24 +142,10 @@ public final class GcsArtifactStore extends S3CompatibleArtifactStore {
         }
     }
 
-    /**
-     * An upload-spool temp file readable and writable only by its owner, matching the {@code s3} backend. The XML API
-     * needs a content length up front, so a PUT body is buffered here before upload; a shared {@code /tmp} spool would
-     * leave the plaintext artifact bytes world-readable for the life of the upload, so on a POSIX filesystem the file
-     * is created {@code 0600} at open time. A non-POSIX filesystem that cannot express owner-only permissions at create
-     * time falls back to a default temp file, then tightens it best-effort through the {@link File} API.
-     */
+    /** The owner-only upload spool ({@link OwnerOnly}): the XML API needs a content length up front, so a PUT body is buffered here before upload, and a shared {@code /tmp} spool would
+     *  leave the plaintext artifact bytes world-readable for the life of the upload. */
     private static Path spool() throws IOException {
-        if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
-            return Files.createTempFile("gcs-artifact-", null, PosixFilePermissions.asFileAttribute(OWNER_ONLY));
-        }
-        Path temporary = Files.createTempFile("gcs-artifact-", null);
-        File file = temporary.toFile();
-        file.setReadable(false, false);
-        file.setWritable(false, false);
-        file.setReadable(true, true);
-        file.setWritable(true, true);
-        return temporary;
+        return OwnerOnly.createTempFile("gcs-artifact-", null);
     }
 
     @Override

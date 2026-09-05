@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.OwnerOnly;
 
 /**
  * The {@code filesystem} provider: a store rooted at {@code jenreg.filesystem.root}, which is <em>required</em>.
