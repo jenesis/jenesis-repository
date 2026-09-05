@@ -139,6 +139,17 @@ public final class Lease {
         return false;
     }
 
+    /** The holder whose lease on {@code name} is live at {@code now}, or empty when the lock is free, expired or was
+     *  never taken - what an operator's or a test's view of the fleet reads to say which node owns a pass right now. */
+    public Optional<String> holder(String name, Instant now) throws IOException {
+        Optional<ArtifactStore.Versioned> current = store.readVersioned(key(name));
+        if (current.isEmpty()) {
+            return Optional.empty();
+        }
+        Instant expiry = expiry(current.get());
+        return expiry != null && expiry.isAfter(now) ? Optional.of(owner(current.get())) : Optional.empty();
+    }
+
     /**
      * Delete the lock objects whose lease has lapsed - what a crashed holder leaves behind on a name no later pass
      * revisits, and the expired objects {@link #release} leaves - so an orphaned lock never accumulates. A lock with
