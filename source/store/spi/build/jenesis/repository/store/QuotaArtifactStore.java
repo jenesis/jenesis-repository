@@ -85,8 +85,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
 
     /** The bytes currently counted against the limit; {@code 0} before the counter is first written or seeded. */
     public long used() throws IOException {
-        Optional<Versioned> stored = meter.readVersioned(USED);
-        return stored.isEmpty() ? 0L : parse(stored.get().content());
+        return new StoredCounter(meter, USED).read();
     }
 
     @Override
@@ -203,8 +202,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
      *  conflict so a concurrent {@link #adjust} cannot silently drop the recomputed total; if contention persists the
      *  stale counter stands until the next reconcile corrects it, which is the counter's documented drift model. */
     public void store(long total) throws IOException {
-        byte[] body = Long.toString(total).getBytes(StandardCharsets.UTF_8);
-        Retries.tryUpdate(meter, USED, current -> body);        // the next reconcile corrects a counter this lost
+        new StoredCounter(meter, USED).set(total);   // the next reconcile corrects a counter this lost
     }
 
     /** Whether a key names content that consumes the quota: a finished blob, or the in-flight chunks of an OCI
@@ -290,14 +288,15 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
      *  but a dropped delta is logged, so a counter drifting under sustained contention is visible to the operator
      *  before the periodic {@link #recompute reconcile} corrects it, not a silent surprise. */
     private void adjust(long delta) throws IOException {
-        boolean landed = Retries.tryUpdate(meter, USED, stored -> {
-            long current = stored.isEmpty() ? 0L : parse(stored.get().content());
-            return Long.toString(Math.max(0L, current + delta)).getBytes(StandardCharsets.UTF_8);
-        });
-        if (!landed) {
+        if (!new StoredCounter(meter, USED).add(delta)) {
             LOGGER.warn("quota counter update of " + delta + " bytes dropped after repeated conflicts; "
                     + "the usage counter drifts until the next recompute");
         }
+    }
+
+    @Override
+    public ArtifactStore scope(String tenant) {
+        return new QuotaArtifactStore(delegate.scope(tenant), meter, limit);
     }
 
     /** The owner-only blob-digest spool ({@link OwnerOnly}): the quota decorator wraps every backend, so its own
@@ -306,19 +305,6 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
      *  it must NOT be a {@code Files.copy(REPLACE_EXISTING)}, which would delete and recreate it under the umask. */
     private static Path spool() throws IOException {
         return OwnerOnly.createTempFile("quota-blob-", null);
-    }
-
-    private static long parse(byte[] content) {
-        try {
-            return Long.parseLong(new String(content, StandardCharsets.UTF_8).trim());
-        } catch (NumberFormatException e) {
-            return 0L;
-        }
-    }
-
-    @Override
-    public ArtifactStore scope(String tenant) {
-        return new QuotaArtifactStore(delegate.scope(tenant), meter, limit);
     }
 
     @Override
