@@ -531,7 +531,11 @@ public interface ArtifactStore {
      * overridden {@code page}, and it reports no metadata rather than inventing any.
      */
     default void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
-        page(prefix, startAfter, limit, name -> consumer.accept(Listed.of(child(prefix, name))));
+        // The container name normalised as every backend normalises it, so a trailing-slash prefix keys its children
+        // exactly as the bare one does; the decorator legs of the store contract found this default keying them
+        // kit/listing//alpha.
+        String container = container(prefix);
+        page(prefix, startAfter, limit, name -> consumer.accept(Listed.of(child(container, name))));
     }
 
     /** A child's key under {@code prefix} - the root's children are keyed by their bare names. */

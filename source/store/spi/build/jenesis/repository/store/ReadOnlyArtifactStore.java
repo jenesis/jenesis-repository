@@ -90,6 +90,18 @@ public final class ReadOnlyArtifactStore implements ArtifactStore {
         delegate.page(prefix, startAfter, limit, consumer);
     }
 
+    /** Forwarded like {@link #page}: the SPI's default would derive the page from names alone and drop the listing's
+     *  sizes and ages. */
+    @Override
+    public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+        delegate.pageListed(prefix, startAfter, limit, consumer);
+    }
+
+    @Override
+    public Optional<Capacity> capacity() throws IOException {
+        return delegate.capacity();
+    }
+
     @Override
     public Optional<Versioned> readVersioned(String key) throws IOException {
         return delegate.readVersioned(key);

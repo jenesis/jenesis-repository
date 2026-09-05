@@ -359,6 +359,23 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
         return delegate.writeVersioned(key, content, expected);
     }
 
+    /** Forwarded, so the listing's sizes and ages reach the caller: the SPI's default derives the page from names alone
+     *  and reports no metadata, which the store contract's decorator leg measured as a descent that stats every leaf. */
+    @Override
+    public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+        delegate.pageListed(prefix, startAfter, limit, consumer);
+    }
+
+    @Override
+    public Optional<Capacity> capacity() throws IOException {
+        return delegate.capacity();
+    }
+
+    @Override
+    public void touch(String key) throws IOException {
+        delegate.touch(key);
+    }
+
     /** Delegated rather than inherited: the inherited body buffers, which would turn a streaming backend into a
      *  buffering one for every deployment that meters a quota. */
     @Override
