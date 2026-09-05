@@ -9,17 +9,31 @@ import build.jenesis.repository.store.OwnerOnly;
  * The default {@link ArtifactStore}: blobs under a mounted root directory, keyed by their object path.
  * Version tokens pair the file's last-modified stamp with a digest of its bytes (see {@link #token}), so
  * {@link #writeVersioned} is a compare-and-set on the stored <em>incarnation</em> rather than on the tick it was
- * written in - adequate for a single node; a clustered deployment uses an object-store backend whose
- * ETag / generation gives true cross-node compare-and-set.
+ * written in. The compare and the move it amounts to are made exclusive across <em>processes</em> as well as threads
+ * - the striped monitors below for threads, and for processes an operating-system lock on one of sixty-four stripe
+ * files under {@code .cas} at the root, held from the compare to the move - so several nodes on one shared mount
+ * (NFS, EFS, a host path) lose no update to one another. Measured before the file lock existed: two JVMs each making
+ * three thousand compare-and-set increments to one key over one directory came up short, both having passed the
+ * compare with one token and both moved, the second move discarding the first write; and two containerised nodes
+ * publishing versions of one Go module into one directory dropped a version from the module's list. The lock is
+ * advisory, as file locks are: a mount that does not honour them (an NFS export without its lock daemon) is one the
+ * deployment must not share.
  */
 public final class FilesystemArtifactStore implements ArtifactStore {
 
     /** Striped monitors for {@link #writeVersioned}: the last-modified compare-and-set is a check-then-move, so two
-     *  in-process threads holding the same token would otherwise both pass the check and both land - a lost update on
-     *  the very node the mtime token is documented adequate for. Static, so every scoped view (each a new instance
-     *  over the same directory tree) serializes against the same stripes; two unrelated keys sharing a stripe merely
-     *  serialize a small-object write, never a blob stream. */
+     *  in-process threads holding the same token would otherwise both pass the check and both land. Static, so
+     *  every scoped view (each a new instance over the same directory tree) serializes against the same stripes;
+     *  two unrelated keys sharing a stripe merely serialize a small-object write, never a blob stream. The monitor
+     *  is also what keeps the process lock on the same stripe's file from being asked for twice by one JVM, which
+     *  the platform refuses rather than queues. */
     private static final Object[] LOCKS = new Object[64];
+
+    /** The directory of stripe lock files under the top-level root, one per monitor stripe: a dotted name, so it is
+     *  no tenant and no key anyone can name, on the shared mount itself, where a lock has to be to reach the other
+     *  node. A file is created on first use and never deleted - a deleted lock file is a new inode to the next opener
+     *  and no lock at all to the one still holding the old. */
+    private static final String CAS_LOCKS = ".cas";
 
     static {
         for (int index = 0; index < LOCKS.length; index++) {
@@ -29,13 +43,22 @@ public final class FilesystemArtifactStore implements ArtifactStore {
 
     private final Path root;
 
+    /** The stripe lock files' directory, shared by every scoped view of one store: a scope narrows the root and not
+     *  the mount, and two nodes contending for one key contend under the same top-level root. */
+    private final Path locks;
+
     public FilesystemArtifactStore(Path root) {
+        this(root, root.resolve(CAS_LOCKS));
+    }
+
+    private FilesystemArtifactStore(Path root, Path locks) {
         this.root = root;
+        this.locks = locks;
     }
 
     @Override
     public ArtifactStore scope(String tenant) {
-        return new FilesystemArtifactStore(root.resolve(ArtifactStore.segment(tenant)));
+        return new FilesystemArtifactStore(root.resolve(ArtifactStore.segment(tenant)), locks);
     }
 
     @Override
@@ -538,32 +561,11 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     @Override
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
         Path path = resolve(ArtifactStore.key(key));
-        synchronized (LOCKS[Math.floorMod(path.hashCode(), LOCKS.length)]) {
-            boolean present = Files.isRegularFile(path);
-            long modified = present ? Files.getLastModifiedTime(path).toMillis() : -1L;
-            Object current = present ? token(modified, path) : null;
-            if (!Objects.equals(current, expected)) {
-                return false;
+        int stripe = Math.floorMod(path.hashCode(), LOCKS.length);
+        synchronized (LOCKS[stripe]) {
+            try (FileChannel channel = stripeLock(stripe); FileLock _ = channel.lock()) {
+                return compareAndMove(path, expected, temp -> Files.write(temp, content));
             }
-            // The same .upload*.tmp shape a keyed write spools through, so list()'s in-flight filter hides this
-            // temp file too and an aborted write never leaves it behind; createUploadTemp re-creates the parent if a
-            // concurrent delete tidied it away.
-            Path temp = createUploadTemp(path.getParent());
-            try {
-                Files.write(temp, content);
-                Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                // The token must advance on every successful update, including a re-write of byte-identical content
-                // (which the digest half of the token cannot distinguish): two writes inside one clock tick would
-                // otherwise leave it unchanged, and a third writer holding the pre-update token would still pass
-                // the compare - a stale write disguised as a fresh one.
-                if (present && Files.getLastModifiedTime(path).toMillis() <= modified) {
-                    Files.setLastModifiedTime(path, FileTime.fromMillis(modified + 1));
-                }
-            } catch (IOException e) {
-                Files.deleteIfExists(temp);
-                throw e;
-            }
-            return true;
         }
     }
 
@@ -580,32 +582,55 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     public boolean writeVersioned(String key, InputStream content, long length, Object expected)
             throws IOException {
         Path path = resolve(ArtifactStore.key(key));
-        synchronized (LOCKS[Math.floorMod(path.hashCode(), LOCKS.length)]) {
-            boolean present = Files.isRegularFile(path);
-            long modified = present ? Files.getLastModifiedTime(path).toMillis() : -1L;
-            Object current = present ? token(modified, path) : null;
-            if (!Objects.equals(current, expected)) {
-                return false;
+        int stripe = Math.floorMod(path.hashCode(), LOCKS.length);
+        synchronized (LOCKS[stripe]) {
+            try (FileChannel channel = stripeLock(stripe); FileLock _ = channel.lock()) {
+                return compareAndMove(path, expected, temp -> Files.copy(content, temp, StandardCopyOption.REPLACE_EXISTING));
             }
-            // The same .upload*.tmp shape a keyed write spools through, so list()'s in-flight filter hides this
-            // temp file too and an aborted write never leaves it behind; createUploadTemp re-creates the parent if a
-            // concurrent delete tidied it away.
-            Path temp = createUploadTemp(path.getParent());
-            try {
-                Files.copy(content, temp, StandardCopyOption.REPLACE_EXISTING);
-                Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                // The token must advance on every successful update, including a re-write of byte-identical content
-                // (which the digest half of the token cannot distinguish): two writes inside one clock tick would
-                // otherwise leave it unchanged, and a third writer holding the pre-update token would still pass
-                // the compare - a stale write disguised as a fresh one.
-                if (present && Files.getLastModifiedTime(path).toMillis() <= modified) {
-                    Files.setLastModifiedTime(path, FileTime.fromMillis(modified + 1));
-                }
-            } catch (IOException e) {
-                Files.deleteIfExists(temp);
-                throw e;
-            }
-            return true;
         }
+    }
+
+    /** Fill a spool file for a versioned write. */
+    @FunctionalInterface
+    private interface Spool {
+        void fill(Path temp) throws IOException;
+    }
+
+    /**
+     * The compare-and-set proper, under both locks: compare the stored incarnation's token with {@code expected},
+     * spool the new content beside it and move it into place atomically. The token must advance on every successful
+     * update, including a re-write of byte-identical content (which the digest half of the token cannot distinguish):
+     * two writes inside one clock tick would otherwise leave it unchanged, and a third writer holding the pre-update
+     * token would still pass the compare - a stale write disguised as a fresh one.
+     */
+    private static boolean compareAndMove(Path path, Object expected, Spool spool) throws IOException {
+        boolean present = Files.isRegularFile(path);
+        long modified = present ? Files.getLastModifiedTime(path).toMillis() : -1L;
+        Object current = present ? token(modified, path) : null;
+        if (!Objects.equals(current, expected)) {
+            return false;
+        }
+        // The same .upload*.tmp shape a keyed write spools through, so list()'s in-flight filter hides this temp file
+        // too and an aborted write never leaves it behind; createUploadTemp re-creates the parent if a concurrent
+        // delete tidied it away.
+        Path temp = createUploadTemp(path.getParent());
+        try {
+            spool.fill(temp);
+            Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            if (present && Files.getLastModifiedTime(path).toMillis() <= modified) {
+                Files.setLastModifiedTime(path, FileTime.fromMillis(modified + 1));
+            }
+        } catch (IOException e) {
+            Files.deleteIfExists(temp);
+            throw e;
+        }
+        return true;
+    }
+
+    /** The open channel of {@code stripe}'s lock file, created on first use; the caller locks and closes it. */
+    private FileChannel stripeLock(int stripe) throws IOException {
+        Files.createDirectories(locks);
+        return FileChannel.open(locks.resolve(Integer.toString(stripe)),
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE);
     }
 }
