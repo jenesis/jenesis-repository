@@ -18,7 +18,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The upload-spool temp file {@link build.jenesis.repository.store.gcs.GcsArtifactStore#write} buffers a PUT body
+ * The upload-spool temp file {@link build.jenesis.repository.store.gcs.GcsArtifactStore#write} buffers an upload body
  * through (via {@code spool()}) is created owner-only {@code rw-------} (POSIX 0600), matching the {@code s3} backend,
  * so a regression cannot leave the plaintext artifact bytes world-readable in the shared temp directory for the life of
  * the upload. The subtle failure this guards: a {@code Files.copy(in, temporary, REPLACE_EXISTING)} would DELETE and
@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * which preserves the permission.
  *
  * <p>The spool exists only between its creation and the {@code finally} that deletes it, so a WireMock transformer parks
- * the object PUT on a barrier: it signals the moment the PUT is in flight (the spool is now on disk) and blocks until the
+ * the object upload on a barrier: it signals the moment the upload is in flight (the spool is now on disk) and blocks until the
  * test has inspected the file's permissions, then releases the upload. Skips cleanly where the filesystem cannot express
  * POSIX permissions. No Docker, always runs.
  */
@@ -36,21 +36,16 @@ public class GcsSpoolPermissionsTest {
 
     private WireMockServer server;
     private ArtifactStore store;
-    private final Barrier barrier = new Barrier("/repo/acme/spool/aa01");
+    private final Barrier barrier = new Barrier("/upload/storage/v1/b/repo/o");
 
     @BeforeAll
     public void start() {
         server = new WireMockServer(WireMockConfiguration.options().bindAddress("localhost").dynamicPort()
                 .extensions(barrier));
         server.start();
-        server.stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withHeader("ETag", "\"stub\"")));
-        Map<String, String> values = Map.of(
-                "jenreg.gcs.bucket", "repo",
-                "jenreg.gcs.endpoint", "http://localhost:" + server.port(),
-                "jenreg.gcs.allow-insecure-endpoint", "true",
-                "jenreg.gcs.access-key-id", "hmac-access",
-                "jenreg.gcs.secret-access-key", "hmac-secret");
-        store = ArtifactStoreProvider.resolve("gcs", values::get).scope("acme");
+        server.stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json").withBody("{}")));
+        store = ArtifactStoreProvider.resolve("gcs", JsonGcs.settings(server.port(), "repo")::get).scope("acme");
     }
 
     @AfterAll
@@ -79,7 +74,7 @@ public class GcsSpoolPermissionsTest {
         upload.start();
         try {
             assertThat(barrier.awaitInFlight(Duration.ofSeconds(15)))
-                    .as("the PUT reached the stub, so the spool file is now on disk").isTrue();
+                    .as("the upload reached the stub, so the spool file is now on disk").isTrue();
 
             Path spool = newSpoolFile(tmp, before);
             assertThat(spool).as("write() created a gcs-artifact- spool file while the upload was in flight").isNotNull();
@@ -113,7 +108,7 @@ public class GcsSpoolPermissionsTest {
     }
 
     /**
-     * A WireMock transformer that parks the request to one target path (the object PUT) until the test releases it,
+     * A WireMock transformer that parks the request to one target path (the object upload) until the test releases it,
      * signalling when the request is in flight. Every other request passes through with its matched response.
      */
     private static final class Barrier implements ResponseDefinitionTransformerV2 {
@@ -148,14 +143,14 @@ public class GcsSpoolPermissionsTest {
         public ResponseDefinition transform(ServeEvent event) {
             String url = event.getRequest().getUrl();
             String path = url.indexOf('?') < 0 ? url : url.substring(0, url.indexOf('?'));
-            if (RequestMethod.PUT.equals(event.getRequest().getMethod()) && path.equals(targetPath)) {
+            if (RequestMethod.POST.equals(event.getRequest().getMethod()) && path.equals(targetPath)) {
                 inFlight.countDown();
                 try {
                     released.await(15, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
-                return aResponse().withStatus(200).withHeader("ETag", "\"stub\"").build();
+                return aResponse().withStatus(200).withHeader("Content-Type", "application/json").withBody("{}").build();
             }
             return event.getResponseDefinition();
         }
