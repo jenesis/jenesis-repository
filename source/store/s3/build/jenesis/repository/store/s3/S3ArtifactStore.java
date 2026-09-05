@@ -16,6 +16,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 import build.jenesis.repository.store.s3compatible.S3CompatibleArtifactStore;
+import build.jenesis.repository.store.OwnerOnly;
 
 /**
  * An {@link ArtifactStore} backed by an S3-compatible bucket (AWS S3, GCS via the XML API, MinIO,
@@ -29,9 +30,6 @@ import build.jenesis.repository.store.s3compatible.S3CompatibleArtifactStore;
  * resolve through S3 itself, with no database or lock service.
  */
 public final class S3ArtifactStore extends S3CompatibleArtifactStore {
-
-    /** Owner-only (0600) permissions for the upload spool file - see {@link #spool()}. */
-    private static final Set<PosixFilePermission> OWNER_ONLY = PosixFilePermissions.fromString("rw-------");
 
     private final S3Presigner presigner;
     /** The KMS key id for {@code aws:kms} encryption, or {@code null} for the SSE-S3 (AES256) default. */
@@ -106,26 +104,10 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
         return builder.serverSideEncryption(ServerSideEncryption.AES256);
     }
 
-    /**
-     * A temp file for spooling an artifact body, readable and writable only by its owner. A blob is buffered here to
-     * learn its length (and, for a content-addressed write, its SHA-256) before the length-prefixed S3 {@code PutObject}
-     * - the body cannot stream straight through the sync client without its length up front. A shared {@code /tmp}
-     * spool would leave the plaintext artifact bytes world-readable for the life of the upload, so on a POSIX
-     * filesystem the file is created {@code 0600} at open time (never briefly world-readable). A non-POSIX filesystem
-     * that cannot express owner-only permissions at create time falls back to a default temp file, then tightens it
-     * best-effort through the {@link File} API.
-     */
+    /** The owner-only upload spool ({@link OwnerOnly}): the XML API's {@code PutObject} needs a content length up front (and a content-addressed write its SHA-256), so a PUT body is buffered here first, and a shared {@code /tmp} spool would
+     *  leave the plaintext artifact bytes world-readable for the life of the upload. */
     private static Path spool() throws IOException {
-        if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
-            return Files.createTempFile("s3-artifact-", null, PosixFilePermissions.asFileAttribute(OWNER_ONLY));
-        }
-        Path temporary = Files.createTempFile("s3-artifact-", null);
-        File file = temporary.toFile();
-        file.setReadable(false, false);
-        file.setWritable(false, false);
-        file.setReadable(true, true);
-        file.setWritable(true, true);
-        return temporary;
+        return OwnerOnly.createTempFile("s3-artifact-", null);
     }
 
     @Override

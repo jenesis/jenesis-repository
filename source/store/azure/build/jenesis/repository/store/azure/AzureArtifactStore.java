@@ -22,6 +22,7 @@ import com.azure.storage.blob.sas.BlobSasPermission;
 import com.azure.storage.blob.sas.BlobServiceSasSignatureValues;
 import com.azure.storage.blob.specialized.BlobOutputStream;
 import com.azure.storage.blob.specialized.BlockBlobClient;
+import build.jenesis.repository.store.OwnerOnly;
 
 /**
  * An {@link ArtifactStore} backed by an Azure Blob Storage container on the official
@@ -188,24 +189,10 @@ public final class AzureArtifactStore implements ArtifactStore {
         }
     }
 
-    /** An owner-only ({@code rw-------}) blob-digest spool, matching the s3/gcs artifact stores: a content-addressed
-     *  write buffers the (possibly large) plaintext artifact here while hashing, so a shared {@code /tmp} spool would
-     *  leave those bytes world-readable for the upload's life. On a POSIX filesystem the file is created {@code 0600}
-     *  at open time; a non-POSIX filesystem tightens best-effort through the {@link File} API. The {@code newOutputStream}
-     *  write opens this file in place (truncate), preserving the permission - it must NOT become a
-     *  {@code Files.copy(REPLACE_EXISTING)}, which would delete and recreate it under the umask. */
+    /** The owner-only upload spool ({@link OwnerOnly}): a content-addressed write buffers the (possibly large) plaintext artifact here while hashing, and a shared {@code /tmp} spool would
+     *  leave the plaintext artifact bytes world-readable for the life of the upload. */
     private static Path spool() throws IOException {
-        if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
-            return Files.createTempFile("azure-artifact-", null,
-                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-        }
-        Path temporary = Files.createTempFile("azure-artifact-", null);
-        File file = temporary.toFile();
-        file.setReadable(false, false);
-        file.setWritable(false, false);
-        file.setReadable(true, true);
-        file.setWritable(true, true);
-        return temporary;
+        return OwnerOnly.createTempFile("azure-artifact-", null);
     }
 
     @Override

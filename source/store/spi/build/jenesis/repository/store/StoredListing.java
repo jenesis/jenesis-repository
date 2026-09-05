@@ -328,7 +328,7 @@ public final class StoredListing {
 
             private void open() throws IOException {
                 if (spool == null) {
-                    spool = Files.createTempFile("jenreg-listing-spool", ".tmp");
+                    spool = OwnerOnly.createTempFile("jenreg-listing-spool", ".tmp");
                     body = new BufferedOutputStream(Files.newOutputStream(spool));
                 }
             }
@@ -1575,7 +1575,7 @@ public final class StoredListing {
 
     /** Render {@code spec}'s generator into a temporary file, digesting as it goes. */
     private static Rendered render(Spec spec) throws IOException {
-        Path file = Files.createTempFile("jenreg-listing", ".tmp");
+        Path file = OwnerOnly.createTempFile("jenreg-listing", ".tmp");
         Counter counter = new Counter();
         MessageDigest sha256 = digest("SHA-256");
         MessageDigest md5 = spec.md5() ? digest("MD5") : null;
@@ -1619,7 +1619,7 @@ public final class StoredListing {
             }
             resolved.putAll(pending.changes());
         }
-        Path file = Files.createTempFile("jenreg-listing", ".tmp");
+        Path file = OwnerOnly.createTempFile("jenreg-listing", ".tmp");
         Counter counter = new Counter();
         MessageDigest sha256 = digest("SHA-256");
         MessageDigest md5 = spec.md5() ? digest("MD5") : null;
