@@ -647,11 +647,14 @@ class PublicationCommitTest {
                 "filesystem", key -> "jenreg.filesystem.root".equals(key) ? scope.toString() : null);
     }
 
-    /** Every stored object under {@code scope} as key &rarr; content digest. */
+    /** Every stored object under {@code scope} as key &rarr; content digest. The filesystem store's stripe lock files
+     *  - under {@code .cas} at its root, the layout its javadoc documents - are the store's own and not objects, so
+     *  they are left out; which stripe a write took depends on the key, not on what was written. */
     private static Map<String, String> objects(Path scope) throws IOException {
         Map<String, String> objects = new TreeMap<>();
+        Path locks = scope.resolve(".cas");
         try (Stream<Path> files = Files.walk(scope)) {
-            for (Path file : (Iterable<Path>) files.filter(Files::isRegularFile)::iterator) {
+            for (Path file : (Iterable<Path>) files.filter(Files::isRegularFile).filter(file -> !file.startsWith(locks))::iterator) {
                 objects.put(scope.relativize(file).toString().replace(File.separatorChar, '/'), digest(file));
             }
         }

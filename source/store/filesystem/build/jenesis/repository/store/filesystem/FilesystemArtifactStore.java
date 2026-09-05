@@ -12,7 +12,9 @@ import build.jenesis.repository.store.OwnerOnly;
  * written in. The compare and the move it amounts to are made exclusive across <em>processes</em> as well as threads
  * - the striped monitors below for threads, and for processes an operating-system lock on one of sixty-four stripe
  * files under {@code .cas} at the root, held from the compare to the move - so several nodes on one shared mount
- * (NFS, EFS, a host path) lose no update to one another. Measured before the file lock existed: two JVMs each making
+ * (NFS, EFS, a host path) lose no update to one another. The stripe is chosen from the key relative to the root and
+ * not from the absolute path, so two nodes mounting one share at different paths meet on the same lock; the lock
+ * files are the store's own and no listing, page or scan reports them. Measured before the file lock existed: two JVMs each making
  * three thousand compare-and-set increments to one key over one directory came up short, both having passed the
  * compare with one token and both moved, the second move discarding the first write; and two containerised nodes
  * publishing versions of one Go module into one directory dropped a version from the module's list. The lock is
@@ -233,7 +235,8 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     public List<String> list(String prefix) {
         Path dir = resolve(prefix);
         try (Stream<Path> entries = Files.list(dir)) {
-            return entries.map(path -> path.getFileName().toString())
+            // The stripe locks under .cas are the store's own, never a stored entry: a root listing skips them.
+            return entries.filter(path -> !path.equals(locks)).map(path -> path.getFileName().toString())
                     // Skip an atomic write's in-flight .upload*.tmp file, a sibling here until it is renamed
                     // into place, so a concurrent listing never returns it as if it were a stored entry.
                     .filter(name -> !(name.startsWith(".upload") && name.endsWith(".tmp")))
@@ -285,7 +288,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             for (Path path : entries) {
                 String name = path.getFileName().toString();
                 // The same in-flight .upload*.tmp filter as list(), so a concurrent atomic write never pages out.
-                if (name.startsWith(".upload") && name.endsWith(".tmp") || name.compareTo(startAfter) <= 0) {
+                if (name.startsWith(".upload") && name.endsWith(".tmp") || path.equals(locks) || name.compareTo(startAfter) <= 0) {
                     continue;
                 }
                 if (smallest.size() < limit || name.compareTo(smallest.lastKey()) < 0) {
@@ -344,6 +347,12 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             return Scan.exhausted(0, 1);
         }
         Files.walkFileTree(base, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attributes) {
+                // The stripe locks under .cas are the store's own, never stored objects: a scan does not enter them.
+                return dir.equals(locks) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+            }
+
             @Override
             public FileVisitResult visitFile(Path path, BasicFileAttributes attributes) {
                 String name = path.getFileName().toString();
@@ -565,7 +574,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     @Override
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
         Path path = resolve(ArtifactStore.key(key));
-        int stripe = Math.floorMod(path.hashCode(), LOCKS.length);
+        int stripe = stripe(path);
         synchronized (LOCKS[stripe]) {
             try (FileChannel channel = stripeLock(stripe); FileLock _ = acquire(channel)) {
                 return compareAndMove(path, expected, temp -> Files.write(temp, content));
@@ -586,12 +595,20 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     public boolean writeVersioned(String key, InputStream content, long length, Object expected)
             throws IOException {
         Path path = resolve(ArtifactStore.key(key));
-        int stripe = Math.floorMod(path.hashCode(), LOCKS.length);
+        int stripe = stripe(path);
         synchronized (LOCKS[stripe]) {
             try (FileChannel channel = stripeLock(stripe); FileLock _ = acquire(channel)) {
                 return compareAndMove(path, expected, temp -> Files.copy(content, temp, StandardCopyOption.REPLACE_EXISTING));
             }
         }
+    }
+
+    /** The stripe a key's compare-and-set serializes on, chosen from the key relative to the top-level root and never
+     *  from the absolute path: two processes mounting one share at different paths resolve one key to two paths,
+     *  and a stripe taken from the path would let them hold two different locks for one write. */
+    private int stripe(Path path) {
+        String key = locks.getParent().normalize().relativize(path).toString().replace(File.separatorChar, '/');
+        return Math.floorMod(key.hashCode(), LOCKS.length);
     }
 
     /** Fill a spool file for a versioned write. */

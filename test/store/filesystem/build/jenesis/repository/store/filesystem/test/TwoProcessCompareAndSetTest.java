@@ -38,6 +38,29 @@ class TwoProcessCompareAndSetTest {
                 .isEqualTo(2 * INCREMENTS);
     }
 
+    /** The same two processes, one over the directory and one over a symbolic link to it - two nodes mounting one
+     *  share at different paths. The stripe lock is chosen from the key relative to the root; taken from the absolute
+     *  path, the two would hold different locks for one key and the first leg's shortfall would be back. */
+    @Test
+    void two_processes_naming_one_directory_differently_lose_no_increment(@TempDir Path scratch) throws Exception {
+        Path root = Files.createDirectories(scratch.resolve("shared"));
+        Path alias = Files.createSymbolicLink(scratch.resolve("alias"), root);
+        ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+        assertThat(store.writeVersioned("m/counter", "0".getBytes(StandardCharsets.UTF_8), null)).isTrue();
+
+        Process first = incrementer(root);
+        Process second = incrementer(alias);
+        String said = output(first) + output(second);
+        assertThat(first.exitValue()).as("the first process ran to completion: %s", said).isZero();
+        assertThat(second.exitValue()).as("the second process ran to completion: %s", said).isZero();
+
+        String counter = new String(store.readVersioned("m/counter").orElseThrow().content(), StandardCharsets.UTF_8);
+        assertThat(Integer.parseInt(counter))
+                .as("every increment landed although the two processes named the directory differently (%s)", said)
+                .isEqualTo(2 * INCREMENTS);
+    }
+
     /** A second JVM on this one's module path, running {@link Incrementer} over {@code root}. */
     private static Process incrementer(Path root) throws IOException {
         String java = ProcessHandle.current().info().command()
