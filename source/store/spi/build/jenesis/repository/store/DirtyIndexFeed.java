@@ -105,8 +105,55 @@ public final class DirtyIndexFeed {
     /** The coordinates currently marked dirty, each with its version, op and marker token. This is the O(&Delta;)
      *  read a sweep does instead of enumerating the whole coordinate set: it lists only the {@code dirty/} prefix, so
      *  its cost is the number of pending changes, independent of the index size. */
+    /** Every pending entry, gathered page by page - for a feed known to be small, and for tests; a pass
+     *  {@linkplain #drain drains} instead, so the feed's length never reaches its heap. */
     public List<Entry> pending() throws IOException {
-        return pending(Integer.MAX_VALUE);
+        List<Entry> entries = new ArrayList<>();
+        drain(PAGE, entries::addAll);
+        return entries;
+    }
+
+    /** Markers per page when the feed is drained or compacted: the same width the walk's drain uses over a level,
+     *  because a page of a thousand over a million markers is a thousand scans of a million on the filesystem store -
+     *  restated here rather than shared, since the store cannot depend on the walk. */
+    public static final int PAGE = 10_000;
+
+    /** What a {@link #drain} hands each page to. */
+    @FunctionalInterface
+    public interface Pages {
+
+        void accept(List<Entry> page) throws IOException;
+    }
+
+    /**
+     * Hand every pending entry to {@code pages}, {@code batch} at a time, paging the level with a cursor so the feed
+     * is never listed whole and a page the consumer {@linkplain #clear clears} as it goes is never re-read. The
+     * consumer decides when to clear: per page, where each page commits on its own (the dependents shards), or once
+     * after the pass has committed what every page fed into (the search snapshot). The search pass used to call
+     * {@code pending()} unbounded, which listed the level whole and held the burst in heap - the shape the dependents
+     * pass had already left for a paged drain after its canary measured it.
+     */
+    public void drain(int batch, Pages pages) throws IOException {
+        String after = "";
+        while (true) {
+            List<String> names = new ArrayList<>();
+            store.page(dirtyPrefix, after, batch, names::add);
+            if (names.isEmpty()) {
+                return;
+            }
+            List<Entry> entries = new ArrayList<>(names.size());
+            for (String name : names) {
+                Optional<ArtifactStore.Versioned> marker = store.readVersioned(dirtyPrefix + "/" + name);
+                if (marker.isPresent()) {
+                    entries.add(decode(marker.get()));
+                }
+            }
+            pages.accept(entries);
+            if (names.size() < batch) {
+                return;
+            }
+            after = names.getLast();
+        }
     }
 
     /**
@@ -127,11 +174,7 @@ public final class DirtyIndexFeed {
         // the feed a batch at a time applies a page, clears it, and asks again - so the feed's length never reaches
         // heap, and on a filesystem the one directory scan a page costs is paid per batch rather than per marker.
         List<String> names = new ArrayList<>();
-        if (limit == Integer.MAX_VALUE) {
-            names.addAll(store.list(dirtyPrefix));
-        } else {
-            store.page(dirtyPrefix, "", limit, names::add);
-        }
+        store.page(dirtyPrefix, "", limit, names::add);
         for (String name : names) {
             if (entries.size() >= limit) {
                 break;
@@ -164,12 +207,21 @@ public final class DirtyIndexFeed {
      *  reconcile that rebuilds from durable truth heals whatever the feed missed, then calls this to bound the feed.
      *  Pass {@link Long#MAX_VALUE} to clear the whole feed. */
     public void compactThrough(long throughVersion) throws IOException {
-        for (String name : store.list(dirtyPrefix)) {
-            String key = dirtyPrefix + "/" + name;
-            Optional<ArtifactStore.Versioned> marker = store.readVersioned(key);
-            if (marker.isPresent() && decode(marker.get()).version() <= throughVersion) {
-                store.delete(key);
+        String after = "";
+        while (true) {
+            List<String> names = new ArrayList<>();
+            store.page(dirtyPrefix, after, PAGE, names::add);
+            for (String name : names) {
+                String key = dirtyPrefix + "/" + name;
+                Optional<ArtifactStore.Versioned> marker = store.readVersioned(key);
+                if (marker.isPresent() && decode(marker.get()).version() <= throughVersion) {
+                    store.delete(key);
+                }
             }
+            if (names.size() < PAGE) {
+                return;
+            }
+            after = names.getLast();               // a name, so deleting behind the cursor moves nothing under it
         }
     }
 
