@@ -428,9 +428,22 @@ public final class AzureArtifactStore implements ArtifactStore {
      */
     @Override
     public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
-        return streamingWrites
-                ? put(key, BinaryData.fromStream(content, length), expected)
-                : put(key, BinaryData.fromBytes(content.readAllBytes()), expected);
+        if (!streamingWrites) {
+            return put(key, BinaryData.fromBytes(content.readAllBytes()), expected);
+        }
+        // Spooled to an owner-only file first, as write(..) is: a body from a plain stream is not replayable, and the
+        // client retries a refused upload by reading it again - the shape the S3 store measured as a publish
+        // answering 500 under two nodes' contention. A file-backed body replays.
+        Path temporary = spool();
+        try {
+            try (OutputStream out = Files.newOutputStream(temporary,
+                    StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                content.transferTo(out);
+            }
+            return put(key, BinaryData.fromFile(temporary), expected);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
     }
 
     /** Both conditional writes; only the body differs. */
