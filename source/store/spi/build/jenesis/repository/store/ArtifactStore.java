@@ -480,6 +480,16 @@ public interface ArtifactStore {
     }
 
     /**
+     * The page a drain of a level takes - a pass that must follow a level to exhaustion, paging with
+     * {@link #page}. On the filesystem store every page rescans its directory, so for such a walk the page width is
+     * the number of rescans: a thousand a page over a million names was a thousand scans of a million, measured by
+     * the memory canaries as a pass that never finished, and ten thousand a page a hundred scans - the arithmetic the
+     * walk module's {@code BoundedChildren} records in full. Every drain in the product pages at this width through
+     * {@link Names}, and this is the one place the number is written.
+     */
+    int DRAIN_PAGE = 10_000;
+
+    /**
      * Stream up to {@code limit} immediate child names under {@code prefix} to {@code consumer}, in lexicographic
      * order, starting strictly after {@code startAfter} (the empty string starts from the beginning). This is the
      * ordered-paging primitive the shared artifact walk enumerates through: repeated pages, each resuming after the
