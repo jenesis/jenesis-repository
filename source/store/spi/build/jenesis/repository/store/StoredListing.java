@@ -801,33 +801,23 @@ public final class StoredListing {
      * <p>So the first caller builds and the rest wait on it. They are not given the result - they return to the
      * loop above and probe the store again, which is what they would have done anyway and keeps this function's
      * only job the suppression of duplicate work. A build that fails is rethrown to the caller that ran it and
-     * swallowed by the waiters, whose next probe finds nothing and lets one of them try again.
+     * ignored by the waiters, whose next probe finds nothing and lets one of them try again; a build that outlives a
+     * waiter's patience is left to finish while that waiter probes again too.
      */
     private static void materialiseOnce(ArtifactStore store, Spec spec, String key) throws IOException {
-        LaneKey lane = new LaneKey(store.identity(), key);
-        CompletableFuture<Void> mine = new CompletableFuture<>();
-        CompletableFuture<Void> running = MATERIALISING.putIfAbsent(lane, mine);
-        if (running == null) {
-            try {
-                materialise(store, spec);
-                mine.complete(null);
-            } catch (IOException | RuntimeException failure) {
-                mine.completeExceptionally(failure);
-                throw failure;
-            } finally {
-                MATERIALISING.remove(lane, mine);
-            }
-            return;
-        }
-        try {
-            running.join();
-        } catch (CancellationException | CompletionException failedForSomeoneElse) {
-            // Their build, their exception. This caller re-probes and may become the one that tries next.
-        }
+        MATERIALISING.run(new LaneKey(store.identity(), key), () -> {
+            materialise(store, spec);
+            return null;
+        }, FOLLOW_MATERIALISATION);
     }
 
     /** One materialisation per absent document, so a burst of first readers does the work once. */
-    private static final ConcurrentMap<LaneKey, CompletableFuture<Void>> MATERIALISING = new ConcurrentHashMap<>();
+    private static final SingleFlight<LaneKey, Void> MATERIALISING = new SingleFlight<>();
+
+    /** How long a reader waits on another reader's materialisation before probing the store again for itself: longer
+     *  than any document takes to generate, short enough that a generation hung on a store that never answers does
+     *  not hold every reader of that document with it. */
+    private static final Duration FOLLOW_MATERIALISATION = Duration.ofMinutes(5);
 
     /** Open a stored document as a stream - through the store's stream face, or, for a backend that answers a
      *  versioned write only through its versioned read, from the whole versioned read. */
