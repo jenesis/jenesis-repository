@@ -20,7 +20,10 @@ final class FilesystemStoreFixture implements StoreFixture {
      *  emulator over plaintext http through the explicit opt-out. */
     @Override
     public Map<StoreContract.Property, String> unsupported() {
-        return Map.of(StoreContract.Property.PLAINTEXT_ENDPOINT_REFUSED,
+        return Map.of(StoreContract.Property.PRESIGNED_GET_FETCHES_THE_BYTES,
+                "the filesystem backend mints no URL: presign answers empty by contract and the caller streams, so there is"
+                        + " nothing to fetch",
+                StoreContract.Property.PLAINTEXT_ENDPOINT_REFUSED,
                 "the filesystem backend is a directory on the host and has no endpoint, so there is no transport "
                         + "scheme to refuse; the property is proven by the s3, gcs and azure-blob fixtures, which each "
                         + "reach their emulator over plaintext http through the explicit opt-out");
