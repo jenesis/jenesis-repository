@@ -111,7 +111,12 @@ class WalkObservabilityTest {
                 throw new IOException("crash mid-segment");
             }
         })).hasMessageContaining("crash mid-segment");
-        assertThat(walk.metrics()).as("the crashed pass never returned, so nothing is observed yet").isEmpty();
+        assertThat(walk.metrics()).as("the pass is observed from the moment it is joined, crash or not: a reader of "
+                        + "the fleet sees the walk that is under way, not only the one that returned")
+                .filteredOn(metric -> metric.name().equals("jenreg.walk.resumes"))
+                .singleElement().extracting(Metric::value).isEqualTo(0.0);
+        assertThat(walk.taskStatuses()).as("and the pass reads as still running, its segment still claimed")
+                .singleElement().extracting(TaskStatus::state).isEqualTo(TaskStatus.State.RUNNING);
 
         clock.advance(Duration.ofMinutes(11)); // let the abandoned claim expire
         List<String> after = new ArrayList<>();
