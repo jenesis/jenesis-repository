@@ -212,17 +212,8 @@ public final class Lifecycle {
             throw new IllegalArgumentException("Not a traversal-safe version: " + version);
         }
         byte[] content = encode(flag);
-        String key = key(coordinate, version);
-        for (int attempt = 0; attempt < Retries.COMPARE_AND_SET; attempt++) {
-            Object token = store.readVersioned(key).map(ArtifactStore.Versioned::token).orElse(null);
-            if (store.writeVersioned(key, content, token)) {
-                Publication.notifyMarked(subject(coordinate, version), store);
-                return;
-            }
-            Retries.backoff(attempt);
-        }
-        throw new IOException("Could not write lifecycle flag for " + coordinate + " " + version
-                + " after repeated version conflicts");
+        Retries.update(store, key(coordinate, version), _ -> content);
+        Publication.notifyMarked(subject(coordinate, version), store);
     }
 
     /** Clear a coordinate/version's mark; {@code true} when one was present, {@code false} when there was nothing to

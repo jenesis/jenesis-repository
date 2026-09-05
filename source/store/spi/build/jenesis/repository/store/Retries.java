@@ -21,6 +21,15 @@ import module java.base;
  * caller picks one by name: {@link #update} throws, because a writer that gives up a compare-and-set has usually
  * lost something the caller must know about; {@link #tryUpdate} returns {@code false}, for the few writes whose loss
  * a later pass repairs - and a caller choosing it says in its javadoc which pass that is.
+ *
+ * <p>{@link #decide} and {@link #tryDecide} are the same policy for a write that has more to say than a body: the
+ * {@link Decision} hands back a {@link Verdict} - write this body, keep the key as it is, or delete it - together with
+ * a value the caller needs from the try that landed (the pointer that was replaced, whether a publish was the first,
+ * the transition a re-fold is made from). Twenty-five loops still stood after the first sweep, most of them written
+ * out only to keep such a value in a local; a loop that keeps a value is not a reason to keep a loop. A
+ * {@link Verdict#delete deletion} is the store's unconditional {@link ArtifactStore#delete}, as every caller that
+ * emptied a set and dropped its key already did: the store has no conditional delete, and a peer that lands between
+ * the read and the delete has written into a key whose content the deciding try found empty.
  */
 public final class Retries {
 
@@ -62,6 +71,35 @@ public final class Retries {
     }
 
     /**
+     * What one try of {@link #decide} decided from the key's current content: a body to write, nothing to do, or the
+     * key to delete - and the value the caller gets back from the try that lands.
+     */
+    public record Verdict<T>(byte[] body, boolean delete, T result) {
+
+        /** Write {@code body} against the token that was read; {@code result} is the caller's if it lands. */
+        public static <T> Verdict<T> write(byte[] body, T result) {
+            return new Verdict<>(Objects.requireNonNull(body, "body"), false, result);
+        }
+
+        /** Leave the key as it is - nothing to change - and answer {@code result} at once. */
+        public static <T> Verdict<T> keep(T result) {
+            return new Verdict<>(null, false, result);
+        }
+
+        /** Delete the key - a set that emptied, a last statement that went - and answer {@code result}. */
+        public static <T> Verdict<T> delete(T result) {
+            return new Verdict<>(null, true, result);
+        }
+    }
+
+    /** A {@link Mutation} that also decides between writing, keeping and deleting, and carries a value back. */
+    @FunctionalInterface
+    public interface Decision<T> {
+
+        Verdict<T> decide(Optional<ArtifactStore.Versioned> current) throws IOException;
+    }
+
+    /**
      * Apply {@code mutation} to {@code key} under compare-and-set, re-reading and retrying with {@link #backoff} for
      * up to {@link #COMPARE_AND_SET} tries. Throws when every try lost, naming the key: a writer that gives the
      * conflict up has usually lost a record the caller must not pretend it kept.
@@ -77,6 +115,41 @@ public final class Retries {
      */
     public static boolean tryUpdate(ArtifactStore store, String key, Mutation mutation) throws IOException {
         return tryCompareAndSet(() -> tryOnce(store, key, mutation));
+    }
+
+    /**
+     * {@link #update} for a write with a {@link Verdict}: the {@link Decision} is asked of every re-read until a try
+     * lands, and the value it attached to that try is answered - {@code null} if that is what it attached. Throws
+     * when every try lost, naming the key.
+     */
+    public static <T> T decide(ArtifactStore store, String key, Decision<T> decision) throws IOException {
+        Optional<Verdict<T>> landed = tryDecide(store, key, decision);
+        if (landed.isEmpty()) {
+            throw new IOException("lost the compare-and-set on " + key + " " + COMPARE_AND_SET + " times running");
+        }
+        return landed.get().result();
+    }
+
+    /**
+     * {@link #decide}, answering the verdict that landed - whose {@link Verdict#result} may be {@code null} - or empty
+     * when every try lost, so a caller tells a landed nothing from exhaustion.
+     */
+    public static <T> Optional<Verdict<T>> tryDecide(ArtifactStore store, String key, Decision<T> decision)
+            throws IOException {
+        for (int tries = 0; tries < COMPARE_AND_SET; tries++) {
+            Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
+            Verdict<T> verdict = decision.decide(current);
+            if (verdict.delete()) {
+                store.delete(key);
+                return Optional.of(verdict);
+            }
+            if (verdict.body() == null
+                    || store.writeVersioned(key, verdict.body(), current.map(ArtifactStore.Versioned::token).orElse(null))) {
+                return Optional.of(verdict);
+            }
+            backoff(tries);
+        }
+        return Optional.empty();
     }
 
     /** {@link #update} for a compare-and-set the caller performs itself: {@code attempt} is tried until it lands,
