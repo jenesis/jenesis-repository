@@ -35,6 +35,10 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      *  and no lock at all to the one still holding the old. */
     private static final String CAS_LOCKS = ".cas";
 
+    /** How long a writer waits for another process's stripe lock before the write fails: a holder keeps it for one
+     *  compare and one move of a small object, so a wait this long is a holder that will not return. */
+    private static final Duration LOCK_PATIENCE = Duration.ofSeconds(30);
+
     static {
         for (int index = 0; index < LOCKS.length; index++) {
             LOCKS[index] = new Object();
@@ -563,7 +567,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         Path path = resolve(ArtifactStore.key(key));
         int stripe = Math.floorMod(path.hashCode(), LOCKS.length);
         synchronized (LOCKS[stripe]) {
-            try (FileChannel channel = stripeLock(stripe); FileLock _ = channel.lock()) {
+            try (FileChannel channel = stripeLock(stripe); FileLock _ = acquire(channel)) {
                 return compareAndMove(path, expected, temp -> Files.write(temp, content));
             }
         }
@@ -584,7 +588,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         Path path = resolve(ArtifactStore.key(key));
         int stripe = Math.floorMod(path.hashCode(), LOCKS.length);
         synchronized (LOCKS[stripe]) {
-            try (FileChannel channel = stripeLock(stripe); FileLock _ = channel.lock()) {
+            try (FileChannel channel = stripeLock(stripe); FileLock _ = acquire(channel)) {
                 return compareAndMove(path, expected, temp -> Files.copy(content, temp, StandardCopyOption.REPLACE_EXISTING));
             }
         }
@@ -625,6 +629,35 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             throw e;
         }
         return true;
+    }
+
+    /**
+     * The process lock on a stripe file, taken by polling rather than by blocking. A blocking {@code lock()} is the
+     * kernel's {@code F_SETLKW}, and POSIX record locks belong to the <em>process</em>: when two threads of one node
+     * wait on two stripes the other node's threads hold, the kernel reads a cycle between the two processes where
+     * there is none between the four threads and refuses one waiter with {@code EDEADLK} - "Resource deadlock
+     * avoided", which a fleet suite measured as a publish answering 500 under two nodes on one directory. The
+     * non-blocking {@code tryLock()} carries no such detection, so the waiter polls it at a millisecond, bounded so
+     * a holder that never returns fails the write loudly rather than parking it for ever.
+     */
+    private static FileLock acquire(FileChannel channel) throws IOException {
+        Instant deadline = Instant.now().plus(LOCK_PATIENCE);
+        while (true) {
+            FileLock lock = channel.tryLock();
+            if (lock != null) {
+                return lock;
+            }
+            if (Instant.now().isAfter(deadline)) {
+                throw new IOException("the compare-and-set stripe lock was held by another process for over "
+                        + LOCK_PATIENCE);
+            }
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("interrupted while waiting for the compare-and-set stripe lock", e);
+            }
+        }
     }
 
     /** The open channel of {@code stripe}'s lock file, created on first use; the caller locks and closes it. */
