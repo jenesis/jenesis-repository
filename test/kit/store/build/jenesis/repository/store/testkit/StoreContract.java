@@ -1,6 +1,7 @@
 package build.jenesis.repository.store.testkit;
 
 import module java.base;
+import module java.net.http;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
@@ -112,6 +113,13 @@ public final class StoreContract {
         /** The store-primitive invariants hold on a live backend: no {@code publish/} pointer without its blob, no
          *  unreferenced blob - and a planted dangling pointer is caught. */
         STORE_INVARIANTS,
+        /** A read through a {@link ArtifactStore.RangedSink} delivers exactly the window it asks for - the bytes from
+         *  its offset for its length, and to the end of the object where the window runs past it - so a client
+         *  {@code Range} is served as a slice and never as the whole object. */
+        RANGED_READ_IS_A_WINDOW,
+        /** {@link ArtifactStore#presign} mints a URL a plain HTTP client fetches the stored bytes through, valid for
+         *  the ttl asked for; a backend that mints none answers empty by contract and excludes the property. */
+        PRESIGNED_GET_FETCHES_THE_BYTES,
         /** An endpoint an operator points the backend at is required to be {@code https}: a plaintext one is refused
          *  at resolution, naming the opt-out key, and is honoured only once that opt-out is explicitly set. A backend
          *  with no endpoint at all (the filesystem) has no transport to screen and excludes the property. */
@@ -218,6 +226,12 @@ public final class StoreContract {
         checks.add(new Check(Property.STORE_INVARIANTS,
                 "the store-primitive invariants hold and a dangling pointer is caught",
                 StoreContract::storeInvariants));
+        checks.add(new Check(Property.RANGED_READ_IS_A_WINDOW,
+                "a ranged read delivers exactly the window asked for, and to the end where the window runs past it",
+                StoreContract::rangedReadIsAWindow));
+        checks.add(new Check(Property.PRESIGNED_GET_FETCHES_THE_BYTES,
+                "a presigned GET fetches the stored bytes through a plain HTTP client",
+                StoreContract::presignedGetFetchesTheBytes));
         return List.copyOf(checks);
     }
 
@@ -783,6 +797,65 @@ public final class StoreContract {
 
         store.delete(alpha);
         store.delete(gamma);
+    }
+
+    private static void rangedReadIsAWindow(ArtifactStore store) throws Exception {
+        String key = "kit/ranged/artifact.bin";
+        byte[] body = ramp(64);
+        store.write(key, new ByteArrayInputStream(body));
+        ByteArrayOutputStream window = new ByteArrayOutputStream();
+        store.read(key, new Window(window, 10, 8));
+        equal(window.toByteArray(), Arrays.copyOfRange(body, 10, 18), "a window inside the object is exactly its bytes");
+        ByteArrayOutputStream tail = new ByteArrayOutputStream();
+        store.read(key, new Window(tail, 60, 16));
+        equal(tail.toByteArray(), Arrays.copyOfRange(body, 60, 64), "a window past the end reads to the end, never a 416");
+        store.delete(key);
+    }
+
+    private static void presignedGetFetchesTheBytes(ArtifactStore store) throws Exception {
+        String key = "kit/presigned/artifact.bin";
+        byte[] body = ramp(96);
+        store.write(key, new ByteArrayInputStream(body));
+        Optional<URI> url = store.presign(key, Duration.ofMinutes(5));
+        isTrue(url.isPresent(), "a backend that runs this property mints a URL; one that cannot excludes it with a reason");
+        HttpResponse<byte[]> response = HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder(url.get()).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        equal((long) response.statusCode(), 200L, "the presigned GET is answered 200 by the store itself");
+        equal(response.body(), body, "and carries the stored bytes");
+        store.delete(key);
+    }
+
+    /** The serving layer's shape of a ranged read: an output stream that is also the window it asks for. */
+    private static final class Window extends OutputStream implements ArtifactStore.RangedSink {
+        private final OutputStream sink;
+        private final long offset;
+        private final long length;
+
+        private Window(OutputStream sink, long offset, long length) {
+            this.sink = sink;
+            this.offset = offset;
+            this.length = length;
+        }
+
+        @Override
+        public long offset() {
+            return offset;
+        }
+
+        @Override
+        public long length() {
+            return length;
+        }
+
+        @Override
+        public OutputStream sink() {
+            return sink;
+        }
+
+        @Override
+        public void write(int b) {
+            throw new UnsupportedOperationException("a ranged read writes to the sink");
+        }
     }
 
     private static void storeInvariants(ArtifactStore store) throws Exception {
