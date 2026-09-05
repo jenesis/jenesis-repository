@@ -286,4 +286,21 @@ class PageTest {
             assertThat(names).containsExactlyElementsOf(store.list("dir"));
         }
     }
+
+    @Test
+    void the_default_page_listed_keys_a_trailing_slash_prefix_as_the_bare_one() throws IOException {
+        // The interface default derives pageListed from page; it used to key the children under the prefix as given,
+        // so a caller's "kit/listing/" produced "kit/listing//alpha" where every backend produces "kit/listing/alpha".
+        // The store contract's decorator legs found it through a decorator that forwarded page alone.
+        ArtifactStore store = fallback(store());
+        for (String name : List.of("alpha", "beta")) {
+            store.write("kit/listing/" + name, new ByteArrayInputStream(name.getBytes(StandardCharsets.UTF_8)));
+        }
+        for (String prefix : List.of("kit/listing", "kit/listing/")) {
+            List<String> keys = new ArrayList<>();
+            store.pageListed(prefix, "", 10, listed -> keys.add(listed.key()));
+            assertThat(keys).as("children of '%s'", prefix).containsExactly("kit/listing/alpha", "kit/listing/beta");
+        }
+    }
+
 }
