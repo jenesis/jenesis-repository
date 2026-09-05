@@ -168,7 +168,7 @@ public record BoundedChildren(int steps, int entries, int page) {
      * it should be reached for when a canary shows the quadratic biting again, not before, which is why the code
      * is not carried in the meantime.
      */
-    public static final int DRAIN_PAGE = 10_000;
+    public static final int DRAIN_PAGE = ArtifactStore.DRAIN_PAGE;
 
     /** {@link #draining(int)} at the default {@link #DRAIN_PAGE}. */
     public static BoundedChildren draining() {

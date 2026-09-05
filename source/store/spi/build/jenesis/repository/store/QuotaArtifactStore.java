@@ -62,7 +62,6 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     // rather than let staged bytes bypass the cap until (if ever) they are finalized into a blob.
     private static final String UPLOADS = "oci/uploads/";
     private static final String USED = Scopes.space(Scopes.QUOTA) + "/used";
-    private static final int PAGE = 1000;
 
     private final ArtifactStore delegate;
     private final ArtifactStore meter;
@@ -141,20 +140,12 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
      *  content (the default, single-scope wrapping). */
     public long recompute() throws IOException {
         long total = 0L;
-        String after = "";
-        while (true) {
-            List<String> names = new ArrayList<>();
-            delegate.page("blobs", after, PAGE, names::add);
-            for (String name : names) {
-                long size = delegate.size(BLOBS + name);
-                if (size > 0) {
-                    total += size;
-                }
+        Names blobs = Names.over(delegate, "blobs");
+        for (String name = blobs.next(); name != null; name = blobs.next()) {
+            long size = delegate.size(BLOBS + name);
+            if (size > 0) {
+                total += size;
             }
-            if (names.size() < PAGE) {
-                break;
-            }
-            after = names.getLast();
         }
         total += uploadBytes();
         store(total);
@@ -167,32 +158,16 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
      *  next to the blob pass while counting the same bytes the live path meters. */
     private long uploadBytes() throws IOException {
         long total = 0L;
-        String afterSession = "";
-        while (true) {
-            List<String> sessions = new ArrayList<>();
-            delegate.page("oci/uploads", afterSession, PAGE, sessions::add);
-            for (String session : sessions) {
-                String prefix = UPLOADS + session;
-                String afterChunk = "";
-                while (true) {
-                    List<String> chunks = new ArrayList<>();
-                    delegate.page(prefix, afterChunk, PAGE, chunks::add);
-                    for (String chunk : chunks) {
-                        long size = delegate.size(prefix + "/" + chunk);
-                        if (size > 0) {
-                            total += size;
-                        }
-                    }
-                    if (chunks.size() < PAGE) {
-                        break;
-                    }
-                    afterChunk = chunks.getLast();
+        Names sessions = Names.over(delegate, "oci/uploads");
+        for (String session = sessions.next(); session != null; session = sessions.next()) {
+            String prefix = UPLOADS + session;
+            Names chunks = Names.over(delegate, prefix);
+            for (String chunk = chunks.next(); chunk != null; chunk = chunks.next()) {
+                long size = delegate.size(prefix + "/" + chunk);
+                if (size > 0) {
+                    total += size;
                 }
             }
-            if (sessions.size() < PAGE) {
-                break;
-            }
-            afterSession = sessions.getLast();
         }
         return total;
     }

@@ -109,14 +109,9 @@ public final class DirtyIndexFeed {
      *  {@linkplain #drain drains} instead, so the feed's length never reaches its heap. */
     public List<Entry> pending() throws IOException {
         List<Entry> entries = new ArrayList<>();
-        drain(PAGE, entries::addAll);
+        drain(ArtifactStore.DRAIN_PAGE, entries::addAll);
         return entries;
     }
-
-    /** Markers per page when the feed is drained or compacted: the same width the walk's drain uses over a level,
-     *  because a page of a thousand over a million markers is a thousand scans of a million on the filesystem store -
-     *  restated here rather than shared, since the store cannot depend on the walk. */
-    public static final int PAGE = 10_000;
 
     /** What a {@link #drain} hands each page to. */
     @FunctionalInterface
@@ -210,7 +205,7 @@ public final class DirtyIndexFeed {
         String after = "";
         while (true) {
             List<String> names = new ArrayList<>();
-            store.page(dirtyPrefix, after, PAGE, names::add);
+            store.page(dirtyPrefix, after, ArtifactStore.DRAIN_PAGE, names::add);
             for (String name : names) {
                 String key = dirtyPrefix + "/" + name;
                 Optional<ArtifactStore.Versioned> marker = store.readVersioned(key);
@@ -218,7 +213,7 @@ public final class DirtyIndexFeed {
                     store.delete(key);
                 }
             }
-            if (names.size() < PAGE) {
+            if (names.size() < ArtifactStore.DRAIN_PAGE) {
                 return;
             }
             after = names.getLast();               // a name, so deleting behind the cursor moves nothing under it

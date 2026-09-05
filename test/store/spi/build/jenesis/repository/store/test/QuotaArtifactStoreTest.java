@@ -235,12 +235,13 @@ class QuotaArtifactStoreTest {
         QuotaArtifactStore store = new QuotaArtifactStore(new PagingDelegate(raw, pages), 3000);
         assertThat(store.recompute()).as("every live blob summed across page boundaries").isEqualTo(2001);
         assertThat(store.used()).isEqualTo(2001);
-        // Three bounded pages resume across the 2001-blob namespace, plus one bounded probe of the (here empty)
+        // One page at the drain width covers the 2001-blob namespace, plus one bounded probe of the (here empty)
         // oci/uploads staging the reseed also sums - every access is a page() with the bound, never an unbounded
         // list() (PagingDelegate.list() throws), so the "never materialise as one list" guarantee still holds and
-        // now covers the staging walk too.
-        assertThat(pages).as("bounded pages only - blob namespace resumed plus the staging probe, never a list")
-                .hasSize(4).containsOnly(1000);
+        // covers the staging walk too. That a drain resumes across page boundaries is Names' claim, pinned in
+        // NamesTest; this used to page at a thousand and seed three pages of its own.
+        assertThat(pages).as("bounded pages only, at the drain width - the blob namespace plus the staging probe, never a list")
+                .hasSize(2).containsOnly(ArtifactStore.DRAIN_PAGE);
     }
 
     @Test

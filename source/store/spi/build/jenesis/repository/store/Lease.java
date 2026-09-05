@@ -147,7 +147,8 @@ public final class Lease {
      * so it stops and retries - never a lost or double-applied mutation.
      */
     public void reapExpired(Instant now) throws IOException {
-        for (String name : store.list(root)) {
+        Names names = Names.over(store, root);
+        for (String name = names.next(); name != null; name = names.next()) {
             Optional<ArtifactStore.Versioned> current = store.readVersioned(key(name));
             if (current.isPresent()) {
                 Instant expiry = expiry(current.get());
