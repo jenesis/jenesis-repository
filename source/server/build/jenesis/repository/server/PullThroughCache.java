@@ -9,6 +9,8 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 import io.micrometer.observation.ObservationRegistry;
+import build.jenesis.repository.store.SingleFlight;
+import io.micrometer.observation.Observation;
 
 /**
  * The format-agnostic pull-through loop shared by every dispatcher. A {@code GET} or {@code HEAD} of a path the
@@ -44,7 +46,7 @@ public final class PullThroughCache {
      * map is bounded by the number of requests concurrently missing; the cap below is the belt to that braces, and
      * a reader arriving past it simply fetches for itself rather than queueing behind an unbounded structure.
      */
-    private static final ConcurrentMap<String, CompletableFuture<Void>> FILLING = new ConcurrentHashMap<>();
+    private static final SingleFlight<String, Void> FILLING = new SingleFlight<>();
 
     private static final int MAX_FILLING = 1024;
 
@@ -113,39 +115,44 @@ public final class PullThroughCache {
                 return null;
             }
             String filling = upstream + "\u0000" + exchange.path();
-            CompletableFuture<Void> mine = new CompletableFuture<>();
-            boolean crowded = FILLING.size() >= MAX_FILLING;
-            CompletableFuture<Void> leader = crowded ? null : FILLING.putIfAbsent(filling, mine);
-            if (leader != null && awaitFill(leader)) {
-                // The leader has finished; the local-first path is tried once more and is normally a hit now. This
-                // is a second attempt at the SAME exchange, which is safe because Deferred withholds the response
-                // until it has seen the format's status - nothing was written for the first miss.
+            // Past the cap a reader fetches for itself rather than queue behind an unbounded structure.
+            SingleFlight.Outcome<Void> outcome = FILLING.inFlight() >= MAX_FILLING
+                    ? new SingleFlight.Overdue<>()
+                    : FILLING.run(filling, () -> {
+                        fetch(exchange, store, format, proxy, upstream, observation);
+                        return null;
+                    }, FOLLOW);
+            if (outcome instanceof SingleFlight.Led<Void>) {
+                return null;                                    // this reader was the one that fetched
+            }
+            if (!(outcome instanceof SingleFlight.Overdue<Void>)) {
+                // The leader has finished, however it finished - a waiting reader does not inherit a failure it can
+                // do nothing with. The local-first path is tried once more and is normally a hit now. This is a
+                // second attempt at the SAME exchange, which is safe because Deferred withholds the response until
+                // it has seen the format's status - nothing was written for the first miss.
                 Deferred filled = new Deferred(exchange);
                 format.handle(filled, store);
                 if (!filled.missed()) {
                     observation.lowCardinalityKeyValue("outcome", "coalesced");
                     return null;
                 }
-                // The leader filled nothing this reader can serve, so fall through and fetch for itself.
+                // The leader filled nothing this reader can serve, so it fetches for itself.
             }
-            try {
-                if (proxy.proxy(exchange, store, upstream, hooks.screenFetch(exchange.path(), fetcher, store))) {
-                    observation.lowCardinalityKeyValue("outcome", "miss");
-                    observePublish(format, exchange.path(), store);
-                } else {
-                    observation.lowCardinalityKeyValue("outcome", "negative");
-                    exchange.respond(404);
-                }
-            } finally {
-                if (leader == null && !crowded) {
-                    // Completed normally even when the fetch threw: a waiting reader should retry the local path
-                    // and then fetch for itself, not inherit a failure it can do nothing with.
-                    mine.complete(null);
-                    FILLING.remove(filling, mine);
-                }
-            }
+            fetch(exchange, store, format, proxy, upstream, observation);
             return null;
         });
+    }
+
+    /** Fetch the missed path from the upstream through the format, screened by the hooks, and record the outcome. */
+    private void fetch(FormatExchange exchange, ArtifactStore store, RepositoryFormat format, ProxyFormat proxy,
+                       URI upstream, Observation observation) throws IOException {
+        if (proxy.proxy(exchange, store, upstream, hooks.screenFetch(exchange.path(), fetcher, store))) {
+            observation.lowCardinalityKeyValue("outcome", "miss");
+            observePublish(format, exchange.path(), store);
+        } else {
+            observation.lowCardinalityKeyValue("outcome", "negative");
+            exchange.respond(404);
+        }
     }
 
     /**
@@ -192,18 +199,6 @@ public final class PullThroughCache {
      * real exchange unchanged.
      */
     /** Waits for the leader's fill; false when the wait ended without one, so the caller fetches for itself. */
-    private static boolean awaitFill(CompletableFuture<Void> leader) {
-        try {
-            leader.get(FOLLOW.toSeconds(), TimeUnit.SECONDS);
-            return true;
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            return false;
-        } catch (ExecutionException | TimeoutException unfinished) {
-            return false;
-        }
-    }
-
     private static final class Deferred implements FormatExchange {
 
         private final FormatExchange delegate;
