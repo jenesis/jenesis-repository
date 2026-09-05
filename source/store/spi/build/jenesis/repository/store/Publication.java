@@ -254,30 +254,24 @@ public final class Publication {
         // presence before re-linking, so their idempotent converge passes overwrite rather than freshly link and raise
         // no event.
         boolean quarantine = isQuarantinePath(requestPath);
-        for (int attempt = 0; attempt < Retries.COMPARE_AND_SET; attempt++) {
-            Optional<ArtifactStore.Versioned> prior = store.readVersioned("publish" + requestPath);
-            Object token = prior.map(ArtifactStore.Versioned::token).orElse(null);
-            // Any prior pointer counts, INCLUDING one naming the same blob. A byte-identical re-publish
-            // replaces a contribution with an equal one, so a consumer folding a delta must see it and compute
-            // zero; filtering it out here as "nothing was replaced" is what makes such a publish count twice, and
-            // is the defect this value exists to close.
-            String replaced = prior.map(versioned -> new String(versioned.content(), StandardCharsets.UTF_8).trim())
-                    .filter(previous -> !previous.isEmpty())
-                    .orElse(null);
-            if (store.writeVersioned("publish" + requestPath, hash.getBytes(StandardCharsets.UTF_8), token)) {
-                String condemned = "gc/condemned/" + hash;
-                if (store.exists(condemned)) {
-                    store.delete(condemned);
-                }
-                if (quarantine && prior.isEmpty()) {
-                    notifyWithheld(ArtifactDescriptor.at(null, requestPath.substring(QUARANTINE_PATH.length()))
-                            .withBlob(hash, -1L));
-                }
-                return replaced;
-            }
-            Retries.backoff(attempt);
+        String key = "publish" + requestPath;
+        Optional<ArtifactStore.Versioned> prior = Retries.decide(store, key,
+                current -> Retries.Verdict.write(hash.getBytes(StandardCharsets.UTF_8), current));
+        String condemned = "gc/condemned/" + hash;
+        if (store.exists(condemned)) {
+            store.delete(condemned);
         }
-        throw new IOException("could not link publish" + requestPath + " after repeated version conflicts");
+        if (quarantine && prior.isEmpty()) {
+            notifyWithheld(ArtifactDescriptor.at(null, requestPath.substring(QUARANTINE_PATH.length()))
+                    .withBlob(hash, -1L));
+        }
+        // Any prior pointer counts, INCLUDING one naming the same blob. A byte-identical re-publish replaces a
+        // contribution with an equal one, so a consumer folding a delta must see it and compute zero; filtering it
+        // out here as "nothing was replaced" is what makes such a publish count twice, and is the defect this value
+        // exists to close.
+        return prior.map(versioned -> new String(versioned.content(), StandardCharsets.UTF_8).trim())
+                .filter(previous -> !previous.isEmpty())
+                .orElse(null);
     }
 
     /** The content hash a path currently points at, or empty if nothing is published there. */

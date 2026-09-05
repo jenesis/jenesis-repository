@@ -186,57 +186,40 @@ public final class ServedAliases {
 
     /** Add one line to a stored set under compare-and-set, leaving it unchanged when the line is already there. */
     private static void append(ArtifactStore store, String key, String line) throws IOException {
-        for (int attempt = 0; attempt < Retries.COMPARE_AND_SET; attempt++) {
-            Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
-            Set<String> lines = new TreeSet<>();
-            if (current.isPresent()) {
-                for (String existing : new String(current.get().content(), StandardCharsets.UTF_8).split("\n")) {
-                    if (!existing.isBlank()) {
-                        lines.add(existing);
-                    }
-                }
-            }
-            if (!lines.add(line)) {
-                return;   // already recorded: a repeat publish or a rebuild pass re-running, both free
-            }
-            if (store.writeVersioned(key, String.join("\n", lines).getBytes(StandardCharsets.UTF_8),
-                    current.map(ArtifactStore.Versioned::token).orElse(null))) {
-                return;
-            }
-            Retries.backoff(attempt);
-        }
-        throw new IOException("Could not record a served alias at " + key + " within " + Retries.COMPARE_AND_SET
-                + " attempts; a peer publish held the key for the whole window");
+        Retries.update(store, key, current -> {
+            Set<String> lines = lines(current);
+            return lines.add(line) ? join(lines) : null;   // already recorded: a repeat publish or a rebuild re-running
+        });
     }
 
     /** Remove one line from a stored set under compare-and-set, deleting the key once it empties. */
     private static void remove(ArtifactStore store, String key, String line) throws IOException {
-        for (int attempt = 0; attempt < Retries.COMPARE_AND_SET; attempt++) {
-            Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
+        Retries.decide(store, key, current -> {
             if (current.isEmpty()) {
-                return;
+                return Retries.Verdict.keep(null);
             }
-            Set<String> lines = new TreeSet<>();
+            Set<String> lines = lines(current);
+            if (!lines.remove(line)) {
+                return Retries.Verdict.keep(null);
+            }
+            return lines.isEmpty() ? Retries.Verdict.delete(null) : Retries.Verdict.write(join(lines), null);
+        });
+    }
+
+    private static Set<String> lines(Optional<ArtifactStore.Versioned> current) {
+        Set<String> lines = new TreeSet<>();
+        if (current.isPresent()) {
             for (String existing : new String(current.get().content(), StandardCharsets.UTF_8).split("\n")) {
                 if (!existing.isBlank()) {
                     lines.add(existing);
                 }
             }
-            if (!lines.remove(line)) {
-                return;
-            }
-            if (lines.isEmpty()) {
-                store.delete(key);
-                return;
-            }
-            if (store.writeVersioned(key, String.join("\n", lines).getBytes(StandardCharsets.UTF_8),
-                    current.get().token())) {
-                return;
-            }
-            Retries.backoff(attempt);
         }
-        throw new IOException("Could not drop a served alias from " + key + " within " + Retries.COMPARE_AND_SET
-                + " attempts; a peer publish held the key for the whole window");
+        return lines;
+    }
+
+    private static byte[] join(Set<String> lines) {
+        return String.join("\n", lines).getBytes(StandardCharsets.UTF_8);
     }
 
     private static Optional<String> read(ArtifactStore store, String key) throws IOException {

@@ -475,7 +475,7 @@ class PublicationCommitTest {
         assertThatThrownBy(() -> publication.commit(descriptor("/raw/b"), bytes("other"),
                 Publication.Republish.overwrite(), _ -> Publication.Visibility.at("/raw/b")))
                 .isInstanceOf(IOException.class)
-                .hasMessageContaining("repeated version conflicts");
+                .hasMessageContaining("publish/raw/b");   // by name: the one compare-and-set message names the key
         assertThat(new Publication(store).located("/raw/b")).isEmpty();
         assertThat(observer.published).as("a pointer that never landed is never observed").hasSize(1);
     }

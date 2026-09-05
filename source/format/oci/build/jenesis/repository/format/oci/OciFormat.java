@@ -1325,15 +1325,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      *  push silently dropping the other's update while still answering {@code 201}, and a write that cannot land after
      *  repeated conflicts surfaces as an {@link IOException} instead of a false success. */
     static void linkTag(ArtifactStore store, String key, String digest) throws IOException {
-        byte[] value = digest.getBytes(StandardCharsets.UTF_8);
-        for (int attempt = 0; attempt < Retries.COMPARE_AND_SET; attempt++) {
-            Object token = store.readVersioned(key).map(ArtifactStore.Versioned::token).orElse(null);
-            if (store.writeVersioned(key, value, token)) {
-                return;
-            }
-            Retries.backoff(attempt);
-        }
-        throw new IOException("could not link " + key + " after repeated version conflicts");
+        Retries.update(store, key, _ -> digest.getBytes(StandardCharsets.UTF_8));
     }
 
     // --- RepositoryImporter capability (WSPI.2 (c)): delegated to OciImporter. importTarget returns empty - OCI owns
