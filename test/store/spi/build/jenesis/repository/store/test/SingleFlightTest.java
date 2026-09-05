@@ -28,20 +28,15 @@ class SingleFlightTest {
             await(release);
             return "built";
         };
-        try (ExecutorService pool = Executors.newFixedThreadPool(9)) {
+        try (ExecutorService pool = Executors.newFixedThreadPool(1)) {
             Future<SingleFlight.Outcome<String>> leader = pool.submit(() -> flights.run("k", work, PATIENCE));
             assertThat(leading.await(10, TimeUnit.SECONDS)).isTrue();
-            List<Future<SingleFlight.Outcome<String>>> followers = new ArrayList<>();
-            for (int i = 0; i < 8; i++) {
-                followers.add(pool.submit(() -> flights.run("k", work, PATIENCE)));
-            }
-            while (flights.inFlight() != 1) {
-                Thread.onSpinWait();
-            }
+            List<Follower> followers = followers(8, () -> flights.run("k", work, PATIENCE));
+            awaitParked(followers);
             release.countDown();
             assertThat(leader.get(10, TimeUnit.SECONDS)).isEqualTo(new SingleFlight.Led<>("built"));
-            for (Future<SingleFlight.Outcome<String>> follower : followers) {
-                assertThat(follower.get(10, TimeUnit.SECONDS)).isEqualTo(new SingleFlight.Followed<>("built"));
+            for (Follower follower : followers) {
+                assertThat(follower.result()).isEqualTo(new SingleFlight.Followed<>("built"));
             }
         }
         assertThat(runs.get()).as("the work ran once for nine callers").isEqualTo(1);
@@ -63,20 +58,15 @@ class SingleFlightTest {
             await(release);
             throw new AssertionError("the leader died");
         };
-        try (ExecutorService pool = Executors.newFixedThreadPool(4)) {
+        try (ExecutorService pool = Executors.newFixedThreadPool(1)) {
             Future<SingleFlight.Outcome<String>> leader = pool.submit(() -> flights.run("k", work, PATIENCE));
             assertThat(leading.await(10, TimeUnit.SECONDS)).isTrue();
-            List<Future<SingleFlight.Outcome<String>>> followers = new ArrayList<>();
-            for (int i = 0; i < 3; i++) {
-                followers.add(pool.submit(() -> flights.run("k", work, PATIENCE)));
-            }
-            while (flights.inFlight() != 1) {
-                Thread.onSpinWait();
-            }
+            List<Follower> followers = followers(3, () -> flights.run("k", work, PATIENCE));
+            awaitParked(followers);
             release.countDown();
             assertThatThrownBy(() -> leader.get(10, TimeUnit.SECONDS)).hasCauseInstanceOf(AssertionError.class);
-            for (Future<SingleFlight.Outcome<String>> follower : followers) {
-                SingleFlight.Outcome<String> outcome = follower.get(10, TimeUnit.SECONDS);
+            for (Follower follower : followers) {
+                SingleFlight.Outcome<String> outcome = follower.result();
                 assertThat(outcome).isInstanceOf(SingleFlight.Failed.class);
                 assertThat(((SingleFlight.Failed<String>) outcome).failure()).isInstanceOf(AssertionError.class);
             }
@@ -94,16 +84,14 @@ class SingleFlightTest {
             await(release);
             throw new IOException("the store is down");
         };
-        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+        try (ExecutorService pool = Executors.newFixedThreadPool(1)) {
             Future<SingleFlight.Outcome<String>> leader = pool.submit(() -> flights.run("k", work, PATIENCE));
             assertThat(leading.await(10, TimeUnit.SECONDS)).isTrue();
-            Future<SingleFlight.Outcome<String>> follower = pool.submit(() -> flights.run("k", work, PATIENCE));
-            while (flights.inFlight() != 1) {
-                Thread.onSpinWait();
-            }
+            List<Follower> followers = followers(1, () -> flights.run("k", work, PATIENCE));
+            awaitParked(followers);
             release.countDown();
             assertThatThrownBy(() -> leader.get(10, TimeUnit.SECONDS)).hasCauseInstanceOf(IOException.class);
-            SingleFlight.Outcome<String> outcome = follower.get(10, TimeUnit.SECONDS);
+            SingleFlight.Outcome<String> outcome = followers.getFirst().result();
             assertThat(outcome).isInstanceOf(SingleFlight.Failed.class);
             assertThat(((SingleFlight.Failed<String>) outcome).failure()).hasMessage("the store is down");
         }
@@ -126,6 +114,53 @@ class SingleFlightTest {
             assertThat(outcome).as("the waiter did not wait the leader out").isEqualTo(new SingleFlight.Overdue<>());
             release.countDown();
             assertThat(leader.get(10, TimeUnit.SECONDS)).isEqualTo(new SingleFlight.Led<>("late"));
+        }
+    }
+
+    /** A caller on its own thread, so the test can see it park inside the flight's timed wait before it releases the
+     *  leader: a follower submitted to a pool could arrive after the leader had finished and lead a second flight of
+     *  its own, which is what a first version of these tests did about one run in ten. */
+    private record Follower(Thread thread, AtomicReference<SingleFlight.Outcome<String>> outcome,
+                            AtomicReference<Throwable> failure) {
+
+        SingleFlight.Outcome<String> result() throws Exception {
+            thread.join(10_000);
+            if (failure.get() != null) {
+                throw new AssertionError("a follower failed instead of receiving an outcome", failure.get());
+            }
+            return outcome.get();
+        }
+    }
+
+    private static List<Follower> followers(int count, Callable<SingleFlight.Outcome<String>> call) {
+        List<Follower> followers = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            AtomicReference<SingleFlight.Outcome<String>> outcome = new AtomicReference<>();
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            Thread thread = new Thread(() -> {
+                try {
+                    outcome.set(call.call());
+                } catch (Throwable t) {
+                    failure.set(t);
+                }
+            });
+            thread.start();
+            followers.add(new Follower(thread, outcome, failure));
+        }
+        return followers;
+    }
+
+    /** Every follower has parked in the flight's timed wait - the only timed wait on its path while the leader holds
+     *  the flight - so releasing the leader now frees exactly these waiters. */
+    private static void awaitParked(List<Follower> followers) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        for (Follower follower : followers) {
+            while (follower.thread().getState() != Thread.State.TIMED_WAITING) {
+                if (System.nanoTime() > deadline) {
+                    throw new AssertionError("a follower never parked in the flight's wait: " + follower.thread().getState());
+                }
+                Thread.onSpinWait();
+            }
         }
     }
 
