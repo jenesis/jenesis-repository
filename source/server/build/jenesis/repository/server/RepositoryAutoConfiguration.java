@@ -2,6 +2,7 @@ package build.jenesis.repository.server;
 import module java.base;
 import module org.slf4j;
 
+import build.jenesis.repository.store.Clocks;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.spi.RateLimiterProvider;
@@ -53,6 +54,12 @@ public class RepositoryAutoConfiguration {
     private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryAutoConfiguration.class);
 
     public RepositoryAutoConfiguration(Environment environment) {
+        // The clock every stored stamp is made with, before any bean stamps anything: the system clock, offset by
+        // jenreg.clock.skew when a fleet test wants this node's clock to run ahead of its peers'.
+        String skew = environment.getProperty("jenreg.clock.skew");
+        if (skew != null && !skew.isBlank()) {
+            Clocks.install(Clock.offset(Clock.systemUTC(), Duration.parse(skew.strip())));
+        }
         // Hand the Spring Environment to the config-driven SPI enable/disable convention before any bean below
         // discovers providers, so every jenreg.* toggle - including its JENREG_* environment
         // spelling through relaxed binding - gates ServiceLoader discovery deployment-wide.
