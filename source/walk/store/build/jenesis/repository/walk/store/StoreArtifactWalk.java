@@ -133,6 +133,12 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
         String scope = ArtifactStore.segment(consumer);
         String holder = node + "/" + workers.incrementAndGet();
         Manifest manifest = manifest(store, scope, roots);
+        // The instance that walks is the instance the observability reports, and it reports the pass from the moment
+        // it is joined: a provider re-resolved on a settings-convergence tick installs a fresh instance the scheduler
+        // may or may not drive, and a pass recorded only on completion is never seen RUNNING - two nodes' fleet view
+        // read no walk at all while one of them walked.
+        install(this);
+        observed = pass(store, scope, manifest);
         while (true) {
             Claimed claimed = claim(store, scope, manifest, holder);
             if (claimed == null) {
