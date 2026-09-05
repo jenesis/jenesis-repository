@@ -73,7 +73,11 @@ public final class SettingsCatalogue {
             new Setting("jenreg.walk.segments",
                     "Artifact-walk parallel segment count"),
             new Setting("jenreg.walk.ttl",
-                    "Seconds an artifact-walk cursor stays resumable before it expires"));
+                    "Seconds an artifact-walk cursor stays resumable before it expires"),
+            new Setting("jenreg.clock.skew",
+                    "An ISO-8601 offset added to this node's clock for every stamp it stores - unset in a deployment; "
+                            + "a fleet test sets it on one node to prove the others tolerate a peer whose clock runs "
+                            + "ahead"));
 
     private SettingsCatalogue() {
     }
