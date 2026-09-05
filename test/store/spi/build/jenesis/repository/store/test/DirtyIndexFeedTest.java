@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.DirtyIndexFeed;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -72,6 +73,44 @@ class DirtyIndexFeedTest {
     }
 
     /** One full incremental sweep: apply the dirty set into the index, then (snapshot "committed") clear what applied. */
+    @Test
+    void a_drain_pages_the_feed_with_a_cursor_and_never_lists_the_level() throws IOException {
+        for (int i = 0; i < 25; i++) {
+            feed.touched("coord-" + i, 1);
+        }
+        FaultInjectingStore counting = FaultInjectingStore.wrap(store);
+        DirtyIndexFeed paged = new DirtyIndexFeed(counting, "index/search");
+        List<Integer> pageSizes = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        paged.drain(10, page -> {
+            pageSizes.add(page.size());
+            page.forEach(entry -> seen.add(entry.coordinate()));
+            paged.clear(page);                                 // the per-page discipline: cleared as it goes
+        });
+        assertThat(pageSizes).as("three pages of ten, ten and five").containsExactly(10, 10, 5);
+        assertThat(seen).hasSize(25);
+        // This decorator has no native page, so each page falls back to one scan of the level - which is what the
+        // filesystem store does too: a scan per page, never one per marker, and never a scan past the last page.
+        assertThat(counting.calls(FaultInjectingStore.Op.LIST)).as("one level scan per page").isEqualTo(pageSizes.size());
+        assertThat(feed.pending()).isEmpty();
+    }
+
+    @Test
+    void a_drain_that_clears_nothing_still_ends_and_a_compaction_pages_too() throws IOException {
+        for (int i = 0; i < 12; i++) {
+            feed.touched("coord-" + i, i);
+        }
+        FaultInjectingStore counting = FaultInjectingStore.wrap(store);
+        DirtyIndexFeed paged = new DirtyIndexFeed(counting, "index/search");
+        List<Integer> pageSizes = new ArrayList<>();
+        paged.drain(5, page -> pageSizes.add(page.size()));  // the after-commit discipline: nothing cleared yet
+        assertThat(pageSizes).as("the cursor moves past pages nobody cleared").containsExactly(5, 5, 2);
+        paged.compactThrough(5);
+        assertThat(feed.pending()).as("versions past the cutoff survive the compaction").hasSize(6);
+        assertThat(counting.calls(FaultInjectingStore.Op.LIST)).as("three drain pages and the compaction's one")
+                .isEqualTo(pageSizes.size() + 1);
+    }
+
     private void sweep() throws IOException {
         feed.clear(applyPending());
     }
