@@ -2,6 +2,8 @@ package build.jenesis.repository.store;
 
 import module java.base;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.Signals;
 
@@ -43,20 +45,19 @@ public final class StoreCache {
      *  holds it and a test's store does not pin one for the life of the JVM. */
     private static final Map<String, WeakReference<StoreCache>> SHARED = new HashMap<>();
 
-    private record Entry(Optional<ArtifactStore.Versioned> value, long expiresAtNanos) {
-    }
-
-    private record Listing(List<String> names, long expiresAtNanos) {
-    }
-
     private final String name;
     /** {@code jenreg.cache.<name>}, validated against the signal grammar when the cache is made - a name the report
      *  would refuse is refused here, at boot, rather than dropping every cache's counters from the report. */
     private final String prefix;
     private final ArtifactStore store;
     private final Duration ttl;
-    private final Map<String, Entry> entries = new ConcurrentHashMap<>();
-    private final Map<String, Listing> listings = new ConcurrentHashMap<>();
+    /** How many documents, and how many listings, one cache holds at most: the documents this cache is for -
+     *  credentials, settings, ceilings, tenant lists - are small and few, so the bound is a ceiling on a runaway
+     *  key space, never a working-set size. Eviction past it is the library's, by frequency and recency. */
+    static final long MAX_ENTRIES = 100_000;
+
+    private final Cache<String, Optional<ArtifactStore.Versioned>> entries;
+    private final Cache<String, List<String>> listings;
     private final AtomicLong hits = new AtomicLong();
     private final AtomicLong misses = new AtomicLong();
 
@@ -70,6 +71,10 @@ public final class StoreCache {
         if (ttl.isNegative()) {
             throw new IllegalArgumentException("a cache ttl is zero (off) or positive: " + ttl);
         }
+        // A zero ttl is no cache at all; the caches are still built so the read paths need no second branch.
+        Duration lifetime = ttl.isZero() ? Duration.ofNanos(1) : ttl;
+        this.entries = Caffeine.newBuilder().expireAfterWrite(lifetime).maximumSize(MAX_ENTRIES).build();
+        this.listings = Caffeine.newBuilder().expireAfterWrite(lifetime).maximumSize(MAX_ENTRIES).build();
         CACHES.add(this);
     }
 
@@ -147,15 +152,14 @@ public final class StoreCache {
             misses.incrementAndGet();
             return store.readVersioned(key);
         }
-        long now = System.nanoTime();
-        Entry entry = entries.get(key);
-        if (entry != null && entry.expiresAtNanos() - now > 0) {
+        Optional<ArtifactStore.Versioned> cached = entries.getIfPresent(key);
+        if (cached != null) {
             hits.incrementAndGet();
-            return entry.value();
+            return cached;
         }
         misses.incrementAndGet();
         Optional<ArtifactStore.Versioned> value = store.readVersioned(key);
-        entries.put(key, new Entry(value, now + ttl.toNanos()));
+        entries.put(key, value);
         return value;
     }
 
@@ -167,27 +171,26 @@ public final class StoreCache {
             misses.incrementAndGet();
             return store.list(prefix);
         }
-        long now = System.nanoTime();
-        Listing listing = listings.get(prefix);
-        if (listing != null && listing.expiresAtNanos() - now > 0) {
+        List<String> cached = listings.getIfPresent(prefix);
+        if (cached != null) {
             hits.incrementAndGet();
-            return listing.names();
+            return cached;
         }
         misses.incrementAndGet();
         List<String> names = List.copyOf(store.list(prefix));
-        listings.put(prefix, new Listing(names, now + ttl.toNanos()));
+        listings.put(prefix, names);
         return names;
     }
 
     /** Drop the cached listing of {@code prefix}: for a child this node created or removed past this cache. */
     public void invalidateListing(String prefix) {
-        listings.remove(prefix);
+        listings.invalidate(prefix);
     }
 
     /** Write {@code content} at {@code key} and drop the entry, so this node's next read sees the store's answer. */
     public void write(String key, byte[] content) throws IOException {
         store.write(key, new ByteArrayInputStream(content));
-        entries.remove(key);
+        entries.invalidate(key);
     }
 
     /** {@link ArtifactStore#writeVersioned}, dropping the entry whether or not the compare-and-set landed - a lost
@@ -196,7 +199,7 @@ public final class StoreCache {
         try {
             return store.writeVersioned(key, content, expected);
         } finally {
-            entries.remove(key);
+            entries.invalidate(key);
         }
     }
 
@@ -205,20 +208,20 @@ public final class StoreCache {
         try {
             store.delete(key);
         } finally {
-            entries.remove(key);
+            entries.invalidate(key);
         }
     }
 
     /** Drop the entry at {@code key}: for a write that went past this cache to the store. */
     public void invalidate(String key) {
-        entries.remove(key);
+        entries.invalidate(key);
     }
 
     /** Drop every entry; answers how many there were. */
     public int clear() {
-        int size = entries.size() + listings.size();
-        entries.clear();
-        listings.clear();
+        int size = size();
+        entries.invalidateAll();
+        listings.invalidateAll();
         return size;
     }
 
@@ -231,7 +234,10 @@ public final class StoreCache {
     }
 
     public int size() {
-        return entries.size() + listings.size();
+        // The library's size is an estimate until it has swept what expired; sweeping first makes it the count.
+        entries.cleanUp();
+        listings.cleanUp();
+        return (int) (entries.estimatedSize() + listings.estimatedSize());
     }
 
     /** The counters this cache reports: hits, misses and live entries, under {@code jenreg.cache.<name>}. */
@@ -263,6 +269,6 @@ public final class StoreCache {
 
     @Override
     public String toString() {
-        return "StoreCache[" + name + ", ttl=" + ttl + ", entries=" + entries.size() + "]";
+        return "StoreCache[" + name + ", ttl=" + ttl + ", entries=" + size() + "]";
     }
 }
