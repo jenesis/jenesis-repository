@@ -588,14 +588,14 @@ public final class WalkConsumerContract {
         }
 
         @Override
-        public void onPassStarted(WalkPass pass) {
+        public void onPassStarted(WalkPass pass, ArtifactStore store) {
             events.add("started");
             generation = pass.generation();
-            delegate.onPassStarted(pass);
+            delegate.onPassStarted(pass, store);
         }
 
         @Override
-        public void onPassCompleted(WalkPass pass) {
+        public void onPassCompleted(WalkPass pass, ArtifactStore store) {
             events.add("completed");
             if (point == CrashPoint.AT_PASS_COMPLETION) {
                 // The process dies in the pass-completion window - before the consumer commits, which for a snapshot
@@ -603,7 +603,7 @@ public final class WalkConsumerContract {
                 // failure per consumer and would otherwise read this as one; a process dying is nobody's failure.
                 throw new ProcessDeath("injected crash at pass completion");
             }
-            delegate.onPassCompleted(pass);
+            delegate.onPassCompleted(pass, store);
         }
 
         /** Arm the fault for the crash point once the consumer has seen the deliveries that define it. The walk's

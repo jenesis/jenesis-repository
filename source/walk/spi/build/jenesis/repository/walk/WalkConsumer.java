@@ -229,12 +229,27 @@ public interface WalkConsumer {
     default void onPassStarted(WalkPass pass) {
     }
 
+    /** {@link #onPassStarted(WalkPass)} told which store's pass is starting: a deployment fans passes over its
+     *  repositories across workers, calling this one instance for several stores at once, so a consumer that keeps
+     *  per-pass state keys it by {@link ArtifactStore#identity()} and resets only that store's here. The default
+     *  calls the store-less form, which a consumer keeping no per-store state may keep overriding instead. */
+    default void onPassStarted(WalkPass pass, ArtifactStore store) {
+        onPassStarted(pass);
+    }
+
     /** The pass enumerated everything - the commit / compact / heal hook for a consumer that acts at pass end. Like
      *  {@link #onPassStarted} it carries no {@link ArtifactStore}: a consumer that persists here uses the store it was
      *  handed by {@link #onRetained} (and so cannot commit anything for a pass that delivered it nothing), and wraps a
      *  store failure in an {@link UncheckedIOException}, which propagates out of the pass just as a checked one
      *  would. */
     default void onPassCompleted(WalkPass pass) {
+    }
+
+    /** {@link #onPassCompleted(WalkPass)} told which store's pass completed - the store the deliveries carried, so
+     *  a consumer that commits, compacts or judges at pass end does so for that store alone, and only its state goes.
+     *  The default calls the store-less form. */
+    default void onPassCompleted(WalkPass pass, ArtifactStore store) {
+        onPassCompleted(pass);
     }
 
     /** Every enabled consumer discovered via {@link ServiceLoader} (a parallel SPI: a
