@@ -201,11 +201,6 @@ public final class GcsArtifactStore implements ArtifactStore {
         return keyPrefix + (container.isEmpty() ? "" : container + "/");
     }
 
-    private static String name(String key) {
-        int slash = key.lastIndexOf('/');
-        return slash < 0 ? key : key.substring(slash + 1);
-    }
-
     /** One page of the listing. {@code startOffset} is inclusive on the JSON API where S3's start-after is not, so a
      *  caller that must not see the boundary's own object drops it itself. */
     private Objects listPage(String prefix, String delimiter, String startOffset, long maxResults, String pageToken)
@@ -275,13 +270,6 @@ public final class GcsArtifactStore implements ArtifactStore {
             throw new UncheckedIOException("Could not list " + prefix, e);
         }
         return new ArrayList<>(names);
-    }
-
-    @Override
-    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        // The names-only view of pageListed: the ordering rules there are subtle enough that a second copy would
-        // drift, so this form derives from that one rather than repeating it.
-        pageListed(prefix, startAfter, limit, listed -> consumer.accept(name(listed.key())));
     }
 
     /** Whether {@code name} may not be paged out yet at stream position {@code relative}: a proper prefix of it
@@ -478,15 +466,6 @@ public final class GcsArtifactStore implements ArtifactStore {
                 throw new IOException("Could not delete " + key, e);
             }
         }
-    }
-
-    @Override
-    public List<BatchOutcome> writeBatch(List<BatchWrite> writes) throws IOException {
-        // Best-effort, per-key compare-and-set, not a transaction (GCS has no multi-object atomicity): the
-        // conditional inserts go bounded-parallel so a k-write commit is about one round trip instead of k, each
-        // 412 classified exactly as writeVersioned. The shared helper keeps input order and never overlaps two
-        // writes to one key.
-        return ArtifactStore.writeBatchParallel(this, writes);
     }
 
     /** Both conditional writes; the generation precondition is identical, only the body differs. */

@@ -177,14 +177,6 @@ public final class WitnessStore implements ArtifactStore {
         return delegate.writeVersioned(key, content, expected);
     }
 
-    @Override
-    public List<BatchOutcome> writeBatch(List<BatchWrite> writes) throws IOException {
-        for (BatchWrite write : writes) {
-            buffered(write.key(), write.content().length);
-        }
-        return delegate.writeBatch(writes);
-    }
-
     private void refuseSealed(String key, String operation) {
         if (witness.sealed.contains(key)) {
             throw new AssertionError("The artifact body at '" + key + "' was " + operation + "ed. This request must be "

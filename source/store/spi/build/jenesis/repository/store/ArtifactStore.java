@@ -71,7 +71,7 @@ import module java.base;
  * <li><b>Streaming (&sect;1).</b> {@link #write}, {@link #writeBlob}, {@link #read} and {@link #open} are the
  *     artifact-sized paths and must not materialise a body: a backend that needs a length or a hash before it can
  *     upload spools to disk, never to the heap, so the JVM stays bounded under a multi-gigabyte publish.
- *     {@link #readVersioned} / {@link #writeVersioned} / {@link #writeBatch} are the small-object paths and do
+ *     {@link #readVersioned} / {@link #writeVersioned} are the small-object paths and do
  *     materialise, so only pointers, indexes and metadata may travel through them. A {@link RangedSink} passed to
  *     {@link #read} is a request to transfer only that window; a backend that cannot seek still writes the whole
  *     blob through and the sink forwards only the window, so the answer is correct either way.</li>
@@ -108,9 +108,7 @@ import module java.base;
  *     the child name, strictly after {@code startAfter}, so repeated pages traverse an arbitrarily large child set
  *     exactly once. A container and a same-named leaf are one child, and the ordering is by child name - never by the
  *     backend's raw key order, in which a grouped prefix sorts after a sibling whose name extends it past a character
- *     below {@code '/'}. {@link #list} enumerates the same children as a full paging. {@link #writeBatch} answers
- *     one outcome per write in input order, may execute disjoint keys concurrently, and never reorders or overlaps
- *     two writes to the same key.</li>
+ *     below {@code '/'}. {@link #list} enumerates the same children as a full paging.</li>
  * <li><b>Bounded work / cancellation.</b> {@link #page}'s {@code limit} bounds what is emitted - always, on every
  *     backend - and a non-positive limit emits nothing. It bounds what the backend <em>buffers</em> only where the
  *     backend pages natively, which is the obligation on an implementation and the reason every shipped backend
@@ -141,9 +139,7 @@ import module java.base;
  *     wall-clock stamp therefore has to add something the re-creation cannot repeat - the filesystem folds in a digest
  *     of the bytes, the object stores already have an ETag or a generation. The one collision this permits is
  *     a re-creation that is byte-identical at the same stamp, where the state a stale token passes against is
- *     precisely the state its holder read. {@link #writeBatch} is explicitly <b>not</b> a transaction: there is no atomicity across
- *     keys and no rollback, each entry commits, conflicts or fails on its own, and a caller must read the per-entry
- *     outcomes rather than assume the batch succeeded or failed as a unit.</li>
+ *     precisely the state its holder read.</li>
  * </ol>
  */
 public interface ArtifactStore {
@@ -496,21 +492,24 @@ public interface ArtifactStore {
      * last name of the one before, traverse an arbitrarily large child set - the flat, millions-entry {@code blobs/}
      * namespace - without ever materialising it as one {@code List} the way {@link #list} does.
      *
-     * <p><strong>A backend pages natively; the inherited body is a small-container fallback and says so out loud.</strong>
-     * The {@code default} delegates to {@link #pageByListing}, which is {@link #list}-and-sort: it emits the right names
-     * in the right order, but it materialises the container's whole child set to do it - the opposite of what paging is
-     * for. So it refuses rather than pretending: past {@link #MAX_INHERITED_CHILDREN} children it throws an
-     * {@link IllegalStateException} naming the inheriting class, the prefix and the remedy, instead of quietly turning
-     * one page request into an unbounded heap allocation (&sect;9, and the "bounds fail visibly" gate). Every shipped
-     * backend therefore overrides this - the filesystem scans a directory in bounded strides, the three object stores
-     * use their own start-after pagination - and the store contract kit's {@code NATIVE_PAGING} property proves it for
-     * each, so a new backend that inherits fails the kit rather than shipping the fallback. An implementation whose
-     * whole child set genuinely <em>is</em> in memory (a map-backed test double, an in-process spool) calls
-     * {@link #pageByListing} by name: the cost is then a decision at the call site rather than an accident of
-     * inheritance.
+     * <p><strong>This is the names-only view of {@link #pageListed}, and only that.</strong> A backend implements
+     * {@code pageListed} - the filesystem scans a directory in bounded strides, the three object stores use their own
+     * start-after pagination - and this form derives from it losslessly, the child's name being the last segment of
+     * its key. It used to be the other way round on paper and both ways in practice: four backends each carried the
+     * identical three-line override and the identical {@code name} helper to express this over that one, which is
+     * the shape a default exists for. The contract kit's {@code NATIVE_PAGING} property still proves a backend pages
+     * natively, and a backend that overrides neither inherits {@code pageListed}'s bounded listing fallback, which
+     * refuses past {@link #MAX_INHERITED_CHILDREN} children rather than pretending to page.
      */
     default void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        pageByListing(this, prefix, startAfter, limit, consumer);
+        pageListed(prefix, startAfter, limit, listed -> consumer.accept(name(listed.key())));
+    }
+
+    /** The last segment of {@code key}: the child's own name, as {@link #page} reports it and
+     *  {@link Listed#key} does not. */
+    static String name(String key) {
+        int slash = key.lastIndexOf('/');
+        return slash < 0 ? key : key.substring(slash + 1);
     }
 
     /**
@@ -524,18 +523,26 @@ public interface ArtifactStore {
      * returned and never costs a request of its own, so a child that is a CONTAINER - which has no size or age of its
      * own - reports neither.
      *
-     * <p>Every shipped backend implements this one and expresses {@link #page} in terms of it, rather than the other
-     * way round: the ordering rules a hierarchical listing needs (a container's grouped prefix sorting after a
-     * sibling whose name extends it) are subtle enough that two copies would drift, and the names-only form is the
-     * one that can be derived losslessly. The inherited body is the reverse fallback for a backend that has only
-     * overridden {@code page}, and it reports no metadata rather than inventing any.
+     * <p>Every shipped backend implements this one, and {@link #page} derives from it: the ordering rules a
+     * hierarchical listing needs (a container's grouped prefix sorting after a sibling whose name extends it) are
+     * subtle enough that two copies would drift, and the names-only form is the one that can be derived losslessly.
+     *
+     * <p><strong>The inherited body is a small-container fallback and says so out loud.</strong> It is
+     * {@link #pageByListing} - {@link #list}-and-sort, which emits the right children in the right order but
+     * materialises the container's whole child set to do it, the opposite of what paging is for - so it refuses
+     * rather than pretending: past {@link #MAX_INHERITED_CHILDREN} children it throws an {@link IllegalStateException}
+     * naming the inheriting class, the prefix and the remedy, instead of quietly turning one page request into an
+     * unbounded heap allocation (&sect;9, and the "bounds fail visibly" gate). It reports no metadata, because it has
+     * none it did not ask for. An implementation whose whole child set genuinely <em>is</em> in memory (a map-backed
+     * test double, an in-process spool) may call {@link #pageByListing} by name from its {@code page}: the cost is then
+     * a decision at the call site rather than an accident of inheritance.
      */
     default void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         // The container name normalised as every backend normalises it, so a trailing-slash prefix keys its children
-        // exactly as the bare one does; the decorator legs of the store contract found this default keying them
+        // exactly as the bare one does; the decorator legs of the store contract found an earlier default keying them
         // kit/listing//alpha.
         String container = container(prefix);
-        page(prefix, startAfter, limit, name -> consumer.accept(Listed.of(child(container, name))));
+        pageByListing(this, prefix, startAfter, limit, name -> consumer.accept(Listed.of(child(container, name))));
     }
 
     /** A child's key under {@code prefix} - the root's children are keyed by their bare names. */
@@ -564,7 +571,7 @@ public interface ArtifactStore {
      * with a cursor because it has a continuation; a bound on how pathological the key space is throws because it has
      * none), and this bound is the second kind. Past {@link #MAX_INHERITED_CHILDREN} children it throws an
      * {@link IllegalStateException} naming {@code store}'s class, the prefix and the count, and pointing at the fix:
-     * override {@link #page}.
+     * override {@link #pageListed}.
      *
      * @throws IllegalStateException when {@code prefix} holds more than {@link #MAX_INHERITED_CHILDREN} children
      */
@@ -577,7 +584,7 @@ public interface ArtifactStore {
         if (children.size() > MAX_INHERITED_CHILDREN) {
             throw new IllegalStateException(store.getClass().getName() + " pages '" + prefix + "' by materialising its "
                     + children.size() + " children, past the " + MAX_INHERITED_CHILDREN + "-child bound on the "
-                    + "inherited ArtifactStore.page fallback. Override page(...) with the backend's own start-after "
+                    + "inherited ArtifactStore.pageListed fallback. Override pageListed(...) with the backend's own start-after "
                     + "pagination; a paging primitive that first buffers the whole container is not one.");
         }
         Collections.sort(children);
@@ -841,138 +848,6 @@ public interface ArtifactStore {
      */
     default boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
         return writeVersioned(key, content.readAllBytes(), expected);
-    }
-
-    /** One compare-and-set write in a {@link #writeBatch} batch: exactly the arguments of
-     *  {@link #writeVersioned(String, byte[], Object)} - store {@code content} at {@code key} only while the stored
-     *  version still matches {@code expected} ({@code null} requires the key be absent). */
-    record BatchWrite(String key, byte[] content, Object expected) {
-    }
-
-    /**
-     * The outcome of one {@link BatchWrite}, reported by {@link #writeBatch} in input order, so a caller sees exactly
-     * which keys landed and which did not:
-     * <ul>
-     *   <li>{@code COMMITTED} - the conditional write landed;</li>
-     *   <li>{@code CONFLICTED} - the compare-and-set lost (the stored version no longer matched {@code expected}),
-     *       exactly a {@code false} from {@link #writeVersioned}: the caller re-reads and retries that key;</li>
-     *   <li>{@code FAILED} - the write threw, and {@link #failure()} carries the {@link IOException}.</li>
-     * </ul>
-     * {@code failure} is non-null only for {@code FAILED}.
-     */
-    record BatchOutcome(String key, Status status, IOException failure) {
-
-        public enum Status {
-            COMMITTED, CONFLICTED, FAILED
-        }
-
-        public static BatchOutcome committed(String key) {
-            return new BatchOutcome(key, Status.COMMITTED, null);
-        }
-
-        public static BatchOutcome conflicted(String key) {
-            return new BatchOutcome(key, Status.CONFLICTED, null);
-        }
-
-        public static BatchOutcome failed(String key, IOException failure) {
-            return new BatchOutcome(key, Status.FAILED, failure);
-        }
-    }
-
-    /** The bounded fan-out an object-store {@link #writeBatch} override issues its conditional writes with: a small
-     *  fixed concurrency (deliberately not unbounded - a large batch must never open a connection per key), enough to
-     *  turn a k-write commit from k sequential round-trips into roughly one. The filesystem backend keeps the
-     *  sequential default. */
-    int BATCH_FANOUT = 8;
-
-    /**
-     * Apply each {@link BatchWrite} with {@link #writeVersioned} semantics and return one {@link BatchOutcome} per
-     * write, <em>in input order</em>, so a caller sees exactly which keys committed, which lost their compare-and-set
-     * and which failed.
-     *
-     * <p><strong>Best-effort, per-key compare-and-set, explicitly NOT a transaction.</strong> There is no atomicity
-     * across keys and no rollback: S3, GCS and Azure have no multi-object transaction (conditional writes are per-key
-     * only), and the repository's reconcile-heals-partials model tolerates a partial batch by design. A crash or a
-     * mid-batch failure leaves the keys already written committed; every key is still individually atomic and
-     * compare-and-set-checked exactly as {@link #writeVersioned} - a conflicting token fails that one key
-     * ({@code CONFLICTED}) or a thrown {@link IOException} fails it ({@code FAILED}) while the rest still proceed. A
-     * backend may execute disjoint keys concurrently but never reorders or overlaps two writes to the same key.
-     *
-     * <p>The default applies the writes sequentially through {@link #writeVersioned} - correct on every backend, and
-     * what the filesystem store uses; the object-store backends override it to issue the conditional writes
-     * {@linkplain #BATCH_FANOUT bounded-parallel} (see {@link #writeBatchParallel}).
-     */
-    default List<BatchOutcome> writeBatch(List<BatchWrite> writes) throws IOException {
-        List<BatchOutcome> outcomes = new ArrayList<>(writes.size());
-        for (BatchWrite write : writes) {
-            outcomes.add(writeOne(this, write));
-        }
-        return outcomes;
-    }
-
-    /**
-     * Apply one {@link BatchWrite} through {@code store}'s {@link #writeVersioned} and classify the result into a
-     * {@link BatchOutcome} exactly as {@link #writeBatch} documents. This is the single place every backend - the
-     * default sequential loop and the object-store parallel overrides alike - turns a conditional write into an
-     * outcome, so committed-vs-conflicted-vs-failed is classified identically everywhere. Never throws: a thrown
-     * {@link IOException} becomes a {@code FAILED} outcome rather than escaping and aborting the rest of the batch.
-     */
-    static BatchOutcome writeOne(ArtifactStore store, BatchWrite write) {
-        try {
-            return store.writeVersioned(write.key(), write.content(), write.expected())
-                    ? BatchOutcome.committed(write.key())
-                    : BatchOutcome.conflicted(write.key());
-        } catch (IOException failure) {
-            return BatchOutcome.failed(write.key(), failure);
-        }
-    }
-
-    /**
-     * The shared bounded-parallel implementation the object-store {@link #writeBatch} overrides delegate to: issue
-     * each write through {@link #writeOne} on a pool of at most {@link #BATCH_FANOUT} threads, collect the outcomes
-     * in input order, and never reorder or overlap two writes to the same key (writes sharing a key run sequentially
-     * in input order on one task; disjoint keys fan out). Best-effort, not a transaction - see {@link #writeBatch}.
-     * A single write skips the pool entirely.
-     */
-    static List<BatchOutcome> writeBatchParallel(ArtifactStore store, List<BatchWrite> writes) throws IOException {
-        int size = writes.size();
-        if (size <= 1) {
-            return size == 0 ? List.of() : List.of(writeOne(store, writes.get(0)));
-        }
-        BatchOutcome[] results = new BatchOutcome[size];
-        // Group the write indices by key in input order: two writes to one key share a task and run in order (the
-        // no-reorder-per-key rule above), while disjoint keys fan out across the pool - a batch of one key is never
-        // parallelised into a lost update against itself.
-        LinkedHashMap<String, List<Integer>> byKey = new LinkedHashMap<>();
-        for (int index = 0; index < size; index++) {
-            byKey.computeIfAbsent(writes.get(index).key(), _ -> new ArrayList<>()).add(index);
-        }
-        ExecutorService pool = Executors.newFixedThreadPool(Math.min(BATCH_FANOUT, byKey.size()));
-        try {
-            List<Future<?>> futures = new ArrayList<>(byKey.size());
-            for (List<Integer> indices : byKey.values()) {
-                futures.add(pool.submit(() -> {
-                    for (int index : indices) {
-                        results[index] = writeOne(store, writes.get(index));
-                    }
-                }));
-            }
-            for (Future<?> future : futures) {
-                try {
-                    future.get();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Interrupted writing batch", e);
-                } catch (ExecutionException e) {
-                    // writeOne captures every IOException as a FAILED outcome, so a task body cannot throw a checked
-                    // failure; an escape here is an unchecked programming error - surface it, never swallow it.
-                    throw new IOException("Batch write task failed", e.getCause());
-                }
-            }
-        } finally {
-            pool.shutdown();
-        }
-        return Arrays.asList(results);
     }
 
     /**
