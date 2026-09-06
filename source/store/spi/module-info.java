@@ -26,7 +26,7 @@
  */
 module build.jenesis.repository.store {
     requires build.jenesis.repository.scope;
-    requires build.jenesis.repository.observation;
+    requires transitive build.jenesis.repository.observation;
     requires org.slf4j;
     exports build.jenesis.repository.store;
     uses build.jenesis.repository.store.ArtifactStoreProvider;
@@ -34,7 +34,8 @@ module build.jenesis.repository.store {
     uses build.jenesis.repository.store.TenantsProvider;
     provides build.jenesis.repository.observation.ObservabilitySource
             with build.jenesis.repository.store.QuotaObservability,
-                 build.jenesis.repository.store.StoredListing.Observability;
+                 build.jenesis.repository.store.StoredListing.Observability,
+            build.jenesis.repository.store.StoreCacheObservability;
 
     // The family extends IconContributor, so every implementation gains the optional mark seam and
     // the console resolves one answer for all of them. Transitive: an implementation overriding
