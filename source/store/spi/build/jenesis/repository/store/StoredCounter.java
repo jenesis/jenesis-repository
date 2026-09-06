@@ -23,6 +23,14 @@ import module java.base;
  * {@code add(1)}s on an incremental pass and {@code set(0)}s after the full one. That used to be a second class,
  * {@code PassCounter}, with the same key, the same decimal body and a plain read-then-write where this one
  * compare-and-sets; a lost race there cost at most one pass of cadence, which the compare-and-set costs never.
+ *
+ * <p><b>A delta may be deferred.</b> {@link #addLater} keeps the delta in this process and a flusher folds every
+ * pending delta of a key into one compare-and-set per {@code jenreg.counters.flush} (a minute by default) and on
+ * shutdown; {@link #read} answers the stored value plus what this node still holds, so the node that wrote sees
+ * its own deltas at once and the check a write makes against its limit is exact here. The folder-size roll-ups
+ * paid five or six compare-and-sets per publish through this counter, each a round trip and a write-class call on
+ * an object store, for a total the recompute recomputes anyway; a lost buffer is the drift the counter's own
+ * documentation already accepts and the reconcile already heals.
  */
 public final class StoredCounter {
 
@@ -43,11 +51,127 @@ public final class StoredCounter {
     /** The current total: zero when never counted, or when the stored value does not parse. */
     public long read() throws IOException {
         Optional<ArtifactStore.Versioned> stored = store.readVersioned(key);
-        return stored.isEmpty() ? 0L : parse(stored.get().content());
+        return Math.max(0L, (stored.isEmpty() ? 0L : parse(stored.get().content())) + pending());
+    }
+
+    /** {@link #read}, empty when nothing is stored and nothing is pending - for a reader that shows "unknown" rather
+     *  than zero for a counter that was never written. */
+    public OptionalLong readIfPresent() throws IOException {
+        Optional<ArtifactStore.Versioned> stored = store.readVersioned(key);
+        Deferred deferred = DEFERRED.get(deferredKey());
+        if (stored.isEmpty() && deferred == null) {
+            return OptionalLong.empty();   // never written, and never counted on this node either
+        }
+        long pending = deferred == null ? 0L : deferred.pending.get();
+        return OptionalLong.of(Math.max(0L, (stored.isEmpty() ? 0L : parse(stored.get().content())) + pending));
+    }
+
+    /** Remove the counter - the stored object and whatever this node still held pending for it - for a folder or a
+     *  subject that no longer exists; a delta deferred against it would otherwise re-create it at the next flush. */
+    public void delete() throws IOException {
+        DEFERRED.remove(deferredKey());
+        store.delete(key);
     }
 
     /** Move the total by {@code delta}, floored at zero, retrying a lost compare-and-set through {@link Retries};
      *  {@code false} when every try lost and the delta was dropped for the recomputing pass to heal. */
+    /** The flush cadence setting: an ISO-8601 or suffixed duration; {@code 0} flushes every deferred delta at once,
+     *  which is {@link #add}. */
+    public static final String FLUSH_SETTING = "counters.flush";
+
+    public static final Duration DEFAULT_FLUSH = Duration.ofMinutes(1);
+
+    private static final Map<String, Deferred> DEFERRED = new ConcurrentHashMap<>();
+    private static final AtomicReference<ScheduledExecutorService> FLUSHER = new AtomicReference<>();
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(StoredCounter.class);
+
+    /** A key's deltas this process has not yet written, with the counter that will write them. */
+    private static final class Deferred {
+        private final StoredCounter counter;
+        private final AtomicLong pending = new AtomicLong();
+
+        private Deferred(StoredCounter counter) {
+            this.counter = counter;
+        }
+    }
+
+    /**
+     * Add {@code delta} later: it is folded into the stored value by the next flush, and {@link #read} on this node
+     * already counts it. With {@link #FLUSH_SETTING} at {@code 0} this is {@link #add}.
+     */
+    public void addLater(long delta) throws IOException {
+        Duration cadence = flushCadence();
+        if (cadence.isZero()) {
+            add(delta);
+            return;
+        }
+        DEFERRED.computeIfAbsent(deferredKey(), _ -> new Deferred(this)).pending.addAndGet(delta);
+        startFlusher(cadence);
+    }
+
+    /** Fold every deferred delta into its counter now - the shutdown hook, and what a test calls. Answers how many
+     *  counters were written. */
+    public static int flushNow() {
+        int written = 0;
+        for (Map.Entry<String, Deferred> entry : DEFERRED.entrySet()) {
+            Deferred deferred = entry.getValue();
+            long sum = deferred.pending.getAndSet(0L);
+            if (sum == 0L) {
+                continue;
+            }
+            try {
+                if (deferred.counter.add(sum)) {
+                    written++;
+                } else {
+                    deferred.pending.addAndGet(sum);   // every try lost: keep the delta for the next flush
+                    LOGGER.warn("deferred counter update of {} on {} lost every compare-and-set; kept for the next flush",
+                            sum, deferred.counter.key);
+                }
+            } catch (IOException | RuntimeException failure) {
+                deferred.pending.addAndGet(sum);
+                LOGGER.warn("deferred counter update of {} on {} could not be written; kept for the next flush: {}",
+                        sum, deferred.counter.key, failure.toString());
+            }
+        }
+        return written;
+    }
+
+    /** What this node still holds for this key, unwritten. */
+    private long pending() {
+        Deferred deferred = DEFERRED.get(deferredKey());
+        return deferred == null ? 0L : deferred.pending.get();
+    }
+
+    private String deferredKey() {
+        return store.identity() + "\u0000" + key;
+    }
+
+    static Duration flushCadence() {
+        String setting = Features.settings().apply(FLUSH_SETTING);
+        if (setting == null || setting.isBlank()) {
+            return DEFAULT_FLUSH;
+        }
+        return StoreCache.ttl(setting);   // the same duration grammar, 0 meaning "not deferred"
+    }
+
+    private static void startFlusher(Duration cadence) {
+        if (FLUSHER.get() != null) {
+            return;
+        }
+        ScheduledExecutorService flusher = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "jenesis-counter-flush");
+            thread.setDaemon(true);
+            return thread;
+        });
+        if (FLUSHER.compareAndSet(null, flusher)) {
+            long millis = Math.max(1L, cadence.toMillis());
+            flusher.scheduleAtFixedRate(StoredCounter::flushNow, millis, millis, TimeUnit.MILLISECONDS);
+            Runtime.getRuntime().addShutdownHook(new Thread(StoredCounter::flushNow, "jenesis-counter-flush-exit"));
+        } else {
+            flusher.shutdownNow();
+        }
+    }
+
     public boolean add(long delta) throws IOException {
         return Retries.tryUpdate(store, key, stored -> {
             long current = stored.isEmpty() ? 0L : parse(stored.get().content());
@@ -58,6 +182,10 @@ public final class StoredCounter {
     /** Store a total recomputed from truth, whatever the counter held - the pass's authoritative correction. A lost
      *  race is left to the next pass, as the caller's own last-writer-wins write always was. */
     public void set(long total) throws IOException {
+        Deferred deferred = DEFERRED.get(deferredKey());
+        if (deferred != null) {
+            deferred.pending.set(0L);   // the recompute is the truth; a delta it did not see is superseded by it
+        }
         byte[] body = Long.toString(Math.max(0L, total)).getBytes(StandardCharsets.UTF_8);
         Retries.tryUpdate(store, key, _ -> body);
     }

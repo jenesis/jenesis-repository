@@ -7,6 +7,7 @@ import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.QuotaExceededException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -288,19 +289,31 @@ class QuotaArtifactStoreTest {
         // recompute finds MORE bytes than the counter shows and corrects up, never a phantom-freed over-admit.
         ArtifactStore raw = delegate();
         QuotaArtifactStore store = new QuotaArtifactStore(new ConflictingCounterStore(raw), 1000);
+        String counter = Scopes.space(Scopes.QUOTA) + "/used";
 
-        store.write("blobs/aaa", bytes(300));   // the blob lands, but the counter increment cannot
+        store.write("blobs/aaa", bytes(300));   // the blob lands; the counter delta is deferred on this node
 
         assertThat(store.exists("blobs/aaa")).as("the blob is really stored").isTrue();
-        assertThat(store.used()).as("the increment was dropped under contention - the counter drifts").isZero();
-        // A recompute from the live blobs heals the drift back to truth.
+        assertThat(store.used()).as("this node counts the delta it has not written yet").isEqualTo(300);
+        StoredCounter.flushNow();   // every compare-and-set on the counter is refused: nothing lands
+        assertThat(raw.readVersioned(counter)).as("what every other node sees: the stored counter, unmoved - the drift "
+                + "is toward under-counting, which admits more, never a phantom-freed over-admit").isEmpty();
+        // A recompute from the live blobs is the truth, supersedes the delta this node still holds, and lands.
         assertThat(new QuotaArtifactStore(raw, 1000).recompute()).as("the reconcile corrects the drift up").isEqualTo(300);
+        StoredCounter.flushNow();
+        assertThat(new String(raw.readVersioned(counter).orElseThrow().content(), StandardCharsets.UTF_8).trim())
+                .as("the superseded delta is not folded in on top of the recompute").isEqualTo("300");
     }
 
     /** Forwards to a real store but reports every write of the quota counter ({@code quota/used}) as a compare-and-set
      *  conflict, so a test can drive the counter's exhausted-retry paths - store()'s stale-counter forfeit and
      *  adjust()'s dropped-delta drift - while blob writes and reads pass through untouched. */
     private record ConflictingCounterStore(ArtifactStore delegate) implements ArtifactStore {
+
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's, so a deferred delta is one key across views
+        }
 
         @Override
         public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {

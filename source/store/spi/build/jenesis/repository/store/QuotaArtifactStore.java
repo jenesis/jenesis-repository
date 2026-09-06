@@ -263,10 +263,9 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
      *  but a dropped delta is logged, so a counter drifting under sustained contention is visible to the operator
      *  before the periodic {@link #recompute reconcile} corrects it, not a silent surprise. */
     private void adjust(long delta) throws IOException {
-        if (!new StoredCounter(meter, USED).add(delta)) {
-            LOGGER.warn("quota counter update of " + delta + " bytes dropped after repeated conflicts; "
-                    + "the usage counter drifts until the next recompute");
-        }
+        // Deferred: this node's used() already counts it, so the limit check is exact here, and the store sees one
+        // compare-and-set per flush rather than one per write; a delta that never lands is the drift the recompute heals.
+        new StoredCounter(meter, USED).addLater(delta);
     }
 
     @Override

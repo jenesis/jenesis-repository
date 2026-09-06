@@ -49,6 +49,7 @@ class StoredListingSpoolPermissionsTest {
             sink.accept("b", "b 2\n".getBytes(StandardCharsets.UTF_8));
         };
         AtomicReference<Throwable> failure = new AtomicReference<>();
+        Set<Path> observed = new HashSet<>();   // the spools this render was seen writing, judged on their own below
         Thread render = new Thread(() -> {
             try (StoredListing.Served served = StoredListing.open(store,
                     StoredListing.Spec.of("spooled", LINES, generator)).orElseThrow()) {
@@ -62,6 +63,7 @@ class StoredListingSpoolPermissionsTest {
             assertThat(inFlight.await(15, TimeUnit.SECONDS)).as("the generator reached its first entry").isTrue();
             Set<Path> spools = new HashSet<>(spools(tmp));
             spools.removeAll(before);
+            observed.addAll(spools);
             assertThat(spools).as("the render spooled into the temporary directory").isNotEmpty();
             for (Path spool : spools) {
                 assertThat(Files.getPosixFilePermissions(spool))
@@ -73,7 +75,11 @@ class StoredListingSpoolPermissionsTest {
             render.join(15_000);
         }
         assertThat(failure.get()).as("the render completed").isNull();
-        assertThat(spools(tmp)).as("the spool was removed with the render").isEqualTo(before);
+        // Judged on the spools this render created, not on the directory as a whole: the temporary directory is
+        // shared with every other test JVM a full lane runs beside this one, and their renders spool into it too.
+        for (Path spool : observed) {
+            assertThat(Files.exists(spool)).as("%s was removed with the render", spool.getFileName()).isFalse();
+        }
     }
 
     private static Set<Path> spools(Path tmp) throws IOException {
