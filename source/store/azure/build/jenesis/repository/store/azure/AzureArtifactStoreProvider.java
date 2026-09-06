@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.ConditionalWrites;
 import build.jenesis.repository.store.Endpoints;
 import build.jenesis.repository.store.Features;
 import com.azure.storage.blob.BlobContainerClient;
@@ -77,8 +78,16 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
             // The container may already exist or the credentials may not permit creation; the operations
             // below surface a clear error if the container is truly unusable.
         }
-        return new AzureArtifactStore(container,
+        AzureArtifactStore store = new AzureArtifactStore(container,
                 !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)));
+        // The one boot-time question every compare-and-set rests on, asked of every object-store endpoint alike.
+        try {
+            ConditionalWrites.probe(store, "the blob endpoint for container " + containerName);
+        } catch (IOException failure) {
+            throw new IllegalStateException("the azure-blob store could not be probed for conditional writes at boot - "
+                    + "is container " + containerName + " writable with these credentials? " + failure.getMessage(), failure);
+        }
+        return store;
     }
 
     /**

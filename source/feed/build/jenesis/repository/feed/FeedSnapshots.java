@@ -9,7 +9,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * The durable half of a mirrored feed: one catalogue snapshot and the staleness stamp that says when it was fetched,
  * held in an already tenant-scoped {@link ArtifactStore} under one namespace this object owns entirely.
  *
- * <p><strong>The snapshot and its staleness stamp are one object.</strong> A {@link Stamp} carries the fetch instant
+ * <p><strong>The snapshot and its staleness stamp are one object.</strong> A {@link Refresh} carries the fetch instant
  * <em>inside</em> the {@link Snapshot} reference, so "a snapshot with no fetch instant" and "a fetch instant with no
  * snapshot" are unrepresentable, and the single compare-and-set write that publishes a snapshot is the same write
  * that stamps it. A reader can therefore never see a fresh catalogue behind a stale timestamp, or a timestamp
@@ -36,7 +36,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     pointer simply finds the body already present and commits the pointer.</li>
  * <li><b>Absence sentinel.</b> A namespace that was never refreshed answers {@link Optional#empty()} from
  *     {@link #current()}; a stamp that exists but has never completed a fetch carries an empty
- *     {@link Stamp#snapshot()}. Neither is ever {@code null}, and neither is ever an empty catalogue presented as
+ *     {@link Refresh#snapshot()}. Neither is ever {@code null}, and neither is ever an empty catalogue presented as
  *     an authoritative one.</li>
  * <li><b>Tenant scoping.</b> The store handed in is already scoped to its tenant. This class never calls
  *     {@link ArtifactStore#scope}, never discovers a store, and writes only under its own namespace, which is
@@ -48,7 +48,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     only. Nothing here reaches the network - this class holds no transport - so a read path built on it stands
  *     when the vendor is down.</li>
  * <li><b>Staleness (&sect;9/&sect;10).</b> {@link Snapshot#fetchedAt()} is the instant the committed catalogue was
- *     drawn, and {@link Stamp#nextRefreshAt()} when it should be drawn again. Both survive a restart, so staleness is
+ *     drawn, and {@link Refresh#nextRefreshAt()} when it should be drawn again. Both survive a restart, so staleness is
  *     a durable property of the data rather than of the process that happens to be running.</li>
  * <li><b>Durability / delivery (&sect;13).</b> The commit point is the pointer's compare-and-set. Before it, nothing
  *     is visible; after it, the whole snapshot is. The crash windows are: before the body write (nothing changed),
@@ -123,7 +123,7 @@ public final class FeedSnapshots {
      * performs no external I/O. An unparseable pointer reads as absent (self-healing: the next commit replaces it by
      * compare-and-set on the token it just read).
      */
-    public Optional<Stamp> current() throws IOException {
+    public Optional<Refresh> current() throws IOException {
         return store.readVersioned(pointerKey()).flatMap(versioned -> decode(versioned.content()));
     }
 
@@ -137,7 +137,7 @@ public final class FeedSnapshots {
      * as a stream, never as a {@code byte[]}: a mirrored catalogue is parsed incrementally (&sect;1). The caller
      * closes it.
      */
-    public Optional<InputStream> open(Stamp stamp) throws IOException {
+    public Optional<InputStream> open(Refresh stamp) throws IOException {
         Objects.requireNonNull(stamp, "stamp");
         if (stamp.snapshot().isEmpty()) {
             return Optional.empty();
@@ -156,7 +156,7 @@ public final class FeedSnapshots {
      *                 already holds; {@link FeedClient} enforces the policy's snapshot cap before calling.
      * @param ttl      how long the snapshot is good for - {@code nextRefreshAt} is {@code now + ttl}.
      */
-    public Stamp commit(byte[] snapshot, Duration ttl) throws IOException {
+    public Refresh commit(byte[] snapshot, Duration ttl) throws IOException {
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(ttl, "ttl");
         Instant now = clock.instant();
@@ -168,16 +168,16 @@ public final class FeedSnapshots {
             store.write(key, new ByteArrayInputStream(snapshot));
         }
         Optional<ArtifactStore.Versioned> pointer = store.readVersioned(pointerKey());
-        Optional<Stamp> prior = pointer.flatMap(versioned -> decode(versioned.content()));
-        Stamp fresh = new Stamp(feed,
+        Optional<Refresh> prior = pointer.flatMap(versioned -> decode(versioned.content()));
+        Refresh fresh = new Refresh(feed,
                 Optional.of(new Snapshot(digest, snapshot.length, now)),
                 now.plus(ttl),
-                prior.map(Stamp::generation).orElse(0L) + 1);
+                prior.map(Refresh::generation).orElse(0L) + 1);
         if (!store.writeVersioned(pointerKey(), encode(fresh), pointer.map(ArtifactStore.Versioned::token)
                 .orElse(null))) {
             // A concurrent refresher committed first. Its snapshot is at least as fresh as this one, so converge on
             // it rather than overwriting: the loser's body is unreferenced and the winner's next prune collects it.
-            Optional<Stamp> winner = current();
+            Optional<Refresh> winner = current();
             if (winner.isPresent()) {
                 LOGGER.debug("A concurrent {} refresh committed generation {} first; adopting it",
                         feed, winner.get().generation());
@@ -196,14 +196,14 @@ public final class FeedSnapshots {
      * staleness keeps being told truthfully. A feed that has never completed a fetch gets a stamp with an empty
      * snapshot - a durable "tried, nothing yet", which is exactly not the same thing as an empty catalogue.
      */
-    public Stamp defer(Duration after) throws IOException {
+    public Refresh defer(Duration after) throws IOException {
         Objects.requireNonNull(after, "after");
         Optional<ArtifactStore.Versioned> pointer = store.readVersioned(pointerKey());
-        Optional<Stamp> prior = pointer.flatMap(versioned -> decode(versioned.content()));
-        Stamp deferred = new Stamp(feed,
-                prior.flatMap(Stamp::snapshot),
+        Optional<Refresh> prior = pointer.flatMap(versioned -> decode(versioned.content()));
+        Refresh deferred = new Refresh(feed,
+                prior.flatMap(Refresh::snapshot),
                 clock.instant().plus(after),
-                prior.map(Stamp::generation).orElse(0L));
+                prior.map(Refresh::generation).orElse(0L));
         if (!store.writeVersioned(pointerKey(), encode(deferred),
                 pointer.map(ArtifactStore.Versioned::token).orElse(null))) {
             // Another refresher wrote in the meantime - its stamp is at least as good as this deferral, which only
@@ -214,10 +214,10 @@ public final class FeedSnapshots {
     }
 
     /** Delete every snapshot body except the current and the previous one - bounded, and best-effort by design. */
-    private void prune(String current, Optional<Stamp> prior) {
+    private void prune(String current, Optional<Refresh> prior) {
         Set<String> keep = new HashSet<>();
         keep.add(current);
-        prior.flatMap(Stamp::snapshot).map(Snapshot::digest).ifPresent(keep::add);
+        prior.flatMap(Refresh::snapshot).map(Snapshot::digest).ifPresent(keep::add);
         try {
             List<String> superseded = new ArrayList<>();
             store.page(namespace + '/' + BODIES, "", PRUNE_LIMIT, name -> {
@@ -256,7 +256,7 @@ public final class FeedSnapshots {
      * The pointer document, in the same small {@code key=value} form the artifact walk persists its own
      * compare-and-set state in - a fixed handful of fields needs no parser and no JSON dependency in the core.
      */
-    private static byte[] encode(Stamp stamp) {
+    private static byte[] encode(Refresh stamp) {
         Properties properties = new Properties();
         properties.setProperty("feed", stamp.feed());
         properties.setProperty("generation", Long.toString(stamp.generation()));
@@ -275,7 +275,7 @@ public final class FeedSnapshots {
     }
 
     /** Parse a pointer document; empty for an unparseable one, which the next commit replaces by compare-and-set. */
-    private static Optional<Stamp> decode(byte[] content) {
+    private static Optional<Refresh> decode(byte[] content) {
         try {
             Properties properties = new Properties();
             properties.load(new ByteArrayInputStream(content));
@@ -291,7 +291,7 @@ public final class FeedSnapshots {
                     : Optional.of(new Snapshot(digest,
                             Long.parseLong(properties.getProperty("bytes", "0")),
                             Instant.parse(fetchedAt)));
-            return Optional.of(new Stamp(feed, snapshot, Instant.parse(nextRefreshAt),
+            return Optional.of(new Refresh(feed, snapshot, Instant.parse(nextRefreshAt),
                     Long.parseLong(properties.getProperty("generation", "0"))));
         } catch (IOException | RuntimeException _) {
             return Optional.empty();
@@ -321,9 +321,9 @@ public final class FeedSnapshots {
      * when to try again, and how many complete refreshes have landed. One store object, written by one
      * compare-and-set.
      */
-    public record Stamp(String feed, Optional<Snapshot> snapshot, Instant nextRefreshAt, long generation) {
+    public record Refresh(String feed, Optional<Snapshot> snapshot, Instant nextRefreshAt, long generation) {
 
-        public Stamp {
+        public Refresh {
             Objects.requireNonNull(feed, "feed");
             Objects.requireNonNull(snapshot, "snapshot");
             Objects.requireNonNull(nextRefreshAt, "nextRefreshAt");

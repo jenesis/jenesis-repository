@@ -29,7 +29,7 @@ public final class FaultInjectingStore implements ArtifactStore {
     /** The store operations a fault can be armed against. {@code WRITE_BLOB} carries no key, so it matches only a
      *  fault armed with {@link #anyKey}. */
     public enum Op {
-        READ, OPEN, WRITE, WRITE_BLOB, WRITE_VERSIONED, DELETE, LIST, SIZE, EXISTS, READ_VERSIONED
+        READ, OPEN, WRITE, WRITE_BLOB, WRITE_VERSIONED, DELETE, LIST, PAGE, SIZE, EXISTS, READ_VERSIONED
     }
 
     private enum Mode {
@@ -299,6 +299,16 @@ public final class FaultInjectingStore implements ArtifactStore {
     }
 
     @Override
+    public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+        // The paging primitive is forwarded, as a decorator must: left to the SPI's fallback it would page by listing
+        // and report no sizes, and a pass measured through this store would read as paying a request per child. A
+        // fault against it is a silent empty page, the SPI's absent-container shape, as for list().
+        if (intercept(Op.PAGE, prefix) == null) {
+            delegate.pageListed(prefix, startAfter, limit, consumer);
+        }
+    }
+
+    @Override
     public Optional<Versioned> readVersioned(String key) throws IOException {
         Mode mode = intercept(Op.READ_VERSIONED, key);
         if (mode == Mode.THROW_BEFORE || mode == Mode.THROW_AFTER) {
@@ -432,6 +442,13 @@ public final class FaultInjectingStore implements ArtifactStore {
         public List<String> list(String prefix) {
             // As on the outer store: an armed LIST fault is a silent empty listing, the SPI's absent-container shape.
             return intercept(Op.LIST, prefix) != null ? List.of() : scoped.list(prefix);
+        }
+
+        @Override
+        public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+            if (intercept(Op.PAGE, prefix) == null) {
+                scoped.pageListed(prefix, startAfter, limit, consumer);
+            }
         }
 
         @Override

@@ -18,6 +18,9 @@ import module java.base;
  *
  * <p>A name is a snapshot of a page: a peer deleting behind the cursor moves nothing under it, and a name deleted
  * between the page and its use reads as absent where the caller looks it up, which every drain here already handles.
+ *
+ * <p>{@link Listings} is the same drain over {@link ArtifactStore#pageListed}, for a pass that needs each child's
+ * size or age as well as its name.
  */
 @FunctionalInterface
 public interface Names {

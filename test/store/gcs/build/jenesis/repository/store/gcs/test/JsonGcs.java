@@ -74,6 +74,11 @@ final class JsonGcs implements ResponseDefinitionTransformerV2 {
             segments = Arrays.copyOfRange(segments, 1, segments.length);
         }
         RequestMethod method = request.getMethod();
+        if (segments.length == 1 && "token".equals(segments[0]) && RequestMethod.POST.equals(method)) {
+            // The OAuth token endpoint a service-account key names as its token_uri: a bearer token the stub never
+            // checks, so a signing credential can be booted against the stub without reaching Google.
+            return json(200, Map.of("access_token", "stub-token", "expires_in", 3600, "token_type", "Bearer"));
+        }
         if (segments.length >= 6 && "upload".equals(segments[0]) && "b".equals(segments[3]) && "o".equals(segments[5])
                 && RequestMethod.POST.equals(method)) {
             return upload(request, segments[4]);
