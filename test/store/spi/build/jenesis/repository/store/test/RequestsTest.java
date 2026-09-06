@@ -61,7 +61,13 @@ class RequestsTest {
     void the_running_marker_tells_an_unclean_boot_from_a_clean_one() throws IOException {
         assertThat(RunningMarker.boot(store, "node-a")).as("the first boot finds no marker").isFalse();
         assertThat(RunningMarker.running(store, "node-a")).isTrue();
-        assertThat(RunningMarker.boot(store, "node-a")).as("a boot over a standing marker is an unclean one").isTrue();
+        assertThat(RunningMarker.boot(store, "node-a"))
+                .as("a boot over this process's own standing marker is the same process still running, not a crash")
+                .isFalse();
+        assertThat(RunningMarker.boot(store, "node-a", "4242@2026-09-06T00:00:00Z"))
+                .as("a boot over a marker another process left behind is an unclean one").isTrue();
+        assertThat(RunningMarker.boot(store, "node-a"))
+                .as("and so is this process's boot over that other process's marker").isTrue();
         RunningMarker.clean(store, "node-a");
         assertThat(RunningMarker.running(store, "node-a")).isFalse();
         assertThat(RunningMarker.boot(store, "node-a")).as("after a clean shutdown the next boot is clean").isFalse();

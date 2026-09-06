@@ -132,7 +132,7 @@ class RebuildSchedulerTest {
         }
         assertThat(RunningMarker.running(store, "node-a")).as("a clean shutdown removes it").isFalse();
 
-        RunningMarker.boot(store, "node-a");   // the previous run died with its marker standing
+        RunningMarker.boot(store, "node-a", "4242@2026-09-06T00:00:00Z");   // a previous process died with its marker standing
         try (RebuildScheduler second = new RebuildScheduler(store, config, Optional.empty(), List.of(), List.of())) {
             second.start();
             assertThat(Requests.pending(store, Requests.WALK)).as("a boot over the marker asks for the walk")

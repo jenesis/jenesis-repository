@@ -21,10 +21,34 @@ public final class RunningMarker {
     /** Record that {@code nodeId} is running on {@code root}; {@code true} when it already was according to the
      *  store, which is to say the previous run of this node did not shut down cleanly. */
     public static boolean boot(ArtifactStore root, String nodeId) throws IOException {
+        return boot(root, nodeId, process());
+    }
+
+    /**
+     * {@link #boot(ArtifactStore, String)} on behalf of the named process. A marker names the process that wrote
+     * it, and only a marker another process left behind is an unclean shutdown: a node that boots twice inside one
+     * process - a test's second Spring context over the same store, a driver restarted in place - finds its own
+     * marker standing, and that is the same process still running, not a crash. A crash that came back with the
+     * same process id is told apart by the process's start instant, which the id alone would not.
+     */
+    public static boolean boot(ArtifactStore root, String nodeId, String process) throws IOException {
         String key = key(nodeId);
-        boolean unclean = root.readVersioned(key).isPresent();
-        root.write(key, new ByteArrayInputStream(Instant.now().toString().getBytes(StandardCharsets.UTF_8)));
+        Optional<ArtifactStore.Versioned> standing = root.readVersioned(key);
+        boolean unclean = standing.isPresent() && !process.equals(processOf(standing.get()));
+        root.write(key, new ByteArrayInputStream((process + "\n" + Instant.now()).getBytes(StandardCharsets.UTF_8)));
         return unclean;
+    }
+
+    /** This process's identity as a marker records it: its id and its start instant. */
+    public static String process() {
+        ProcessHandle current = ProcessHandle.current();
+        return current.pid() + "@" + current.info().startInstant().map(Instant::toString).orElse("unknown");
+    }
+
+    private static String processOf(ArtifactStore.Versioned marker) {
+        String body = new String(marker.content(), StandardCharsets.UTF_8);
+        int end = body.indexOf('\n');
+        return end < 0 ? body.trim() : body.substring(0, end).trim();
     }
 
     /** Whether {@code nodeId} is recorded as running. */
