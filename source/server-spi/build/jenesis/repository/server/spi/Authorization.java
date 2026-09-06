@@ -6,6 +6,7 @@ import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.Durations;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoreCache;
 
 /**
  * The credential model. A key is {@code jenk_<tenant>.<secret><checksum>} (see {@link #mint}): the {@code jenk_}
@@ -44,6 +45,10 @@ public final class Authorization {
     public static final String MANAGE_WRITE = "manage:write";
 
     private final ArtifactStore store;
+
+    /** The credential, quota and ceiling documents through the read-through, write-through cache - a request pays for
+     *  a credential's two documents once per {@code jenreg.cache.ttl}, not three times per request. */
+    private final StoreCache cache;
     private final Duration defaultLifetime;
     private final Duration maxLifetime;
     // The strictly-opt-in anonymous role (WANON.1): the rights a keyless caller is granted, as scope -> tokens, exactly
@@ -59,6 +64,7 @@ public final class Authorization {
     private Authorization(ArtifactStore store, Duration defaultLifetime, Duration maxLifetime,
                           Map<String, List<String>> anonymousGrants) {
         this.store = store;
+        this.cache = store == null ? null : StoreCache.of("authorization", store, StoreCache.configuredTtl());
         this.defaultLifetime = defaultLifetime;
         this.maxLifetime = maxLifetime;
         this.anonymousGrants = anonymousGrants;
@@ -309,8 +315,8 @@ public final class Authorization {
             throw new IllegalArgumentException("A storage quota must not be negative");
         }
         if (maxBytes == 0) {
-            if (store.readVersioned(quotaPath(tenant)).isPresent()) {
-                store.delete(quotaPath(tenant));
+            if (cache.readVersioned(quotaPath(tenant)).isPresent()) {
+                cache.delete(quotaPath(tenant));
             }
             return;
         }
@@ -334,8 +340,8 @@ public final class Authorization {
             throw new IllegalArgumentException("A rate limit must not be negative");
         }
         if (permitsPerMinute == 0) {
-            if (store.readVersioned(rateLimitPath(tenant)).isPresent()) {
-                store.delete(rateLimitPath(tenant));
+            if (cache.readVersioned(rateLimitPath(tenant)).isPresent()) {
+                cache.delete(rateLimitPath(tenant));
             }
             return;
         }
@@ -789,7 +795,7 @@ public final class Authorization {
         if (store == null || !wellFormed(key)) {
             return true;
         }
-        Properties metadata = read(metadataPath(tenantOf(key), hash(key)));
+        Properties metadata = read(metadataPath(tenantOf(key), hash(key)));   // the entry authorize() just filled
         String allowed = metadata == null ? null : metadata.getProperty("allowed-ips");
         if (allowed == null || allowed.isBlank()) {
             return true;
@@ -912,7 +918,7 @@ public final class Authorization {
         require();
         // Retries.tryUpdate, not update: the usage count is informational and the tracker keeps the delta on a loss
         // and re-applies it on the next flush, so a contended write defers the increment rather than dropping it.
-        return Retries.tryUpdate(store, metadataPath(tenant, hash), current -> {
+        boolean landed = Retries.tryUpdate(store, metadataPath(tenant, hash), current -> {
             if (current.isEmpty()) {
                 return null;                       // a revoked credential (no metadata) is settled - nothing to record
             }
@@ -928,13 +934,15 @@ public final class Authorization {
             metadata.store(bytes, null);
             return bytes.toByteArray();
         });
+        cache.invalidate(metadataPath(tenant, hash));   // written past the cache: the node's next read must see it
+        return landed;
     }
 
     /** Revoke a credential by hash: delete its grants and metadata, so the next request is forbidden. */
     public void revoke(String tenant, String hash) throws IOException {
         require();
-        store.delete(grantsPath(tenant, hash));
-        store.delete(metadataPath(tenant, hash));
+        cache.delete(grantsPath(tenant, hash));
+        cache.delete(metadataPath(tenant, hash));
     }
 
     /** Revoke the credential a raw {@code key} resolves to, for when a key is reported leaked: the {@code jenk_}
@@ -1049,7 +1057,7 @@ public final class Authorization {
     }
 
     private Properties read(String path) throws IOException {
-        Optional<ArtifactStore.Versioned> object = store.readVersioned(path);
+        Optional<ArtifactStore.Versioned> object = cache.readVersioned(path);
         if (object.isEmpty()) {
             return null;
         }
@@ -1061,7 +1069,7 @@ public final class Authorization {
     private void write(String path, Properties properties) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         properties.store(bytes, null);
-        store.write(path, new ByteArrayInputStream(bytes.toByteArray()));
+        cache.write(path, bytes.toByteArray());
     }
 
     private static Instant instant(Properties properties, String key) {
