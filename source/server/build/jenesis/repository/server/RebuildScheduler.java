@@ -8,6 +8,8 @@ import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.store.Requests;
+import build.jenesis.repository.store.RunningMarker;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.RebuildPass;
@@ -38,6 +40,13 @@ public final class RebuildScheduler implements AutoCloseable {
     /** The first pass runs this long after boot, so a restart does not walk the store before it serves. */
     static final Duration INITIAL_DELAY = Duration.ofMinutes(1);
 
+    /** The safety cadence: a week. The walk is the repair for what a crash left behind, and a node that crashed says
+     *  so through its running marker and asks for one; the clock is only for the case nobody noticed. */
+    static final Duration DEFAULT_INTERVAL = Duration.ofDays(7);
+
+    /** How often the driver looks for a standing request, whether or not a cadence is configured. */
+    static final Duration REQUEST_POLL = Duration.ofSeconds(30);
+
     private static final String TASK = "jenreg.rebuild.pass";
 
     private static final AtomicReference<RebuildScheduler> INSTALLED = new AtomicReference<>();
@@ -48,6 +57,7 @@ public final class RebuildScheduler implements AutoCloseable {
     private final List<WalkConsumer> consumers;
     private final List<StoredListing.Rebuilder> rebuilders;
     private final ScheduledExecutorService scheduler;
+    private final String nodeId;
     private final AtomicBoolean running = new AtomicBoolean();
     private volatile Instant lastRun;
     private volatile Duration lastDuration;
@@ -69,6 +79,7 @@ public final class RebuildScheduler implements AutoCloseable {
                             List<WalkConsumer> consumers, List<StoredListing.Rebuilder> rebuilders) {
         this.store = Objects.requireNonNull(store, "store");
         this.interval = interval(config.apply(INTERVAL));
+        this.nodeId = NodeFingerprintPublisher.nodeId(config);
         this.walk = Objects.requireNonNull(walk, "walk");
         this.consumers = List.copyOf(consumers);
         this.rebuilders = List.copyOf(rebuilders);
@@ -102,6 +113,19 @@ public final class RebuildScheduler implements AutoCloseable {
 
     public void start() {
         INSTALLED.set(this);
+        // This node's driver is where a request can reach the root: install it, and ask for a walk ourselves when
+        // the marker says the previous run of this node never shut down cleanly.
+        Requests.installRoot(store);
+        try {
+            if (RunningMarker.boot(store, nodeId)) {
+                Requests.request(store, Requests.WALK, "node " + nodeId + " did not shut down cleanly");
+                LOGGER.warn("node {} did not shut down cleanly; a walk of the store is requested", nodeId);
+            }
+        } catch (IOException | RuntimeException unwritable) {
+            LOGGER.warn("the running marker of node {} could not be written: {}", nodeId, unwritable.toString());
+        }
+        scheduler.scheduleAtFixedRate(this::runIfRequested, REQUEST_POLL.toMillis(), REQUEST_POLL.toMillis(),
+                TimeUnit.MILLISECONDS);
         if (interval.isZero()) {
             LOGGER.info("rebuild pass: off ({}=off); the discovered walk consumers converge only when a pass is "
                     + "driven by an embedder or an artifact is republished", INTERVAL);
@@ -133,6 +157,9 @@ public final class RebuildScheduler implements AutoCloseable {
             lastOutcome = pass.map(p -> p.complete() ? "complete" : "joined, other workers still active")
                     .orElse("nothing to walk") + (rebuilt > 0 ? ", " + rebuilt + " listing(s) regenerated" : "");
             lastFailed = false;
+            if (pass.map(WalkPass::complete).orElse(false)) {
+                Requests.clear(store, Requests.WALK);   // the work a standing request asked for is done
+            }
             return pass;
         } catch (IOException | RuntimeException failure) {
             lastOutcome = "failed: " + failure.getClass().getSimpleName();
@@ -142,6 +169,17 @@ public final class RebuildScheduler implements AutoCloseable {
             lastRun = started;
             lastDuration = Duration.between(started, Instant.now());
             running.set(false);
+        }
+    }
+
+    /** The request poll: a pass now if something asked for one, whatever the cadence says. */
+    private void runIfRequested() {
+        try {
+            if (Requests.pending(store, Requests.WALK).isPresent()) {
+                runQuietly();
+            }
+        } catch (IOException | RuntimeException unreadable) {
+            LOGGER.warn("the standing walk request could not be read: {}", unreadable.toString());
         }
     }
 
@@ -196,7 +234,7 @@ public final class RebuildScheduler implements AutoCloseable {
      */
     public static Duration interval(String value) {
         if (value == null || value.isBlank()) {
-            return Duration.ofDays(1);
+            return DEFAULT_INTERVAL;
         }
         String text = value.trim();
         if (text.equalsIgnoreCase("off") || text.equals("0") || text.equalsIgnoreCase("false")) {
@@ -213,6 +251,12 @@ public final class RebuildScheduler implements AutoCloseable {
     @Override
     public void close() {
         scheduler.shutdownNow();
+        try {
+            RunningMarker.clean(store, nodeId);
+        } catch (IOException | RuntimeException unremovable) {
+            LOGGER.warn("the running marker of node {} could not be removed; the next boot will ask for a walk: {}",
+                    nodeId, unremovable.toString());
+        }
     }
 
     /** The discovered observability face: the driver's task status, reported from the started instance. */
