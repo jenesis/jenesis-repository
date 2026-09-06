@@ -406,7 +406,7 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public RebuildScheduler rebuildScheduler(ArtifactStore store, RepositoryProperties properties,
                                              Environment environment) {
-        return new RebuildScheduler(store.scope(properties.getTenant()).scope(properties.getRepository()),
+        return new RebuildScheduler(store, store.scope(properties.getTenant()).scope(properties.getRepository()),
                 environment::getProperty);
     }
 

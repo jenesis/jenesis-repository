@@ -51,6 +51,9 @@ public final class RebuildScheduler implements AutoCloseable {
 
     private static final AtomicReference<RebuildScheduler> INSTALLED = new AtomicReference<>();
 
+    /** The deployment root: the running marker and the standing requests live under its {@code .system}. */
+    private final ArtifactStore root;
+
     private final ArtifactStore store;
     private final Duration interval;
     private final Optional<ArtifactWalk> walk;
@@ -64,19 +67,26 @@ public final class RebuildScheduler implements AutoCloseable {
     private volatile String lastOutcome = "";
     private volatile boolean lastFailed;
 
-    public RebuildScheduler(ArtifactStore store, UnaryOperator<String> config) {
-        this(store, config, WalkProvider.resolve(config), WalkConsumer.discovered(), rebuilders());
+    /**
+     * @param root  the deployment's root store, where the node's running marker and the standing requests live
+     *              under {@code .system} - never a scoped store, whose scope a marker would turn into a tenant
+     * @param store the one repository the pass walks
+     */
+    public RebuildScheduler(ArtifactStore root, ArtifactStore store, UnaryOperator<String> config) {
+        this(root, store, config, WalkProvider.resolve(config), WalkConsumer.discovered(), rebuilders());
     }
 
     /** The explicit seam: the walk and the consumers handed in rather than discovered, and no listing repair. */
-    public RebuildScheduler(ArtifactStore store, UnaryOperator<String> config, Optional<ArtifactWalk> walk,
-                            List<WalkConsumer> consumers) {
-        this(store, config, walk, consumers, List.of());
+    public RebuildScheduler(ArtifactStore root, ArtifactStore store, UnaryOperator<String> config,
+                            Optional<ArtifactWalk> walk, List<WalkConsumer> consumers) {
+        this(root, store, config, walk, consumers, List.of());
     }
 
     /** The explicit seam with the listing repairers handed in as well. */
-    public RebuildScheduler(ArtifactStore store, UnaryOperator<String> config, Optional<ArtifactWalk> walk,
-                            List<WalkConsumer> consumers, List<StoredListing.Rebuilder> rebuilders) {
+    public RebuildScheduler(ArtifactStore root, ArtifactStore store, UnaryOperator<String> config,
+                            Optional<ArtifactWalk> walk, List<WalkConsumer> consumers,
+                            List<StoredListing.Rebuilder> rebuilders) {
+        this.root = Objects.requireNonNull(root, "root");
         this.store = Objects.requireNonNull(store, "store");
         this.interval = interval(config.apply(INTERVAL));
         this.nodeId = NodeFingerprintPublisher.nodeId(config);
@@ -115,10 +125,10 @@ public final class RebuildScheduler implements AutoCloseable {
         INSTALLED.set(this);
         // This node's driver is where a request can reach the root: install it, and ask for a walk ourselves when
         // the marker says the previous run of this node never shut down cleanly.
-        Requests.installRoot(store);
+        Requests.installRoot(root);
         try {
-            if (RunningMarker.boot(store, nodeId)) {
-                Requests.request(store, Requests.WALK, "node " + nodeId + " did not shut down cleanly");
+            if (RunningMarker.boot(root, nodeId)) {
+                Requests.request(root, Requests.WALK, "node " + nodeId + " did not shut down cleanly");
                 LOGGER.warn("node {} did not shut down cleanly; a walk of the store is requested", nodeId);
             }
         } catch (IOException | RuntimeException unwritable) {
@@ -158,7 +168,7 @@ public final class RebuildScheduler implements AutoCloseable {
                     .orElse("nothing to walk") + (rebuilt > 0 ? ", " + rebuilt + " listing(s) regenerated" : "");
             lastFailed = false;
             if (pass.map(WalkPass::complete).orElse(false)) {
-                Requests.clear(store, Requests.WALK);   // the work a standing request asked for is done
+                Requests.clear(root, Requests.WALK);    // the work a standing request asked for is done
             }
             return pass;
         } catch (IOException | RuntimeException failure) {
@@ -175,7 +185,7 @@ public final class RebuildScheduler implements AutoCloseable {
     /** The request poll: a pass now if something asked for one, whatever the cadence says. */
     private void runIfRequested() {
         try {
-            if (Requests.pending(store, Requests.WALK).isPresent()) {
+            if (Requests.pending(root, Requests.WALK).isPresent()) {
                 runQuietly();
             }
         } catch (IOException | RuntimeException unreadable) {
@@ -252,7 +262,7 @@ public final class RebuildScheduler implements AutoCloseable {
     public void close() {
         scheduler.shutdownNow();
         try {
-            RunningMarker.clean(store, nodeId);
+            RunningMarker.clean(root, nodeId);
         } catch (IOException | RuntimeException unremovable) {
             LOGGER.warn("the running marker of node {} could not be removed; the next boot will ask for a walk: {}",
                     nodeId, unremovable.toString());

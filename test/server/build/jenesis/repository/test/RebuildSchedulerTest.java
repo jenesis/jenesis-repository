@@ -84,7 +84,7 @@ class RebuildSchedulerTest {
                 seen.add(artifact.path());
             }
         };
-        try (RebuildScheduler scheduler = new RebuildScheduler(repository, key -> null,
+        try (RebuildScheduler scheduler = new RebuildScheduler(store, repository, key -> null,
                 WalkProvider.resolve(key -> null), List.of(consumer))) {
             assertThat(scheduler.active()).isTrue();
             Optional<WalkPass> pass = scheduler.runNow();
@@ -99,13 +99,13 @@ class RebuildSchedulerTest {
 
     @Test
     void the_driver_is_inert_without_a_consumer_or_when_switched_off() throws Exception {
-        try (RebuildScheduler none = new RebuildScheduler(store, key -> null, WalkProvider.resolve(key -> null),
+        try (RebuildScheduler none = new RebuildScheduler(store, store, key -> null, WalkProvider.resolve(key -> null),
                 List.of())) {
             assertThat(none.active()).isFalse();
             assertThat(none.runNow()).isEmpty();
             assertThat(none.status().outcome()).isEqualTo("no walk consumer discovered");
         }
-        try (RebuildScheduler off = new RebuildScheduler(store,
+        try (RebuildScheduler off = new RebuildScheduler(store, store,
                 key -> RebuildScheduler.INTERVAL.equals(key) ? "off" : null, WalkProvider.resolve(key -> null),
                 List.of(new WalkConsumer() {
                     @Override
@@ -125,7 +125,7 @@ class RebuildSchedulerTest {
     @Test
     void a_node_that_boots_over_its_own_running_marker_asks_for_a_walk_and_a_clean_shutdown_leaves_none() throws Exception {
         UnaryOperator<String> config = key -> "jenreg.consistency.node-id".equals(key) ? "node-a" : null;
-        try (RebuildScheduler first = new RebuildScheduler(store, config, Optional.empty(), List.of(), List.of())) {
+        try (RebuildScheduler first = new RebuildScheduler(store, store, config, Optional.empty(), List.of(), List.of())) {
             first.start();
             assertThat(RunningMarker.running(store, "node-a")).as("the marker is up while the node is").isTrue();
             assertThat(Requests.pending(store, Requests.WALK)).as("a clean boot asks for nothing").isEmpty();
@@ -133,7 +133,7 @@ class RebuildSchedulerTest {
         assertThat(RunningMarker.running(store, "node-a")).as("a clean shutdown removes it").isFalse();
 
         RunningMarker.boot(store, "node-a", "4242@2026-09-06T00:00:00Z");   // a previous process died with its marker standing
-        try (RebuildScheduler second = new RebuildScheduler(store, config, Optional.empty(), List.of(), List.of())) {
+        try (RebuildScheduler second = new RebuildScheduler(store, store, config, Optional.empty(), List.of(), List.of())) {
             second.start();
             assertThat(Requests.pending(store, Requests.WALK)).as("a boot over the marker asks for the walk")
                     .hasValueSatisfying(request -> assertThat(request.reason()).contains("node-a"));
