@@ -47,7 +47,7 @@ import build.jenesis.repository.store.ServableNames;
  *
  * <p><strong>Two caps, one outcome vocabulary.</strong> The scan cap (how many stored names one call may examine, from
  * the {@link BoundedChildren} bounds) bounds the work; the {@linkplain #take take} cap (how many disclosable names one
- * call may deliver) bounds the answer. Either one ends the call {@link Traversal.Outcome#TRUNCATED} with a
+ * call may deliver) bounds the answer. Either one ends the call {@linkplain Traversal.Result#truncated() truncated} with a
  * continuation cursor - never a short list that looks complete - and the bounds with no safe continuation (step
  * budget, hostile segment) still raise {@link TraversalException} exactly as {@link BoundedChildren} defines. The take
  * cap is only spent when a <em>further</em> disclosable name has been proven to exist, so a container whose
@@ -61,7 +61,7 @@ import build.jenesis.repository.store.ServableNames;
  *   <li><b>Idempotency / replay.</b> A pure read that commits nothing: re-running a scan, or resuming from an older
  *       cursor, is always safe. A sink with side effects must be idempotent per name, since a crash before the cursor
  *       is committed replays the last page.</li>
- *   <li><b>Absence sentinel.</b> An absent or empty container is not an error - {@link Traversal.Outcome#EXHAUSTED}
+ *   <li><b>Absence sentinel.</b> An absent or empty container is not an error - {@linkplain Traversal.Result#exhausted() exhausted}
  *       with zero delivered, and {@link #any} is {@code false}. {@code null} is never returned; a {@code null} or empty
  *       cursor starts at the beginning.</li>
  *   <li><b>Selection failure.</b> The face is chosen by construction, so an unscreened enumeration is unrepresentable
@@ -90,7 +90,7 @@ import build.jenesis.repository.store.ServableNames;
  *       one call never parallelises itself; the screen is applied in that same order, so two callers of the same
  *       container in the same state see the same names in the same order.</li>
  *   <li><b>Bounded work / cancellation.</b> The scan cap, the take cap, the step budget and the page width bound every
- *       call. The visible outcome at a bound is {@link Traversal.Outcome#TRUNCATED} plus a cursor (scan and take caps)
+ *       call. The visible outcome at a bound is {@linkplain Traversal.Result#truncated() truncated} plus a cursor (scan and take caps)
  *       or a {@link TraversalException} naming the bound (steps, hostile segment). A caller cancels by throwing from
  *       {@link Disclosed#accept}.</li>
  *   <li><b>Durability / delivery.</b> Nothing is committed here; a caller that persists the continuation cursor

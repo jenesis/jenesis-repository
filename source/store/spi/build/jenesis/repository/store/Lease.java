@@ -165,6 +165,12 @@ public final class Lease {
         }
     }
 
+    /** The key a lease object lives under for the default root - what a test that plants a rival lease, or a report
+     *  that names the lock, spells; the one place the locks space and a lease name are joined. */
+    public static String objectKey(String name) {
+        return Scopes.space(Scopes.LOCKS) + "/" + name;
+    }
+
     private String key(String name) {
         return root + "/" + name;
     }

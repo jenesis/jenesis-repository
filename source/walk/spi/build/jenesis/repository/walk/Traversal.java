@@ -10,20 +10,20 @@ import build.jenesis.repository.store.ArtifactStore;
  * everything?" the same way whichever primitive it drove, and the traversal-free segment screen both apply.
  *
  * <p><strong>Exhausted or truncated, never "probably complete".</strong> A {@link Result} is either
- * {@link Outcome#EXHAUSTED} - the traversal reached the end of its scope and there is nothing more - or
- * {@link Outcome#TRUNCATED}, which <em>always</em> carries a continuation {@link Result#cursor() cursor}. The record's
- * constructor enforces that equivalence, so an incomplete traversal cannot be represented as a complete one by
- * accident: there is no way to build an exhausted result that carries a cursor, and no way to build a truncated one
- * that does not.
+ * {@linkplain Result#exhausted() exhausted} - the traversal reached the end of its scope and there is nothing more -
+ * or {@linkplain Result#truncated() truncated}, which <em>always</em> carries a continuation
+ * {@link Result#cursor() cursor}. The record derives both from the cursor rather than storing an outcome beside it, so
+ * an incomplete traversal cannot be represented as a complete one by accident: a result with a cursor is truncated
+ * and one without is exhausted, and there is no second field for the two to disagree in.
  *
  * <p><strong>Not every bound answers here - and which bound answers where is the most misread thing in this API.</strong>
  * A bounded traversal has two kinds of cap and they behave <em>oppositely</em>, deliberately:
  * <ul>
  *   <li><b>the entry cap TRUNCATES</b> - "how many entries may one call deliver" ends the call with
- *       {@link Outcome#TRUNCATED} and a cursor. It is a bound on the <em>size of one answer</em>, and the caller can
+ *       {@linkplain Result#truncated() truncated} and a cursor. It is a bound on the <em>size of one answer</em>, and the caller can
  *       ask for the next answer, so paging it costs nothing but another round;</li>
  *   <li><b>the step, depth and segment caps THROW</b> {@link TraversalException} - they never appear as an
- *       {@link Outcome} at all, and no {@link Result} is produced. They are bounds on <em>how pathological the key
+ *       {@link Result} at all. They are bounds on <em>how pathological the key
  *       space is</em>, and they have no safe continuation: a cursor cannot express "resume below a subtree I refused
  *       to enter" in path order (depth), a step budget too small to re-establish a resume position would hand back a
  *       cursor that makes no forward progress - a livelock dressed up as paging (steps), and a stored name that is not
@@ -47,34 +47,20 @@ public final class Traversal {
     private Traversal() {
     }
 
-    /** Whether a bounded traversal saw its whole scope, or stopped at a cap with more to come. */
-    public enum Outcome {
-        /** The traversal reached the end of its scope: everything in scope was delivered. */
-        EXHAUSTED,
-        /** A cap was reached: what was delivered is a prefix of the scope, and the result's cursor resumes it. */
-        TRUNCATED
-    }
-
     /**
-     * What one bounded traversal call saw: its {@link Outcome}, the continuation {@code cursor} (present exactly when
-     * {@link Outcome#TRUNCATED}), how many entries it {@code delivered}, and how many {@code steps} - nodes opened or
+     * What one bounded traversal call saw: the continuation {@code cursor} (present exactly when
+     * {@linkplain #truncated() truncated}), how many entries it {@code delivered}, and how many {@code steps} - nodes opened or
      * page round-trips - it spent doing so. The step count is a diagnostic for an operator sizing a budget, not a
      * completeness proof.
      *
-     * <p>A cap reached exactly at the end of the scope answers {@link Outcome#TRUNCATED}, and the continuation then
-     * returns an {@link Outcome#EXHAUSTED} result that delivered nothing. The bias is deliberate and one-way: a
+     * <p>A cap reached exactly at the end of the scope answers {@linkplain #truncated() truncated}, and the continuation then
+     * returns an {@linkplain #exhausted() exhausted} result that delivered nothing. The bias is deliberate and one-way: a
      * traversal may under-claim completeness and cost one extra empty round, and may never over-claim it.
      */
-    public record Result(Outcome outcome, Optional<String> cursor, long delivered, long steps) {
+    public record Result(Optional<String> cursor, long delivered, long steps) {
 
         public Result {
-            Objects.requireNonNull(outcome, "outcome");
             Objects.requireNonNull(cursor, "cursor");
-            if (cursor.isPresent() != (outcome == Outcome.TRUNCATED)) {
-                throw new IllegalArgumentException(
-                        "A truncated result carries a continuation cursor and an exhausted one does not: "
-                                + outcome + " / " + cursor);
-            }
             if (delivered < 0 || steps < 0) {
                 throw new IllegalArgumentException("Negative traversal counters: " + delivered + " / " + steps);
             }
@@ -82,24 +68,23 @@ public final class Traversal {
 
         /** The scope was seen whole: nothing more is coming, and there is no cursor to resume from. */
         public static Result exhausted(long delivered, long steps) {
-            return new Result(Outcome.EXHAUSTED, Optional.empty(), delivered, steps);
+            return new Result(Optional.empty(), delivered, steps);
         }
 
         /** A cap was reached after {@code cursor}: resume the traversal with it to receive the rest. */
         public static Result truncated(String cursor, long delivered, long steps) {
-            return new Result(Outcome.TRUNCATED,
-                    Optional.of(Objects.requireNonNull(cursor, "cursor")), delivered, steps);
+            return new Result(Optional.of(Objects.requireNonNull(cursor, "cursor")), delivered, steps);
         }
 
         /** Whether the whole scope was delivered - the only condition under which a caller may present its result as
          *  a complete listing. */
         public boolean exhausted() {
-            return outcome == Outcome.EXHAUSTED;
+            return cursor.isEmpty();
         }
 
         /** Whether a cap cut this call short, so {@link #cursor()} must be followed to see the rest. */
         public boolean truncated() {
-            return outcome == Outcome.TRUNCATED;
+            return cursor.isPresent();
         }
     }
 

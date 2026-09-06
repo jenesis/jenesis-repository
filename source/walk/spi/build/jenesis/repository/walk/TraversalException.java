@@ -6,7 +6,7 @@ import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The named failure a bounded store traversal raises rather than returning a plausible but incomplete answer - the
- * "bounds fail visibly" half of {@link Traversal}'s outcome model. {@link Traversal.Outcome#TRUNCATED} plus a
+ * "bounds fail visibly" half of {@link Traversal}'s outcome model. {@linkplain Traversal.Result#truncated() truncated} plus a
  * continuation cursor is the <em>resumable</em> bound (the caller can ask for the next page and eventually see
  * everything); this exception is the bound that has <em>no</em> safe continuation, so degrading it to a short list
  * would silently hide keys:

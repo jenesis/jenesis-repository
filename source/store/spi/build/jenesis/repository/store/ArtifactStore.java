@@ -185,16 +185,9 @@ public interface ArtifactStore {
      * store's own guard did not.
      */
     static boolean safeSegment(String value) {
-        if (value == null || value.isEmpty() || value.equals(".") || value.equals("..")) {
-            return false;
-        }
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            if (character == '/' || character == '\\' || character < 0x20) {
-                return false;
-            }
-        }
-        return true;
+        // One segment is a traversal-free path with no separator in it: the same refusals, stated once, in
+        // traversalFree, which is where the control-character argument lives.
+        return value != null && !value.isEmpty() && value.indexOf('/') < 0 && traversalFree(value);
     }
 
     /**

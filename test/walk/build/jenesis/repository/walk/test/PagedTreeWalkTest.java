@@ -299,13 +299,13 @@ class PagedTreeWalkTest {
     // ---- the result type itself cannot express "incomplete but complete-looking" ----
 
     @Test
-    void a_result_cannot_claim_exhaustion_while_carrying_a_cursor_or_truncation_without_one() {
-        assertThatThrownBy(() -> new Traversal.Result(
-                Traversal.Outcome.EXHAUSTED, Optional.of("root/a"), 1, 1))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new Traversal.Result(
-                Traversal.Outcome.TRUNCATED, Optional.empty(), 1, 1))
-                .isInstanceOf(IllegalArgumentException.class);
+    void a_result_is_exhausted_exactly_when_it_carries_no_cursor() {
+        // Completeness is derived from the cursor, never stored beside it, so the two cannot disagree - which used to
+        // be a runtime check on a second field.
+        assertThat(Traversal.Result.exhausted(1, 1).exhausted()).isTrue();
+        assertThat(Traversal.Result.exhausted(1, 1).truncated()).isFalse();
+        assertThat(Traversal.Result.truncated("root/a", 1, 1).truncated()).isTrue();
+        assertThat(Traversal.Result.truncated("root/a", 1, 1).exhausted()).isFalse();
     }
 
     @Test
