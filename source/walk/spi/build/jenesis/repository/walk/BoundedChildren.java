@@ -17,7 +17,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * fluently ({@code BoundedChildren.bounded().entries(take).page(take)}):
  * <ul>
  *   <li>{@link #entries()} - how many names one call may deliver ({@value #ENTRIES} by default). Reaching it ends the
- *       call {@link Traversal.Outcome#TRUNCATED} with a cursor.</li>
+ *       call {@linkplain Traversal.Result#truncated() truncated} with a cursor.</li>
  *   <li>{@link #steps()} - how many {@link ArtifactStore#page} round-trips one call may issue ({@value #STEPS} by
  *       default). Exceeding it raises {@link TraversalException.Reason#STEPS}: a caller that filters names downstream
  *       (a search scan whose window is small but whose scan is not) is bounded by this, not by the entry cap.</li>
@@ -28,7 +28,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p><strong>One cap truncates; two throw.</strong> The three bounds above do not fail the same way, and the
  * asymmetry is the same one {@link PagedTreeWalk} carries - stated again here because a caller meets this primitive
  * without necessarily meeting that one. Only {@link #entries()} - the bound on how large <em>one answer</em> may be -
- * ends the call as a value ({@link Traversal.Outcome#TRUNCATED} plus a cursor to resume from). {@link #steps()} and
+ * ends the call as a value ({@linkplain Traversal.Result#truncated() truncated} plus a cursor to resume from). {@link #steps()} and
  * the traversal-free segment screen <b>throw</b> {@link TraversalException} and produce no {@link Traversal.Result}
  * at all: a step budget too small to reach the next name would hand back a cursor that makes no forward progress -
  * a livelock dressed up as paging - and a stored name carrying a separator or a {@code .}/{@code ..} segment must
@@ -50,8 +50,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * {@code children}, {@code versions} and {@code coordinates}, the enumeration tokens the disclosure ratchet watches.
  *
  * <p><strong>Exactly at the boundary.</strong> A short page proves the container is drained, so an entry cap met at
- * the end of a short page still answers {@link Traversal.Outcome#EXHAUSTED}; a cap met at the end of a <em>full</em>
- * page answers {@link Traversal.Outcome#TRUNCATED}, and the continuation may then deliver nothing. The bias is the
+ * the end of a short page still answers {@linkplain Traversal.Result#exhausted() exhausted}; a cap met at the end of a <em>full</em>
+ * page answers {@linkplain Traversal.Result#truncated() truncated}, and the continuation may then deliver nothing. The bias is the
  * one {@link Traversal.Result} documents: under-claim completeness, never over-claim it.
  *
  * <h2>Contract</h2>
@@ -61,7 +61,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *   <li><b>Idempotency / replay.</b> A pure read that commits nothing: re-running a call, or resuming from an older
  *       cursor, is always safe. A consumer with side effects must be idempotent per name, since a crash before the
  *       cursor is committed replays the last page.</li>
- *   <li><b>Absence sentinel.</b> An absent or empty container is not an error - {@link Traversal.Outcome#EXHAUSTED}
+ *   <li><b>Absence sentinel.</b> An absent or empty container is not an error - {@linkplain Traversal.Result#exhausted() exhausted}
  *       with zero delivered. {@code null} is never returned; a {@code null} or empty cursor starts at the
  *       beginning.</li>
  *   <li><b>Selection failure.</b> A malformed prefix raises {@link TraversalException}; a cursor that is not an
@@ -81,7 +81,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *   <li><b>Ordering / concurrency.</b> Lexicographic child order, exactly {@link ArtifactStore#page}'s, deterministic
  *       and never self-parallelised.</li>
  *   <li><b>Bounded work / cancellation.</b> The three caps bound every call, and the visible outcome at a bound is
- *       asymmetric by design: {@link Traversal.Outcome#TRUNCATED} plus a cursor for the <em>entry</em> cap, which is a
+ *       asymmetric by design: {@linkplain Traversal.Result#truncated() truncated} plus a cursor for the <em>entry</em> cap, which is a
  *       bound on one answer's size and therefore resumable, and a thrown {@link TraversalException} naming the bound
  *       for <em>steps</em> and a hostile segment, which have no continuation that makes progress. A caller may not
  *       convert the second kind into the first. A caller cancels by throwing from {@link Names#accept}.</li>

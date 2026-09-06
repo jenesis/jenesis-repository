@@ -23,7 +23,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *       that survives an attacker-shaped tree of a million empty containers holding no leaf at all: a cap on delivered
  *       entries alone would never fire there.</li>
  *   <li>{@link #entries()} - how many leaves one call may deliver ({@value #ENTRIES} by default). Reaching it ends the
- *       call with {@link Traversal.Outcome#TRUNCATED} and a cursor - the continuation, not a failure. Leaves are
+ *       call with {@linkplain Traversal.Result#truncated() truncated} and a cursor - the continuation, not a failure. Leaves are
  *       counted as delivered to the consumer, so a caller that filters downstream is bounded by {@link #steps()},
  *       not by this.</li>
  *   <li>{@link #page()} - the sibling-page width the descent buffers per open container ({@value #PAGE} by default),
@@ -32,7 +32,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *
  * <p><strong>One cap truncates; three throw.</strong> The four bounds above do not fail the same way, and reading them
  * as if they did is the single most common mistake against this API. Only {@link #entries()} - the bound on how large
- * <em>one answer</em> may be - ends the call as a value: {@link Traversal.Outcome#TRUNCATED} plus a cursor, which the
+ * <em>one answer</em> may be - ends the call as a value: {@linkplain Traversal.Result#truncated() truncated} plus a cursor, which the
  * caller feeds back to get the rest. {@link #depth()}, {@link #steps()} and the traversal-free segment screen
  * <b>throw</b> {@link TraversalException} and produce no {@link Traversal.Result} at all, because they are bounds on
  * how pathological the key space is and none of them has a safe continuation: no cursor in path order can say "resume
@@ -43,7 +43,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * each reason's rationale.
  *
  * <p><strong>Exhausted or truncated.</strong> The call answers a {@link Traversal.Result}. Reaching the entry cap
- * never looks like a complete listing: the outcome is {@link Traversal.Outcome#TRUNCATED} and the cursor is the last
+ * never looks like a complete listing: the outcome is {@linkplain Traversal.Result#truncated() truncated} and the cursor is the last
  * delivered leaf key. Feeding that cursor back resumes strictly after it, in the same
  * {@linkplain Trees#order path order} the descent visits in, so no key between two calls is skipped and no key is
  * delivered twice. The resume is a <em>seek</em>, not a re-scan: the cursor's own path is descended directly and every
@@ -67,7 +67,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *       at-least-once across a crash that lost an uncommitted cursor, so a consumer with side effects must be
  *       idempotent per key.</li>
  *   <li><b>Absence sentinel.</b> An absent or empty subtree is not an error: the result is
- *       {@link Traversal.Outcome#EXHAUSTED} with zero delivered and no cursor. {@code null} is never returned; a
+ *       {@linkplain Traversal.Result#exhausted() exhausted} with zero delivered and no cursor. {@code null} is never returned; a
  *       {@code null} or empty cursor argument means "start at the beginning".</li>
  *   <li><b>Selection failure.</b> A malformed root or a cursor that is not a key under the root is a caller error and
  *       fails immediately - {@link TraversalException} naming the offending key for a root that is not a
@@ -93,7 +93,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *       one call never parallelises itself. Concurrent calls over disjoint cursors of the same subtree are
  *       independent.</li>
  *   <li><b>Bounded work / cancellation.</b> The four caps above bound every call, and the visible outcome at a bound
- *       is asymmetric by design: {@link Traversal.Outcome#TRUNCATED} plus a cursor for the <em>entry</em> cap, which
+ *       is asymmetric by design: {@linkplain Traversal.Result#truncated() truncated} plus a cursor for the <em>entry</em> cap, which
  *       is a bound on one answer's size and therefore resumable, and a thrown {@link TraversalException} naming the
  *       bound and the key for <em>depth</em>, <em>steps</em> and a hostile segment, which are bounds on how
  *       pathological the key space is and have no continuation that makes progress. A caller may not convert the

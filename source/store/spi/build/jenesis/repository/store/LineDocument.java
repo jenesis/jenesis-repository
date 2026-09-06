@@ -18,6 +18,10 @@ import module java.base;
  *
  * <p>Written byte-for-byte as the search manifest already was ({@code jenesis-search 1}, then {@code name value}
  * lines), so a document that adopts this codec need not migrate what it stored.
+ *
+ * <p>A value here may not carry a newline - the builder replaces one with a space - because a line is a field. A
+ * document whose values must survive byte for byte (the outbox's queued notes) uses a key-value codec with URL
+ * encoding instead; the two are siblings by design, not a duplication.
  */
 public final class LineDocument {
 
