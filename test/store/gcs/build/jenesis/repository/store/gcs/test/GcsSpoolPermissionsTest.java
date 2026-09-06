@@ -10,15 +10,11 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.extension.ResponseDefinitionTransformerV2;
 import com.github.tomakehurst.wiremock.http.RequestMethod;
 import com.github.tomakehurst.wiremock.http.ResponseDefinition;
-import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
-import static com.github.tomakehurst.wiremock.client.WireMock.matching;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -49,19 +45,11 @@ public class GcsSpoolPermissionsTest {
         server.start();
         server.stubFor(any(anyUrl()).atPriority(10).willReturn(aResponse().withStatus(200)
                 .withHeader("Content-Type", "application/json").withBody("{}")));
-        // The provider probes the endpoint at boot with two creates of one key under an only-if-absent precondition;
-        // this stub answers everything 200, so the probe's second create is refused here as a real endpoint would.
-        server.stubFor(post(urlPathEqualTo("/upload/storage/v1/b/repo/o")).atPriority(1)
-                .withQueryParam("name", matching("\\.system/probe/.*")).inScenario("probe")
-                .whenScenarioStateIs(Scenario.STARTED)
-                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json").withBody("{}"))
-                .willSetStateTo("created"));
-        server.stubFor(post(urlPathEqualTo("/upload/storage/v1/b/repo/o")).atPriority(1)
-                .withQueryParam("name", matching("\\.system/probe/.*")).inScenario("probe")
-                .whenScenarioStateIs("created")
-                .willReturn(aResponse().withStatus(412).withHeader("Content-Type", "application/json")
-                        .withBody("{\"error\":{\"code\":412,\"message\":\"conditionNotMet\"}}")));
-        store = ArtifactStoreProvider.resolve("gcs", JsonGcs.settings(server.port(), "repo")::get).scope("acme");
+        // This stub answers everything 200 and knows no generations, so it cannot play the boot-time conditional-write
+        // probe; the probe is switched off here, which is what the switch is for - this test is about the spool.
+        Map<String, String> settings = new HashMap<>(JsonGcs.settings(server.port(), "repo"));
+        settings.put(GcsArtifactStoreProvider.PROBE_KEY, "false");
+        store = ArtifactStoreProvider.resolve("gcs", settings::get).scope("acme");
     }
 
     @AfterAll
@@ -159,10 +147,7 @@ public class GcsSpoolPermissionsTest {
         public ResponseDefinition transform(ServeEvent event) {
             String url = event.getRequest().getUrl();
             String path = url.indexOf('?') < 0 ? url : url.substring(0, url.indexOf('?'));
-            String name = event.getRequest().queryParameter("name").isPresent()
-                    ? event.getRequest().queryParameter("name").firstValue() : "";
-            if (RequestMethod.POST.equals(event.getRequest().getMethod()) && path.equals(targetPath)
-                    && !name.startsWith(".system/probe/")) {   // the boot probe's uploads pass; only the test's parks
+            if (RequestMethod.POST.equals(event.getRequest().getMethod()) && path.equals(targetPath)) {
                 inFlight.countDown();
                 try {
                     released.await(15, TimeUnit.SECONDS);
