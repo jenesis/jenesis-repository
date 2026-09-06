@@ -53,6 +53,12 @@ public final class Scopes {
 
     /** A tenant's usage counter, inside that tenant beside its repositories. */
     public static final String QUOTA = "quota";
+    /** Standing requests for work, at the root: {@code requests/<subject>}, one small object per subject, written
+     *  by whatever noticed the need (an unclean shutdown, a contained failure, an operator) and cleared by the
+     *  worker that did the work. */
+    public static final String REQUESTS = "requests";
+    /** Per-node state, at the root: {@code nodes/<id>/running} while a node is up, gone after a clean shutdown. */
+    public static final String NODES = "nodes";
 
     /**
      * The product's own spaces, sorted. An inventory, not a denylist: nothing consults it to decide whether a name
@@ -60,7 +66,7 @@ public final class Scopes {
      * reporting what it deliberately cannot reach, an error message describing the layout - reads them from here
      * rather than restating the set.
      */
-    public static final Set<String> SPACES = Set.of(AUTH, CONFIG, AUDIT, LOCKS, CACHE, QUOTA);
+    public static final Set<String> SPACES = Set.of(AUTH, CONFIG, AUDIT, LOCKS, CACHE, QUOTA, REQUESTS, NODES);
 
     /** A traversal-free path segment: the shape any single store scope name must have. */
     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_-]+");
