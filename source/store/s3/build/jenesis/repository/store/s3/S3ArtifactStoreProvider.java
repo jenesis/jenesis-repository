@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.ConditionalWrites;
 import build.jenesis.repository.store.Endpoints;
 import build.jenesis.repository.store.Features;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -108,8 +109,18 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
         // key when s3.sse-kms-key-id is supplied. There is no key that turns encryption off. The presigner
         // rides alongside so this store can also mint direct-fetch GET URLs (RD-1 presign).
         String kmsKeyId = config.apply(Features.key("s3.sse-kms-key-id"));
-        return new S3ArtifactStore(s3, presigner, bucket, kmsKeyId,
+        S3ArtifactStore store = new S3ArtifactStore(s3, presigner, bucket, kmsKeyId,
                 !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)));
+        // Every compare-and-set below rests on the endpoint refusing a write whose precondition fails, and not every
+        // S3-compatible endpoint does; the one boot-time question that settles it, answered by refusing to start.
+        try {
+            ConditionalWrites.probe(store, endpoint == null || endpoint.isBlank() ? "the S3 endpoint for bucket " + bucket
+                    : "the S3-compatible endpoint " + endpoint);
+        } catch (IOException failure) {
+            throw new IllegalStateException("the s3 store could not be probed for conditional writes at boot - is bucket "
+                    + bucket + " writable with these credentials? " + failure.getMessage(), failure);
+        }
+        return store;
     }
 
     /**
