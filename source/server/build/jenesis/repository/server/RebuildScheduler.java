@@ -7,7 +7,6 @@ import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.Requests;
 import build.jenesis.repository.store.RunningMarker;
 import build.jenesis.repository.store.StoredListing;
@@ -108,13 +107,7 @@ public final class RebuildScheduler implements AutoCloseable {
 
     /** The stored-listing repairers among the discovered observers - every format that maintains a listing. */
     public static List<StoredListing.Rebuilder> rebuilders() {
-        List<StoredListing.Rebuilder> discovered = new ArrayList<>();
-        for (PublicationObserver observer : ServiceLoader.load(PublicationObserver.class)) {
-            if (observer instanceof StoredListing.Rebuilder rebuilder) {
-                discovered.add(rebuilder);
-            }
-        }
-        return List.copyOf(discovered);
+        return StoredListing.Rebuilder.installed();
     }
 
     public Duration interval() {

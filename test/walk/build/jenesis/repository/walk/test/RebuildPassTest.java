@@ -86,12 +86,12 @@ class RebuildPassTest {
         }
 
         @Override
-        public void onPassStarted(WalkPass pass) {
+        public void onPassStarted(WalkPass pass, ArtifactStore store) {
             events.add("started:" + pass.generation());
         }
 
         @Override
-        public void onPassCompleted(WalkPass pass) {
+        public void onPassCompleted(WalkPass pass, ArtifactStore store) {
             events.add("completed:" + pass.generation());
         }
     }

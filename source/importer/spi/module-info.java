@@ -17,6 +17,7 @@
  */
 module build.jenesis.repository.importer {
     requires transitive build.jenesis.repository.format;
+    uses build.jenesis.repository.importer.ImportSourceProvider;
     exports build.jenesis.repository.importer;
 
     // The family extends IconContributor, so every implementation gains the optional mark seam and

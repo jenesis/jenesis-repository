@@ -225,34 +225,38 @@ public final class ServableNames {
 
     /** A path's state and, when it is {@link State#SERVABLE}, the content hash its pointer resolved to - so a serve
      *  that has just decided a path is servable streams {@code blobs/<hash>} without reading the pointer again. */
-    public record Location(State state, String hash) {
+    /** Where a request path stands, and for a {@link State#SERVABLE} one the hash its pointer names and the blob's
+     *  stored length - read in the one stat that proves the blob present, so a serve sets its {@code Content-Length}
+     *  without probing the same object again. {@code -1} where there is no blob to measure. */
+    public record Location(State state, String hash, long size) {
     }
 
     public Location located(String requestPath) throws IOException {
         try {
             if (publication.withheld(requestPath)) {
-                return new Location(State.WITHHELD, null);
+                return new Location(State.WITHHELD, null, -1L);
             }
             Optional<String> hash = publication.blob(requestPath);
             if (hash.isEmpty()) {
-                return new Location(State.UNPUBLISHED, null);
+                return new Location(State.UNPUBLISHED, null, -1L);
             }
             if (Withheld.is(store, hash.get())) {
-                return new Location(State.WITHHELD, null);
+                return new Location(State.WITHHELD, null, -1L);
             }
             // A sidecar is held by its subject's hold. Read AFTER the pointer, so a path that is not published pays
             // nothing and still answers UNPUBLISHED - the sidecar question is only ever asked about a path that is
             // otherwise servable.
             String subject = subject(requestPath);
             if (subject != null && held(subject)) {
-                return new Location(State.WITHHELD, null);
+                return new Location(State.WITHHELD, null, -1L);
             }
-            return store.exists("blobs/" + hash.get())
-                    ? new Location(State.SERVABLE, hash.get())
-                    : new Location(State.BLOB_GONE, null);
+            long size = store.size("blobs/" + hash.get());
+            return size < 0
+                    ? new Location(State.BLOB_GONE, null, -1L)
+                    : new Location(State.SERVABLE, hash.get(), size);
         } catch (RuntimeException hostile) {
             LOGGER.warn("servable-name probe of {} failed; treating as withheld (fail-closed)", requestPath, hostile);
-            return new Location(State.WITHHELD, null);
+            return new Location(State.WITHHELD, null, -1L);
         }
     }
 

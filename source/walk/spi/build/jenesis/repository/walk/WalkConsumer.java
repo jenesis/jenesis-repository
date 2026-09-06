@@ -240,33 +240,20 @@ public interface WalkConsumer {
     default void beforeCheckpoint(String cursor) throws IOException {
     }
 
-    /** The pass is starting - the moment a snapshot rebuilder resets its accumulation, and the moment it learns the
-     *  {@link WalkPass#generation()} whose re-appearance is its only signal that a later pass is a crash-resume rather
-     *  than a fresh start (clause 12). */
-    default void onPassStarted(WalkPass pass) {
-    }
-
-    /** {@link #onPassStarted(WalkPass)} told which store's pass is starting: a deployment fans passes over its
-     *  repositories across workers, calling this one instance for several stores at once, so a consumer that keeps
-     *  per-pass state keys it by {@link ArtifactStore#identity()} and resets only that store's here. The default
-     *  calls the store-less form, which a consumer keeping no per-store state may keep overriding instead. */
+    /** The pass over {@code store} is starting - the moment a snapshot rebuilder resets its accumulation, and the
+     *  moment it learns the {@link WalkPass#generation()} whose re-appearance is its only signal that a later pass is
+     *  a crash-resume rather than a fresh start (clause 12). A deployment fans passes over its repositories across
+     *  workers, calling this one instance for several stores at once, so a consumer that keeps per-pass state keys it
+     *  by {@link ArtifactStore#identity()} and resets only that store's here. There is deliberately no store-less
+     *  form beside this one: two arities of one hook meant an implementor overriding the other got silence. */
     default void onPassStarted(WalkPass pass, ArtifactStore store) {
-        onPassStarted(pass);
     }
 
-    /** The pass enumerated everything - the commit / compact / heal hook for a consumer that acts at pass end. Like
-     *  {@link #onPassStarted} it carries no {@link ArtifactStore}: a consumer that persists here uses the store it was
-     *  handed by {@link #onRetained} (and so cannot commit anything for a pass that delivered it nothing), and wraps a
+    /** The pass over {@code store} enumerated everything - the commit / compact / heal hook for a consumer that acts
+     *  at pass end, for that store alone. It declares no {@link IOException}: a consumer that persists here wraps a
      *  store failure in an {@link UncheckedIOException}, which propagates out of the pass just as a checked one
      *  would. */
-    default void onPassCompleted(WalkPass pass) {
-    }
-
-    /** {@link #onPassCompleted(WalkPass)} told which store's pass completed - the store the deliveries carried, so
-     *  a consumer that commits, compacts or judges at pass end does so for that store alone, and only its state goes.
-     *  The default calls the store-less form. */
     default void onPassCompleted(WalkPass pass, ArtifactStore store) {
-        onPassCompleted(pass);
     }
 
     /** Every enabled consumer discovered via {@link ServiceLoader} (a parallel SPI: a

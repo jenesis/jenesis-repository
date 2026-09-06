@@ -326,6 +326,13 @@ public interface PublishInterceptor extends PublicationObserver {
      * read may refuse the request, a redirect edge may treat it as withheld. What no caller can now do by accident
      * is read a store outage as "nothing is withheld".
      */
+    /** The interceptors among the {@link PublicationObserver#installed() installed observers} - the chain
+     *  {@link Publication#screen} drives and a read-side withheld guard probes, one list for both so serve and
+     *  screen can never disagree about which screens exist. */
+    static List<PublishInterceptor> installed() {
+        return Observers.INTERCEPTORS;
+    }
+
     static boolean withheldByAny(String path, ArtifactStore store, Iterable<PublishInterceptor> interceptors)
             throws IOException {
         IOException failed = null;

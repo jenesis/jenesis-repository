@@ -55,11 +55,11 @@ class RebuildPassCostTest {
             }
 
             @Override
-            public void onPassStarted(WalkPass pass) {
+            public void onPassStarted(WalkPass pass, ArtifactStore store) {
             }
 
             @Override
-            public void onPassCompleted(WalkPass pass) {
+            public void onPassCompleted(WalkPass pass, ArtifactStore store) {
             }
         };
 

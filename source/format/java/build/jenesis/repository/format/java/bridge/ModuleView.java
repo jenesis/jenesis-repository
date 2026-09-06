@@ -18,8 +18,8 @@ import build.jenesis.repository.store.ArtifactStore;
  *
  * <h2>Contract</h2>
  * <ol>
- *   <li><b>Thread-safety.</b> The Maven format discovers the views once into a static list at class load and holds them
- *       for the process, so one instance serves every publishing request thread and both methods may run concurrently
+ *   <li><b>Thread-safety.</b> The bridge discovers the views once into a static list ({@link #installed()}) and holds
+ *       them for the process, so one instance serves every publishing request thread and both methods may run concurrently
  *       for different artifacts - and, since {@link #rebuild} is driven from a background rebuild pass, concurrently
  *       with a publish of another version of the same module. An implementation must be stateless and keep no per-call
  *       state in fields.</li>
@@ -35,10 +35,9 @@ import build.jenesis.repository.store.ArtifactStore;
  *       does so silently rather than by raising.</li>
  *   <li><b>Selection failure.</b> There is nothing to select. The bridge is additive over a <em>qualified</em> export
  *       to exactly two modules, has no {@code name()}, no selection key and no {@code Features} toggle, so the &sect;9
- *       "explicitly selected but unavailable" case cannot arise; consequently the SPI also carries no {@code resolve}
- *       static and the consumer owns the {@code ServiceLoader} list. Because it does not resolve through
- *       {@code Providers}, a module registered twice would publish the same view twice - harmless only because the
- *       writes are idempotent (clause 2).</li>
+ *       "explicitly selected but unavailable" case cannot arise; {@link #installed()} is therefore the plain
+ *       discovered list, unvalidated because there is no name to validate by, and a module registered twice would
+ *       publish the same view twice - harmless only because the writes are idempotent (clause 2).</li>
  *   <li><b>Streaming (&sect;1).</b> Neither method takes or returns artifact bytes: {@link #publish} is handed the
  *       {@code hash} of a blob the caller already stored, so a cross-publish is a pointer write and never a re-upload,
  *       a second buffering of the jar, or a second pass over its bytes.</li>
@@ -53,12 +52,11 @@ import build.jenesis.repository.store.ArtifactStore;
  *       documented - it is the one a later pass can finish, which is why the ordering is what it is.</li>
  *   <li><b>Read purity.</b> Not applicable: this is a write seam only. It performs no external I/O of any kind - every
  *       write goes through the scoped store - and it never reads or serves.</li>
- *   <li><b>Lifecycle / ownership.</b> The consumer owns the lifecycle: instances are
- *       {@link java.util.ServiceLoader}-created from a public no-arg constructor once at the consuming class's load
- *       and cached for the life of the process. There are two such consumers - the Maven format's publish path and its
- *       rebuild consumer - so a process holds one instance of each provider per consumer rather than one in total;
- *       that is harmless precisely because clause 1 forbids per-call state. There is no close hook, so an
- *       implementation owns no thread, client or connection and must be a cheap, stateless writer.</li>
+ *   <li><b>Lifecycle / ownership.</b> This SPI owns the lifecycle: instances are
+ *       {@link java.util.ServiceLoader}-created from a public no-arg constructor once, at the bridge's own load, and
+ *       cached for the life of the process; the two consumers - the Maven format's publish path and its rebuild
+ *       consumer - share that one list. There is no close hook, so an implementation owns no thread, client or
+ *       connection and must be a cheap, stateless writer.</li>
  *   <li><b>Ordering / concurrency.</b> Views are applied in discovery order, which is not stable across module-path
  *       arrangements; because every write is an idempotent compare-and-set on the view's own keys, the order is not
  *       observable and an implementation must not depend on another view having run, nor on being the only one. The
@@ -98,6 +96,13 @@ import build.jenesis.repository.store.ArtifactStore;
  * </ol>
  */
 public interface ModuleView {
+
+    /** Every view on the module path, discovered once from this SPI's home and cached for the process - the one
+     *  list the Maven format publishes through and its rebuild consumer repairs through, so a repaired view is
+     *  byte-identical to a published one and no consumer carries a discovery of its own. */
+    static List<ModuleView> installed() {
+        return Views.ALL;
+    }
 
     /**
      * Give a published modular jar its whole {@code /module/} view: every pointer this layout addresses the module by,

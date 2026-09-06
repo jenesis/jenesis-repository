@@ -268,32 +268,48 @@ public interface RepositoryFormat extends IconContributor {
         return Set.of();
     }
 
-    /** The installed format of the given {@link #name() name}, discovered via {@link ServiceLoader} from this SPI
-     *  module - the sanctioned lookup for a neutral consumer (an importer walking a format's upstream index, say)
-     *  that must find one format by name without carrying its own {@code uses} clause. Empty when no module on the
-     *  path provides it, or when the format is configured off ({@code jenreg.<name>=false},
-     *  {@link Features}) - a disabled format degrades exactly like a missing module. */
+    /** Every format on the module path, whatever its toggle says: validated once (two answering to one name is a
+     *  packaging error and throws rather than being settled by discovery order), name-ordered, and one instance set
+     *  for the process. This is the set a catalogue reads - the settings contributor that lists every format's
+     *  {@code jenreg.<name>} toggle, the capabilities report - and never the set that serves: a format configured
+     *  off is here and absent from {@link #installed()}. Nothing but this SPI module loads the service; a consumer
+     *  reaches every format through these statics and carries no {@code uses} clause of its own. */
+    static List<RepositoryFormat> declared() {
+        return FormatDiscovery.DECLARED;
+    }
+
+    /** Every {@link Features#active switched-on, fully configured} format in the deployment's one configuration
+     *  ({@link Features#configure}) - the set that serves, dispatches, imports, promotes and screens, so a format
+     *  configured off ({@code jenreg.<name>=false}) or with required config unset is absent exactly as a missing
+     *  module is, on every one of those paths alike. Measured before this was the one lookup: an import, a staging
+     *  promotion, the gate's sibling read and a hold's replay each discovered the formats raw and served a
+     *  switched-off one. */
+    static List<RepositoryFormat> installed() {
+        return installed(Features.settings());
+    }
+
+    /** As {@link #installed()}, against a lookup the caller supplies, keyed by bare feature names - the Spring
+     *  {@code Environment} a configuration class holds while the global lookup may not be configured yet. */
+    static List<RepositoryFormat> installed(UnaryOperator<String> config) {
+        List<RepositoryFormat> active = new ArrayList<>();
+        for (RepositoryFormat format : declared()) {
+            if (Features.active(config, format.name(), format.requiredConfig())) {
+                active.add(format);
+            }
+        }
+        return List.copyOf(active);
+    }
+
+    /** The installed format of the given {@link #name() name} - the lookup for a neutral consumer (an importer
+     *  walking a format's upstream index, say) that must find one format by name. Empty when no module on the path
+     *  provides it, or when the format is configured off - a disabled format degrades exactly like a missing
+     *  module. */
     static Optional<RepositoryFormat> installed(String name) {
-        for (RepositoryFormat format : ServiceLoader.load(RepositoryFormat.class)) {
+        for (RepositoryFormat format : declared()) {
             if (format.name().equals(name)) {
                 return Features.active(format.name(), format.requiredConfig()) ? Optional.of(format) : Optional.empty();
             }
         }
         return Optional.empty();
-    }
-
-    /** Every installed, switched-on format, discovered via {@link ServiceLoader} from this SPI module and resolved
-     *  through the shared {@link Providers#all} additive policy - the sanctioned lookup for a neutral consumer that
-     *  must see the whole set rather than one by name (the console resolving a namespace's mark, say) without
-     *  carrying a {@code uses} clause of its own. Ordered by name, so a consumer's answer does not depend on the
-     *  module path's discovery order, and a format configured off ({@code jenreg.<name>=false}) or with
-     *  required config unset is absent exactly as a missing module is. Two formats answering to one name is a
-     *  packaging error and throws rather than being settled by discovery order. */
-    static List<RepositoryFormat> installed() {
-        return Providers.all("format",
-                ServiceLoader.load(RepositoryFormat.class),
-                RepositoryFormat::name,
-                format -> Features.active(format.name(), format.requiredConfig()),
-                Optional::of);
     }
 }
