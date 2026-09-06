@@ -516,7 +516,7 @@ public final class WalkConsumerContract {
             this.pointers = pointers;
             if (point == CrashPoint.BEFORE_THE_FIRST_DELIVERY) {
                 // The first pointer's own metadata read fails, before the pass has told the consumer anything at all.
-                store.failNextOn(FaultInjectingStore.Op.SIZE, pointers);
+                store.failNextOn(FaultInjectingStore.Op.READ_VERSIONED, pointers);
             }
         }
 
@@ -576,7 +576,7 @@ public final class WalkConsumerContract {
                 // The store goes away mid-enumeration, two artifacts past a cursor that did land.
                 case MID_STRIDE -> {
                     if (deliveries == checkpoint + 2) {
-                        store.failNextOn(FaultInjectingStore.Op.SIZE, pointers);
+                        store.failNextOn(FaultInjectingStore.Op.READ_VERSIONED, pointers);
                     }
                 }
                 // A whole stride is delivered; the cursor commit that would cover it never lands.

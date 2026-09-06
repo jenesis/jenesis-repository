@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
 
@@ -231,7 +232,17 @@ public final class RebuildPass {
 
         @Override
         public void visit(String key) throws IOException {
-            long size = store.size(key);
+            visit(key, store.size(key));
+        }
+
+        /** The size the listing already carried: a HEAD per object was the walk's largest single cost over an object
+         *  store, paid for every key to decide whether it was small enough to be a pointer. */
+        @Override
+        public void visit(ArtifactStore.Listed entry) throws IOException {
+            visit(entry.key(), entry.size().isPresent() ? entry.size().getAsLong() : store.size(entry.key()));
+        }
+
+        private void visit(String key, long size) throws IOException {
             if (size < 0 || size > LARGEST_POINTER) {
                 return;
             }
@@ -250,7 +261,7 @@ public final class RebuildPass {
                 return; // a sidecar row, marker or index - not a serving pointer, never delivered
             }
             String path = key.startsWith("publish/") ? key.substring("publish".length()) : key;
-            if (key.startsWith("publish/") && withheld(path)) {
+            if (key.startsWith("publish/") && withheld(path, named)) {
                 return; // withheld from serving - a GET would 404 it, so a rebuild must not reinstate it into an index
             }
             if (!started) {
@@ -264,22 +275,16 @@ public final class RebuildPass {
             }
         }
 
-        /** Whether the free {@code publish/} namespace withholds this request path from serving - the quarantine read
-         *  side {@code PublishedAssets} screens, mirrored here through the one servable-name seam so a rebuild never
-         *  reinstates a withheld artifact into a consumer's index. The quarantine review subtree
-         *  ({@code publish/quarantine/...}) is stored but never served, exactly as {@code PublishedAssets} never
-         *  descends it. Otherwise the discrimination is the seam's first-class {@link ServableNames.State}: a
-         *  {@link ServableNames.State#WITHHELD} path (an interceptor retracts it, or a {@code withheld/<hash>} marker) is
-         *  skipped; a {@link ServableNames.State#BLOB_GONE} torn pointer is <em>not</em> withheld - it is delivered as
-         *  the torn state a reconcile consumer repairs. This replaces the former hand-rolled
-         *  {@code located().isEmpty() && blobs exists} test, which mis-classified a withheld-AND-gc-reclaimed pointer as
-         *  merely torn (its blob absent flipped the {@code &&} to false) and so delivered it; the seam runs the withhold
-         *  probe first, so such a pointer now reads {@code WITHHELD} and is correctly skipped. */
-        private boolean withheld(String requestPath) throws IOException {
+        /** Whether a pointer is withheld from serving - the interceptor chain's hold on the path, the content-addressed
+         *  marker under {@code withheld/} for its hash, or the quarantine path itself. Two point reads, where the
+         *  servability probe this used to go through read the pointer again and stat the blob as well: a rebuild has
+         *  already read the pointer and has the hash in hand, and a withheld-and-reclaimed pointer reads WITHHELD by
+         *  its marker alone. */
+        private boolean withheld(String requestPath, String hash) throws IOException {
             if (requestPath.equals("/quarantine") || requestPath.startsWith("/quarantine/")) {
                 return true;
             }
-            return names.state(requestPath) == ServableNames.State.WITHHELD;
+            return names.heldByChain(requestPath) || Withheld.is(store, hash);
         }
     }
 }

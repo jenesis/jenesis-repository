@@ -2,6 +2,7 @@ package build.jenesis.repository.walk.contract.test;
 
 import module java.base;
 
+import build.jenesis.repository.format.maven.MavenFormat;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServedAliases;
 import build.jenesis.repository.walk.testkit.WalkConsumerFixture;
@@ -58,7 +59,9 @@ final class ModuleViewFixture implements WalkConsumerFixture {
         // artifact under two names - which is what lets a reviewer's release lift both. A rebuild that restored the
         // pointer and not the relation would leave a view that serves and a release that still strands it, so the
         // repair owns both or it does not repair the view.
-        return List.of(SPACE, ServedAliases.NAMESPACE);
+        // And the module-name record the pass writes for a jar it had to open - the first materialisation of a
+        // repository from before the record; every later pass reads it instead of the jar.
+        return List.of(SPACE, ServedAliases.NAMESPACE, MavenFormat.MODULE_INDEX);
     }
 
     @Override
