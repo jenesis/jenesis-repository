@@ -112,6 +112,11 @@ import build.jenesis.repository.store.Features;
  *     {@link #onWithheld} to a consumer that {@linkplain #seesWithheld() asked to see it} (a reconcile, a collector's
  *     mark: state that must be complete over what is stored, not over what serves) and to nobody else. A consumer
  *     that rebuilds a served view never sees one, so it cannot reinstate into an index what a GET would refuse.</li>
+ * <li><b>Self-description.</b> {@link #description()} is one sentence an operator reads beside the consumer's
+ *     checkbox on the walks screen: what it repairs and what riding a walk costs it, in the operator's terms rather
+ *     than the implementation's. {@link #settings()} names the dials that govern what the consumer does with what it
+ *     is handed - a retention policy's criteria, a collector's grace - so the screen can show them beside it; a
+ *     consumer with no such dial answers none. Neither is consulted by the pass, and neither reaches the store.</li>
  * </ol>
  */
 public interface WalkConsumer {
@@ -190,6 +195,18 @@ public interface WalkConsumer {
      *  default, which is right for every consumer that rebuilds a served view. */
     default boolean seesWithheld() {
         return false;
+    }
+
+    /** One sentence for the operator: what this consumer repairs when it rides a walk, and what that costs. The
+     *  default is the name, which is what a consumer that has not yet described itself shows. */
+    default String description() {
+        return name();
+    }
+
+    /** The settings keys (bare, without the {@code jenreg.} prefix) of the dials that govern what this consumer
+     *  does with what it is handed, for the walks screen to show beside it; none by default. */
+    default List<String> settings() {
+        return List.of();
     }
 
     /** One retained artifact, visited in total key order; must be idempotent per artifact (see the class contract
