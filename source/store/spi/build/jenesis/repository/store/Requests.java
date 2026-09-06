@@ -75,10 +75,18 @@ public final class Requests {
         return root.readVersioned(key(subject)).map(versioned -> Request.decode(subject, versioned.content()));
     }
 
-    /** Every standing request - a listing of one small space, bounded by the subjects there are. */
+    /** The most standing requests one read answers: a request is one object per subject and a subject is a task or
+     *  a walk, so the space holds a few dozen at most - the page is a bound on a misuse, never a limit anyone
+     *  reaches. */
+    private static final int PAGE = 1_000;
+
+    /** Every standing request - one page of one small space, bounded by the subjects there are. A page rather than a
+     *  whole-space listing, because the walks screen and its API read this on a request. */
     public static List<Request> pending(ArtifactStore root) throws IOException {
+        List<String> subjects = new ArrayList<>();
+        root.page(Scopes.space(Scopes.REQUESTS), "", PAGE, subjects::add);
         List<Request> requests = new ArrayList<>();
-        for (String subject : root.list(Scopes.space(Scopes.REQUESTS))) {
+        for (String subject : subjects) {
             pending(root, subject).ifPresent(requests::add);
         }
         return requests;

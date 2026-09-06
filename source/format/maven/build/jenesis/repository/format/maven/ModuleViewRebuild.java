@@ -51,10 +51,9 @@ import build.jenesis.repository.walk.WalkConsumer;
  */
 public final class ModuleViewRebuild implements WalkConsumer {
 
-    /** The discovered views, loaded once like {@link MavenFormat}'s own list - the same providers, reached through the
-     *  same bridge, so a repaired view is byte-identical to a published one. */
-    private static final List<ModuleView> MODULE_VIEWS = ServiceLoader.load(ModuleView.class)
-            .stream().map(ServiceLoader.Provider::get).toList();
+    /** The bridge's one discovered list, the same instances {@link MavenFormat} publishes through, so a repaired view
+     *  is byte-identical to a published one. */
+    private static final List<ModuleView> MODULE_VIEWS = ModuleView.installed();
 
     @Override
     public String name() {

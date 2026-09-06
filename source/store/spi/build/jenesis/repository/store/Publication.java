@@ -115,22 +115,6 @@ public final class Publication {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Publication.class);
 
-    /** The one discovered publication hook class, loaded once at class load like {@code MavenFormat.MODULE_VIEWS}:
-     *  every {@link PublicationObserver} on the module path, the interceptors among them included - a
-     *  {@link PublishInterceptor} IS a {@code PublicationObserver}, so a single {@code uses PublicationObserver}
-     *  clause discovers both. Empty in the core (no provider on the module path). */
-    private static final List<PublicationObserver> OBSERVERS = ServiceLoader.load(PublicationObserver.class)
-            .stream().map(ServiceLoader.Provider::get).toList();
-
-    /** The verdict-bearing subset, split from the one discovered list by {@code instanceof PublishInterceptor}: the
-     *  observers that also screen. So {@link #screen} drives exactly the interceptors while {@link #published} and
-     *  {@link #unpublish} still notify every discovered observer - the interceptors ride the after-commit call too
-     *  (their {@link PublishInterceptor#onPublished} defaults to a no-op, so this never double-counts a screen). */
-    private static final List<PublishInterceptor> DISCOVERED = OBSERVERS.stream()
-            .filter(observer -> observer instanceof PublishInterceptor)
-            .map(observer -> (PublishInterceptor) observer)
-            .toList();
-
     /** The reserved review-subtree request-path root ({@code /quarantine}) - the pointer face of the hold convention
      *  whose enumeration face is {@link ServableNames#QUARANTINE}. A hold writer links a review pointer at
      *  {@code /quarantine/<servedPath>}; this is that {@code /quarantine} prefix as a request path. */
@@ -176,14 +160,14 @@ public final class Publication {
     private final List<PublicationObserver> observers;
 
     public Publication(ArtifactStore store) {
-        this(store, DISCOVERED, OBSERVERS);
+        this(store, PublishInterceptor.installed(), PublicationObserver.installed());
     }
 
     /** A publication whose upload post-processing runs an explicit screen list rather than the
      *  {@code ServiceLoader}-discovered one - the seam an embedder uses to inject screens that are not on the module
      *  path. Either way the chain runs sorted by {@link PublishInterceptor#order()}, ties keeping their given order. */
     public Publication(ArtifactStore store, List<PublishInterceptor> interceptors) {
-        this(store, interceptors, OBSERVERS);
+        this(store, interceptors, PublicationObserver.installed());
     }
 
     /** The fully explicit seam: screens and after-commit observers both injected rather than discovered. */
@@ -193,26 +177,37 @@ public final class Publication {
         this.observers = observers;
     }
 
-    /** The blob key ({@code blobs/<hash>}) a path resolves to when it is published and the blob is present - what a
-     *  streaming {@code GET} sets its {@code Content-Length} from (through {@link ArtifactStore#size}) and then copies
-     *  to the response (through {@link ArtifactStore#read}), instead of buffering the blob to learn its length. Empty
+    /** The blob key ({@code blobs/<hash>}) a path resolves to when it is published and the blob is present - the
+     *  key a streaming read copies to the response (through {@link ArtifactStore#read}); a serve that also needs the
+     *  length takes {@link #locate}, which learnt it in the probe that proved the blob present. Empty
      *  when nothing is published there, the blob is gone, a screen {@link PublishInterceptor#withheld withholds} the
      *  path, or a {@link Withheld withheld/&lt;hash&gt;} marker retracts the bytes the path names - the quarantine read
      *  side, so a verdict that changes after the fact retracts a linked artifact from every serving surface without
      *  touching its pointer, and a content-addressed hold retracts it under every alias it is served by rather than
      *  only the ones the hold writer enumerated. */
     public Optional<String> located(String requestPath) throws IOException {
+        return locate(requestPath).map(Located::key);
+    }
+
+    /** A {@link #located located} artifact as a serve needs it: the blob key the bytes stream from and the blob's
+     *  stored length, learnt in the one stat that proved the blob present. */
+    public record Located(String key, long size) {
+    }
+
+    /** As {@link #located}, with the blob's length beside the key - the face a {@code GET} sets its
+     *  {@code Content-Length} from and a {@code HEAD} answers from, so neither probes the blob a second time for a
+     *  number the probe that found it already returned. Measured before: a Maven download read the pointer, the
+     *  withheld marker, the blob's existence, then its length, then its bytes - two round trips for one fact. */
+    public Optional<Located> locate(String requestPath) throws IOException {
         // Delegate the servable-vs-not discrimination to the one enumeration seam so serve and enumeration can never
         // disagree (located empty iff state != SERVABLE); the seam composes this same publication's interceptor chain
-        // and the withheld/<hash> marker convention. This is a behaviour-preserving refactor of the former inline
-        // "chain withheld -> pointer resolve -> blobs/<hash> exists" (with the one gain the seam brings: a hostile,
-        // unresolvable request path now fails closed to empty rather than throwing an InvalidPathException out of a
-        // serve), so a linked, present, non-withheld path still resolves to blobs/<hash> exactly as before.
+        // and the withheld/<hash> marker convention, and fails a hostile, unresolvable request path closed to empty
+        // rather than throwing an InvalidPathException out of a serve.
         ServableNames.Location location = new ServableNames(store, this).located(requestPath);
         if (location.state() != ServableNames.State.SERVABLE) {
             return Optional.empty();
         }
-        return Optional.of("blobs/" + location.hash());   // the hash the seam just resolved - no second pointer read
+        return Optional.of(new Located("blobs/" + location.hash(), location.size()));
     }
 
     /** Whether any interceptor in this publication's chain withholds the request path from serving - the chain probe
@@ -449,6 +444,58 @@ public final class Publication {
 
     /** Whether a pointer's content is the lower-case SHA-256 hex a {@link #link} writes - the only shape carried
      *  into a removal descriptor's blob identity, so a corrupt pointer never masquerades as a hash. */
+    /** Counts the bytes a store reads through it. {@link #transferTo} is spelled out over this class's own reads
+     *  rather than inherited, so a store that drains the body with it counts too. */
+    private static final class Counting extends FilterInputStream {
+
+        private long count;
+
+        Counting(InputStream in) {
+            super(in);
+        }
+
+        @Override
+        public int read() throws IOException {
+            int b = in.read();
+            if (b >= 0) {
+                count++;
+            }
+            return b;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            int read = in.read(buffer, offset, length);
+            if (read > 0) {
+                count += read;
+            }
+            return read;
+        }
+
+        @Override
+        public long skip(long n) throws IOException {
+            long skipped = in.skip(n);
+            count += skipped;
+            return skipped;
+        }
+
+        @Override
+        public long transferTo(OutputStream out) throws IOException {
+            byte[] buffer = new byte[16 * 1024];
+            long transferred = 0;
+            int read;
+            while ((read = read(buffer, 0, buffer.length)) >= 0) {
+                out.write(buffer, 0, read);
+                transferred += read;
+            }
+            return transferred;
+        }
+
+        long count() {
+            return count;
+        }
+    }
+
     private static boolean hash(String value) {
         if (value.length() != 64) {
             return false;
@@ -540,27 +587,27 @@ public final class Publication {
                 observer -> observer.onWithholdCleared(subject, store));
     }
 
-    /** The withhold-change feed's transition-ON notify over the ServiceLoader-discovered {@link #OBSERVERS} - the
+    /** The withhold-change feed's transition-ON notify over the {@link PublicationObserver#installed() installed observers} - the
      *  package-private static seam the same-package {@link Withheld#mark} (a static primitive with no {@code Publication}
      *  instance) fires the marker face through, reusing the one discovered observer list rather than a second discovery.
      *  Failures are logged and contained exactly as on the instance notify paths, so a hold's marker write never fails
      *  open because a downstream consumer is down. */
     public static void notifyWithheld(ArtifactDescriptor subject, ArtifactStore store) {
-        notify(OBSERVERS, "withhold of hash " + subject.hash(), observer -> observer.onWithheld(subject, store));
+        notify(PublicationObserver.installed(), "withhold of hash " + subject.hash(), observer -> observer.onWithheld(subject, store));
     }
 
     /** The transition-OFF mirror the same-package {@link Withheld#clear} fires through - the marker-cleared face.
      *  Public, like its twin, so a hold a {@link PublishInterceptor} places by its own means announces it the way the
      *  marker and pointer holds do, and every listing that mirrors the hold is updated. */
     public static void notifyWithholdCleared(ArtifactDescriptor subject, ArtifactStore store) {
-        notify(OBSERVERS, "withhold-clear of hash " + subject.hash(),
+        notify(PublicationObserver.installed(), "withhold-clear of hash " + subject.hash(),
                 observer -> observer.onWithholdCleared(subject, store));
     }
 
     /** The lifecycle-mark face ({@link PublicationObserver#onMarked}) over the discovered observers, fired by the
      *  lifecycle primitive after a flag was set or cleared; contained like every other face. */
     public static void notifyMarked(ArtifactDescriptor subject, ArtifactStore store) {
-        notify(OBSERVERS, "lifecycle mark of " + subject.coordinate() + " " + subject.version(),
+        notify(PublicationObserver.installed(), "lifecycle mark of " + subject.coordinate() + " " + subject.version(),
                 observer -> observer.onMarked(subject, store));
     }
 
@@ -591,8 +638,11 @@ public final class Publication {
     }
 
     private Published route(ArtifactDescriptor artifact, InputStream content) throws IOException {
-        String hash = storeBlob(content);
-        ArtifactDescriptor stored = artifact.withBlob(hash, store.size("blobs/" + hash));
+        // The length is counted as the bytes stream into the store, so the descriptor never stats the blob it just
+        // wrote - one read per publish that answered a question the write itself had answered.
+        Counting counted = new Counting(content);
+        String hash = storeBlob(counted);
+        ArtifactDescriptor stored = artifact.withBlob(hash, counted.count());
         PublishInterceptor.Content access = contentOf(hash);
         PublishInterceptor.Disposition disposition = PublishInterceptor.Disposition.ACCEPT;
         for (PublishInterceptor interceptor : interceptors) {

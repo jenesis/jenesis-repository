@@ -3,6 +3,7 @@ package build.jenesis.repository.importer;
 import module java.base;
 
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.store.Features;
 import build.jenesis.repository.icon.IconContributor;
 
 /**
@@ -105,5 +106,42 @@ public interface ImportSourceProvider extends IconContributor {
      */
     static ImportSource open(ImportSourceProvider provider, ImportRequest request, ProxyFormat.Fetcher fetcher) {
         return provider.create(request, ImportScreen.around(fetcher, request.url()));
+    }
+
+    /** Every import source on the module path, whatever its toggle says: validated once, name-ordered, one instance
+     *  set for the process - the set a toggle catalogue or a capabilities report lists. Nothing but this SPI module
+     *  loads the service. */
+    static List<ImportSourceProvider> declared() {
+        return ImportSources.DECLARED;
+    }
+
+    /** Every {@link Features#active switched-on, fully configured} source in the deployment's one configuration -
+     *  the set an edge builds a source from, so a connector configured off is unreachable by name on every edge
+     *  alike. Measured before: the console's import job discovered the connectors raw and ran a switched-off one,
+     *  while the API's edge refused it. */
+    static List<ImportSourceProvider> installed() {
+        return installed(Features.settings());
+    }
+
+    /** As {@link #installed()}, against a lookup the caller supplies, keyed by bare feature names. */
+    static List<ImportSourceProvider> installed(UnaryOperator<String> config) {
+        List<ImportSourceProvider> active = new ArrayList<>();
+        for (ImportSourceProvider provider : declared()) {
+            if (Features.active(config, provider.name(), provider.requiredConfig())) {
+                active.add(provider);
+            }
+        }
+        return List.copyOf(active);
+    }
+
+    /** The installed source that {@link #handles handles} {@code source}, or empty - for a name nothing answers to
+     *  and for a connector configured off alike. */
+    static Optional<ImportSourceProvider> installed(String source, UnaryOperator<String> config) {
+        for (ImportSourceProvider provider : installed(config)) {
+            if (provider.handles(source)) {
+                return Optional.of(provider);
+            }
+        }
+        return Optional.empty();
     }
 }
