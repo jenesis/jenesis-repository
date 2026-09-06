@@ -11,6 +11,7 @@ import java.util.function.UnaryOperator;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.ConditionalWrites;
 import build.jenesis.repository.store.Endpoints;
 import build.jenesis.repository.store.Features;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
@@ -110,7 +111,16 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
             ensureBucket(storage, project, bucket);
         }
         GcsSignedUrl signer = credentials instanceof ServiceAccountSigner able ? new GcsSignedUrl(able, root) : null;
-        return new GcsArtifactStore(storage, bucket, !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)), signer);
+        GcsArtifactStore store = new GcsArtifactStore(storage, bucket,
+                !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)), signer);
+        // The one boot-time question every compare-and-set rests on, asked of every object-store endpoint alike.
+        try {
+            ConditionalWrites.probe(store, "the GCS endpoint " + endpoint + " for bucket " + bucket);
+        } catch (IOException failure) {
+            throw new IllegalStateException("the gcs store could not be probed for conditional writes at boot - is bucket "
+                    + bucket + " writable with these credentials? " + failure.getMessage(), failure);
+        }
+        return store;
     }
 
     /**

@@ -44,17 +44,17 @@ class FeedSnapshotTest {
         FeedClient client = client(FeedPolicy.closed().refreshInterval(Duration.ofHours(6)),
                 new RecordedTransport(RecordedTransport.Step.answering(200, "CVE-2021-44228")));
 
-        FeedClient.Answer<FeedSnapshots.Stamp> answer = client.refresh(snapshots,
+        FeedClient.Answer<FeedSnapshots.Refresh> answer = client.refresh(snapshots,
                 FeedRequest.get(Feeds.ORIGIN), body());
 
-        FeedSnapshots.Stamp stamp = answer.value().orElseThrow();
+        FeedSnapshots.Refresh stamp = answer.value().orElseThrow();
         assertThat(stamp.loaded()).isTrue();
         assertThat(stamp.generation()).isEqualTo(1);
         assertThat(stamp.fetchedAt()).contains(clock.instant());
         assertThat(stamp.nextRefreshAt()).isEqualTo(clock.instant().plus(Duration.ofHours(6)));
 
         // One pointer object carries both, so a fresh catalogue behind a stale timestamp is unrepresentable.
-        FeedSnapshots.Stamp durable = snapshots.current().orElseThrow();
+        FeedSnapshots.Refresh durable = snapshots.current().orElseThrow();
         assertThat(durable).isEqualTo(stamp);
         try (InputStream body = snapshots.open(durable).orElseThrow()) {
             assertThat(new String(body.readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("CVE-2021-44228");
@@ -63,9 +63,9 @@ class FeedSnapshotTest {
 
     @Test
     void a_snapshot_and_a_fetch_instant_cannot_be_separated() {
-        assertThatThrownBy(() -> new FeedSnapshots.Stamp("kev", Optional.empty(), clock.instant(), 3))
+        assertThatThrownBy(() -> new FeedSnapshots.Refresh("kev", Optional.empty(), clock.instant(), 3))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new FeedSnapshots.Stamp("kev",
+        assertThatThrownBy(() -> new FeedSnapshots.Refresh("kev",
                 Optional.of(new FeedSnapshots.Snapshot("abc", 3, clock.instant())), clock.instant(), 0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
@@ -75,7 +75,7 @@ class FeedSnapshotTest {
         FeedSnapshots snapshots = snapshots();
         client(FeedPolicy.closed(), new RecordedTransport(RecordedTransport.Step.answering(200, "good")))
                 .refresh(snapshots, FeedRequest.get(Feeds.ORIGIN), body());
-        FeedSnapshots.Stamp good = snapshots.current().orElseThrow();
+        FeedSnapshots.Refresh good = snapshots.current().orElseThrow();
 
         clock.advance(Duration.ofHours(7));
         FeedClient failing = client(FeedPolicy.closed().maxAttempts(1).retryInterval(Duration.ofMinutes(15)),
@@ -84,7 +84,7 @@ class FeedSnapshotTest {
         assertThatThrownBy(() -> failing.refresh(snapshots, FeedRequest.get(Feeds.ORIGIN), body()))
                 .isInstanceOf(FeedException.class);
 
-        FeedSnapshots.Stamp after = snapshots.current().orElseThrow();
+        FeedSnapshots.Refresh after = snapshots.current().orElseThrow();
         assertThat(after.snapshot()).isEqualTo(good.snapshot());        // the same body, the same fetch instant
         assertThat(after.generation()).isEqualTo(good.generation());
         assertThat(after.nextRefreshAt()).isEqualTo(clock.instant().plus(Duration.ofMinutes(15)));
@@ -98,7 +98,7 @@ class FeedSnapshotTest {
         FeedSnapshots snapshots = snapshots();
         client(FeedPolicy.closed(), new RecordedTransport(RecordedTransport.Step.answering(200, "good")))
                 .refresh(snapshots, FeedRequest.get(Feeds.ORIGIN), body());
-        FeedSnapshots.Stamp good = snapshots.current().orElseThrow();
+        FeedSnapshots.Refresh good = snapshots.current().orElseThrow();
 
         FeedClient endless = client(FeedPolicy.closed().maxPages(3),
                 new RecordedTransport(RecordedTransport.Step.answering(200, "partial")));
@@ -118,11 +118,11 @@ class FeedSnapshotTest {
         FeedClient client = client(FeedPolicy.soft().maxAttempts(1),
                 new RecordedTransport(RecordedTransport.Step.answering(500, "boom")));
 
-        FeedClient.Answer<FeedSnapshots.Stamp> answer = client.refresh(snapshots,
+        FeedClient.Answer<FeedSnapshots.Refresh> answer = client.refresh(snapshots,
                 FeedRequest.get(Feeds.ORIGIN), body());
 
         assertThat(answer.status()).isEqualTo(FeedClient.Status.DEGRADED);
-        FeedSnapshots.Stamp cold = snapshots.current().orElseThrow();
+        FeedSnapshots.Refresh cold = snapshots.current().orElseThrow();
         assertThat(cold.loaded()).isFalse();                       // "tried, nothing yet" - never an authoritative empty
         assertThat(cold.fetchedAt()).isEmpty();
         assertThat(snapshots.open(cold)).isEmpty();
@@ -132,7 +132,7 @@ class FeedSnapshotTest {
     void an_unconfigured_feed_refreshes_nothing_at_all() throws Exception {
         FeedSnapshots snapshots = snapshots();
 
-        FeedClient.Answer<FeedSnapshots.Stamp> answer = FeedClient.unconfigured("vulncheck", "vulncheck-token")
+        FeedClient.Answer<FeedSnapshots.Refresh> answer = FeedClient.unconfigured("vulncheck", "vulncheck-token")
                 .refresh(snapshots, FeedRequest.get(Feeds.ORIGIN), body());
 
         assertThat(answer.status()).isEqualTo(FeedClient.Status.SKIPPED);
@@ -144,7 +144,7 @@ class FeedSnapshotTest {
         FeedSnapshots snapshots = snapshots();
         client(FeedPolicy.closed(), new RecordedTransport(RecordedTransport.Step.answering(200, "good")))
                 .refresh(snapshots, FeedRequest.get(Feeds.ORIGIN), body());
-        FeedSnapshots.Stamp good = snapshots.current().orElseThrow();
+        FeedSnapshots.Refresh good = snapshots.current().orElseThrow();
 
         // Crash exactly between the body write and the pointer compare-and-set.
         ArtifactStore crashing = new ForwardingStore(store) {
@@ -174,12 +174,12 @@ class FeedSnapshotTest {
         FeedSnapshots snapshots = snapshots();
         client(FeedPolicy.closed(), new RecordedTransport(RecordedTransport.Step.answering(200, "same")))
                 .refresh(snapshots, FeedRequest.get(Feeds.ORIGIN), body());
-        FeedSnapshots.Stamp first = snapshots.current().orElseThrow();
+        FeedSnapshots.Refresh first = snapshots.current().orElseThrow();
 
         clock.advance(Duration.ofHours(7));
         client(FeedPolicy.closed(), new RecordedTransport(RecordedTransport.Step.answering(200, "same")))
                 .refresh(snapshots, FeedRequest.get(Feeds.ORIGIN), body());
-        FeedSnapshots.Stamp second = snapshots.current().orElseThrow();
+        FeedSnapshots.Refresh second = snapshots.current().orElseThrow();
 
         assertThat(second.snapshot().orElseThrow().digest())
                 .isEqualTo(first.snapshot().orElseThrow().digest());   // the key IS the content
@@ -193,7 +193,7 @@ class FeedSnapshotTest {
         FeedSnapshots snapshots = snapshots();
         client(FeedPolicy.closed(), new RecordedTransport(RecordedTransport.Step.answering(200, "winner")))
                 .refresh(snapshots, FeedRequest.get(Feeds.ORIGIN), body());
-        FeedSnapshots.Stamp winner = snapshots.current().orElseThrow();
+        FeedSnapshots.Refresh winner = snapshots.current().orElseThrow();
 
         // The loser read the pointer BEFORE the winner committed, so its compare-and-set still expects an absent
         // object - the store double reproduces exactly that stale read while the real object is already there.
@@ -209,7 +209,7 @@ class FeedSnapshotTest {
         };
         FeedSnapshots losing = FeedSnapshots.in(stale, NAMESPACE, "kev", clock);
 
-        FeedSnapshots.Stamp adopted = losing.commit("loser".getBytes(StandardCharsets.UTF_8), Duration.ofHours(6));
+        FeedSnapshots.Refresh adopted = losing.commit("loser".getBytes(StandardCharsets.UTF_8), Duration.ofHours(6));
 
         assertThat(adopted).isEqualTo(winner);                     // converged, never an alternating overwrite
         assertThat(snapshots.current().orElseThrow()).isEqualTo(winner);
@@ -237,7 +237,7 @@ class FeedSnapshotTest {
         // The read path holds no transport at all; this asserts it against one that would fail the test if used.
         FeedClient reading = FeedClient.of("kev", new Feeds.NoEgressTransport(), FeedPolicy.closed(), clock,
                 new Feeds.RecordingPause());
-        FeedSnapshots.Stamp stamp = snapshots.current().orElseThrow();
+        FeedSnapshots.Refresh stamp = snapshots.current().orElseThrow();
 
         assertThat(reading.configured()).isTrue();
         assertThat(stamp.age(clock.instant())).contains(Duration.ZERO);
@@ -261,7 +261,7 @@ class FeedSnapshotTest {
         store.writeVersioned(NAMESPACE + "/current", "not a stamp at all".getBytes(StandardCharsets.UTF_8), null);
 
         assertThat(snapshots.current()).isEmpty();
-        FeedSnapshots.Stamp healed = snapshots.commit("fresh".getBytes(StandardCharsets.UTF_8), Duration.ofHours(6));
+        FeedSnapshots.Refresh healed = snapshots.commit("fresh".getBytes(StandardCharsets.UTF_8), Duration.ofHours(6));
         assertThat(healed.generation()).isEqualTo(1);
         assertThat(snapshots.current()).contains(healed);
     }

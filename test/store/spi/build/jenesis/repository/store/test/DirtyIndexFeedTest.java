@@ -89,9 +89,9 @@ class DirtyIndexFeedTest {
         });
         assertThat(pageSizes).as("three pages of ten, ten and five").containsExactly(10, 10, 5);
         assertThat(seen).hasSize(25);
-        // This decorator has no native page, so each page falls back to one scan of the level - which is what the
-        // filesystem store does too: a scan per page, never one per marker, and never a scan past the last page.
-        assertThat(counting.calls(FaultInjectingStore.Op.LIST)).as("one level scan per page").isEqualTo(pageSizes.size());
+        // The decorator forwards each page to the filesystem store, which scans the level once per page: a page call
+        // per page, never one per marker, and never a call past the last page.
+        assertThat(counting.calls(FaultInjectingStore.Op.PAGE)).as("one page call per page").isEqualTo(pageSizes.size());
         assertThat(feed.pending()).isEmpty();
     }
 
@@ -107,7 +107,7 @@ class DirtyIndexFeedTest {
         assertThat(pageSizes).as("the cursor moves past pages nobody cleared").containsExactly(5, 5, 2);
         paged.compactThrough(5);
         assertThat(feed.pending()).as("versions past the cutoff survive the compaction").hasSize(6);
-        assertThat(counting.calls(FaultInjectingStore.Op.LIST)).as("three drain pages and the compaction's one")
+        assertThat(counting.calls(FaultInjectingStore.Op.PAGE)).as("three drain pages and the compaction's one")
                 .isEqualTo(pageSizes.size() + 1);
     }
 
