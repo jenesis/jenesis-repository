@@ -44,7 +44,7 @@ class LeaseTest {
         // The renewal at thirty seconds moved the expiry to thirty seconds past the ttl; the steal comes after that.
         Instant lapsed = T0.plusSeconds(30).plus(TTL).plusSeconds(1);
         assertThat(lease.acquire("sweep", "node-b", lapsed)).as("expired: taken over against its token").isTrue();
-        assertThat(lease.stillHeld("sweep", "node-a", lapsed.plusSeconds(1)))
+        assertThat(lease.renew("sweep", "node-a", lapsed.plusSeconds(1)))
                 .as("the old holder has provably lost it").isFalse();
     }
 

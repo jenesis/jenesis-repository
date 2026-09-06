@@ -5,16 +5,15 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.DirtyFlag;
-import build.jenesis.repository.store.PassCounter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link DirtyFlag} and {@link PassCounter}: the two small objects a feed consumer keeps beside the feed. A flag is
+ * {@link DirtyFlag}, the small object a feed consumer keeps beside the feed (its pass cadence is a {@link build.jenesis.repository.store.StoredCounter}). A flag is
  * raised by any change and lowered only against the token read before the pass, so a change landing mid-pass
  * survives; a counter says when the periodic full pass is due and starts over when it has run.
  */
-class DirtyFlagAndPassCounterTest {
+class DirtyFlagTest {
 
     private static final Instant T0 = Instant.parse("2026-09-05T09:00:00Z");
 
@@ -51,25 +50,5 @@ class DirtyFlagAndPassCounterTest {
         assertThat(flag.peek()).as("lowered against the current token").isEmpty();
         flag.clearIf(latest.get().token());                       // idempotent on an absent flag
         assertThat(flag.peek()).isEmpty();
-    }
-
-    @Test
-    void a_pass_counter_is_due_on_the_nth_pass_and_starts_over_after_the_full_one() throws IOException {
-        PassCounter passes = new PassCounter(store, "index/passes");
-        assertThat(passes.passes()).isZero();
-        assertThat(passes.due(1)).as("a cadence of one: every pass reconciles").isTrue();
-        assertThat(passes.due(3)).isFalse();
-        passes.bump();
-        assertThat(passes.due(3)).as("the second pass is not yet the third").isFalse();
-        passes.bump();
-        assertThat(passes.passes()).isEqualTo(2);
-        assertThat(passes.due(3)).as("the third pass since the last full one reconciles").isTrue();
-        passes.reset();
-        assertThat(passes.passes()).isZero();
-        assertThat(passes.due(3)).isFalse();
-
-        store.writeVersioned("index/passes", "not a number".getBytes(StandardCharsets.UTF_8),
-                store.readVersioned("index/passes").orElseThrow().token());
-        assertThat(passes.passes()).as("an unreadable count restarts at zero").isZero();
     }
 }

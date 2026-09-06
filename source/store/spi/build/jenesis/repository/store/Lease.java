@@ -83,6 +83,13 @@ public final class Lease {
      * was stolen): the caller has lost single-writer status and must stop. The extension is a compare-and-set
      * against the read token, so a renewal that races a concurrent takeover also answers {@code false} rather than
      * overwriting the winner.
+     *
+     * <p>It is therefore also the ownership fence: any unconditional mutation of shared state on a leased path - an
+     * unpublish, a delete another node could race - gates on a fresh renew, because the lease may have lapsed
+     * mid-pass and been legitimately taken over by a rival that has already redone and sealed the same work. Prefer
+     * {@link #guarded}, which runs the mutation only when this answers {@code true}; call this directly only to
+     * branch on ownership for more than one action. (A {@code stillHeld} alias for this fence existed and was this
+     * method under another name.)
      */
     public boolean renew(String name, String holder, Instant now) throws IOException {
         String key = key(name);
@@ -107,20 +114,8 @@ public final class Lease {
     }
 
     /**
-     * Whether this holder still provably owns {@code name}'s lease right now - a fresh compare-and-set renew against
-     * the holder token. This is the fence: any unconditional mutation of shared state on a leased path - an
-     * unpublish, a delete another node could race - gates on it, because the lease may have lapsed mid-pass and been
-     * legitimately taken over by a rival that has already redone and sealed the same work. Prefer {@link #guarded},
-     * which runs the mutation only when this is true; call this directly only to branch on ownership for more than
-     * one action.
-     */
-    public boolean stillHeld(String name, String holder, Instant now) throws IOException {
-        return renew(name, holder, now);
-    }
-
-    /**
      * Run {@code action} - an unconditional mutation of shared state on {@code name}'s leased path - only while this
-     * holder still provably owns the lease ({@link #stillHeld}). Returns {@code true} if the action ran; {@code false},
+     * holder still provably owns the lease ({@link #renew}). Returns {@code true} if the action ran; {@code false},
      * touching nothing, when the lease was lost or ownership could not even be probed: a node that cannot prove it
      * holds the lease has no authority to mutate the leased path, so it skips rather than risk clobbering the rival,
      * and the caller surfaces its own original failure.
@@ -128,7 +123,7 @@ public final class Lease {
     public boolean guarded(String name, String holder, Instant now, Action action) throws IOException {
         boolean owned;
         try {
-            owned = stillHeld(name, holder, now);
+            owned = renew(name, holder, now);
         } catch (IOException | RuntimeException probe) {
             return false;
         }

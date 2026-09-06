@@ -161,7 +161,7 @@ public final class Retries {
     }
 
     /** {@link #tryUpdate} for a compare-and-set the caller performs itself. */
-    public static boolean tryCompareAndSet(Attempt attempt) throws IOException {
+    private static boolean tryCompareAndSet(Attempt attempt) throws IOException {
         for (int tries = 0; tries < COMPARE_AND_SET; tries++) {
             if (attempt.tryOnce()) {
                 return true;
