@@ -251,7 +251,7 @@ public final class RebuildPass {
             for (WalkConsumer consumer : consumers) {
                 // Narrower than the other three deliberately: onPassCompleted declares no IOException, so a
                 // runtime failure is the only shape there is to contain here.
-                delivery.attributed(consumer, null, delivered -> delivered.onPassCompleted(pass));
+                delivery.attributed(consumer, null, delivered -> delivered.onPassCompleted(pass, store));
             }
         }
         return Optional.of(pass);
@@ -345,7 +345,7 @@ public final class RebuildPass {
                         && Failed.decode(consumer.name(), recorded.get().content()).generation() < generation) {
                     store.delete(marker);
                 }
-                attributed(consumer, null, delivered -> delivered.onPassStarted(pass));
+                attributed(consumer, null, delivered -> delivered.onPassStarted(pass, store));
             }
         }
 
