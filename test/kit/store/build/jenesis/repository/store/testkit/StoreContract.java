@@ -19,10 +19,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * exactly as it already requires {@link FaultInjectingStore}. The JUnit driver lives under {@code test/**} and turns
  * each check into one dynamic test.
  *
- * <p>Two of the kit's checks drive the fixtures this module already ships rather than re-implementing them:
- * {@link Property#BATCH_FAILURE_IS_PER_ENTRY} arms a {@link FaultInjectingStore} over the real backend to prove a
- * thrown write becomes one {@code FAILED} entry instead of aborting the batch, and {@link Property#STORE_INVARIANTS}
- * runs {@link StoreInvariants} against a freshly scoped subspace of the live backend.
+ * <p>One of the kit's checks drives a fixture this module already ships rather than re-implementing it:
+ * {@link Property#STORE_INVARIANTS} runs {@link StoreInvariants} against a freshly scoped subspace of the live
+ * backend.
  *
  * <h2>Clauses this kit discharges</h2>
  * Almost all of
@@ -101,15 +100,6 @@ public final class StoreContract {
          *  and re-created with different content never re-issues a token a reader of the previous incarnation holds,
          *  so a compare-and-set from before the delete is refused. */
         VERSION_TOKEN_PER_INCARNATION,
-        /** {@code writeBatch} answers exactly one outcome per write, in input order, keyed to that write; two writes
-         *  to one key apply in input order rather than racing. */
-        BATCH_ORDERED_PER_ENTRY_OUTCOMES,
-        /** {@code writeBatch} is explicitly not a transaction: a losing compare-and-set neither rolls back nor
-         *  prevents its neighbours, and the conflicted key keeps its prior value. */
-        BATCH_IS_NOT_A_TRANSACTION,
-        /** A write that throws fails that entry only: its outcome carries the {@link IOException} while the rest of
-         *  the batch still commits. */
-        BATCH_FAILURE_IS_PER_ENTRY,
         /** The store-primitive invariants hold on a live backend: no {@code publish/} pointer without its blob, no
          *  unreferenced blob - and a planted dangling pointer is caught. */
         STORE_INVARIANTS,
@@ -214,15 +204,6 @@ public final class StoreContract {
         checks.add(new Check(Property.VERSION_TOKEN_PER_INCARNATION,
                 "a token from a deleted-and-re-created incarnation of a key no longer passes",
                 StoreContract::versionTokenPerIncarnation));
-        checks.add(new Check(Property.BATCH_ORDERED_PER_ENTRY_OUTCOMES,
-                "writeBatch answers one outcome per write, in input order",
-                StoreContract::batchOrderedPerEntryOutcomes));
-        checks.add(new Check(Property.BATCH_IS_NOT_A_TRANSACTION,
-                "a losing compare-and-set neither rolls back nor prevents its neighbours",
-                StoreContract::batchIsNotATransaction));
-        checks.add(new Check(Property.BATCH_FAILURE_IS_PER_ENTRY,
-                "a thrown write fails its own entry while the rest of the batch commits",
-                StoreContract::batchFailureIsPerEntry));
         checks.add(new Check(Property.STORE_INVARIANTS,
                 "the store-primitive invariants hold and a dangling pointer is caught",
                 StoreContract::storeInvariants));
@@ -464,23 +445,25 @@ public final class StoreContract {
     }
 
     /**
-     * A backend declares {@code page} itself. The SPI's {@code default} is a correctness fallback that sorts a whole
-     * {@link ArtifactStore#list} - it emits the right names, so no behavioural check can tell it from a native
-     * implementation on a small container, which is exactly why every shipped backend already overrode it and nothing
-     * caught the trap. The only observable difference is the declaring class, so that is what is asserted: a backend
-     * whose {@code page} resolves to {@link ArtifactStore}'s own body would materialise a millions-entry namespace to
-     * answer one page, and is refused here rather than at whatever scale first exhausts a production heap.
+     * A backend declares {@code pageListed} itself - the one paging primitive, from which {@code page} derives. The
+     * SPI's {@code default} is a correctness fallback that sorts a whole {@link ArtifactStore#list} - it emits the
+     * right children, so no behavioural check can tell it from a native implementation on a small container, which is
+     * exactly why every shipped backend already overrode it and nothing caught the trap. The only observable
+     * difference is the declaring class, so that is what is asserted: a backend whose {@code pageListed} resolves to
+     * {@link ArtifactStore}'s own body would materialise a millions-entry namespace to answer one page, and is refused
+     * here rather than at whatever scale first exhausts a production heap. A decorator passes because it overrides
+     * the method to delegate, which is the only correct thing for a decorator to do with it.
      */
     private static void nativePaging(ArtifactStore store) throws Exception {
         Class<?> declaring = store.getClass()
-                .getMethod("page", String.class, String.class, int.class, Consumer.class)
+                .getMethod("pageListed", String.class, String.class, int.class, Consumer.class)
                 .getDeclaringClass();
         if (declaring == ArtifactStore.class) {
-            throw new AssertionError(store.getClass().getName() + " inherits ArtifactStore's list-and-sort page "
+            throw new AssertionError(store.getClass().getName() + " inherits ArtifactStore's list-and-sort pageListed "
                     + "fallback instead of paging natively: it materialises the container's whole child set to answer "
                     + "one page, which is the opposite of what paging is for, and it refuses outright past "
-                    + ArtifactStore.MAX_INHERITED_CHILDREN + " children. Implement page(...) over the backend's own "
-                    + "start-after pagination.");
+                    + ArtifactStore.MAX_INHERITED_CHILDREN + " children. Implement pageListed(...) over the backend's "
+                    + "own start-after pagination; page derives from it.");
         }
     }
 
@@ -694,109 +677,6 @@ public final class StoreContract {
             equal(content(store, key), after, "the refused write left the second incarnation untouched");
             store.delete(key);
         }
-    }
-
-    private static void batchOrderedPerEntryOutcomes(ArtifactStore store) throws Exception {
-        String base = "kit/batch/ordered/";
-        List<ArtifactStore.BatchWrite> writes = List.of(
-                new ArtifactStore.BatchWrite(base + "alpha", utf8("A"), null),
-                new ArtifactStore.BatchWrite(base + "beta", utf8("B"), null),
-                new ArtifactStore.BatchWrite(base + "gamma", utf8("C"), null));
-        List<ArtifactStore.BatchOutcome> outcomes = store.writeBatch(writes);
-
-        equal(outcomes.size(), writes.size(), "exactly one outcome per write");
-        equal(outcomes.stream().map(ArtifactStore.BatchOutcome::key).toList(),
-                writes.stream().map(ArtifactStore.BatchWrite::key).toList(),
-                "the outcomes come back in input order, each keyed to its own write");
-        for (ArtifactStore.BatchOutcome outcome : outcomes) {
-            equal(outcome.status(), ArtifactStore.BatchOutcome.Status.COMMITTED, "a disjoint create commits");
-            if (outcome.failure() != null) {
-                throw failure("a COMMITTED outcome carries no failure, but " + outcome.key() + " carried "
-                        + outcome.failure());
-            }
-        }
-        equal(content(store, base + "alpha"), "A", "the batch really landed the bytes");
-
-        equal(store.writeBatch(List.of()), List.of(), "an empty batch is an empty outcome list, not a failure");
-
-        // Two writes to one key are applied in input order on one task rather than racing: the first create lands and
-        // the second - now no longer create-if-absent - conflicts. A backend that fanned the same key out in parallel
-        // would report a discovery-order winner instead.
-        String repeated = base + "repeated";
-        List<ArtifactStore.BatchOutcome> sameKey = store.writeBatch(List.of(
-                new ArtifactStore.BatchWrite(repeated, utf8("first"), null),
-                new ArtifactStore.BatchWrite(repeated, utf8("second"), null)));
-        equal(sameKey.stream().map(ArtifactStore.BatchOutcome::status).toList(),
-                List.of(ArtifactStore.BatchOutcome.Status.COMMITTED, ArtifactStore.BatchOutcome.Status.CONFLICTED),
-                "two writes to one key apply in input order");
-        equal(content(store, repeated), "first", "the earlier write of the pair is the one that stands");
-
-        for (String key : new String[]{base + "alpha", base + "beta", base + "gamma", repeated}) {
-            store.delete(key);
-        }
-    }
-
-    private static void batchIsNotATransaction(ArtifactStore store) throws Exception {
-        String base = "kit/batch/partial/";
-        String conflicting = base + "conflicting", updated = base + "updated", created = base + "created";
-
-        // A genuinely superseded token of this backend's own type - never a fabricated one, because the token is
-        // opaque and a caller may not manufacture a value of it.
-        isTrue(store.writeVersioned(conflicting, utf8("v1"), null), "the conflicting key is seeded");
-        Object stale = store.readVersioned(conflicting).orElseThrow().token();
-        isTrue(store.writeVersioned(conflicting, utf8("v2"), stale), "and then superseded, so the token goes stale");
-        isTrue(store.writeVersioned(updated, utf8("u1"), null), "the neighbour key is seeded");
-        Object current = store.readVersioned(updated).orElseThrow().token();
-
-        List<ArtifactStore.BatchOutcome> outcomes = store.writeBatch(List.of(
-                new ArtifactStore.BatchWrite(conflicting, utf8("v3"), stale),
-                new ArtifactStore.BatchWrite(updated, utf8("u2"), current),
-                new ArtifactStore.BatchWrite(created, utf8("c1"), null)));
-
-        equal(outcomes.stream().map(ArtifactStore.BatchOutcome::status).toList(),
-                List.of(ArtifactStore.BatchOutcome.Status.CONFLICTED,
-                        ArtifactStore.BatchOutcome.Status.COMMITTED,
-                        ArtifactStore.BatchOutcome.Status.COMMITTED),
-                "a lost compare-and-set is reported per entry, exactly as a false from writeVersioned");
-        equal(content(store, conflicting), "v2", "the conflicted key kept its prior value - nothing was overwritten");
-        equal(content(store, updated), "u2",
-                "and its neighbours still committed: writeBatch is best-effort per key, never a transaction that "
-                        + "rolls back on one conflict");
-        equal(content(store, created), "c1", "including the create in the same batch");
-
-        for (String key : new String[]{conflicting, updated, created}) {
-            store.delete(key);
-        }
-    }
-
-    private static void batchFailureIsPerEntry(ArtifactStore store) throws Exception {
-        // The kit's own FaultInjectingStore over the live backend: only an injected fault can drive the FAILED leg,
-        // because a real backend cannot be asked to throw on one key. The decorator does not override writeBatch, so
-        // this exercises the SPI's default sequential batch and the shared ArtifactStore.writeOne classification every
-        // backend's parallel override also routes through, against that backend's real writeVersioned.
-        String base = "kit/batch/failure/";
-        String alpha = base + "alpha", beta = base + "beta", gamma = base + "gamma";
-        FaultInjectingStore faulty = FaultInjectingStore.wrap(store)
-                .failNextOn(FaultInjectingStore.Op.WRITE_VERSIONED, FaultInjectingStore.keyContaining("beta"));
-
-        List<ArtifactStore.BatchOutcome> outcomes = faulty.writeBatch(List.of(
-                new ArtifactStore.BatchWrite(alpha, utf8("A"), null),
-                new ArtifactStore.BatchWrite(beta, utf8("B"), null),
-                new ArtifactStore.BatchWrite(gamma, utf8("C"), null)));
-
-        equal(outcomes.stream().map(ArtifactStore.BatchOutcome::status).toList(),
-                List.of(ArtifactStore.BatchOutcome.Status.COMMITTED,
-                        ArtifactStore.BatchOutcome.Status.FAILED,
-                        ArtifactStore.BatchOutcome.Status.COMMITTED),
-                "a thrown write fails its own entry rather than aborting the batch");
-        notNull(outcomes.get(1).failure(), "a FAILED outcome carries the IOException that caused it");
-        equal(outcomes.get(1).key(), beta, "the failure is attributed to the write that threw");
-        isTrue(store.exists(alpha), "the entry before the failure stayed committed in the real backend");
-        isFalse(store.exists(beta), "the failed entry landed nothing");
-        isTrue(store.exists(gamma), "and the batch carried on past the failure");
-
-        store.delete(alpha);
-        store.delete(gamma);
     }
 
     private static void rangedReadIsAWindow(ArtifactStore store) throws Exception {

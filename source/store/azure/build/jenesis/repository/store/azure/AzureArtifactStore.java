@@ -228,17 +228,6 @@ public final class AzureArtifactStore implements ArtifactStore {
     }
 
     @Override
-    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        // The names-only view of pageListed; the ordering repair below exists once.
-        pageListed(prefix, startAfter, limit, listed -> consumer.accept(name(listed.key())));
-    }
-
-    private static String name(String key) {
-        int slash = key.lastIndexOf('/');
-        return slash < 0 ? key : key.substring(slash + 1);
-    }
-
-    @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         if (limit <= 0) {
             return;
@@ -474,14 +463,5 @@ public final class AzureArtifactStore implements ArtifactStore {
             }
             throw new IOException("Could not write " + key, e);
         }
-    }
-
-    @Override
-    public List<BatchOutcome> writeBatch(List<BatchWrite> writes) throws IOException {
-        // Best-effort, per-key CAS, not a transaction (Azure has no multi-blob atomicity): issue the conditional
-        // If-Match / If-None-Match uploads bounded-parallel so a k-write commit is ~1 round-trip instead of k,
-        // classifying each 412/409/404 conflict exactly as writeVersioned. The shared helper keeps input order and
-        // never overlaps two writes to one key.
-        return ArtifactStore.writeBatchParallel(this, writes);
     }
 }

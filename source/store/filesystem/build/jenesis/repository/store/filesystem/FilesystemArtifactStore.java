@@ -248,17 +248,6 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         }
     }
 
-    @Override
-    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        // Expressed over pageListed so the selection below exists once: this form is the names-only view of it.
-        pageListed(prefix, startAfter, limit, listed -> consumer.accept(name(listed.key())));
-    }
-
-    private static String name(String key) {
-        int slash = key.lastIndexOf('/');
-        return slash < 0 ? key : key.substring(slash + 1);
-    }
-
     /**
      * One page is one scan of the directory, whatever the page's width. A directory listing has no order and no
      * seek, so selecting the {@code limit} names past {@code startAfter} reads every sibling and keeps the smallest

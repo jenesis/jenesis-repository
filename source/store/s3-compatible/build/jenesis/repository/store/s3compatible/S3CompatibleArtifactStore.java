@@ -41,17 +41,6 @@ public abstract class S3CompatibleArtifactStore implements ArtifactStore {
         return keyPrefix + (container.isEmpty() ? "" : container + "/");
     }
 
-    private static String name(String key) {
-        int slash = key.lastIndexOf('/');
-        return slash < 0 ? key : key.substring(slash + 1);
-    }
-
-    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        // The names-only view of pageListed: the ordering rules below are subtle enough that a second copy
-        // would drift, so this form derives from that one rather than repeating it.
-        pageListed(prefix, startAfter, limit, listed -> consumer.accept(name(listed.key())));
-    }
-
     public InputStream open(String key) throws IOException {
         try {
             return s3.getObject(b -> b.bucket(bucket).key(keyPrefix + key));
@@ -265,10 +254,4 @@ public abstract class S3CompatibleArtifactStore implements ArtifactStore {
             }
         }
     }
-
-    public List<BatchOutcome> writeBatch(List<BatchWrite> writes) throws IOException {
-        // Best-effort, per-key CAS, not a transaction (S3 has no multi-object atomicity): issue the conditional PUTs
-        // bounded-parallel so a k-write commit is ~1 round-trip instead of k, classifying each 412/409/404 conflict
-        // exactly as writeVersioned. The shared helper keeps input order and never overlaps two writes to one key.
-        return ArtifactStore.writeBatchParallel(this, writes);
-    }}
+}
