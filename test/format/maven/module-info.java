@@ -33,6 +33,7 @@
  */
 open module build.jenesis.repository.format.maven.test {
     requires build.jenesis.repository.format.maven;
+    requires build.jenesis.repository.store.testkit;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.store.filesystem;
     requires org.junit.jupiter;

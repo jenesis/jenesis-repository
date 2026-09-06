@@ -217,6 +217,12 @@ public final class ServableNames {
         return located(requestPath).state();
     }
 
+    /** Whether the interceptor chain withholds {@code requestPath} - the hold probe alone, for a caller that already
+     *  holds the pointer's hash and checks the {@link Withheld} marker itself, as the rebuild pass does per object. */
+    public boolean heldByChain(String requestPath) throws IOException {
+        return publication.withheld(requestPath);
+    }
+
     /** A path's state and, when it is {@link State#SERVABLE}, the content hash its pointer resolved to - so a serve
      *  that has just decided a path is servable streams {@code blobs/<hash>} without reading the pointer again. */
     public record Location(State state, String hash) {

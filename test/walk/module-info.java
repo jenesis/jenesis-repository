@@ -42,6 +42,7 @@ open module build.jenesis.repository.walk.test {
     requires build.jenesis.repository.walk.store;
     requires build.jenesis.repository.observation;
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.store.testkit;
     requires build.jenesis.repository.store.filesystem;
     requires org.junit.jupiter;
     requires org.assertj.core;
