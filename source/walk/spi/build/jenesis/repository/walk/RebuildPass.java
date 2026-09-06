@@ -82,9 +82,15 @@ public final class RebuildPass {
     /** The pass-state scope every joiner shares ({@code walks/rebuild/...}) - one pass, however many workers. */
     public static final String CONSUMER = "rebuild";
 
-    /** Where a consumer's failure in a generation is recorded, one small object per consumer name - read by the
-     *  task that drove the pass to report it, cleared when a later generation reaches the consumer again. */
-    public static final String FAILED_SPACE = "walks/" + CONSUMER + "/failed";
+    /** Where a consumer's failure in a generation is recorded under the default scope - see {@link #failedSpace}. */
+    public static final String FAILED_SPACE = failedSpace(CONSUMER);
+
+    /** Where a consumer's failure in a generation is recorded under {@code scope}, one small object per consumer
+     *  name - read by the task that drove the pass to report it, cleared when a later generation reaches the
+     *  consumer again. */
+    public static String failedSpace(String scope) {
+        return "walks/" + scope + "/failed";
+    }
 
     /** A consumer's failure in a generation: which consumer, in which generation, on which key (or {@code null}
      *  for a pass hook), and what it threw. */
@@ -107,12 +113,17 @@ public final class RebuildPass {
         }
     }
 
-    /** Every consumer recorded as failed, whatever the generation - a listing of {@link #FAILED_SPACE}, bounded by
-     *  the number of consumers, never by the store. */
+    /** Every consumer recorded as failed under the default scope, whatever the generation. */
     public static List<Failed> failed(ArtifactStore store) throws IOException {
+        return failed(store, CONSUMER);
+    }
+
+    /** Every consumer recorded as failed under {@code scope}, whatever the generation - a listing of one small
+     *  space, bounded by the number of consumers, never by the store. */
+    public static List<Failed> failed(ArtifactStore store, String scope) throws IOException {
         List<Failed> failed = new ArrayList<>();
-        for (String name : store.list(FAILED_SPACE)) {
-            store.readVersioned(FAILED_SPACE + "/" + name)
+        for (String name : store.list(failedSpace(scope))) {
+            store.readVersioned(failedSpace(scope) + "/" + name)
                     .ifPresent(body -> failed.add(Failed.decode(name, body.content())));
         }
         return failed;
@@ -203,6 +214,16 @@ public final class RebuildPass {
      */
     public static Optional<WalkPass> run(ArtifactWalk walk, ArtifactStore store, Publication publication,
                                          Roots roots, List<WalkConsumer> consumers) throws IOException {
+        return run(walk, store, publication, roots, consumers, CONSUMER);
+    }
+
+    /**
+     * As {@link #run(ArtifactWalk, ArtifactStore, Publication, Roots, List)} under the pass scope {@code scope}
+     * ({@code walks/<scope>/...}): a deployment that schedules several walks, each with its own consumers, gives
+     * each its own scope, so two walks never join one another's generation and deliver to the wrong consumers.
+     */
+    public static Optional<WalkPass> run(ArtifactWalk walk, ArtifactStore store, Publication publication,
+                                         Roots roots, List<WalkConsumer> consumers, String scope) throws IOException {
         if (consumers.isEmpty()) {
             return Optional.empty();
         }
@@ -222,8 +243,9 @@ public final class RebuildPass {
             throw new IllegalArgumentException("no root to walk: the consumers listen on " + listening.keySet()
                     + " and the deployment names no root for any of them");
         }
-        Delivery delivery = new Delivery(walk, store, publication, List.copyOf(consumers), listening, familyByRoot);
-        WalkPass pass = walk.walk(store, CONSUMER, List.copyOf(familyByRoot.keySet()), delivery);
+        Delivery delivery = new Delivery(walk, store, publication, List.copyOf(consumers), listening, familyByRoot,
+                scope);
+        WalkPass pass = walk.walk(store, scope, List.copyOf(familyByRoot.keySet()), delivery);
         if (pass.complete()) {
             delivery.started(pass);
             for (WalkConsumer consumer : consumers) {
@@ -277,6 +299,7 @@ public final class RebuildPass {
         private final List<WalkConsumer> consumers;
         private final Map<WalkConsumer.Family, List<WalkConsumer>> listening;
         private final Map<String, WalkConsumer.Family> familyByRoot;
+        private final String scope;
         /** The consumers that failed in this generation on this worker: delivered nothing more, recorded durably. */
         private final Set<WalkConsumer> dropped = new HashSet<>();
         private long generation = -1L;
@@ -284,13 +307,14 @@ public final class RebuildPass {
 
         private Delivery(ArtifactWalk walk, ArtifactStore store, Publication publication,
                          List<WalkConsumer> consumers, Map<WalkConsumer.Family, List<WalkConsumer>> listening,
-                         Map<String, WalkConsumer.Family> familyByRoot) {
+                         Map<String, WalkConsumer.Family> familyByRoot, String scope) {
             this.walk = walk;
             this.store = store;
             this.names = new ServableNames(store, publication);
             this.consumers = consumers;
             this.listening = listening;
             this.familyByRoot = familyByRoot;
+            this.scope = scope;
         }
 
         /** The family a walked key belongs to, by the longest root that prefixes it. */
@@ -315,7 +339,7 @@ public final class RebuildPass {
             generation = pass.generation();
             for (WalkConsumer consumer : consumers) {
                 // A failure recorded for an earlier generation is over: this generation reaches the consumer whole.
-                String marker = FAILED_SPACE + "/" + consumer.name();
+                String marker = failedSpace(scope) + "/" + consumer.name();
                 Optional<ArtifactStore.Versioned> recorded = store.readVersioned(marker);
                 if (recorded.isPresent()
                         && Failed.decode(consumer.name(), recorded.get().content()).generation() < generation) {
@@ -351,7 +375,7 @@ public final class RebuildPass {
                 handoff.to(consumer);
             } catch (IOException | RuntimeException failure) {
                 dropped.add(consumer);
-                store.write(FAILED_SPACE + "/" + consumer.name(),
+                store.write(failedSpace(scope) + "/" + consumer.name(),
                         new ByteArrayInputStream(new Failed(consumer.name(), generation, key, failure.toString())
                                 .encoded()));
             }
@@ -399,7 +423,7 @@ public final class RebuildPass {
             }
             if (family != WalkConsumer.Family.POINTERS) {
                 if (!started) {
-                    started(walk.pass(store, CONSUMER)
+                    started(walk.pass(store, scope)
                             .orElseThrow(() -> new IOException("no rebuild pass to deliver under")));
                 }
                 WalkConsumer.Walked entry = new WalkConsumer.Walked(family, key, size, store);
@@ -430,7 +454,7 @@ public final class RebuildPass {
             // alone does - a hash withheld is withheld wherever it is served, whatever the layout that names it.
             boolean held = key.startsWith("publish/") ? withheld(path, named) : Withheld.is(store, named);
             if (!started) {
-                started(walk.pass(store, CONSUMER)
+                started(walk.pass(store, scope)
                         .orElseThrow(() -> new IOException("no rebuild pass to deliver under")));
             }
             ArtifactDescriptor artifact = new ArtifactDescriptor(null, null, null, path, null, false, named,

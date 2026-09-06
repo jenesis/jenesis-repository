@@ -68,4 +68,17 @@ class RequestsTest {
         assertThat(RunningMarker.boot(store, "host.example/with:odd chars")).as("an id is reduced to a key segment")
                 .isFalse();
     }
+
+    @Test
+    void a_request_not_before_a_moment_is_not_due_until_then() throws IOException {
+        Instant later = Instant.now().plusSeconds(3600);
+        Requests.request(store, "probe", "the pass failed; retried in an hour", later);
+        Requests.Request request = Requests.pending(store, "probe").orElseThrow();
+        assertThat(request.due(Instant.now())).as("a retry stands but is not due").isFalse();
+        assertThat(request.due(later)).isTrue();
+        assertThat(request.notBefore()).isEqualTo(later);
+        Requests.request(store, "probe", "an operator asked now");
+        assertThat(Requests.pending(store, "probe").orElseThrow().due(Instant.now()))
+                .as("a plain request is due at once and supersedes the retry").isTrue();
+    }
 }

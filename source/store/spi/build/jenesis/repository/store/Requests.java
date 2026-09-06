@@ -25,22 +25,30 @@ public final class Requests {
     private static final Pattern SUBJECT = Pattern.compile("[A-Za-z0-9_-]+");
     private static final AtomicReference<ArtifactStore> ROOT = new AtomicReference<>();
 
-    /** One standing request: for what, why, and since when. */
-    public record Request(String subject, String reason, Instant at) {
+    /** One standing request: for what, why, since when, and - for a retry rather than a need - not before when. */
+    public record Request(String subject, String reason, Instant at, Instant notBefore) {
+
+        /** Whether the request may be acted on at {@code now}. */
+        public boolean due(Instant now) {
+            return !notBefore.isAfter(now);
+        }
 
         byte[] encoded() {
-            return (at + "\n" + reason).getBytes(StandardCharsets.UTF_8);
+            return (at + "\n" + notBefore + "\n" + reason).getBytes(StandardCharsets.UTF_8);
         }
 
         static Request decode(String subject, byte[] body) {
-            String[] lines = new String(body, StandardCharsets.UTF_8).split("\n", 2);
-            Instant at;
+            String[] lines = new String(body, StandardCharsets.UTF_8).split("\n", 3);
+            Instant at = instant(lines, 0, Instant.EPOCH);
+            return new Request(subject, lines.length > 2 ? lines[2] : "", at, instant(lines, 1, at));
+        }
+
+        private static Instant instant(String[] lines, int index, Instant fallback) {
             try {
-                at = Instant.parse(lines[0].trim());
+                return lines.length > index ? Instant.parse(lines[index].trim()) : fallback;
             } catch (DateTimeParseException _) {
-                at = Instant.EPOCH;
+                return fallback;
             }
-            return new Request(subject, lines.length > 1 ? lines[1] : "", at);
         }
     }
 
@@ -49,8 +57,17 @@ public final class Requests {
 
     /** Ask for {@code subject}'s work on {@code root}, for {@code reason}; a standing request is overwritten. */
     public static void request(ArtifactStore root, String subject, String reason) throws IOException {
+        request(root, subject, reason, Instant.now());
+    }
+
+    /** As {@link #request(ArtifactStore, String, String)}, to be acted on no earlier than {@code notBefore} - the
+     *  shape of a retry: a pass that failed asks for itself again, an hour on, rather than at once and forever. */
+    public static void request(ArtifactStore root, String subject, String reason, Instant notBefore)
+            throws IOException {
+        Instant now = Instant.now();
         root.write(key(subject), new ByteArrayInputStream(
-                new Request(subject, reason == null ? "" : reason, Instant.now()).encoded()));
+                new Request(subject, reason == null ? "" : reason, now, notBefore == null ? now : notBefore)
+                        .encoded()));
     }
 
     /** The standing request for {@code subject}, if any. */
