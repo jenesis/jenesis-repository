@@ -67,13 +67,26 @@ public final class FaultInjectingStore implements ArtifactStore {
      *  already handed - so the arrangement follows the deployment instead of forty-six signatures. */
     private volatile ChoreographyMutant choreography = ChoreographyMutant.NONE;
 
-    private FaultInjectingStore(ArtifactStore delegate) {
+    /** Non-null for a {@link #peer}: the identity this wrapper answers instead of the delegate's. */
+    private final Object peer;
+
+    private FaultInjectingStore(ArtifactStore delegate, Object peer) {
         this.delegate = delegate;
+        this.peer = peer;
     }
 
-    /** Wrap a delegate store; with no fault armed this is a transparent pass-through. */
+    /** Wrap a delegate store; with no fault armed this is a transparent pass-through, and it {@linkplain #identity()
+     *  is the same store} as the delegate - what a node holds pending for the delegate (a deferred counter delta, a
+     *  cache entry) it holds for the wrapper too. */
     public static FaultInjectingStore wrap(ArtifactStore delegate) {
-        return new FaultInjectingStore(delegate);
+        return new FaultInjectingStore(delegate, null);
+    }
+
+    /** Wrap a delegate store as <em>another node</em> over the same bytes: an identity of its own, so nothing this
+     *  process keeps per store identity - a deferred counter delta, a cache entry, a single-flight lane - is shared
+     *  with the delegate. For a test that simulates a peer's write landing between this node's read and write. */
+    public static FaultInjectingStore peer(ArtifactStore delegate) {
+        return new FaultInjectingStore(delegate, new Object());
     }
 
     /** Run every publication built over this store - or over a scope of it - under {@code mutant}'s arranged
@@ -298,6 +311,13 @@ public final class FaultInjectingStore implements ArtifactStore {
         return intercept(Op.LIST, prefix) != null ? List.of() : delegate.list(prefix);
     }
 
+    /** A decorator answers its delegate's identity, so a deferred counter delta or a listing writer queue keyed by
+     *  it is one key across the wrapped and the bare view of the same store. */
+    @Override
+    public Object identity() {
+        return peer != null ? peer : delegate.identity();
+    }
+
     @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         // The paging primitive is forwarded, as a decorator must: left to the SPI's fallback it would page by listing
@@ -442,6 +462,11 @@ public final class FaultInjectingStore implements ArtifactStore {
         public List<String> list(String prefix) {
             // As on the outer store: an armed LIST fault is a silent empty listing, the SPI's absent-container shape.
             return intercept(Op.LIST, prefix) != null ? List.of() : scoped.list(prefix);
+        }
+
+        @Override
+        public Object identity() {
+            return peer != null ? List.of(peer, scoped.identity()) : scoped.identity();
         }
 
         @Override
