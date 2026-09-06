@@ -558,6 +558,16 @@ public final class WalkConsumerContract {
         }
 
         @Override
+        public String description() {
+            return delegate.description();
+        }
+
+        @Override
+        public List<String> settings() {
+            return delegate.settings();
+        }
+
+        @Override
         public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
             events.add("retained");
             delegate.onRetained(artifact, store);

@@ -349,6 +349,36 @@ class RebuildPassTest {
     }
 
     @Test
+    void a_completed_pass_records_what_it_delivered_per_family() throws IOException {
+        ArtifactStore store = store("measured");
+        publish(store, "/npm/left-pad-1.0.tgz", "left pad");
+        publish(store, "/npm/right-pad-1.0.tgz", "right pad");
+        store.writeVersioned("published/npm/left-pad/1.0", "row".getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("pinned/npm/left-pad/1.0", "".getBytes(StandardCharsets.UTF_8), null);
+        RebuildPass.Roots roots = new RebuildPass.Roots(List.of("publish"), List.of("published"), List.of("blobs"),
+                List.of("pinned"));
+        assertThat(RebuildPass.last(store)).as("no pass has completed").isEmpty();
+
+        Optional<WalkPass> pass = RebuildPass.run(walk(), store, new Publication(store), roots,
+                List.of(new Listener(false, Family.POINTERS), new Listener(false, Family.INVENTORY),
+                        new Listener(false, Family.BLOBS)));
+
+        assertThat(RebuildPass.last(store)).hasValueSatisfying(measured -> {
+            assertThat(measured.generation()).isEqualTo(pass.orElseThrow().generation());
+            assertThat(measured.started()).isEqualTo(pass.orElseThrow().started());
+            assertThat(measured.completed()).isAfterOrEqualTo(measured.started());
+            assertThat(measured.pointers()).as("two served pointers").isEqualTo(2);
+            assertThat(measured.inventory()).as("one row").isEqualTo(1);
+            assertThat(measured.blobs()).as("two blobs").isEqualTo(2);
+            assertThat(measured.derived()).as("nobody listened on the derived rows, so they were not walked")
+                    .isZero();
+            assertThat(measured.objects()).isEqualTo(5);
+        });
+        assertThat(store.list("walks/" + RebuildPass.CONSUMER + "/counted"))
+                .as("the generation's counters are folded into the account and gone").isEmpty();
+    }
+
+    @Test
     void a_withheld_pointer_reaches_only_a_consumer_that_asked_to_see_it() throws IOException {
         ArtifactStore store = store("withheld");
         publish(store, "/npm/served-1.0.tgz", "served");

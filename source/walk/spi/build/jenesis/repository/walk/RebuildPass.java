@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
@@ -84,6 +85,62 @@ public final class RebuildPass {
 
     /** Where a consumer's failure in a generation is recorded under the default scope - see {@link #failedSpace}. */
     public static final String FAILED_SPACE = failedSpace(CONSUMER);
+
+    /** Where the last completed pass under {@code scope} recorded what it delivered - see {@link #last}. */
+    public static String measuredKey(String scope) {
+        return "walks/" + scope + "/last";
+    }
+
+    /** Where the workers of a generation fold the objects they delivered, one counter per family. */
+    private static String countedKey(String scope, long generation, WalkConsumer.Family family) {
+        return "walks/" + scope + "/counted/" + generation + "/" + family.name().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * What the last completed pass under a scope delivered: its generation, when it started and completed, and the
+     * objects it handed over per family, summed over every worker that took part. This is the pass's own account
+     * of its cost in objects; what the store charged for them is the deployment's to measure around the pass.
+     */
+    public record Measured(long generation, Instant started, Instant completed, long pointers, long inventory,
+                           long blobs, long derived) {
+
+        /** The objects delivered in family {@code family}. */
+        public long objects(WalkConsumer.Family family) {
+            return switch (family) {
+                case POINTERS -> pointers;
+                case INVENTORY -> inventory;
+                case BLOBS -> blobs;
+                case DERIVED -> derived;
+            };
+        }
+
+        /** Every family's objects, summed. */
+        public long objects() {
+            return pointers + inventory + blobs + derived;
+        }
+
+        byte[] encoded() {
+            return (generation + "\n" + started + "\n" + completed + "\n" + pointers + "\n" + inventory + "\n"
+                    + blobs + "\n" + derived + "\n").getBytes(StandardCharsets.UTF_8);
+        }
+
+        static Measured decode(byte[] content) {
+            String[] lines = new String(content, StandardCharsets.UTF_8).split("\n");
+            return new Measured(Long.parseLong(lines[0]), Instant.parse(lines[1]), Instant.parse(lines[2]),
+                    Long.parseLong(lines[3]), Long.parseLong(lines[4]), Long.parseLong(lines[5]),
+                    Long.parseLong(lines[6]));
+        }
+    }
+
+    /** {@link #last(ArtifactStore, String)} under the default scope. */
+    public static Optional<Measured> last(ArtifactStore store) throws IOException {
+        return last(store, CONSUMER);
+    }
+
+    /** What the last completed pass under {@code scope} delivered, or empty when none has completed. */
+    public static Optional<Measured> last(ArtifactStore store, String scope) throws IOException {
+        return store.readVersioned(measuredKey(scope)).map(versioned -> Measured.decode(versioned.content()));
+    }
 
     /** Where a consumer's failure in a generation is recorded under {@code scope}, one small object per consumer
      *  name - read by the task that drove the pass to report it, cleared when a later generation reaches the
@@ -246,6 +303,7 @@ public final class RebuildPass {
         Delivery delivery = new Delivery(walk, store, publication, List.copyOf(consumers), listening, familyByRoot,
                 scope);
         WalkPass pass = walk.walk(store, scope, List.copyOf(familyByRoot.keySet()), delivery);
+        delivery.counted(pass);
         if (pass.complete()) {
             delivery.started(pass);
             for (WalkConsumer consumer : consumers) {
@@ -253,8 +311,22 @@ public final class RebuildPass {
                 // runtime failure is the only shape there is to contain here.
                 delivery.attributed(consumer, null, delivered -> delivered.onPassCompleted(pass, store));
             }
+            measured(store, scope, pass);
         }
         return Optional.of(pass);
+    }
+
+    /** The worker that observed the pass complete writes its account: every worker's counters, summed. */
+    private static void measured(ArtifactStore store, String scope, WalkPass pass) throws IOException {
+        long[] objects = new long[WalkConsumer.Family.values().length];
+        for (WalkConsumer.Family family : WalkConsumer.Family.values()) {
+            objects[family.ordinal()] = new StoredCounter(store, countedKey(scope, pass.generation(), family)).read();
+        }
+        store.write(measuredKey(scope), new ByteArrayInputStream(new Measured(pass.generation(), pass.started(),
+                Instant.now(), objects[0], objects[1], objects[2], objects[3]).encoded()));
+        for (WalkConsumer.Family family : WalkConsumer.Family.values()) {
+            new StoredCounter(store, countedKey(scope, pass.generation(), family)).delete();
+        }
     }
 
     /** Validate and normalise the caller's pointer roots: at least one, and never one of the store namespaces the
@@ -304,6 +376,8 @@ public final class RebuildPass {
         private final Set<WalkConsumer> dropped = new HashSet<>();
         private long generation = -1L;
         private boolean started;
+        /** The objects this worker handed over, per family, folded into the generation's counters at the end. */
+        private final long[] delivered = new long[WalkConsumer.Family.values().length];
 
         private Delivery(ArtifactWalk walk, ArtifactStore store, Publication publication,
                          List<WalkConsumer> consumers, Map<WalkConsumer.Family, List<WalkConsumer>> listening,
@@ -315,6 +389,18 @@ public final class RebuildPass {
             this.listening = listening;
             this.familyByRoot = familyByRoot;
             this.scope = scope;
+        }
+
+        /** Fold what this worker delivered into the generation's counters, so the account the completing worker
+         *  writes sums every worker; a worker that delivered nothing writes nothing. */
+        private void counted(WalkPass pass) throws IOException {
+            for (WalkConsumer.Family family : WalkConsumer.Family.values()) {
+                if (delivered[family.ordinal()] > 0) {
+                    new StoredCounter(store, countedKey(scope, pass.generation(), family))
+                            .add(delivered[family.ordinal()]);
+                    delivered[family.ordinal()] = 0;
+                }
+            }
         }
 
         /** The family a walked key belongs to, by the longest root that prefixes it. */
@@ -427,6 +513,7 @@ public final class RebuildPass {
                             .orElseThrow(() -> new IOException("no rebuild pass to deliver under")));
                 }
                 WalkConsumer.Walked entry = new WalkConsumer.Walked(family, key, size, store);
+                delivered[family.ordinal()]++;
                 for (WalkConsumer consumer : listening.get(family)) {
                     attributed(consumer, key, delivered -> delivered.onWalked(entry, store));
                 }
@@ -459,6 +546,7 @@ public final class RebuildPass {
             }
             ArtifactDescriptor artifact = new ArtifactDescriptor(null, null, null, path, null, false, named,
                     store.size("blobs/" + named));
+            delivered[WalkConsumer.Family.POINTERS.ordinal()]++;
             for (WalkConsumer consumer : listening.get(WalkConsumer.Family.POINTERS)) {
                 if (held) {
                     // Withheld from serving - a GET would 404 it, so a rebuild of a served view must not reinstate
