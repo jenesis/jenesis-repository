@@ -9,6 +9,7 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Names;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.ArtifactWalk;
@@ -91,8 +92,6 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
 
     private static final String CONDEMNED = "gc/condemned";
 
-    /** Names fetched per {@link ArtifactStore#page} call when streaming the marker space. */
-    private static final int PAGE = 1000;
 
     /** A pointer names a hash in a few dozen bytes; a larger leaf is other metadata and is never read whole. */
     private static final int LARGEST_POINTER = 1024;
@@ -672,19 +671,12 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
         void accept(String name) throws IOException;
     }
 
-    /** Stream every immediate child name under {@code prefix} through {@code action}, paged - never one list. */
+    /** Stream every immediate child name under {@code prefix} through {@code action}, pulled over the store's pages at
+     *  the drain width - never one list. */
     private static void each(ArtifactStore store, String prefix, NameAction action) throws IOException {
-        String after = "";
-        while (true) {
-            List<String> names = new ArrayList<>();
-            store.page(prefix, after, PAGE, names::add);
-            for (String name : names) {
-                action.accept(name);
-            }
-            if (names.size() < PAGE) {
-                return;
-            }
-            after = names.getLast();
+        Names names = Names.over(store, prefix);
+        for (String name = names.next(); name != null; name = names.next()) {
+            action.accept(name);
         }
     }
 }

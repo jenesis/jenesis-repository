@@ -18,6 +18,11 @@ import module java.base;
  * <p>The quota decorator and the subtree-size observer each wrote this - the same parse, the same floor, the same
  * {@link Retries#tryUpdate}, the same warning shape - and the observer's javadoc said "exactly as the quota does" three
  * times over. One class, one test.
+ *
+ * <p>A pass cadence is this counter too: a task that reconciles every {@code n}th pass reads {@code read() + 1 >= n},
+ * {@code add(1)}s on an incremental pass and {@code set(0)}s after the full one. That used to be a second class,
+ * {@code PassCounter}, with the same key, the same decimal body and a plain read-then-write where this one
+ * compare-and-sets; a lost race there cost at most one pass of cadence, which the compare-and-set costs never.
  */
 public final class StoredCounter {
 
