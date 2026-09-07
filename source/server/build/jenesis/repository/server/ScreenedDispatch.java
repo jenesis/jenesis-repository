@@ -104,7 +104,7 @@ public final class ScreenedDispatch {
                     // An opaque format-SPI layout: RepositoryFormat.handle writes the format's own namespace and its
                     // response, so it links its own serving pointer inside this callback rather than declaring it.
                     // The ingress census asserts the pointer-last ordering behaviourally for this shape.
-                    format.handle(new RestreamExchange(exchange, accepted::open), store);
+                    format.handle(new RestreamExchange(exchange, accepted), store);
                     return Publication.Visibility.laidOut();
                 });
         switch (commit.disposition()) {
