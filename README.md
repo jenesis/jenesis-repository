@@ -39,8 +39,8 @@ JENREG_AUTH=false JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
 
 The server discovers whatever is on its module path at startup, so a narrower deployment is a launcher
 whose `requires` name only the modules it should speak. Authentication is enforced by default; a real
-deployment starts from `JENREG_BOOTSTRAP_KEY` (a well-formed `jenk_<tenant>.<secret><checksum>` key the
-server provisions at boot) and issues its keys through `/api/credentials`, while `JENREG_AUTH=false` is the
+deployment starts from `JENREG_BOOTSTRAP_KEY` (a well-formed `jenk_<tenant>.<secret><checksum>` key that
+`java -Djenesis.execute.module=source+server-spi build/jenesis/Execute.java` mints and the server provisions at boot) and issues its keys through `/api/credentials`, while `JENREG_AUTH=false` is the
 shortcut for local work. **The web console runs in that same process**, on the same port: the launcher
 above scans it in, so `/` and `/console` are served beside the repository's own routes. It used to be a
 second entry point on port 8081, which is why an older reading of this file describes one. The `dev`

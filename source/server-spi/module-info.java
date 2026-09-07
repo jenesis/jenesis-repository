@@ -20,6 +20,11 @@
  * clauses for them sit in this module; the server {@code requires transitive} this module, so every existing
  * {@code requires build.jenesis.repository.server} consumer still sees the moved types unchanged.
  *
+ * <p>It is also launchable, for the one program the credential model needs outside a server: {@code MintKey} prints a
+ * well-formed key for a tenant, which is how a deployment's bootstrap key comes to exist
+ * ({@code java -Djenesis.execute.module=source+server-spi build/jenesis/Execute.java [tenant]}).
+ *
+ * @jenesis.main build.jenesis.repository.server.spi.MintKey
  * @jenesis.release 25
  * @jenesis.pin com.github.ben-manes.caffeine/caffeine 3.2.4 SHA-256/9d9d2cfd681fd9272ded3d27c9930db12f89f732345975aa113ebc223bbf1224
  * @jenesis.pin com.google.errorprone/error_prone_annotations 2.49.0 SHA-256/3b1003e51b8ae56fdbd7c71073e81d1683b97e6c4dff5a9151164d59b769d13c
