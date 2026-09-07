@@ -65,4 +65,27 @@ class StoredCounterTest {
         assertThat(new StoredCounter(store, "quota/used").read()).as("the last landed total stands").isEqualTo(100);
         assertThat(losing.calls(FaultInjectingStore.Op.WRITE_VERSIONED)).isEqualTo(Retries.COMPARE_AND_SET);
     }
+
+    @Test
+    void deferred_deltas_are_counted_at_once_here_and_written_as_one_compare_and_set_per_flush() throws IOException {
+        StoredCounter counter = new StoredCounter(store, "quota/used");
+        counter.set(100);
+        FaultInjectingStore counting = FaultInjectingStore.wrap(store);
+        StoredCounter deferred = new StoredCounter(counting, "quota/used");
+        for (int delta = 1; delta <= 5; delta++) {
+            deferred.addLater(delta);
+        }
+        assertThat(deferred.read()).as("this node counts what it has not written yet").isEqualTo(115);
+        assertThat(counting.calls(FaultInjectingStore.Op.WRITE_VERSIONED)).as("nothing written before the flush").isZero();
+        assertThat(new StoredCounter(FaultInjectingStore.peer(store), "quota/used").read())
+                .as("another node - a store of another identity - sees the stored value only").isEqualTo(100);
+        assertThat(StoredCounter.flushNow()).isGreaterThanOrEqualTo(1);
+        assertThat(counting.calls(FaultInjectingStore.Op.WRITE_VERSIONED)).as("five deltas, one compare-and-set").isEqualTo(1);
+        assertThat(new StoredCounter(store, "quota/used").read()).isEqualTo(115);
+        deferred.addLater(-15);
+        deferred.set(50);
+        StoredCounter.flushNow();
+        assertThat(new StoredCounter(store, "quota/used").read()).as("a recompute supersedes a pending delta").isEqualTo(50);
+    }
+
 }

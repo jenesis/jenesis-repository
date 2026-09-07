@@ -57,6 +57,13 @@ public interface WalkConsumerFixture {
      *  formats declare). Never {@code blobs}, {@code gc} or {@code walks} - {@link RebuildPass} refuses those. */
     List<String> pointerRoots();
 
+    /** The roots of every family the consumer listens on, keyed by family - the pointer roots alone by default. A
+     *  fixture for a consumer on the inventory rows or the blob pool names those roots and seeds members under them
+     *  in {@link #seed}, counting each seeded member in the corpus's deliveries. */
+    default Map<WalkConsumer.Family, List<String>> familyRoots() {
+        return Map.of(WalkConsumer.Family.POINTERS, pointerRoots());
+    }
+
     /** The store key prefixes this consumer may write under. The kit walks the store after a pass and fails on any key
      *  the pass created outside them (or outside the walk's own {@code walks/} pass state), so "the consumer stayed in
      *  its own namespace" is a statement about the store rather than about intent. */

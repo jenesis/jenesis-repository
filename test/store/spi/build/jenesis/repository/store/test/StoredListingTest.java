@@ -186,7 +186,7 @@ class StoredListingTest {
         StoredListing.put(store, lines("raced"), "a", "a 1".getBytes());
         // A second node's write between this node's read and write: simulated by a store whose identity differs
         // (the wrapper's own, so no lane is shared) writing straight through the same root.
-        ArtifactStore other = FaultInjectingStore.wrap(store);
+        ArtifactStore other = FaultInjectingStore.peer(store);
         assertThat(other.identity()).isNotEqualTo(store.identity());
         StoredListing.Generator.Materialising racing = () -> {
             StoredListing.put(other, lines("raced"), "z", "z 26".getBytes());

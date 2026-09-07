@@ -162,11 +162,12 @@ public class GcsConditionalWriteTest {
 
     @Test
     public void an_absent_bucket_is_an_error_not_a_lost_compare_and_set() {
-        // A missing or renamed bucket must surface, or the caller's retry loop turns an outage into silent exhaustion.
-        ArtifactStore gone = ArtifactStoreProvider.resolve("gcs", JsonGcs.settings(server.port(), "gone")::get);
-        assertThatThrownBy(() -> gone.writeVersioned("config/x", "x".getBytes(StandardCharsets.UTF_8), null))
-                .isInstanceOf(IOException.class)
-                .hasMessageContaining("gone");
+        // A missing or renamed bucket must surface, or the caller's retry loop turns an outage into silent exhaustion -
+        // and since the provider probes its endpoint at boot, it surfaces there, naming the bucket, before any caller.
+        assertThatThrownBy(() -> ArtifactStoreProvider.resolve("gcs", JsonGcs.settings(server.port(), "gone")::get))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("gone")
+                .cause().isInstanceOf(IOException.class).hasMessageContaining("gone");
     }
 
     @Test

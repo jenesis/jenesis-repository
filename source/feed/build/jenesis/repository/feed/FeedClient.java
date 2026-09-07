@@ -233,7 +233,7 @@ public final class FeedClient {
      * <p>What happens at each outcome is the whole point of the method:
      * <ul>
      * <li><b>Complete fetch</b> - the body is written, the pointer moves by compare-and-set, and the answer carries
-     *     the new {@link FeedSnapshots.Stamp}, whose fetch instant and snapshot were committed by that one write.</li>
+     *     the new {@link FeedSnapshots.Refresh}, whose fetch instant and snapshot were committed by that one write.</li>
      * <li><b>Any incomplete fetch</b> (a cap, a bad status, the deadline, an exhausted retry budget) - <em>nothing</em>
      *     is committed. The prior-good snapshot and its fetch instant stand untouched; only {@code nextRefreshAt} is
      *     pushed out by {@link FeedPolicy#retryInterval()} so the failure is retried rather than hammered. The failure
@@ -245,7 +245,7 @@ public final class FeedClient {
      * @param first     the first request of the catalogue download.
      * @param reader    yields the reduced catalogue to persist; bounded by {@link FeedPolicy#maxSnapshotBytes()}.
      */
-    public Answer<FeedSnapshots.Stamp> refresh(FeedSnapshots snapshots,
+    public Answer<FeedSnapshots.Refresh> refresh(FeedSnapshots snapshots,
                                                FeedRequest first,
                                                Supplier<? extends Reader<byte[]>> reader) throws FeedException {
         Objects.requireNonNull(snapshots, "snapshots");

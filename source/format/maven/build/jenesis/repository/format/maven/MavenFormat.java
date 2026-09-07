@@ -269,12 +269,39 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return hash;
     }
 
-    /** The module name the content-addressed blob {@code hash} declares, or null when the blob is gone or the jar is
-     *  non-modular - the single read the layout cross-link and its rebuild share, so both act on the same module. */
+    /** The reverse index the module name is recorded under, by blob hash ({@code by/module/<hash>}): one small object
+     *  beside the jar, written when the name is first read - at publish by the cross-link, or by the first rebuild
+     *  pass over a repository from before the record - so a pass reads it rather than opening every jar in the
+     *  repository. {@code by/} is the free core's space for reverse indexes by content hash; a collected blob's record
+     *  is left behind, a few bytes that cost nothing to keep and a listing to find. */
+    public static final String MODULE_INDEX = "by/module";
+
+    /**
+     * The module name the content-addressed blob {@code hash} declares, or null when the blob is gone or the jar is
+     * non-modular - the single read the layout cross-link and its rebuild share, so both act on the same module.
+     *
+     * <p>Read from {@link #MODULE_INDEX} when it has been recorded, else out of the jar and then recorded, an empty
+     * body standing for a non-modular jar so it is not opened again either. The rebuild pass used to open every
+     * Maven jar in the repository on every pass for this one string - a full GET of the artifact bytes per jar per
+     * day. A store that refuses the record (read-only) still answers the name; it just pays the jar again next time.
+     */
     static String moduleName(ArtifactStore store, String hash) throws IOException {
-        try (InputStream in = store.open("blobs/" + hash)) {
-            return JavaLayout.moduleName(in);
+        Optional<ArtifactStore.Versioned> recorded = store.readVersioned(MODULE_INDEX + "/" + hash);
+        if (recorded.isPresent()) {
+            String name = new String(recorded.get().content(), StandardCharsets.UTF_8).trim();
+            return name.isEmpty() ? null : name;
         }
+        String name;
+        try (InputStream in = store.open("blobs/" + hash)) {
+            name = JavaLayout.moduleName(in);
+        }
+        try {
+            store.write(MODULE_INDEX + "/" + hash,
+                    new ByteArrayInputStream((name == null ? "" : name).getBytes(StandardCharsets.UTF_8)));
+        } catch (IOException | RuntimeException unrecordable) {
+            // A read-only store, or a store that refused the small write: the name is still the jar's, only unrecorded.
+        }
+        return name;
     }
 
     @Override

@@ -100,7 +100,16 @@ public final class WalkConsumerContract {
         /** A failed pass is left resumable and visibly incomplete: {@code ArtifactWalk.pass} still reports it active
          *  and its segment carries the cursor it reached, so a stuck rebuild is legible instead of looking done
          *  (gate 4, clause 6). */
-        A_FAILED_PASS_IS_RESUMABLE_NEVER_SILENTLY_COMPLETE
+        A_FAILED_PASS_IS_RESUMABLE_NEVER_SILENTLY_COMPLETE,
+        /** A withheld pointer reaches a consumer that asked to see withheld pointers through {@code onWithheld}, and
+         *  reaches no other consumer at all (clause 14). Judged with two kit probes riding the same pass beside the
+         *  consumer under test - one asking, one not - so the property bites whatever the fixture's consumer
+         *  declares. */
+        A_WITHHELD_POINTER_REACHES_ONLY_A_CONSUMER_THAT_ASKED,
+        /** A consumer that throws fails alone (clause 6): the pass completes for every other consumer, the failure
+         *  is recorded durably with its generation and key, and the next generation redelivers everything to the
+         *  one that failed. Judged with a kit consumer that throws, riding beside the consumer under test. */
+        A_FAILING_CONSUMER_FAILS_ALONE
     }
 
     /**
@@ -183,6 +192,12 @@ public final class WalkConsumerContract {
         checks.add(new Check(Property.A_FAILED_PASS_IS_RESUMABLE_NEVER_SILENTLY_COMPLETE,
                 "a failed pass stays active and resumable rather than reporting itself complete",
                 WalkConsumerContract::aFailedPassIsResumableNeverSilentlyComplete));
+        checks.add(new Check(Property.A_WITHHELD_POINTER_REACHES_ONLY_A_CONSUMER_THAT_ASKED,
+                "a withheld pointer reaches only a consumer that asked to see withheld pointers",
+                WalkConsumerContract::aWithheldPointerReachesOnlyAConsumerThatAsked));
+        checks.add(new Check(Property.A_FAILING_CONSUMER_FAILS_ALONE,
+                "a consumer that throws fails alone, is recorded, and is redelivered whole by the next generation",
+                WalkConsumerContract::aFailingConsumerFailsAlone));
         return List.copyOf(checks);
     }
 
@@ -483,7 +498,7 @@ public final class WalkConsumerContract {
         Instrumented worker = new Instrumented(fixture.create(), store, point, corpus.deliveries(),
                 harness.checkpoint(), pointers(fixture));
         try {
-            worker.observed(RebuildPass.run(harness.walk(), store, fixture.pointerRoots(), List.of(worker)));
+            worker.observed(RebuildPass.run(harness.walk(), store, roots(fixture), List.of(worker)));
         } catch (Throwable failure) {
             worker.failure = failure;
         }
@@ -516,7 +531,7 @@ public final class WalkConsumerContract {
             this.pointers = pointers;
             if (point == CrashPoint.BEFORE_THE_FIRST_DELIVERY) {
                 // The first pointer's own metadata read fails, before the pass has told the consumer anything at all.
-                store.failNextOn(FaultInjectingStore.Op.SIZE, pointers);
+                store.failNextOn(FaultInjectingStore.Op.READ_VERSIONED, pointers);
             }
         }
 
@@ -533,9 +548,45 @@ public final class WalkConsumerContract {
         }
 
         @Override
+        public Set<Family> families() {
+            return delegate.families();
+        }
+
+        @Override
+        public boolean seesWithheld() {
+            return delegate.seesWithheld();
+        }
+
+        @Override
+        public String description() {
+            return delegate.description();
+        }
+
+        @Override
+        public List<String> settings() {
+            return delegate.settings();
+        }
+
+        @Override
         public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
             events.add("retained");
             delegate.onRetained(artifact, store);
+            deliveries++;
+            arm();
+        }
+
+        @Override
+        public void onWithheld(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
+            events.add("withheld");
+            delegate.onWithheld(artifact, store);
+            deliveries++;
+            arm();
+        }
+
+        @Override
+        public void onWalked(Walked entry, ArtifactStore store) throws IOException {
+            events.add("walked");
+            delegate.onWalked(entry, store);
             deliveries++;
             arm();
         }
@@ -547,21 +598,22 @@ public final class WalkConsumerContract {
         }
 
         @Override
-        public void onPassStarted(WalkPass pass) {
+        public void onPassStarted(WalkPass pass, ArtifactStore store) {
             events.add("started");
             generation = pass.generation();
-            delegate.onPassStarted(pass);
+            delegate.onPassStarted(pass, store);
         }
 
         @Override
-        public void onPassCompleted(WalkPass pass) {
+        public void onPassCompleted(WalkPass pass, ArtifactStore store) {
             events.add("completed");
             if (point == CrashPoint.AT_PASS_COMPLETION) {
                 // The process dies in the pass-completion window - before the consumer commits, which for a snapshot
-                // rebuilder is the only moment it ever writes.
-                throw new UncheckedIOException(new IOException("injected crash at pass completion"));
+                // rebuilder is the only moment it ever writes. An Error, because the pass contains a consumer's own
+                // failure per consumer and would otherwise read this as one; a process dying is nobody's failure.
+                throw new ProcessDeath("injected crash at pass completion");
             }
-            delegate.onPassCompleted(pass);
+            delegate.onPassCompleted(pass, store);
         }
 
         /** Arm the fault for the crash point once the consumer has seen the deliveries that define it. The walk's
@@ -576,7 +628,7 @@ public final class WalkConsumerContract {
                 // The store goes away mid-enumeration, two artifacts past a cursor that did land.
                 case MID_STRIDE -> {
                     if (deliveries == checkpoint + 2) {
-                        store.failNextOn(FaultInjectingStore.Op.SIZE, pointers);
+                        store.failNextOn(FaultInjectingStore.Op.READ_VERSIONED, pointers);
                     }
                 }
                 // A whole stride is delivered; the cursor commit that would cover it never lands.
@@ -660,9 +712,161 @@ public final class WalkConsumerContract {
 
     /** Keys under any of this fixture's pointer roots - what {@code RebuildPass} reads to build a delivery, and so
      *  where a "the store went away mid-enumeration" fault belongs. */
+    /** A key under any root of any family the fixture listens on - what the crash points fault the read of. */
     private static Predicate<String> pointers(WalkConsumerFixture fixture) {
-        List<String> roots = List.copyOf(fixture.pointerRoots());
+        List<String> roots = fixture.familyRoots().values().stream().flatMap(List::stream).distinct().toList();
         return key -> key != null && roots.stream().anyMatch(root -> key.startsWith(root + "/"));
+    }
+
+    /** The fixture's family roots as the pass takes them. */
+    private static RebuildPass.Roots roots(WalkConsumerFixture fixture) {
+        Map<WalkConsumer.Family, List<String>> roots = fixture.familyRoots();
+        return new RebuildPass.Roots(roots.getOrDefault(WalkConsumer.Family.POINTERS, fixture.pointerRoots()),
+                roots.getOrDefault(WalkConsumer.Family.INVENTORY, List.of()),
+                roots.getOrDefault(WalkConsumer.Family.BLOBS, List.of()),
+                roots.getOrDefault(WalkConsumer.Family.DERIVED, List.of()));
+    }
+
+    // --- clause 14: withheld pointers reach only those who asked ------------------------------------------------
+
+    private static void aWithheldPointerReachesOnlyAConsumerThatAsked(WalkConsumerFixture fixture, WalkHarness harness,
+                                                                     FaultInjectingStore store) throws Exception {
+        Corpus corpus = fixture.seed(store, artifacts(harness));
+        // One seeded pointer under the fixture's pointer roots is withheld by its content hash - the marker the pass
+        // reads, whatever the interceptor chain says - before the consumer's first pass.
+        List<String> pointerRoots = fixture.familyRoots().getOrDefault(WalkConsumer.Family.POINTERS,
+                fixture.pointerRoots());
+        Optional<String> pointer = keys(store).stream()
+                .filter(key -> pointerRoots.stream().anyMatch(root -> key.startsWith(root + "/")))
+                .findFirst();
+        if (pointer.isEmpty()) {
+            throw failure(fixture, "the corpus seeds no pointer under " + pointerRoots + ", so there is nothing to "
+                    + "withhold; a consumer that listens on no pointers excludes this property with that reason");
+        }
+        byte[] body = store.readVersioned(pointer.get()).orElseThrow().content();
+        String hash = build.jenesis.repository.store.ServableNames.hash(body);
+        build.jenesis.repository.store.Withheld.mark(store, hash);
+        Probe asking = new Probe("kit-asking", true);
+        Probe blind = new Probe("kit-blind", false);
+        Instrumented worker = new Instrumented(fixture.create(), store, null, corpus.deliveries(),
+                harness.checkpoint(), pointers(fixture));
+        worker.observed(RebuildPass.run(harness.walk(), store, roots(fixture), List.of(worker, asking, blind)));
+        isTrue(worker.failure == null, fixture, "the pass completes with a withheld pointer in it: " + worker.failure);
+        String path = pointer.get().startsWith("publish/") ? pointer.get().substring("publish".length()) : pointer.get();
+        // Every pointer naming the withheld hash is withheld - a corpus that names one hash from two pointers (a
+        // coordinate and its module view) loses both - so the probes are judged against each other, not a count.
+        isTrue(asking.withheld.contains(path) && Collections.frequency(asking.withheld, path) == 1, fixture,
+                "the probe that asked is handed the withheld pointer, once, through onWithheld: " + asking.withheld);
+        isTrue(!asking.retained.contains(path), fixture, "and not through onRetained");
+        equal(blind.withheld, List.of(), fixture, "the probe that did not ask is handed no withheld pointer");
+        isTrue(!blind.retained.contains(path), fixture,
+                "and the withheld pointer does not reach it as retained either - a rebuild of a served view must not "
+                        + "reinstate what a GET would refuse");
+        equal(blind.retained, asking.retained, fixture, "the two probes saw the same retained pointers");
+        int expected = worker.delegate.seesWithheld()
+                ? asking.retained.size() + asking.withheld.size()
+                : blind.retained.size();
+        equal(worker.deliveries, expected, fixture,
+                "the consumer under test saw the withheld pointer only if it asked (it asked: "
+                        + worker.delegate.seesWithheld() + ")");
+    }
+
+    /** The kit's simulation of the process dying inside a hook: an {@link Error}, which the pass never contains. */
+    private static final class ProcessDeath extends Error {
+
+        private static final long serialVersionUID = 1L;
+
+        private ProcessDeath(String message) {
+            super(message, null, false, false);
+        }
+    }
+
+    // --- clause 6: a failing consumer fails alone ------------------------------------------------------------
+
+    private static void aFailingConsumerFailsAlone(WalkConsumerFixture fixture, WalkHarness harness,
+                                                   FaultInjectingStore store) throws Exception {
+        Corpus corpus = fixture.seed(store, artifacts(harness));
+        Throwing broken = new Throwing(2);
+        Instrumented worker = new Instrumented(fixture.create(), store, null, corpus.deliveries(),
+                harness.checkpoint(), pointers(fixture));
+        worker.observed(RebuildPass.run(harness.walk(), store, roots(fixture), List.of(broken, worker)));
+        isTrue(worker.failure == null && worker.complete, fixture,
+                "a consumer that throws fails alone: the pass completes for the others (" + worker.failure + ")");
+        equal(worker.deliveries, corpus.deliveries(), fixture,
+                "the consumer under test was handed every delivery while its neighbour was failing");
+        equal(fixture.projection(store), corpus.converged(), fixture,
+                "and converged - one plugin's failure never holds another plugin's rebuild");
+        equal(broken.deliveries, 2, fixture, "the failing consumer was dropped at the delivery it failed on");
+        List<RebuildPass.Failed> failed = RebuildPass.failed(store);
+        isTrue(failed.size() == 1 && failed.get(0).consumer().equals(broken.name())
+                        && failed.get(0).generation() == worker.generation && failed.get(0).key() != null
+                        && failed.get(0).failure().contains("injected consumer failure"), fixture,
+                "the failure is recorded durably with its generation, its key and its cause: " + failed);
+        // The next generation reaches the failed consumer whole, and the record of the earlier one goes.
+        Throwing behaving = new Throwing(Integer.MAX_VALUE);
+        Instrumented next = new Instrumented(fixture.create(), store, null, corpus.deliveries(),
+                harness.checkpoint(), pointers(fixture));
+        next.observed(RebuildPass.run(harness.walk(), store, roots(fixture), List.of(behaving, next)));
+        equal(behaving.deliveries, corpus.deliveries(), fixture,
+                "the next generation redelivers every key to the consumer that failed");
+        equal(RebuildPass.failed(store), List.of(), fixture, "and clears the record of its failure");
+    }
+
+    /** A kit consumer that throws on its {@code failAt}th delivery - the neighbour whose failure must stay its own. */
+    private static final class Throwing implements WalkConsumer {
+
+        private final int failAt;
+        private int deliveries;
+
+        private Throwing(int failAt) {
+            this.failAt = failAt;
+        }
+
+        @Override
+        public String name() {
+            return "kit-throwing";
+        }
+
+        @Override
+        public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
+            if (++deliveries == failAt) {
+                throw new IOException("injected consumer failure");
+            }
+        }
+    }
+
+    /** A kit consumer riding a pass beside the fixture's, recording what reaches it and whether it asked. */
+    private static final class Probe implements WalkConsumer {
+
+        private final String name;
+        private final boolean seesWithheld;
+        private final List<String> retained = new ArrayList<>();
+        private final List<String> withheld = new ArrayList<>();
+
+        private Probe(String name, boolean seesWithheld) {
+            this.name = name;
+            this.seesWithheld = seesWithheld;
+        }
+
+        @Override
+        public String name() {
+            return name;
+        }
+
+        @Override
+        public boolean seesWithheld() {
+            return seesWithheld;
+        }
+
+        @Override
+        public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) {
+            retained.add(artifact.path());
+        }
+
+        @Override
+        public void onWithheld(ArtifactDescriptor artifact, ArtifactStore store) {
+            withheld.add(artifact.path());
+        }
     }
 
     /** Every stored key, found through the shared descent primitive rather than a hand-rolled walk - so a consumer
