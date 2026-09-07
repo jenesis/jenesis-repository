@@ -108,6 +108,12 @@ public abstract class BatchingWorker<H> {
     protected void onIterationFailure(RuntimeException failure) {
     }
 
+    /** Called about once a second while nothing is queued, so a worker that holds work back on a clock - a delta
+     *  waiting for its flush interval - releases it without waiting for the next hit. Does nothing by default; a
+     *  failure in it is reported through {@link #onIterationFailure} like a failing drain. */
+    protected void onIdle(Instant now) {
+    }
+
     /** Everything still queued, removed - for a subclass's {@link #onClosed} to fold the tail of a clean shutdown. */
     protected final List<H> drainQueue() {
         List<H> tail = new ArrayList<>();
@@ -135,6 +141,8 @@ public abstract class BatchingWorker<H> {
                     batch.add(first);
                     queue.drainTo(batch);
                     drain(batch, Instant.now());
+                } else {
+                    onIdle(Instant.now());
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
