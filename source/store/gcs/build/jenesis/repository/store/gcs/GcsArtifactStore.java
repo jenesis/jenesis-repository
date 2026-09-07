@@ -20,6 +20,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Consumer;
@@ -139,6 +140,19 @@ public final class GcsArtifactStore implements ArtifactStore {
     public long size(String key) throws IOException {
         StorageObject object = metadata(key, "size");
         return object == null || object.getSize() == null ? -1L : object.getSize().longValueExact();
+    }
+
+    @Override
+    public Optional<Listed> listed(String key) throws IOException {
+        // The same metadata request size makes, asking for the update time beside the size - never a download.
+        StorageObject object = metadata(key, "size,updated");
+        if (object == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new Listed(key,
+                object.getSize() == null ? OptionalLong.empty() : OptionalLong.of(object.getSize().longValueExact()),
+                object.getUpdated() == null
+                        ? Optional.empty() : Optional.of(Instant.ofEpochMilli(object.getUpdated().getValue()))));
     }
 
     @Override

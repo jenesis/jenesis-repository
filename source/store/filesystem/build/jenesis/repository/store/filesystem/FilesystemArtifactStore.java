@@ -205,6 +205,19 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     @Override
+    public Optional<Listed> listed(String key) throws IOException {
+        Path path = resolve(key);
+        try {
+            BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
+            return attributes.isRegularFile()
+                    ? Optional.of(Listed.of(key, attributes.size(), attributes.lastModifiedTime().toInstant()))
+                    : Optional.empty();
+        } catch (NoSuchFileException _) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
     public void delete(String key) throws IOException {
         Path path = resolve(key);
         Files.deleteIfExists(path);

@@ -79,6 +79,9 @@ public final class StoreContract {
         /** {@code scan} delivers each entry's size and modification time out of the backend's own listing, so a sweep
          *  costs its listings and nothing per object. A names-only scan turns every sweep into an N+1. */
         SCAN_CARRIES_LISTING_METADATA,
+        /** {@code listed} answers one key with the size and modification time a scan would carry for it, by a point
+         *  request, and empty for a key that holds nothing. */
+        LISTED_IS_ONE_OBJECTS_LISTING,
         /** {@code pageListed} delivers the same children, in the same order, as {@code page} - and carries each
          *  stored child's size and modification time from the backend's own listing, so a descent that needs them
          *  spends no request per child. A container reports neither, having none of its own. */
@@ -183,6 +186,9 @@ public final class StoreContract {
         checks.add(new Check(Property.SCAN_CARRIES_LISTING_METADATA,
                 "scan carries each entry's size and modification time from the backend's own listing",
                 StoreContract::scanCarriesListingMetadata));
+        checks.add(new Check(Property.LISTED_IS_ONE_OBJECTS_LISTING,
+                "listed answers one key with the size and modification time a scan would carry, and empty when absent",
+                StoreContract::listedIsOneObjectsListing));
         checks.add(new Check(Property.PAGE_LISTED_AGREES_AND_CARRIES_METADATA,
                 "pageListed agrees with page and carries each stored child's size and modification time",
                 StoreContract::pageListedAgreesAndCarriesMetadata));
@@ -518,6 +524,24 @@ public final class StoreContract {
         isTrue(entry.modified().orElseThrow().isAfter(before),
                 "the carried modification time is the object's, not a placeholder");
         store.delete(key);
+    }
+
+    private static void listedIsOneObjectsListing(ArtifactStore store) throws Exception {
+        String key = "kit/listed-one/object";
+        byte[] body = utf8("twenty-four characters!!");
+        Instant before = Instant.now().minusSeconds(60);
+        isTrue(store.listed(key).isEmpty(), "a key that holds nothing is not listed");
+        store.write(key, new ByteArrayInputStream(body));
+        isTrue(store.listed(key).isPresent(), "a stored object is listed by its key");
+        ArtifactStore.Listed listed = store.listed(key).orElseThrow();
+        equal(listed.key(), key, "under the key it was asked for");
+        equal(listed.size().orElse(-1L), (long) body.length, "with its size");
+        isTrue(listed.modified().isPresent(),
+                "and the backend's own modification time - the one-object form of what a scan carries, so a caller "
+                        + "that knows the key never lists its container to learn its age");
+        isTrue(listed.modified().orElseThrow().isAfter(before), "the carried time is the object's, not a placeholder");
+        store.delete(key);
+        isTrue(store.listed(key).isEmpty(), "and not once deleted");
     }
 
     private static void pageListedAgreesAndCarriesMetadata(ArtifactStore store) throws Exception {

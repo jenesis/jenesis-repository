@@ -115,6 +115,20 @@ public final class AzureArtifactStore implements ArtifactStore {
     }
 
     @Override
+    public Optional<Listed> listed(String key) throws IOException {
+        try {
+            var properties = container.getBlobClient(keyPrefix + key).getProperties();
+            return Optional.of(new Listed(key, OptionalLong.of(properties.getBlobSize()),
+                    Optional.ofNullable(properties.getLastModified()).map(OffsetDateTime::toInstant)));
+        } catch (BlobStorageException e) {
+            if (e.getStatusCode() == 404) {
+                return Optional.empty();
+            }
+            throw new IOException("Could not describe " + key, e);
+        }
+    }
+
+    @Override
     public void read(String key, OutputStream out) throws IOException {
         try {
             if (out instanceof ArtifactStore.RangedSink ranged) {

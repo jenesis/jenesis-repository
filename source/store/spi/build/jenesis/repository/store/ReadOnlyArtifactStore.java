@@ -56,6 +56,11 @@ public final class ReadOnlyArtifactStore implements ArtifactStore {
     }
 
     @Override
+    public Optional<Listed> listed(String key) throws IOException {
+        return delegate.listed(key);
+    }
+
+    @Override
     public Optional<URI> presign(String key, Duration ttl) {
         return delegate.presign(key, ttl);
     }

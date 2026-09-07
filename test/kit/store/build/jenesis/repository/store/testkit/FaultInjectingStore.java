@@ -292,6 +292,16 @@ public final class FaultInjectingStore implements ArtifactStore {
     }
 
     @Override
+    public Optional<Listed> listed(String key) throws IOException {
+        // The same request class as size - a metadata point read - so a fault planted on SIZE reaches it too.
+        Mode mode = intercept(Op.SIZE, key);
+        if (mode == Mode.THROW_BEFORE || mode == Mode.THROW_AFTER) {
+            throw fault(Op.SIZE, key);
+        }
+        return delegate.listed(key);
+    }
+
+    @Override
     public long size(String key) throws IOException {
         Mode mode = intercept(Op.SIZE, key);
         if (mode == Mode.THROW_BEFORE || mode == Mode.THROW_AFTER) {
@@ -454,6 +464,14 @@ public final class FaultInjectingStore implements ArtifactStore {
                 throw fault(Op.SIZE, key);
             }
             return scoped.size(key);
+        }
+
+        @Override
+        public Optional<Listed> listed(String key) throws IOException {
+            if (intercept(Op.SIZE, key) != null) {
+                throw fault(Op.SIZE, key);
+            }
+            return scoped.listed(key);
         }
 
         @Override

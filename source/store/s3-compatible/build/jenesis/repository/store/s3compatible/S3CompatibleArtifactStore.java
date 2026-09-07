@@ -82,6 +82,20 @@ public abstract class S3CompatibleArtifactStore implements ArtifactStore {
         }
     }
 
+    @Override
+    public Optional<Listed> listed(String key) throws IOException {
+        try {
+            var head = s3.headObject(b -> b.bucket(bucket).key(keyPrefix + key));
+            return Optional.of(new Listed(key, OptionalLong.of(head.contentLength()),
+                    Optional.ofNullable(head.lastModified())));
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return Optional.empty();
+            }
+            throw new IOException("Could not describe " + key, e);
+        }
+    }
+
     /** Whether {@code name} may not be paged out yet at stream position {@code relative}: a proper prefix of it
      *  whose next character sorts below {@code '/'} could still arrive as a grouped prefix (its container key
      *  {@code prefix + "/"} sorts at or past the position), and that shorter child name must page first. */

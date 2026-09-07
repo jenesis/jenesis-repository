@@ -391,6 +391,18 @@ public interface ArtifactStore {
     /** The stored byte length of the blob at this key, or {@code -1} if nothing is stored there. */
     long size(String key) throws IOException;
 
+    /**
+     * What a listing would report for the one object at {@code key} - its size and the backend's own modification
+     * time, see {@link Listed} - by a point request (a stat, a HEAD), or empty when nothing is stored there. The
+     * one-object form of the metadata {@link #scan} carries: a caller that knows the key and wants the object's own
+     * time pays one request rather than a listing of its container. The default answers presence alone, from
+     * {@link #exists}, with neither size nor time - enough for a double; a backend overrides it with the metadata
+     * request it already makes for {@link #size}, and a decorator forwards it.
+     */
+    default Optional<Listed> listed(String key) throws IOException {
+        return exists(key) ? Optional.of(Listed.of(key)) : Optional.empty();
+    }
+
     /** Delete the blob, tidying any now-empty container it leaves behind. */
     void delete(String key) throws IOException;
 
