@@ -103,6 +103,20 @@ public final class AzureArtifactStore implements ArtifactStore {
     }
 
     @Override
+    public Optional<Instant> modified(String key) throws IOException {
+        // The blob's properties, the same request size() makes, read for Last-Modified.
+        try {
+            OffsetDateTime modified = container.getBlobClient(keyPrefix + key).getProperties().getLastModified();
+            return Optional.ofNullable(modified).map(OffsetDateTime::toInstant);
+        } catch (BlobStorageException e) {
+            if (e.getStatusCode() == 404) {
+                return Optional.empty();
+            }
+            throw new IOException("Could not read the age of " + key, e);
+        }
+    }
+
+    @Override
     public long size(String key) throws IOException {
         try {
             return container.getBlobClient(keyPrefix + key).getProperties().getBlobSize();

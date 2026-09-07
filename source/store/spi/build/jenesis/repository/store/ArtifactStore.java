@@ -418,6 +418,26 @@ public interface ArtifactStore {
      * {@link Listed#modified} is the write time, and a policy reading it gets least-recently-written and should know
      * that is what it got.
      */
+    /**
+     * When the object at {@code key} was last written - or last {@linkplain #touch touched}, on a backend where a
+     * touch is real - as a point read: {@link Optional#empty()} when there is no such object. This is the age a
+     * listing reports for the key ({@link Listed#modified}) without the listing, so a caller deciding whether to
+     * stamp recency again can ask for one key at metadata price - a stat on the filesystem, a HEAD on an object
+     * store - rather than page the container the key sits in.
+     *
+     * <p>Inherited, it is a scan bounded to the key itself, which every backend answers but at listing price; a
+     * shipped backend overrides it with its metadata request.
+     */
+    default Optional<Instant> modified(String key) throws IOException {
+        Instant[] found = new Instant[1];
+        scan(key, null, 1, listed -> {
+            if (listed.key().equals(key)) {
+                found[0] = listed.modified().orElse(null);
+            }
+        });
+        return Optional.ofNullable(found[0]);
+    }
+
     default void touch(String key) throws IOException {
     }
 
