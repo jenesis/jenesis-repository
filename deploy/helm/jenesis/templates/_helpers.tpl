@@ -47,6 +47,12 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/* The store-backend selection and its settings, shared by the server and the console container
      (both read the same store). Credentials ride the Secret (envFrom) or a pod identity. */}}
+{{/* Where the gcs service-account key is mounted when secrets.gcsServiceAccountKey is set; the backend reads
+     the file the setting names. */}}
+{{- define "jenreg.gcsCredentialsPath" -}}
+/var/run/secrets/jenesis/gcs/credentials.json
+{{- end }}
+
 {{- define "jenreg.storeEnv" -}}
 - name: JENREG_STORE
   value: {{ .Values.store.backend | quote }}
@@ -69,9 +75,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 - name: JENREG_GCS_ENDPOINT
   value: {{ . | quote }}
 {{- end }}
-{{- with .Values.store.gcs.region }}
-- name: JENREG_GCS_REGION
-  value: {{ . | quote }}
+{{- if .Values.secrets.gcsServiceAccountKey }}
+- name: JENREG_GCS_CREDENTIALS
+  value: {{ include "jenreg.gcsCredentialsPath" . | quote }}
 {{- end }}
 {{- else if eq .Values.store.backend "azure-blob" }}
 - name: JENREG_AZURE_BLOB_CONTAINER

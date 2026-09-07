@@ -10,7 +10,7 @@ description: |
   image carries its edition in the tag, and a chart cannot, because Helm's OCI tag is the chart
   version.
 type: application
-version: 0.2.0
+version: 0.3.0
 # The edition this chart deploys, and the image tag it falls back to when image.tag is left empty.
 # Packaging stamps it per edition; a chart installed straight out of this directory is the free one,
 # which is what a reader of the free repository should get.

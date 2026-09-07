@@ -41,7 +41,9 @@ store:
   gcs:
     bucket: ""
     endpoint: ""        # default https://storage.googleapis.com; set for an emulator
-    region: ""          # SigV4 scope region, default "auto"
+    # The gcs backend authenticates with a service-account key file (secrets.gcsServiceAccountKey below) or,
+    # with none given, the Application Default Credentials - on GKE that is Workload Identity: annotate the
+    # service account (serviceAccount.annotations, iam.gke.io/gcp-service-account) and set no key at all.
   # backend: azure-blob (the key is camelCase because a Helm value is reached by dot notation)
   azureBlob:
     container: jenesis-repository
@@ -80,8 +82,11 @@ secrets:
   existingSecret: ""
   s3AccessKeyId: ""           # JENREG_S3_ACCESS_KEY_ID (s3 backend; empty = the AWS chain / IRSA)
   s3SecretAccessKey: ""       # JENREG_S3_SECRET_ACCESS_KEY
-  gcsAccessKeyId: ""          # JENREG_GCS_ACCESS_KEY_ID (gcs backend HMAC pair)
-  gcsSecretAccessKey: ""      # JENREG_GCS_SECRET_ACCESS_KEY
+  # The JSON key of a service account with objectAdmin on the bucket (gcs backend), e.g.
+  # --set-file secrets.gcsServiceAccountKey=key.json. It is a file to the backend, not a variable, so it is
+  # rendered into its own Secret, mounted read-only, and named through JENREG_GCS_CREDENTIALS. Empty means the
+  # Application Default Credentials (Workload Identity on GKE).
+  gcsServiceAccountKey: ""
   azureConnectionString: ""   # JENREG_AZURE_BLOB_CONNECTION_STRING (azure-blob backend)
   githubClientSecret: ""      # JENREG_UI_GITHUB_CLIENT_SECRET
   oidcClientSecret: ""        # JENREG_UI_OIDC_CLIENT_SECRET
@@ -120,7 +125,7 @@ resources:
 serviceAccount:
   create: true
   name: ""
-  annotations: {}      # e.g. eks.amazonaws.com/role-arn for S3 via IRSA
+  annotations: {}      # e.g. eks.amazonaws.com/role-arn for S3 via IRSA, iam.gke.io/gcp-service-account for GCS via Workload Identity
 
 # Free-form extra environment variables passed straight through.
 extraEnv: []

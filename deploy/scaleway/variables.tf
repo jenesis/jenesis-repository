@@ -24,9 +24,9 @@ variable "image" {
   type        = string
   description = <<-EOT
     The all-in-one repository image (the free edition differs only by tag), e.g.
-    rg.fr-par.scw.cloud/NAMESPACE/jenesis-repository:enterprise. A public image on Docker Hub works too
-    (jenesis/jenesis-repository:free), but Scaleway advises against it: Docker Hub's rate limits can fail a
-    container start, so push the image to the Scaleway Container Registry for a deployment that matters.
+    rg.fr-par.scw.cloud/NAMESPACE/jenesis-repository:free. An image on Docker Hub works too, but Scaleway
+    advises against it: Docker Hub's rate limits can fail a container start, so push the image to the Scaleway
+    Container Registry for a deployment that matters.
   EOT
 }
 
