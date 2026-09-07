@@ -80,7 +80,7 @@ public class RepositorySecurityAutoConfiguration {
      * <p>Replacing this chain outright is still available, and is still how a fork-free deployment does it: define
      * a bean named {@code securityFilterChain}. Contributing to it - extra open routes, an extra filter, a richer
      * authorization manager - needs no replacement at all and rides the {@link SecurityChainCustomizer} seam, which
-     * is what the class comment above recommends and what enterprise actually does.
+     * is what the class comment above recommends and what a downstream edition does.
      */
     @Bean
     @ConditionalOnMissingBean(name = "securityFilterChain")

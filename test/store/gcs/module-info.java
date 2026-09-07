@@ -8,7 +8,7 @@
  * compare-and-set, and the plaintext-endpoint refusal. The presign leg builds a service-account key in the test and
  * verifies the V4 signature with its public half. The spool leg holds an upload in flight and reads the spool file's
  * permissions. The cross-backend {@code ArtifactStore} contract itself lives in the shared {@code StoreContract} kit
- * and runs against this backend from the enterprise store-backends suite over Google's storage testbench.
+ * and runs against this backend from a downstream store-backends suite over Google's storage testbench.
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.store.gcs

@@ -28,7 +28,7 @@
 <!-- The shared <head>, in two shapes for the two ways a console needs it.
 
      `headContents` is everything every page loads; `head` is that wrapped in a <head> for a console with nothing
-     to add. A console that does need something of its own - the enterprise shell has one stylesheet - writes its
+     to add. A console that does need something of its own - a downstream shell has one stylesheet - writes its
      own <head>, includes the contents, and adds its extra, so there is still exactly one list of what a page
      loads. Keeping two whole <head>s in step by hand is what failed before: a script added to one was missing
      from the other until something noticed. -->

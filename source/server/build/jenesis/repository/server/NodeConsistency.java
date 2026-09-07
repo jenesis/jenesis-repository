@@ -21,10 +21,10 @@ import tools.jackson.databind.json.JsonMapper;
  * object; a node reads with {@link ArtifactStore#readVersioned} and writes with {@link ArtifactStore#writeVersioned}
  * on its own key's token, so a stale-token retry only ever races the same node.
  *
- * <p>This is the one engine. The enterprise telemetry module used to carry a second, wired beside this one under a
+ * <p>This is the one engine. A downstream telemetry module used to carry a second, wired beside this one under a
  * different bean name, writing a {@code key=value} document to a different prefix - so one deployment heartbeated two
  * disjoint node sets in two encodings and its posture advisor read one of them. The two differed in nothing but
- * where they wrote and how; what the enterprise copy did better (folding the live tenant set on every heartbeat, a
+ * where they wrote and how; what that copy did better (folding the live tenant set on every heartbeat, a
  * wider must-match set) is what the {@link NodeFingerprintPublisher} does now.
  */
 public final class NodeConsistency {

@@ -56,24 +56,12 @@ The image is built by the build rather than by a hand-written `Dockerfile`: `sou
 implementation, its `bundle=true` packaging emits the resolved runtime closure, and its `docker=` packaging
 line makes `stage` write a ready-to-build context - `java -Djenesis.test.skip=true build/jenesis/Project.java stage`,
 then `docker build -t jenesis-repository:free 'target/stage/docker/output/module-source%2Fbundle'` is the image.
-`java build/Build.java images` in the enterprise repository builds both editions the same way and tags them.
-There was a `Dockerfile` here that re-ran the whole build
-inside Docker - a second mechanism for a job the shared one does - and the deployment settings it carried
-(`JENREG_FILESYSTEM_ROOT=/data`, a `VOLUME`) belong to the Helm chart, which can make them conditional on
-the storage backend where an image cannot: a baked-in `VOLUME` cannot be un-declared by a consumer, so an
-object-store deployment would create an anonymous volume on every run that it never writes to.
-
-`deploy/helm/jenesis` is the chart, and it deploys **either edition**: the tag selects one
-(`jenesis-repository:free` or `:enterprise`) and every value is identical for both. It lives here rather than
-beside the enterprise edition because that is what it is - shared mechanism, with nothing edition-specific in it -
-and two charts would be two things to keep in step for one value. An edition ships its own values file;
-`deploy/helm/values-free.yaml` is this one's, and installing the chart with no values file at all also gives the
-free edition, because that is what a reader of this repository should get.
-
-It is *published* twice, as `jenesis-free` and `jenesis-enterprise`, packaged from this one source. That is not a
-second chart: an image carries its edition in the tag and a chart cannot, since Helm's OCI tag is the chart
-version, so the edition moves into the name. `deploy/gcp` is the free edition's cloud template, beside the chart
-for the same reason.
+There was a `Dockerfile` here that re-ran the whole build inside Docker - a second mechanism for a job the
+shared one does - and the deployment settings it carried (`JENREG_FILESYSTEM_ROOT=/data`, a `VOLUME`) belong
+to a deployment's own descriptor, which can make them conditional on the storage backend where an image cannot:
+a baked-in `VOLUME` cannot be un-declared by a consumer, so an object-store deployment would create an anonymous
+volume on every run that it never writes to. So the image declares no store root: name one with
+`JENREG_FILESYSTEM_ROOT` and mount a volume there, or select an object store.
 
 ## Module layout
 
