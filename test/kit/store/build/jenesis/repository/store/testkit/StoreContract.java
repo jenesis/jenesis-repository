@@ -79,9 +79,6 @@ public final class StoreContract {
         /** {@code scan} delivers each entry's size and modification time out of the backend's own listing, so a sweep
          *  costs its listings and nothing per object. A names-only scan turns every sweep into an N+1. */
         SCAN_CARRIES_LISTING_METADATA,
-        /** {@code modified(key)} is a point read of one key's age: present and the object's own for a stored key,
-         *  empty for a missing one - what a listing would report, without the listing. */
-        MODIFIED_IS_A_POINT_READ,
         /** {@code pageListed} delivers the same children, in the same order, as {@code page} - and carries each
          *  stored child's size and modification time from the backend's own listing, so a descent that needs them
          *  spends no request per child. A container reports neither, having none of its own. */
@@ -183,9 +180,6 @@ public final class StoreContract {
         checks.add(new Check(Property.SCAN_IS_RECURSIVE_AND_RESUMES,
                 "scan enumerates a prefix recursively in key order and resumes strictly after its cursor",
                 StoreContract::scanRecursiveAndResumes));
-        checks.add(new Check(Property.MODIFIED_IS_A_POINT_READ,
-                "modified(key) answers a stored key's age and empty for a missing one",
-                StoreContract::modifiedPointRead));
         checks.add(new Check(Property.SCAN_CARRIES_LISTING_METADATA,
                 "scan carries each entry's size and modification time from the backend's own listing",
                 StoreContract::scanCarriesListingMetadata));
@@ -933,18 +927,6 @@ public final class StoreContract {
 
     private static AssertionError failure(String message) {
         return new AssertionError(message);
-    }
-
-    private static void modifiedPointRead(ArtifactStore store) throws IOException {
-        String key = "kit/modified/object";
-        Instant before = Instant.now().minusSeconds(60);
-        store.write(key, new ByteArrayInputStream(utf8("an object with an age")));
-        Optional<Instant> modified = store.modified(key);
-        isTrue(modified.isPresent(), "a stored key has an age, read for that one key");
-        isTrue(modified.orElseThrow().isAfter(before), "the age is the object's own, not a placeholder");
-        isTrue(store.modified("kit/modified/absent").isEmpty(), "a missing key has no age rather than an error");
-        store.delete(key);
-        isTrue(store.modified(key).isEmpty(), "a deleted key has no age");
     }
 
 }

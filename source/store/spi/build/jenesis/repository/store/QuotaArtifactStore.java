@@ -375,11 +375,6 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
         delegate.touch(key);
     }
 
-    @Override
-    public Optional<Instant> modified(String key) throws IOException {
-        return delegate.modified(key);
-    }
-
     /** Delegated rather than inherited: the inherited body buffers, which would turn a streaming backend into a
      *  buffering one for every deployment that meters a quota. */
     @Override

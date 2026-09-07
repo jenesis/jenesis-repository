@@ -159,21 +159,6 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
     }
 
     @Override
-    public Optional<Instant> modified(String key) throws IOException {
-        // The same HEAD the version token comes from, read for its Last-Modified: GET-class, never a listing.
-        try {
-            return Optional.of(s3.headObject(b -> b.bucket(bucket).key(keyPrefix + key)).lastModified());
-        } catch (NoSuchKeyException _) {
-            return Optional.empty();
-        } catch (S3Exception e) {
-            if (e.statusCode() == 404) {
-                return Optional.empty();
-            }
-            throw new IOException("Could not read the age of " + key, e);
-        }
-    }
-
-    @Override
     public Optional<Object> version(String key) throws IOException {
         // A metadata request, where the inherited default would download the object to read its ETag.
         try {

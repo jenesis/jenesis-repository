@@ -434,19 +434,6 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     @Override
-    public Optional<Instant> modified(String key) throws IOException {
-        Path path = resolve(key);
-        if (!regularFile(path)) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.of(Files.getLastModifiedTime(path).toInstant());
-        } catch (NoSuchFileException _) {
-            return Optional.empty();   // raced with a delete between the probe and the stat
-        }
-    }
-
-    @Override
     public void touch(String key) throws IOException {
         Path path = resolve(key);
         if (regularFile(path)) {

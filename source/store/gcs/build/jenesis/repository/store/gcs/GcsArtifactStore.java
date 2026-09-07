@@ -142,16 +142,6 @@ public final class GcsArtifactStore implements ArtifactStore {
     }
 
     @Override
-    public Optional<Instant> modified(String key) throws IOException {
-        // The object document's "updated" field, which a metadata rewrite moves as a write does; a Class B read.
-        StorageObject object = metadata(key, "updated");
-        if (object == null || object.getUpdated() == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Instant.ofEpochMilli(object.getUpdated().getValue()));
-    }
-
-    @Override
     public Optional<Object> version(String key) throws IOException {
         // A metadata request, never a download: the token is the generation the JSON document carries.
         StorageObject object = metadata(key, "generation");
