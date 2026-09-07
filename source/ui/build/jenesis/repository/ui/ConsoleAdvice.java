@@ -84,13 +84,34 @@ public class ConsoleAdvice {
      */
     @ModelAttribute("postureBadge")
     public PostureBadge postureBadge() {
+        // This advice is global - every console screen, in whichever module, renders through the one shell - so
+        // its attributes run for every handler in the process, the repository's artifact requests included. A
+        // badge that collected the whole posture report each time cost every download a listing of the
+        // consistency nodes and every advisor's reads (measured: one page of .system/config/consistency/nodes per
+        // GET on the free bundle), so the count is kept for a short while and recomputed after it.
+        Badge held = badge;
+        long now = System.nanoTime();
+        if (held != null && now - held.computedAt < BADGE_TTL_NANOS) {
+            return held.value;
+        }
+        PostureBadge fresh;
         try {
             // The same source the screen reads, so the badge and its own destination cannot name different numbers.
-            return PostureBadge.of(source.collect(current.name()).report().count());
+            fresh = PostureBadge.of(source.collect(current.name()).report().count());
         } catch (IOException | RuntimeException uncollectable) {
-            return PostureBadge.unknown();
+            fresh = PostureBadge.unknown();
         }
+        badge = new Badge(fresh, now);
+        return fresh;
     }
+
+    /** How long the header's posture count is served before the report is collected again. */
+    private static final long BADGE_TTL_NANOS = 30_000_000_000L;
+
+    private record Badge(PostureBadge value, long computedAt) {
+    }
+
+    private volatile Badge badge;
 
     /** Who is signed in, for the header to greet and to hang sign-out on; absent when nobody is. */
     /**

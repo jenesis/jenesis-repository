@@ -680,7 +680,7 @@ public final class Publication {
 
     /** The outcome of a screened upload: the disposition the interceptor chain reached and the SHA-256 the blob was
      *  stored under - present whatever the disposition, since the blob is written content-addressed before the gate. */
-    public record Published(PublishInterceptor.Disposition disposition, String hash) {
+    public record Published(PublishInterceptor.Disposition disposition, String hash, long size) {
     }
 
     /**
@@ -709,7 +709,8 @@ public final class Publication {
         // wrote - one read per publish that answered a question the write itself had answered.
         Counting counted = new Counting(content);
         String hash = storeBlob(counted);
-        ArtifactDescriptor stored = artifact.withBlob(hash, counted.count());
+        long size = content instanceof Stored ? artifact.size() : counted.count();
+        ArtifactDescriptor stored = artifact.withBlob(hash, size);
         PublishInterceptor.Content access = contentOf(hash);
         PublishInterceptor.Disposition disposition = PublishInterceptor.Disposition.ACCEPT;
         for (PublishInterceptor interceptor : interceptors) {
@@ -732,7 +733,7 @@ public final class Publication {
         for (PublishInterceptor interceptor : interceptors) {
             interceptor.committed(stored, disposition, store);
         }
-        return new Published(disposition, hash);
+        return new Published(disposition, hash, stored.size());
     }
 
     // --- the pointer-last accepted-layout commit --------------------------------------------------------------------
@@ -1046,7 +1047,8 @@ public final class Publication {
         Objects.requireNonNull(layout, "layout");
         Published screened = screen(artifact, body);
         String hash = screened.hash();
-        ArtifactDescriptor stored = artifact.withBlob(hash, store.size("blobs/" + hash));
+        // The length was counted as the bytes streamed in; the blob is not stat-ed for a number the write knew.
+        ArtifactDescriptor stored = artifact.withBlob(hash, screened.size());
         if (screened.disposition() != PublishInterceptor.Disposition.ACCEPT) {
             return new Commit(screened.disposition(), stored, false);
         }
