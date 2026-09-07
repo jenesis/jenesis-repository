@@ -18,6 +18,7 @@
  * @jenesis.pin com.fasterxml.jackson.core/jackson-databind 2.21.3 SHA-256/f397563d8e67630c10cab8c2334ca0e55af832fa3ebde160a379c2c96d43bf25
  * @jenesis.pin com.fasterxml.jackson.dataformat/jackson-dataformat-yaml 2.18.3 SHA-256/3ca00e47cfcb43e79438ddcfc8fc735e9ebac3824fb7769138609be6bd56e483
  * @jenesis.pin com.fasterxml.jackson.datatype/jackson-datatype-jsr310 2.21.3 SHA-256/c6f721d6ea16f5557567a476069f7c08c598ff8f02766f229b45fe1e87139a20
+ * @jenesis.pin com.github.ben-manes.caffeine/caffeine 3.2.4 SHA-256/9d9d2cfd681fd9272ded3d27c9930db12f89f732345975aa113ebc223bbf1224
  * @jenesis.pin com.github.jknack/handlebars 4.5.3 SHA-256/ea3be4f2cde8cc7b912448edd764a754debfeedd0c85f426c4de77361216cfd2
  * @jenesis.pin com.github.jknack/handlebars-helpers 4.5.3 SHA-256/c46e4f5d01069924d02ec474343555190fe645e1bbd4ba0b0399d8b488519573
  * @jenesis.pin com.google.errorprone/error_prone_annotations 2.47.0 SHA-256/5364bc6f22e72e98195e406a58d3ba1c09ffa11dea0729592cb870dc2de4056d

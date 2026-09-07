@@ -21,6 +21,7 @@
  * @jenesis.pin com.fasterxml.jackson.core/jackson-databind 2.21.3 SHA-256/f397563d8e67630c10cab8c2334ca0e55af832fa3ebde160a379c2c96d43bf25
  * @jenesis.pin com.fasterxml.jackson.dataformat/jackson-dataformat-yaml 2.18.3 SHA-256/3ca00e47cfcb43e79438ddcfc8fc735e9ebac3824fb7769138609be6bd56e483
  * @jenesis.pin com.fasterxml.jackson.datatype/jackson-datatype-jsr310 2.21.3 SHA-256/c6f721d6ea16f5557567a476069f7c08c598ff8f02766f229b45fe1e87139a20
+ * @jenesis.pin com.github.ben-manes.caffeine/caffeine 3.2.4 SHA-256/9d9d2cfd681fd9272ded3d27c9930db12f89f732345975aa113ebc223bbf1224
  * @jenesis.pin com.github.docker-java/docker-java-api 3.7.1 SHA-256/dad153d484b1f4ef009e2fdbad27e07aeb3191122da52b8985507ac504300081
  * @jenesis.pin com.github.docker-java/docker-java-transport 3.7.1 SHA-256/d15eec8034bf0f92c2a48ca9172691804048115c96dc853272f9486fa2695c3c
  * @jenesis.pin com.github.docker-java/docker-java-transport-zerodep 3.7.1 SHA-256/b89bdb1754160323597f9ea32a7fe7a4a3aa8f5b3b43b88e8d71fff3b267ab21
@@ -39,7 +40,6 @@
  * @jenesis.pin commons-io/commons-io 2.19.0 SHA-256/824268919b4b62f9f40f08c54381de5993b078f58667e332d17348ae019d72b9
  * @jenesis.pin commons-logging/commons-logging 1.3.5 SHA-256/6d7a744e4027649fbb50895df9497d109f98c766a637062fe8d2eabbb3140ba4
  * @jenesis.pin io.micrometer/micrometer-commons 1.17.0 SHA-256/03919dc71e2417ec4b5c254c4ba924963c972e124190f73cdcb68ed51c6eede6
- * @jenesis.pin micrometer.observation 1.17.0
  * @jenesis.pin io.micrometer/micrometer-core 1.17.0 SHA-256/73503e701a377fafeaf33b71b9b8910a8d7884cbba88ab27971b33b3753b65aa
  * @jenesis.pin io.micrometer/micrometer-jakarta9 1.17.0 SHA-256/4ae9dbc9072fea8c36684a745e0e944b9540fd15027dfe7af0a186f8df43272c
  * @jenesis.pin io.micrometer/micrometer-observation 1.17.0 SHA-256/2fc95a327578d3b2a81c3ff40e646a4a21e46b0153ccbbf91690142bf80d9661
@@ -58,6 +58,7 @@
  * @jenesis.pin javax.enterprise/cdi-api 1.2 SHA-256/cc5ce2cbc62fe96bf59af00bba00bde823a1094462b4364747863510b76c0518
  * @jenesis.pin javax.inject/javax.inject 1 SHA-256/91c77044a50c481636c32d916fd89c9118a72195390452c81065080f957de7ff
  * @jenesis.pin javax.interceptor/javax.interceptor-api 1.2 SHA-256/62acf2da0e19e813e0f5aa5de09108368b12e40b4a2f47c66a88f984f4f5143b
+ * @jenesis.pin micrometer.observation 1.17.0
  * @jenesis.pin net.bytebuddy/byte-buddy 1.18.3 SHA-256/d78396e3c5bce3f2865c9186647481e5589d34cacc632484715b686108d17c66
  * @jenesis.pin net.bytebuddy/byte-buddy-agent 1.17.7 SHA-256/a9ba887dca252ad61b7d5153294f34e6f3bdf4b2736b04373d13615a695fc0ff
  * @jenesis.pin net.java.dev.jna/jna 5.18.1 SHA-256/260c4b1e22b1db9e110ee441c4f13ce115f841fa48c41d78750986214b395557
