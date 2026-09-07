@@ -227,7 +227,74 @@ public final class Publication {
      *  network to storage without being buffered whole in memory. The primitive a staging deploy or a cross-publish
      *  uses to hold bytes before any view points at them. */
     public String storeBlob(InputStream content) throws IOException {
+        // The edge restreams an accepted body into the format's layout through a Stored stream; the bytes are in the
+        // store already, so the layout's own storeBlob answers the hash it carries and neither reads nor writes.
+        // Measured before: every screened publish wrote its blob twice and read it once more for the second write.
+        if (content instanceof Stored stored) {
+            return stored.hash();
+        }
         return store.writeBlob(content);
+    }
+
+    /**
+     * A request body that is already a stored blob: what an ingress edge hands a format's layout after screening, so
+     * the layout that {@linkplain #storeBlob stores} the body it was given gets the hash back without a second write,
+     * and a layout that reads the body (a packument's attachments, a jar's module name) opens the blob once, lazily,
+     * on the first read. Opened afresh per instance and closed by whoever reads it, like the socket stream it stands
+     * in for.
+     */
+    public static final class Stored extends InputStream {
+
+        private final Acceptance accepted;
+        private InputStream in;
+
+        public Stored(Acceptance accepted) {
+            this.accepted = Objects.requireNonNull(accepted, "accepted");
+        }
+
+        /** The content hash of the stored bytes - the answer a store of this stream gives without storing. */
+        public String hash() {
+            return accepted.hash();
+        }
+
+        private InputStream open() throws IOException {
+            if (in == null) {
+                in = accepted.open();
+            }
+            return in;
+        }
+
+        @Override
+        public int read() throws IOException {
+            return open().read();
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            return open().read(buffer, offset, length);
+        }
+
+        @Override
+        public long skip(long n) throws IOException {
+            return open().skip(n);
+        }
+
+        @Override
+        public int available() throws IOException {
+            return open().available();
+        }
+
+        @Override
+        public long transferTo(OutputStream out) throws IOException {
+            return open().transferTo(out);
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (in != null) {
+                in.close();
+            }
+        }
     }
 
     /** Point a request path at an already-stored blob - the primitive promotion and cross-publishing use to publish a

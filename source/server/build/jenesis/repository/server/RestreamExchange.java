@@ -3,6 +3,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.store.Publication;
 
 /**
  * A {@link FormatExchange} that wraps a real request/response exchange but restreams its request body from an
@@ -10,31 +11,24 @@ import build.jenesis.repository.format.FormatExchange;
  * {@link build.jenesis.repository.format.RepositoryFormat} for pure layout. Everything except the body - the method,
  * path, query, headers, settings, and the whole response side (status, headers, streamed body, range/conditional
  * handling) - delegates to the wrapped exchange, so the format writes its response straight to the original client
- * exactly as it would on a direct dispatch; only {@link #requestStream()} is redirected to the {@link Body} source.
+ * exactly as it would on a direct dispatch; only {@link #requestStream()} is redirected to the stored blob.
  *
  * <p>This is the core, edition-neutral restream exchange the edge screening choreography builds on: after
- * {@link build.jenesis.repository.store.Publication#screen} accepts a body, the edge restreams {@code blobs/<hash>}
- * from the store ({@code () -> store.open("blobs/" + hash)}) into the format through one of these. The body is a
- * restream, never a buffered copy - the {@link Body} opens a fresh {@link InputStream} each time the format asks for
- * one - so a large artifact goes from storage to the format's layout write without being materialised in memory. Both
- * the free {@link RepositoryController} write edge and (once the downstream deploy edge's private {@code PublishExchange}
- * is retired onto it) the downstream edge share this one implementation.
+ * {@link build.jenesis.repository.store.Publication#screen} accepts a body, the edge hands the format a
+ * {@link Publication.Stored} stream over the acceptance. The body is a restream, never a buffered copy - each
+ * {@link #requestStream()} is a fresh stream that opens {@code blobs/<hash>} lazily on the first read - so a large
+ * artifact goes from storage to the format's layout write without being materialised in memory, and a layout that
+ * only stores what it was given stores nothing: {@link Publication#storeBlob} recognises the stream and answers the
+ * hash. Measured before that: every screened publish wrote its blob twice and read it once more to do so.
  */
 public final class RestreamExchange implements FormatExchange {
 
-    /** Opens the request body afresh each time the wrapped format reads it - the seam the edge fills with
-     *  {@code () -> store.open("blobs/" + hash)}, so nothing is buffered and a re-read reopens the stored blob. */
-    @FunctionalInterface
-    public interface Body {
-        InputStream open() throws IOException;
-    }
-
     private final FormatExchange delegate;
-    private final Body body;
+    private final Publication.Acceptance accepted;
 
-    public RestreamExchange(FormatExchange delegate, Body body) {
+    public RestreamExchange(FormatExchange delegate, Publication.Acceptance accepted) {
         this.delegate = delegate;
-        this.body = body;
+        this.accepted = accepted;
     }
 
     @Override
@@ -79,7 +73,7 @@ public final class RestreamExchange implements FormatExchange {
 
     @Override
     public InputStream requestStream() throws IOException {
-        return body.open();
+        return new Publication.Stored(accepted);
     }
 
     @Override

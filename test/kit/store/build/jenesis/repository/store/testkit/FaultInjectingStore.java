@@ -61,6 +61,9 @@ public final class FaultInjectingStore implements ArtifactStore {
     private final List<Rule> rules = new ArrayList<>();
     private final Map<Op, Integer> counts = new EnumMap<>(Op.class);
 
+    /** The per-key listener a cost probe installs - every intercepted operation, scoped views included. */
+    private volatile BiConsumer<Op, String> trace;
+
     /** Which commit choreography this deployment simulates. It rides the store rather than the check's
      *  signature because every check reaches its {@code Publication} through
      *  {@link PublicationHookContract#publication}, and the store is the one deployment object every check body is
@@ -169,6 +172,14 @@ public final class FaultInjectingStore implements ArtifactStore {
         return this;
     }
 
+    /** Hand every operation to {@code listener} as it is intercepted, with its key ({@code null} for a blob write,
+     *  whose key is the hash it computes) - the per-key trace beside the per-op {@link #calls counts}, which say how
+     *  much but never what. A scoped view reports through the store it was scoped from, with the scoped key. */
+    public FaultInjectingStore tracing(BiConsumer<Op, String> listener) {
+        this.trace = listener;
+        return this;
+    }
+
     /** Clear every armed fault, so the store heals and delegates unchanged from here on. */
     public synchronized void heal() {
         rules.clear();
@@ -190,6 +201,10 @@ public final class FaultInjectingStore implements ArtifactStore {
      *  proceed). {@code THROW_BEFORE} is acted on before delegating; the others after. */
     private synchronized Mode intercept(Op op, String key) {
         counts.merge(op, 1, Integer::sum);
+        BiConsumer<Op, String> listener = trace;
+        if (listener != null) {
+            listener.accept(op, key);
+        }
         Iterator<Rule> iterator = rules.iterator();
         while (iterator.hasNext()) {
             Rule rule = iterator.next();
