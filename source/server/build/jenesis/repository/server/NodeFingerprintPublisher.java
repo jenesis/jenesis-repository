@@ -77,7 +77,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         // deployment publishes nothing, so it never writes an operational key into an otherwise-clean store layout; a
         // multi-node deployment sets jenreg.consistency.enabled=true so its nodes publish and can be compared.
         this.enabled = "true".equalsIgnoreCase(String.valueOf(config.apply("jenreg.consistency.enabled")));
-        this.nodeId = resolveNodeId(config);
+        this.nodeId = nodeId(config);
         this.mustMatch = mustMatch(config);
         this.lastTenants = List.of(configuredTenant(config));
         this.heartbeatMillis = Math.max(1000L, millis(config, "jenreg.consistency.heartbeat",
@@ -171,8 +171,9 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
     }
 
     /** A stable node id: the explicit setting, else the hostname, else a generated per-process id (with a warning that
-     *  a stable id is preferable so a restart does not leave an orphan fingerprint object behind). */
-    private static String resolveNodeId(UnaryOperator<String> config) {
+     *  a stable id is preferable so a restart does not leave an orphan fingerprint object behind). The one derivation
+     *  every per-node key uses - the fingerprint, the running marker - so they agree on which node this is. */
+    public static String nodeId(UnaryOperator<String> config) {
         String configured = config.apply("jenreg.consistency.node-id");
         if (configured != null && !configured.isBlank()) {
             return sanitize(configured.trim());

@@ -4,6 +4,8 @@ import module java.base;
 
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoredCounter;
+import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
 
@@ -48,8 +50,10 @@ import build.jenesis.repository.store.ServableNames;
  * {@code PublishInterceptor.withheld} verdict against an artifact that has served for months) is skipped, so a
  * rebuild never reinstates a retracted-after-advisory artifact into a consumer's index. A torn pointer whose blob is
  * merely gone is <em>not</em> withheld - it is still delivered as the torn state a reconcile consumer repairs, so
- * only a path whose blob is present yet unlocatable is screened out. The screen is the {@code publish/} withhold
- * model's; a format's own blobs-namespace root carries no publication pointer and is delivered raw as before.
+ * only a path whose blob is present yet unlocatable is screened out. The chain's hold and the quarantine subtree
+ * are the {@code publish/} withhold model's; the content-addressed {@code withheld/} marker applies under every
+ * root, because a hash withheld is withheld wherever a layout names it. A withheld pointer is not dropped but
+ * delivered through {@link WalkConsumer#onWithheld} to the consumers that asked to see it (clause 14).
  *
  * <p><b>Delivery and failure.</b> The walk's contract carries over <em>whole</em>: every retained pointer is delivered
  * exactly once per pass, and at least once for the uncommitted stride tail after a crash-resume - consumers are
@@ -57,10 +61,16 @@ import build.jenesis.repository.store.ServableNames;
  * consumer before the cursor covering those deliveries is committed. That forward is what makes a buffering consumer
  * (one durable write per stride rather than per artifact) safe rather than lossy: without it a landed cursor would
  * skip items still sitting in a consumer's buffer when the process died, and nothing would ever replay them.
- * A consumer failure propagates and stops this worker's segment with its claim left to expire; the pass then
- * resumes from the last committed cursor, so a failure delays a rebuild but never silently truncates it - a stuck
- * pass is visible through {@link ArtifactWalk#pass} / {@link ArtifactWalk#segments}, never a quietly-incomplete
- * view served as whole. {@link WalkConsumer#onPassStarted} fires on this worker before its first delivery (and
+ * A failure of the <em>walk</em> - a store that will not answer the pass's own read or cursor commit - propagates
+ * and stops this worker's segment with its claim left to expire; the pass then resumes from the last committed
+ * cursor, so such a failure delays a rebuild but never silently truncates it. A failure of one <em>consumer</em>
+ * fails that consumer alone: it is recorded under {@link #FAILED_SPACE} with the generation and the key, the
+ * consumer receives nothing more in this generation, the others converge, and the next generation redelivers
+ * everything to it. Its projection is therefore incomplete for exactly one generation and says so durably - the
+ * task that drove the pass reports the consumer as failed - rather than every other consumer's rebuild waiting on
+ * the one that broke, which is what a shared cursor used to cost. Either way nothing is served as whole that is
+ * not: a stuck pass is visible through {@link ArtifactWalk#pass} / {@link ArtifactWalk#segments}, a failed
+ * consumer through {@link #failed}. {@link WalkConsumer#onPassStarted} fires on this worker before its first delivery (and
  * before {@code onPassCompleted} on an empty store - a rebuild from an empty truth is still a rebuild);
  * {@link WalkConsumer#onPassCompleted} fires when this worker observed the pass complete. The hooks are per-worker:
  * with one scheduled worker driving the pass - the default - a snapshot rebuilder sees the whole pass between its
@@ -72,6 +82,109 @@ public final class RebuildPass {
 
     /** The pass-state scope every joiner shares ({@code walks/rebuild/...}) - one pass, however many workers. */
     public static final String CONSUMER = "rebuild";
+
+    /** Where a consumer's failure in a generation is recorded under the default scope - see {@link #failedSpace}. */
+    public static final String FAILED_SPACE = failedSpace(CONSUMER);
+
+    /** Where the last completed pass under {@code scope} recorded what it delivered - see {@link #last}. */
+    public static String measuredKey(String scope) {
+        return "walks/" + scope + "/last";
+    }
+
+    /** Where the workers of a generation fold the objects they delivered, one counter per family. */
+    private static String countedKey(String scope, long generation, WalkConsumer.Family family) {
+        return "walks/" + scope + "/counted/" + generation + "/" + family.name().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * What the last completed pass under a scope delivered: its generation, when it started and completed, and the
+     * objects it handed over per family, summed over every worker that took part. This is the pass's own account
+     * of its cost in objects; what the store charged for them is the deployment's to measure around the pass.
+     */
+    public record Measured(long generation, Instant started, Instant completed, long pointers, long inventory,
+                           long blobs, long derived) {
+
+        /** The objects delivered in family {@code family}. */
+        public long objects(WalkConsumer.Family family) {
+            return switch (family) {
+                case POINTERS -> pointers;
+                case INVENTORY -> inventory;
+                case BLOBS -> blobs;
+                case DERIVED -> derived;
+            };
+        }
+
+        /** Every family's objects, summed. */
+        public long objects() {
+            return pointers + inventory + blobs + derived;
+        }
+
+        byte[] encoded() {
+            return (generation + "\n" + started + "\n" + completed + "\n" + pointers + "\n" + inventory + "\n"
+                    + blobs + "\n" + derived + "\n").getBytes(StandardCharsets.UTF_8);
+        }
+
+        static Measured decode(byte[] content) {
+            String[] lines = new String(content, StandardCharsets.UTF_8).split("\n");
+            return new Measured(Long.parseLong(lines[0]), Instant.parse(lines[1]), Instant.parse(lines[2]),
+                    Long.parseLong(lines[3]), Long.parseLong(lines[4]), Long.parseLong(lines[5]),
+                    Long.parseLong(lines[6]));
+        }
+    }
+
+    /** {@link #last(ArtifactStore, String)} under the default scope. */
+    public static Optional<Measured> last(ArtifactStore store) throws IOException {
+        return last(store, CONSUMER);
+    }
+
+    /** What the last completed pass under {@code scope} delivered, or empty when none has completed. */
+    public static Optional<Measured> last(ArtifactStore store, String scope) throws IOException {
+        return store.readVersioned(measuredKey(scope)).map(versioned -> Measured.decode(versioned.content()));
+    }
+
+    /** Where a consumer's failure in a generation is recorded under {@code scope}, one small object per consumer
+     *  name - read by the task that drove the pass to report it, cleared when a later generation reaches the
+     *  consumer again. */
+    public static String failedSpace(String scope) {
+        return "walks/" + scope + "/failed";
+    }
+
+    /** A consumer's failure in a generation: which consumer, in which generation, on which key (or {@code null}
+     *  for a pass hook), and what it threw. */
+    public record Failed(String consumer, long generation, String key, String failure) {
+
+        byte[] encoded() {
+            return (generation + "\n" + (key == null ? "" : key) + "\n" + failure).getBytes(StandardCharsets.UTF_8);
+        }
+
+        static Failed decode(String consumer, byte[] body) {
+            String[] lines = new String(body, StandardCharsets.UTF_8).split("\n", 3);
+            long generation;
+            try {
+                generation = Long.parseLong(lines[0].trim());
+            } catch (NumberFormatException _) {
+                generation = -1L;
+            }
+            return new Failed(consumer, generation, lines.length > 1 && !lines[1].isEmpty() ? lines[1] : null,
+                    lines.length > 2 ? lines[2] : "");
+        }
+    }
+
+    /** Every consumer recorded as failed under the default scope, whatever the generation. */
+    public static List<Failed> failed(ArtifactStore store) throws IOException {
+        return failed(store, CONSUMER);
+    }
+
+    /** Every consumer recorded as failed under {@code scope}, whatever the generation - a listing of one small
+     *  space, bounded by the number of consumers, never by the store. */
+    public static List<Failed> failed(ArtifactStore store, String scope) throws IOException {
+        List<Failed> failed = new ArrayList<>();
+        for (String name : store.list(failedSpace(scope))) {
+            store.readVersioned(failedSpace(scope) + "/" + name)
+                    .ifPresent(body -> failed.add(Failed.decode(name, body.content())));
+        }
+        return failed;
+    }
 
     /** A pointer names a hash in a few dozen bytes; a larger leaf is other metadata and is never read whole. */
     private static final int LARGEST_POINTER = 1024;
@@ -88,7 +201,49 @@ public final class RebuildPass {
      */
     public static Optional<WalkPass> run(ArtifactWalk walk, ArtifactStore store, List<String> pointerRoots,
                                          List<WalkConsumer> consumers) throws IOException {
-        return run(walk, store, new Publication(store), pointerRoots, consumers);
+        return run(walk, store, new Publication(store), Roots.pointers(pointerRoots), consumers);
+    }
+
+    /**
+     * The store roots that make up each {@link WalkConsumer.Family}: the deployment names them, the pass enumerates
+     * only the families its consumers listen on. Pointer roots are validated as such (never {@code blobs}, {@code gc}
+     * or {@code walks}); the other families' roots may be empty, in which case a consumer listening on that family
+     * is handed nothing - which is the shape a deployment without an inventory has.
+     */
+    public record Roots(List<String> pointers, List<String> inventory, List<String> blobs, List<String> derived) {
+
+        public Roots {
+            // Empty pointer roots are legitimate here (a pass whose consumers listen on other families only); what
+            // is refused is a root that is not a pointer root, and a pass with no root at all is refused by run.
+            pointers = pointers == null || pointers.isEmpty() ? List.of() : RebuildPass.roots(pointers);
+            inventory = normalised(inventory);
+            blobs = normalised(blobs);
+            derived = normalised(derived);
+        }
+
+        /** The pointer roots alone - what the free core's own pass walks. */
+        public static Roots pointers(List<String> pointerRoots) {
+            return new Roots(pointerRoots, List.of(), List.of(), List.of());
+        }
+
+        List<String> of(WalkConsumer.Family family) {
+            return switch (family) {
+                case POINTERS -> pointers;
+                case INVENTORY -> inventory;
+                case BLOBS -> blobs;
+                case DERIVED -> derived;
+            };
+        }
+
+        private static List<String> normalised(List<String> roots) {
+            List<String> sorted = (roots == null ? List.<String>of() : roots).stream().distinct().sorted().toList();
+            for (String root : sorted) {
+                if (root == null || root.isBlank() || root.equals("gc") || root.equals("walks")) {
+                    throw new IllegalArgumentException("not a family root: " + root);
+                }
+            }
+            return sorted;
+        }
     }
 
     /**
@@ -99,25 +254,79 @@ public final class RebuildPass {
      */
     public static Optional<WalkPass> run(ArtifactWalk walk, ArtifactStore store, Publication publication,
                                          List<String> pointerRoots, List<WalkConsumer> consumers) throws IOException {
+        return run(walk, store, publication, Roots.pointers(pointerRoots), consumers);
+    }
+
+    /** As {@link #run(ArtifactWalk, ArtifactStore, Publication, Roots, List)} over a {@link Publication} of the
+     *  store's own - the core's empty interceptor chain screens the pointers. */
+    public static Optional<WalkPass> run(ArtifactWalk walk, ArtifactStore store, Roots roots,
+                                         List<WalkConsumer> consumers) throws IOException {
+        return run(walk, store, new Publication(store), roots, consumers);
+    }
+
+    /**
+     * Join the shared pass over every family of {@code roots} that one of {@code consumers} listens on - each
+     * enumerated once, in one generation, under one cursor set - and hand every member to the consumers listening
+     * on its family (clause 13 of the consumer contract), withheld pointers to those that asked (clause 14).
+     */
+    public static Optional<WalkPass> run(ArtifactWalk walk, ArtifactStore store, Publication publication,
+                                         Roots roots, List<WalkConsumer> consumers) throws IOException {
+        return run(walk, store, publication, roots, consumers, CONSUMER);
+    }
+
+    /**
+     * As {@link #run(ArtifactWalk, ArtifactStore, Publication, Roots, List)} under the pass scope {@code scope}
+     * ({@code walks/<scope>/...}): a deployment that schedules several walks, each with its own consumers, gives
+     * each its own scope, so two walks never join one another's generation and deliver to the wrong consumers.
+     */
+    public static Optional<WalkPass> run(ArtifactWalk walk, ArtifactStore store, Publication publication,
+                                         Roots roots, List<WalkConsumer> consumers, String scope) throws IOException {
         if (consumers.isEmpty()) {
             return Optional.empty();
         }
-        Delivery delivery = new Delivery(walk, store, publication, List.copyOf(consumers));
-        WalkPass pass = walk.walk(store, CONSUMER, roots(pointerRoots), delivery);
+        Map<WalkConsumer.Family, List<WalkConsumer>> listening = new EnumMap<>(WalkConsumer.Family.class);
+        for (WalkConsumer consumer : consumers) {
+            for (WalkConsumer.Family family : consumer.families()) {
+                listening.computeIfAbsent(family, _ -> new ArrayList<>()).add(consumer);
+            }
+        }
+        Map<String, WalkConsumer.Family> familyByRoot = new TreeMap<>();
+        for (WalkConsumer.Family family : listening.keySet()) {
+            for (String root : roots.of(family)) {
+                familyByRoot.put(root, family);
+            }
+        }
+        if (familyByRoot.isEmpty()) {
+            throw new IllegalArgumentException("no root to walk: the consumers listen on " + listening.keySet()
+                    + " and the deployment names no root for any of them");
+        }
+        Delivery delivery = new Delivery(walk, store, publication, List.copyOf(consumers), listening, familyByRoot,
+                scope);
+        WalkPass pass = walk.walk(store, scope, List.copyOf(familyByRoot.keySet()), delivery);
+        delivery.counted(pass);
         if (pass.complete()) {
             delivery.started(pass);
             for (WalkConsumer consumer : consumers) {
-                try {
-                    consumer.onPassCompleted(pass);
-                } catch (RuntimeException failure) {
-                    // Narrower than the other three deliberately: onPassCompleted declares no IOException, so a
-                    // runtime failure is the only shape there is to name here.
-                    failure.addSuppressed(new WalkConsumerFailure(consumer));
-                    throw failure;
-                }
+                // Narrower than the other three deliberately: onPassCompleted declares no IOException, so a
+                // runtime failure is the only shape there is to contain here.
+                delivery.attributed(consumer, null, delivered -> delivered.onPassCompleted(pass, store));
             }
+            measured(store, scope, pass);
         }
         return Optional.of(pass);
+    }
+
+    /** The worker that observed the pass complete writes its account: every worker's counters, summed. */
+    private static void measured(ArtifactStore store, String scope, WalkPass pass) throws IOException {
+        long[] objects = new long[WalkConsumer.Family.values().length];
+        for (WalkConsumer.Family family : WalkConsumer.Family.values()) {
+            objects[family.ordinal()] = new StoredCounter(store, countedKey(scope, pass.generation(), family)).read();
+        }
+        store.write(measuredKey(scope), new ByteArrayInputStream(new Measured(pass.generation(), pass.started(),
+                Instant.now(), objects[0], objects[1], objects[2], objects[3]).encoded()));
+        for (WalkConsumer.Family family : WalkConsumer.Family.values()) {
+            new StoredCounter(store, countedKey(scope, pass.generation(), family)).delete();
+        }
     }
 
     /** Validate and normalise the caller's pointer roots: at least one, and never one of the store namespaces the
@@ -160,14 +369,52 @@ public final class RebuildPass {
         private final ArtifactStore store;
         private final ServableNames names;
         private final List<WalkConsumer> consumers;
+        private final Map<WalkConsumer.Family, List<WalkConsumer>> listening;
+        private final Map<String, WalkConsumer.Family> familyByRoot;
+        private final String scope;
+        /** The consumers that failed in this generation on this worker: delivered nothing more, recorded durably. */
+        private final Set<WalkConsumer> dropped = new HashSet<>();
+        private long generation = -1L;
         private boolean started;
+        /** The objects this worker handed over, per family, folded into the generation's counters at the end. */
+        private final long[] delivered = new long[WalkConsumer.Family.values().length];
 
         private Delivery(ArtifactWalk walk, ArtifactStore store, Publication publication,
-                         List<WalkConsumer> consumers) {
+                         List<WalkConsumer> consumers, Map<WalkConsumer.Family, List<WalkConsumer>> listening,
+                         Map<String, WalkConsumer.Family> familyByRoot, String scope) {
             this.walk = walk;
             this.store = store;
             this.names = new ServableNames(store, publication);
             this.consumers = consumers;
+            this.listening = listening;
+            this.familyByRoot = familyByRoot;
+            this.scope = scope;
+        }
+
+        /** Fold what this worker delivered into the generation's counters, so the account the completing worker
+         *  writes sums every worker; a worker that delivered nothing writes nothing. */
+        private void counted(WalkPass pass) throws IOException {
+            for (WalkConsumer.Family family : WalkConsumer.Family.values()) {
+                if (delivered[family.ordinal()] > 0) {
+                    new StoredCounter(store, countedKey(scope, pass.generation(), family))
+                            .add(delivered[family.ordinal()]);
+                    delivered[family.ordinal()] = 0;
+                }
+            }
+        }
+
+        /** The family a walked key belongs to, by the longest root that prefixes it. */
+        private WalkConsumer.Family familyOf(String key) {
+            WalkConsumer.Family family = null;
+            int longest = -1;
+            for (Map.Entry<String, WalkConsumer.Family> root : familyByRoot.entrySet()) {
+                String prefix = root.getKey();
+                if ((key.equals(prefix) || key.startsWith(prefix + "/")) && prefix.length() > longest) {
+                    family = root.getValue();
+                    longest = prefix.length();
+                }
+            }
+            return family;
         }
 
         private void started(WalkPass pass) throws IOException {
@@ -175,34 +422,48 @@ public final class RebuildPass {
                 return;
             }
             started = true;
+            generation = pass.generation();
             for (WalkConsumer consumer : consumers) {
-                attributed(consumer, delivered -> delivered.onPassStarted(pass));
+                // A failure recorded for an earlier generation is over: this generation reaches the consumer whole.
+                String marker = failedSpace(scope) + "/" + consumer.name();
+                Optional<ArtifactStore.Versioned> recorded = store.readVersioned(marker);
+                if (recorded.isPresent()
+                        && Failed.decode(consumer.name(), recorded.get().content()).generation() < generation) {
+                    store.delete(marker);
+                }
+                attributed(consumer, null, delivered -> delivered.onPassStarted(pass, store));
             }
         }
 
         /**
-         * Run {@code delivery} for {@code consumer} and, if it fails, say whose failure it was before letting it
-         * through.
+         * Run {@code handoff} for {@code consumer}; if it fails, record whose failure it was, durably, and deliver
+         * that consumer nothing more in this generation.
          *
-         * <p><b>This names; it never contains.</b> The four fan-outs below deliberately let a consumer's failure
-         * propagate, and that is the load-bearing choice: the cursor is <em>shared</em> - one walk, one committed
-         * position, N consumers - so containing one consumer's failure while the pass commits the stride would
-         * advance past items that consumer never received, permanently, with it then reporting itself converged.
-         * Propagating is what holds the cursor, so the pass resumes from the last committed position and a failure
-         * <em>delays</em> a rebuild instead of truncating it.
+         * <p><b>This contains per consumer, and the cursor is why it may.</b> The cursor is <em>shared</em> - one
+         * walk, one committed position, N consumers - so a consumer that missed a delivery can never be handed it
+         * again in this generation; the pass used to propagate the failure for that reason, holding the cursor for
+         * everyone at the price of every consumer's rebuild waiting on the one that broke. What makes containment
+         * honest is that a consumer's generation is a whole or nothing: the failure is written under
+         * {@link #FAILED_SPACE} with the generation and the key before the pass moves on, the consumer is dropped
+         * for the rest of the generation so its projection is never half of one, the task that drove the pass
+         * reports it failed, and the next generation - a full pass - redelivers everything to it. A failure of the
+         * walk itself is not a consumer's and still propagates.
          *
-         * <p>What propagating cost was attribution: the failing consumer's class reached the operator only in a
-         * stack trace, and appeared in no counter and no message. An operator seeing a rebuild stall was told a
-         * pass failed and not which plugin stalled it. So the exception is rethrown - the same exception, with its
-         * type and its own message intact, because a caller distinguishing {@code IOException} from a runtime one
-         * must keep being able to - carrying a suppressed marker that names the consumer.
+         * <p>The record names the consumer and carries the failure's own text; the exception is not rethrown, so
+         * the marker is the operator's surface. An {@link Error} is not contained: it is the runtime giving way, not
+         * a consumer failing.
          */
-        private void attributed(WalkConsumer consumer, Handoff handoff) throws IOException {
+        private void attributed(WalkConsumer consumer, String key, Handoff handoff) throws IOException {
+            if (dropped.contains(consumer)) {
+                return;
+            }
             try {
                 handoff.to(consumer);
             } catch (IOException | RuntimeException failure) {
-                failure.addSuppressed(new WalkConsumerFailure(consumer));
-                throw failure;
+                dropped.add(consumer);
+                store.write(failedSpace(scope) + "/" + consumer.name(),
+                        new ByteArrayInputStream(new Failed(consumer.name(), generation, key, failure.toString())
+                                .encoded()));
             }
         }
 
@@ -225,13 +486,39 @@ public final class RebuildPass {
                 return;
             }
             for (WalkConsumer consumer : consumers) {
-                attributed(consumer, delivered -> delivered.beforeCheckpoint(cursor));
+                attributed(consumer, cursor, delivered -> delivered.beforeCheckpoint(cursor));
             }
         }
 
         @Override
         public void visit(String key) throws IOException {
-            long size = store.size(key);
+            visit(key, store.size(key));
+        }
+
+        /** The size the listing already carried: a HEAD per object was the walk's largest single cost over an object
+         *  store, paid for every key to decide whether it was small enough to be a pointer. */
+        @Override
+        public void visit(ArtifactStore.Listed entry) throws IOException {
+            visit(entry.key(), entry.size().isPresent() ? entry.size().getAsLong() : store.size(entry.key()));
+        }
+
+        private void visit(String key, long size) throws IOException {
+            WalkConsumer.Family family = familyOf(key);
+            if (family == null) {
+                return;   // a key under no root of this pass - the walk's own bookkeeping never is, but say so cheaply
+            }
+            if (family != WalkConsumer.Family.POINTERS) {
+                if (!started) {
+                    started(walk.pass(store, scope)
+                            .orElseThrow(() -> new IOException("no rebuild pass to deliver under")));
+                }
+                WalkConsumer.Walked entry = new WalkConsumer.Walked(family, key, size, store);
+                delivered[family.ordinal()]++;
+                for (WalkConsumer consumer : listening.get(family)) {
+                    attributed(consumer, key, delivered -> delivered.onWalked(entry, store));
+                }
+                return;
+            }
             if (size < 0 || size > LARGEST_POINTER) {
                 return;
             }
@@ -250,36 +537,39 @@ public final class RebuildPass {
                 return; // a sidecar row, marker or index - not a serving pointer, never delivered
             }
             String path = key.startsWith("publish/") ? key.substring("publish".length()) : key;
-            if (key.startsWith("publish/") && withheld(path)) {
-                return; // withheld from serving - a GET would 404 it, so a rebuild must not reinstate it into an index
-            }
+            // Under publish/ the whole withhold model applies; under any other root the content-addressed marker
+            // alone does - a hash withheld is withheld wherever it is served, whatever the layout that names it.
+            boolean held = key.startsWith("publish/") ? withheld(path, named) : Withheld.is(store, named);
             if (!started) {
-                started(walk.pass(store, CONSUMER)
+                started(walk.pass(store, scope)
                         .orElseThrow(() -> new IOException("no rebuild pass to deliver under")));
             }
             ArtifactDescriptor artifact = new ArtifactDescriptor(null, null, null, path, null, false, named,
                     store.size("blobs/" + named));
-            for (WalkConsumer consumer : consumers) {
-                attributed(consumer, delivered -> delivered.onRetained(artifact, store));
+            delivered[WalkConsumer.Family.POINTERS.ordinal()]++;
+            for (WalkConsumer consumer : listening.get(WalkConsumer.Family.POINTERS)) {
+                if (held) {
+                    // Withheld from serving - a GET would 404 it, so a rebuild of a served view must not reinstate
+                    // it into an index; a consumer that must be complete over what is stored asked, and gets it.
+                    if (consumer.seesWithheld()) {
+                        attributed(consumer, key, delivered -> delivered.onWithheld(artifact, store));
+                    }
+                } else {
+                    attributed(consumer, key, delivered -> delivered.onRetained(artifact, store));
+                }
             }
         }
 
-        /** Whether the free {@code publish/} namespace withholds this request path from serving - the quarantine read
-         *  side {@code PublishedAssets} screens, mirrored here through the one servable-name seam so a rebuild never
-         *  reinstates a withheld artifact into a consumer's index. The quarantine review subtree
-         *  ({@code publish/quarantine/...}) is stored but never served, exactly as {@code PublishedAssets} never
-         *  descends it. Otherwise the discrimination is the seam's first-class {@link ServableNames.State}: a
-         *  {@link ServableNames.State#WITHHELD} path (an interceptor retracts it, or a {@code withheld/<hash>} marker) is
-         *  skipped; a {@link ServableNames.State#BLOB_GONE} torn pointer is <em>not</em> withheld - it is delivered as
-         *  the torn state a reconcile consumer repairs. This replaces the former hand-rolled
-         *  {@code located().isEmpty() && blobs exists} test, which mis-classified a withheld-AND-gc-reclaimed pointer as
-         *  merely torn (its blob absent flipped the {@code &&} to false) and so delivered it; the seam runs the withhold
-         *  probe first, so such a pointer now reads {@code WITHHELD} and is correctly skipped. */
-        private boolean withheld(String requestPath) throws IOException {
+        /** Whether a pointer is withheld from serving - the interceptor chain's hold on the path, the content-addressed
+         *  marker under {@code withheld/} for its hash, or the quarantine path itself. Two point reads, where the
+         *  servability probe this used to go through read the pointer again and stat the blob as well: a rebuild has
+         *  already read the pointer and has the hash in hand, and a withheld-and-reclaimed pointer reads WITHHELD by
+         *  its marker alone. */
+        private boolean withheld(String requestPath, String hash) throws IOException {
             if (requestPath.equals("/quarantine") || requestPath.startsWith("/quarantine/")) {
                 return true;
             }
-            return names.state(requestPath) == ServableNames.State.WITHHELD;
+            return names.heldByChain(requestPath) || Withheld.is(store, hash);
         }
     }
 }

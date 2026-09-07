@@ -47,6 +47,45 @@ public record ObservabilityReport(List<HealthCheck> healthChecks, List<Metric> m
         return new ObservabilityReport(health, metrics, tasks);
     }
 
+    /**
+     * The report as every endpoint answers it - the repository's admin endpoint, the actuator endpoint, the cache
+     * node's - one document shape, rendered here once: the overall verdict, then the health checks, metrics and task
+     * statuses with their names and registration descriptions. {@code version} lets a client detect a future shape
+     * change; a metric's {@code limit} and {@code usage} are {@code null} where it has no ceiling.
+     */
+    public View view() {
+        return new View(1, overall().name(),
+                healthChecks.stream().map(check -> new HealthView(check.name(), check.description(),
+                        check.status().name(), check.detail())).toList(),
+                metrics.stream().map(metric -> new MetricView(metric.name(), metric.description(),
+                        metric.kind().name(), metric.value(), metric.unit(),
+                        metric.limit().isPresent() ? metric.limit().getAsDouble() : null,
+                        metric.usage().isPresent() ? metric.usage().getAsDouble() : null)).toList(),
+                tasks.stream().map(task -> new TaskView(task.name(), task.description(), task.state().name(),
+                        task.lastRun() == null ? null : task.lastRun().toString(),
+                        task.lastDuration() == null ? null : task.lastDuration().toString(),
+                        task.outcome())).toList());
+    }
+
+    /** The whole collected report, grouped by signal kind - see {@link #view()}. */
+    public record View(int version, String overall, List<HealthView> health, List<MetricView> metrics,
+                       List<TaskView> tasks) {
+    }
+
+    /** One self-describing health check: its name, registration description, verdict and detail. */
+    public record HealthView(String name, String description, String status, String detail) {
+    }
+
+    /** One metric with its ceiling and usage fraction where it has one, {@code null} otherwise. */
+    public record MetricView(String name, String description, String kind, double value, String unit, Double limit,
+                             Double usage) {
+    }
+
+    /** One scheduled task's last run as its scheduler reported it. */
+    public record TaskView(String name, String description, String state, String lastRun, String lastDuration,
+                           String outcome) {
+    }
+
     /** Collect the signals of every {@link ServiceLoader}-discovered {@link ObservabilitySource}. */
     public static ObservabilityReport discover() {
         return from(ServiceLoader.load(ObservabilitySource.class).stream()

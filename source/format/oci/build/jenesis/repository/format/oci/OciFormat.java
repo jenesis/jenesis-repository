@@ -1,6 +1,8 @@
 package build.jenesis.repository.format.oci;
 
 import module java.base;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.Listings;
@@ -1123,18 +1125,12 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
          *  upstream. */
         private static final int CAPACITY = 50_000;
 
-        private final Map<String, Boolean> seen = new LinkedHashMap<>(1024, 0.75f, true) {
-
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
-                return size() > CAPACITY;
-            }
-        };
+        private final Cache<String, Boolean> seen = Caffeine.newBuilder().maximumSize(CAPACITY).build();
 
         /** Remember {@code digest} and report whether it is new to this enumeration - the {@code Set#add} contract,
          *  with the one difference that an evicted digest reads as new again (see the class note). */
         private boolean add(String digest) {
-            return seen.put(digest, Boolean.TRUE) == null;
+            return seen.asMap().putIfAbsent(digest, Boolean.TRUE) == null;
         }
     }
 

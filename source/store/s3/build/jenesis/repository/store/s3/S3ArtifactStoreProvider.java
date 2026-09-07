@@ -47,6 +47,13 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
     /** The config key that opts {@link #ENDPOINT_KEY} out of the https-only transport screen. */
     public static final String ALLOW_INSECURE_KEY = Features.key("s3.allow-insecure-endpoint");
 
+    /** The config key that switches the boot-time conditional-write probe off ({@code false}); on by default.
+     *  The probe refuses to start a node over an endpoint that ignores a write precondition, which is how two
+     *  nodes would lose each other's writes silently; switching it off is for an endpoint a deployment has
+     *  satisfied itself about by other means, and the node then warns on every start. */
+    public static final String PROBE_KEY = Features.key("s3.conditional-write-probe");
+
+
     /**
      * Whether a conditional write may stream its body ({@code true} by default).
      *
@@ -115,7 +122,7 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
         // S3-compatible endpoint does; the one boot-time question that settles it, answered by refusing to start.
         try {
             ConditionalWrites.probe(store, endpoint == null || endpoint.isBlank() ? "the S3 endpoint for bucket " + bucket
-                    : "the S3-compatible endpoint " + endpoint);
+                    : "the S3-compatible endpoint " + endpoint, config.apply(PROBE_KEY));
         } catch (IOException failure) {
             throw new IllegalStateException("the s3 store could not be probed for conditional writes at boot - is bucket "
                     + bucket + " writable with these credentials? " + failure.getMessage(), failure);

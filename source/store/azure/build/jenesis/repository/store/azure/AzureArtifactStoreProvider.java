@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.ConditionalWrites;
 import build.jenesis.repository.store.Endpoints;
 import build.jenesis.repository.store.Features;
 import com.azure.storage.blob.BlobContainerClient;
@@ -49,6 +50,13 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
      *  transport screen. */
     public static final String ALLOW_INSECURE_KEY = Features.key("azure-blob.allow-insecure-endpoint");
 
+    /** The config key that switches the boot-time conditional-write probe off ({@code false}); on by default.
+     *  The probe refuses to start a node over an endpoint that ignores a write precondition, which is how two
+     *  nodes would lose each other's writes silently; switching it off is for an endpoint a deployment has
+     *  satisfied itself about by other means, and the node then warns on every start. */
+    public static final String PROBE_KEY = Features.key("azure-blob.conditional-write-probe");
+
+
     @Override
     public String name() {
         return "azure-blob";
@@ -77,8 +85,16 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
             // The container may already exist or the credentials may not permit creation; the operations
             // below surface a clear error if the container is truly unusable.
         }
-        return new AzureArtifactStore(container,
+        AzureArtifactStore store = new AzureArtifactStore(container,
                 !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)));
+        // The one boot-time question every compare-and-set rests on, asked of every object-store endpoint alike.
+        try {
+            ConditionalWrites.probe(store, "the blob endpoint for container " + containerName, config.apply(PROBE_KEY));
+        } catch (IOException failure) {
+            throw new IllegalStateException("the azure-blob store could not be probed for conditional writes at boot - "
+                    + "is container " + containerName + " writable with these credentials? " + failure.getMessage(), failure);
+        }
+        return store;
     }
 
     /**

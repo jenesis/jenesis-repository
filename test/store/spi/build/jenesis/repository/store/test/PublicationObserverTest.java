@@ -8,6 +8,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.store.Requests;
 import build.jenesis.repository.store.PublishInterceptor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -310,5 +311,21 @@ class PublicationObserverTest {
         assertThat(scoped.readVersioned("outbox/" + entries.getFirst()))
                 .hasValueSatisfying(versioned -> assertThat(new String(versioned.content(), StandardCharsets.UTF_8))
                         .isEqualTo("/raw/forward-me"));
+    }
+
+    @Test
+    void a_contained_observer_failure_asks_for_the_walk_that_repairs_it() throws IOException {
+        Requests.installRoot(store);
+        try {
+            Publication publication = new Publication(store, List.of(), List.of((artifact, store) -> {
+                throw new IOException("index down");
+            }));
+            edgePublish(publication, store, ArtifactDescriptor.at("raw", "/raw/asks"), bytes("asks"));
+            assertThat(Requests.pending(store, Requests.WALK))
+                    .as("the contained failure left derived state behind the commit; the walk is asked for")
+                    .hasValueSatisfying(request -> assertThat(request.reason()).contains("index down"));
+        } finally {
+            Requests.installRoot(null);
+        }
     }
 }

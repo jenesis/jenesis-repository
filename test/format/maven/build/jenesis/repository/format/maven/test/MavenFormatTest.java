@@ -9,6 +9,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.Withheld;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -177,6 +178,23 @@ class MavenFormatTest {
         assertThat(format.paths("org.example:lib", "1.0", store))
                 .as("its module view is cross-published, read from the stored blob")
                 .containsExactlyInAnyOrder("/maven/org/example/lib/1.0", "/module/org.example.lib/1.0");
+    }
+
+    @Test
+    void the_module_name_is_recorded_once_and_read_from_its_record_rather_than_the_jar_again() throws IOException {
+        // A rebuild pass used to open every Maven jar in the repository on every pass for this one string. The name
+        // is recorded under by/module/<hash> the first time it is read, and read from there after.
+        FaultInjectingStore counting = FaultInjectingStore.wrap(store);
+        byte[] jar = automaticModuleJar("org.example.lib");
+        MavenFormat.layout(counting, "/maven/org/example/lib/1.0/lib-1.0.jar", new java.io.ByteArrayInputStream(jar));
+        int opened = counting.calls(FaultInjectingStore.Op.OPEN);
+        assertThat(opened).as("the first layout reads the jar").isGreaterThanOrEqualTo(1);
+        assertThat(counting.list("by/module")).as("and records what it read").hasSize(1);
+
+        MavenFormat.layout(counting, "/maven/org/example/lib/1.1/lib-1.1.jar", new java.io.ByteArrayInputStream(jar));
+        assertThat(counting.calls(FaultInjectingStore.Op.OPEN)).as("the same bytes, published again: the record answers").isEqualTo(opened);
+        assertThat(format.paths("org.example:lib", "1.1", store))
+                .containsExactlyInAnyOrder("/maven/org/example/lib/1.1", "/module/org.example.lib/1.1");
     }
 
     private static byte[] automaticModuleJar(String moduleName) throws IOException {

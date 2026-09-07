@@ -61,6 +61,12 @@ public final class ModuleViewRebuild implements WalkConsumer {
         return "module-view";
     }
 
+    @Override
+    public String description() {
+        return "Re-derives the /module/ view of every published modular Maven jar whose cross-publish never "
+                + "completed; reads each pointer the walk hands it and the jar's descriptor when the view is missing.";
+    }
+
     /**
      * Re-derive the version-addressed {@code /module/} view of one delivered pointer, when it is a Maven jar that
      * declares a module name.

@@ -11,9 +11,9 @@ import build.jenesis.repository.store.Features;
  * routes, and a correct plugin implements <em>both</em>: <b>live events</b> ({@code PublicationObserver}'s
  * {@code onPublished} / {@code onDeleted}) for the steady state, and <b>the full walk</b> - this interface - for
  * first-activation back-fill, periodic refresh and self-heal. A scheduled walk pass ({@link RebuildPass}) drives
- * every discovered consumer from <em>one</em> enumeration, so N metadata rebuilders over the same serving pointers
- * never mean N tree walks (a pass whose roots, granularity or completeness rule differ opens its own, and
- * {@link RebuildPass} says which do). The walk alone must be able to
+ * every discovered consumer from <em>one</em> enumeration of each key family they listen on (clause 13), so N
+ * rebuilders over the same store never mean N tree walks, and a consumer that must see withheld pointers says so
+ * (clause 14) rather than walking on its own. The walk alone must be able to
  * fully rebuild the plugin's derived state from the durable store wherever the truth model permits; where a surface
  * genuinely cannot be re-derived (a human decision, a point-in-time observation), the plugin's documentation names
  * it and the plugin degrades gracefully rather than serving a silently-incomplete view as if it were whole.
@@ -49,13 +49,16 @@ import build.jenesis.repository.store.Features;
  *     pass enumerated, already scoped by the caller. A consumer derives every key it writes from that argument and
  *     never captures a store from anywhere else, so one deployment's pass can never write into another tenant's
  *     namespace.</li>
- * <li><b>Error visibility (&sect;9).</b> An {@link IOException} out of {@link #onRetained} or {@link #beforeCheckpoint}
- *     propagates: it stops this worker's segment, leaves its claim to expire, and the pass resumes from the last
- *     committed cursor - a failure delays a rebuild but never silently truncates it, and the stuck pass is visible
- *     through {@link ArtifactWalk#pass} / {@link ArtifactWalk#segments}. A consumer must therefore not catch its own
- *     store failures into a shrug: a swallowed write is exactly the silently-incomplete projection &sect;5 forbids. The
- *     pass hooks are not declared to throw, so a consumer that persists in them wraps a store failure in an
- *     {@link UncheckedIOException}, which propagates out of the pass in the same way.</li>
+ * <li><b>Error visibility (&sect;9).</b> An {@link IOException} (or a runtime failure) out of any hook fails
+ *     <em>this consumer's generation</em>: the pass records it under {@code walks/rebuild/failed/<name>} with the
+ *     generation and the key, hands this consumer nothing more until the next generation, and completes for the
+ *     others; the task that drove the pass reports the consumer as failed, and the next generation - a full pass -
+ *     redelivers everything to it ({@link RebuildPass#failed}). A consumer must therefore not catch its own store
+ *     failures into a shrug: a swallowed write is exactly the silently-incomplete projection &sect;5 forbids, while a
+ *     thrown one is recorded, reported and redelivered. The pass hooks are not declared to throw, so a consumer that
+ *     persists in them wraps a store failure in an {@link UncheckedIOException}, which is contained the same way.
+ *     A failure of the walk itself - the store refusing the pass's own read or cursor commit - is nobody's and
+ *     propagates, leaving the pass active and resumable.</li>
  * <li><b>Read purity (&sect;10).</b> A pass is a read of durable state plus a write of derived state. Neither hook may
  *     fetch from an upstream, call a scanner, or otherwise reach outside the store: the walk must produce the same
  *     projection when every external system is down.</li>
@@ -97,16 +100,129 @@ import build.jenesis.repository.store.Features;
  *     </ul>
  *     No consumer may claim a stronger class than the one it implements: the walk's cursor is the only durability the
  *     pass itself provides.</li>
+ * <li><b>Families.</b> A pass enumerates each {@linkplain Family key family} its consumers listen on exactly once
+ *     per generation - the pointer roots, the inventory rows, the blob pool, the derived rows - and hands every
+ *     member to every consumer that {@linkplain #families() listens} on that family: a pointer as a descriptor
+ *     through {@link #onRetained} (or {@link #onWithheld}), any other member as a {@link Walked} key through
+ *     {@link #onWalked}, whose body is read once for all of them. A family nobody listens on is not enumerated, so
+ *     a consumer pays for exactly the streams it asked for; and every repair that used to walk the store on its
+ *     own rides here instead, which is the reason the families exist.</li>
+ * <li><b>Withheld pointers.</b> The pass decides once per pointer whether serving would 404 it - the quarantine
+ *     subtree, the interceptor chain's hold, the {@code withheld/} marker - and delivers a withheld pointer through
+ *     {@link #onWithheld} to a consumer that {@linkplain #seesWithheld() asked to see it} (a reconcile, a collector's
+ *     mark: state that must be complete over what is stored, not over what serves) and to nobody else. A consumer
+ *     that rebuilds a served view never sees one, so it cannot reinstate into an index what a GET would refuse.</li>
+ * <li><b>Self-description.</b> {@link #description()} is one sentence an operator reads beside the consumer's
+ *     checkbox on the walks screen: what it repairs and what riding a walk costs it, in the operator's terms rather
+ *     than the implementation's. {@link #settings()} names the dials that govern what the consumer does with what it
+ *     is handed - a retention policy's criteria, a collector's grace - so the screen can show them beside it; a
+ *     consumer with no such dial answers none. Neither is consulted by the pass, and neither reaches the store.</li>
  * </ol>
  */
 public interface WalkConsumer {
 
+    /**
+     * The key families one pass can enumerate, each once per generation. Which store roots make up a family is the
+     * deployment's to say ({@link RebuildPass.Roots}); the family is the consumer's word for what it wants.
+     */
+    enum Family {
+        /** The serving pointers: the free {@code publish/} root and every blobs-namespace root a format declares.
+         *  Delivered as descriptors through {@link #onRetained} and {@link #onWithheld}. */
+        POINTERS,
+        /** The inventory's rows per published version - the sidecars under {@code published/} - delivered as keys. */
+        INVENTORY,
+        /** The content-addressed pool under {@code blobs/}, delivered as keys. */
+        BLOBS,
+        /** The per-coordinate derived rows - downloads, licenses, overrides, pins - delivered as keys. */
+        DERIVED
+    }
+
+    /** One member of a non-pointer family, handed to every consumer listening on it: the key, the size the listing
+     *  carried ({@code -1} when it did not), and the body, read from the store once on first ask and shared by every
+     *  consumer of this delivery - so N listeners on the inventory rows cost one read per row, not N. */
+    final class Walked {
+
+        private final Family family;
+        private final String key;
+        private final long size;
+        private final ArtifactStore store;
+        private Optional<byte[]> body;
+
+        public Walked(Family family, String key, long size, ArtifactStore store) {
+            this.family = Objects.requireNonNull(family, "family");
+            this.key = Objects.requireNonNull(key, "key");
+            this.size = size;
+            this.store = Objects.requireNonNull(store, "store");
+        }
+
+        public Family family() {
+            return family;
+        }
+
+        public String key() {
+            return key;
+        }
+
+        /** The size the listing carried, or {@code -1}. */
+        public long size() {
+            return size;
+        }
+
+        /** The member's bytes, read once for every consumer of this delivery; empty when it vanished between the
+         *  listing and the read. */
+        public Optional<byte[]> body() throws IOException {
+            if (body == null) {
+                body = store.readVersioned(key).map(ArtifactStore.Versioned::content);
+            }
+            return body;
+        }
+
+        @Override
+        public String toString() {
+            return family + ":" + key;
+        }
+    }
+
     /** The consumer's name - its signal and settings namespace, and its {@code walks/<name>/} pass-state scope. */
     String name();
+
+    /** The families this consumer listens on (clause 13); the pointers alone by default. */
+    default Set<Family> families() {
+        return Set.of(Family.POINTERS);
+    }
+
+    /** Whether withheld pointers reach this consumer through {@link #onWithheld} (clause 14); {@code false} by
+     *  default, which is right for every consumer that rebuilds a served view. */
+    default boolean seesWithheld() {
+        return false;
+    }
+
+    /** One sentence for the operator: what this consumer repairs when it rides a walk, and what that costs. The
+     *  default is the name, which is what a consumer that has not yet described itself shows. */
+    default String description() {
+        return name();
+    }
+
+    /** The settings keys (bare, without the {@code jenreg.} prefix) of the dials that govern what this consumer
+     *  does with what it is handed, for the walks screen to show beside it; none by default. */
+    default List<String> settings() {
+        return List.of();
+    }
 
     /** One retained artifact, visited in total key order; must be idempotent per artifact (see the class contract
      *  for the exactly-once-per-pass / at-least-once-across-a-crash delivery semantics). */
     void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException;
+
+    /** One withheld pointer - a descriptor a GET would refuse - for a consumer that {@link #seesWithheld()}; the
+     *  same idempotency and ordering as {@link #onRetained}. The default does nothing, and is never called for a
+     *  consumer that did not ask. */
+    default void onWithheld(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
+    }
+
+    /** One member of a non-pointer family this consumer {@linkplain #families() listens} on, in total key order
+     *  within a segment; idempotent per key, like {@link #onRetained}. The default does nothing. */
+    default void onWalked(Walked entry, ArtifactStore store) throws IOException {
+    }
 
     /**
      * The walk is about to durably commit {@code cursor} as processed - every checkpoint stride and at segment
@@ -130,12 +246,27 @@ public interface WalkConsumer {
     default void onPassStarted(WalkPass pass) {
     }
 
+    /** {@link #onPassStarted(WalkPass)} told which store's pass is starting: a deployment fans passes over its
+     *  repositories across workers, calling this one instance for several stores at once, so a consumer that keeps
+     *  per-pass state keys it by {@link ArtifactStore#identity()} and resets only that store's here. The default
+     *  calls the store-less form, which a consumer keeping no per-store state may keep overriding instead. */
+    default void onPassStarted(WalkPass pass, ArtifactStore store) {
+        onPassStarted(pass);
+    }
+
     /** The pass enumerated everything - the commit / compact / heal hook for a consumer that acts at pass end. Like
      *  {@link #onPassStarted} it carries no {@link ArtifactStore}: a consumer that persists here uses the store it was
      *  handed by {@link #onRetained} (and so cannot commit anything for a pass that delivered it nothing), and wraps a
      *  store failure in an {@link UncheckedIOException}, which propagates out of the pass just as a checked one
      *  would. */
     default void onPassCompleted(WalkPass pass) {
+    }
+
+    /** {@link #onPassCompleted(WalkPass)} told which store's pass completed - the store the deliveries carried, so
+     *  a consumer that commits, compacts or judges at pass end does so for that store alone, and only its state goes.
+     *  The default calls the store-less form. */
+    default void onPassCompleted(WalkPass pass, ArtifactStore store) {
+        onPassCompleted(pass);
     }
 
     /** Every enabled consumer discovered via {@link ServiceLoader} (a parallel SPI: a

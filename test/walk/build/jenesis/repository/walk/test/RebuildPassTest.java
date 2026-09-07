@@ -8,8 +8,11 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.walk.RebuildPass;
 import build.jenesis.repository.walk.WalkConsumer;
+import build.jenesis.repository.walk.WalkConsumer.Family;
+import build.jenesis.repository.walk.WalkConsumer.Walked;
 import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,6 +60,7 @@ class RebuildPassTest {
         final List<String> events = new ArrayList<>();
         final List<ArtifactDescriptor> retained = new ArrayList<>();
         final Map<String, String> derived = new HashMap<>();
+        final Map<String, String> walked = new HashMap<>();
 
         @Override
         public String name() {
@@ -68,6 +72,17 @@ class RebuildPassTest {
             events.add("retained:" + artifact.path());
             retained.add(artifact);
             derived.put(artifact.path(), artifact.hash());
+        }
+
+        @Override
+        public void onWithheld(ArtifactDescriptor artifact, ArtifactStore store) {
+            events.add("withheld:" + artifact.path());
+        }
+
+        @Override
+        public void onWalked(Walked entry, ArtifactStore store) throws IOException {
+            events.add("walked:" + entry);
+            walked.put(entry.key(), entry.body().map(String::new).orElse(""));
         }
 
         @Override
@@ -115,23 +130,26 @@ class RebuildPassTest {
             expected.put("/" + letter + "/artifact", publish(store, "/" + letter + "/artifact", "content " + letter));
         }
         Recording consumer = new Recording();
-        List<String> before = new ArrayList<>();
-        WalkConsumer fatal = new WalkConsumer() {
+        // The crash is the store going away under the pass's own pointer read, thirteen deliveries in - not a
+        // consumer throwing, which fails that consumer alone and lets the pass complete for the others.
+        FaultInjectingStore crashing = FaultInjectingStore.wrap(store);
+        Recording arming = new Recording() {
             @Override
             public String name() {
-                return "fatal";
+                return "arming";
             }
 
             @Override
-            public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-                before.add(artifact.path());
-                if (before.size() == 13) {
-                    throw new IOException("crash mid-pass");
+            public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) {
+                super.onRetained(artifact, store);
+                if (retained.size() == 13) {
+                    crashing.failNextOn(FaultInjectingStore.Op.READ_VERSIONED, FaultInjectingStore.keyPrefix("publish/"));
                 }
             }
         };
-        assertThatThrownBy(() -> RebuildPass.run(walk(), store, List.of("publish"), List.of(consumer, fatal)))
-                .hasMessageContaining("crash mid-pass");
+        assertThatThrownBy(() -> RebuildPass.run(walk(), crashing, List.of("publish"), List.of(consumer, arming)))
+                .as("a failure of the walk's own read propagates and leaves the pass active")
+                .isInstanceOf(IOException.class);
         clock.advance(Duration.ofMinutes(11));
 
         Optional<WalkPass> resumed = RebuildPass.run(walk(), store, List.of("publish"), List.of(consumer));
@@ -282,96 +300,159 @@ class RebuildPassTest {
         assertThat(walk.pass(store, RebuildPass.CONSUMER)).as("no consumer, no pass state touched").isEmpty();
     }
 
-    /**
-     * A consumer that fails mid-pass is re-delivered every item it missed, because the cursor never moved past it.
-     *
-     * <p>This is the property that makes propagating the right choice rather than a missing containment, and it is
-     * the one a reviewer would break. The cursor is <em>shared</em> - one walk, one committed position, N consumers
-     * - so containing consumer A's failure while the stride commits would advance past items A never received,
-     * permanently, and A would then report itself converged: the silently-incomplete view §5 forbids.
-     *
-     * <p>The sibling crash leg above pins that the failure propagates at all, by expecting a throw. It does not pin
-     * the consequence: it resumes with only the surviving consumer, so it never asks whether the <em>failing</em>
-     * one is made whole afterwards. This leg asks exactly that.
-     *
-     * <p>It asserts the resumed generation as well as the delivery, and that pairing is load-bearing rather than
-     * decorative. Measured against a planted containment that swallows during the walk and rethrows once the pass
-     * is over - the shape that keeps a throw and still advances the cursor - the delivery assertion alone passes,
-     * because a completed pass makes the next run a fresh generation that re-walks everything and hands the failed
-     * consumer its items after all. The generation assertion is what sees the cursor moved.
-     */
-    @Test
-    void a_consumer_that_failed_mid_pass_is_re_delivered_everything_it_missed() throws IOException {
-        ArtifactStore store = store("redelivery");
-        Map<String, String> expected = new HashMap<>();
-        for (char letter = 'a'; letter <= 'z'; letter++) {
-            expected.put("/" + letter + "/artifact", publish(store, "/" + letter + "/artifact", "content " + letter));
+    /** A consumer listening on the families it is given, seeing withheld pointers if told to. */
+    private static final class Listener extends Recording {
+
+        private final Set<Family> families;
+        private final boolean seesWithheld;
+
+        private Listener(boolean seesWithheld, Family... families) {
+            this.families = Set.of(families);
+            this.seesWithheld = seesWithheld;
         }
-        Recording healthy = new Recording();
-        // Fails once, part way through, then behaves - the plugin that was briefly broken and is now fixed.
-        boolean[] alreadyFailed = {false};
-        Recording flaky = new Recording() {
-            @Override
-            public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) {
-                if (!alreadyFailed[0] && derived.size() == 13) {
-                    alreadyFailed[0] = true;
-                    // Unchecked, because Recording's own onRetained declares no IOException - and it drives the
-                    // runtime arm of the fan-out, where the sibling crash leg drives the checked one. One-shot: the
-                    // plugin that was briefly broken and is fixed by the time the pass resumes.
-                    throw new UncheckedIOException(new IOException("consumer gave way mid-pass"));
-                }
-                super.onRetained(artifact, store);
-            }
-        };
 
-        assertThatThrownBy(() -> RebuildPass.run(walk(), store, List.of("publish"), List.of(healthy, flaky)))
-                .as("the failure is not contained: it reaches the pass, which is what holds the cursor")
-                .hasMessageContaining("consumer gave way mid-pass");
-        int seenBeforeFailing = flaky.derived.size();
-        assertThat(seenBeforeFailing).as("it really did stop part way").isLessThan(expected.size());
+        @Override
+        public Set<Family> families() {
+            return families;
+        }
 
-        clock.advance(Duration.ofMinutes(11));
-        Optional<WalkPass> resumed = RebuildPass.run(walk(), store, List.of("publish"), List.of(healthy, flaky));
-
-        assertThat(resumed).hasValueSatisfying(pass -> assertThat(pass.generation())
-                .as("the resume JOINS the interrupted pass rather than starting a fresh one - which is the half "
-                        + "that fails if the failure was contained and the pass therefore ran to completion")
-                .isEqualTo(1));
-        assertThat(flaky.derived)
-                .as("the consumer that failed is whole afterwards - the cursor never advanced past what it missed")
-                .containsExactlyInAnyOrderEntriesOf(expected);
-        assertThat(healthy.derived)
-                .as("and the consumer that did not fail is whole too")
-                .containsExactlyInAnyOrderEntriesOf(expected);
+        @Override
+        public boolean seesWithheld() {
+            return seesWithheld;
+        }
     }
 
-    /** A propagating failure says which consumer produced it. Propagating is right, but it left the operator a
-     *  stack frame and no name: with a dozen consumers installed that is the difference between a name and a
-     *  bisect. The exception itself is untouched - a caller still distinguishes an IOException from a runtime one
-     *  - and the attribution rides as a suppressed marker. */
     @Test
-    void a_propagating_failure_names_the_consumer_that_produced_it() throws IOException {
-        ArtifactStore store = store("attribution");
-        publish(store, "/a/artifact", "content a");
-        WalkConsumer broken = new WalkConsumer() {
+    void a_family_is_enumerated_once_for_every_consumer_listening_on_it_and_not_at_all_otherwise() throws IOException {
+        ArtifactStore store = store("families");
+        String hash = publish(store, "/npm/left-pad-1.0.tgz", "left pad");
+        store.writeVersioned("published/npm/left-pad/1.0", "row".getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("pinned/npm/left-pad/1.0", "".getBytes(StandardCharsets.UTF_8), null);
+        Listener pointers = new Listener(false, Family.POINTERS);
+        Listener rows = new Listener(false, Family.INVENTORY);
+        Listener pool = new Listener(false, Family.BLOBS);
+        RebuildPass.Roots roots = new RebuildPass.Roots(List.of("publish"), List.of("published"), List.of("blobs"),
+                List.of("pinned"));
+
+        Optional<WalkPass> pass = RebuildPass.run(walk(), store, new Publication(store), roots,
+                List.of(pointers, rows, pool));
+
+        assertThat(pass).hasValueSatisfying(result -> assertThat(result.roots())
+                .as("the pass walked exactly the families somebody listens on: not the derived rows")
+                .containsExactly("blobs", "publish", "published"));
+        assertThat(pointers.derived).containsOnlyKeys("/npm/left-pad-1.0.tgz");
+        assertThat(pointers.walked).as("a pointer consumer is handed no other family").isEmpty();
+        assertThat(rows.walked).as("the inventory row, with its body read once for whoever asks")
+                .containsExactly(Map.entry("published/npm/left-pad/1.0", "row"));
+        assertThat(rows.derived).as("an inventory consumer is handed no pointer").isEmpty();
+        assertThat(pool.walked).containsOnlyKeys("blobs/" + hash);
+    }
+
+    @Test
+    void a_completed_pass_records_what_it_delivered_per_family() throws IOException {
+        ArtifactStore store = store("measured");
+        publish(store, "/npm/left-pad-1.0.tgz", "left pad");
+        publish(store, "/npm/right-pad-1.0.tgz", "right pad");
+        store.writeVersioned("published/npm/left-pad/1.0", "row".getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("pinned/npm/left-pad/1.0", "".getBytes(StandardCharsets.UTF_8), null);
+        RebuildPass.Roots roots = new RebuildPass.Roots(List.of("publish"), List.of("published"), List.of("blobs"),
+                List.of("pinned"));
+        assertThat(RebuildPass.last(store)).as("no pass has completed").isEmpty();
+
+        Optional<WalkPass> pass = RebuildPass.run(walk(), store, new Publication(store), roots,
+                List.of(new Listener(false, Family.POINTERS), new Listener(false, Family.INVENTORY),
+                        new Listener(false, Family.BLOBS)));
+
+        assertThat(RebuildPass.last(store)).hasValueSatisfying(measured -> {
+            assertThat(measured.generation()).isEqualTo(pass.orElseThrow().generation());
+            assertThat(measured.started()).isEqualTo(pass.orElseThrow().started());
+            assertThat(measured.completed()).isAfterOrEqualTo(measured.started());
+            assertThat(measured.pointers()).as("two served pointers").isEqualTo(2);
+            assertThat(measured.inventory()).as("one row").isEqualTo(1);
+            assertThat(measured.blobs()).as("two blobs").isEqualTo(2);
+            assertThat(measured.derived()).as("nobody listened on the derived rows, so they were not walked")
+                    .isZero();
+            assertThat(measured.objects()).isEqualTo(5);
+        });
+        assertThat(store.list("walks/" + RebuildPass.CONSUMER + "/counted"))
+                .as("the generation's counters are folded into the account and gone").isEmpty();
+    }
+
+    @Test
+    void a_withheld_pointer_reaches_only_a_consumer_that_asked_to_see_it() throws IOException {
+        ArtifactStore store = store("withheld");
+        publish(store, "/npm/served-1.0.tgz", "served");
+        String held = publish(store, "/npm/held-1.0.tgz", "held back");
+        build.jenesis.repository.store.Withheld.mark(store, held);
+        Listener asking = new Listener(true, Family.POINTERS);
+        Recording blind = new Recording();
+
+        RebuildPass.run(walk(), store, List.of("publish"), List.of(asking, blind));
+
+        assertThat(asking.derived).as("retained pointers reach both").containsOnlyKeys("/npm/served-1.0.tgz");
+        assertThat(asking.events).contains("withheld:/npm/held-1.0.tgz");
+        assertThat(blind.derived).containsOnlyKeys("/npm/served-1.0.tgz");
+        assertThat(blind.events).as("a consumer that did not ask never learns a withheld pointer exists")
+                .noneMatch(event -> event.contains("held-1.0"));
+    }
+
+    @Test
+    void a_pass_with_no_root_for_any_listened_family_is_refused() {
+        ArtifactStore store = store("rootless");
+        Listener pool = new Listener(false, Family.BLOBS);
+
+        assertThatThrownBy(() -> RebuildPass.run(walk(), store, new Publication(store),
+                RebuildPass.Roots.pointers(List.of("publish")), List.of(pool)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("no root to walk");
+    }
+
+    @Test
+    void a_consumer_that_throws_fails_alone_is_recorded_and_is_redelivered_by_the_next_generation() throws IOException {
+        ArtifactStore store = store("alone");
+        Map<String, String> expected = new HashMap<>();
+        for (int each = 0; each < 3; each++) {
+            expected.put("/npm/pkg-" + each + ".tgz", publish(store, "/npm/pkg-" + each + ".tgz", "bytes " + each));
+        }
+        Recording steady = new Recording();
+        Recording broken = new Recording() {
             @Override
             public String name() {
-                return "the-broken-one";
+                return "broken";
             }
 
             @Override
-            public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-                throw new IOException("plugin gave way");
+            public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) {
+                super.onRetained(artifact, store);
+                if (retained.size() == 2) {
+                    throw new IllegalStateException("second delivery refused");
+                }
             }
         };
 
-        assertThatThrownBy(() -> RebuildPass.run(walk(), store, List.of("publish"), List.of(broken)))
-                .isInstanceOf(IOException.class)
-                .as("the consumer's own exception reaches the caller unchanged in type and message")
-                .hasMessageContaining("plugin gave way")
-                .satisfies(failure -> assertThat(failure.getSuppressed())
-                        .as("and carries the name of the consumer that produced it")
-                        .anySatisfy(marker -> assertThat(marker.getMessage())
-                                .contains("the-broken-one").contains(broken.getClass().getName())));
+        Optional<WalkPass> pass = RebuildPass.run(walk(), store, List.of("publish"), List.of(broken, steady));
+
+        assertThat(pass).hasValueSatisfying(result -> assertThat(result.complete()).isTrue());
+        assertThat(steady.derived).as("the other consumer converges").containsExactlyInAnyOrderEntriesOf(expected);
+        assertThat(broken.retained).as("the failing consumer is handed nothing after the delivery it failed on")
+                .hasSize(2);
+        assertThat(broken.events).as("nor the completion hook").noneMatch(event -> event.startsWith("completed"));
+        assertThat(RebuildPass.failed(store)).singleElement().satisfies(failed -> {
+            assertThat(failed.consumer()).isEqualTo("broken");
+            assertThat(failed.generation()).isEqualTo(pass.orElseThrow().generation());
+            assertThat(failed.key()).startsWith("publish/npm/pkg-");
+            assertThat(failed.failure()).contains("second delivery refused");
+        });
+
+        Recording mended = new Recording() {
+            @Override
+            public String name() {
+                return "broken";
+            }
+        };
+        RebuildPass.run(walk(), store, List.of("publish"), List.of(mended, steady));
+
+        assertThat(mended.derived).as("the next generation redelivers everything to it")
+                .containsExactlyInAnyOrderEntriesOf(expected);
+        assertThat(RebuildPass.failed(store)).as("and the record of the earlier generation's failure goes").isEmpty();
     }
 }

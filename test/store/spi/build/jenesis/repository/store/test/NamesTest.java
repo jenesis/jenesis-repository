@@ -47,9 +47,9 @@ class NamesTest {
         FaultInjectingStore counting = FaultInjectingStore.wrap(store);
         List<String> all = drain(Names.over(counting, "rows", 10));
         assertThat(all).hasSize(26).isSorted().startsWith("00.json", "01.json").endsWith("readme.txt");
-        // This decorator pages by listing, as the filesystem store scans a directory per page: 26 names at ten a
-        // page is three pages, the third short, so three scans - never one per name.
-        assertThat(counting.calls(FaultInjectingStore.Op.LIST)).isEqualTo(3);
+        // The decorator forwards each page to the filesystem store, which scans the directory once per page: 26 names
+        // at ten a page is three pages, the third short, so three page calls - never one per name.
+        assertThat(counting.calls(FaultInjectingStore.Op.PAGE)).isEqualTo(3);
         assertThat(Names.over(store, "rows", 10).next()).isNotNull();
         assertThat(drain(Names.over(store, "nothing/here", 10))).as("an empty level is exhausted at once").isEmpty();
     }

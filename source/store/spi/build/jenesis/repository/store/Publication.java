@@ -512,6 +512,10 @@ public final class Publication {
                 throw broken;
             } catch (Exception exception) {
                 LOGGER.warn("publication observer " + identity + " failed for " + subject, exception);
+                // The derived state that observer keeps is now behind the commit it observed; the walk is the
+                // route that brings it back, and this is what asks for one rather than waiting for a clock.
+                Requests.requestOnRoot(Requests.WALK,
+                        "publication observer " + identity + " failed for " + subject + ": " + exception);
             }
         }
     }

@@ -43,9 +43,13 @@ public class GcsSpoolPermissionsTest {
         server = new WireMockServer(WireMockConfiguration.options().bindAddress("localhost").dynamicPort()
                 .extensions(barrier));
         server.start();
-        server.stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200)
+        server.stubFor(any(anyUrl()).atPriority(10).willReturn(aResponse().withStatus(200)
                 .withHeader("Content-Type", "application/json").withBody("{}")));
-        store = ArtifactStoreProvider.resolve("gcs", JsonGcs.settings(server.port(), "repo")::get).scope("acme");
+        // This stub answers everything 200 and knows no generations, so it cannot play the boot-time conditional-write
+        // probe; the probe is switched off here, which is what the switch is for - this test is about the spool.
+        Map<String, String> settings = new HashMap<>(JsonGcs.settings(server.port(), "repo"));
+        settings.put(GcsArtifactStoreProvider.PROBE_KEY, "false");
+        store = ArtifactStoreProvider.resolve("gcs", settings::get).scope("acme");
     }
 
     @AfterAll
