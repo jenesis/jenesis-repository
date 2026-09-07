@@ -175,6 +175,14 @@ public final class Providers {
         return optionalUnique(spi, discovered, name, Optional.empty(), enabled, create, false);
     }
 
+    /** The one optional implementation of a facade SPI - a service whose only provider is the module that ships
+     *  it, keyed by its class name because it has no name to select or switch off by: empty when none is on the
+     *  module path, the provider when one is, and two is a packaging error that throws rather than letting
+     *  module-path order choose. Seven SPIs spelled this out with the same five arguments before it existed. */
+    public static <P> Optional<P> singleton(String spi, Iterable<? extends P> discovered) {
+        return optionalUnique(spi, discovered, provider -> provider.getClass().getName(), _ -> true, Optional::of);
+    }
+
     public static <P, T> Optional<T> optionalUnique(String spi,
                                                     Iterable<? extends P> discovered,
                                                     Function<? super P, String> name,

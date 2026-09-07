@@ -133,12 +133,13 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
             exchange.respond(201);
             return;
         }
-        Optional<String> key = publication.located(path);
-        if (key.isEmpty()) {
+        Optional<Publication.Located> located = publication.locate(path);
+        if (located.isEmpty()) {
             exchange.respond(404);
             return;
         }
-        long size = store.size(key.get());
+        String key = located.get().key();
+        long size = located.get().size();
         if (exchange.method().equals("HEAD")) {
             // A HEAD is answered from the stored size (Content-Length), 200 with no body, without opening the blob -
             // the same HEAD-from-metadata contract OciFormat/RawFormat follow, rather than streaming the whole blob.
@@ -147,7 +148,7 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
             return;
         }
         try (OutputStream out = exchange.respond(200, size)) {
-            store.read(key.get(), out);
+            store.read(key, out);
         }
     }
 }

@@ -1865,6 +1865,12 @@ public final class StoredListing {
      */
     public interface Rebuilder {
 
+        /** The rebuilders among the {@link PublicationObserver#installed() installed observers} - every format that
+         *  maintains a listing - read from the one discovery rather than split off by each consumer. */
+        static List<Rebuilder> installed() {
+            return Observers.REBUILDERS;
+        }
+
         /** Regenerate the listing at this key if it is one of this rebuilder's; {@code false} when it is not. A
          *  derived twin is regenerated with its source and answers {@code true} without work of its own. */
         boolean rebuild(String listing, ArtifactStore store) throws IOException;

@@ -28,8 +28,7 @@ import build.jenesis.repository.store.ArtifactStore;
  */
 public final class MavenFormat implements RepositoryFormat, ProxyFormat, ArtifactLayout, RepositoryImporter {
 
-    private static final List<ModuleView> MODULE_VIEWS = ServiceLoader.load(ModuleView.class)
-            .stream().map(ServiceLoader.Provider::get).toList();
+    private static final List<ModuleView> MODULE_VIEWS = ModuleView.installed();
 
     /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link MavenImporter} - the format
      *  IS the discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
@@ -190,12 +189,13 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         }
         // (2): the default - serve the stored metadata (and its stored checksums) byte-for-byte, a 404 when
         // absent; a normal artifact is streamed from its content-addressed blob.
-        Optional<String> key = new Publication(store).located(path);
-        if (key.isEmpty()) {
+        Optional<Publication.Located> located = new Publication(store).locate(path);
+        if (located.isEmpty()) {
             exchange.respond(404);
             return;
         }
-        long size = store.size(key.get());
+        String key = located.get().key();
+        long size = located.get().size();
         if (head) {
             // A HEAD is answered from the stored size (Content-Length), 200 with no body, without opening the blob -
             // the read-first HEAD-from-metadata contract OciFormat/RawFormat already follow, so a HEAD never streams
@@ -205,7 +205,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             return;
         }
         try (OutputStream out = exchange.respond(200, size)) {
-            store.read(key.get(), out);
+            store.read(key, out);
         }
     }
 

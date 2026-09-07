@@ -206,27 +206,13 @@ public class RepositoryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = "formats")
     public List<RepositoryFormat> formats() {
-        // A parallel SPI: every discovered format is active unless configured off by name
-        // (jenreg.<format>=false), so the one image carries every format and a deployment trims by config.
-        List<RepositoryFormat> formats = new ArrayList<>();
-        ServiceLoader.load(RepositoryFormat.class).forEach(format -> {
-            if (Features.active(format.name(), format.requiredConfig())) {
-                formats.add(format);
-            }
-        });
-        return formats;
+        return new ArrayList<>(RepositoryFormat.installed());
     }
 
     @Bean
     @ConditionalOnMissingBean(name = "importSourceProviders")
     public List<ImportSourceProvider> importSourceProviders() {
-        List<ImportSourceProvider> providers = new ArrayList<>();
-        ServiceLoader.load(ImportSourceProvider.class).forEach(provider -> {
-            if (Features.active(provider.name(), provider.requiredConfig())) {
-                providers.add(provider);
-            }
-        });
-        return providers;
+        return new ArrayList<>(ImportSourceProvider.installed());
     }
 
     @Bean

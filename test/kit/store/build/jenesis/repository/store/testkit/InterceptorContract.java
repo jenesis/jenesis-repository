@@ -996,7 +996,9 @@ final class InterceptorContract {
         Publication publication = publication(store,
                 List.of(log.probe("witness", 0, Disposition.ACCEPT), screen.create()));
 
-        store.failNextOn(FaultInjectingStore.Op.SIZE, FaultInjectingStore.keyPrefix("blobs/"));
+        // The blob lands and the process dies before the chain: the write's own lost ack, since nothing reads the
+        // blob between the write and the chain any more (the length is counted as the bytes stream in).
+        store.crashAfterWrite(FaultInjectingStore.Op.WRITE_BLOB, FaultInjectingStore.anyKey());
         Throwable failed = thrownBy(() -> commit(publication, artifact));
         store.heal();
 

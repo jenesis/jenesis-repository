@@ -7,7 +7,6 @@ import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Publication;
@@ -45,7 +44,7 @@ public final class RepositoryImport {
     private final List<RepositoryImporter> importers;
 
     public RepositoryImport() {
-        this(ServiceLoader.load(RepositoryFormat.class).stream().map(ServiceLoader.Provider::get).toList());
+        this(RepositoryFormat.installed());
     }
 
     /** Filter the discovered (or supplied) formats to those carrying the {@link RepositoryImporter} capability - the
@@ -155,12 +154,7 @@ public final class RepositoryImport {
      * would turn a degraded read into a failed migration.
      */
     private void materialiseListings(ArtifactStore store) {
-        List<StoredListing.Rebuilder> rebuilders = new ArrayList<>();
-        for (PublicationObserver observer : ServiceLoader.load(PublicationObserver.class)) {
-            if (observer instanceof StoredListing.Rebuilder rebuilder) {
-                rebuilders.add(rebuilder);
-            }
-        }
+        List<StoredListing.Rebuilder> rebuilders = StoredListing.Rebuilder.installed();
         if (rebuilders.isEmpty()) {
             return;
         }

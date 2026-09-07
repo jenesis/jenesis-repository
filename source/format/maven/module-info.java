@@ -25,7 +25,6 @@ module build.jenesis.repository.format.maven {
     // beside the 502 it answers the resolver - the operator-visible half a status code alone cannot carry.
     requires org.slf4j;
     exports build.jenesis.repository.format.maven;
-    uses build.jenesis.repository.format.java.bridge.ModuleView;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.maven.MavenFormat;
     provides build.jenesis.repository.store.PublicationObserver

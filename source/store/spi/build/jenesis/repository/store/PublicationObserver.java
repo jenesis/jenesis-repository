@@ -119,6 +119,15 @@ public interface PublicationObserver {
      *  marker) lands under exactly the space the artifact did. */
     void onPublished(ArtifactDescriptor artifact, ArtifactStore store) throws IOException;
 
+    /** Every observer on the module path, discovered once from this SPI's home and cached for the process - the
+     *  one list {@link Publication} notifies and the one every other consumer reads, so no module carries a
+     *  {@code uses} clause or a discovery of its own for it. Interceptors are observers too and are among these;
+     *  {@link PublishInterceptor#installed()} is the verdict-bearing subset. Discovery order; observers have no
+     *  names to validate or sort by, and nothing may depend on the order. */
+    static List<PublicationObserver> installed() {
+        return Observers.ALL;
+    }
+
     /** React to a removed serving pointer, fired once per pointer with the descriptor richness the removal site has:
      *  {@link Publication#unpublish} knows the request path and the blob hash the pointer named (the free store knows
      *  no layouts - a coordinate-needing observer describes the path through its format), while a layout-aware
