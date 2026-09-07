@@ -67,6 +67,11 @@ spec:
             - name: data
               mountPath: /data
             {{- end }}
+            {{- if and (eq .Values.store.backend "gcs") .Values.secrets.gcsServiceAccountKey }}
+            - name: gcs-credentials
+              mountPath: {{ include "jenreg.gcsCredentialsPath" . | dir }}
+              readOnly: true
+            {{- end }}
           startupProbe:
             httpGet:
               path: /actuator/health/readiness
@@ -94,6 +99,11 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ .Values.store.filesystem.persistence.existingClaim | default (printf "%s-data" (include "jenreg.fullname" .)) }}
+        {{- end }}
+        {{- if and (eq .Values.store.backend "gcs") .Values.secrets.gcsServiceAccountKey }}
+        - name: gcs-credentials
+          secret:
+            secretName: {{ include "jenreg.fullname" . }}-gcs
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

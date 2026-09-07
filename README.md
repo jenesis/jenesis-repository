@@ -54,8 +54,10 @@ JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
 
 The image is built by the build rather than by a hand-written `Dockerfile`: `source/bundle` requires every
 implementation, its `bundle=true` packaging emits the resolved runtime closure, and its `docker=` packaging
-line makes `stage` write a ready-to-build context. `java build/Build.java images` in the enterprise repository
-builds and tags it `jenesis-repository:free`. There was a `Dockerfile` here that re-ran the whole build
+line makes `stage` write a ready-to-build context - `java -Djenesis.test.skip=true build/jenesis/Project.java stage`,
+then `docker build -t jenesis-repository:free 'target/stage/docker/output/module-source%2Fbundle'` is the image.
+`java build/Build.java images` in the enterprise repository builds both editions the same way and tags them.
+There was a `Dockerfile` here that re-ran the whole build
 inside Docker - a second mechanism for a job the shared one does - and the deployment settings it carried
 (`JENREG_FILESYSTEM_ROOT=/data`, a `VOLUME`) belong to the Helm chart, which can make them conditional on
 the storage backend where an image cannot: a baked-in `VOLUME` cannot be un-declared by a consumer, so an
