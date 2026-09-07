@@ -245,9 +245,11 @@ class PublicationHookCensusTest {
 
     @Test
     void the_discovered_chain_is_loaded_once_and_cached_for_the_process() throws IOException {
-        // Clause 10: instances are ServiceLoader-discovered once at Publication class load and cached for the life of
-        // the process - which is why a screen that owns a thread or a client owns it for the process lifetime.
+        // Clause 10: instances are ServiceLoader-discovered once, on the first use of the store SPI's one list, and
+        // cached for the life of the process - which is why a screen that owns a thread or a client owns it for the
+        // process lifetime. That first use may be this test's, so the baseline is taken after it.
         ArtifactStore store = store("cached-chain");
+        PublicationObserver.installed();
         int before = RecordingScreen.CONSTRUCTIONS.get();
         for (int round = 0; round < 5; round++) {
             new Publication(store);

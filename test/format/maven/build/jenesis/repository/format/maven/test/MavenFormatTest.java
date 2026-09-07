@@ -197,6 +197,32 @@ class MavenFormatTest {
                 .containsExactlyInAnyOrder("/maven/org/example/lib/1.1", "/module/org.example.lib/1.1");
     }
 
+    @Test
+    void a_download_probes_its_blob_once() throws IOException {
+        // The pointer, the withheld marker, the blob's length, the bytes: four reads for a GET and three for a HEAD.
+        // Measured before this held: an existence probe and then a length probe of the same blob, five and four.
+        MavenFormat.layout(store, "/maven/org/example/lib/1.0/lib-1.0.jar",
+                new java.io.ByteArrayInputStream(automaticModuleJar("org.example.lib")));
+
+        FaultInjectingStore get = FaultInjectingStore.wrap(store);
+        FakeExchange download = new FakeExchange("GET", "/maven/org/example/lib/1.0/lib-1.0.jar");
+        format.handle(download, get);
+        assertThat(download.status()).isEqualTo(200);
+        assertThat(get.calls(FaultInjectingStore.Op.READ_VERSIONED)).as("the pointer and the withheld marker").isEqualTo(2);
+        assertThat(get.calls(FaultInjectingStore.Op.SIZE)).as("the blob's length, which also proves it present").isEqualTo(1);
+        assertThat(get.calls(FaultInjectingStore.Op.EXISTS)).as("no existence probe beside the length").isZero();
+        assertThat(get.calls(FaultInjectingStore.Op.READ)).as("the bytes").isEqualTo(1);
+
+        FaultInjectingStore head = FaultInjectingStore.wrap(store);
+        FakeExchange probe = new FakeExchange("HEAD", "/maven/org/example/lib/1.0/lib-1.0.jar");
+        format.handle(probe, head);
+        assertThat(probe.status()).isEqualTo(200);
+        assertThat(probe.responseHeader("Content-Length")).isEqualTo(Long.toString(automaticModuleJar("org.example.lib").length));
+        assertThat(head.calls(FaultInjectingStore.Op.SIZE)).isEqualTo(1);
+        assertThat(head.calls(FaultInjectingStore.Op.EXISTS)).isZero();
+        assertThat(head.calls(FaultInjectingStore.Op.READ) + head.calls(FaultInjectingStore.Op.OPEN)).as("a HEAD opens no blob").isZero();
+    }
+
     private static byte[] automaticModuleJar(String moduleName) throws IOException {
         java.util.jar.Manifest manifest = new java.util.jar.Manifest();
         manifest.getMainAttributes().putValue("Manifest-Version", "1.0");

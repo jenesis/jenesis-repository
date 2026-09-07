@@ -73,13 +73,13 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
             // as from the GET below - the HEAD-from-metadata shape MavenFormat, JenesisFormat and OciFormat already
             // carry, which this leg alone was missing (§13).
             case "HEAD" -> {
-                Optional<String> located = publication.located(path);
+                Optional<Publication.Located> located = publication.locate(path);
                 if (located.isEmpty()) {
                     exchange.respond(404);
                     return;
                 }
                 exchange.setResponseHeader("Content-Type", "application/octet-stream");
-                exchange.setResponseHeader("Content-Length", Long.toString(store.size(located.get())));
+                exchange.setResponseHeader("Content-Length", Long.toString(located.get().size()));
                 exchange.respond(200);
             }
             default -> {
@@ -87,14 +87,14 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                     listing(path, store, exchange);
                     return;
                 }
-                Optional<String> key = publication.located(path);
-                if (key.isEmpty()) {
+                Optional<Publication.Located> located = publication.locate(path);
+                if (located.isEmpty()) {
                     exchange.respond(404);
                     return;
                 }
                 exchange.setResponseHeader("Content-Type", "application/octet-stream");
-                try (OutputStream out = exchange.respond(200, store.size(key.get()))) {
-                    store.read(key.get(), out);
+                try (OutputStream out = exchange.respond(200, located.get().size())) {
+                    store.read(located.get().key(), out);
                 }
             }
         }

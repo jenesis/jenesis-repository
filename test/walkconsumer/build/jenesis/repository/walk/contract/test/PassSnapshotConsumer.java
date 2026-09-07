@@ -56,7 +56,7 @@ public final class PassSnapshotConsumer implements WalkConsumer {
     }
 
     @Override
-    public void onPassStarted(WalkPass pass) {
+    public void onPassStarted(WalkPass pass, ArtifactStore store) {
         // The reset the javadoc names: a snapshot rebuilder starts its accumulation over at every pass.
         accumulated.clear();
         generation = pass.generation();
@@ -79,7 +79,7 @@ public final class PassSnapshotConsumer implements WalkConsumer {
     }
 
     @Override
-    public void onPassCompleted(WalkPass pass) {
+    public void onPassCompleted(WalkPass pass, ArtifactStore store) {
         if (store == null) {
             return;               // this worker was handed nothing, so it has neither a view nor a store to write with
         }
