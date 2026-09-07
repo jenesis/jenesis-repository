@@ -111,15 +111,15 @@
  * @jenesis.pin org.junit.platform.commons 6.0.3
  * @jenesis.pin org.junit.platform.console 6.0.3
  * @jenesis.pin org.junit.platform/junit-platform-commons 6.0.3 SHA-256/39f262d09c3d52719fe0b77f080e90a3695e285d779a41b232e17963ae5da200
- * @jenesis.pin org.junit.platform/junit-platform-console 6.0.3
+ * @jenesis.pin org.junit.platform/junit-platform-console 6.0.3 SHA-256/aee6094514f5761d15d469a187305c123a524153ee303473fcd836e0df7e1942
  * @jenesis.pin org.junit.platform/junit-platform-engine 6.0.3 SHA-256/491e9e4f745f161b8a8e4186a1a7c6a450ea12c70930c9aedae427215301d947
- * @jenesis.pin org.junit.platform/junit-platform-launcher 6.0.3
- * @jenesis.pin org.junit.platform/junit-platform-reporting 6.0.3
+ * @jenesis.pin org.junit.platform/junit-platform-launcher 6.0.3 SHA-256/315608372e4dc44bca0ccb3ae8a07ecc206b3367033fa05748a03ccd563f1301
+ * @jenesis.pin org.junit.platform/junit-platform-reporting 6.0.3 SHA-256/f19c5be871c37ebed493f3152b67a909f89a44dff67c2db8016dfe34167d5730
  * @jenesis.pin org.mockito/mockito-core 4.11.0 SHA-256/4b909690cab288c761eb94c0bf0e814496cf3921d8affac84cd87774530351e5
  * @jenesis.pin org.mockito/mockito-junit-jupiter 4.6.0 SHA-256/a773c0a51530291b72d03aca35191928bb18967700a8ceb53694e9bc8a1cff15
  * @jenesis.pin org.objenesis/objenesis 3.2 SHA-256/03d960bd5aef03c653eb000413ada15eb77cdd2b8e4448886edf5692805e35f3
  * @jenesis.pin org.opentest4j 1.3.0
- * @jenesis.pin org.opentest4j.reporting/open-test-reporting-tooling-spi 0.2.4
+ * @jenesis.pin org.opentest4j.reporting/open-test-reporting-tooling-spi 0.2.4 SHA-256/04ac4ecfcaf60abe0e6d5b18e8306320aec7cd9cbf15e59eeac54fa9faa16902
  * @jenesis.pin org.opentest4j/opentest4j 1.3.0 SHA-256/48e2df636cab6563ced64dcdff8abb2355627cb236ef0bf37598682ddf742f1b
  * @jenesis.pin org.reactivestreams/reactive-streams 1.0.4 SHA-256/f75ca597789b3dac58f61857b9ac2e1034a68fa672db35055a8fb4509e325f28
  * @jenesis.pin org.reflections/reflections 0.10.2 SHA-256/938a2d08fe54050d7610b944d8ddc3a09355710d9e6be0aac838dbc04e9a2825

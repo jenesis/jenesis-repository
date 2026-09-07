@@ -24,12 +24,12 @@
  * @jenesis.pin org.junit.platform.commons 6.0.3
  * @jenesis.pin org.junit.platform.console 6.0.3
  * @jenesis.pin org.junit.platform/junit-platform-commons 6.0.3 SHA-256/39f262d09c3d52719fe0b77f080e90a3695e285d779a41b232e17963ae5da200
- * @jenesis.pin org.junit.platform/junit-platform-console 6.0.3
+ * @jenesis.pin org.junit.platform/junit-platform-console 6.0.3 SHA-256/aee6094514f5761d15d469a187305c123a524153ee303473fcd836e0df7e1942
  * @jenesis.pin org.junit.platform/junit-platform-engine 6.0.3 SHA-256/491e9e4f745f161b8a8e4186a1a7c6a450ea12c70930c9aedae427215301d947
- * @jenesis.pin org.junit.platform/junit-platform-launcher 6.0.3
- * @jenesis.pin org.junit.platform/junit-platform-reporting 6.0.3
+ * @jenesis.pin org.junit.platform/junit-platform-launcher 6.0.3 SHA-256/315608372e4dc44bca0ccb3ae8a07ecc206b3367033fa05748a03ccd563f1301
+ * @jenesis.pin org.junit.platform/junit-platform-reporting 6.0.3 SHA-256/f19c5be871c37ebed493f3152b67a909f89a44dff67c2db8016dfe34167d5730
  * @jenesis.pin org.opentest4j 1.3.0
- * @jenesis.pin org.opentest4j.reporting/open-test-reporting-tooling-spi 0.2.4
+ * @jenesis.pin org.opentest4j.reporting/open-test-reporting-tooling-spi 0.2.4 SHA-256/04ac4ecfcaf60abe0e6d5b18e8306320aec7cd9cbf15e59eeac54fa9faa16902
  * @jenesis.pin org.opentest4j/opentest4j 1.3.0 SHA-256/48e2df636cab6563ced64dcdff8abb2355627cb236ef0bf37598682ddf742f1b
  * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
  * @jenesis.pin tools.jackson.core/jackson-core 3.2.0 SHA-256/5e353ce53c6901105dfcbf183e3220c17072e334e552b818a4bb1b99decea596

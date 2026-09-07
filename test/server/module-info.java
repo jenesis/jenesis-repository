@@ -129,15 +129,15 @@
  * @jenesis.pin org.junit.jupiter/junit-jupiter-params 6.0.3 SHA-256/cf2947e2302b9f8c8a059259a277881c1cadae8fbc2514c16a925cfeb7beb2e5
  * @jenesis.pin org.junit.platform.console 6.0.3
  * @jenesis.pin org.junit.platform/junit-platform-commons 6.0.3 SHA-256/39f262d09c3d52719fe0b77f080e90a3695e285d779a41b232e17963ae5da200
- * @jenesis.pin org.junit.platform/junit-platform-console 6.0.3
+ * @jenesis.pin org.junit.platform/junit-platform-console 6.0.3 SHA-256/aee6094514f5761d15d469a187305c123a524153ee303473fcd836e0df7e1942
  * @jenesis.pin org.junit.platform/junit-platform-engine 6.0.3 SHA-256/491e9e4f745f161b8a8e4186a1a7c6a450ea12c70930c9aedae427215301d947
- * @jenesis.pin org.junit.platform/junit-platform-launcher 6.0.3
- * @jenesis.pin org.junit.platform/junit-platform-reporting 6.0.3
+ * @jenesis.pin org.junit.platform/junit-platform-launcher 6.0.3 SHA-256/315608372e4dc44bca0ccb3ae8a07ecc206b3367033fa05748a03ccd563f1301
+ * @jenesis.pin org.junit.platform/junit-platform-reporting 6.0.3 SHA-256/f19c5be871c37ebed493f3152b67a909f89a44dff67c2db8016dfe34167d5730
  * @jenesis.pin org.mockito 5.23.0
  * @jenesis.pin org.mockito/mockito-core 5.23.0 SHA-256/ae295bebd5d11fab97ab297815dc7617188b86003cbce3dfd5c0d5c3a6cc4a0c
  * @jenesis.pin org.objenesis/objenesis 3.3 SHA-256/02dfd0b0439a5591e35b708ed2f5474eb0948f53abf74637e959b8e4ef69bfeb
  * @jenesis.pin org.openjdk.nashorn/nashorn-core 15.4 SHA-256/6f816e84dfd63a81d4eaa7829c08337bbaff3ec683ff3bf6bbd90d017a00dc6f
- * @jenesis.pin org.opentest4j.reporting/open-test-reporting-tooling-spi 0.2.4
+ * @jenesis.pin org.opentest4j.reporting/open-test-reporting-tooling-spi 0.2.4 SHA-256/04ac4ecfcaf60abe0e6d5b18e8306320aec7cd9cbf15e59eeac54fa9faa16902
  * @jenesis.pin org.opentest4j/opentest4j 1.3.0 SHA-256/48e2df636cab6563ced64dcdff8abb2355627cb236ef0bf37598682ddf742f1b
  * @jenesis.pin org.ow2.asm/asm 9.10 SHA-256/34f38c5d5e8bcb32cbd2d11e44bc12725be1ccdb87c3c96000af57fd81df6e64
  * @jenesis.pin org.ow2.asm/asm-analysis 7.3.1 SHA-256/46b8a8efd4b94facb5ab4b35afe30ee0546ae7a43d2c64e6def56c2f168fefa5
