@@ -1,7 +1,7 @@
 /*
  * The console's shared behaviour: the confirmation guard, and the CSRF header htmx needs.
  *
- * Both consoles load this one file. The CSRF wiring lived in the enterprise shell's own <head> and the
+ * Both consoles load this one file. The CSRF wiring lived in a downstream console shell's own <head> and the
  * confirmation guard was pasted into two screens, each with a comment claiming it matched the other - which is
  * how behaviour that is meant to be identical stops being identical.
  */

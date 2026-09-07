@@ -20,8 +20,8 @@ import tools.jackson.databind.json.JsonMapper;
  * December 2023, labelled as breaking passivity; it was assigned to 7.0.x, the dependency was updated rather than
  * removed, and 7.1.0 still ships it. Waiting is not a plan.
  *
- * <p>This lives in the free console because that is the root: the enterprise OIDC module calls it rather than
- * carrying a second copy, and fixing only enterprise would change nothing, since {@code core/source/ui} keeps
+ * <p>This lives in the free console because that is the root: a downstream OIDC module calls it rather than
+ * carrying a second copy, and fixing only that module would change nothing, since {@code source/ui} keeps
  * pulling the same jars into both bundles.
  *
  * <p><b>The issuer check is not optional.</b> A discovery document names the issuer it belongs to, and it must be

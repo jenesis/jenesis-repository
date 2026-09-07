@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
  * {@link RepositorySecurityAutoConfiguration}, read-only, never an anonymous backdoor and it never blocks a request; it
  * only observes. It <strong>degrades cleanly to single-node</strong>: one live node returns that node and no divergence,
  * a false positive impossible. It names the risk (which node, how far behind), never a resolved hash or config value.
- * The enterprise edition's operator-gated {@code /api/admin/consistency} serves {@link #document the same document}
+ * A downstream edition's operator-gated {@code /api/admin/consistency} serves {@link #document the same document}
  * over the same engine, with the divergence advisories added.
  */
 @RestController

@@ -344,8 +344,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         String path = exchange.path();
         // The proxy leg carries the same clause-6 screen as the request seam: a traversal-shaped path
         // is no proxy target either, so it never reaches the upstream and never lays a fetched body out
-        // under a path the store refuses. (The enterprise legs get this from ProxyLeg, which screens
-        // harder still - see the worklist entry on unifying the two.)
+        // under a path the store refuses.
         if (!path.startsWith("/maven/") || !ArtifactStore.traversalFree(path)) {
             return false;
         }

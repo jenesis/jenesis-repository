@@ -12,7 +12,7 @@ import build.jenesis.repository.scope.Scopes;
  * the conditional write is a true cross-node compare-and-set.
  *
  * <p>Two classes used to implement this protocol, character for character apart from where their objects lived:
- * the maintenance scheduler's lease at {@code .system/locks/<name>} in the enterprise server module, and the staging
+ * the maintenance scheduler's lease at {@code .system/locks/<name>} in a downstream server module, and the staging
  * store's per-id lock at {@code staging-lock/<id>}, re-written inside that plugin because a plugin may not depend on
  * the server. The mechanism is the store's compare-and-set, so it lives beside {@link Retries}, the policy it retries
  * under; a caller names the space its locks live in and the ttl, and nothing else differs.

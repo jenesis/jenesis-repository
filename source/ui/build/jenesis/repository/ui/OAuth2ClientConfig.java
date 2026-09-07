@@ -25,7 +25,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
  * signed-in user to authorities through {@link LoginAuthorities} - which is the seam that lets one wiring serve
  * both consoles, since the policy is what differed between them and not the mechanism.
  *
- * <p>This existed twice, once here and once as an enterprise module, with the condition and the contributor
+ * <p>This existed twice, once here and once as a downstream module, with the condition and the contributor
  * byte-identical and the rest differing only in which properties class bound {@code jenreg.ui.github.*} and
  * {@code jenreg.ui.oidc.*} - two bindings of one documented key, with identical fields and identical defaults.
  * A console that wants the mechanism optional imports this through its module seam; one that always carries it

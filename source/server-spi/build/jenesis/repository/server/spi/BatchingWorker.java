@@ -7,7 +7,7 @@ import module java.base;
  * the request path offers a hit and never blocks, a full queue drops rather than back-pressures, and the worker
  * folds what accumulated into a store write on its own schedule.
  *
- * <p>Two trackers kept one: the free core's credential-usage tracker and the enterprise last-download tracker had the
+ * <p>Two trackers kept one: the free core's credential-usage tracker and a downstream last-download tracker had the
  * same queue, the same {@code poll}-then-{@code drainTo} loop, the same start and the same interrupt-and-join close,
  * and their javadocs cited each other as the rule to mirror. What each keeps is what it does with a batch
  * ({@link #drain}) and what it does on the two edges this class exposes as hooks: a failing iteration

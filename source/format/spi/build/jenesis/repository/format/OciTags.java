@@ -6,7 +6,7 @@ import module java.base;
  * The OCI Distribution tag grammar: {@code [a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}}.
  *
  * <p>It lives in the SPI because two modules need it and neither can see the other's copy. The free OCI format
- * exports its package only to its own test, so the enterprise OCI inventory layout - which resolves
+ * exports its package only to its own test, so a downstream OCI inventory layout - which resolves
  * {@code oci/<name>/tags/<ref>} store keys and must reject a reference carrying {@code /} or {@code ..} before it
  * addresses a neighbouring space - could not reach it and carried its own transcription of the same rule.
  */
