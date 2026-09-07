@@ -2,8 +2,7 @@ Scaleway packaging
 ==================
 
 Deploys the **all-in-one repository image** (`jenesis-repository:free` or `:enterprise` - one template, the tag
-selects the edition; built by `java build/Build.java images` in the enterprise repository, which builds and tags
-both editions) as a **Serverless Container**, defaulting the exclusive store selection to Scaleway Object Storage
+selects the edition) as a **Serverless Container**, defaulting the exclusive store selection to Scaleway Object Storage
 through the `s3` backend: `JENREG_STORE=s3` against a bucket the Terraform provisions, reached at the regional
 endpoint `https://s3.<region>.scw.cloud`. The credential is one IAM API key on an application that holds
 `ObjectStorageFullAccess` on the project; the key's access key and secret reach the container as secret
@@ -38,15 +37,16 @@ defaults to one; more than one instance over the same bucket is the product's mu
 1) Push the image to the Scaleway Container Registry
 -----------------------------------------------------
 
-    # from the repo root; builds both editions' images
-    java build/Build.java images
+    # from the repo root: stage the all-in-one module's Docker context, then build the image over it
+    java -Djenesis.test.skip=true build/jenesis/Project.java stage
+    docker build -t jenesis-repository:free 'target/stage/docker/output/module-source%2Fbundle'
     docker login rg.fr-par.scw.cloud/NAMESPACE -u nologin --password-stdin <<< "$SCW_SECRET_KEY"
-    docker tag jenesis-repository:enterprise rg.fr-par.scw.cloud/NAMESPACE/jenesis-repository:enterprise
-    docker push rg.fr-par.scw.cloud/NAMESPACE/jenesis-repository:enterprise
+    docker tag jenesis-repository:free rg.fr-par.scw.cloud/NAMESPACE/jenesis-repository:free
+    docker push rg.fr-par.scw.cloud/NAMESPACE/jenesis-repository:free
 
-A public Docker Hub image deploys too, but Scaleway advises against it: Docker Hub's rate limits can fail a
-container start. (The free edition is the same image tagged `:free` and deploys through this same Terraform; only
-the tag differs.)
+An image on Docker Hub deploys too, but Scaleway advises against it: Docker Hub's rate limits can fail a
+container start. The enterprise repository's `images` goal builds both editions this way and tags the other one
+`:enterprise`; it is the same image shape and deploys through this same Terraform - only the tag differs.
 
 2) Deploy / test
 ----------------
@@ -55,9 +55,9 @@ the tag differs.)
     terraform init
     terraform apply \
       -var project_id=PROJECT -var bucket_name=UNIQUE-IN-REGION \
-      -var image=rg.fr-par.scw.cloud/NAMESPACE/jenesis-repository:enterprise
+      -var image=rg.fr-par.scw.cloud/NAMESPACE/jenesis-repository:free
     # the `url` output is the repository endpoint; check <url>/actuator/health
-    # (the enterprise console is at <url>/console)
+    # (the console is at <url>/console)
 
 The container is private by default (callers present a Scaleway IAM token); `-var allow_unauthenticated=true`
 exposes it, and access then rests on the repository's own key auth, which is on by default.

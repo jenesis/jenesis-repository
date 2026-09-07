@@ -2,9 +2,7 @@ GCP (Google Cloud Marketplace) packaging
 ========================================
 
 Deploys the **all-in-one repository image** (`jenesis-repository:free` or `:enterprise` - one template,
-the tag selects the edition; built by
-`java build/Build.java images` in the enterprise repository, which builds and tags both editions; the free edition is the same image shape from the
-free repo, only the tag differs) on **Cloud Run**, defaulting the exclusive store selection to GCP's
+the tag selects the edition) on **Cloud Run**, defaulting the exclusive store selection to GCP's
 native object store: `JENREG_STORE=gcs` against a bucket the Terraform provisions. The `gcs` backend
 speaks GCS's JSON API through **Application Default Credentials**: the Cloud Run service runs as a
 service account that holds `objectAdmin` on the bucket, the metadata server hands the backend its
@@ -34,13 +32,16 @@ and two nodes would lose updates silently. The `gcs` backend's precondition is G
 1) Build and push the image to Artifact Registry
 -------------------------------------------------
 
-    # from the repo root; builds both editions' images
-    ./build-images.sh
+    # from the repo root: stage the all-in-one module's Docker context, then build the image over it
+    java -Djenesis.test.skip=true build/jenesis/Project.java stage
+    docker build -t jenesis-repository:free 'target/stage/docker/output/module-source%2Fbundle'
     gcloud auth configure-docker REGION-docker.pkg.dev
-    docker tag jenesis-repository:enterprise REGION-docker.pkg.dev/PROJECT/REPO/jenesis-repository:enterprise
-    docker push REGION-docker.pkg.dev/PROJECT/REPO/jenesis-repository:enterprise
+    docker tag jenesis-repository:free REGION-docker.pkg.dev/PROJECT/REPO/jenesis-repository:free
+    docker push REGION-docker.pkg.dev/PROJECT/REPO/jenesis-repository:free
 
-(The free edition is the same image, built by the same script and tagged `:free` — jenesis-repository:free .` there — and deploys through this same Terraform; only the tag differs.)
+The build stages the context and never invokes a container tool, so `podman build` consumes the same folder. The
+enterprise repository's `images` goal builds both editions this way and tags the other one `:enterprise`; it is
+the same image shape and deploys through this same Terraform - only the tag differs.
 
 2) Deploy / test
 ----------------
@@ -48,9 +49,9 @@ and two nodes would lose updates silently. The `gcs` backend's precondition is G
     terraform init
     terraform apply \
       -var project_id=PROJECT -var bucket_name=GLOBALLY-UNIQUE-NAME \
-      -var image=REGION-docker.pkg.dev/PROJECT/REPO/jenesis-repository:enterprise
+      -var image=REGION-docker.pkg.dev/PROJECT/REPO/jenesis-repository:free
     # the `url` output is the repository endpoint; check <url>/actuator/health
-    # (the enterprise console is at <url>/console)
+    # (the console is at <url>/console)
 
 3) Google Cloud Marketplace
 ---------------------------
