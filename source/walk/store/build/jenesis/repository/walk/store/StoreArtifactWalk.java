@@ -157,6 +157,14 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
         return manifest == null ? Optional.empty() : Optional.of(pass(store, scope, manifest));
     }
 
+    /** The manifest carries the generation, so the segments this pass is made of need not be read to learn it. */
+    @Override
+    public Optional<Long> generation(ArtifactStore store, String consumer) throws IOException {
+        Manifest manifest = parseManifest(
+                store.readVersioned(manifestKey(ArtifactStore.segment(consumer))).orElse(null));
+        return manifest == null ? Optional.empty() : Optional.of(manifest.generation());
+    }
+
     @Override
     public List<WalkSegment> segments(ArtifactStore store, String consumer) throws IOException {
         String scope = ArtifactStore.segment(consumer);

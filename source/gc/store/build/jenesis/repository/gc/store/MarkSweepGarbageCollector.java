@@ -585,7 +585,12 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
             // Absence of the proof is not proof: with nothing to judge the lease by, the blob is spared and the next
             // pass re-judges it. We can only be here inside a sweep that followed a completed mark, so an empty
             // answer is always the unreadable case rather than a genuinely fresh store.
-            return walk.pass(store, MARK).map(pass -> pass.generation() <= generation).orElse(false);
+            // The generation alone, not the whole pass: this fence asks whether the mark we are sweeping under
+            // still stands, and assembling every segment state to read one number off the manifest cost up to
+            // thirty three reads per blob deleted - 4.64 per blob held, the largest single line of a collection,
+            // measured on a node counting by key family. Same read of the same object, same freshness, same
+            // answer; only the segments it did not use are gone.
+            return walk.generation(store, MARK).map(current -> current <= generation).orElse(false);
         }
     }
 

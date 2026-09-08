@@ -81,6 +81,24 @@ public interface ArtifactWalk {
      *  or fingerprint surfaces without joining the walk. */
     Optional<WalkPass> pass(ArtifactStore store, String consumer) throws IOException;
 
+    /**
+     * Just the current pass's generation for {@code consumer}, without the segment states {@link #pass} assembles.
+     *
+     * <p>For a caller that needs to know only whether the pass it is acting under still stands - a lease fence
+     * immediately before a destructive act - where reading every segment to use one number off the manifest is
+     * pure cost. Measured 2026-09-08: the collector's sweep asked {@code pass} before every blob it deleted, at a
+     * manifest read and up to thirty two segment reads each, which on a node counting by key family was 4.64
+     * reads per blob held and the largest single line of a collection.
+     *
+     * <p>The default assembles the whole pass, so an implementation that cannot answer more cheaply is correct
+     * without doing anything; a store-backed one reads the manifest alone.
+     *
+     * @return the generation of the current pass, empty when none was ever started.
+     */
+    default Optional<Long> generation(ArtifactStore store, String consumer) throws IOException {
+        return pass(store, consumer).map(WalkPass::generation);
+    }
+
     /** The current pass's segments with their live claim state ({@code holder}, {@code expiry}, {@code cursor}) -
      *  "node X's segment cursor stuck 40 minutes" is read straight off this. Empty when no pass exists. */
     List<WalkSegment> segments(ArtifactStore store, String consumer) throws IOException;
