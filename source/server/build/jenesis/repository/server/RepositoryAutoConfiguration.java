@@ -234,6 +234,12 @@ public class RepositoryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(name = "trustsController")
+    public TrustsController trustsController(Authorization authorization, CredentialContext credentialContext) {
+        return new TrustsController(authorization, credentialContext);
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     public RateLimiter rateLimiter() {
         // The metering strategy is a discovered plugin (the token-bucket module); with none installed nothing is
