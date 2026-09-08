@@ -41,7 +41,7 @@ class GcCostProbeTest {
     /** Two sizes, because a collection's fixed cost per pass is large next to its per-object cost at any size a
      *  unit test can seed: a single figure would read as per-object when most of it is not. The slope between
      *  them is what a reduction has to move. */
-    private static final int[] SIZES = {400, 2_000};
+    private static final int[] SIZES = {2_000, 20_000};
 
     /** The share left unreferenced, as an evicted version leaves it: a fifth. */
     private static final int COLLECTABLE_PERCENT = 20;
