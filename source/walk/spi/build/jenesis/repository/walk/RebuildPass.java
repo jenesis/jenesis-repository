@@ -306,7 +306,10 @@ public final class RebuildPass {
         delivery.counted(pass);
         if (pass.complete()) {
             delivery.started(pass);
-            for (WalkConsumer consumer : consumers) {
+            // In WalkConsumer.order(), so a consumer that reclaims sees the store as the others left it rather than
+            // as it was a moment before they finished; equal order keeps the discovered order.
+            for (WalkConsumer consumer : consumers.stream()
+                    .sorted(Comparator.comparingInt(WalkConsumer::order)).toList()) {
                 // Narrower than the other three deliberately: onPassCompleted declares no IOException, so a
                 // runtime failure is the only shape there is to contain here.
                 delivery.attributed(consumer, null, delivered -> delivered.onPassCompleted(pass, store));

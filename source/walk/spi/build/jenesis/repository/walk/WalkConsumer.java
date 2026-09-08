@@ -253,6 +253,23 @@ public interface WalkConsumer {
      *  at pass end, for that store alone. It declares no {@link IOException}: a consumer that persists here wraps a
      *  store failure in an {@link UncheckedIOException}, which propagates out of the pass just as a checked one
      *  would. */
+    /**
+     * Where this consumer's {@link #onPassCompleted} sits among the others: lower runs first, and equal order is
+     * the order they were discovered in.
+     *
+     * <p>It exists for one relationship, and only completion is ordered by it. A consumer's completion work can
+     * orphan content - a retention sweep unpublishes what it evicted - so anything that reclaims must see the store
+     * as the others left it, or it reclaims one pass late. That used to hold only because the consumers happened to
+     * be listed in one file in the right order, which stopped being true the moment one of them moved to a module
+     * of its own.
+     */
+    default int order() {
+        return 0;
+    }
+
+    /** The order of a consumer that must complete after every other: reclamation, which reads what they left. */
+    int LAST = Integer.MAX_VALUE;
+
     default void onPassCompleted(WalkPass pass, ArtifactStore store) {
     }
 

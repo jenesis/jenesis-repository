@@ -254,6 +254,11 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.proxy;
     requires build.jenesis.repository.ratelimit;
     requires build.jenesis.repository.usage;
+    // Reclamation: the collector, and the walk consumer that runs it at the end of a pass. Without these an
+    // installed collector is never called and a deployment's storage only ever grows.
+    requires build.jenesis.repository.gc;
+    requires build.jenesis.repository.gc.store;
+    requires build.jenesis.repository.gc.walk;
     requires spring.boot;
     requires spring.context;
 }
