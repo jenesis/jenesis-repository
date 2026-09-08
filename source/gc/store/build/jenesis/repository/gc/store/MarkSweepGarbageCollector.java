@@ -490,6 +490,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
         private final long generation;
         private final Instant now;
         private final References references;
+        /** The condemned markers of the shard being swept, so the sparing question is answered in memory. */
+        private final Markers markers;
         private long condemned, spared, collected;
         /** Blobs this sweep left carrying a condemned marker - newly condemned this pass plus those still within
          *  their grace - the in-flight {@code gc/condemned/} set the jenreg.gc.condemned gauge reports. */
@@ -501,6 +503,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
             this.generation = generation;
             this.now = now;
             this.references = new References(store, generation);
+            this.markers = new Markers(store);
         }
 
         @Override
@@ -514,7 +517,14 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
             }
             String marker = CONDEMNED + "/" + hash;
             if (references.contains(hash)) {
-                if (deleteIfPresent(store, marker)) {
+                // Asked in memory first. Almost every blob in a healthy store is referenced and carries no marker,
+                // and probing the store for one cost an existence read per referenced blob per pass - measured
+                // 2026-09-08 as 32,000 of a collection's 44,754, for an answer that is nearly always "absent".
+                // The markers stream in the same hash order the blobs do, so one shard is resident at a time,
+                // exactly as the reference shards are. A stale snapshot can only make this skip a delete, leaving
+                // a marker on a referenced blob for the next pass to clear - the convergence this already relies
+                // on - and never deletes anything, which is the only direction that would matter.
+                if (markers.condemned(hash) && deleteIfPresent(store, marker)) {
                     spared++; // referenced again - the dedup re-publish an earlier pass condemned
                 }
                 return;
@@ -578,6 +588,71 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
             return walk.pass(store, MARK).map(pass -> pass.generation() <= generation).orElse(false);
         }
     }
+
+    /**
+     * The condemned markers, read the way the reference shards are: one leading-byte shard resident at a time,
+     * in the hash order the sweep already streams blobs in.
+     *
+     * <p>It answers the sparing question - does this referenced blob carry a marker an earlier pass left - which
+     * was an existence read per referenced blob per pass, and is nearly always no. A whole store condemned at
+     * once is a state this collector really reaches, so the resident set is a shard rather than the set: at ten
+     * million blobs all condemned that is some forty thousand hashes, not ten million. Past {@link #CAP} it stops
+     * holding them and says so, and the caller falls back to asking the store per blob - slower, and bounded,
+     * which is the right way round.
+     */
+    private static final class Markers {
+
+        /** Hashes held for one shard before falling back to probing. Forty thousand is a ten-million-blob store
+         *  wholly condemned; past that the memory matters more than the round trips. */
+        private static final int CAP = 50_000;
+
+        private final ArtifactStore store;
+        private String shard;
+        private Set<String> hashes = Set.of();
+        private boolean capped;
+
+        private Markers(ArtifactStore store) {
+            this.store = store;
+        }
+
+        /** Whether {@code hash} may carry a marker: exact when the shard is held, and {@code true} - ask the
+         *  store - when it was too large to hold. */
+        private boolean condemned(String hash) throws IOException {
+            String leading = hash.substring(0, 2);
+            if (!leading.equals(shard)) {
+                shard = leading;
+                capped = false;
+                hashes = load(leading);
+            }
+            return capped || hashes.contains(hash);
+        }
+
+        private Set<String> load(String leading) throws IOException {
+            Set<String> loaded = new HashSet<>();
+            String after = leading;
+            while (true) {
+                List<String> page = new ArrayList<>();
+                store.page(CONDEMNED, after, PAGE, page::add);
+                if (page.isEmpty()) {
+                    return loaded;
+                }
+                for (String name : page) {
+                    if (!name.startsWith(leading)) {
+                        return loaded; // past this shard, and the names are ordered
+                    }
+                    loaded.add(name);
+                    if (loaded.size() > CAP) {
+                        capped = true;
+                        return Set.of();
+                    }
+                }
+                after = page.getLast();
+            }
+        }
+    }
+
+    /** How many marker names one listing asks for; the sweep reads at most a shard's worth however large it is. */
+    private static final int PAGE = 1_000;
 
     /** The completed mark's reference shards, loaded one leading-byte shard at a time - both consumers stream
      *  hashes in name order, so this is a sequential read of at most 256 shards, never an O(N) set. */
