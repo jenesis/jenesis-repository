@@ -1,6 +1,7 @@
 package build.jenesis.repository.usage;
 
 import module java.base;
+import build.jenesis.repository.store.Features;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.spi.KeyUsageTrackerProvider;
@@ -20,7 +21,7 @@ public final class BatchingKeyUsageTrackerProvider implements KeyUsageTrackerPro
     @Override
     public Optional<KeyUsageTracker> create(Authorization authorization, UnaryOperator<String> config) {
         BatchingKeyUsageTracker tracker = new BatchingKeyUsageTracker(authorization,
-                Boolean.parseBoolean(config.apply("track-key-usage")));
+                Features.enabled(config, "track-key-usage"));
         BatchingKeyUsageTracker.install(tracker);               // the discovered observability reads this one
         return Optional.of(tracker);
     }

@@ -48,6 +48,14 @@ public final class SettingsCatalogue {
                     "How long a proxy negative-cache (upstream miss) entry is honoured before a re-fetch is allowed"),
 
             // --- Credential usage tracking (source/usage). ---
+            new Setting("collect",
+                    "Run the collector at the end of a walk, freeing the storage of content no live pointer names."),
+            new Setting("gc",
+                    "The collector to use, by name; a name nothing answers to fails the boot."),
+            new Setting("gc.stride",
+                    "Items the collector handles between checkpoints."),
+            new Setting("gc.grace",
+                    "A wall-clock floor on the gap between condemning a blob and deleting it."),
             new Setting("track-key-usage",
                     "Whether the batching key-usage tracker records each credential's last use and running count"),
 
