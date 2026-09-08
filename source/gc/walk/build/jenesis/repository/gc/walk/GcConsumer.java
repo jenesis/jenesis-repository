@@ -61,6 +61,14 @@ public final class GcConsumer implements WalkConsumer {
         return false;
     }
 
+    /** Nor whether it is withheld. A held artifact's blob is referenced - that is the whole reason the mark reads
+     *  the pointers itself rather than taking the walk's screened view - so the distinction changes nothing here
+     *  and costs two reads per pointer per pass to draw. */
+    @Override
+    public boolean needsWithheldStatus() {
+        return false;
+    }
+
     /** Last, so it reclaims what the other consumers' completion work orphaned in this same pass rather than in
      *  the next one - a retention sweep unpublishes during its own completion. */
     @Override

@@ -215,6 +215,24 @@ public interface WalkConsumer {
         return true;
     }
 
+    /**
+     * Whether this consumer distinguishes a withheld pointer from a served one.
+     *
+     * <p>{@code true} by default, because every consumer that rebuilds a served view must: a withheld artifact
+     * would 404 on a GET, so reinstating it into an index is the clause 14 breach {@link #seesWithheld} exists to
+     * govern. Declaring {@code false} says the opposite - hand me every pointer through {@link #onRetained} and
+     * do not work out which are held - and it lets the walk skip two reads per pointer per pass: the quarantine
+     * chain and the content-addressed withheld marker, measured 2026-09-08 as 1.60 reads per blob held each.
+     *
+     * <p>The walk skips them only when NO consumer listening on {@link Family#POINTERS} distinguishes, so one
+     * consumer that does keeps the status exact for everyone.
+     *
+     * @return whether the withheld status must be resolved for this consumer.
+     */
+    default boolean needsWithheldStatus() {
+        return true;
+    }
+
     /** One sentence for the operator: what this consumer repairs when it rides a walk, and what that costs. The
      *  default is the name, which is what a consumer that has not yet described itself shows. */
     default String description() {

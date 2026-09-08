@@ -377,6 +377,8 @@ public final class RebuildPass {
         private final String scope;
         /** Whether any consumer listening on POINTERS reads the blob's size - resolved once, not per pointer. */
         private final boolean sizeWanted;
+        /** Whether any of them distinguishes a withheld pointer from a served one - likewise resolved once. */
+        private final boolean heldWanted;
         /** The consumers that failed in this generation on this worker: delivered nothing more, recorded durably. */
         private final Set<WalkConsumer> dropped = new HashSet<>();
         private long generation = -1L;
@@ -396,6 +398,8 @@ public final class RebuildPass {
             this.scope = scope;
             this.sizeWanted = listening.getOrDefault(WalkConsumer.Family.POINTERS, List.of()).stream()
                     .anyMatch(WalkConsumer::needsBlobSize);
+            this.heldWanted = listening.getOrDefault(WalkConsumer.Family.POINTERS, List.of()).stream()
+                    .anyMatch(WalkConsumer::needsWithheldStatus);
         }
 
         /** Fold what this worker delivered into the generation's counters, so the account the completing worker
@@ -546,7 +550,11 @@ public final class RebuildPass {
             String path = key.startsWith("publish/") ? key.substring("publish".length()) : key;
             // Under publish/ the whole withhold model applies; under any other root the content-addressed marker
             // alone does - a hash withheld is withheld wherever it is served, whatever the layout that names it.
-            boolean held = key.startsWith("publish/") ? withheld(path, named) : Withheld.is(store, named);
+            // Two reads per pointer per pass - the quarantine chain and the content-addressed withheld marker -
+            // paid only when a consumer listening here distinguishes a held pointer from a served one. With none
+            // that does, every pointer is delivered as published, which is what such a consumer asked for.
+            boolean held = heldWanted
+                    && (key.startsWith("publish/") ? withheld(path, named) : Withheld.is(store, named));
             if (!started) {
                 started(walk.pass(store, scope)
                         .orElseThrow(() -> new IOException("no rebuild pass to deliver under")));
