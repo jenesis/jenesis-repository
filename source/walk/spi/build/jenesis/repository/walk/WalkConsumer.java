@@ -197,6 +197,24 @@ public interface WalkConsumer {
         return false;
     }
 
+    /**
+     * Whether this consumer reads {@link ArtifactDescriptor#size()} off the pointers it is handed.
+     *
+     * <p>{@code true} by default, because most consumers do and one that has not thought about it must not
+     * silently be handed a {@code -1} it would read as "unknown". Declaring {@code false} lets the walk skip a
+     * round trip that no listing can answer: a pointer's own size comes from the listing that enumerated it, but
+     * the size of the <em>blob</em> it names is a different key, so it costs a HEAD per pointer per pass.
+     * Measured 2026-09-08 on a node counting by key family, that probe was 4.80 reads per blob held - a fifth of
+     * everything a collection reads. The walk pays it when any consumer listening on {@link Family#POINTERS}
+     * says it will read it, so the saving is real for a walk whose listeners do not - the daily retention walk
+     * carries the retention sweep and the roll-up, and neither reads a blob's size.
+     *
+     * @return whether the blob's size must be resolved for this consumer.
+     */
+    default boolean needsBlobSize() {
+        return true;
+    }
+
     /** One sentence for the operator: what this consumer repairs when it rides a walk, and what that costs. The
      *  default is the name, which is what a consumer that has not yet described itself shows. */
     default String description() {

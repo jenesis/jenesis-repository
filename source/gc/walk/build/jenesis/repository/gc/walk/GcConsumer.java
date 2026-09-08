@@ -54,6 +54,13 @@ public final class GcConsumer implements WalkConsumer {
         return NAME;
     }
 
+    /** The collector does its work at completion, over its own pass; a pointer handed to it here decides nothing,
+     *  and how large the blob is decides less. Asking costs a HEAD on a key the walk is not enumerating. */
+    @Override
+    public boolean needsBlobSize() {
+        return false;
+    }
+
     /** Last, so it reclaims what the other consumers' completion work orphaned in this same pass rather than in
      *  the next one - a retention sweep unpublishes during its own completion. */
     @Override
