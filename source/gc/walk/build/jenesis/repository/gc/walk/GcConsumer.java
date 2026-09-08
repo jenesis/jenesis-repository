@@ -61,6 +61,14 @@ public final class GcConsumer implements WalkConsumer {
         return false;
     }
 
+    /** It rides the walk for its completion alone: the mark reads the pointers itself, over its own pass, so a
+     *  pointer handed to it here is read a second time for nothing. It still listens on POINTERS, because that is
+     *  what gives the pass a root to enumerate - it only declines the deliveries. */
+    @Override
+    public boolean needsPointers() {
+        return false;
+    }
+
     /** Nor whether it is withheld. A held artifact's blob is referenced - that is the whole reason the mark reads
      *  the pointers itself rather than taking the walk's screened view - so the distinction changes nothing here
      *  and costs two reads per pointer per pass to draw. */

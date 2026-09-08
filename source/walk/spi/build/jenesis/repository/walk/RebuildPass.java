@@ -379,6 +379,8 @@ public final class RebuildPass {
         private final boolean sizeWanted;
         /** Whether any of them distinguishes a withheld pointer from a served one - likewise resolved once. */
         private final boolean heldWanted;
+        /** Whether any listener uses a pointer delivery at all; with none, no pointer body is read. */
+        private final boolean pointersWanted;
         /** The consumers that failed in this generation on this worker: delivered nothing more, recorded durably. */
         private final Set<WalkConsumer> dropped = new HashSet<>();
         private long generation = -1L;
@@ -400,6 +402,8 @@ public final class RebuildPass {
                     .anyMatch(WalkConsumer::needsBlobSize);
             this.heldWanted = listening.getOrDefault(WalkConsumer.Family.POINTERS, List.of()).stream()
                     .anyMatch(WalkConsumer::needsWithheldStatus);
+            this.pointersWanted = listening.getOrDefault(WalkConsumer.Family.POINTERS, List.of()).stream()
+                    .anyMatch(WalkConsumer::needsPointers);
         }
 
         /** Fold what this worker delivered into the generation's counters, so the account the completing worker
@@ -531,6 +535,12 @@ public final class RebuildPass {
                 return;
             }
             if (size < 0 || size > LARGEST_POINTER) {
+                return;
+            }
+            if (!pointersWanted) {
+                // Every listener rides this walk for its completion alone, so there is no delivery to build and
+                // the body need not be read. That was a second full read of the pointer tree beside the reader
+                // that actually uses it - the collector's own mark reads every pointer for the hash it names.
                 return;
             }
             Optional<ArtifactStore.Versioned> pointer = store.readVersioned(key);

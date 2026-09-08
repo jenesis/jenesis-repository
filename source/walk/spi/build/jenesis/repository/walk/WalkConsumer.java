@@ -233,6 +233,26 @@ public interface WalkConsumer {
         return true;
     }
 
+    /**
+     * Whether this consumer uses the pointers it is handed at all.
+     *
+     * <p>{@code true} by default: a consumer listening on {@link Family#POINTERS} normally wants them. Declaring
+     * {@code false} says it rides the walk only to act when the walk completes, and the walk then does not read
+     * a pointer's body to build a delivery nobody takes - one read per pointer per pass, measured 2026-09-08 as
+     * 1.60 reads per blob held.
+     *
+     * <p>It is deliberately this rather than declaring no {@link #families()}. A consumer that listens on nothing
+     * leaves the walk with no root to enumerate, and the pass refuses to start - which is right for a
+     * misconfigured deployment and wrong for a consumer that simply wants completion, and the two are the same
+     * state to that check today. Keeping the family and declining the body says the same thing without asking a
+     * refusal to tell them apart.
+     *
+     * @return whether pointer deliveries are of any use to this consumer.
+     */
+    default boolean needsPointers() {
+        return true;
+    }
+
     /** One sentence for the operator: what this consumer repairs when it rides a walk, and what that costs. The
      *  default is the name, which is what a consumer that has not yet described itself shows. */
     default String description() {
