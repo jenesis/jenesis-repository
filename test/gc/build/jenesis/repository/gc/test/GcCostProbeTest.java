@@ -46,7 +46,19 @@ class GcCostProbeTest {
     /** The share left unreferenced, as an evicted version leaves it: a fifth. */
     private static final int COLLECTABLE_PERCENT = 20;
 
-    /** What {@code StoreWalkProvider} ships, so the figures are the ones a deployment pays. */
+    /**
+     * What {@code StoreWalkProvider} ships, so the figures are the ones a deployment pays.
+     *
+     * <p><b>This probe over-predicts against the end-to-end canary, and the gap is not yet explained.</b> Raising
+     * this to 10,000 cut the mark's reference bookkeeping fivefold here - 1.22 store operations per blob to 0.24 -
+     * and moved the containerised canary by thirty operations in half a million, with the compiled default
+     * verified as the one the node ran. The probe's slope also predicts more writes to {@code gc/<pass>} at twenty
+     * thousand blobs than that canary records in total, so its magnitudes do not carry to a real node. A flush
+     * fires at segment completion as well as at the stride, so the segment count bounds the flush count from
+     * below and the stride only binds once a segment holds more than a stride of keys - which is the likeliest
+     * reason, and is unproven. Read this probe for the shape - which families exist and roughly how they grow -
+     * and the canary for what anything costs.
+     */
     private static final int CHECKPOINT = 1_000;
 
     private static final int SEGMENTS = 32;
