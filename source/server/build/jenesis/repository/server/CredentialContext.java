@@ -48,6 +48,17 @@ public interface CredentialContext {
     default void audit(String key, String action, String detail) {
     }
 
+    /**
+     * The tenant a surface acts on when a caller names none - the token exchange is the one that asks, because a CI
+     * job posting its id-token has no key to derive a tenant from yet.
+     *
+     * <p>Answered here rather than read from configuration by the caller, because which property carries it is a
+     * deployment's own business: this core has one tenant and a distribution with several has a configured default.
+     */
+    default String defaultTenant() {
+        return "default";
+    }
+
     /** The default: tenant from the key, no auditing. */
     static CredentialContext basic() {
         return new CredentialContext() {

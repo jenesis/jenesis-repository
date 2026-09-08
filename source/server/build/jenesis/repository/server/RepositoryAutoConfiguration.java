@@ -3,6 +3,8 @@ import module java.base;
 import module org.slf4j;
 
 import build.jenesis.repository.store.Clocks;
+import build.jenesis.repository.server.spi.TokenExchange;
+import build.jenesis.repository.server.spi.TokenExchangeProvider;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.spi.KeyUsageTrackerProvider;
 import build.jenesis.repository.server.spi.Authorization;
@@ -211,6 +213,24 @@ public class RepositoryAutoConfiguration {
             return KeyUsageTracker.NONE;
         }
         return KeyUsageTrackerProvider.resolve(authorization, environment::getProperty);
+    }
+
+    /**
+     * The workload-identity token exchange, discovered like every other plugin: the OIDC module when it is on the
+     * graph, else one that admits nothing, which is what makes {@code POST /api/token} answer {@code 501} rather
+     * than pretending. A downstream edition that wants to audit the exchange contributes its own controller under
+     * this bean name, and this one stands down.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public TokenExchange tokenExchange(Authorization authorization, Environment environment) {
+        return TokenExchangeProvider.resolve(authorization, environment::getProperty);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(name = "tokenController")
+    public TokenController tokenController(TokenExchange tokenExchange, CredentialContext credentialContext) {
+        return new TokenController(tokenExchange, credentialContext);
     }
 
     @Bean
