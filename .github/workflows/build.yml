@@ -11,7 +11,7 @@ on:
 env:
   MAVEN_REPOSITORY_URI: ${{ vars.MAVEN_REPOSITORY_URI || 'https://repo1.maven.org/maven2/' }}
 
-# A single build runs the whole project in one `java build/jenesis/Project.java`
+# A single build runs the whole project in one `java build/jenesis/Make.java`
 # invocation, so the expensive tool integration tests are gated with JUnit tags
 # rather than split into separate (re-compiling) jobs. Each such test carries a
 # @Tag ("docker", "helm", "proxy", "maven", "nexus", "artifactory", "s3", "gcs", "azure"); on a pull request the step below
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          # build/jenesis is a symlink into the .jenesis/upstream submodule (the pinned jenesis build tool).
+          # build/jenesis is a symlink into the build/.upstream submodule (the pinned jenesis build tool).
           submodules: true
 
       - name: Set up JDK 25
@@ -121,13 +121,13 @@ jobs:
           # lenient - its excluded suites make an unreachable dependency expected.
           ARGS=()
           if [ "${REQUIRE_TOOLS:-}" = "true" ]; then
-            ARGS+=("-Djenesis.project.properties=ci")
+            ARGS+=("-Djenesis.make.profiles=ci")
           fi
           if [ -n "${TAG:-}" ]; then
             echo "Running with jenesis.test.tag=$TAG"
             ARGS+=("-Djenesis.test.tag=$TAG")
           fi
-          java "${ARGS[@]}" build/jenesis/Project.java
+          java "${ARGS[@]}" build/jenesis/Make.java
 
       - name: Upload target on failure
         if: failure()

@@ -19,13 +19,13 @@ console. What follows is for people working *on* this repository.
 
 ## Building and running
 
-The build tool is a git submodule (`build/jenesis` symlinks into `.jenesis/upstream`), so populate it once
+The build tool is a git submodule (`build/jenesis` symlinks into `build/.upstream`), so populate it once
 after cloning:
 
 ```bash
 git submodule update --init                          # the pinned build tool
-java build/jenesis/Project.java build                # build everything
-java build/jenesis/Project.java +source+store+s3 build   # one module and its dependencies
+java build/jenesis/Make.java build                # build everything
+java build/jenesis/Make.java +source+store+s3 build   # one module and its dependencies
 ```
 
 Run the all-in-one server against the filesystem backend - `source/bundle` is the launchable module that
@@ -54,7 +54,7 @@ JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
 
 The image is built by the build rather than by a hand-written `Dockerfile`: `source/bundle` requires every
 implementation, its `bundle=true` packaging emits the resolved runtime closure, and its `docker=` packaging
-line makes `stage` write a ready-to-build context - `java -Djenesis.test.skip=true build/jenesis/Project.java stage`,
+line makes `stage` write a ready-to-build context - `java -Djenesis.test.skip=true build/jenesis/Make.java stage`,
 then `docker build -t jenesis-repository:free 'target/stage/docker/output/module-source%2Fbundle'` is the image.
 There was a `Dockerfile` here that re-ran the whole build inside Docker - a second mechanism for a job the
 shared one does - and the deployment settings it carried (`JENREG_FILESYSTEM_ROOT=/data`, a `VOLUME`) belong
@@ -101,7 +101,7 @@ outlive a single change.
 ## Tests
 
 ```bash
-java build/jenesis/Project.java build     # compile and run the suite
+java build/jenesis/Make.java build     # compile and run the suite
 ```
 
 Contract suites are tagged, and CI decides which tagged suites to run from what a change touches. A change to

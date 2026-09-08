@@ -4,15 +4,15 @@ The core: the repository / build-cache server modules consumed by downstream edi
 
 ## Build & test
 
-- `java build/jenesis/Project.java` resolves, compiles, and tests every module. **Requires JDK 25** (the sources use module-import declarations and unnamed variables). The build tool is the `.jenesis/upstream` git submodule pinned to a jenesis/jenesis commit (`build/jenesis` is a symlink into it) — run `git submodule update --init` once after cloning.
+- `java build/jenesis/Make.java` resolves, compiles, and tests every module. **Requires JDK 25** (the sources use module-import declarations and unnamed variables). The build tool is the `build/.upstream` git submodule pinned to a jenesis/jenesis commit (`build/jenesis` is a symlink into it) — run `git submodule update --init` once after cloning.
 - Fast iteration — build one module's subgraph with a `+` selector: `+source+<path>` or `+test+<path>` (e.g. `+test+store+s3`; a nested `store/s3` is written `+store+s3`, and `/<step>` drills into a step). `+` selectors are *lenient* — a wrong one silently matches nothing, so confirm your module shows an `[EXECUTED]` line.
 - `-Djenreg.*` system properties go **before** the `Project.java` path; bare selectors go **after** it.
-- `java build/jenesis/Project.java help` documents every selector and `-D` flag (`pin` regenerates the `@jenesis.pin` version/checksum lines; `export` produces the deliverable repository).
+- `java build/jenesis/Make.java help` documents every selector and `-D` flag (`pin` regenerates the `@jenesis.pin` version/checksum lines; `export` produces the deliverable repository).
 
 ## Local gotchas (a red here is often the environment, not a regression)
 
 - **Docker is the only host tool the suite needs** (besides JDK 25). Ecosystem clients run from pinned images through `ToolContainer`, never from the host `PATH` — Maven from `maven:3.9.9-eclipse-temurin-21`, Helm from `alpine/helm:3.16.3` — so there is no `mvn` or `helm` to install. The backing services are containers too: MinIO (`s3`/`gcs`), Azurite (`azure`), Nexus, Artifactory OSS and `selenium/standalone-chrome`. Only the `docker` CLI itself is executed on the host, by the suites that drive a real client against the registry (`OciDockerTest`, `OciProxyTest`) and by the Artifactory boot.
-- Container-backed tests **self-skip without Docker**; the strict CI lane (`-Djenesis.project.properties=ci`) makes them *fail* instead. A full local run is therefore `java -Djenesis.project.properties=ci build/jenesis/Project.java` — a green run there is a run that really executed every tagged suite.
+- Container-backed tests **self-skip without Docker**; the strict CI lane (`-Djenesis.make.profiles=ci`) makes them *fail* instead. A full local run is therefore `java -Djenesis.make.profiles=ci build/jenesis/Make.java` — a green run there is a run that really executed every tagged suite.
 - A few tests need a **UTF-8 locale**: `MavenMetadataTest` publishes non-ASCII versions (`naïve`, `café`) into a filesystem store, where they become real filenames and so depend on `sun.jnu.encoding`. Set `LANG=C.UTF-8` if your locale is not already UTF-8.
 
 ## SPI contracts
@@ -47,7 +47,7 @@ Where an SPI's clauses are observable but not generifiable, they are asserted by
 - a fixture may exclude a property only with a reason naming where the property is proven instead, and a property every fixture excludes fails the census;
 - a per-implementation suite keeps only what is **particular** to that implementation. Adding a generic assertion back to one of them is the drift the kit exists to prevent.
 
-A containerised fixture self-skips without Docker and **fails** under the strict lane (`-Djenesis.project.properties=ci`, which sets `-Djenreg.test.required`): the decision lives once in `StoreFixture.skipReason`, so a required backend that cannot start is a red build rather than a green skip.
+A containerised fixture self-skips without Docker and **fails** under the strict lane (`-Djenesis.make.profiles=ci`, which sets `-Djenreg.test.required`): the decision lives once in `StoreFixture.skipReason`, so a required backend that cannot start is a red build rather than a green skip.
 
 The walk-consumer kit (`source/walk/testkit` + `test/walkconsumer`) is the same shape for `WalkConsumer`, and adds the pattern for a contract whose *guarantee legitimately differs per implementation*. A fixture declares two things the kit refuses to guess: its **projection** — its durable state read back and normalised into the view its own contract calls converged, so two consumers holding completely different bytes for the same view are both comparable without the kit owning either layout — and its **delivery class**, which decides what may be asserted after a crash. A per-item or stride-durable consumer must already be converged when a resumed pass ends; a pass-snapshot one must be converged **or** visibly degraded, and may never publish the fragment a resumed pass happened to deliver. The crash is the store kit's `FaultInjectingStore`, armed off the consumer's own delivery count at six points (before the first delivery, mid-stride, a full stride with the cursor commit dying before it lands, the same with it landing but the caller never learning, the terminal segment commit, the pass-completion hook), and every check re-derives from the durable pass state that the crash landed where it claims — a crash point that stopped biting fails instead of passing vacuously.
 

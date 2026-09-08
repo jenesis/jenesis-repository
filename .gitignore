@@ -1,8 +1,7 @@
 target/
-# The tool's runtime caches inside the jenesis home dir (.jenesis/ also holds the committed
-# .jenreg.skip marker and the upstream submodule, which stay tracked).
-.jenesis/artifacts/
-.jenesis/cache/
+# The tool's home dir. It holds nothing tracked any more - the engine submodule moved to
+# build/.upstream - so it is ignored wholesale rather than entry by entry with a negation.
+.jenesis/
 # Anchored to the repo root: a runtime cache dir, not the build.jenesis.repository.cache package dirs.
 /cache/
 *.class
