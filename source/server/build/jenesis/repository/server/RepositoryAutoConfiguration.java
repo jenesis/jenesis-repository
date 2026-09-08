@@ -3,6 +3,8 @@ import module java.base;
 import module org.slf4j;
 
 import build.jenesis.repository.store.Clocks;
+import build.jenesis.repository.server.spi.KeyUsageTracker;
+import build.jenesis.repository.server.spi.KeyUsageTrackerProvider;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.spi.RateLimiterProvider;
@@ -193,6 +195,22 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public CredentialsController credentialsController(Authorization authorization, CredentialContext context) {
         return new CredentialsController(authorization, context);
+    }
+
+    /**
+     * The credential-use tracker, discovered like every other plugin: the batching one when the usage module is on
+     * the graph and {@code track-key-usage} is on, else a tracker that records nothing and reports itself off. It is
+     * a worker, so it starts and stops with the context; a read-only deployment records nothing either, since a use
+     * count is a store write.
+     */
+    @Bean(initMethod = "start", destroyMethod = "close")
+    @ConditionalOnMissingBean
+    public KeyUsageTracker keyUsageTracker(RepositoryProperties properties, Authorization authorization,
+                                           Environment environment) {
+        if (properties.isReadOnly()) {
+            return KeyUsageTracker.NONE;
+        }
+        return KeyUsageTrackerProvider.resolve(authorization, environment::getProperty);
     }
 
     @Bean

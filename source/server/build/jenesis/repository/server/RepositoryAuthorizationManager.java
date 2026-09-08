@@ -2,6 +2,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.KeyUsageTracker;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
@@ -25,10 +26,24 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
 
     private final Authorization authorization;
     private final RepositoryRouting routing;
+    private final KeyUsageTracker usage;
 
     public RepositoryAuthorizationManager(Authorization authorization, RepositoryRouting routing) {
+        this(authorization, routing, KeyUsageTracker.NONE);
+    }
+
+    /**
+     * The authorizing manager, recording each accepted credential's use through {@code usage}.
+     *
+     * <p>This is the only place that knows a request was accepted <em>and</em> which credential accepted it, so it is
+     * where a use is recorded. The tracker batches: a busy key costs one store write a day rather than one per
+     * request, and with no tracker installed nothing is recorded at all.
+     */
+    public RepositoryAuthorizationManager(Authorization authorization, RepositoryRouting routing,
+                                          KeyUsageTracker usage) {
         this.authorization = authorization;
         this.routing = routing;
+        this.usage = usage;
     }
 
     @Override
@@ -141,6 +156,10 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
             decision = Authorization.Decision.FORBIDDEN;
         }
         request.setAttribute("jenreg.decision", decision);
+        String tenant = Authorization.tenantOf(key);
+        if (decision == Authorization.Decision.ALLOWED && usage.enabled() && tenant != null) {
+            usage.record(tenant, Authorization.hash(key), clientAddress(request));
+        }
         return new AuthorizationDecision(decision == Authorization.Decision.ALLOWED);
     }
 

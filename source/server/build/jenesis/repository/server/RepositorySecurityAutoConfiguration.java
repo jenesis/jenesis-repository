@@ -1,4 +1,5 @@
 package build.jenesis.repository.server;
+import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.store.Features;
@@ -42,8 +43,9 @@ public class RepositorySecurityAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = "repositoryAuthorizationManager")
     public RepositoryAuthorizationManager repositoryAuthorizationManager(Authorization authorization,
-                                                                         RepositoryRouting routing) {
-        return new RepositoryAuthorizationManager(authorization, routing);
+                                                                         RepositoryRouting routing,
+                                                                         KeyUsageTracker keyUsageTracker) {
+        return new RepositoryAuthorizationManager(authorization, routing, keyUsageTracker);
     }
 
     @Bean

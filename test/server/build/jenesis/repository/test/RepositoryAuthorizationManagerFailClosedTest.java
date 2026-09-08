@@ -121,11 +121,78 @@ public class RepositoryAuthorizationManagerFailClosedTest {
         return request;
     }
 
+    /** A tracker that records what it was told, so the test can see whether a use was recorded at all. */
+    private static final class Recording implements build.jenesis.repository.server.spi.KeyUsageTracker {
+
+        private final List<String> hits = new ArrayList<>();
+
+        @Override
+        public boolean enabled() {
+            return true;
+        }
+
+        @Override
+        public boolean alive() {
+            return true;
+        }
+
+        @Override
+        public long dropped() {
+            return 0L;
+        }
+
+        @Override
+        public void record(String tenant, String hash, String address) {
+            hits.add(tenant + " " + hash);
+        }
+
+        @Override
+        public void start() {
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    @Test
+    void an_accepted_request_records_the_credentials_use_and_a_refused_one_records_nothing() throws IOException {
+        // The tracker is what fills lastUsed and useCount on GET /api/credentials, and this manager is the only place
+        // that knows both that a request was accepted and which credential accepted it. Until 2026-09 nothing in this
+        // edition called it, so track-key-usage was a setting that did nothing here while doing something downstream.
+        ArtifactStore store = ArtifactStoreProvider.resolve(
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+        Authorization authorization = Authorization.enforcing(store);
+        String key = Authorization.mint("acme");
+        authorization.provision("acme", Authorization.hash(key), "k", null);
+        authorization.grant(key, "*", Authorization.REPOSITORY_READ);
+        Recording usage = new Recording();
+        RepositoryAuthorizationManager manager = manager(authorization, usage);
+
+        assertThat(manager.authorize(() -> null,
+                new RequestAuthorizationContext(request(key, new HashMap<>()))).isGranted()).isTrue();
+        assertThat(usage.hits)
+                .as("an accepted request records the credential that accepted it")
+                .containsExactly("acme " + Authorization.hash(key));
+
+        String other = Authorization.mint("acme");   // never provisioned, so it is refused
+        assertThat(manager.authorize(() -> null,
+                new RequestAuthorizationContext(request(other, new HashMap<>()))).isGranted()).isFalse();
+        assertThat(usage.hits)
+                .as("a refused request records nothing - a use is an accepted use")
+                .hasSize(1);
+    }
+
     private RepositoryAuthorizationManager manager(Authorization authorization) {
+        return manager(authorization, build.jenesis.repository.server.spi.KeyUsageTracker.NONE);
+    }
+
+    private RepositoryAuthorizationManager manager(Authorization authorization,
+                                                   build.jenesis.repository.server.spi.KeyUsageTracker usage) {
         ArtifactStore store = ArtifactStoreProvider.resolve(
                 "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         RepositoryRouting.Route route = new RepositoryRouting.Route("acme", "default", store, "maven/org/x/y/1/y-1.jar");
-        return new RepositoryAuthorizationManager(authorization, new FixedRoute(route));
+        return new RepositoryAuthorizationManager(authorization, new FixedRoute(route), usage);
     }
 
     @Test
