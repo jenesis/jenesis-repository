@@ -15,6 +15,21 @@ import build.jenesis.repository.store.ArtifactStore;
  * prerelease rule, the directory a version occupies), and this is the interface through which it lends that knowledge
  * to the rest of the system.
  *
+ * <p><b>An empty {@link #paths} is an answer, not a gap</b>, and a whole format family gives it. A layout in this
+ * interface's sense lays its artifacts out <em>under the published tree</em>, where a version owns a directory of its
+ * own - which is why the reverse mapping can be a handful of <em>directory prefixes</em> that a caller then
+ * enumerates. A format that keeps its artifacts in a blobs namespace of its own has no such directory: npm, RubyGems,
+ * Debian and Go all place every version of a package in one folder beside its siblings, so a prefix would name the
+ * package rather than the version, and enumerating it would hand an eviction the neighbours. Those formats therefore
+ * answer empty from both overloads here and map a coordinate through their own namespace's layout contract instead
+ * (the one {@link EcosystemLayout} names), which answers with the <em>exact</em> pointer keys the version occupies.
+ *
+ * <p>Both are the same question - "where does this coordinate version live, so it can be unpublished" - and the
+ * difference in answer shape is what makes each of them safe: a prefix may be enumerated because the directory
+ * belongs to the version alone, and an exact key is required precisely where it does not. So read an empty list here
+ * as "this format answers through the other family", never as "this format cannot be evicted"; the second reading is
+ * the natural one and it is wrong.
+ *
  * <h2>Contract</h2>
  * This is a role sub-interface of {@link RepositoryFormat}: that contract still binds, and the clauses below state
  * what mapping a coordinate to a path and back adds. {@code FormatContract}'s format-seam leg in the format testkit
@@ -88,7 +103,9 @@ public interface ArtifactLayout extends EcosystemLayout {
     /** The request-path directory prefixes a coordinate version occupies across this format's layouts, resolved
      *  against {@code store} so a format can include a cross-published mirror it recorded (a Maven module view found
      *  through the format's own index), so a cleanup pass enumerates and unpublishes every pointer under them from the
-     *  coordinate alone - no layout knowledge in the caller. Empty when the coordinate maps nowhere. */
+     *  coordinate alone - no layout knowledge in the caller. Empty when the coordinate maps nowhere, and empty by
+     *  design for a format that serves from a blobs namespace rather than from the published tree - see the class
+     *  note above before reading that as a missing mapping. */
     List<String> paths(String coordinate, String version, ArtifactStore store);
 
     /** The request-path folders a coordinate version occupies computed from the coordinate alone - no artifact read,

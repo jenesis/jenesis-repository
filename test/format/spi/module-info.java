@@ -7,7 +7,9 @@
  * {@link java.util.ServiceLoader}-discovered stub providers registered by this module - no network, no store. It also
  * covers {@link build.jenesis.repository.format.FormatMarks}, the format family's half of the shared mark resolution
  * (which installed format owns a storage namespace or declares an ecosystem), driven over stub formats so the
- * mapping and not discovery is what is asserted.
+ * mapping and not discovery is what is asserted. Discovery itself is covered by the one claim that needs it: a
+ * composition in which two switched-on formats declare the same ecosystem refuses to start, driven over two
+ * {@code provides}-registered stub formats that collide on one.
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.format
@@ -41,6 +43,9 @@ open module build.jenesis.repository.format.test {
     requires build.jenesis.repository.store;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    provides build.jenesis.repository.format.RepositoryFormat
+            with build.jenesis.repository.format.test.StubTwinAlphaFormat,
+                    build.jenesis.repository.format.test.StubTwinBetaFormat;
     provides build.jenesis.repository.format.FetcherProvider
             with build.jenesis.repository.format.test.StubEmptyFetcherProvider,
                     build.jenesis.repository.format.test.StubAlphaFetcherProvider,

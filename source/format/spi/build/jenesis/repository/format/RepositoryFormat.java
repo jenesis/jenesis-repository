@@ -283,7 +283,12 @@ public interface RepositoryFormat extends IconContributor {
      *  configured off ({@code jenreg.<name>=false}) or with required config unset is absent exactly as a missing
      *  module is, on every one of those paths alike. Measured before this was the one lookup: an import, a staging
      *  promotion, the gate's sibling read and a hold's replay each discovered the formats raw and served a
-     *  switched-off one. */
+     *  switched-off one.
+     *
+     *  <p>It is also where a composition is refused: two switched-on formats declaring one ecosystem throw here
+     *  rather than leaving the owner of a coordinate to discovery order - see {@link #oneLayoutPerEcosystem}. This
+     *  is a boot-time failure in both editions, because every node resolves its serving set while its context
+     *  starts. */
     static List<RepositoryFormat> installed() {
         return installed(Features.settings());
     }
@@ -295,6 +300,49 @@ public interface RepositoryFormat extends IconContributor {
         for (RepositoryFormat format : declared()) {
             if (Features.active(config, format.name(), format.requiredConfig())) {
                 active.add(format);
+            }
+        }
+        return oneLayoutPerEcosystem(active);
+    }
+
+    /**
+     * Refuse a composition in which two switched-on formats claim the same ecosystem.
+     *
+     * <p>{@link FormatDiscovery} already refuses a duplicated format <em>name</em>, for the reason its javadoc
+     * gives: a packaging error should throw once rather than produce a discovery-order winner. A duplicated
+     * <em>ecosystem</em> is the same error one level along, and its ending is worse. An ecosystem is what neutral
+     * code resolves a layout by - {@link FormatMarks#forEcosystem} takes the first match, and so does every
+     * consumer that asks which layout owns a coordinate in order to compute the request paths it browses,
+     * reconciles or <em>deletes</em> under. Two claimants make that answer the module path's ordering, which means
+     * the same store can be swept differently on two nodes. Nothing downstream can detect it: both answers look
+     * like a layout doing its job.
+     *
+     * <p>Declaring the same ecosystem is not absurd, which is why this is a refusal rather than an assumption left
+     * unstated. An ecosystem is a vulnerability-database vocabulary rather than a layout, and one language's
+     * artifacts can legitimately be served through more than one layout - Maven and Ivy are both {@code Maven} to
+     * OSV. Supporting that means deciding what eviction, reconciliation and the browse each do when an ecosystem
+     * has several layouts, and those are three separate answers. Until they are given, a composition that would
+     * need them refuses to start and names both formats, rather than picking one silently.
+     *
+     * <p>Judged over the <em>active</em> set rather than the declared one: carrying two such formats on the module
+     * path and switching one off is a legitimate deployment, and the one that is off owns nothing.
+     */
+    private static List<RepositoryFormat> oneLayoutPerEcosystem(List<RepositoryFormat> active) {
+        Map<String, RepositoryFormat> claimed = new TreeMap<>();
+        for (RepositoryFormat format : active) {
+            if (!(format instanceof EcosystemLayout layout)) {
+                continue;
+            }
+            RepositoryFormat first = claimed.putIfAbsent(layout.ecosystem(), format);
+            if (first != null) {
+                throw new IllegalStateException("The formats '" + first.name() + "' ("
+                        + first.getClass().getName() + ") and '" + format.name() + "' ("
+                        + format.getClass().getName() + ") both declare the ecosystem '" + layout.ecosystem()
+                        + "', so which layout owns a coordinate of it is decided by discovery order - and a"
+                        + " deletion computes the paths it removes from that layout. Switch one of the two off"
+                        + " (jenreg." + format.name() + "=false) or leave its module out; one ecosystem cannot be"
+                        + " served through two layouts until eviction, reconciliation and the browse each say"
+                        + " which of them they mean.");
             }
         }
         return List.copyOf(active);
