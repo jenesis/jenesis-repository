@@ -55,6 +55,22 @@ import build.jenesis.repository.store.ArtifactStore;
  *     depend on discovery order or on store enumeration order.</li>
  * <li><b>Bounded work.</b> Both {@link #paths} overloads answer a small, fixed set of directory prefixes - one per
  *     layout view the format publishes - never an enumeration of a version's contents.</li>
+ * <li><b>Exclusive prefixes.</b> A prefix {@link #paths} returns for a coordinate version contains that version's
+ *     files and <em>nothing else</em> - in particular, nothing belonging to another version of the same coordinate.
+ *     Two distinct versions therefore map to prefixes neither of which contains the other.
+ *     <p>This is the clause with teeth, because of what the prefixes are for: eviction enumerates every key beneath
+ *     them and unpublishes it, so a layout that answered the <em>module</em> directory rather than the version's own
+ *     would delete a version's siblings, and the operator asked only for one version to go. It is stated here rather
+ *     than left implicit because every layout in this build happens to honour it, which is exactly the condition
+ *     under which an assumption goes unnoticed until a layout does not - and the reading that produces one is
+ *     natural: "where does this version live" has an obvious answer one directory too high.
+ *     <p>A layout whose pattern gives a version no directory of its own therefore cannot be expressed here, and
+ *     should answer empty rather than a prefix it does not own. That is a real constraint on a layout's pattern, not
+ *     a gap to be worked around at the call site: the caller has no way to tell an exclusive prefix from a shared
+ *     one, and the cost of guessing wrong is measured in deleted artifacts.
+ *     <p>{@code FormatContract}'s {@code VERSION_PREFIXES_ARE_EXCLUSIVE} proves it per layout, and the store's own
+ *     contract proves the half beneath it - that enumerating a container never reaches a sibling whose name merely
+ *     extends its own, so a prefix for {@code 1.0} does not enumerate {@code 1.0.1}.</li>
  * </ol>
  */
 public interface ArtifactLayout extends EcosystemLayout {

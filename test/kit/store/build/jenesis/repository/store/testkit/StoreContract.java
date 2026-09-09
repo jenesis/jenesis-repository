@@ -405,6 +405,38 @@ public final class StoreContract {
         equal(scanned, List.of(base + "/alpha", base + "/beta/nested", base + "/gamma"),
                 "scan accepts the trailing slash and keys its results without it");
 
+        // A container is named by its NAME, not by its characters - so a sibling whose name merely EXTENDS this
+        // one is a different container and must not be enumerated with it. Every check above uses names where no
+        // one is a prefix of another (alpha/beta/gamma), which is precisely the arrangement that cannot see this.
+        //
+        // It is not a curiosity. Version numbers collide this way constantly - "1.0" is a character-prefix of
+        // "1.0.1" - and the prefixes a layout hands out are what an eviction ENUMERATES AND DELETES UNDER
+        // (ArtifactLayout's exclusive-prefix clause). A backend that composed its native listing from the raw prefix
+        // without the delimiter would answer 1.0.1's files when asked for 1.0's, and evicting one version would take
+        // the next one with it. The object stores are where that would happen: their listing IS a prefix query, and
+        // the trailing delimiter is the only thing making it a container query.
+        String versions = "kit/listing/versions";
+        store.write(versions + "/1.0/artifact.bin", new ByteArrayInputStream(ramp(4)));
+        store.write(versions + "/1.0.1/artifact.bin", new ByteArrayInputStream(ramp(4)));
+        store.write(versions + "/1.0-suffixed", new ByteArrayInputStream(ramp(4)));
+
+        equal(store.list(versions + "/1.0"), List.of("artifact.bin"),
+                "a container is named, not prefix-matched: listing 1.0 does not reach 1.0.1 or 1.0-suffixed");
+        List<String> pagedVersion = new ArrayList<>();
+        store.page(versions + "/1.0", "", 10, pagedVersion::add);
+        equal(pagedVersion, List.of("artifact.bin"), "page draws the same boundary as list");
+        List<String> scannedVersion = new ArrayList<>();
+        store.scan(versions + "/1.0", "", 10, listed -> scannedVersion.add(listed.key()));
+        equal(scannedVersion, List.of(versions + "/1.0/artifact.bin"),
+                "scan recurses into the named container only - the key an eviction would delete under");
+        isFalse(store.isEmpty(versions + "/1.0"), "the named container is not empty");
+        // And the sibling is still whole afterwards, which is the property stated the way the damage would read.
+        equal(store.list(versions + "/1.0.1"), List.of("artifact.bin"),
+                "the sibling whose name extends the first is a container of its own, untouched");
+
+        store.delete(versions + "/1.0/artifact.bin");
+        store.delete(versions + "/1.0.1/artifact.bin");
+        store.delete(versions + "/1.0-suffixed");
         store.delete(base + "/alpha");
         store.delete(base + "/beta/nested");
         store.delete(base + "/gamma");

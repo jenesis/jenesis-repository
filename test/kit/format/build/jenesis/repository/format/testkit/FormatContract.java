@@ -84,6 +84,11 @@ public final class FormatContract {
          *  request path out of a hostile coordinate or version, and a published artifact's coordinate round-trips
          *  back to the path it occupies ({@code ArtifactLayout} clause 3). */
         COORDINATE_TRAVERSAL_REFUSED,
+        /** The prefixes two distinct versions of one coordinate map to are exclusive: neither contains the other,
+         *  and neither contains the artifact the other published ({@code ArtifactLayout} clause 7). Eviction
+         *  enumerates and DELETES under these, so a layout answering the module directory rather than the version's
+         *  own takes a version's siblings with it. */
+        VERSION_PREFIXES_ARE_EXCLUSIVE,
         /** A version listed by every enumeration surface leaves all of them the moment it is held, and its served
          *  path answers {@code 404} - one hold, no surface left behind (clause 7). */
         WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION,
@@ -146,6 +151,9 @@ public final class FormatContract {
                 new Check(Property.COORDINATE_TRAVERSAL_REFUSED,
                         "a hostile coordinate maps nowhere and a real one round-trips to its own path",
                         FormatContract::coordinateTraversalRefused),
+                new Check(Property.VERSION_PREFIXES_ARE_EXCLUSIVE,
+                        "two versions of one coordinate map to prefixes neither of which contains the other",
+                        FormatContract::versionPrefixesAreExclusive),
                 new Check(Property.WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION,
                         "a held version leaves every enumeration surface and 404s where it served",
                         FormatContract::withheldVersionLeavesEveryEnumeration),
@@ -367,6 +375,77 @@ public final class FormatContract {
                 }
             }
         }
+    }
+
+    /**
+     * Two versions of one coordinate occupy prefixes that do not contain one another, and neither reaches the other's
+     * published artifact.
+     *
+     * <p>What makes this worth a clause is what the prefixes are handed to. Eviction enumerates every key beneath
+     * them and unpublishes it, so a layout answering the <em>module</em> directory rather than the version's own
+     * would delete a version's siblings when an operator asked for one version to go - and nothing downstream could
+     * tell, because a prefix carries no mark saying whose it is.
+     *
+     * <p><b>It applies to the {@code publish/}-namespace layouts and skips the rest by construction</b>, which in
+     * this build means it bites on Maven and the Jenesis module layout and is silent for the other nineteen. That is
+     * the property being narrow rather than the formats being wrong: a blobs-namespace format names the
+     * <em>exact</em> pointer keys a version occupies instead of a prefix an eviction widens to, so there is no prefix
+     * to overlap and its coordinate seam is covered where those keys are (the downstream {@code BlobLayout}
+     * coordinate-seam test). Three shapes are skipped, all the same fact: a format with no {@link ArtifactLayout} at
+     * all, one that excludes the generic publish leg because its protocol parses the artifact, and one whose
+     * {@link ArtifactLayout#paths} answers empty - which its own javadoc calls the exact answer for a shared-blobs
+     * format. Nineteen fixture exclusions all saying that would be worse than saying it once here.
+     *
+     * <p>The free-core leg is the non-vacuity anchor and always runs: Maven and Jenesis both place prefixes, so a
+     * regression in the shared composition is caught without a container.
+     *
+     * <p>The sibling version is the real one with a digit appended, which is deliberate rather than convenient:
+     * {@code 1.0} is a <em>character</em> prefix of {@code 1.0.1} while being a different container, so a layout - or
+     * a store - comparing prefixes without a segment boundary fails here and passes against any sibling chosen to
+     * look different. The store's own contract holds the half beneath this one.
+     */
+    private static void versionPrefixesAreExclusive(FormatFixture fixture, ArtifactStore store) throws Exception {
+        if (!(fixture.serving() instanceof ArtifactLayout layout)
+                || fixture.unsupported().containsKey(Property.PUBLISH_SERVES_EXACT_BYTES)) {
+            return;   // places no publish/ prefix, or cannot publish a generic body - see the note above
+        }
+        byte[] body = ramp(ARTIFACT_BYTES);
+        FormatFixture.Published published = fixture.publish(store, body);
+        ArtifactDescriptor descriptor = layout.describe(published.servedPath()).orElseThrow(() -> failure(fixture,
+                "describe(" + published.servedPath() + ") resolves the published artifact's coordinate"));
+        notNull(descriptor.coordinate(), fixture, "the published artifact describes to a coordinate");
+        notNull(descriptor.version(), fixture, "the published artifact describes to a version");
+
+        List<String> mine = layout.paths(descriptor.coordinate(), descriptor.version(), store);
+        String sibling = descriptor.version() + "1";
+        List<String> theirs = layout.paths(descriptor.coordinate(), sibling, store);
+        if (mine.isEmpty() || theirs.isEmpty()) {
+            return;   // an ArtifactLayout that places no prefix for a version claims none to be exclusive about
+        }
+
+        for (String ours : mine) {
+            for (String other : theirs) {
+                isTrue(!contains(ours, other), fixture, "the prefix of version '" + descriptor.version()
+                        + "' (" + ours + ") does not contain the prefix of '" + sibling + "' (" + other
+                        + "), or evicting the first would enumerate and delete the second");
+                isTrue(!contains(other, ours), fixture, "the prefix of version '" + sibling + "' (" + other
+                        + ") does not contain the prefix of '" + descriptor.version() + "' (" + ours
+                        + "), or evicting the sibling would delete the published version");
+            }
+        }
+        for (String other : theirs) {
+            isTrue(!contains(other, published.servedPath()), fixture, "the artifact published at "
+                    + published.servedPath() + " does not sit under the prefix a DIFFERENT version ('" + sibling
+                    + "') maps to (" + other + "), which is the same defect stated as the damage it does");
+        }
+    }
+
+    /** Whether {@code prefix} contains {@code path} as a container does - by segment, never by characters, so
+     *  {@code .../1.0} does not contain {@code .../1.0.1}. Equality counts: two versions answering the identical
+     *  prefix is the defect in its purest form. */
+    private static boolean contains(String prefix, String path) {
+        String container = ArtifactStore.container(prefix);
+        return path.equals(container) || path.startsWith(container + "/");
     }
 
     /** The name parts a coordinate or a version must not be able to smuggle into a composed request path. */
