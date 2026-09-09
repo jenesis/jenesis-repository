@@ -530,6 +530,86 @@ public final class Authorization {
                              Map<String, String> grants) {
     }
 
+    /**
+     * What a grant is held by. Rights are the noun and this is the variable: the same vocabulary
+     * ({@code repository:read}, {@code cache:write}, {@code manage:write}, {@code *}) is held by a machine
+     * credential, by a person, by a named group of people, and by the keyless caller - so anonymous access becomes
+     * a holder with a small grant rather than a mechanism of its own, and a person's rights are written down the
+     * way a key's are instead of inferred from the edition and the tenancy mode.
+     *
+     * <p><strong>What is true today is the key, and only the key.</strong> This declares the vocabulary and keys
+     * the store by it; {@link #authorize} still resolves {@link Kind#CREDENTIAL} and nothing else, and a person is
+     * still authorized by the console's own mechanism. The other three kinds are the shape the rest is built into,
+     * and each becomes writable in the change that makes it enforceable - never before, because a stored grant
+     * nothing consults reads as access granted.
+     *
+     * <p>A subject is one path segment pair, so a grant lookup stays the point read the cost model depends on.
+     * What it deliberately does NOT do is resolve membership: the rights a person effectively holds are the union
+     * over their identity, their groups and anonymous, and computing that union per request would be the
+     * unbounded fan-out the bounded-read rule forbids. That union is a document maintained on the write path.
+     */
+    public enum Kind {
+
+        /** A minted key, identified by its hash. The only kind that authenticates by presenting a secret. */
+        CREDENTIAL,
+
+        /** A person, identified as the sign-in mechanism names them (an {@code oidc/<sub>}, a SAML name id). */
+        PRINCIPAL,
+
+        /** A named collection of principals within a tenant, holding rights exactly as a person or key does. */
+        GROUP,
+
+        /** The keyless caller - today a setting rather than a row; see {@link Subject#ANONYMOUS}. */
+        ANONYMOUS;
+
+        /** The path segment this kind's subjects live under. Lower case, so the store key reads as prose. */
+        public String segment() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
+
+    /** A grant's holder: a {@link Kind} and an id unique within that kind and tenant. */
+    public record Subject(Kind kind, String id) {
+
+        public Subject {
+            Objects.requireNonNull(kind, "A grant is held by some kind of subject");
+            if (id == null || id.isBlank()) {
+                throw new IllegalArgumentException("A " + kind.segment() + " subject needs an id");
+            }
+            if (id.indexOf('/') >= 0) {
+                // The id is one path segment; a slash would silently graft the subject into another's subtree.
+                throw new IllegalArgumentException("A subject id may not contain '/': " + id);
+            }
+        }
+
+        /** The subject a minted key authorizes as. */
+        public static Subject credential(String hash) {
+            return new Subject(Kind.CREDENTIAL, hash);
+        }
+
+        /** The subject a signed-in person authorizes as. */
+        public static Subject principal(String id) {
+            return new Subject(Kind.PRINCIPAL, id);
+        }
+
+        /** The subject every member of a named group holds through. */
+        public static Subject group(String name) {
+            return new Subject(Kind.GROUP, name);
+        }
+
+        /**
+         * The keyless caller's subject: unnamed within its kind, so it takes a fixed id - {@code -} rather than a
+         * word, because a word is a name a real subject could also be given.
+         *
+         * <p><strong>Not yet the source of truth.</strong> A keyless caller's rights come from the
+         * {@code anonymous-rights} setting, held in memory per node and deployment-wide, and {@link #authorize}
+         * still reads them from there. This subject is where they belong, and moving them is a decision rather
+         * than a refactor: it settles whether a grant may be expressed in configuration at all, and a keyless
+         * request names no tenant, so the row is deployment-wide until the request path carries one.
+         */
+        public static final Subject ANONYMOUS = new Subject(Kind.ANONYMOUS, "-");
+    }
+
     /** Whether {@code key} carries {@code required} (a {@code <surface>:<verb>} token) for {@code scope} (a
      *  repository name, or {@code null} for the default); an expired key is {@code UNAUTHORIZED}. */
     public Decision authorize(String key, String scope, String required) throws IOException {
@@ -701,19 +781,25 @@ public final class Authorization {
         if (store == null) {
             return List.of();
         }
-        return store.list(AUTH + "/" + tenant);
+        return store.list(kindPrefix(tenant, Kind.CREDENTIAL));
+    }
+
+    private static String kindPrefix(String tenant, Kind kind) {
+        return AUTH + "/" + tenant + "/" + kind.segment();
     }
 
     /** One page of a tenant's credential hashes, in key order: at most {@code limit} names strictly after
      *  {@code after} ({@code null} from the start) and the name to continue from, {@code null} on the last page. The
-     *  listing names the tenant's per-tenant objects ({@code policy}, {@code quota}, ...) as well; {@link #credential}
-     *  answers empty for those. The face a management surface pages through, never the whole listing. */
+     *  face a management surface pages through, never the whole listing. It names credentials and nothing else:
+     *  they used to sit directly under the tenant beside its {@code policy} and {@code quota} objects, so this
+     *  listing returned those too and a caller had to know that {@link #credential} answers empty for them. */
     public CredentialPage credentials(String tenant, String after, int limit) {
         if (store == null) {
             return new CredentialPage(List.of(), null);
         }
         List<String> names = new ArrayList<>();
-        store.page(AUTH + "/" + tenant, after == null ? "" : after, ArtifactStore.oneMoreThan(limit), names::add);
+        store.page(kindPrefix(tenant, Kind.CREDENTIAL),
+                after == null ? "" : after, ArtifactStore.oneMoreThan(limit), names::add);
         boolean more = names.size() > limit;
         List<String> page = more ? names.subList(0, limit) : names;
         return new CredentialPage(List.copyOf(page), more ? page.getLast() : null);
@@ -761,24 +847,37 @@ public final class Authorization {
 
     /** Set the rights for {@code scope} on a credential by hash, replacing any held for that scope. */
     public void setGrant(String tenant, String hash, String scope, String tokens) throws IOException {
+        setGrant(tenant, Subject.credential(hash), scope, tokens);
+    }
+
+    /** Set the rights for {@code scope} on any subject. Deliberately NOT public: {@link #authorize} consults the
+     *  {@link Kind#CREDENTIAL} subject and nothing else, so a caller able to grant to a principal or a group today
+     *  would write a row that reads as access and confers none. It becomes public in the change that teaches
+     *  {@code authorize} to resolve a subject's effective rights, not before. */
+    private void setGrant(String tenant, Subject subject, String scope, String tokens) throws IOException {
         require();
-        Properties grants = read(grantsPath(tenant, hash));
+        Properties grants = read(grantsPath(tenant, subject));
         if (grants == null) {
             grants = new Properties();
         }
         grants.setProperty(scope, tokens);
-        write(grantsPath(tenant, hash), grants);
+        write(grantsPath(tenant, subject), grants);
     }
 
     /** Remove the rights for {@code scope} on a credential by hash. */
     public void removeGrant(String tenant, String hash, String scope) throws IOException {
+        removeGrant(tenant, Subject.credential(hash), scope);
+    }
+
+    /** Remove the rights for {@code scope} on any subject; private for the reason {@link #setGrant} is. */
+    private void removeGrant(String tenant, Subject subject, String scope) throws IOException {
         require();
-        Properties grants = read(grantsPath(tenant, hash));
+        Properties grants = read(grantsPath(tenant, subject));
         if (grants == null) {
             return;
         }
         grants.remove(scope);
-        write(grantsPath(tenant, hash), grants);
+        write(grantsPath(tenant, subject), grants);
     }
 
     /** Set or clear a credential's expiry; {@code null} removes it (the key no longer expires) unless the tenant
@@ -1183,11 +1282,32 @@ public final class Authorization {
     }
 
     private static String grantsPath(String tenant, String hash) {
-        return AUTH + "/" + tenant + "/" + hash + "/grants";
+        return grantsPath(tenant, Subject.credential(hash));
+    }
+
+    private static String grantsPath(String tenant, Subject subject) {
+        return subjectPath(tenant, subject) + "/grants";
     }
 
     private static String metadataPath(String tenant, String hash) {
-        return AUTH + "/" + tenant + "/" + hash + "/metadata";
+        return metadataPath(tenant, Subject.credential(hash));
+    }
+
+    private static String metadataPath(String tenant, Subject subject) {
+        return subjectPath(tenant, subject) + "/metadata";
+    }
+
+    /**
+     * Where one subject's documents live: {@code .system/auth/<tenant>/<kind>/<id>}.
+     *
+     * <p>The kind segment is what makes a grant's holder part of the key rather than a convention, and it also
+     * repairs a listing that was wrong: credentials used to sit directly under the tenant, beside that tenant's
+     * {@code policy}, {@code quota} and {@code roles} objects, so enumerating them returned those too and
+     * {@link #credential} answered empty for them. Under a kind segment the enumeration names credentials and
+     * nothing else.
+     */
+    private static String subjectPath(String tenant, Subject subject) {
+        return AUTH + "/" + tenant + "/" + subject.kind().segment() + "/" + subject.id();
     }
 
     private static String policyPath(String tenant) {
