@@ -7,6 +7,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Lease;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * {@link Lease}: one object per job, acquired by compare-and-set, refused while another holder's lease is live and
@@ -72,6 +73,36 @@ class LeaseTest {
         assertThat(lease.acquire("sweep", "node-b", T0.plus(TTL).plusSeconds(1))).isTrue();
         assertThat(lease.guarded("sweep", "node-a", T0.plus(TTL).plusSeconds(2), () -> ran.add("lost"))).isFalse();
         assertThat(ran).as("the fence let exactly the held case through").containsExactly("held");
+    }
+
+    @Test
+    void renewing_or_releasing_a_lock_nobody_took_is_refused_and_harmless() {
+        // The two calls a caller makes when it has lost track of whether it ever held the lock - after a restart,
+        // or in a finally block that runs whether or not the acquire succeeded. Neither may invent a holder:
+        // a renewal must say no rather than create a lease out of nothing, and a release must leave a free lock
+        // free rather than throw at the caller who was only tidying up.
+        assertThatCode(() -> {
+            assertThat(lease.renew("sweep", "node-a", T0)).as("nothing to renew").isFalse();
+            lease.release("sweep", "node-a", T0);
+            assertThat(lease.acquire("sweep", "node-b", T0)).as("still free to acquire").isTrue();
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    void a_release_after_the_lease_was_stolen_never_frees_the_thiefs_lock() throws IOException {
+        // The stalled-holder shape, which is the one that actually happens: A takes the lock, runs long enough for
+        // its lease to lapse, and B legitimately steals it. When A finally finishes and releases in its finally
+        // block, it must not hand B's live lock to whoever asks next - a release clears a lease this holder still
+        // owns, and A no longer owns one. Distinct from a rival releasing a lease that never lapsed, above.
+        assertThat(lease.acquire("sweep", "node-a", T0)).isTrue();
+        assertThat(lease.acquire("sweep", "node-b", T0.plus(TTL).plusSeconds(1))).as("expired: stolen").isTrue();
+
+        lease.release("sweep", "node-a", T0.plus(TTL).plusSeconds(2));
+
+        assertThat(lease.acquire("sweep", "node-c", T0.plus(TTL).plusSeconds(3)))
+                .as("B's hold is intact - the stale release freed nothing").isFalse();
+        assertThat(lease.renew("sweep", "node-b", T0.plus(TTL).plusSeconds(4)))
+                .as("and B can still renew what it holds").isTrue();
     }
 
     @Test

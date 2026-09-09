@@ -67,4 +67,65 @@ class ReadOnlyArtifactStoreTest {
         assertThat(scoped).isInstanceOf(ReadOnlyArtifactStore.class);
         assertThatThrownBy(() -> scoped.write("blobs/bbb", bytes(10))).isInstanceOf(ReadOnlyException.class);
     }
+
+    @Test
+    void page_delegates_the_native_bounded_pagination_and_never_materialises_a_whole_list() {
+        // Without the explicit page() override the read-only wrapper inherits the SPI default page() (list() + sort),
+        // throwing away the backend's native bounded pagination and materialising the whole namespace into heap - which
+        // OOMs the GC / rollup / quota passes that walk a read-only deployment through this decorator. The override
+        // must pass page() straight to the delegate; a read never mutates, so it is safe on a read-only store.
+        AtomicBoolean listed = new AtomicBoolean(false);
+        ReadOnlyArtifactStore store = new ReadOnlyArtifactStore(new PagingProbe(listed));
+
+        List<String> seen = new ArrayList<>();
+        store.page("blobs", "", 100, seen::add);
+
+        assertThat(seen).as("the backend's native bounded paging flows through the read-only decorator")
+                .containsExactly("blobs/a", "blobs/b");
+        assertThat(listed.get())
+                .as("page() must not inherit the SPI default (list() + sort) and materialise the whole namespace")
+                .isFalse();
+    }
+
+    /** A backend that answers {@code page()} natively and flags any whole-namespace {@code list()} - so a wrapper that
+     *  inherited the SPI default {@code page()} (which lists then sorts) is caught reintroducing the materialisation.
+     *  Every other operation is unused by the test. */
+    private static final class PagingProbe implements ArtifactStore {
+
+        private final AtomicBoolean listed;
+
+        private PagingProbe(AtomicBoolean listed) {
+            this.listed = listed;
+        }
+
+        @Override
+        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
+            consumer.accept("blobs/a");
+            consumer.accept("blobs/b");
+        }
+
+        @Override
+        public List<String> list(String prefix) {
+            listed.set(true);
+            return List.of();
+        }
+
+        @Override public ArtifactStore scope(String tenant) { return this; }
+        @Override public boolean exists(String key) { throw new UnsupportedOperationException(); }
+        @Override public void read(String key, OutputStream out) { throw new UnsupportedOperationException(); }
+        @Override public InputStream open(String key) { throw new UnsupportedOperationException(); }
+        @Override public void write(String key, InputStream in) { throw new UnsupportedOperationException(); }
+        @Override public String writeBlob(InputStream in) { throw new UnsupportedOperationException(); }
+        @Override public long size(String key) { throw new UnsupportedOperationException(); }
+        @Override public void delete(String key) { throw new UnsupportedOperationException(); }
+        @Override public Optional<Versioned> readVersioned(String key) { throw new UnsupportedOperationException(); }
+        @Override public boolean writeVersioned(String key, byte[] content, Object expected) {
+            throw new UnsupportedOperationException();
+        }
+    
+    @Override
+    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
+    }
+}
 }
