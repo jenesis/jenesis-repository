@@ -79,7 +79,11 @@ public final class StoredCounter {
      *  which is {@link #add}. */
     public static final String FLUSH_SETTING = "counters.flush";
 
-    public static final Duration DEFAULT_FLUSH = Duration.ofMinutes(1);
+    /** The default cadence as an operator writes it - a compile-time constant so the settings reference prints it
+     *  rather than {@code (computed)}; {@link #DEFAULT_FLUSH} parses this, so there is one spelling. */
+    public static final String DEFAULT_FLUSH_TEXT = "PT1M";
+
+    public static final Duration DEFAULT_FLUSH = Duration.parse(DEFAULT_FLUSH_TEXT);
 
     private static final Map<String, Deferred> DEFERRED = new ConcurrentHashMap<>();
     private static final AtomicReference<ScheduledExecutorService> FLUSHER = new AtomicReference<>();

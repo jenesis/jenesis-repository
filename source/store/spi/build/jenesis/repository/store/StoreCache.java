@@ -36,7 +36,12 @@ public final class StoreCache {
     public static final String TTL_SETTING = "cache.ttl";
 
     /** Five minutes: what another node's write may lag by, and the bound a deployment turns down when it must. */
-    public static final Duration DEFAULT_TTL = Duration.ofMinutes(5);
+    /** The default ttl as an operator writes it. A compile-time constant beside the parsed one, so a settings
+     *  contributor naming it renders a value the reference can print rather than {@code (computed)} - see
+     *  {@code Reference.declared}. One spelling: {@link #DEFAULT_TTL} parses this. */
+    public static final String DEFAULT_TTL_TEXT = "PT5M";
+
+    public static final Duration DEFAULT_TTL = Duration.parse(DEFAULT_TTL_TEXT);
 
     private static final Set<StoreCache> CACHES = Collections.synchronizedSet(
             Collections.newSetFromMap(new WeakHashMap<>()));

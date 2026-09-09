@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Durations;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -58,20 +59,53 @@ public final class NodeConsistency {
         return new ConsistencyReport.Settings(
                 millis(config, "jenreg.consistency.staleness-window", defaults.stalenessWindowMillis()),
                 millis(config, "jenreg.consistency.sweep-interval", defaults.sweepIntervalMillis()),
-                (int) millis(config, "jenreg.consistency.sweep-intervals", defaults.sweepIntervals()),
+                count(config, "jenreg.consistency.sweep-intervals", defaults.sweepIntervals()),
                 millis(config, "jenreg.consistency.dead-after", defaults.deadAfterMillis()),
                 millis(config, "jenreg.consistency.forget-after", defaults.forgetAfterMillis()));
     }
 
+    /**
+     * One {@code jenreg.consistency.*} duration dial, or its default when the operator left it unset.
+     *
+     * <p><b>It takes the same ISO-8601-or-suffixed form every other duration in this product takes</b>
+     * ({@code PT5M}, {@code 5m}, {@code 30s}), through the one shared {@link Durations#parse}. It used to take a
+     * bare count of milliseconds, which made these the only durations in the deployment spelled differently from
+     * all the others - so an operator writing the form they had just used for {@code cache.ttl} or {@code gc.grace}
+     * got something else entirely.
+     *
+     * <p><b>And a value that is set and unreadable throws rather than falling back</b> (&sect;9). It used to be
+     * caught and the default returned, which reads as robust and is not: the operator gets a window they did not
+     * choose, no line saying so, and a fleet judging nodes dead on it. The same reasoning the bootstrap key's
+     * malformed-value refusal already carries - someone who sets a value expects it to take effect, and a silently
+     * dropped typo leaves behaviour they cannot account for and nothing to read. Unset is a choice and keeps the
+     * default; set-and-unparseable is a mistake and says so.
+     */
     private static long millis(UnaryOperator<String> config, String key, long fallback) {
         String value = config.apply(key);
         if (value == null || value.isBlank()) {
             return fallback;
         }
         try {
-            return Long.parseLong(value.trim());
-        } catch (NumberFormatException unparseable) {
+            return Durations.parse(value.trim()).toMillis();
+        } catch (RuntimeException unparseable) {
+            throw new IllegalStateException(key + "='" + value.trim() + "' is not a duration. These take the "
+                    + "ISO-8601 or suffixed form every other duration setting takes (PT5M, 5m, 30s); unset the key "
+                    + "to keep the default of " + Duration.ofMillis(fallback) + ".", unparseable);
+        }
+    }
+
+    /** One {@code jenreg.consistency.*} count dial - {@code sweep-intervals} is a number of sweeps, not a duration,
+     *  and is read as one. Set-and-unparseable throws for the reason above. */
+    private static int count(UnaryOperator<String> config, String key, int fallback) {
+        String value = config.apply(key);
+        if (value == null || value.isBlank()) {
             return fallback;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException unparseable) {
+            throw new IllegalStateException(key + "='" + value.trim() + "' is not a whole number of sweeps; unset "
+                    + "the key to keep the default of " + fallback + ".", unparseable);
         }
     }
 

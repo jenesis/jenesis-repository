@@ -26,7 +26,7 @@ import org.springframework.context.annotation.Import;
  * jenreg.console=false} takes it out, leaving the repository's own chain as the whole of what the node answers.
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(name = ConsoleNode.GATE, havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "jenreg." + ConsoleNode.GATE, havingValue = "true", matchIfMissing = true)
 @ComponentScan(basePackages = "build.jenesis.repository.ui",
         // The console's own entry point, which a composing launcher replaces. A full class name, and it must track
         // the package: the combined app once left these patterns naming a package that no longer existed, matched
@@ -37,5 +37,5 @@ import org.springframework.context.annotation.Import;
 public class ConsoleNode {
 
     /** Whether this application serves the console at all. Read before the context starts; applies on restart. */
-    public static final String GATE = "jenreg.console";
+    public static final String GATE = "console";
 }

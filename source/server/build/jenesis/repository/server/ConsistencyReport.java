@@ -59,13 +59,25 @@ public record ConsistencyReport(List<NodeView> nodes, List<NodeDivergence> diver
                     Duration.ofDays(1).toMillis());
         }
 
+        /** The documented defaults, as an operator writes them - compile-time constants rather than computed
+         *  durations, so the settings reference can print the value instead of "(computed)" and there is still only
+         *  one spelling of each: {@link #defaults()} parses these, and the settings contributor names them. */
+        public static final String DEFAULT_STALENESS_WINDOW = "PT5M";
+        public static final String DEFAULT_SWEEP_INTERVAL = "PT1M";
+        public static final String DEFAULT_SWEEP_INTERVALS = "3";
+        public static final String DEFAULT_DEAD_AFTER = "PT15M";
+        public static final String DEFAULT_FORGET_AFTER = "PT24H";
+
         /** The documented defaults: a 5-minute staleness window, a 60-second sweep interval, 3 intervals to catch up
          *  before stuck, a 15-minute silence before a node is considered dead, and a day of silence before its
          *  fingerprint is forgotten - deleted by a publishing node, so a fleet that schedules a fresh host (a pod)
          *  per restart does not accumulate one fingerprint per host it ever ran on. */
         public static Settings defaults() {
-            return new Settings(Duration.ofMinutes(5).toMillis(), Duration.ofSeconds(60).toMillis(), 3,
-                    Duration.ofMinutes(15).toMillis(), Duration.ofDays(1).toMillis());
+            return new Settings(Duration.parse(DEFAULT_STALENESS_WINDOW).toMillis(),
+                    Duration.parse(DEFAULT_SWEEP_INTERVAL).toMillis(),
+                    Integer.parseInt(DEFAULT_SWEEP_INTERVALS),
+                    Duration.parse(DEFAULT_DEAD_AFTER).toMillis(),
+                    Duration.parse(DEFAULT_FORGET_AFTER).toMillis());
         }
 
         /** The wall-clock budget a lagging node has to advance its cursor before it is judged stuck. */

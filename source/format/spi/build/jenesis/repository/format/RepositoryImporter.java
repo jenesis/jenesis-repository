@@ -24,7 +24,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * {@link #imports} rather than {@code handles} (which {@link RepositoryFormat#handles(String)} owns for request-path
  * claiming) and {@link #importTarget} rather than {@code describe} (which {@link ArtifactLayout#describe(String)} owns
  * for the coordinate behind a request path) - so one format object can carry the layout and the importer capability
- * at once. There is no backwards-compatibility constraint; the re-pin batch absorbs the rename.
+ * at once. There is no backwards-compatibility constraint, so a rename lands as one change.
  *
  * <h2>Contract</h2>
  * This is a role sub-interface of {@link RepositoryFormat}: that contract still binds, and the clauses below state what

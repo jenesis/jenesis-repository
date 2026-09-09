@@ -6,6 +6,8 @@ import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.Durations;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Epoch;
+import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.StoreCache;
 
 /**
@@ -57,6 +59,30 @@ public final class Authorization {
     // mutable static), parsed once from jenreg.anonymous-rights at bean creation.
     private final Map<String, List<String>> anonymousGrants;
 
+    /** The key the deployment's auth epoch lives under - one token, bumped by every credential mutation. */
+    static final String EPOCH = AUTH + "/epoch";
+
+    /** How long a credential document is cached: {@code jenreg.auth.cache-ttl}, fifteen minutes by default. */
+    public static final String CACHE_TTL_SETTING = "auth.cache-ttl";
+
+    /** The default, deliberately longer than the deployment-wide {@code cache.ttl}: an authorization happens on
+     *  every request, and the epoch below is what keeps a long ttl from also meaning a long revocation window. */
+    public static final String DEFAULT_CACHE_TTL_TEXT = "PT15M";
+
+    public static final Duration DEFAULT_CACHE_TTL = Duration.parse(DEFAULT_CACHE_TTL_TEXT);
+
+    /** How long this node may believe its own reading of the epoch. Seconds, not minutes: this is the interval a
+     *  revocation takes to reach another node, and one small read amortised over every request the node serves in
+     *  that window is the whole of its cost. */
+    static final Duration EPOCH_TTL = Duration.ofSeconds(5);
+
+    private final Epoch epoch;
+
+    /** The epoch token this node last read, and when - the pair that turns one document into a fleet-wide
+     *  invalidation without a read per request. */
+    private volatile String seenEpoch;
+    private volatile long seenAt;
+
     private Authorization(ArtifactStore store) {
         this(store, Duration.ofDays(90), null, Map.of());
     }
@@ -64,7 +90,8 @@ public final class Authorization {
     private Authorization(ArtifactStore store, Duration defaultLifetime, Duration maxLifetime,
                           Map<String, List<String>> anonymousGrants) {
         this.store = store;
-        this.cache = store == null ? null : StoreCache.of("authorization", store, StoreCache.configuredTtl());
+        this.cache = store == null ? null : StoreCache.of("authorization", store, cacheTtl());
+        this.epoch = store == null ? null : new Epoch(store, EPOCH);
         this.defaultLifetime = defaultLifetime;
         this.maxLifetime = maxLifetime;
         this.anonymousGrants = anonymousGrants;
@@ -316,7 +343,7 @@ public final class Authorization {
         }
         if (maxBytes == 0) {
             if (cache.readVersioned(quotaPath(tenant)).isPresent()) {
-                cache.delete(quotaPath(tenant));
+                remove(quotaPath(tenant));
             }
             return;
         }
@@ -341,7 +368,7 @@ public final class Authorization {
         }
         if (permitsPerMinute == 0) {
             if (cache.readVersioned(rateLimitPath(tenant)).isPresent()) {
-                cache.delete(rateLimitPath(tenant));
+                remove(rateLimitPath(tenant));
             }
             return;
         }
@@ -518,6 +545,7 @@ public final class Authorization {
         if (store == null) {
             return Decision.ALLOWED;
         }
+        freshen();   // another node's grant or revocation, at most EPOCH_TTL old - see freshen()
         // WANON.1 - the one choke-point: an enforcing deployment that sees a request with NO credential decides it
         // against the strictly-opt-in anonymous grant set, reusing the exact covers()/grantedBy() matching a minted
         // credential uses (no second code path). Default (empty grants) => UNAUTHORIZED, byte-for-byte today's keyless
@@ -935,6 +963,7 @@ public final class Authorization {
             return bytes.toByteArray();
         });
         cache.invalidate(metadataPath(tenant, hash));   // written past the cache: the node's next read must see it
+        mutated();                                      // ...and every other node's, within EPOCH_TTL
         return landed;
     }
 
@@ -942,7 +971,7 @@ public final class Authorization {
     public void revoke(String tenant, String hash) throws IOException {
         require();
         cache.delete(grantsPath(tenant, hash));
-        cache.delete(metadataPath(tenant, hash));
+        remove(metadataPath(tenant, hash));   // the pair is one revocation; remove() bumps for both
     }
 
     /** Revoke the credential a raw {@code key} resolves to, for when a key is reported leaked: the {@code jenk_}
@@ -1056,6 +1085,63 @@ public final class Authorization {
         }
     }
 
+    /** {@link #CACHE_TTL_SETTING} as the deployment set it, else {@link #DEFAULT_CACHE_TTL}. Its own dial rather
+     *  than the shared {@code cache.ttl} because the trade differs from a listing's: this cache is read on every
+     *  request <em>and</em> the thing it holds is a security decision. */
+    private static Duration cacheTtl() {
+        String configured = Features.settings().apply(CACHE_TTL_SETTING);
+        return configured == null || configured.isBlank() ? DEFAULT_CACHE_TTL : StoreCache.ttl(configured);
+    }
+
+    /**
+     * Drop this node's credential cache if another node has changed a credential since it last looked.
+     *
+     * <p>Called before a decision is read, and it is what makes a fifteen-minute credential ttl safe: without it a
+     * grant or a **revocation** made on one node reaches the others only when their entries expire, and
+     * {@code POST /api/admin/caches/clear} cannot help because it clears one node. The epoch is one small document
+     * that every credential mutation bumps; a node re-reads it at most once per {@link #EPOCH_TTL} and clears its
+     * cache when the token has moved. Revocation latency therefore follows the epoch's window rather than the
+     * credential's, and the cost is one read every few seconds spread across every request the node answers.
+     *
+     * <p>An unreadable epoch clears the cache and reads through: that costs latency, never a stale grant.
+     */
+    private void freshen() {
+        if (epoch == null) {
+            return;
+        }
+        long now = System.nanoTime();
+        long last = seenAt;
+        if (last != 0 && now - last < EPOCH_TTL.toNanos()) {
+            return;
+        }
+        String token;
+        try {
+            token = epoch.current();
+        } catch (IOException unreadable) {
+            cache.clear();   // fail closed: better a re-read than a decision from a cache we cannot vouch for
+            seenAt = now;
+            return;
+        }
+        seenAt = now;
+        String previous = seenEpoch;
+        if (previous != null && !previous.equals(token)) {
+            cache.clear();
+        }
+        seenEpoch = token;
+    }
+
+    /** Mark the deployment's credentials changed, so every other node drops its cache within {@link #EPOCH_TTL}.
+     *  Called from the one place each mutation funnels through, never at the call sites, so a future write cannot
+     *  forget it. A failed bump is not swallowed: a caller who was told their revocation landed must not have it
+     *  reach one node only. */
+    private void mutated() throws IOException {
+        if (epoch != null) {
+            epoch.bump();
+            seenEpoch = null;   // this node has just changed things; do not clear on its own bump
+            seenAt = 0;
+        }
+    }
+
     private Properties read(String path) throws IOException {
         Optional<ArtifactStore.Versioned> object = cache.readVersioned(path);
         if (object.isEmpty()) {
@@ -1070,6 +1156,14 @@ public final class Authorization {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         properties.store(bytes, null);
         cache.write(path, bytes.toByteArray());
+        mutated();
+    }
+
+    /** Remove one credential document and mark the deployment changed - the delete half of {@link #write}, so both
+     *  directions of a mutation bump the epoch from one place. */
+    private void remove(String path) throws IOException {
+        cache.delete(path);
+        mutated();
     }
 
     private static Instant instant(Properties properties, String key) {

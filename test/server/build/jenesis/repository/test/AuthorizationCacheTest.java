@@ -16,6 +16,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * served from the {@link StoreCache} for its ttl, the address check re-uses the entry the grant check filled, and a
  * grant or revocation on this node is seen by its next request - so a download is authorised for zero store reads
  * in the steady state, where it used to pay three per request, a third of the read path's round trips.
+ *
+ * <p><b>Three reads rather than two, and the third is the deployment's auth epoch</b> - one small document a node
+ * re-reads at most once per {@code Authorization.EPOCH_TTL} (seconds), clearing its credential cache when another
+ * node has changed a credential. It is what lets the credential ttl be fifteen minutes without a revocation taking
+ * fifteen minutes to reach the fleet, and {@code POST /api/admin/caches/clear} only ever clearing one node. The
+ * claim this suite exists for is untouched and is the second assertion, not the first: **a hundred further requests
+ * still cost no store read at all**, because the epoch is paid per window and not per request.
  */
 class AuthorizationCacheTest {
 
@@ -43,7 +50,8 @@ class AuthorizationCacheTest {
                 .isEqualTo(Authorization.Decision.ALLOWED);
         assertThat(authorization.addressAllowed(key, "10.0.0.7")).isTrue();
         long first = store.calls(FaultInjectingStore.Op.READ_VERSIONED) - before;
-        assertThat(first).as("the metadata and the grants, once each; the address check re-uses the metadata").isEqualTo(2);
+        assertThat(first).as("the metadata and the grants once each - the address check re-uses the metadata - plus the "
+                + "auth epoch, read once per window and not per request").isEqualTo(3);
 
         for (int request = 0; request < 100; request++) {
             assertThat(authorization.authorize(key, "releases", "com/acme/lib/1.0/lib.jar", Authorization.REPOSITORY_READ))
@@ -51,7 +59,8 @@ class AuthorizationCacheTest {
             assertThat(authorization.addressAllowed(key, "10.0.0.7")).isTrue();
         }
         assertThat(store.calls(FaultInjectingStore.Op.READ_VERSIONED) - before)
-                .as("a hundred more requests cost no store read: the read path pays for nothing twice").isEqualTo(2);
+                .as("a hundred more requests cost no store read: the read path pays for nothing twice, and the "
+                        + "epoch is inside its window").isEqualTo(3);
     }
 
     @Test
@@ -72,7 +81,8 @@ class AuthorizationCacheTest {
                     .isEqualTo(Authorization.Decision.FORBIDDEN);
         }
         assertThat(store.calls(FaultInjectingStore.Op.READ_VERSIONED) - before)
-                .as("an unprovisioned key is asked of the store once, not per request").isEqualTo(2);
+                .as("an unprovisioned key is asked of the store once, not per request - and the epoch is not "
+                        + "re-read, because the revocation above already freshened it inside the window").isEqualTo(2);
     }
 
     @Test
@@ -84,6 +94,7 @@ class AuthorizationCacheTest {
         long before = store.calls(FaultInjectingStore.Op.READ_VERSIONED);
         StoreCache.clearAll();
         authorization.authorize(key, "releases", null, Authorization.REPOSITORY_READ);
-        assertThat(store.calls(FaultInjectingStore.Op.READ_VERSIONED) - before).as("after a clear the store is asked again").isEqualTo(2);
+        assertThat(store.calls(FaultInjectingStore.Op.READ_VERSIONED) - before)
+                .as("after a clear the store is asked again").isEqualTo(2);
     }
 }
