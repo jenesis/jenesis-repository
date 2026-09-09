@@ -100,6 +100,30 @@ public interface ArtifactLayout extends EcosystemLayout {
      *  when the path carries no coordinate to describe (generated metadata, a directory). Derived from the path only. */
     Optional<ArtifactDescriptor> describe(String path);
 
+    /**
+     * {@link #describe(String)} against the repository the path belongs to, for a layout whose path-to-coordinate
+     * mapping is not a deployment-wide constant.
+     *
+     * <p>Most layouts are: a Maven path spells its coordinate the same way in every repository on earth, so the pure
+     * overload above is exact and this one defaults to it. Some are not. An Ivy repository's layout is a
+     * <em>pattern</em> chosen per repository - {@code [organisation]/[module]/[revision]/...} is only Gradle's
+     * default - so the same path yields different coordinates, or none, depending on which repository it was
+     * addressed to. Without this seam such a layout has two options, and both are bad: fix one pattern for the whole
+     * deployment, or answer empty and lose every coordinate-keyed capability (advisory matching, retention, the
+     * browse) for the artifacts it serves.
+     *
+     * <p>{@code store} is already scoped to the tenant and repository, so it <em>is</em> the repository context: a
+     * layout reads its own configuration document from it. This is deliberately the same shape
+     * {@link #paths(String, String, ArtifactStore)} has beside {@link #paths(String, String)} - the pure form for a
+     * caller that has no store and the store form for one that does - and it carries the same obligation: it is a
+     * read, never a write or a repair, it is bounded, and a caller on a serving read path uses the pure form. A
+     * caller holding a scoped store should prefer this one, because a layout that needs it answers empty from the
+     * other and its artifacts then have no coordinates at all.
+     */
+    default Optional<ArtifactDescriptor> describe(String path, ArtifactStore store) {
+        return describe(path);
+    }
+
     /** The request-path directory prefixes a coordinate version occupies across this format's layouts, resolved
      *  against {@code store} so a format can include a cross-published mirror it recorded (a Maven module view found
      *  through the format's own index), so a cleanup pass enumerates and unpublishes every pointer under them from the

@@ -82,7 +82,7 @@ public final class ScreenedDispatch {
      *  the restreamed blob rather than through the dispatcher's proxy branch - the same effect a direct dispatch of a
      *  write has, now with the body already screened. */
     private void screen(RepositoryFormat format, FormatExchange exchange, ArtifactStore store) throws IOException {
-        ArtifactDescriptor descriptor = describe(format, exchange.path());
+        ArtifactDescriptor descriptor = describe(format, exchange.path(), store);
         // The one hosted-publish choreography: Publication.commit screens once, hands the accepted blob to the layout
         // below, and fires published() itself once visibility has committed - so this edge no longer re-assembles the
         // screen/layout/notify sequence by hand, and cannot get its order wrong.
@@ -126,9 +126,12 @@ public final class ScreenedDispatch {
     /** The claiming format's layout descriptor for the path when it has one (so an observer keys on the neutral
      *  ecosystem/coordinate/version), else a bare descriptor carrying only the format name and path - the same shape
      *  the downstream deploy edge builds ({@code ArtifactDescriptor.at(plugin.name(), path)}). */
-    private static ArtifactDescriptor describe(RepositoryFormat format, String path) {
+    private static ArtifactDescriptor describe(RepositoryFormat format, String path, ArtifactStore store) {
         if (format instanceof ArtifactLayout layout) {
-            Optional<ArtifactDescriptor> described = layout.describe(path);
+            // The repository-scoped overload, because the store IS the repository: a layout whose path-to-coordinate
+            // mapping is configured per repository answers empty from the pure form, and this artifact would then be
+            // observed with no coordinate at all.
+            Optional<ArtifactDescriptor> described = layout.describe(path, store);
             if (described.isPresent()) {
                 return described.get();
             }

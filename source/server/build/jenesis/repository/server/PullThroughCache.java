@@ -172,7 +172,7 @@ public final class PullThroughCache {
                 return;
             }
             String hash = key.get().substring("blobs/".length());
-            publication.published(descriptor(format, path).withBlob(hash, store.size(key.get())));
+            publication.published(descriptor(format, path, store).withBlob(hash, store.size(key.get())));
         } catch (Exception _) {
             // best-effort observer parity; a proxy serve must never fail because an observer event could not be built
         }
@@ -180,9 +180,11 @@ public final class PullThroughCache {
 
     /** The claiming format's layout descriptor for the path when it has one, else a bare format-name-and-path
      *  descriptor - the neutral identity the observer keys on. */
-    private static ArtifactDescriptor descriptor(RepositoryFormat format, String path) {
+    private static ArtifactDescriptor descriptor(RepositoryFormat format, String path, ArtifactStore store) {
         if (format instanceof ArtifactLayout layout) {
-            Optional<ArtifactDescriptor> described = layout.describe(path);
+            // The repository-scoped overload - see the same call in ScreenedDispatch: a per-repository layout has no
+            // answer without it, and a proxied artifact would be observed coordinate-less.
+            Optional<ArtifactDescriptor> described = layout.describe(path, store);
             if (described.isPresent()) {
                 return described.get();
             }
