@@ -75,15 +75,27 @@ public final class FormatMarks {
      * The mark of the format that declares an ecosystem - a browse search hit carries the ecosystem its coordinate
      * belongs to ({@link EcosystemLayout#ecosystem()}) - or empty when no installed format declares it. As with a
      * namespace, a format that declares the ecosystem but no mark resolves to its generated figure.
+     *
+     * <p><b>Where several installed formats declare one ecosystem</b> - which {@link EcosystemLayout} says is a
+     * legitimate composition, since an ecosystem names a coordinate space rather than a layout - the answer is the
+     * figure generated from the <em>ecosystem's</em> name, not any one claimant's mark. This is the one lookup on
+     * that seam where a fan-out is meaningless: a row draws a single icon. Taking the first claimant would make the
+     * icon a property of discovery order and would silently change an ecosystem's appearance the day a second format
+     * for it is installed; deriving it from the ecosystem is stable under both, and honest about what it identifies -
+     * the coordinate space, which is exactly what the row's subject belongs to.
      */
     public Optional<Mark> forEcosystem(String ecosystem) {
         return ecosystems.computeIfAbsent(ecosystem, this::resolveEcosystem);
     }
 
     private Optional<Mark> resolveEcosystem(String ecosystem) {
-        return formats.stream()
+        List<RepositoryFormat> claimants = formats.stream()
                 .filter(format -> format instanceof EcosystemLayout layout && ecosystem.equals(layout.ecosystem()))
-                .findFirst()
-                .map(Marks::of);
+                .toList();
+        return switch (claimants.size()) {
+            case 0 -> Optional.empty();
+            case 1 -> Optional.of(Marks.of(claimants.getFirst()));
+            default -> Optional.of(Marks.generated(ecosystem));
+        };
     }
 }

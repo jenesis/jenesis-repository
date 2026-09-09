@@ -7,9 +7,10 @@
  * {@link java.util.ServiceLoader}-discovered stub providers registered by this module - no network, no store. It also
  * covers {@link build.jenesis.repository.format.FormatMarks}, the format family's half of the shared mark resolution
  * (which installed format owns a storage namespace or declares an ecosystem), driven over stub formats so the
- * mapping and not discovery is what is asserted. Discovery itself is covered by the one claim that needs it: a
- * composition in which two switched-on formats declare the same ecosystem refuses to start, driven over two
- * {@code provides}-registered stub formats that collide on one.
+ * mapping and not discovery is what is asserted. Discovery itself is covered by the one claim that needs it: two
+ * installed formats may declare the SAME ecosystem - a coordinate space can be served through more than one layout -
+ * and every seam that maps an ecosystem back to a layout answers over both rather than over whichever discovery
+ * yielded first. That is driven over two {@code provides}-registered stub formats sharing one.
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.format
