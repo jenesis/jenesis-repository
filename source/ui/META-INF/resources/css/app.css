@@ -392,6 +392,16 @@
     color: var(--app-status-info-fg);
 }
 .app-alert--danger { background: var(--app-status-danger-bg); color: var(--app-status-danger-fg); }
+
+/* Work in progress: quieter than an alert, because it is not an outcome and it will replace itself. */
+.app-running {
+    padding: var(--app-space-2) var(--app-space-3);
+    margin-bottom: var(--app-space-3);
+    border-inline-start: 3px solid var(--app-status-info-fg);
+    background: var(--app-status-info-bg);
+    color: var(--app-status-info-fg);
+    border-radius: var(--app-radius-md);
+}
 .app-alert--warn { background: var(--app-status-warn-bg); color: var(--app-status-warn-fg); }
 .app-alert--pass { background: var(--app-status-pass-bg); color: var(--app-status-pass-fg); }
 

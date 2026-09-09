@@ -157,6 +157,19 @@
      the kind now carries its own icon - so two badges meaning the same thing look the same without any template
      naming one. A fragment nobody renders, documented as though they did, is worse than no fragment. -->
 
+<!-- Work that is running off the request path, and the marker that keeps the page current while it does.
+
+     A screen never blocks and never waits: it renders what is known and refreshes itself. This is the one place
+     that says so, and the one place the interval lives - console.js finds the marker, re-fetches the page and
+     swaps <main>, so the rest of the page stays alive and nothing has to tell the reader to reload by hand. It
+     stops on its own, because a finished report renders no marker for the next poll to find.
+
+     A screen wanting a different cadence sets data-app-poll itself; three seconds suits every report the consoles
+     currently start, all of which are minutes rather than hours. -->
+<p th:fragment="running(message)" class="app-running" role="status" data-app-poll="3000">
+    <small th:text="${message}">Something is running.</small>
+</p>
+
 <!-- Form field with inline help: label, control, help text — the atom the config page composes from. -->
 <div th:fragment="field(label, name, value, help)" class="app-field">
     <label th:for="${name}" th:text="${label}">Label</label>

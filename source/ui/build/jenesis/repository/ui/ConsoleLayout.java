@@ -70,10 +70,15 @@ public final class ConsoleLayout {
     /** The browse's up-one-level row, taking where it goes. */
     public static final String BROWSE_UP = "browseUp";
 
+    /** A notice that work is running off the request path, taking what to say about it - and carrying the marker
+     *  that makes the page keep itself current until it finishes. A screen never blocks and never waits for the
+     *  work; it renders what is known and refreshes itself, and this is the one place that interval lives. */
+    public static final String RUNNING = "running";
+
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BRAND, THEME_SELECT, HEAD_CONTENTS,
-            DANGER_BUTTON, NAV_LINKS, SHELL, MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP);
+            DANGER_BUTTON, NAV_LINKS, SHELL, MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP, RUNNING);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();
