@@ -88,7 +88,14 @@ import build.jenesis.repository.store.Providers;
  *     serving or accepting surfaces rather than degrading to a {@code 404}, or to a {@code 201} that stored nothing.</li>
  * <li><b>Lifecycle / ownership.</b> The dispatcher discovers formats through {@link ServiceLoader} and keeps them for
  *     the life of the process; a format owns no thread, no client and no cache, and closes nothing. A format whose
- *     {@link #requiredConfig} is unset self-disables at discovery rather than failing at request time.</li>
+ *     {@link #requiredConfig} is unset self-disables at discovery rather than failing at request time.
+ *     <p><b>What a format remembers is an optimisation, never correctness</b> - and the deployment shape settles
+ *     that rather than this clause's authority. A repository runs on several nodes, so two of them are two JVMs
+ *     holding two instance sets; anything a format remembered that a later answer depended on would already be
+ *     wrong across nodes, with nothing to notice it. So what is permitted is state whose loss costs repeated work
+ *     and nothing else. The one instance of it in this build is the throttle pacing OCI's upload-session reap,
+ *     where a second holder simply reaps sooner and the reap is idempotent; the import walk's digest memory says
+ *     the same of itself in its own words, that its bound is on recall and never on correctness.</li>
  * <li><b>Ordering / concurrency.</b> Two requests against one path may run concurrently; a format's pointer writes are
  *     compare-and-set, so a concurrent republish resolves last-writer-wins rather than tearing. A format imposes no
  *     ordering on the dispatcher and behaves identically whatever order the other formats were discovered in.</li>

@@ -152,12 +152,15 @@ public interface BlobReferences {
      * without carrying its own {@code uses} clause. Empty when no installed format serves from a blobs namespace,
      * which is the core's own shape: only the collector's caller-supplied {@code publish/} roots are then scanned.
      *
-     * <p>It filters {@link RepositoryFormat#installed()} rather than running a {@link ServiceLoader} of its own, and
-     * the difference is not stylistic. A second load is a second <em>instance</em> set: a format keeps state (a
-     * bounded digest set, a listing coalescer), which {@code FormatDiscovery} exists to make process-wide, and a
-     * lender resolved here would have been a different object from the one serving the requests whose blobs it is
-     * being asked about. Filtering the one set also means this seam inherits the discovery validation - a blank or
-     * duplicated format name is refused before a deletion path ever sees it.
+     * <p>It filters {@link RepositoryFormat#installed()} rather than running a {@link ServiceLoader} of its own.
+     * <b>Not because the second instance set would have been stateful</b> - it would not: a format's memory is an
+     * optimisation and cannot be anything else, since a multi-node deployment holds one instance set per JVM
+     * already ({@link RepositoryFormat}'s lifecycle clause). The reasons are the other three. A raw load bypasses
+     * {@code Providers.all}, so a blank or duplicated format name would reach a <em>deletion</em> path unvalidated,
+     * which is the one path where a discovery-order winner is unrecoverable. It is a second answer to "what is
+     * installed", free to drift from the one that serves the requests whose blobs are being judged. And it
+     * reconstructs every format on the module path on each call, for a set that is fixed for the life of the
+     * process.
      */
     static List<BlobReferences> installed() {
         List<BlobReferences> lenders = new ArrayList<>();
