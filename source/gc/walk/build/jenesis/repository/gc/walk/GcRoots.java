@@ -32,13 +32,10 @@ public interface GcRoots {
         return discovered.hasNext() ? discovered.next() : GcRoots::declared;
     }
 
-    /** {@code publish} plus every installed format's lent blob roots, always as a known answer. */
+    /** {@code publish} plus every installed format's lent blob roots, always as a known answer - the one
+     *  computation of that set ({@link BlobReferences#pointerRoots}), so what a walk enumerates and what a
+     *  collector judges against cannot drift apart. */
     static Known<List<String>> declared(ArtifactStore store) {
-        List<String> roots = new ArrayList<>();
-        roots.add("publish");
-        for (BlobReferences lender : BlobReferences.installed()) {
-            roots.addAll(lender.blobRoots());
-        }
-        return Known.known(List.copyOf(roots));
+        return Known.known(BlobReferences.pointerRoots());
     }
 }

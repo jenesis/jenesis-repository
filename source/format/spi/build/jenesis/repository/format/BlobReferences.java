@@ -162,4 +162,29 @@ public interface BlobReferences {
         }
         return List.copyOf(lenders);
     }
+
+    /**
+     * Every root a live pointer can sit under: the free {@code publish/} tree plus each installed lender's own
+     * blob roots.
+     *
+     * <p><b>One computation, because two of them is a deletion bug waiting for a divergence.</b> This was derived
+     * independently in two places - a garbage collector asking {@code installed()} for its lenders, and a walk
+     * asking the discovered formats which ones were blob-rooted - and the two filters are not the same question:
+     * one accepts any installed {@link BlobReferences}, the other only the ones that are also a format wearing a
+     * particular sub-interface. They happen to agree today. On the day they do not, the walk enumerates a smaller
+     * set than the collector judges against, every pointer under the missing root reads as absent, and the blobs
+     * beneath it are condemned and then deleted. There is no test that would fail first; the artifacts would
+     * simply be gone.
+     *
+     * <p>So the set has one home, and callers that need it as a plain list and callers that need it wrapped in a
+     * {@code Known} answer both start here.
+     */
+    static List<String> pointerRoots() {
+        List<String> roots = new ArrayList<>();
+        roots.add("publish");
+        for (BlobReferences lender : installed()) {
+            roots.addAll(lender.blobRoots());
+        }
+        return List.copyOf(roots);
+    }
 }
