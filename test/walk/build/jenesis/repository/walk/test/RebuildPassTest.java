@@ -407,6 +407,23 @@ class RebuildPassTest {
     }
 
     @Test
+    void a_completion_only_consumer_walks_no_root_and_still_sees_the_pass() throws IOException {
+        ArtifactStore store = store("completion-only");
+        publish(store, "/npm/pkg-1.0.tgz", "bytes");
+        Listener completionOnly = new Listener(false);   // listens on nothing at all
+
+        Optional<WalkPass> pass = RebuildPass.run(walk(), store, new Publication(store),
+                RebuildPass.Roots.pointers(List.of("publish")), List.of(completionOnly));
+
+        assertThat(pass).as("a pass over no root is still a pass").isPresent();
+        assertThat(pass.get().complete()).as("and it completes, so the completion work runs").isTrue();
+        assertThat(pass.get().segments()).as("with nothing to enumerate").isZero();
+        assertThat(completionOnly.events).contains("completed:" + pass.get().generation());
+        assertThat(completionOnly.events).as("and no member is delivered - the point of declaring no family")
+                .noneMatch(event -> event.startsWith("retained:") || event.startsWith("walked:"));
+    }
+
+    @Test
     void a_consumer_that_throws_fails_alone_is_recorded_and_is_redelivered_by_the_next_generation() throws IOException {
         ArtifactStore store = store("alone");
         Map<String, String> expected = new HashMap<>();

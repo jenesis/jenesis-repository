@@ -61,9 +61,24 @@ public final class GcConsumer implements WalkConsumer {
         return false;
     }
 
-    /** It rides the walk for its completion alone: the mark reads the pointers itself, over its own pass, so a
-     *  pointer handed to it here is read a second time for nothing. It still listens on POINTERS, because that is
-     *  what gives the pass a root to enumerate - it only declines the deliveries. */
+    /**
+     * It listens on nothing at all: the mark reads the pointers itself, over its own pass, so a member handed to it
+     * here would be read a second time for nothing.
+     *
+     * <p>Declaring no family is what makes an entry naming only this consumer walk nothing rather than walk the
+     * pointers for it - the driving pass then costs a manifest and a generation, and the enumeration a collection
+     * pays is its own mark. On an entry it shares with other consumers this changes nothing: their families give the
+     * pass its roots and this one simply takes no delivery.
+     */
+    @Override
+    public Set<WalkConsumer.Family> families() {
+        return Set.of();
+    }
+
+    /** Kept for the same reason, and redundant while {@link #families()} is empty: a consumer listening on no family
+     *  is handed no pointer to decline. It stays declared so that re-declaring a family - a future consumer of this
+     *  class, or a deployment that wants the collector on a pointer walk - does not silently start paying for bodies
+     *  the collector has never read. */
     @Override
     public boolean needsPointers() {
         return false;

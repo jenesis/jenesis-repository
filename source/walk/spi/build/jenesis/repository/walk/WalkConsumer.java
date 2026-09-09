@@ -186,7 +186,16 @@ public interface WalkConsumer {
     /** The consumer's name - its signal and settings namespace, and its {@code walks/<name>/} pass-state scope. */
     String name();
 
-    /** The families this consumer listens on (clause 13); the pointers alone by default. */
+    /**
+     * The families this consumer listens on (clause 13); the pointers alone by default.
+     *
+     * <p>Empty is a legal answer and says the consumer rides the walk for its completion alone - it enumerates
+     * whatever it needs itself, as the collector's own mark does. A pass whose consumers all answer empty walks no
+     * root: it still takes a manifest, a generation and the segment lease, so the completion is still ordered and
+     * still happens once across the fleet, and it reads no key for a delivery nobody takes. That is told apart from
+     * a deployment that names no root for the families its consumers DID declare, which is a misconfiguration and
+     * is refused.
+     */
     default Set<Family> families() {
         return Set.of(Family.POINTERS);
     }
@@ -241,11 +250,10 @@ public interface WalkConsumer {
      * a pointer's body to build a delivery nobody takes - one read per pointer per pass, measured 2026-09-08 as
      * 1.60 reads per blob held.
      *
-     * <p>It is deliberately this rather than declaring no {@link #families()}. A consumer that listens on nothing
-     * leaves the walk with no root to enumerate, and the pass refuses to start - which is right for a
-     * misconfigured deployment and wrong for a consumer that simply wants completion, and the two are the same
-     * state to that check today. Keeping the family and declining the body says the same thing without asking a
-     * refusal to tell them apart.
+     * <p>It is narrower than declaring no {@link #families()}, and both are now available: a consumer that wants a
+     * family's membership but not its bodies keeps the family and declares this {@code false}, while one that wants
+     * nothing but the completion declares no family at all and the walk enumerates nothing for it. The refusal that
+     * used to conflate the second with a misconfigured deployment tells them apart.
      *
      * @return whether pointer deliveries are of any use to this consumer.
      */

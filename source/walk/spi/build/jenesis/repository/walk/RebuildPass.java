@@ -296,7 +296,16 @@ public final class RebuildPass {
                 familyByRoot.put(root, family);
             }
         }
-        if (familyByRoot.isEmpty()) {
+        if (familyByRoot.isEmpty() && !listening.isEmpty()) {
+            // Consumers named families and the deployment names no root for any of them: a misconfiguration, and
+            // walking nothing would look like a clean pass over an empty store. Refuse.
+            //
+            // The other way to reach an empty root set is a consumer that listens on NOTHING - it rides the walk for
+            // its completion alone and does its own enumeration, which is exactly what the collector does. That is a
+            // declaration rather than a mistake, and it falls through to a pass over no roots: the manifest, the
+            // generation and the lease still exist, so the completion is still ordered and still happens once across
+            // the fleet, and no key is read for a delivery nobody takes. Before this told the two apart, a walk entry
+            // naming only such a consumer was refused - `consumers: ["collect"]` could not be scheduled at all.
             throw new IllegalArgumentException("no root to walk: the consumers listen on " + listening.keySet()
                     + " and the deployment names no root for any of them");
         }
