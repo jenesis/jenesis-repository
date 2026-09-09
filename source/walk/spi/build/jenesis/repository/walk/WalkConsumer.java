@@ -283,9 +283,37 @@ public interface WalkConsumer {
     default void onWithheld(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
     }
 
-    /** One member of a non-pointer family this consumer {@linkplain #families() listens} on, in total key order
-     *  within a segment; idempotent per key, like {@link #onRetained}. The default does nothing. */
+    /** One member of a family this consumer {@linkplain #families() listens} on, delivered as a key rather than as
+     *  a descriptor, in total key order within a segment; idempotent per key, like {@link #onRetained}. Every
+     *  non-pointer family arrives here. A {@link Family#POINTERS} member arrives here only for a consumer that
+     *  declared {@link #needsEveryKey()}, and then it arrives for <em>every</em> key under the pointer roots -
+     *  including the ones that are not pointers at all. The default does nothing. */
     default void onWalked(Walked entry, ArtifactStore store) throws IOException {
+    }
+
+    /**
+     * Whether this consumer wants every key under its {@link Family#POINTERS} roots, and not only the serving
+     * pointers among them.
+     *
+     * <p>{@code false} by default, which is right for everything that rebuilds a view of what is served: those
+     * consumers want the pointers, and the walk's judgement of what is one is exactly the judgement they would
+     * make themselves. Declaring {@code true} adds an {@link #onWalked} delivery for every key the walk visits
+     * under those roots - before the pointer-size gate and regardless of what the body turns out to say - with the
+     * key as the store spells it.
+     *
+     * <p><b>It exists because "the pointers" is not the same set as "everything that keeps a blob alive".</b> A
+     * format may hold a blob alive through a stored <em>document</em> rather than through a pointer body: the OCI
+     * media-type sidecars under {@code oci/types/<hex>} resolve to a manifest, and that manifest's config and
+     * layers are live content, yet the sidecar's own body is a media type and no walk would call it a serving
+     * pointer. A reference scan handed only the pointers would not ask about those keys, and a blob nothing asked
+     * about is a blob that gets condemned and then deleted. So the consumer that must see everything says so, and
+     * pays for it, rather than the walk guessing on everyone's behalf.
+     *
+     * <p>It costs the delivery and nothing else: no body is read to make it, since the key and the size the listing
+     * carried are all it hands over. A consumer that wants a body asks the {@link Walked} for one.
+     */
+    default boolean needsEveryKey() {
+        return false;
     }
 
     /**

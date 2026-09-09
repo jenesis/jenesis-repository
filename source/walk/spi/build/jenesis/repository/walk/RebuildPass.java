@@ -390,6 +390,9 @@ public final class RebuildPass {
         private final boolean heldWanted;
         /** Whether any listener uses a pointer delivery at all; with none, no pointer body is read. */
         private final boolean pointersWanted;
+        /** The listeners that asked for every key under the pointer roots, not only the serving pointers - resolved
+         *  once, and empty for every pass nobody asked, which is the ordinary case. */
+        private final List<WalkConsumer> everyKeyWanted;
         /** The consumers that failed in this generation on this worker: delivered nothing more, recorded durably. */
         private final Set<WalkConsumer> dropped = new HashSet<>();
         private long generation = -1L;
@@ -413,6 +416,8 @@ public final class RebuildPass {
                     .anyMatch(WalkConsumer::needsWithheldStatus);
             this.pointersWanted = listening.getOrDefault(WalkConsumer.Family.POINTERS, List.of()).stream()
                     .anyMatch(WalkConsumer::needsPointers);
+            this.everyKeyWanted = listening.getOrDefault(WalkConsumer.Family.POINTERS, List.of()).stream()
+                    .filter(WalkConsumer::needsEveryKey).toList();
         }
 
         /** Fold what this worker delivered into the generation's counters, so the account the completing worker
@@ -543,13 +548,28 @@ public final class RebuildPass {
                 }
                 return;
             }
+            // Every key first, for the consumers that asked - before the size gate and before anything is read,
+            // because that gate bounds what may be read as a POINTER BODY and not what exists under these roots. A
+            // reference scan is the case: a format can keep a blob alive through a stored document whose own body
+            // names no hash, and a key nobody was offered is a blob nobody marks. Deliberately not counted into
+            // the family's delivered total, which counts members handed over as what they are.
+            if (!everyKeyWanted.isEmpty()) {
+                if (!started) {
+                    started(walk.pass(store, scope)
+                            .orElseThrow(() -> new IOException("no rebuild pass to deliver under")));
+                }
+                WalkConsumer.Walked visited = new WalkConsumer.Walked(WalkConsumer.Family.POINTERS, key, size, store);
+                for (WalkConsumer consumer : everyKeyWanted) {
+                    attributed(consumer, key, delivered -> delivered.onWalked(visited, store));
+                }
+            }
             if (size < 0 || size > LARGEST_POINTER) {
                 return;
             }
             if (!pointersWanted) {
-                // Every listener rides this walk for its completion alone, so there is no delivery to build and
-                // the body need not be read. That was a second full read of the pointer tree beside the reader
-                // that actually uses it - the collector's own mark reads every pointer for the hash it names.
+                // No listener uses a pointer delivery, so there is none to build and the body need not be read.
+                // That was a second full read of the pointer tree beside the reader that actually uses it. A
+                // consumer that asked for every key has already had this one, above, without a body being read.
                 return;
             }
             Optional<ArtifactStore.Versioned> pointer = store.readVersioned(key);

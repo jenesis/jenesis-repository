@@ -305,10 +305,22 @@ class RebuildPassTest {
 
         private final Set<Family> families;
         private final boolean seesWithheld;
+        /** Whether this listener asks for every key under its pointer roots, not only the serving pointers. */
+        private boolean everyKey;
 
         private Listener(boolean seesWithheld, Family... families) {
             this.families = Set.of(families);
             this.seesWithheld = seesWithheld;
+        }
+
+        private Listener everyKey() {
+            everyKey = true;
+            return this;
+        }
+
+        @Override
+        public boolean needsEveryKey() {
+            return everyKey;
         }
 
         @Override
@@ -404,6 +416,31 @@ class RebuildPassTest {
         assertThatThrownBy(() -> RebuildPass.run(walk(), store, new Publication(store),
                 RebuildPass.Roots.pointers(List.of("publish")), List.of(pool)))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("no root to walk");
+    }
+
+    @Test
+    void a_consumer_that_asks_for_every_key_gets_the_ones_that_are_not_pointers() throws IOException {
+        ArtifactStore store = store("every-key");
+        publish(store, "/npm/pkg-1.0.tgz", "bytes");
+        // Two keys under the pointer root that are not serving pointers: one whose body names no hash at all -
+        // the shape of a format's media-type sidecar, which lends real references - and one too large to be read
+        // as a pointer body. Neither reaches a consumer that did not ask, and both must reach one that did.
+        store.write("publish/npm/types/sidecar", new ByteArrayInputStream(
+                "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8)));
+        store.write("publish/npm/oversized", new ByteArrayInputStream(new byte[2048]));
+        Listener everything = new Listener(false, Family.POINTERS).everyKey();
+        Listener pointersOnly = new Listener(false, Family.POINTERS);
+
+        RebuildPass.run(walk(), store, new Publication(store), RebuildPass.Roots.pointers(List.of("publish")),
+                List.of(everything, pointersOnly));
+
+        assertThat(everything.walked.keySet())
+                .as("every key under the pointer roots, whatever its body says and however large it is")
+                .contains("publish/npm/types/sidecar", "publish/npm/oversized", "publish/npm/pkg-1.0.tgz");
+        assertThat(pointersOnly.walked)
+                .as("a consumer that did not ask is handed no key it did not listen for").isEmpty();
+        assertThat(everything.derived).as("and it still gets the serving pointers as descriptors")
+                .containsOnlyKeys("/npm/pkg-1.0.tgz");
     }
 
     @Test
