@@ -93,6 +93,11 @@ class PublicationTest {
 
     /** A store whose next {@code n} versioned writes report a benign compare-and-set conflict, then behave. */
     private static final class ConflictingStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         int conflicts;

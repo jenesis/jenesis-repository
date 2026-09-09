@@ -50,6 +50,11 @@ class PublishedAssetsRaceTest {
      *  The blob it named still exists, so the failure mode under test is purely the pointer racing away, not a torn
      *  {@code blobs/<hash>}. */
     private static final class RacingStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return this;   // a standalone fake IS its own subspace
+        }
+
 
         private static final String HASH = "0".repeat(64);
 

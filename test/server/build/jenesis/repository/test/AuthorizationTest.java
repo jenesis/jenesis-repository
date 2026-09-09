@@ -524,6 +524,11 @@ class AuthorizationTest {
      *  writes), so every {@link Authorization#recordUsed} attempt loses - exercising the exhausted-retry forfeit. Every
      *  other call, and every write to any other key, delegates unchanged. */
     private static final class ConflictingStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private final String contendedKey;
@@ -604,6 +609,11 @@ class AuthorizationTest {
      *  and then reports the conflict, exercising {@link Authorization#recordUsed}'s compare-and-set retry; every other
      *  call, and every later write, delegates unchanged. */
     private static final class RacingStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private final String racedKey;

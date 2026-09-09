@@ -60,6 +60,11 @@ class BatchingKeyUsageFlushTest {
     /** A store that forwards to a real backend but can be made to fail every conditional write (return {@code false},
      *  as a lost compare-and-set does), so {@link Authorization#recordUsed} exhausts its retries and forfeits. */
     private static final class ConflictingWrites implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
         private final ArtifactStore delegate;
         private volatile boolean failWrites;
 

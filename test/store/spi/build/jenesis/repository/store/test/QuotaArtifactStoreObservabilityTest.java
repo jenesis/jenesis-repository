@@ -117,6 +117,11 @@ class QuotaArtifactStoreObservabilityTest {
 
     /** A store that fails the versioned read the quota counter is kept on, to drive the counter-unreadable branch. */
     private record ThrowingMeter(ArtifactStore delegate) implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         @Override
         public ArtifactStore scope(String tenant) {

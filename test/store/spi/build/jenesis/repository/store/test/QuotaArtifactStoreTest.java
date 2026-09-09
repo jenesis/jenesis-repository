@@ -388,6 +388,11 @@ class QuotaArtifactStoreTest {
      *  the backend rejects (a permission error, a transient outage), so the counter can be asserted to hold when the
      *  blob it names is still stored. */
     private record FailingDeleteDelegate(ArtifactStore delegate, String failKey) implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         @Override
         public void delete(String key) throws IOException {
@@ -462,6 +467,11 @@ class QuotaArtifactStoreTest {
      *  already-stored content blob is deduped away rather than re-uploaded (its key stays at a single write). */
     private record CountingWriteDelegate(ArtifactStore delegate, java.util.Map<String, Integer> counts)
             implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         CountingWriteDelegate(ArtifactStore delegate) {
             this(delegate, new java.util.HashMap<>());
@@ -542,6 +552,11 @@ class QuotaArtifactStoreTest {
      *  through the ordered {@link ArtifactStore#page} primitive - a millions-entry {@code blobs/} never materialises
      *  as one list - while the recorded page limits pin that every page stays bounded. */
     private record PagingDelegate(ArtifactStore delegate, List<Integer> pages) implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         @Override
         public List<String> list(String prefix) {

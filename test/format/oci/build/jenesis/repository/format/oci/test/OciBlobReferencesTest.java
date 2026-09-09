@@ -221,6 +221,11 @@ class OciBlobReferencesTest {
     /** A store whose blob reads fail the way a backend outage fails: {@code exists} still answers, the read does not.
      *  Everything else is the real store, so the only difference from the passing case is the failure itself. */
     private record FailingReads(ArtifactStore delegate) implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         @Override
         public InputStream open(String key) throws IOException {

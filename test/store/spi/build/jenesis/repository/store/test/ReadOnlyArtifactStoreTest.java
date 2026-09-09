@@ -91,6 +91,11 @@ class ReadOnlyArtifactStoreTest {
      *  inherited the SPI default {@code page()} (which lists then sorts) is caught reintroducing the materialisation.
      *  Every other operation is unused by the test. */
     private static final class PagingProbe implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return this;   // a standalone fake IS its own subspace
+        }
+
 
         private final AtomicBoolean listed;
 

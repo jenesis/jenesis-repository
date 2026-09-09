@@ -55,6 +55,11 @@ class ImportJobsStatusTest {
     /** Wraps a real filesystem store, counting the {@code readVersioned} and {@code exists} calls so the round-trip
      *  shape of a status read is demonstrable rather than assumed. */
     private static final class CountingStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private final AtomicInteger reads = new AtomicInteger();

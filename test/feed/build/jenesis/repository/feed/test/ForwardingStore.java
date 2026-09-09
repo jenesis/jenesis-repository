@@ -10,6 +10,11 @@ import build.jenesis.repository.store.ArtifactStore;
  * compare-and-set.
  */
 class ForwardingStore implements ArtifactStore {
+    @Override
+    public Object identity() {
+        return delegate.identity();   // a decorator answers its delegate's subspace
+    }
+
 
     private final ArtifactStore delegate;
 

@@ -66,6 +66,11 @@ class GcMarkRoundTripsTest {
 
     /** An {@link ArtifactStore} that forwards everything and counts the calls a mark pass is allowed to make. */
     private static final class Counting implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private int sized;

@@ -66,6 +66,11 @@ class PresignDelegationTest {
      * same instance; every other method is unused by these tests.
      */
     private static final class RecordingPresignStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return this;   // a standalone fake IS its own subspace
+        }
+
 
         private final List<String> signed;
         private final String keyPrefix;

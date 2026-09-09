@@ -150,6 +150,11 @@ class BrowseControllerTest {
     /** A store decorator that counts {@code list(prefix)} calls and delegates {@code page(...)} to the real backend's
      *  efficient seek (never the default {@code page} that re-lists), so a test can prove the browse never full-lists. */
     private static final class CountingList implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private int lists;

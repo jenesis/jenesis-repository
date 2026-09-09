@@ -552,6 +552,11 @@ class ServableNamesTest {
     /** An in-memory {@link ArtifactStore} over a flat key map: pointers carry their hash as content, blobs and
      *  {@code withheld/} markers are presence-only, and {@link #list} derives immediate children from the key set. */
     private static class MapStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return this;   // a standalone fake IS its own subspace
+        }
+
 
         final Map<String, byte[]> objects = new LinkedHashMap<>();
 

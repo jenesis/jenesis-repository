@@ -39,6 +39,11 @@ class PublishedAssetsDepthTest {
      *  deep: each node has one child {@code a} until the leaf, which has none. Nothing else is stored, so the leaf's
      *  pointer resolves to nothing and no entry is emitted - the walk's descent is what the deep chain stresses. */
     private static final class DeepChainStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return this;   // a standalone fake IS its own subspace
+        }
+
 
         private int maxDepth;
 

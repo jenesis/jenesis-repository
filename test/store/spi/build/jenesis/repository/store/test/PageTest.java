@@ -29,6 +29,11 @@ class PageTest {
     private static ArtifactStore fallback(ArtifactStore delegate) {
         return new ArtifactStore() {
             @Override
+            public Object identity() {
+                return delegate.identity();   // a decorator answers its delegate's subspace
+            }
+
+            @Override
             public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer)
                     throws IOException {
                 return delegate.scan(prefix, startAfter, limit, consumer);
@@ -156,6 +161,11 @@ class PageTest {
      *  the interface's {@code page} fallback - the shape of a backend that never overrode it. */
     private static ArtifactStore listingOnly(int size) {
         return new ArtifactStore() {
+            @Override
+            public Object identity() {
+                return this;   // a standalone fake IS its own subspace
+            }
+
             @Override
             public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
                 // Named explicitly, which is the point of the change that made scan abstract: the listing walk is

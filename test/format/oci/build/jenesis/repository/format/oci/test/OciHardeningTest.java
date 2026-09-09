@@ -73,6 +73,11 @@ class OciHardeningTest {
     /** A store decorator that fails the very first {@code writeVersioned} once - the concurrent conflict the tag-link
      *  retry absorbs - then delegates untouched. */
     private static final class ConflictOnceStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private boolean armed = true;

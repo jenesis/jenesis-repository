@@ -63,6 +63,11 @@ class GcConcurrentRepublishTest {
      *  concurrent {@link Publication#link} that re-referenced the blob and cleared its condemned marker in the window
      *  between the sweep's judgement read and its delete. Every other operation delegates to the real store. */
     private static final class MarkerClearingStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private final String marker;

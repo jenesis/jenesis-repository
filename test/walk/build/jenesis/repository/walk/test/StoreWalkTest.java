@@ -226,6 +226,11 @@ class StoreWalkTest {
      *  map keyed by full object key; immediate-child enumeration is derived from that map, and the small-object
      *  compare-and-set is a version-token check - exactly what the walk needs to persist its manifest and segments. */
     private static final class MemoryStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return this;   // a standalone fake IS its own subspace
+        }
+
 
         private final NavigableMap<String, byte[]> objects = new TreeMap<>();
         private final Map<String, Long> tokens = new HashMap<>();

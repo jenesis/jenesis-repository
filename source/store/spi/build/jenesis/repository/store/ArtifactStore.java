@@ -149,14 +149,27 @@ public interface ArtifactStore {
 
     /**
      * A stable identity of this store's subspace: equal for two instances that address the same root directory or
-     * bucket prefix, unequal across scopes. {@link StoredListing} keys its per-document writer queues by it, so the
-     * concurrent writers of one listing - and only they - coalesce into one rewrite. A backend that cannot name its
-     * subspace inherits the instance itself, which stays correct and merely coalesces nothing; a decorator answers its
-     * delegate's.
+     * bucket prefix, unequal across scopes, and stable across restarts of the process.
+     *
+     * <p>Fifteen consumers key on it. {@link StoredListing} keys its per-document writer queues, so the concurrent
+     * writers of one listing - and only they - coalesce into one rewrite; {@link StoreCache} and
+     * {@link StoredCounter} key their entries; every walk consumer keys the per-repository state it carries across a
+     * pass; and the search index <em>hashes it into the name of a durable index</em>.
+     *
+     * <p><b>There is no default, and that is the whole of the design here.</b> It used to fall back to the instance
+     * itself, described as staying correct and merely coalescing nothing - which was true of the one consumer it was
+     * written for and of none of the fourteen that arrived afterwards. An instance identity makes every new store
+     * object a new key: a long-lived map grows without bound, a gauge that sums its values counts stale entries, and
+     * an index name changes when nothing about the repository did. Whether a future consumer merely coalesces or
+     * durably names cannot be known from here, and the failure is silent in both directions - nothing throws, a
+     * number is quietly wrong - so the answer is required rather than assumed.
+     *
+     * <p>Answering is never hard, which is why requiring it costs nothing: every implementation in this build is its
+     * scheme and its location ({@code "s3:" + bucket + "/" + keyPrefix}), and <b>a decorator answers its delegate's</b>
+     * - the case a default made easiest to forget, and the one where forgetting it silently moves a whole
+     * repository's coalescing, caching and counting onto a key nothing else shares.
      */
-    default Object identity() {
-        return this;
-    }
+    Object identity();
 
     /**
      * Validate {@code segment} as a single traversal-free scope name and return it - defence in depth for

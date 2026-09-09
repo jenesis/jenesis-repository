@@ -140,6 +140,11 @@ class RawFormatTest {
      *  efficient seek (never the default {@code page} that re-lists), so a test can prove the raw listing never
      *  full-lists a directory - neither the child enumeration nor the folder probe. */
     private static final class CountingList implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private int lists;

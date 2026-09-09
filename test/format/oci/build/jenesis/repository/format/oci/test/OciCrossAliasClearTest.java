@@ -207,6 +207,11 @@ class OciCrossAliasClearTest {
      *  concurrent enforce sweep that lands its hold between the guard read and the clear. Every other operation is a
      *  straight pass-through to the real store, so the post-clear re-verify reads fresh truth through this same view. */
     private static final class InjectingStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private final String markerKey;

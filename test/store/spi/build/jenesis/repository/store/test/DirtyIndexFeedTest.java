@@ -316,6 +316,11 @@ class DirtyIndexFeedTest {
     /** Forwards to a real store but reports every versioned write as a compare-and-set conflict, so a test can drive
      *  the marker write's exhausted-attempts path (the loud failure a persistently contended mark takes). */
     private record AlwaysConflictingStore(ArtifactStore delegate) implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         @Override
         public boolean writeVersioned(String key, byte[] content, Object expected) {
@@ -385,6 +390,11 @@ class DirtyIndexFeedTest {
      * {@link #readVersioned} are tallied.
      */
     private static final class CountingStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private final Map<String, Integer> lists = new HashMap<>();

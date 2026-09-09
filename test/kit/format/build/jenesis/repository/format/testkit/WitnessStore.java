@@ -25,6 +25,11 @@ import build.jenesis.repository.store.ArtifactStore;
  * than as a store outage the format might legitimately handle.
  */
 public final class WitnessStore implements ArtifactStore {
+    @Override
+    public Object identity() {
+        return delegate.identity();   // a decorator answers its delegate's subspace
+    }
+
 
     /** State shared with every {@link #scope} derived from this witness, so a tripwire armed on the root still fires
      *  on a scoped view and the counters read back on one instance. */

@@ -50,6 +50,11 @@ public class RepositoryAuthorizationManagerFailClosedTest {
      *  a transient read error on the authorization lookup; every other operation is unreachable in this path. */
     private static final class UnreadableStore implements ArtifactStore {
         @Override
+        public Object identity() {
+            return this;   // a standalone fake IS its own subspace
+        }
+
+        @Override
         public Optional<Versioned> readVersioned(String key) throws IOException {
             throw new IOException("store read failed");
         }

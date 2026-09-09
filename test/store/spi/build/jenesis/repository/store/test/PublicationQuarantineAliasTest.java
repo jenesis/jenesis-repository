@@ -139,6 +139,11 @@ class PublicationQuarantineAliasTest {
      *  configured RuntimeException or IOException, exercising the scan's contain-vs-propagate split; every other method
      *  is inert. */
     private static final class WalkStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return this;   // a standalone fake IS its own subspace
+        }
+
 
         private final RuntimeException runtimeOnRead;
         private final IOException ioOnRead;

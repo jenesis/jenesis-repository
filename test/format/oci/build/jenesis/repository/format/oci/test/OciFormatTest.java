@@ -891,6 +891,11 @@ class OciFormatTest {
     /** A store decorator that counts how many times the chunk directory ({@code oci/uploads/<id>}) is listed, so a
      *  test can prove a chunked upload's per-PATCH cost never re-scans the staged chunks. Everything else delegates. */
     private static final class CountingUploadsList implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return delegate.identity();   // a decorator answers its delegate's subspace
+        }
+
 
         private final ArtifactStore delegate;
         private int uploadsListings;

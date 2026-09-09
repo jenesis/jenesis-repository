@@ -385,6 +385,11 @@ class ScreenedNamesTest {
      *  store throws on an unmappable path, and {@link #failing} makes every pointer read fail as a store outage
      *  would. */
     private static final class ScreenStore implements ArtifactStore {
+        @Override
+        public Object identity() {
+            return this;   // a standalone fake IS its own subspace
+        }
+
 
         private final NavigableMap<String, byte[]> objects = new TreeMap<>();
 

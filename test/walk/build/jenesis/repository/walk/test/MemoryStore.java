@@ -15,6 +15,11 @@ import build.jenesis.repository.store.ArtifactStore;
  * concurrency. Suites that need those drive a real {@code FilesystemArtifactStore}.
  */
 final class MemoryStore implements ArtifactStore {
+    @Override
+    public Object identity() {
+        return this;   // a standalone fake IS its own subspace
+    }
+
 
     private final NavigableSet<String> keys = new TreeSet<>();
 
