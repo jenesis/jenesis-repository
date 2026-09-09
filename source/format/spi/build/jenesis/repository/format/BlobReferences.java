@@ -151,12 +151,18 @@ public interface BlobReferences {
      * <p>The sanctioned lookup for a neutral consumer - the mark phase of a garbage collector - that must find these
      * without carrying its own {@code uses} clause. Empty when no installed format serves from a blobs namespace,
      * which is the core's own shape: only the collector's caller-supplied {@code publish/} roots are then scanned.
+     *
+     * <p>It filters {@link RepositoryFormat#installed()} rather than running a {@link ServiceLoader} of its own, and
+     * the difference is not stylistic. A second load is a second <em>instance</em> set: a format keeps state (a
+     * bounded digest set, a listing coalescer), which {@code FormatDiscovery} exists to make process-wide, and a
+     * lender resolved here would have been a different object from the one serving the requests whose blobs it is
+     * being asked about. Filtering the one set also means this seam inherits the discovery validation - a blank or
+     * duplicated format name is refused before a deletion path ever sees it.
      */
     static List<BlobReferences> installed() {
         List<BlobReferences> lenders = new ArrayList<>();
-        for (RepositoryFormat format : ServiceLoader.load(RepositoryFormat.class)) {
-            if (format instanceof BlobReferences lender
-                    && Features.active(format.name(), format.requiredConfig())) {
+        for (RepositoryFormat format : RepositoryFormat.installed()) {
+            if (format instanceof BlobReferences lender) {
                 lenders.add(lender);
             }
         }
