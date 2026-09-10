@@ -27,6 +27,31 @@ class RepositoryPropertiesTest {
         return properties.quotaBytes();
     }
 
+    /**
+     * The request-rate floor is this core's decision, and it is asserted here because this is where it is made.
+     *
+     * <p>It used to be made twice. This core shipped {@code 0} - unlimited, on the reasoning that a ceiling is an
+     * operator's decision - and the downstream edition's own properties shipped {@code 6000}, on the reasoning
+     * that a fresh deployment should cap a runaway client. Both javadocs argued their side sincerely, which is how
+     * a difference like that survives; the effect was that the posture a deployment got depended on which image it
+     * ran. An edition adds capability, it does not change what this core decided - so the floor moved here and the
+     * edition now references it.
+     *
+     * <p>Which leaves one way for the split to come back: this core drifting to {@code 0} while the edition keeps
+     * referencing a constant that has changed under it. The downstream census would still pass, because it checks
+     * that the edition does not re-flip the value rather than what the value is. This is the half that says the
+     * floor is still a floor.
+     */
+    @Test
+    void a_fresh_deployment_carries_the_request_rate_floor() {
+        assertThat(RepositoryProperties.DEFAULT_RATE_LIMIT)
+                .as("0 would be unlimited - the floor is what caps a runaway or abusive client on a fresh deploy")
+                .isEqualTo(6000L);
+        assertThat(new RepositoryProperties().getRateLimit())
+                .as("and the property carries it, so a deployment that configures nothing is not unlimited")
+                .isEqualTo(RepositoryProperties.DEFAULT_RATE_LIMIT);
+    }
+
     @Test
     void per_credential_authorization_is_on_by_default_and_anonymous_is_an_explicit_opt_out() {
         assertThat(new RepositoryProperties().isAuth())

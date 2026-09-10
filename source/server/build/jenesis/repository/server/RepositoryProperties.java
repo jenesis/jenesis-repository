@@ -76,7 +76,22 @@ public class RepositoryProperties {
 
     private String quota = "";
 
-    private long rateLimit = 0;
+    /**
+     * Requests per minute per tenant a deployment serves before refusing, and the value every edition ships with.
+     *
+     * <p>{@code 6000} is a hundred a second per tenant - the secure floor: a fresh deployment caps a runaway or
+     * abusive client instead of serving unlimited requests, while staying well clear of legitimate parallel CI. An
+     * operator raises it, lowers it, or sets {@code 0} to restore unlimited.
+     *
+     * <p><strong>It lives here, and it used to differ by edition.</strong> This core shipped {@code 0} and the
+     * downstream edition's own properties flipped it to {@code 6000}, so which posture a deployment got depended on
+     * which image it ran - and both javadocs argued their side sincerely, which is how a difference like that
+     * survives. A downstream edition adds capability; it does not change what this core decided. So the floor is
+     * the decision, it is made once, and it is made here.
+     */
+    public static final long DEFAULT_RATE_LIMIT = 6000;
+
+    private long rateLimit = DEFAULT_RATE_LIMIT;
 
     private Map<String, String> proxy = new LinkedHashMap<>();
 
