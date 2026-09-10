@@ -43,6 +43,13 @@
  * @jenesis.pin io.micrometer/micrometer-core 1.17.0 SHA-256/73503e701a377fafeaf33b71b9b8910a8d7884cbba88ab27971b33b3753b65aa
  * @jenesis.pin io.micrometer/micrometer-jakarta9 1.17.0 SHA-256/4ae9dbc9072fea8c36684a745e0e944b9540fd15027dfe7af0a186f8df43272c
  * @jenesis.pin io.micrometer/micrometer-observation 1.17.0 SHA-256/2fc95a327578d3b2a81c3ff40e646a4a21e46b0153ccbbf91690142bf80d9661
+ * @jenesis.pin io.micrometer/micrometer-registry-prometheus 1.17.0 SHA-256/6fc1177ec572a4bec332d00515859cf4a7adec232d66d2b5bedb4ad96456a4e3
+ * @jenesis.pin io.prometheus/prometheus-metrics-config 1.7.0 SHA-256/bc9455f938df76ec4add13fe31903a5bb583c605679a16a779d6a6c2b21218f2
+ * @jenesis.pin io.prometheus/prometheus-metrics-core 1.7.0 SHA-256/f9e5f1c8a20073347c88941d43e8c64ae6810afe0a61cbfe9c2f4efffe72808b
+ * @jenesis.pin io.prometheus/prometheus-metrics-exposition-formats 1.7.0 SHA-256/7352ca8b50e861eca3567ceb332e9590a06742a9d177cff54e52c8cff4c4fb90
+ * @jenesis.pin io.prometheus/prometheus-metrics-exposition-textformats 1.7.0 SHA-256/7e49065895a35181c57f2c3c6d07b7b3f9b5754cd6422e0a7bd793f20a29c28a
+ * @jenesis.pin io.prometheus/prometheus-metrics-model 1.7.0 SHA-256/e6d94538f8735c4161c36a660298f3a0fa8e4b281ceaf209723aaf9e212d292d
+ * @jenesis.pin io.prometheus/prometheus-metrics-tracer-common 1.7.0 SHA-256/b7e8699032f0f1501556eeafd20fcfdd89b355f5d22b6d8361d723d467d88ed4
  * @jenesis.pin jakarta.annotation/jakarta.annotation-api 3.0.0 SHA-256/b01f55552284cfb149411e64eabca75e942d26d2e1786b32914250e4330afaa2
  * @jenesis.pin jakarta.enterprise/jakarta.enterprise.cdi-api 4.1.0 SHA-256/c42c808f17925129a0800f618febe050d966e181a4c7384c8a5e7a0283d68699
  * @jenesis.pin jakarta.enterprise/jakarta.enterprise.lang-model 4.1.0 SHA-256/bb56f571f60d2862b2387d5468fe8f5540f8094727283ed991f89082708095ee
@@ -54,6 +61,7 @@
  * @jenesis.pin jakarta.websocket/jakarta.websocket-api 2.2.0 SHA-256/541d00436cbca0a5e1f6a457c9f70a64f00bd2f83e10ed89c2b372bc34843b7e
  * @jenesis.pin jakarta.websocket/jakarta.websocket-client-api 2.2.0 SHA-256/aa6fa9331a3f470daee0dbfcf084abfbd7a49507297575d5bb8bfbf3d62fe8c0
  * @jenesis.pin micrometer.observation 1.17.0
+ * @jenesis.pin micrometer.registry.prometheus 1.17.0
  * @jenesis.pin org.apache.logging.log4j/log4j-api 2.25.4 SHA-256/c4b642a7f047275215de117e0e3847eb2c7711d84a0aa7433e7b3c096daf341d
  * @jenesis.pin org.apache.logging.log4j/log4j-to-slf4j 2.25.4 SHA-256/d7b78fc0aaaa5e8ada388b29d718b0ab187e512965bed0b259bb4ab299f13db2
  * @jenesis.pin org.apache.tomcat.embed/tomcat-embed-el 11.0.22 SHA-256/1b34c33b858c141df36c501b4d809e68036c406bca3671a86facae297917c7de
@@ -164,6 +172,12 @@ open module build.jenesis.repository.server {
     requires tools.jackson.databind;
     requires jakarta.servlet;
     requires micrometer.observation;
+    // The Prometheus registry, here rather than downstream, because scraping metrics is a Spring Boot feature and
+    // not an edition's. It used to be pinned only in a downstream module, so this core had no /actuator/prometheus
+    // to expose and its exposure list omitted it - which read as a policy decision and was only a decision about
+    // where a dependency happened to sit. The endpoint it auto-configures is gated like every other actuator
+    // surface: RepositoryAuthorizationManager binds the /actuator subtree to a deployment-wide grant.
+    requires micrometer.registry.prometheus;
     // Micrometer's histogram backing, adopted under a name so it reaches the module path: it carries neither a
     // module descriptor nor an Automatic-Module-Name, which is the only reason it was on the class path.
     requires hdrhistogram;

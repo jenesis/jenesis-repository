@@ -57,6 +57,7 @@
  * @jenesis.pin io.micrometer/micrometer-core 1.17.0 SHA-256/73503e701a377fafeaf33b71b9b8910a8d7884cbba88ab27971b33b3753b65aa
  * @jenesis.pin io.micrometer/micrometer-jakarta9 1.17.0 SHA-256/4ae9dbc9072fea8c36684a745e0e944b9540fd15027dfe7af0a186f8df43272c
  * @jenesis.pin io.micrometer/micrometer-observation 1.17.0 SHA-256/2fc95a327578d3b2a81c3ff40e646a4a21e46b0153ccbbf91690142bf80d9661
+ * @jenesis.pin io.micrometer/micrometer-registry-prometheus 1.17.0 SHA-256/6fc1177ec572a4bec332d00515859cf4a7adec232d66d2b5bedb4ad96456a4e3
  * @jenesis.pin io.netty/netty-buffer 4.1.135.Final SHA-256/2a194f99fc93d07c4d442d04ac71bd2dc56d3188cd0e4270cdc2a953d1956bf9
  * @jenesis.pin io.netty/netty-codec 4.1.135.Final SHA-256/7252171264dbb5bb8ed38e77f89643b31e3cabc96144ec27b6882435d718a61e
  * @jenesis.pin io.netty/netty-codec-dns 4.1.135.Final SHA-256/5e996d7ac7597f368ab114fbb91d16788918c7e5bf166345c51e56db54d50fd1
@@ -80,6 +81,12 @@
  * @jenesis.pin io.projectreactor.netty/reactor-netty-core 1.2.18 SHA-256/2d1ff55147102d4284c6f9c59c06d4288e3a59b1921da01647fef24869cfefc3
  * @jenesis.pin io.projectreactor.netty/reactor-netty-http 1.2.18 SHA-256/5b8409741ebe7fd95ae44519a90115352fb4bf9d32f2af579c89da7003b0db10
  * @jenesis.pin io.projectreactor/reactor-core 3.7.18 SHA-256/7d9b507c0d651de30a20dac634e7cb7ca908a7c23d57ce05e71bbb9bb79bf0c4
+ * @jenesis.pin io.prometheus/prometheus-metrics-config 1.7.0 SHA-256/bc9455f938df76ec4add13fe31903a5bb583c605679a16a779d6a6c2b21218f2
+ * @jenesis.pin io.prometheus/prometheus-metrics-core 1.7.0 SHA-256/f9e5f1c8a20073347c88941d43e8c64ae6810afe0a61cbfe9c2f4efffe72808b
+ * @jenesis.pin io.prometheus/prometheus-metrics-exposition-formats 1.7.0 SHA-256/7352ca8b50e861eca3567ceb332e9590a06742a9d177cff54e52c8cff4c4fb90
+ * @jenesis.pin io.prometheus/prometheus-metrics-exposition-textformats 1.7.0 SHA-256/7e49065895a35181c57f2c3c6d07b7b3f9b5754cd6422e0a7bd793f20a29c28a
+ * @jenesis.pin io.prometheus/prometheus-metrics-model 1.7.0 SHA-256/e6d94538f8735c4161c36a660298f3a0fa8e4b281ceaf209723aaf9e212d292d
+ * @jenesis.pin io.prometheus/prometheus-metrics-tracer-common 1.7.0 SHA-256/b7e8699032f0f1501556eeafd20fcfdd89b355f5d22b6d8361d723d467d88ed4
  * @jenesis.pin jakarta.annotation/jakarta.annotation-api 3.0.0 SHA-256/b01f55552284cfb149411e64eabca75e942d26d2e1786b32914250e4330afaa2
  * @jenesis.pin jakarta.el/jakarta.el-api 6.0.0 SHA-256/f33d0becf2d5516730ba5cc99a7b5a2b1f62986bf0a3370249cdff9a2f171507
  * @jenesis.pin jakarta.enterprise/jakarta.enterprise.cdi-api 4.1.0 SHA-256/c42c808f17925129a0800f618febe050d966e181a4c7384c8a5e7a0283d68699
