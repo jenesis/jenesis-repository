@@ -736,6 +736,27 @@ public final class Authorization {
         return authorize(tenant, subject, scope, null, required);
     }
 
+    /**
+     * Forget everything this node has cached about who holds what, and tell every other node to do the same.
+     *
+     * <p><b>For a writer that changed the auth store without going through this class.</b> Every mutation here
+     * invalidates the entry it wrote and bumps the epoch, so a peer clears within {@link #EPOCH_TTL}. A caller
+     * that deletes auth keys directly - the tenant purge does, because it removes whole namespaces through the
+     * store rather than a credential at a time - leaves this node's cache holding grants whose objects are gone.
+     * Reads are answered from that cache until it ages out, which for a purge means a deleted tenant's
+     * credentials still authorize and its console members still read as members.
+     *
+     * <p>It is deliberately blunt: a purge removes an unbounded set of keys, so there is no entry list to
+     * invalidate, and clearing costs one re-read of whatever is asked for next.
+     */
+    public void forget() throws IOException {
+        if (cache == null) {
+            return;
+        }
+        cache.clear();
+        mutated();
+    }
+
     /** Whether a strictly-opt-in anonymous role is configured (a non-empty {@code anonymous-rights}); the console and
      *  {@code /api/capabilities} read the raw value to advertise it, this is the plain predicate for a decision. */
     public boolean anonymousEnabled() {
@@ -892,6 +913,7 @@ public final class Authorization {
         if (store == null) {
             return new SubjectPage(List.of(), null);
         }
+        freshen();   // a subject provisioned on another node is a member this listing must not omit
         List<String> names = new ArrayList<>();
         store.page(kindPrefix(tenant, kind),
                 after == null ? "" : segment(after), ArtifactStore.oneMoreThan(limit), names::add);
@@ -908,8 +930,18 @@ public final class Authorization {
     public record SubjectPage(List<String> ids, String next) {
     }
 
-    /** The scope-to-rights map a subject holds in {@code tenant}, empty when it holds none. */
+    /**
+     * The scope-to-rights map a subject holds in {@code tenant}, empty when it holds none.
+     *
+     * <p>It freshens first, for the same reason {@link #authorize} does and it is not optional here: reads go
+     * through a {@link StoreCache}, so a grant written by another node - or by another {@code Authorization} over
+     * the same store, which is what a console request and a provisioning path are - would otherwise be answered
+     * from a cached absence until the entry aged out. The console's per-request role check is this method, so a
+     * missing freshen reads as "not a member" for the cache's lifetime, which is a membership that silently does
+     * not exist.
+     */
     public Map<String, String> grants(String tenant, Subject subject) throws IOException {
+        freshen();
         Properties grants = read(grantsPath(tenant, subject));
         if (grants == null) {
             return Map.of();
@@ -921,8 +953,10 @@ public final class Authorization {
         return Map.copyOf(scopes);
     }
 
-    /** A subject's human label - a credential's name, a person's display login - or empty when it has none. */
+    /** A subject's human label - a credential's name, a person's display login - or empty when it has none.
+     *  Freshens for the reason {@link #grants} does: it is read beside the grants, on the same request. */
     public Optional<String> label(String tenant, Subject subject) throws IOException {
+        freshen();
         Properties metadata = read(metadataPath(tenant, subject));
         String label = metadata == null ? null : metadata.getProperty("label");
         return label == null || label.isBlank() ? Optional.empty() : Optional.of(label);
