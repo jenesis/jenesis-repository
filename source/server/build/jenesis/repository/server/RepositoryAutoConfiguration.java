@@ -315,10 +315,56 @@ public class RepositoryAutoConfiguration {
         return new LoggingObservationHandler();
     }
 
+    /**
+     * The routing, resolved through {@link RepositoryRoutingProvider} rather than constructed here.
+     *
+     * <p>This core installs one provider - the fixed-tenant routing, which is also the default - so on its own the
+     * answer is the same object it was when this method built it directly. What changes is that it is now the
+     * <em>seam's</em> answer: a deployment that adds a routing provider to the module path gets it here, without a
+     * composition written against the routings by name. That is the arrangement every other extension point in
+     * this product has, and the one the downstream editions' three routings now arrive through too.
+     */
     @Bean
     @ConditionalOnMissingBean
-    public RepositoryRouting repositoryRouting(ArtifactStore store, RepositoryProperties properties) {
-        return new FixedTenantRouting(store, properties.getTenant(), properties.getRepository());
+    public RepositoryRouting repositoryRouting(ArtifactStore store, RepositoryProperties properties,
+                                               Environment environment) {
+        return RepositoryRoutingProvider.resolve(environment.getProperty("jenreg." + RepositoryRoutingProvider.SETTING),
+                new RoutingContext() {
+                    @Override
+                    public ArtifactStore root() {
+                        return store;
+                    }
+
+                    @Override
+                    public String config(String key) {
+                        return environment.getProperty("jenreg." + key);
+                    }
+
+                    @Override
+                    public String defaultTenant() {
+                        return properties.getTenant();
+                    }
+
+                    @Override
+                    public String defaultRepository() {
+                        return properties.getRepository();
+                    }
+
+                    @Override
+                    public String tenantOf(String key) {
+                        return properties.getTenant();   // one tenant here; a key names no other
+                    }
+
+                    @Override
+                    public ArtifactStore store(String tenant, String repository) {
+                        return store.scope(tenant).scope(repository);
+                    }
+
+                    @Override
+                    public boolean writable(String repository) {
+                        return true;   // this core holds no repository definitions, so nothing says otherwise
+                    }
+                });
     }
 
     @Bean

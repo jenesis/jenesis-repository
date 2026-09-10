@@ -12,8 +12,9 @@ import jakarta.servlet.http.HttpServletRequest;
  * {@code <tenant>/<repository>/...} layout a multi-tenant routing addresses. Artifacts are served under the
  * {@code /repository/} prefix, which is stripped so a format sees its own {@code /maven/}, {@code /raw/} ... path;
  * the OCI {@code /v2/} registry, which the Docker protocol pins at the host root, is offered unchanged. A
- * multi-tenant edition replaces this by contributing its own {@code RepositoryRouting} bean; either switch is a
- * configuration change over the same layout, so the data is found where it was left.
+ * multi-tenant edition installs a {@link RepositoryRoutingProvider} of its own and a deployment names it with
+ * {@code jenreg.tenancy}; either switch is a configuration change over the same layout, so the data is found
+ * where it was left.
  */
 public final class FixedTenantRouting implements RepositoryRouting {
 

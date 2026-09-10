@@ -13,10 +13,11 @@ import jakarta.servlet.http.HttpServletRequest;
  * a route always names its tenant and repository and always carries the doubly
  * {@link ArtifactStore#scope(String) scoped} store ({@code root.scope(tenant).scope(repository)}), so switching a
  * deployment between fixed- and multi-tenant routing is a configuration change that finds the data where it was
- * left. By default the {@link FixedTenantRouting} binds: every request resolves to the configured
- * {@code jenreg.tenant} / {@code jenreg.repository} space (each {@code default} by
- * default) with the request path unchanged beyond the {@code /repository} prefix strip. A multi-tenant deployment
- * contributes its own {@code RepositoryRouting} bean (overriding the {@code @ConditionalOnMissingBean} default).
+ * left. Which routing a deployment runs on is <strong>discovered</strong>, through
+ * {@link RepositoryRoutingProvider}: {@code jenreg.tenancy} names one of the installed providers, and naming none
+ * binds the {@link FixedTenantRouting}, where every request resolves to the configured {@code jenreg.tenant} /
+ * {@code jenreg.repository} space (each {@code default} by default) with the request path unchanged beyond the
+ * {@code /repository} prefix strip. A multi-tenant deployment installs a provider; it does not override a bean.
  *
  * <p><strong>Where the tenant comes from is the implementation's business, not this seam's.</strong> A downstream
  * routing may read it from the {@code Jenesis-Repository-Key} header (taking the repository from the first path
