@@ -109,12 +109,13 @@ public interface ArtifactStoreProvider extends IconContributor {
      * credentials, with the selection left unset or pointing elsewhere, serves and persists happily against the
      * other backend while every artifact the operator expects to find is somewhere nobody reads.
      *
-     * <p><b>Why "fully configured" and not "any key present".</b> Probing for any stray key would fire constantly
-     * and for nothing: the shipped properties files declare every backend's keys so relaxed binding can reach them,
-     * several with real defaults ({@code jenreg.s3.region=us-east-1}, an Azure container name), so those keys are
-     * always set on any Spring deployment. A backend is taken as configured only when every key of its
-     * {@link #requiredConfig()} is present - a bucket, a connection string - which is precisely the set an operator
-     * cannot supply by accident and which the shipped files leave empty. Ambient cloud credentials are not
+     * <p><b>Why "fully configured" and not "any key present".</b> Probing for any stray key would fire on a key an
+     * operator never set. The shipped properties files used to declare every backend's keys - on the belief that a
+     * key had to be declared for relaxed binding to reach it, which is not so - and each such line set the key to
+     * the value its own code already defaulted to, so every backend read as partly configured on every deployment.
+     * Those lines are gone; a backend is taken as configured only when every key of its {@link #requiredConfig()}
+     * is present - a bucket, a connection string - which is precisely the set an operator cannot supply by
+     * accident, and which no shipped file sets. Ambient cloud credentials are not
      * consulted at all: the check reads this product's own keys, never {@code AWS_*}, so a CI box or a laptop with
      * a default credential chain is unaffected.
      */

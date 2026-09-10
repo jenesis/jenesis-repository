@@ -15,7 +15,7 @@ import org.springframework.context.ConfigurableApplicationContext;
  * the module path (filesystem, S3, Azure), selected by {@code jenreg.ui.store} - so a deployment or a test supplies
  * the backend, the shell names none.
  *
- * <p><b>It is not a launcher.</b> The console ships inside the all-in-one bundle rather than as a node of its own,
+ * <p><b>It is not a launcher.</b> The console ships inside the bundle rather than as a node of its own,
  * so what is left here is {@link #start(int)} - the seam an embedder or a test boots the real console through - and
  * the composition the bundle imports.
  */

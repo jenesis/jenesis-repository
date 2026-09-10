@@ -28,7 +28,7 @@ java build/jenesis/Make.java build                # build everything
 java build/jenesis/Make.java +source+store+s3 build   # one module and its dependencies
 ```
 
-Run the all-in-one server against the filesystem backend - `source/bundle` is the launchable module that
+Run the server against the filesystem backend - `source/bundle` is the launchable module that
 carries every layout, backend, importer and the console; `source/server` on its own `requires` none of
 them and has nothing to serve:
 
@@ -79,7 +79,7 @@ seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by 
 | `source/ui` | The web console (`/console`, `/browse`) and its design system. |
 | `source/oidc`, `source/ratelimit`, `source/usage` | Sign-in, the request-rate ceiling, and credential-usage tracking. |
 | `source/observation/spi`, `source/posture/spi`, `source/icon/spi` | Observation hooks, security-posture advisories, and console iconography. |
-| `source/feed`, `source/bundle`, `source/contract/testkit` | The advisory feed, the all-in-one launchable module, and the shared contract test kit. |
+| `source/feed`, `source/bundle`, `source/contract/testkit` | The advisory feed, the launchable module, and the shared contract test kit. |
 
 Each family's `testkit` module carries the contract tests an implementation must pass, so a new backend or
 format is validated against the same suite the built-in ones are.

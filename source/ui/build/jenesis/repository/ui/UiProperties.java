@@ -23,7 +23,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * same keys a second time with identical fields and identical defaults. A mechanism owns its own configuration; a
  * console's properties are what the console itself reads.
  *
- *   jenreg.ui.store             the artifact-store backend name (JENREG_STORE), default filesystem
  *   jenreg.ui.admins            comma-separated provider-qualified ids SEEDED as deployment administrators on
  *                               every boot (JENREG_UI_ADMINS); not a mirror - removing one does not revoke it,
  *                               and a '*' entry is refused at startup, an admin being a holder and it naming none
@@ -31,16 +30,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "jenreg.ui")
 public class UiProperties {
 
-    private String store = "filesystem";
     private String admins = "";
-
-    public String getStore() {
-        return store;
-    }
-
-    public void setStore(String store) {
-        this.store = store;
-    }
 
     public String getAdmins() {
         return admins;

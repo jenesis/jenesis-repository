@@ -332,7 +332,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
      * merely lose performance: it *replaces* the backend's native, genuinely bounded prefix listing with that
      * fallback, so a bounded question asked through the decorator becomes an unbounded one.
      *
-     * <p>Measured rather than reasoned: this was missing from every decorator at once, and the all-in-one image
+     * <p>Measured rather than reasoned: this was missing from every decorator at once, and the image
      * stopped booting over a store holding more than ten thousand keys. A tenant existence probe - already written
      * as a point read with a page limit of one - reached this fallback through the decorator and materialised
      * 10,001 keys to answer it.

@@ -10,12 +10,12 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Import;
 
 /**
- * Boots the repository AND the console as one application, off the all-in-one module path.
+ * Boots the repository AND the console as one application, off the bundle module path.
  *
  * <p>There used to be two launchers here, selected by {@code MAINCLASS}: this one for the server and a
  * {@code Console} beside it, each with its own config file and its own port. One image that has to be told which
  * half to be is an indirection nobody wants - so there is now one entry point, one config file
- * ({@code allinone.properties}, named explicitly because two modules on this path carry a root
+ * ({@code bundle.properties}, named explicitly because two modules on this path carry a root
  * {@code application.properties}) and one port.
  *
  * <p><b>How the two halves compose.</b> The repository needs no scanning: {@link RepositoryApplication} is a bare
@@ -37,26 +37,29 @@ import org.springframework.context.annotation.Import;
 // out. A launcher cannot make its own @ComponentScan conditional, so a console that could be switched off had to
 // become a configuration that can be.
 @Import(ConsoleNode.class)
-public class AllInOne {
+public class Server {
 
-    private AllInOne() {
+    private Server() {
     }
 
     public static void main(String[] args) {
-        new SpringApplicationBuilder(AllInOne.class)
-                .properties("spring.config.name=allinone")
+        new SpringApplicationBuilder(Server.class)
+                .properties("spring.config.name=bundle")
                 .run(args);
     }
 
     /**
-     * Boot the all-in-one server on the given port ({@code 0} picks an ephemeral one) and return a handle exposing
+     * Boot the server on the given port ({@code 0} picks an ephemeral one) and return a handle exposing
      * the bound port and closing the context, so a test can drive the exact composition the image runs over HTTP.
-     * The port rides as an argument, not a property: {@code allinone.properties} pins {@code server.port=${PORT:8080}}
-     * and config files outrank default properties, so a property-passed {@code 0} would silently bind 8080.
+     * The port rides as a run argument rather than a default property, which is not merely a habit: a
+     * {@code .properties()} default sits in Spring's lowest-precedence layer, so anything above it - a config
+     * file, an environment variable - would win and two suites asking for an ephemeral port would race for one
+     * fixed port. No file pins {@code server.port} any more (8080 is Spring's own default and restating it put
+     * the value in a second place), so an argument is what makes {@code 0} mean 0.
      */
     public static Running start(int port) {
-        ConfigurableApplicationContext context = new SpringApplicationBuilder(AllInOne.class)
-                .properties("spring.config.name=allinone")
+        ConfigurableApplicationContext context = new SpringApplicationBuilder(Server.class)
+                .properties("spring.config.name=bundle")
                 .run("--server.port=" + port);
         return new Running(Integer.parseInt(context.getEnvironment().getProperty("local.server.port")), context);
     }

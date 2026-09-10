@@ -22,7 +22,7 @@ import org.springframework.context.ConfigurableApplicationContext;
  * is selected by {@code jenreg.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem
  * fallback).
  *
- * <p><b>It is not a launcher.</b> The one artifact this edition ships is the all-in-one bundle, which imports this
+ * <p><b>It is not a launcher.</b> The one artifact this edition ships is the bundle, which imports this
  * composition; what is left here is {@link #start(int)}, the seam an embedder or a test boots the real server
  * through. A {@code main} beside it would be a second entry point with no artifact behind it - and a second place
  * for a boot-time decision to sit where nothing shipped would apply it.

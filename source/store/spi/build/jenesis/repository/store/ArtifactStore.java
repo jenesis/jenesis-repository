@@ -453,7 +453,7 @@ public interface ArtifactStore {
      * <p>It exists because the obvious spelling is a trap that this repository has now paid for three times:
      * {@code list(prefix).isEmpty()} materialises a container's whole child set to answer a yes/no question, so
      * asking whether the blob pool is empty costs one string per blob. A console browse once listed a namespace
-     * per row to draw a folder icon; a tenant existence probe reached the scan fallback and stopped the all-in-one
+     * per row to draw a folder icon; a tenant existence probe reached the scan fallback and stopped the bundled
      * image booting over ten thousand keys.
      *
      * <p>So the point of this method is not that it is faster. It is that <em>the correct form is now shorter than
@@ -716,7 +716,7 @@ public interface ArtifactStore {
      * <p>It cost exactly that. Three decorators - metering, quota and read-only - each overrode {@code page} for
      * this very reason and each forgot {@code scan}, so all three replaced their backend's native bounded listing
      * with the fallback. A tenant existence probe, already written as a point read with a page limit of one,
-     * reached it through the metering decorator, materialised 10,001 keys and refused - and the all-in-one image
+     * reached it through the metering decorator, materialised 10,001 keys and refused - and the image
      * stopped booting over any store holding more than ten thousand keys.
      *
      * <p>Made abstract, none of that can recur quietly: a store that does not implement this does not compile, and

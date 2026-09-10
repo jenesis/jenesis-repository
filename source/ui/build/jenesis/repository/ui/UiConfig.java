@@ -40,10 +40,25 @@ public class UiConfig {
         return cards;
     }
 
+    /**
+     * The store this console reads when it runs alone - {@code @ConditionalOnMissingBean}, so wherever it is
+     * composed with the repository (which is every shipped image) the repository's own bean wins and this is
+     * never built.
+     *
+     * <p>It reads {@code jenreg.store}, the deployment's one store key, rather than a {@code jenreg.ui.store} of
+     * its own. That property existed and could not carry a meaningful second value: a console browses,
+     * administers and reclaims the artifacts the repository serves, so pointing it elsewhere administers a store
+     * nobody serves - and it selected only the backend NAME while both read the same {@code jenreg.<backend>.*}
+     * location keys. Its own javadoc named {@code JENREG_STORE} as its source and the public reference said the
+     * two "point at one store"; the downstream console had already stopped consulting it. Reading the real key
+     * also means {@code JENREG_STORE} reaches this bean by relaxed binding, which is what a second key could not
+     * do without a file declaring it.
+     */
     @Bean
     @ConditionalOnMissingBean
-    public ArtifactStore artifactStore(UiProperties properties, Environment environment) {
-        return ArtifactStoreProvider.resolve(properties.getStore(), environment::getProperty);
+    public ArtifactStore artifactStore(Environment environment) {
+        return ArtifactStoreProvider.resolve(environment.getProperty("jenreg.store", "filesystem"),
+                environment::getProperty);
     }
 
     /**
