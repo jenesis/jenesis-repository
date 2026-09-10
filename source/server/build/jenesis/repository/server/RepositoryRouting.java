@@ -59,6 +59,59 @@ public interface RepositoryRouting {
     }
 
     /**
+     * Whether a repository of this name could ever be addressed on this routing.
+     *
+     * <p>It is not "does it exist" and not "may this caller write to it". It is the question a surface that
+     * <em>creates</em> a repository has to ask before it tells an operator what will happen: whether the installed
+     * routing has any URL at all that reaches a repository by this name. On the {@link FixedTenantRouting} exactly
+     * one name does - every request resolves to the configured {@code jenreg.tenant} / {@code jenreg.repository}
+     * space - while a routing that takes the repository from the request addresses all of them.
+     *
+     * <p><b>A name this rules out is not thereby useless</b>, which is why the answer feeds a warning rather than a
+     * refusal: see {@link #unaddressableWarning}.
+     *
+     * <p><b>The default answers {@code true}, and that is the honest answer rather than a lax one.</b> This asks a
+     * routing to rule a name <em>out</em>, and a routing that resolves its target from a request has nothing to
+     * rule out - every valid name is reachable through some request. Defaulting to {@code false} would refuse
+     * creation on exactly the deployments where creating a repository is the normal thing to do, which is the
+     * opposite of the failure this exists to prevent. So a caller reads {@code false} as "this routing knows the
+     * name is unreachable" and {@code true} as "it is not ruled out", never as "it exists".
+     *
+     * @param repository the repository name a caller proposes to create or address.
+     * @return {@code false} only when this routing can never reach a repository of that name.
+     */
+    default boolean addresses(String repository) {
+        return true;
+    }
+
+    /**
+     * What a surface that creates repositories must say about a name {@link #addresses} ruled out - written once
+     * here because every such surface must say the same thing.
+     *
+     * <p><b>It is a warning and not a refusal, and the difference was measured rather than reasoned.</b> A name no
+     * URL reaches is not thereby useless: where a deployment composes repositories - a grouped view over members, a
+     * fallback from one repository to another - the composed name is resolved <em>by name</em> against the stored
+     * definitions and never through this routing. So a fixed-tenant deployment whose one served repository is a
+     * group over two others is an ordinary configuration in which those two are load-bearing and unaddressable at
+     * once, and refusing to create them would refuse the shape a single-repository deployment uses to put a proxy
+     * behind what it serves. Creation order rules out a narrower refusal too, since the members are created before
+     * the composition that names them.
+     *
+     * <p>What is left to say is therefore exactly what is true: this name will not answer as a URL, and it takes
+     * effect only if something else names it.
+     *
+     * @param repository the name this routing cannot address.
+     * @return the warning, for a log line and for whatever a surface shows its operator.
+     */
+    static String unaddressableWarning(String repository) {
+        return "Repository '" + repository + "' is not addressable on this deployment's routing: every request "
+                + "resolves to the one configured artifact space, so no URL names it and '/repository/"
+                + repository + "/...' will answer 404. It still takes effect if another definition names it - a "
+                + "group member or a fallback is resolved by name, not by URL. To address it directly, set "
+                + "'jenreg.tenancy' to a routing that names repositories in the request - multi, path or host.";
+    }
+
+    /**
      * The resolved artifact space for a request: the {@code tenant} and {@code repository} it addresses (never
      * {@code null} - the fixed-tenant deployment resolves its configured defaults), the doubly-scoped
      * {@code root.scope(tenant).scope(repository)} {@link ArtifactStore} the format reads and writes, the

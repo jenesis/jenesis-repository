@@ -49,4 +49,15 @@ public final class FixedTenantRouting implements RepositoryRouting {
                 ? Optional.of(new Route(tenant, repository, store, path))
                 : Optional.empty();
     }
+
+    /**
+     * Only the configured repository, because this routing has no URL that names another one: the request path
+     * carries a format, never a repository. That is a statement about URLs and not about usefulness - a definition
+     * under another name is still reached when something else names it, a group member or a fallback - so what it
+     * lets a surface do is warn an operator that the name will not answer, never refuse to store it.
+     */
+    @Override
+    public boolean addresses(String repository) {
+        return this.repository.equals(repository);
+    }
 }
