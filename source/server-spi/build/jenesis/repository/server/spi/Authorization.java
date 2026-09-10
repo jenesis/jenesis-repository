@@ -884,6 +884,73 @@ public final class Authorization {
                 lastUsedAddress, useCount, allowedAddresses, scopes));
     }
 
+    /** One page of a tenant's subject ids of one kind, in key order: at most {@code limit} ids strictly after
+     *  {@code after} ({@code null} from the start), and the id to continue from ({@code null} on the last page).
+     *  The ids are decoded, so a caller sees {@code github/octocat} rather than the segment it is keyed under -
+     *  and passes the decoded one straight back as the cursor. */
+    public SubjectPage subjects(String tenant, Kind kind, String after, int limit) {
+        if (store == null) {
+            return new SubjectPage(List.of(), null);
+        }
+        List<String> names = new ArrayList<>();
+        store.page(kindPrefix(tenant, kind),
+                after == null ? "" : segment(after), ArtifactStore.oneMoreThan(limit), names::add);
+        boolean more = names.size() > limit;
+        List<String> page = more ? names.subList(0, limit) : names;
+        List<String> ids = new ArrayList<>(page.size());
+        for (String name : page) {
+            ids.add(unsegment(name));
+        }
+        return new SubjectPage(List.copyOf(ids), more ? ids.getLast() : null);
+    }
+
+    /** One page of subject ids and the cursor the next page resumes after ({@code null} when exhausted). */
+    public record SubjectPage(List<String> ids, String next) {
+    }
+
+    /** The scope-to-rights map a subject holds in {@code tenant}, empty when it holds none. */
+    public Map<String, String> grants(String tenant, Subject subject) throws IOException {
+        Properties grants = read(grantsPath(tenant, subject));
+        if (grants == null) {
+            return Map.of();
+        }
+        Map<String, String> scopes = new TreeMap<>();
+        for (String scope : grants.stringPropertyNames()) {
+            scopes.put(scope, grants.getProperty(scope));
+        }
+        return Map.copyOf(scopes);
+    }
+
+    /** A subject's human label - a credential's name, a person's display login - or empty when it has none. */
+    public Optional<String> label(String tenant, Subject subject) throws IOException {
+        Properties metadata = read(metadataPath(tenant, subject));
+        String label = metadata == null ? null : metadata.getProperty("label");
+        return label == null || label.isBlank() ? Optional.empty() : Optional.of(label);
+    }
+
+    /** Set a subject's human label, leaving the rest of its metadata alone. A blank value removes it. */
+    public void setLabel(String tenant, Subject subject, String label) throws IOException {
+        require();
+        mutate(metadataPath(tenant, subject), metadata -> {
+            metadata.putIfAbsent("created", Instant.now().toString());
+            if (label == null || label.isBlank()) {
+                metadata.remove("label");
+            } else {
+                metadata.setProperty("label", label.trim());
+            }
+        });
+    }
+
+    /** Remove a subject entirely - every grant it holds and its metadata - so nothing of it is left to read back
+     *  as a holder with no rights. Silent when there was nothing there, which is what makes a repeated revoke and
+     *  a revoke racing another one both answer the same way. */
+    public void removeSubject(String tenant, Subject subject) throws IOException {
+        require();
+        cache.delete(grantsPath(tenant, subject));
+        cache.delete(metadataPath(tenant, subject));
+        mutated();
+    }
+
     /** Record a freshly minted credential's metadata (created now, an optional label and optional expiry); the
      *  caller has already hashed the key. Grants are added with {@link #setGrant}. */
     public void provision(String tenant, String hash, String label, Instant expires) throws IOException {
@@ -916,12 +983,7 @@ public final class Authorization {
     public void setGrant(String tenant, Subject subject, String scope, String tokens) throws IOException {
         enforceable(subject);
         require();
-        Properties grants = read(grantsPath(tenant, subject));
-        if (grants == null) {
-            grants = new Properties();
-        }
-        grants.setProperty(scope, tokens);
-        write(grantsPath(tenant, subject), grants);
+        mutate(grantsPath(tenant, subject), grants -> grants.setProperty(scope, tokens));
     }
 
     /** Remove the rights for {@code scope} on a credential by hash. */
@@ -943,12 +1005,7 @@ public final class Authorization {
     /** Remove the rights for {@code scope} on any subject; private for the reason {@link #setGrant} is. */
     private void removeGrant(String tenant, Subject subject, String scope) throws IOException {
         require();
-        Properties grants = read(grantsPath(tenant, subject));
-        if (grants == null) {
-            return;
-        }
-        grants.remove(scope);
-        write(grantsPath(tenant, subject), grants);
+        mutate(grantsPath(tenant, subject), grants -> grants.remove(scope));
     }
 
     /** Set or clear a credential's expiry; {@code null} removes it (the key no longer expires) unless the tenant
@@ -1347,6 +1404,35 @@ public final class Authorization {
         return properties;
     }
 
+    /**
+     * Read a document, change it, write it back - under compare-and-set, re-reading on a loss.
+     *
+     * <p>These writes used to be a plain read-modify-write: read the grants object, set one scope, put the whole
+     * object back unconditionally. Two administrators granting <em>different</em> scopes to one subject at the same
+     * moment therefore raced, and the loser's grant was overwritten with no error and nothing to notice it by -
+     * on the object that decides what a caller may do. It is the shape the project's own rule names: a
+     * read-modify-write on a store with no atomic update is a compare-and-set through {@link Retries}, which
+     * re-reads and re-applies rather than clobbering, and throws when it has genuinely lost rather than pretending
+     * it kept the record.
+     *
+     * <p>The write goes to the store rather than through the cache, so the node's own next read is invalidated
+     * explicitly and every other node's within the epoch's ttl - the same pair {@link #recordUsed} makes.
+     */
+    private void mutate(String path, Consumer<Properties> change) throws IOException {
+        Retries.update(store, path, current -> {
+            Properties properties = new Properties();
+            if (current.isPresent()) {
+                properties.load(new ByteArrayInputStream(current.get().content()));
+            }
+            change.accept(properties);
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            properties.store(bytes, null);
+            return bytes.toByteArray();
+        });
+        cache.invalidate(path);
+        mutated();
+    }
+
     private void write(String path, Properties properties) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         properties.store(bytes, null);
@@ -1422,6 +1508,13 @@ public final class Authorization {
         return id.indexOf('%') < 0 && id.indexOf('/') < 0
                 ? id
                 : id.replace("%", "%25").replace("/", "%2F");
+    }
+
+    /** The id a key segment names - {@link #segment} read backwards, so an enumeration hands back the id a caller
+     *  granted rather than the shape it is stored under. The slash is decoded before the percent, mirroring the
+     *  order the encoder escapes them in. */
+    private static String unsegment(String name) {
+        return name.indexOf('%') < 0 ? name : name.replace("%2F", "/").replace("%25", "%");
     }
 
     private static String policyPath(String tenant) {
