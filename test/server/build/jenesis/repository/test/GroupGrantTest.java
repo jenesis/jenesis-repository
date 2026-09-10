@@ -212,6 +212,55 @@ class GroupGrantTest {
     }
 
     @Test
+    void a_directory_reconciling_its_own_view_leaves_every_other_source_alone() throws IOException {
+        // The claim that makes four sources of one concept safe to combine. Group membership arrives from an OIDC
+        // claim, a SAML attribute, a SCIM push, an LDAP search and an operator's own hand, and each of them
+        // reconciles - it removes the memberships it no longer sees. Without a source on the row the first one to
+        // reconcile deletes what the others made, and an operator's manual grant is silently undone by the next
+        // sign-in. That is the failure that makes a directory integration untrustworthy rather than merely wrong.
+        authorization.addMember("acme", "hand-picked", "oidc/ada");                 // an operator, by hand
+        authorization.reconcileMembership("acme", "oidc/ada", Set.of("developers"), "oidc");
+
+        assertThat(members("hand-picked")).as("the operator's own row survives a directory reconciliation")
+                .contains("oidc/ada");
+        assertThat(members("developers")).contains("oidc/ada");
+
+        // The directory now says they are in `auditors` instead. Its own previous row goes; the hand-picked one
+        // does not.
+        authorization.reconcileMembership("acme", "oidc/ada", Set.of("auditors"), "oidc");
+
+        assertThat(members("auditors")).as("what the source now says").contains("oidc/ada");
+        assertThat(members("developers")).as("what the source no longer says").isEmpty();
+        assertThat(members("hand-picked")).as("and still not the operator's").contains("oidc/ada");
+    }
+
+    @Test
+    void two_directories_do_not_reconcile_each_other_away() throws IOException {
+        // The same claim between two mechanisms rather than between a mechanism and a person - the shape an estate
+        // running SCIM push and an LDAP pull at once really has.
+        authorization.reconcileMembership("acme", "oidc/ada", Set.of("from-scim"), "scim");
+        authorization.reconcileMembership("acme", "oidc/ada", Set.of("from-ldap"), "ldap");
+
+        assertThat(members("from-scim")).as("the first source's view is not the second's to remove")
+                .contains("oidc/ada");
+        assertThat(members("from-ldap")).contains("oidc/ada");
+    }
+
+    @Test
+    void a_reconciled_membership_confers_the_group_rights_like_any_other() throws IOException {
+        // A membership from a directory is a membership: it is not a second, weaker kind of belonging.
+        authorization.setGrant("acme", Authorization.Subject.group("developers"), "*",
+                Authorization.REPOSITORY_READ);
+        authorization.reconcileMembership("acme", "oidc/ada", Set.of("developers"), "oidc");
+
+        assertThat(allowed("oidc/ada", Authorization.REPOSITORY_READ)).isTrue();
+    }
+
+    private List<String> members(String group) {
+        return authorization.members("acme", group, null, 50).ids();
+    }
+
+    @Test
     void the_keyless_caller_is_still_refused_a_grant() throws IOException {
         // The rule that governed this the whole way through: a kind authorize does not resolve may not be granted
         // rights, because the row would read as access and confer none. A group is resolved now; anonymous is not.

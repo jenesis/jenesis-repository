@@ -115,7 +115,10 @@ public final class CredentialsController {
                          @RequestBody GrantRequest request,
                          HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.setGrant(context.tenant(key), hashId(id), request.scope(), String.join(",", request.tokens()));
+        // Through the subject form so the expiry is honoured: the record carries one for every holder, and a field
+        // a surface accepts and drops is worse than one it never offered.
+        authorization.setGrant(context.tenant(key), Authorization.Subject.credential(hashId(id)),
+                request.scope(), String.join(",", request.tokens()), Authorization.expiry(request.expires()));
         context.audit(key, "grant.set", id + " " + request.scope());
         response.setStatus(200);
     }
@@ -215,7 +218,9 @@ public final class CredentialsController {
     public record Minted(String id, String key, String expires) {
     }
 
-    public record GrantRequest(String scope, List<String> tokens) {
+    /** {@code expires} is optional: blank or absent is a grant that does not lapse. A leading {@code P} is an
+     *  ISO-8601 duration from now, anything else an absolute instant - the spelling every expiry here takes. */
+    public record GrantRequest(String scope, List<String> tokens, String expires) {
     }
 
     public record ExpiryRequest(String expires) {

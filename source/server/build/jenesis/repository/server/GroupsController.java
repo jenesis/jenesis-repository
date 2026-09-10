@@ -90,7 +90,8 @@ public final class GroupsController {
                          HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
         authorization.setGrant(context.tenant(key), Authorization.Subject.group(group(name)),
-                request.scope(), String.join(",", request.tokens()));
+                request.scope(), String.join(",", request.tokens()),
+                Authorization.expiry(request.expires()));
         context.audit(key, "group.grant.set", name + " " + request.scope());
         response.setStatus(200);
     }

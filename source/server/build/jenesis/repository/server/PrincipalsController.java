@@ -72,7 +72,8 @@ public final class PrincipalsController {
                          HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
         authorization.setGrant(context.tenant(key), Authorization.Subject.principal(request.id()),
-                request.scope(), String.join(",", request.tokens()));
+                request.scope(), String.join(",", request.tokens()),
+                Authorization.expiry(request.expires()));
         context.audit(key, "principal.grant.set", request.id() + " " + request.scope());
         response.setStatus(200);
     }
@@ -123,7 +124,8 @@ public final class PrincipalsController {
     public record PrincipalView(String id, String label, Map<String, String> grants) {
     }
 
-    /** A grant to a person: who, at what scope, of what. The id is in the body because it carries a slash. */
-    public record PrincipalGrantRequest(String id, String scope, List<String> tokens) {
+    /** A grant to a person: who, at what scope, of what, and until when. The id is in the body because it carries
+     *  a slash; {@code expires} is optional and a blank one is a grant that does not lapse. */
+    public record PrincipalGrantRequest(String id, String scope, List<String> tokens, String expires) {
     }
 }

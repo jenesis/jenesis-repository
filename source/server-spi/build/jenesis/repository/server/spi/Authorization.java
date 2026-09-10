@@ -764,8 +764,12 @@ public final class Authorization {
         if (grants == null) {
             return false;
         }
+        Instant now = Instant.now();
         for (String grantScope : grants.stringPropertyNames()) {
-            if (!covers(grantScope, repository, path)) {
+            if (grantScope.startsWith(EXPIRES)) {
+                continue;   // a scope's expiry, not a scope
+            }
+            if (!covers(grantScope, repository, path) || expired(grants, grantScope, now)) {
                 continue;
             }
             for (String token : grants.getProperty(grantScope).split(",")) {
@@ -775,6 +779,21 @@ public final class Authorization {
             }
         }
         return false;
+    }
+
+    /** Whether this scope's grant has lapsed. A malformed instant is treated as expired rather than ignored: the
+     *  value exists only because somebody time-boxed the grant, and reading it as "no expiry" would answer the
+     *  opposite of what they asked for. */
+    private static boolean expired(Properties grants, String scope, Instant now) {
+        String value = grants.getProperty(EXPIRES + scope);
+        if (value == null) {
+            return false;
+        }
+        try {
+            return !Instant.parse(value).isAfter(now);
+        } catch (DateTimeParseException unreadable) {
+            return true;
+        }
     }
 
     /** Whether {@code subject} carries {@code required} for {@code scope}, on no particular path. */
@@ -992,8 +1011,14 @@ public final class Authorization {
         if (grants == null) {
             return Map.of();
         }
+        Instant now = Instant.now();
         Map<String, String> scopes = new TreeMap<>();
         for (String scope : grants.stringPropertyNames()) {
+            // A lapsed grant is not shown as a grant. It authorizes nothing, and a surface that listed it would
+            // have an operator revoking what already ended while believing it was live.
+            if (scope.startsWith(EXPIRES) || expired(grants, scope, now)) {
+                continue;
+            }
             scopes.put(scope, grants.getProperty(scope));
         }
         return Map.copyOf(scopes);
@@ -1069,12 +1094,65 @@ public final class Authorization {
      * which is the failure mode this whole model exists to remove.
      */
     public void addMember(String tenant, String group, String principal) throws IOException {
+        addMember(tenant, group, principal, MANUAL);
+    }
+
+    /**
+     * Put {@code principal} in {@code group}, recording which {@code source} says so.
+     *
+     * <p><b>The source is what lets four sources of one concept coexist.</b> Group membership arrives from an
+     * OIDC {@code groups} claim, a SAML attribute, a SCIM push, an LDAP search and an operator's own hand, and
+     * each of them reconciles: it removes the memberships it no longer sees. Without a source recorded on the row,
+     * the first mechanism to reconcile would delete every membership the others had made - an operator's manual
+     * grant silently undone by the next sign-in, which is the failure that makes a directory integration
+     * untrustworthy rather than merely wrong.
+     *
+     * <p>So {@link #reconcileMembership} only ever touches rows carrying its own source, and a person may be in
+     * one group by claim and another by hand without the two knowing about each other.
+     */
+    public void addMember(String tenant, String group, String principal, String source) throws IOException {
         require();
         Subject member = Subject.principal(principal);   // rejects a traversal id before it reaches a key
         Properties recorded = new Properties();
         recorded.setProperty("joined", Instant.now().toString());
+        recorded.setProperty("source", source == null || source.isBlank() ? MANUAL : source.trim());
         write(memberPath(tenant, group, member.id()), recorded);
         rederive(tenant, member.id());
+    }
+
+    /** The source a membership carries when nobody says otherwise: an operator put them there, and no
+     *  reconciliation may take them out again. */
+    public static final String MANUAL = "manual";
+
+    /**
+     * Make {@code source}'s view of which groups {@code principal} is in the truth, and change nothing else.
+     *
+     * <p>This is the seam every directory integration plugs into, defined over "the groups this principal has"
+     * rather than over any one mechanism's way of saying it - because LDAP groups, OIDC {@code groups} claims,
+     * SAML attributes and SCIM group memberships are four spellings of one concept, and specified any other way it
+     * would be built four times.
+     *
+     * <p>It adds what is missing and removes what this source no longer names, leaving every other source's rows
+     * and the operator's own alone. A group the source names need not exist first: one with members and no grants
+     * confers nothing.
+     */
+    public void reconcileMembership(String tenant, String principal, Set<String> groups, String source)
+            throws IOException {
+        require();
+        String owner = source == null || source.isBlank() ? MANUAL : source.trim();
+        Subject member = Subject.principal(principal);
+        for (String group : groups) {
+            addMember(tenant, group, member.id(), owner);
+        }
+        for (String group : groups(tenant)) {
+            if (groups.contains(group)) {
+                continue;
+            }
+            Properties recorded = read(memberPath(tenant, group, member.id()));
+            if (recorded != null && owner.equals(recorded.getProperty("source", MANUAL))) {
+                removeMember(tenant, group, member.id());
+            }
+        }
     }
 
     /** Take {@code principal} out of {@code group}, and take the group's rights off them from the next request.
@@ -1267,13 +1345,48 @@ public final class Authorization {
      * grant stands.
      */
     public void setGrant(String tenant, Subject subject, String scope, String tokens) throws IOException {
+        setGrant(tenant, subject, scope, tokens, null);
+    }
+
+    /**
+     * The same grant, ending at {@code expires} - so a right may be time-boxed and not only a key.
+     *
+     * <p>Expiry was a field on a credential, which meant it could only ever time-box a <em>secret</em>. An identity
+     * is a session rather than a credential, so "a contractor until the end of March" or "an elevation that lapses
+     * on its own" had nothing to attach to: the only way to end a person's access was to remember to remove it.
+     * On the grant it applies to every holder, because the grant is what every holder holds.
+     *
+     * <p>{@code null} never expires, which is what an ordinary grant is.
+     */
+    public void setGrant(String tenant, Subject subject, String scope, String tokens, Instant expires)
+            throws IOException {
         enforceable(subject);
         require();
-        mutate(grantsPath(tenant, subject), grants -> grants.setProperty(scope, tokens));
+        mutate(grantsPath(tenant, subject), grants -> {
+            grants.setProperty(scope, tokens);
+            if (expires == null) {
+                grants.remove(EXPIRES + scope);
+            } else {
+                grants.setProperty(EXPIRES + scope, expires.toString());
+            }
+        });
         if (subject.kind() == Kind.GROUP) {
             rederiveGroup(tenant, subject.id());
         }
     }
+
+    /**
+     * The key a scope's expiry is kept under, in the grants document beside the grant itself.
+     *
+     * <p>Beside it rather than in a document of its own, because {@link #authorize} may not grow a read: what a
+     * caller holds is three point reads and stays three. It cannot collide with a scope, and that is a property of
+     * the grammar rather than a hope - a grant scope is {@code *} or a repository name optionally narrowed by a
+     * path prefix, a repository name is {@code [A-Za-z0-9_-]+}, and none of those can begin with a dot. A
+     * separator inside the name would not have been safe: a path prefix may legitimately carry an {@code @} (an
+     * npm scope), so {@code expires@<scope>} would have been a guess about which characters a coordinate space
+     * uses.
+     */
+    private static final String EXPIRES = ".expires.";
 
     /** Remove the rights for {@code scope} on a credential by hash. */
     public void removeGrant(String tenant, String hash, String scope) throws IOException {
