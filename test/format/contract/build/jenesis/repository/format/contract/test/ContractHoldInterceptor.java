@@ -17,6 +17,12 @@ import build.jenesis.repository.store.PublishInterceptor;
  * the testkit's {@code ContractHold}, so a downstream fixture holding a {@code publish/} path uses the same one. It
  * overrides only {@code withheld}, leaving {@code assess} at its {@code ACCEPT} default, so it is completely inert for
  * every path no check has explicitly held - including every path in every other check in this module.
+ *
+ * <p><b>Each contract module needs its own, and that is JPMS rather than duplication.</b> A {@code provides ... with}
+ * names an implementation that must live in the providing module, so the class cannot be shared even though the
+ * convention behind it is - which is what {@code ContractHold} is for. The downstream contract module has a twin of
+ * this file for exactly that reason, and the first {@code publish/}-namespace fixture to land there found out by
+ * serving a held artifact 200.
  */
 public final class ContractHoldInterceptor implements PublishInterceptor {
 
