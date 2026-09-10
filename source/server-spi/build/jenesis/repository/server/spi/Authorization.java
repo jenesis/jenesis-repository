@@ -1233,6 +1233,31 @@ public final class Authorization {
      *  Called from the one place each mutation funnels through, never at the call sites, so a future write cannot
      *  forget it. A failed bump is not swallowed: a caller who was told their revocation landed must not have it
      *  reach one node only. */
+    /**
+     * Drop every node's authorization cache, not only this one's.
+     *
+     * <p>This is what {@code POST /api/admin/caches/clear} was missing. {@link StoreCache#clearAll()} empties the
+     * caches of the node that served the request, which is the right shape for a listing - but the reason an
+     * operator reaches for that button is almost always a revoked credential another node is still honouring
+     * inside its ttl, and that is precisely the case a node-local clear cannot fix. The endpoint therefore
+     * promised something it could not do.
+     *
+     * <p>It is not a fan-out, which is why it is allowed: nothing is pushed to any node. One small document is
+     * bumped, and every node notices within the epoch's own few-second ttl on the read it was going to make
+     * anyway - the same pull that already carries a revocation between nodes.
+     *
+     * @return whether anything was invalidated. An {@linkplain #anonymous() open} deployment holds no grants and
+     *         keeps no epoch, so there is nothing to invalidate and it answers {@code false} - which the operator
+     *         surfaces report rather than claiming a fleet-wide clear that did not happen.
+     */
+    public boolean invalidateAcrossNodes() throws IOException {
+        if (epoch == null) {
+            return false;
+        }
+        mutated();
+        return true;
+    }
+
     private void mutated() throws IOException {
         if (epoch != null) {
             epoch.bump();

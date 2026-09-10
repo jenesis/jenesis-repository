@@ -2,6 +2,7 @@ package build.jenesis.repository.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -9,6 +10,7 @@ import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import org.junit.jupiter.api.io.TempDir;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -61,6 +63,52 @@ class AuthorizationCacheTest {
         assertThat(store.calls(FaultInjectingStore.Op.READ_VERSIONED) - before)
                 .as("a hundred more requests cost no store read: the read path pays for nothing twice, and the "
                         + "epoch is inside its window").isEqualTo(3);
+    }
+
+    /**
+     * The operator's cache clear reaches every node's grants, which is the one thing it is usually pressed for.
+     *
+     * <p>Dropping a cache is node-local by design - pushing to every node would be the fan-out the read rules
+     * forbid - so the endpoint used to empty the serving node's caches and leave a revoked credential working on
+     * its peers for the rest of their ttl. That is precisely the case an operator reaches for it in, so it
+     * promised something it could not do. {@code invalidateAcrossNodes()} closes it by pull rather than push: it
+     * moves the one document every node already re-reads, and a peer drops its credential cache when it sees the
+     * token change.
+     *
+     * <p><b>What this asserts is the bump, not the peer's reaction, and the difference is the contract.</b> A node
+     * re-reads the epoch at most once per {@code EPOCH_TTL}, so a peer that authorized a moment ago is inside its
+     * window and will not notice for a few seconds - by design, since that window is what keeps the epoch from
+     * costing a store read per request. Propagation is therefore bounded by a wall clock, and a unit test that
+     * waited for it would be the kind that fails on a busy machine and blames the product. The half that is a fact
+     * about this code is that the clear moves the token at all, which is what a peer reads; that a moved token
+     * clears a cache is {@link Authorization}'s own already-exercised path.
+     */
+    @Test
+    void a_cache_clear_moves_the_epoch_every_other_node_reads() throws IOException {
+        String key = Authorization.mint("acme");
+        authorization.setGrant("acme", Authorization.hash(key), "releases", Authorization.REPOSITORY_READ);
+        assertThat(authorization.authorize(key, "releases", null, Authorization.REPOSITORY_READ))
+                .isEqualTo(Authorization.Decision.ALLOWED);
+        String epochKey = Scopes.space(Scopes.AUTH) + "/epoch";
+        String before = new String(store.readVersioned(epochKey).orElseThrow().content(), UTF_8);
+
+        authorization.invalidateAcrossNodes();
+
+        assertThat(new String(store.readVersioned(epochKey).orElseThrow().content(), UTF_8))
+                .as("an operator's clear moves the token every node compares against, so the grants half of it is "
+                        + "fleet-wide - without pushing anything to any node")
+                .isNotEqualTo(before);
+    }
+
+    @Test
+    void an_open_deployment_says_it_invalidated_nothing_rather_than_claiming_a_clear() throws IOException {
+        // jenreg.auth=false holds no grants and keeps no epoch, so there is nothing to invalidate. Saying so is the
+        // point: the operator surfaces render this answer, and a bare "cleared" over a fleet is read as more than
+        // it is. A clear that quietly did nothing while reporting success is the shape to avoid on this surface.
+        assertThat(Authorization.anonymous().invalidateAcrossNodes()).isFalse();
+        assertThat(authorization.invalidateAcrossNodes())
+                .as("an enforcing deployment does have something to invalidate, and says so")
+                .isTrue();
     }
 
     @Test
