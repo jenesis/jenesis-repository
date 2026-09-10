@@ -92,8 +92,10 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         // class the /api/assets ?repo re-scope closes). Bind them to the deployment-wide scope "*" instead, so only a key
         // holding a wildcard (deployment-wide) grant may read them - a repository-scoped key is refused. A "*" grant
         // still reads the whole view (the intended deployment-observability feature); a per-repo grant no longer does.
-        // (/actuator/health is permit-all in the security chain, so it never reaches this manager; binding the /actuator
-        // subtree to "*" here covers /actuator/metrics, /actuator/info and any other exposed actuator endpoint.)
+        // (The three probe paths - /actuator/health and the liveness/readiness groups - are permit-all in the security
+        // chain, so they never reach this manager. Everything else under /actuator does, this binding included: the
+        // per-component health paths, the /actuator/health/full group that carries the whole breakdown,
+        // /actuator/metrics, /actuator/info and any other exposed actuator endpoint.)
         // The deployment-wide OPERATOR-observability routes: GET/HEAD /api/logs, /api/consistency and the /actuator
         // subtree. /api/posture is deployment-wide too and is bound to "*" alongside them, but it is INTENTIONALLY
         // anonymous-readable (a public advisory, already tested), so it is deliberately kept OUT of this operator set.

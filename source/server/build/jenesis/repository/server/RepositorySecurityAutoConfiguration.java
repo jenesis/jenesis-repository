@@ -103,7 +103,21 @@ public class RepositorySecurityAutoConfiguration {
                         .authenticationEntryPoint(entryPoint)
                         .accessDeniedHandler(entryPoint))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll())
+                        // The three paths a container platform probes, and nothing else. They answer a
+                        // summarized state - UP or DOWN - and are open because a kubelet has no credential to
+                        // present and a probe that needs one is a probe that fails the pod.
+                        //
+                        // It used to be /actuator/health/** , which also opened every PER-COMPONENT path
+                        // (/actuator/health/db, /actuator/health/diskSpace). Those report which component is
+                        // unhealthy and why, which is a map of the deployment's internals to anyone who can
+                        // reach the port. They fall through to the authorization manager now, which binds the
+                        // /actuator subtree to a wildcard grant, so an operator still reads them with a key.
+                        //
+                        // The narrow list is the guarantee. show-details is a second line - and a weaker one,
+                        // because it is a property a deployment can set back.
+                        .requestMatchers("/actuator/health",
+                                "/actuator/health/liveness",
+                                "/actuator/health/readiness").permitAll())
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new KeyAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
         // The composition seam: contributed customizers layer their open routes and filters over the baseline while

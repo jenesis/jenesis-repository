@@ -38,7 +38,8 @@ public class DevSecurityConfig {
                                       .AuthorizeHttpRequestsConfigurer<org.springframework.security.config.annotation
                                       .web.builders.HttpSecurity>.AuthorizationManagerRequestMatcherRegistry auth) {
                 auth
-                        .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/login/**",
+                        .requestMatchers("/actuator/health", "/actuator/health/liveness",
+                                "/actuator/health/readiness", "/login", "/login/**",
                                 "/error", "/favicon.ico").permitAll()
                         .requestMatchers("/css/**", "/js/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/logout").permitAll()
