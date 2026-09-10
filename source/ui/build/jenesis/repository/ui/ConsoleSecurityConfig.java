@@ -60,6 +60,12 @@ public class ConsoleSecurityConfig {
                         // front of this screen would send a principal that holds nothing to the screen for
                         // principals that hold nothing, forever.
                         .requestMatchers("/no-access").authenticated()
+                        // This console maps no mutating route of its own - measured, not assumed: there is no
+                        // @PostMapping, @PutMapping or @DeleteMapping in the package. The rules are the floor a
+                        // contributed ConsoleModuleProvider screen lands on, and ADMIN here is not a role beside
+                        // the rights vocabulary but the strongest grant in it, read back from the store by
+                        // ConsoleAdministrators. If this console ever grows a write a non-administrator should be
+                        // able to make, the rule it needs is a right rather than another role.
                         .requestMatchers(HttpMethod.POST, "/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/**").hasRole("ADMIN")

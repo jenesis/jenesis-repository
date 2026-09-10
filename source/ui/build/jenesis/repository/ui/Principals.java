@@ -6,13 +6,23 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 /**
- * The single-tenant authority model: every signed-in user is a {@code USER}; a user whose provider-qualified id
+ * The authority model for a console serving one tenant - which is the same model as the multi-tenant one with one
+ * tenant in it, not a second model. A grant is {@code (subject, tenant, scope, rights)} in both, and what differs is
+ * only which tenant a request resolves to; this class used to call itself "the single-tenant authority model" while
+ * granting an untenanted boolean, which is the asymmetry that made the two consoles look like two designs.
+ *
+ * <p>Every signed-in user is a {@code USER}; a user whose provider-qualified id
  * ({@code github/<id>}, {@code oidc/<sub>}) holds deployment-wide administration is also an {@code ADMIN}. The
  * secure default is deny: with nobody granted it, no one is an {@code ADMIN}, so an unconfigured deployment denies
  * writes (a POST/PUT/DELETE needs {@code ROLE_ADMIN}) rather than silently granting full admin to whoever signs in.
  *
  * <p>It also records the sign-in ({@link KnownPrincipals}), because this is the one moment a person's provider
  * subject is known to anything - and an administrator cannot grant to an id nobody can learn.
+ *
+ * <p>Administration is <em>deployment</em>-scoped rather than tenant-scoped, and that is a modelled level rather
+ * than a missing one: administering a deployment is not a privilege over any tenant in it, which is what
+ * {@code jenreg.ui.admins=*} was reaching for and getting wrong - a wildcard over tenants is a different claim, and
+ * it names no holder. With the level named, the wildcard needs no special case beyond being refused.
  *
  * <p><b>It asks {@link ConsoleAdministrators}, not a setting</b>, and that is the whole of the policy here. The
  * answer is a grant in the store - seeded from {@code jenreg.ui.admins} on every boot, and equally real when it
