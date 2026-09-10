@@ -1,6 +1,8 @@
 package build.jenesis.repository.server;
 
 import module java.base;
+
+import build.jenesis.repository.store.Durations;
 import module org.slf4j;
 
 import build.jenesis.repository.store.ArtifactStore;
@@ -199,15 +201,30 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         return cleaned.isBlank() || cleaned.equals(".") || cleaned.equals("..") ? "node" : cleaned;
     }
 
+    /**
+     * The heartbeat cadence, in the deployment's one duration grammar.
+     *
+     * <p>It used to take a bare millisecond count and <strong>swallow</strong> anything else, returning the default -
+     * so an operator who typed {@code 2s} into it got a five-second heartbeat they did not choose, silently, and a
+     * fleet judged nodes late on it. That is the &sect;9 fault its five siblings in {@code jenreg.consistency.*} were
+     * fixed for; this one was missed, which left two grammars inside one family of dials and the only one still
+     * spelled in bare milliseconds anywhere in the product.
+     *
+     * <p>Set-but-unreadable now throws naming the key, the value and the default, exactly as
+     * {@code NodeConsistency} does. A clean cutover: a deployment carrying the old bare-number spelling fails at
+     * boot with a message that says what to write instead, rather than running at a cadence nobody chose.
+     */
     private static long millis(UnaryOperator<String> config, String key, long fallback) {
         String value = config.apply(key);
         if (value == null || value.isBlank()) {
             return fallback;
         }
         try {
-            return Long.parseLong(value.trim());
-        } catch (NumberFormatException unparseable) {
-            return fallback;
+            return Durations.parse(value.trim()).toMillis();
+        } catch (RuntimeException unparseable) {
+            throw new IllegalStateException(key + "='" + value.trim() + "' is not a duration. These take the "
+                    + "ISO-8601 or suffixed form every other duration setting takes (PT5M, 5m, 30s); unset the key "
+                    + "to keep the default of " + Duration.ofMillis(fallback) + ".", unparseable);
         }
     }
 }

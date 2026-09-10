@@ -33,7 +33,8 @@ public final class SettingsCatalogue {
             //     enable toggle and the node id are per-node deploy-time bootstrap, not dials, so they are on the
             //     test's bootstrap allowlist, not here. ---
             new Setting("jenreg.consistency.heartbeat",
-                    "Milliseconds between this node's fingerprint publishes (the consistency heartbeat interval)"),
+                    "How often this node publishes its fingerprint - the consistency heartbeat. An ISO-8601 or "
+                            + "suffixed duration (PT30S, 30s), as every duration dial takes."),
             new Setting("jenreg.consistency.staleness-window",
                     "Milliseconds a node may lag and still count as benign lag rather than stuck-diverged"),
             new Setting("jenreg.consistency.sweep-interval",
