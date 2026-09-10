@@ -203,6 +203,13 @@ public class RepositoryAutoConfiguration {
         return new CredentialsController(authorization, context);
     }
 
+    /** The one person surface, declared beside the other two holders' and named the same way. */
+    @Bean("repositoryPrincipalsController")
+    @ConditionalOnMissingBean
+    public PrincipalsController principalsController(Authorization authorization, CredentialContext context) {
+        return new PrincipalsController(authorization, context);
+    }
+
     /** The one group surface, declared beside the credential one and named the same way and for the same reason:
      *  a console that renders group pages would otherwise collide with it on an unqualified bean name. */
     @Bean("repositoryGroupsController")
