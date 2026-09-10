@@ -17,12 +17,16 @@ import org.springframework.context.annotation.Import;
  * exist had drifted: one pointed form login at a page carrying no credential form, so that console could not be
  * signed into at all.
  *
+ * <p>{@link NoAccessController} rides here for the same reason as the sign-in page: it is the destination of every
+ * console chain's access check, so a composition that imported the others and not this one would refuse a principal
+ * that holds nothing and then answer {@code 404} at the screen that explains why.
+ *
  * <p>The sign-in page is one of them, and that is worth stating because it is the screen a deployment cannot do
  * without: a composition that imported the others and not this one answered 404 on {@code /login} while its own
  * deny-by-default chain redirected every other route to it. There is no console without a way into it.
  */
 @Configuration(proxyBeanMethods = false)
-@Import({LoginController.class, SpiCatalogScreenController.class, PostureScreenController.class,
-        ObservabilityScreenController.class, DevConsoleSecurity.class})
+@Import({LoginController.class, NoAccessController.class, SpiCatalogScreenController.class,
+        PostureScreenController.class, ObservabilityScreenController.class, DevConsoleSecurity.class})
 public class ConsoleScreensConfig {
 }

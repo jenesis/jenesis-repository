@@ -43,10 +43,18 @@ public class DevSecurityConfig {
                                 "/error", "/favicon.ico").permitAll()
                         .requestMatchers("/css/**", "/js/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/logout").permitAll()
+                        .requestMatchers("/no-access").authenticated()
                         .requestMatchers(HttpMethod.POST, "/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/**").hasRole("ADMIN")
-                        .anyRequest().authenticated();
+                        // The same rule the production chain applies, over the identity model this profile
+                        // substitutes. The dev users are in-memory and hold no grants in any store, so the seam is
+                        // answered here rather than from the deployment's - "signed in as one of the two users
+                        // this profile invents" is what holding something means when the identity is invented too.
+                        // Answered this way rather than left as .authenticated() on purpose: a dev chain whose
+                        // rules are a DIFFERENT SHAPE from the production chain's proves a permission model
+                        // nothing ships, which is worse than having no dev chain at all.
+                        .anyRequest().access(ConsoleAccessRule.holdsSomething(id -> true));
             }
         };
     }

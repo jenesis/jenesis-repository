@@ -186,6 +186,7 @@ open module build.jenesis.repository.ui.test {
     requires spring.web;
     requires jakarta.servlet;
     requires spring.security.core;
+    requires spring.security.web;
     requires jdk.httpserver;
     requires spring.security.oauth2.client;
     requires spring.security.oauth2.core;

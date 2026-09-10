@@ -19,9 +19,12 @@ import org.springframework.security.web.authentication.LoginUrlAuthenticationEnt
  * enabled), with the login <em>mechanism</em> kept out of this chain. This config owns the authorization rules, the
  * entry point and logout, and applies every {@link LoginContributor} bean to the shared {@link HttpSecurity} - so a
  * mechanism (OAuth2/OIDC today via {@link OAuth2ClientConfig}, others later) plugs its own login in rather than being
- * wired here. Any write ({@code POST}/{@code PUT}/{@code DELETE}) needs the {@code ADMIN} role; reads need any
- * authenticated user. With no contributor present, login is disabled - the app still starts and shows a "not
- * configured" notice on {@code /login}. The chain is {@code @Profile("!dev")}; the {@code dev} profile's
+ * wired here. Any write ({@code POST}/{@code PUT}/{@code DELETE}) needs the {@code ADMIN} role; a read needs a
+ * principal that holds something here ({@link ConsoleAccess}) - being signed in is not enough, because sign-in
+ * succeeds for anyone the identity provider authenticates and a signed-in stranger reading every screen is exactly
+ * what that openness would otherwise buy. A principal that holds nothing is sent to {@code /no-access}, a designed
+ * screen, rather than to a {@code 403}. With no contributor present, login is disabled - the app still starts and
+ * shows a "not configured" notice on {@code /login}. The chain is {@code @Profile("!dev")}; the {@code dev} profile's
  * {@link DevSecurityConfig} replaces it with local form login, and a downstream deployment can replace it by
  * contributing its own {@link SecurityFilterChain}.
  */
@@ -44,7 +47,7 @@ public class ConsoleSecurityConfig {
     @Bean
     @Order(2)
     @Profile("!dev")
-    public SecurityFilterChain consoleSecurityFilterChain(HttpSecurity http,
+    public SecurityFilterChain consoleSecurityFilterChain(HttpSecurity http, ConsoleAccess access,
                                                    ObjectProvider<LoginContributor> loginContributors) throws Exception {
         http
                 .securityMatcher(ConsoleUrlSpace.space().toArray(String[]::new))
@@ -53,12 +56,19 @@ public class ConsoleSecurityConfig {
                         .requestMatchers("/css/**", "/js/**").permitAll()
                         .requestMatchers("/oauth2/**", "/login/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/logout").permitAll()
+                        // The destination of the access check below, so it cannot itself be behind it - a check in
+                        // front of this screen would send a principal that holds nothing to the screen for
+                        // principals that hold nothing, forever.
+                        .requestMatchers("/no-access").authenticated()
                         .requestMatchers(HttpMethod.POST, "/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/**").hasRole("ADMIN")
-                        .anyRequest().authenticated())
+                        // Not merely authenticated: a read of this console is a read of the repository it shows,
+                        // so it needs a principal that holds something here.
+                        .anyRequest().access(ConsoleAccessRule.holdsSomething(access)))
                 .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login")))
+                        .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
+                        .accessDeniedHandler(new NoAccessRedirect(access)))
                 .logout(logout -> logout.logoutSuccessUrl("/login?logout").permitAll());
 
         List<LoginContributor> contributors = loginContributors.orderedStream().toList();

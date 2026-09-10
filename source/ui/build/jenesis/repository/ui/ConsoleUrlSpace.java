@@ -42,6 +42,7 @@ public final class ConsoleUrlSpace {
             "/favicon.ico",
             "/login", "/login/**",
             "/logout",
+            "/no-access",
             "/oauth2/**",
             "/css/**", "/js/**", "/assets/**", "/webjars/**",
             "/console", "/console/**",

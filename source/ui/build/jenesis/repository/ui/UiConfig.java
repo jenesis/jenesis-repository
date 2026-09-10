@@ -6,6 +6,8 @@ import build.jenesis.repository.store.TenantsProvider;
 import build.jenesis.repository.store.Tenants;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.server.spi.Authorization;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,18 +46,55 @@ public class UiConfig {
         return ArtifactStoreProvider.resolve(properties.getStore(), environment::getProperty);
     }
 
+    /**
+     * The grants this console reads its authority model out of.
+     *
+     * <p>Deliberately not a bean. Where the console is composed with the repository, the repository's own
+     * {@code Authorization} carries a deployment's anonymous rights and credential lifetimes, and it declares
+     * itself {@code @ConditionalOnMissingBean} - so a bean here would not merely duplicate it, it would REPLACE
+     * it, and a console configuration would silently decide a repository's security posture. Taken through an
+     * {@link ObjectProvider} instead: the composition's own if there is one, and a plain enforcing view of the
+     * store when this console runs alone. Either way both readers below share one, because two caches over one
+     * set of grants disagree for as long as the shorter of their windows.
+     */
+    private static Authorization grants(ObjectProvider<Authorization> authorization, ArtifactStore store) {
+        return authorization.getIfAvailable(() -> Authorization.enforcing(store));
+    }
+
     /** Who administers this deployment: one reader over grants, seeded from this console's own admins setting.
      *  A composing console that binds the prefix with its own configuration type declares its own. */
     @Bean
     @ConditionalOnMissingBean
-    public ConsoleAdministrators consoleAdministrators(ArtifactStore store, UiProperties properties) {
-        return new ConsoleAdministrators(store, properties.getAdmins());
+    public ConsoleAdministrators consoleAdministrators(ObjectProvider<Authorization> authorization,
+                                                      ArtifactStore store, UiProperties properties) {
+        return new ConsoleAdministrators(grants(authorization, store), properties.getAdmins());
+    }
+
+    /**
+     * Who may see this console at all - the single-tenant answer, which a multi-tenant console replaces.
+     *
+     * <p>It is a bean rather than a constant because it is the one decision that differs between a console serving
+     * one tenant and a console serving many, and the difference is only in what "somewhere" means.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public ConsoleAccess consoleAccess(ObjectProvider<Authorization> authorization, ArtifactStore store,
+                                       ConsoleAdministrators administrators, CurrentTenant currentTenant) {
+        return new GrantedConsoleAccess(grants(authorization, store), administrators, currentTenant);
+    }
+
+    /** The people this deployment has seen sign in, so an administrator can grant from a list rather than from a
+     *  provider subject somebody had to be told out of band. */
+    @Bean
+    @ConditionalOnMissingBean
+    public KnownPrincipals knownPrincipals(ObjectProvider<Authorization> authorization, ArtifactStore store) {
+        return new KnownPrincipals(grants(authorization, store));
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public Principals principals(ConsoleAdministrators administrators) {
-        return new Principals(administrators);
+    public Principals principals(ConsoleAdministrators administrators, KnownPrincipals known) {
+        return new Principals(administrators, known);
     }
 
     /**

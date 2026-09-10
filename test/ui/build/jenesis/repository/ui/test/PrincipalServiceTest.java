@@ -6,7 +6,9 @@ import module java.base;
 import build.jenesis.repository.ui.OAuth2PrincipalService;
 import build.jenesis.repository.ui.OidcPrincipalService;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.ui.ConsoleAdministrators;
+import build.jenesis.repository.ui.KnownPrincipals;
 import build.jenesis.repository.ui.Principals;
 import build.jenesis.repository.ui.UiProperties;
 import org.mockito.ArgumentCaptor;
@@ -46,7 +48,7 @@ class PrincipalServiceTest {
 
     @Test
     void a_github_sign_in_is_keyed_on_the_provider_qualified_login() {
-        Principals principals = spy(new Principals(administrators("github/octocat")));
+        Principals principals = spy(principals("github/octocat"));
         OAuth2PrincipalService service = new OAuth2PrincipalService(principals);
         service.setRestOperations(userInfo(Map.of("login", "octocat", "id", 1)));
 
@@ -65,7 +67,7 @@ class PrincipalServiceTest {
 
     @Test
     void a_github_login_that_is_not_the_configured_admin_is_only_a_reader() {
-        Principals principals = spy(new Principals(administrators("github/someone-else")));
+        Principals principals = spy(principals("github/someone-else"));
         OAuth2PrincipalService service = new OAuth2PrincipalService(principals);
         service.setRestOperations(userInfo(Map.of("login", "octocat", "id", 1)));
 
@@ -77,7 +79,7 @@ class PrincipalServiceTest {
 
     @Test
     void an_oidc_sign_in_is_keyed_on_the_provider_qualified_subject() {
-        Principals principals = spy(new Principals(administrators("oidc/subject-123")));
+        Principals principals = spy(principals("oidc/subject-123"));
         OidcPrincipalService service = new OidcPrincipalService(principals);
         // No user-info request: the subject comes straight off the id token, so the test needs no network.
         service.setRetrieveUserInfo(request -> false);
@@ -101,13 +103,15 @@ class PrincipalServiceTest {
         return id.getValue();
     }
 
-    /** The one reader the console builds at boot, seeded with this id - so these drive the grant the policy
-     *  really consults rather than a parsed list. */
-    private ConsoleAdministrators administrators(String admins) {
+    /** The policy the console builds at boot, seeded with this id - so these drive the grant it really consults
+     *  rather than a parsed list, and the sign-in recording that rides the same call. */
+    private Principals principals(String admins) {
         UiProperties properties = new UiProperties();
         properties.setAdmins(admins);
-        return new ConsoleAdministrators(ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null), properties.getAdmins());
+        Authorization authorization = Authorization.enforcing(ArtifactStoreProvider.resolve(
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
+        return new Principals(new ConsoleAdministrators(authorization, properties.getAdmins()),
+                new KnownPrincipals(authorization));
     }
 
     private static UiProperties properties(String admins) {

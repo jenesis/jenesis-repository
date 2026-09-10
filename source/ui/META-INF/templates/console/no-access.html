@@ -1,0 +1,37 @@
+<!doctype html>
+<!--
+  no-access.html — the screen a signed-in principal that holds nothing sees, on every console.
+
+  It is a designed state rather than a 403 or an empty dashboard, and it is what makes an open sign-in safe rather
+  than merely permissive: sign-in succeeds for anyone the identity provider authenticates, so being signed in says
+  nothing about what you may see, and the page has to say that in words. It shows the exact id an administrator
+  needs, because that id is an opaque provider subject nobody can otherwise type.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{base :: head('No access yet', ${product})}">
+    <meta charset="utf-8">
+    <title>No access yet</title>
+</head>
+<body>
+<main class="container">
+    <article class="app-card" style="max-width:36rem;margin:4rem auto">
+        <hgroup>
+            <h1>You are signed in</h1>
+            <p th:text="${tagline}">Repository console</p>
+        </hgroup>
+        <p>Your account has been authenticated, and it does not yet hold any access in this deployment. Nothing has
+            gone wrong: access is granted separately from sign-in, so a new account starts with none.</p>
+        <p><strong>Ask an administrator to grant you access.</strong> They will need the identifier below, which is
+            how this deployment names you — it is not your login name, and it does not change if you rename yourself
+            with your identity provider.</p>
+        <!--/* The one value on this page that comes from outside: rendered as text, never as markup. It is shown
+             because an administrator cannot grant to a provider subject they have no way of learning. */-->
+        <p><code th:text="${qualifiedId}">oidc/00000000-0000-0000-0000-000000000000</code></p>
+        <p><small>Once you have been granted access, reload this page.</small></p>
+        <form th:action="@{/logout}" method="post">
+            <button type="submit" class="secondary">Sign out</button>
+        </form>
+    </article>
+</main>
+</body>
+</html>

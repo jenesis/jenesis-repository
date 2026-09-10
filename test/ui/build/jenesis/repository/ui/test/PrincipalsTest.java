@@ -4,7 +4,9 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.ui.ConsoleAdministrators;
+import build.jenesis.repository.ui.KnownPrincipals;
 import build.jenesis.repository.ui.Principals;
 import build.jenesis.repository.ui.UiProperties;
 import org.springframework.security.core.GrantedAuthority;
@@ -58,8 +60,10 @@ class PrincipalsTest {
     private Principals principals(String admins) {
         UiProperties properties = new UiProperties();
         properties.setAdmins(admins);
-        return new Principals(new ConsoleAdministrators(ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null), properties.getAdmins()));
+        Authorization authorization = Authorization.enforcing(ArtifactStoreProvider.resolve(
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
+        return new Principals(new ConsoleAdministrators(authorization, properties.getAdmins()),
+                new KnownPrincipals(authorization));
     }
 
     private List<String> roles(Principals principals, String id) {

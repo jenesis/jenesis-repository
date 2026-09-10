@@ -96,7 +96,10 @@ public class ConsoleAdministrators {
             try {
                 authorization.setGrant(Authorization.DEPLOYMENT,
                         Authorization.Subject.principal(id), EVERYTHING, EVERYTHING);
-            } catch (IOException | IllegalArgumentException failed) {
+            } catch (IOException | RuntimeException failed) {
+                // Including the unchecked ones: a read-only store answers ReadOnlyException, and that is precisely
+                // the case this message exists for - the refusal has to name the id it could not grant, or an
+                // operator reads a bare "writes are refused" with no way to tell which setting caused it.
                 throw new IllegalStateException("jenreg.ui.admins names '" + id + "', which could not be granted "
                         + "administration of this deployment: " + failed.getMessage(), failed);
             }

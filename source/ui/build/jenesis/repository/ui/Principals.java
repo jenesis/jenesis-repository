@@ -11,6 +11,9 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
  * secure default is deny: with nobody granted it, no one is an {@code ADMIN}, so an unconfigured deployment denies
  * writes (a POST/PUT/DELETE needs {@code ROLE_ADMIN}) rather than silently granting full admin to whoever signs in.
  *
+ * <p>It also records the sign-in ({@link KnownPrincipals}), because this is the one moment a person's provider
+ * subject is known to anything - and an administrator cannot grant to an id nobody can learn.
+ *
  * <p><b>It asks {@link ConsoleAdministrators}, not a setting</b>, and that is the whole of the policy here. The
  * answer is a grant in the store - seeded from {@code jenreg.ui.admins} on every boot, and equally real when it
  * was made through the API since - so this authority follows administration as an operator can actually read it
@@ -29,8 +32,11 @@ public class Principals implements LoginAuthorities {
 
     private final ConsoleAdministrators administrators;
 
-    public Principals(ConsoleAdministrators administrators) {
+    private final KnownPrincipals known;
+
+    public Principals(ConsoleAdministrators administrators, KnownPrincipals known) {
         this.administrators = administrators;
+        this.known = known;
     }
 
     /**
@@ -39,6 +45,9 @@ public class Principals implements LoginAuthorities {
      */
     @Override
     public Collection<GrantedAuthority> authorities(String id, String displayName) {
+        // Every sign-in passes through here, which is what makes it the place to note that this deployment has now
+        // seen this person - the only moment their opaque provider subject is known to anything.
+        known.record(id, displayName);
         List<GrantedAuthority> authorities = new ArrayList<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
         // Deny by default: ADMIN only for someone who holds the grant. An unconfigured console has granted it to

@@ -6,8 +6,10 @@ import module java.base;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.ReadOnlyArtifactStore;
 import build.jenesis.repository.ui.ConsoleAdministrators;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 /**
  * {@code jenreg.ui.admins} is a <em>seed</em>, not a mirror, and these are the two halves of that word - the two
@@ -51,6 +53,19 @@ class ConsoleAdministratorsTest {
                         + "seed cannot silently undo a grant made on the surface operators are told to use")
                 .isTrue();
         assertThat(next.is("oidc/alice")).isTrue();
+    }
+
+    @Test
+    void a_read_only_deployment_that_names_an_administrator_refuses_to_boot_and_says_which_id() {
+        // The seed is a store write, so it cannot be made here - and the console must not start believing it has an
+        // administrator it does not have. What matters is the message: a bare "writes are refused" leaves an
+        // operator with no way to tell which setting caused it, and the store's refusal is unchecked, so it reaches
+        // this only if the catch is broad enough to see it.
+        ArtifactStore readOnly = new ReadOnlyArtifactStore(store());
+        assertThatIllegalStateException()
+                .isThrownBy(() -> new ConsoleAdministrators(readOnly, "oidc/alice"))
+                .withMessageContaining("jenreg.ui.admins")
+                .withMessageContaining("oidc/alice");
     }
 
     private ArtifactStore store() {
