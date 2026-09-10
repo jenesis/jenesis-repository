@@ -576,9 +576,19 @@ public final class Authorization {
             if (id == null || id.isBlank()) {
                 throw new IllegalArgumentException("A " + kind.segment() + " subject needs an id");
             }
-            if (id.indexOf('/') >= 0) {
-                // The id is one path segment; a slash would silently graft the subject into another's subtree.
-                throw new IllegalArgumentException("A subject id may not contain '/': " + id);
+            // A slash is legitimate in a PRINCIPAL's id and in nothing else: a person is named as the sign-in
+            // mechanism names them - github/octocat, oidc/<sub>, keylogin/<name> - and that qualification is what
+            // makes two providers' identically-named users different people. The id is NOT a key: subjectPath
+            // encodes it into one segment, so a slash cannot graft a subject into another's subtree. What is still
+            // refused everywhere is a traversal segment, which encoding would carry through faithfully.
+            if (kind != Kind.PRINCIPAL && id.indexOf('/') >= 0) {
+                throw new IllegalArgumentException("A " + kind.segment() + " id may not contain '/': " + id);
+            }
+            for (String segment : id.split("/", -1)) {
+                if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) {
+                    throw new IllegalArgumentException("A subject id may not carry an empty or traversal "
+                            + "segment: " + id);
+                }
             }
         }
 
@@ -681,6 +691,49 @@ public final class Authorization {
             }
         }
         return Decision.UNAUTHORIZED;
+    }
+
+    /**
+     * Whether {@code subject} carries {@code required} for {@code scope} on the in-repository {@code path}.
+     *
+     * <p>The same matching a presented key takes - {@link #covers} and {@link #grantedBy} over the subject's own
+     * grants object - reached without a secret, because a principal does not present one: a person is
+     * authenticated by the sign-in mechanism and authorized here. That is the whole of "one vocabulary, several
+     * holders": a per-tenant console role and a key scoped to that tenant become the same grant, matched by the
+     * same code, instead of two models that have to be kept agreeing by hand.
+     *
+     * <p>Only the kinds {@link #setGrant(String, Subject, String, String)} will write are answered, and for the
+     * same reason: answering a group today would silently return FORBIDDEN for a subject whose rights are real but
+     * unresolved, which reads as a decision and is an absence.
+     */
+    public Decision authorize(String tenant, Subject subject, String scope, String path, String required)
+            throws IOException {
+        enforceable(subject);
+        if (store == null) {
+            return Decision.ALLOWED;
+        }
+        freshen();   // another node's grant or revocation, at most EPOCH_TTL old - see freshen()
+        Properties grants = read(grantsPath(tenant, subject));
+        if (grants == null) {
+            return Decision.FORBIDDEN;
+        }
+        String repository = scope == null || scope.isBlank() ? "*" : scope;
+        for (String grantScope : grants.stringPropertyNames()) {
+            if (!covers(grantScope, repository, path)) {
+                continue;
+            }
+            for (String token : grants.getProperty(grantScope).split(",")) {
+                if (grantedBy(token, required)) {
+                    return Decision.ALLOWED;
+                }
+            }
+        }
+        return Decision.FORBIDDEN;
+    }
+
+    /** Whether {@code subject} carries {@code required} for {@code scope}, on no particular path. */
+    public Decision authorize(String tenant, Subject subject, String scope, String required) throws IOException {
+        return authorize(tenant, subject, scope, null, required);
     }
 
     /** Whether a strictly-opt-in anonymous role is configured (a non-empty {@code anonymous-rights}); the console and
@@ -850,11 +903,18 @@ public final class Authorization {
         setGrant(tenant, Subject.credential(hash), scope, tokens);
     }
 
-    /** Set the rights for {@code scope} on any subject. Deliberately NOT public: {@link #authorize} consults the
-     *  {@link Kind#CREDENTIAL} subject and nothing else, so a caller able to grant to a principal or a group today
-     *  would write a row that reads as access and confers none. It becomes public in the change that teaches
-     *  {@code authorize} to resolve a subject's effective rights, not before. */
-    private void setGrant(String tenant, Subject subject, String scope, String tokens) throws IOException {
+    /**
+     * Set the rights for {@code scope} on any subject, replacing any held for that scope.
+     *
+     * <p>This was private until a principal became enforceable, on the rule that a caller able to grant to a
+     * subject {@link #authorize} does not resolve would write a row that reads as access and confers none. That
+     * is now true of {@link Kind#CREDENTIAL} and {@link Kind#PRINCIPAL}, and of neither of the other two: a
+     * {@link Kind#GROUP} grant still confers nothing, because membership resolution does not exist yet, and
+     * {@link Kind#ANONYMOUS} still takes its rights from configuration. Granting to those two is refused rather
+     * than silently stored - a security surface may answer "no", but it may not answer "yes" and mean nothing.
+     */
+    public void setGrant(String tenant, Subject subject, String scope, String tokens) throws IOException {
+        enforceable(subject);
         require();
         Properties grants = read(grantsPath(tenant, subject));
         if (grants == null) {
@@ -867,6 +927,17 @@ public final class Authorization {
     /** Remove the rights for {@code scope} on a credential by hash. */
     public void removeGrant(String tenant, String hash, String scope) throws IOException {
         removeGrant(tenant, Subject.credential(hash), scope);
+    }
+
+    /** Whether a subject's grants are consulted by {@link #authorize} - and therefore whether writing one means
+     *  anything. See {@link #setGrant(String, Subject, String, String)} for why this refuses rather than stores. */
+    private static void enforceable(Subject subject) {
+        if (subject.kind() != Kind.CREDENTIAL && subject.kind() != Kind.PRINCIPAL) {
+            throw new IllegalArgumentException("Rights cannot be granted to a " + subject.kind().segment()
+                    + " subject yet: authorize does not resolve one, so the grant would read as access and confer "
+                    + "none. A group's rights arrive with membership resolution; the keyless caller's arrive from "
+                    + "configuration.");
+        }
     }
 
     /** Remove the rights for {@code scope} on any subject; private for the reason {@link #setGrant} is. */
@@ -1332,7 +1403,25 @@ public final class Authorization {
      * nothing else.
      */
     private static String subjectPath(String tenant, Subject subject) {
-        return AUTH + "/" + tenant + "/" + subject.kind().segment() + "/" + subject.id();
+        return kindPrefix(tenant, subject.kind()) + "/" + segment(subject.id());
+    }
+
+    /**
+     * One subject id as one key segment: a slash becomes {@code %2F} and everything else is left alone.
+     *
+     * <p>Deliberately the identity for an id that needs no encoding, which is what makes it safe to introduce
+     * over a store that already holds credentials: a hash is hex, so its key is byte-for-byte the key it was
+     * before this existed. Only a principal's provider-qualified id - {@code github/octocat} - is rewritten, and
+     * it had no key before.
+     *
+     * <p>A percent is escaped first, so the encoding is reversible and two different ids cannot collide on one
+     * key: without it {@code a%2Fb} and {@code a/b} would both key as {@code a%2Fb}, which on an authorization
+     * path means one person's grants answering for another's.
+     */
+    private static String segment(String id) {
+        return id.indexOf('%') < 0 && id.indexOf('/') < 0
+                ? id
+                : id.replace("%", "%25").replace("/", "%2F");
     }
 
     private static String policyPath(String tenant) {
