@@ -11,8 +11,13 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
  * ({@code github/<id>}, {@code oidc/<sub>}) is in the configured {@code jenreg.ui.admins} list is also an
  * {@code ADMIN}. The secure default is deny: when no admins are configured, no one is an {@code ADMIN}, so an
  * unconfigured deployment denies writes (a POST/PUT/DELETE needs {@code ROLE_ADMIN}) rather than silently granting
- * full admin to whoever signs in - matching the downstream console. Opening the console to every authenticated user
- * (the old single-tenant convenience) is an <em>explicit opt-out</em>: list {@code *} in {@code jenreg.ui.admins}.
+ * full admin to whoever signs in.
+ *
+ * <p><b>There is no wildcard.</b> {@code jenreg.ui.admins=*} used to open the console to every authenticated user;
+ * it is refused at startup now. An administrator is a holder of rights, and a wildcard names no holder - there is
+ * nothing to read back, revoke, or show in a list of who administers this deployment. Refused rather than ignored,
+ * for the reason the downstream console already gives: ignoring fails in both directions at once, since the
+ * operator believes they granted something while in fact nobody holds admin.
  * A deployment that needs a richer membership model contributes its own {@link LoginAuthorities} instead of this
  * one; the seam is the same and every login mechanism goes through it either way. This deliberately stays
  * single-tenant and carries no multi-tenant machinery.
@@ -23,6 +28,9 @@ public class Principals implements LoginAuthorities {
 
     public Principals(UiProperties properties) {
         this.admins = ConsoleAdmins.parse(properties.getAdmins());
+        if (ConsoleAdmins.carriesWildcard(admins)) {
+            throw new IllegalStateException(ConsoleAdmins.refusal());
+        }
     }
 
     /**
@@ -33,10 +41,10 @@ public class Principals implements LoginAuthorities {
     public Collection<GrantedAuthority> authorities(String id, String displayName) {
         List<GrantedAuthority> authorities = new ArrayList<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
-        // Deny by default: ADMIN only for a configured id (or when the deployment explicitly opts every user in with
-        // the * wildcard). An empty admins list therefore grants no ADMIN, so an unconfigured console cannot be
-        // written to by an arbitrary sign-in.
-        if (ConsoleAdmins.grantsEveryone(admins) || admins.contains(id)) {
+        // Deny by default: ADMIN only for a configured id. An empty admins list therefore grants no ADMIN, so an
+        // unconfigured console cannot be written to by an arbitrary sign-in - and there is no value of this key
+        // that grants it to everyone, because the constructor refuses that one.
+        if (admins.contains(id)) {
             authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
         }
         return authorities;

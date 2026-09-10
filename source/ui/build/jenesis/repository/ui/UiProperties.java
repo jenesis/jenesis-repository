@@ -18,7 +18,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * console's properties are what the console itself reads.
  *
  *   jenreg.ui.store             the artifact-store backend name (JENREG_STORE), default filesystem
- *   jenreg.ui.admins            comma-separated provider-qualified admin ids, or * for everyone (JENREG_UI_ADMINS)
+ *   jenreg.ui.admins            comma-separated provider-qualified admin ids (JENREG_UI_ADMINS); a '*'
+ *                               entry is refused at startup - an admin is a holder, and it names none
  */
 @ConfigurationProperties(prefix = "jenreg.ui")
 public class UiProperties {

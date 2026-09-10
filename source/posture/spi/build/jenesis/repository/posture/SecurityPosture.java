@@ -61,19 +61,10 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "jenreg.rate-limit", "600", DOCS + "#jenreg.ratelimit.unset"));
         }
 
-        // 4. Wildcard console admins: '*' makes every authenticated user a console admin (the explicit open-console
-        //    opt-out) instead of naming the operators who should hold admin. Read through the one shared rule rather
-        //    than parsing the value a third time here - this comment used to say "exactly as Principals does" while
-        //    a third reader had already diverged from both.
-        if (ConsoleAdmins.grantsEveryone(ConsoleAdmins.parse(config.optional("jenreg.ui.admins").orElse("")))) {
-            advisories.add(SecurityAdvisory.deployment("jenreg.console.wildcard", Severity.WARN,
-                    "The admin console grants admin to every signed-in user",
-                    "jenreg.ui.admins=* makes every authenticated user a console admin, so anyone who can sign in can "
-                            + "administer the deployment - the open-console opt-out, rarely what production wants.",
-                    "Name the specific admin principals (provider-qualified ids, e.g. github/<id> or oidc/<sub>) rather "
-                            + "than the '*' wildcard, so only your operators hold admin.",
-                    "jenreg.ui.admins", "github/<your-id>", DOCS + "#jenreg.console.wildcard"));
-        }
+        // 4. There was an advisory here about jenreg.ui.admins=*, warning that every signed-in user held admin.
+        //    It is gone because the state it describes is now unreachable: both consoles refuse that value at
+        //    startup, so a deployment carrying it does not run to be advised about. An advisory about an
+        //    impossible configuration is worse than none - it reads as a live risk somebody must weigh.
 
         // 5. The dev security profile active: DevSecurityConfig replaces the production chain with a permissive
         //    local-only one (form login, in-memory users). Never intended outside a developer laptop.

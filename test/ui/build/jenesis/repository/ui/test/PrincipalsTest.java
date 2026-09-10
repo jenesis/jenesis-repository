@@ -7,6 +7,7 @@ import build.jenesis.repository.ui.Principals;
 import build.jenesis.repository.ui.UiProperties;
 import org.springframework.security.core.GrantedAuthority;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 /**
  * The console's authority model is deny-by-default: an unconfigured {@code jenreg.ui.admins} grants {@code ROLE_USER}
@@ -31,9 +32,19 @@ class PrincipalsTest {
     }
 
     @Test
-    void the_wildcard_opts_every_authenticated_user_back_into_admin() {
-        List<String> roles = roles(principals("*"), "oidc/anyone");
-        assertThat(roles).contains("ROLE_USER", "ROLE_ADMIN");
+    void the_wildcard_is_refused_rather_than_opening_the_console_to_everyone() {
+        // It used to opt every authenticated user into ADMIN - the single-tenant console's open-console opt-out.
+        // An administrator is a holder of rights and a wildcard names no holder, so there was nothing an operator
+        // could read back, revoke, or see in a list of who administers this deployment. Refused rather than
+        // ignored: ignoring fails in both directions, since the operator believes they granted something while in
+        // fact nobody holds admin.
+        assertThatIllegalStateException()
+                .isThrownBy(() -> principals("*"))
+                .withMessageContaining("names no holder");
+        assertThatIllegalStateException()
+                .as("and among named ids too, which is the spelling a whole-value check would miss")
+                .isThrownBy(() -> principals("github/1, *"))
+                .withMessageContaining("names no holder");
     }
 
     private static Principals principals(String admins) {

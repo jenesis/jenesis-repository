@@ -32,16 +32,16 @@ class ConsoleAdminsTest {
 
     @Test
     void the_wildcard_counts_wherever_it_appears_in_the_list() {
-        assertThat(ConsoleAdmins.grantsEveryone(ConsoleAdmins.parse("*"))).isTrue();
-        assertThat(ConsoleAdmins.grantsEveryone(ConsoleAdmins.parse("github/1,*")))
+        assertThat(ConsoleAdmins.carriesWildcard(ConsoleAdmins.parse("*"))).isTrue();
+        assertThat(ConsoleAdmins.carriesWildcard(ConsoleAdmins.parse("github/1,*")))
                 .as("a wildcard hidden among named ids still grants everyone, so a reader that matched only the "
                         + "whole value would fail open on it")
                 .isTrue();
-        assertThat(ConsoleAdmins.grantsEveryone(ConsoleAdmins.parse(" * ")))
+        assertThat(ConsoleAdmins.carriesWildcard(ConsoleAdmins.parse(" * ")))
                 .as("and it is recognised after trimming, as any other entry is")
                 .isTrue();
 
-        assertThat(ConsoleAdmins.grantsEveryone(ConsoleAdmins.parse("github/1"))).isFalse();
-        assertThat(ConsoleAdmins.grantsEveryone(ConsoleAdmins.parse(""))).isFalse();
+        assertThat(ConsoleAdmins.carriesWildcard(ConsoleAdmins.parse("github/1"))).isFalse();
+        assertThat(ConsoleAdmins.carriesWildcard(ConsoleAdmins.parse(""))).isFalse();
     }
 }

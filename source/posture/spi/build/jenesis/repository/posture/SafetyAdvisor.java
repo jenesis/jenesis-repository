@@ -32,7 +32,7 @@ import module java.base;
  *       {@code jenreg.rate-limit} means unlimited and raises; an unset {@code jenreg.auth}
  *       means enforced and stays silent). Where a value is parsed, the parse mirrors the reading code's parse exactly
  *       and an ambiguity resolves <em>toward</em> raising: matching only the whole value of
- *       {@code jenreg.ui.admins} would miss the wildcard in {@code alice,*} that the reader honours, and missing it
+ *       {@code jenreg.ui.admins} would miss the wildcard in {@code alice,*} that the reader refuses on, and missing it
  *       fails open on the surface whose entire job is to report open configuration.</li>
  *   <li><b>Selection failure.</b> There is nothing to select: the policy is additive, every discovered advisor is
  *       evaluated, and no configuration key names one. Discovery is a plain {@code ServiceLoader.load} inside

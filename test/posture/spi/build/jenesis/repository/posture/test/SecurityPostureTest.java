@@ -115,33 +115,16 @@ final class SecurityPostureTest {
     }
 
     @Test
-    void aWildcardHiddenInTheAdminsListStillRaisesTheOpenConsoleAdvisory() {
-        // Regression: the advisory once matched only the whole value "*", so 'alice,*' - which Principals honours as
-        // the wildcard (it comma-splits and checks the set contains "*"), granting every signed-in user admin - failed
-        // open and raised no warning. It must fire whenever "*" appears as any element of the comma-separated list.
-        List<String> ids = new SecurityPosture().advise(config("jenreg.ui.admins", "github/alice, *"))
-                .stream().map(SecurityAdvisory::id).toList();
-        assertThat(ids)
-                .as("a '*' element anywhere in jenreg.ui.admins raises the open-console advisory, not only a bare '*'")
-                .contains("jenreg.console.wildcard");
-        // And a list with no wildcard - named operators only - does not raise it.
-        assertThat(new SecurityPosture().advise(config("jenreg.ui.admins", "github/alice, oidc/bob"))
-                .stream().map(SecurityAdvisory::id).toList())
-                .doesNotContain("jenreg.console.wildcard");
-    }
-
-    @Test
     void theCoreSeederFlagsTheRealFootgunsOnTheirActualKeys() {
         Configuration config = config(
                 "jenreg.auth", "false",
                 "jenreg.block-private-import-hosts", "false",
-                "jenreg.ui.admins", "*",
                 "spring.profiles.active", "prod,dev",
                 "jenreg.demo", "true",
                 "jenreg.read-only", "false");
         List<String> ids = new SecurityPosture().advise(config).stream().map(SecurityAdvisory::id).toList();
         assertThat(ids).contains("jenreg.auth.open", "jenreg.importer.ssrf", "jenreg.ratelimit.unset",
-                "jenreg.console.wildcard", "jenreg.profile.dev", "jenreg.demo.writable");
+                "jenreg.profile.dev", "jenreg.demo.writable");
     }
 
     @Test
@@ -189,7 +172,7 @@ final class SecurityPostureTest {
         // advisory's rendered text - title, why, fix, AND the recommended settingValue - repeats the sentinel.
         Configuration config = config(
                 "jenreg.auth", "false",
-                "jenreg.ui.admins", "github/SECRETVALUE, *",
+                "jenreg.ui.admins", "github/SECRETVALUE",
                 "spring.profiles.active", "SECRETVALUE,dev",
                 "jenreg.demo", "true");
         List<SecurityAdvisory> advisories = new SecurityPosture().advise(config);
