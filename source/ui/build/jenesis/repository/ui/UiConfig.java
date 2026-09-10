@@ -44,10 +44,18 @@ public class UiConfig {
         return ArtifactStoreProvider.resolve(properties.getStore(), environment::getProperty);
     }
 
+    /** Who administers this deployment: one reader over grants, seeded from this console's own admins setting.
+     *  A composing console that binds the prefix with its own configuration type declares its own. */
     @Bean
     @ConditionalOnMissingBean
-    public Principals principals(UiProperties properties) {
-        return new Principals(properties);
+    public ConsoleAdministrators consoleAdministrators(ArtifactStore store, UiProperties properties) {
+        return new ConsoleAdministrators(store, properties.getAdmins());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public Principals principals(ConsoleAdministrators administrators) {
+        return new Principals(administrators);
     }
 
     /**

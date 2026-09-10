@@ -3,6 +3,8 @@ package build.jenesis.repository.ui.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.ui.ConsoleAdministrators;
 import build.jenesis.repository.ui.Principals;
 import build.jenesis.repository.ui.UiProperties;
 import org.springframework.security.core.GrantedAuthority;
@@ -12,10 +14,16 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 /**
  * The console's authority model is deny-by-default: an unconfigured {@code jenreg.ui.admins} grants {@code ROLE_USER}
  * but never {@code ROLE_ADMIN}, so an unconfigured deployment denies writes (a POST/PUT/DELETE needs {@code ADMIN})
- * rather than handing full admin to whoever signs in. A configured id still becomes an admin, and the {@code *}
- * wildcard is the explicit opt-out that re-opens the console to every authenticated user.
+ * rather than handing full admin to whoever signs in. A configured id still becomes an admin.
+ *
+ * <p>The answer comes from a <em>grant</em> now, not from the setting: the configured ids are seeded as
+ * deployment-wide grants at construction, and the policy reads back who holds one. So these drive the real
+ * mechanism rather than a parse - which is also why they need a store to seed into.
  */
 class PrincipalsTest {
+
+    @TempDir
+    Path root;
 
     @Test
     void an_empty_admins_list_grants_no_admin_so_writes_are_denied_by_default() {
@@ -47,13 +55,14 @@ class PrincipalsTest {
                 .withMessageContaining("names no holder");
     }
 
-    private static Principals principals(String admins) {
+    private Principals principals(String admins) {
         UiProperties properties = new UiProperties();
         properties.setAdmins(admins);
-        return new Principals(properties);
+        return new Principals(new ConsoleAdministrators(ArtifactStoreProvider.resolve(
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null), properties.getAdmins()));
     }
 
-    private static List<String> roles(Principals principals, String id) {
+    private List<String> roles(Principals principals, String id) {
         return principals.authorities(id, "").stream().map(GrantedAuthority::getAuthority).toList();
     }
 }

@@ -175,6 +175,7 @@ open module build.jenesis.repository.ui.test {
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
+    requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.observation;
     requires build.jenesis.repository.posture;
     requires build.jenesis.repository.contract.testkit;

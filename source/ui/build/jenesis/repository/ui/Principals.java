@@ -2,16 +2,19 @@ package build.jenesis.repository.ui;
 
 import module java.base;
 
-import build.jenesis.repository.posture.ConsoleAdmins;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 /**
  * The single-tenant authority model: every signed-in user is a {@code USER}; a user whose provider-qualified id
- * ({@code github/<id>}, {@code oidc/<sub>}) is in the configured {@code jenreg.ui.admins} list is also an
- * {@code ADMIN}. The secure default is deny: when no admins are configured, no one is an {@code ADMIN}, so an
- * unconfigured deployment denies writes (a POST/PUT/DELETE needs {@code ROLE_ADMIN}) rather than silently granting
- * full admin to whoever signs in.
+ * ({@code github/<id>}, {@code oidc/<sub>}) holds deployment-wide administration is also an {@code ADMIN}. The
+ * secure default is deny: with nobody granted it, no one is an {@code ADMIN}, so an unconfigured deployment denies
+ * writes (a POST/PUT/DELETE needs {@code ROLE_ADMIN}) rather than silently granting full admin to whoever signs in.
+ *
+ * <p><b>It asks {@link ConsoleAdministrators}, not a setting</b>, and that is the whole of the policy here. The
+ * answer is a grant in the store - seeded from {@code jenreg.ui.admins} on every boot, and equally real when it
+ * was made through the API since - so this authority follows administration as an operator can actually read it
+ * back, rather than following one of the three things that key used to mean.
  *
  * <p><b>There is no wildcard.</b> {@code jenreg.ui.admins=*} used to open the console to every authenticated user;
  * it is refused at startup now. An administrator is a holder of rights, and a wildcard names no holder - there is
@@ -24,13 +27,10 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
  */
 public class Principals implements LoginAuthorities {
 
-    private final Set<String> admins;
+    private final ConsoleAdministrators administrators;
 
-    public Principals(UiProperties properties) {
-        this.admins = ConsoleAdmins.parse(properties.getAdmins());
-        if (ConsoleAdmins.carriesWildcard(admins)) {
-            throw new IllegalStateException(ConsoleAdmins.refusal());
-        }
+    public Principals(ConsoleAdministrators administrators) {
+        this.administrators = administrators;
     }
 
     /**
@@ -41,10 +41,10 @@ public class Principals implements LoginAuthorities {
     public Collection<GrantedAuthority> authorities(String id, String displayName) {
         List<GrantedAuthority> authorities = new ArrayList<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
-        // Deny by default: ADMIN only for a configured id. An empty admins list therefore grants no ADMIN, so an
-        // unconfigured console cannot be written to by an arbitrary sign-in - and there is no value of this key
-        // that grants it to everyone, because the constructor refuses that one.
-        if (admins.contains(id)) {
+        // Deny by default: ADMIN only for someone who holds the grant. An unconfigured console has granted it to
+        // nobody, so it cannot be written to by an arbitrary sign-in - and an administrator granted through the API
+        // since boot holds it too, which reading the setting could never see.
+        if (administrators.is(id)) {
             authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
         }
         return authorities;

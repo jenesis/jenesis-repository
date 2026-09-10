@@ -164,6 +164,9 @@
 open module build.jenesis.repository.ui {
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.store;
+    // The console's authority model is grants now, and a grant is an Authorization. A small closure: this
+    // module is java.base plus the store, which the console already requires.
+    requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.observation;
     requires build.jenesis.repository.posture;
