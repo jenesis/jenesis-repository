@@ -101,6 +101,37 @@ class PrincipalGrantTest {
     }
 
     @Test
+    void a_deployment_wide_grant_is_held_in_every_tenant_including_ones_created_later() throws IOException {
+        // The operator who administers the deployment itself. Expressing this as a grant per tenant would be a set
+        // to maintain as tenants come and go: one missed and they are locked out of the newest tenant, one stale
+        // and a removed operator keeps a tenant nobody thought to check. It is one row, read beside the tenant's.
+        Authorization.Subject root = Authorization.Subject.principal("oidc/root");
+        authorization.setGrant(Authorization.DEPLOYMENT, root, "*", Authorization.MANAGE_WRITE);
+
+        assertThat(authorization.authorize("acme", root, null, Authorization.MANAGE_WRITE))
+                .as("held in a tenant that existed when it was granted").isEqualTo(Authorization.Decision.ALLOWED);
+        assertThat(authorization.authorize("a-tenant-nobody-had-created-yet", root, null,
+                Authorization.MANAGE_WRITE))
+                .as("and in one that did not").isEqualTo(Authorization.Decision.ALLOWED);
+        assertThat(authorization.authorize("acme", root, null, Authorization.REPOSITORY_WRITE))
+                .as("but only the rights it actually grants").isEqualTo(Authorization.Decision.FORBIDDEN);
+    }
+
+    @Test
+    void a_tenant_grant_does_not_leak_into_another_tenant_through_the_deployment_row() throws IOException {
+        // The property that makes the second read safe: only the deployment row is consulted beside the tenant's,
+        // never another tenant's, so the fan-out is two point reads rather than a walk - and a grant in acme is
+        // still exactly a grant in acme.
+        Authorization.Subject octocat = Authorization.Subject.principal("github/octocat");
+        authorization.setGrant("acme", octocat, "*", Authorization.MANAGE_WRITE);
+
+        assertThat(authorization.authorize("acme", octocat, null, Authorization.MANAGE_WRITE))
+                .isEqualTo(Authorization.Decision.ALLOWED);
+        assertThat(authorization.authorize("globex", octocat, null, Authorization.MANAGE_WRITE))
+                .as("a tenant grant is not a deployment grant").isEqualTo(Authorization.Decision.FORBIDDEN);
+    }
+
+    @Test
     void a_traversal_segment_is_refused_wherever_it_appears() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> Authorization.Subject.principal("github/../admin"))

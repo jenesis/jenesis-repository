@@ -568,6 +568,21 @@ public final class Authorization {
         }
     }
 
+    /**
+     * The tenant a deployment-wide grant is held under.
+     *
+     * <p>Some rights are not any tenant's: an operator who administers the deployment itself holds them
+     * everywhere, and expressing that as a grant in each tenant would be a set that has to be maintained as
+     * tenants come and go - one missed and the operator is locked out of the newest tenant, one stale and a
+     * removed operator keeps a tenant nobody thought to check.
+     *
+     * <p>It is a tenant segment no tenant can occupy rather than a separate space, so every path, listing and
+     * purge already handles it: a scope name is {@code [A-Za-z0-9_-]+} and cannot carry a dot, so nothing an
+     * operator may create collides with it and no enumeration that derives tenants from store names offers it as
+     * one. The same reason {@code .system} is safe from a tenant called {@code system}.
+     */
+    public static final String DEPLOYMENT = ".deployment";
+
     /** A grant's holder: a {@link Kind} and an id unique within that kind and tenant. */
     public record Subject(Kind kind, String id) {
 
@@ -713,22 +728,36 @@ public final class Authorization {
             return Decision.ALLOWED;
         }
         freshen();   // another node's grant or revocation, at most EPOCH_TTL old - see freshen()
-        Properties grants = read(grantsPath(tenant, subject));
-        if (grants == null) {
-            return Decision.FORBIDDEN;
-        }
         String repository = scope == null || scope.isBlank() ? "*" : scope;
+        // The tenant's own grant first, then the deployment-wide one. Two point reads rather than one, and
+        // deliberately not a set of per-tenant rows: an operator who administers the deployment holds their rights
+        // in a tenant created after they were granted them, which a per-tenant set could only manage by being
+        // rewritten every time a tenant appears.
+        if (holds(read(grantsPath(tenant, subject)), repository, path, required)
+                || (!DEPLOYMENT.equals(tenant)
+                        && holds(read(grantsPath(DEPLOYMENT, subject)), repository, path, required))) {
+            return Decision.ALLOWED;
+        }
+        return Decision.FORBIDDEN;
+    }
+
+    /** Whether a grants object carries {@code required} for this repository and path - the matching a presented key
+     *  takes, applied to whichever subject row the caller is asking about. */
+    private boolean holds(Properties grants, String repository, String path, String required) {
+        if (grants == null) {
+            return false;
+        }
         for (String grantScope : grants.stringPropertyNames()) {
             if (!covers(grantScope, repository, path)) {
                 continue;
             }
             for (String token : grants.getProperty(grantScope).split(",")) {
                 if (grantedBy(token, required)) {
-                    return Decision.ALLOWED;
+                    return true;
                 }
             }
         }
-        return Decision.FORBIDDEN;
+        return false;
     }
 
     /** Whether {@code subject} carries {@code required} for {@code scope}, on no particular path. */
