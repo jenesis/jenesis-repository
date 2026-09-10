@@ -30,6 +30,10 @@ import build.jenesis.repository.store.StoreCache;
  */
 public final class Authorization {
 
+    /** {@code System.Logger} rather than SLF4J: this module is java.base plus the store, and the one thing it has
+     *  to say is a best-effort repair that did not happen. */
+    private static final System.Logger LOGGER = System.getLogger(Authorization.class.getName());
+
     /** The credential space, deployment-wide: {@code .system/auth/<tenant>/...}. */
     private static final String AUTH = Scopes.space(Scopes.AUTH);
 
@@ -718,8 +722,15 @@ public final class Authorization {
      * same code, instead of two models that have to be kept agreeing by hand.
      *
      * <p>Only the kinds {@link #setGrant(String, Subject, String, String)} will write are answered, and for the
-     * same reason: answering a group today would silently return FORBIDDEN for a subject whose rights are real but
-     * unresolved, which reads as a decision and is an absence.
+     * same reason: answering about the keyless caller here would silently return FORBIDDEN for a subject whose
+     * rights are real but held in configuration, which reads as a decision and is an absence.
+     *
+     * <p><b>Three point reads, and it stays three however a directory is organised.</b> A principal holds what
+     * they were granted directly, what the deployment granted them, and what their groups grant - and that third
+     * one is read as the pre-computed union in their {@code derived} document rather than by enumerating groups
+     * here. The enumeration is real, it is just paid on the write that changes it; doing it here would make the
+     * cost of every request a function of how many groups an operator has, which is the unbounded read the
+     * bounded-read rule forbids on the hottest path in the product.
      */
     public Decision authorize(String tenant, Subject subject, String scope, String path, String required)
             throws IOException {
@@ -736,6 +747,12 @@ public final class Authorization {
         if (holds(read(grantsPath(tenant, subject)), repository, path, required)
                 || (!DEPLOYMENT.equals(tenant)
                         && holds(read(grantsPath(DEPLOYMENT, subject)), repository, path, required))) {
+            return Decision.ALLOWED;
+        }
+        // What their groups grant, as the union a write already computed. Only a principal has one: a credential
+        // is not a member of anything, and a group's own document is what this reads through rather than about.
+        if (subject.kind() == Kind.PRINCIPAL
+                && holds(read(derivedPath(tenant, subject)), repository, path, required)) {
             return Decision.ALLOWED;
         }
         return Decision.FORBIDDEN;
@@ -1009,10 +1026,213 @@ public final class Authorization {
      *  a revoke racing another one both answer the same way. */
     public void removeSubject(String tenant, Subject subject) throws IOException {
         require();
+        List<String> orphaned = subject.kind() == Kind.GROUP ? allMembers(tenant, subject.id()) : List.of();
         cache.delete(grantsPath(tenant, subject));
         cache.delete(metadataPath(tenant, subject));
+        if (subject.kind() == Kind.PRINCIPAL) {
+            cache.delete(derivedPath(tenant, subject));
+        }
+        for (String member : orphaned) {
+            cache.delete(memberPath(tenant, subject.id(), member));
+        }
         mutated();
+        // After the deletes, and read from the list taken before them: a member re-derived while the group's
+        // grants were still readable would be handed back the rights this call is removing.
+        for (String member : orphaned) {
+            rederive(tenant, member);
+        }
     }
+
+    /** Every member of a group, for the two callers that must act on the whole set rather than a page of it. */
+    private List<String> allMembers(String tenant, String group) {
+        List<String> all = new ArrayList<>();
+        for (String cursor = null;;) {
+            SubjectPage page = members(tenant, group, cursor, DERIVE_PAGE);
+            all.addAll(page.ids());
+            if (page.next() == null) {
+                return all;
+            }
+            cursor = page.next();
+        }
+    }
+
+    /**
+     * Put {@code principal} in {@code group}, and give them the group's rights from the next request.
+     *
+     * <p>The group is not required to exist first, and that is deliberate rather than lax: a group with members and
+     * no grants confers nothing, so there is no state here in which an unmade decision reads as access. It is also
+     * the order an identity provider pushes in, which would otherwise need a create-then-fill dance this cannot
+     * make atomic anyway.
+     *
+     * <p>Re-deriving the one principal is part of the write. A membership that took effect on the next repair
+     * rather than the next request would be a grant that is real in the store and absent from every decision,
+     * which is the failure mode this whole model exists to remove.
+     */
+    public void addMember(String tenant, String group, String principal) throws IOException {
+        require();
+        Subject member = Subject.principal(principal);   // rejects a traversal id before it reaches a key
+        Properties recorded = new Properties();
+        recorded.setProperty("joined", Instant.now().toString());
+        write(memberPath(tenant, group, member.id()), recorded);
+        rederive(tenant, member.id());
+    }
+
+    /** Take {@code principal} out of {@code group}, and take the group's rights off them from the next request.
+     *  Silent when they were not a member, so a repeated removal and one racing another answer the same way. */
+    public void removeMember(String tenant, String group, String principal) throws IOException {
+        require();
+        Subject member = Subject.principal(principal);
+        remove(memberPath(tenant, group, member.id()));
+        rederive(tenant, member.id());
+    }
+
+    /** One page of a group's member ids, in key order - the same shape and cursor rule as {@link #subjects}. */
+    public SubjectPage members(String tenant, String group, String after, int limit) {
+        if (store == null) {
+            return new SubjectPage(List.of(), null);
+        }
+        freshen();
+        List<String> names = new ArrayList<>();
+        store.page(membersPrefix(tenant, group),
+                after == null ? "" : segment(after), ArtifactStore.oneMoreThan(limit), names::add);
+        boolean more = names.size() > limit;
+        List<String> page = more ? names.subList(0, limit) : names;
+        List<String> ids = new ArrayList<>(page.size());
+        for (String name : page) {
+            ids.add(unsegment(name));
+        }
+        return new SubjectPage(List.copyOf(ids), more ? ids.getLast() : null);
+    }
+
+    /**
+     * Recompute what {@code principal} holds through the groups of {@code tenant}, and write it down.
+     *
+     * <p>This is the fan-out, moved off the authorization path and paid where it is affordable. It walks the
+     * tenant's groups - an operator-created set, so tens rather than millions - and unions the grants of the ones
+     * this principal belongs to. A scope granted by two groups keeps both their rights, joined, because a union is
+     * the only answer that does not depend on which group was read first.
+     *
+     * <p>Idempotent, so the repair and the write path can both call it and a second call changes nothing. It
+     * writes even when the union is empty, because the absence of the document and an empty one mean different
+     * things to a reader that has to distinguish "no groups" from "never derived".
+     */
+    public void rederive(String tenant, String principal) throws IOException {
+        require();
+        Subject subject = Subject.principal(principal);
+        Properties union = new Properties();
+        for (String group : groups(tenant)) {
+            if (!store.exists(memberPath(tenant, group, subject.id()))) {
+                continue;
+            }
+            Properties held = read(grantsPath(tenant, Subject.group(group)));
+            if (held == null) {
+                continue;
+            }
+            for (String scope : held.stringPropertyNames()) {
+                String already = union.getProperty(scope);
+                union.setProperty(scope, already == null ? held.getProperty(scope)
+                        : already + "," + held.getProperty(scope));
+            }
+        }
+        write(derivedPath(tenant, subject), union);
+    }
+
+    /**
+     * Recompute every member of {@code group} - what a change to the group's own rights obliges.
+     *
+     * <p>Bounded by the group's membership rather than by the tenant's population, and off the request path: a
+     * grant an operator gives a group of five hundred costs five hundred small writes once, against five hundred
+     * fan-outs on every request for as long as the grant stands.
+     */
+    public void rederiveGroup(String tenant, String group) throws IOException {
+        for (String cursor = null;;) {
+            SubjectPage page = members(tenant, group, cursor, DERIVE_PAGE);
+            for (String member : page.ids()) {
+                rederive(tenant, member);
+            }
+            if (page.next() == null) {
+                return;
+            }
+            cursor = page.next();
+        }
+    }
+
+    /**
+     * Recompute every principal of {@code tenant} - the repair, for the drift a partial write leaves behind.
+     *
+     * <p>A node that dies between writing a group's grants and re-deriving the last of its members leaves those
+     * members holding what the group used to grant. Nothing detects that on a read, because a stale derived
+     * document is a well-formed one; so it is recomputed on a cadence rather than checked. Every principal, not
+     * every member of every group, because a principal whose last group dropped them has a derived document
+     * nothing else would ever revisit.
+     */
+    public void rederive(String tenant) throws IOException {
+        for (String cursor = null;;) {
+            SubjectPage page = subjects(tenant, Kind.PRINCIPAL, cursor, DERIVE_PAGE);
+            for (String principal : page.ids()) {
+                rederive(tenant, principal);
+            }
+            if (page.next() == null) {
+                return;
+            }
+            cursor = page.next();
+        }
+    }
+
+    /**
+     * Recompute every principal of every tenant this store holds grants for, and never fail a boot doing it.
+     *
+     * <p><b>The repair runs at start-up, because start-up is when the drift it repairs has just happened.</b> The
+     * only way a derived document goes stale is a node dying between writing a group's grants and re-deriving the
+     * last of its members - every ordinary path re-derives before it returns - and a process that died is a
+     * process that comes back. A weekly sweep would leave the window open for a week to fix something a restart
+     * closes in seconds, and would need a scheduler the free core does not have: the walk's consumers are handed a
+     * repository-scoped store and no tenant, and the free rebuild driver is switched off in the composition that
+     * has a scheduler of its own.
+     *
+     * <p>Best effort by construction. A read-only deployment cannot write a derived document and must still start;
+     * so must a deployment whose store is briefly unreachable. What a failure costs is the repair, not the boot,
+     * and it says so in the log rather than in an exception nobody can act on at that moment.
+     *
+     * <p>The tenants come from the auth space itself rather than from the tenancy SPI, which is what keeps this one
+     * method rather than one per tenancy mode: a tenant with no subjects has nothing to re-derive, and a tenant
+     * that has any is here by definition.
+     */
+    public void repairDerivedGrants() {
+        if (store == null) {
+            return;
+        }
+        try {
+            for (String tenant : store.list(AUTH)) {
+                rederive(tenant);
+            }
+        } catch (IOException | RuntimeException failed) {
+            // Deliberately everything, for the reason the javadoc gives: a store that refuses this write is a
+            // deployment that must still serve, and the cost of the failure is a group grant that may be stale
+            // until the next start - not a node that will not come up.
+            LOGGER.log(System.Logger.Level.WARNING, "Could not repair group-derived grants at start-up; a member "
+                    + "whose derivation was interrupted may hold what their group used to grant until this "
+                    + "succeeds", failed);
+        }
+    }
+
+    /** Every group name in {@code tenant}. Operator-created and therefore enumerable - and read whole only off
+     *  the request path, which is the difference between this and the fan-out {@link #derivedPath} removes. */
+    private List<String> groups(String tenant) {
+        List<String> all = new ArrayList<>();
+        for (String cursor = null;;) {
+            SubjectPage page = subjects(tenant, Kind.GROUP, cursor, DERIVE_PAGE);
+            all.addAll(page.ids());
+            if (page.next() == null) {
+                return all;
+            }
+            cursor = page.next();
+        }
+    }
+
+    /** How many subjects a derivation walk takes at a time. Small objects, off the request path: the page exists
+     *  so the walk is bounded in memory, not because the count is tuned. */
+    private static final int DERIVE_PAGE = 500;
 
     /** Record a freshly minted credential's metadata (created now, an optional label and optional expiry); the
      *  caller has already hashed the key. Grants are added with {@link #setGrant}. */
@@ -1036,17 +1256,23 @@ public final class Authorization {
     /**
      * Set the rights for {@code scope} on any subject, replacing any held for that scope.
      *
-     * <p>This was private until a principal became enforceable, on the rule that a caller able to grant to a
-     * subject {@link #authorize} does not resolve would write a row that reads as access and confers none. That
-     * is now true of {@link Kind#CREDENTIAL} and {@link Kind#PRINCIPAL}, and of neither of the other two: a
-     * {@link Kind#GROUP} grant still confers nothing, because membership resolution does not exist yet, and
-     * {@link Kind#ANONYMOUS} still takes its rights from configuration. Granting to those two is refused rather
-     * than silently stored - a security surface may answer "no", but it may not answer "yes" and mean nothing.
+     * <p>This was private until each kind became enforceable, on the rule that a caller able to grant to a subject
+     * {@link #authorize} does not resolve would write a row that reads as access and confers none. That is now
+     * true of every kind but {@link Kind#ANONYMOUS}, which still takes its rights from configuration and is
+     * therefore still refused - a security surface may answer "no", but it may not answer "yes" and mean nothing.
+     *
+     * <p>A {@link Kind#GROUP} grant re-derives the group's members before it returns, so it is in force on the
+     * next request rather than at the next repair. That is the cost of the grant rather than of the requests
+     * after it: one small write per member, once, against a fan-out on every authorization for as long as the
+     * grant stands.
      */
     public void setGrant(String tenant, Subject subject, String scope, String tokens) throws IOException {
         enforceable(subject);
         require();
         mutate(grantsPath(tenant, subject), grants -> grants.setProperty(scope, tokens));
+        if (subject.kind() == Kind.GROUP) {
+            rederiveGroup(tenant, subject.id());
+        }
     }
 
     /** Remove the rights for {@code scope} on a credential by hash. */
@@ -1057,18 +1283,22 @@ public final class Authorization {
     /** Whether a subject's grants are consulted by {@link #authorize} - and therefore whether writing one means
      *  anything. See {@link #setGrant(String, Subject, String, String)} for why this refuses rather than stores. */
     private static void enforceable(Subject subject) {
-        if (subject.kind() != Kind.CREDENTIAL && subject.kind() != Kind.PRINCIPAL) {
-            throw new IllegalArgumentException("Rights cannot be granted to a " + subject.kind().segment()
-                    + " subject yet: authorize does not resolve one, so the grant would read as access and confer "
-                    + "none. A group's rights arrive with membership resolution; the keyless caller's arrive from "
-                    + "configuration.");
+        if (subject.kind() == Kind.ANONYMOUS) {
+            throw new IllegalArgumentException("Rights cannot be granted to the anonymous subject yet: authorize "
+                    + "does not resolve one, so the grant would read as access and confer none. The keyless "
+                    + "caller's rights still arrive from configuration.");
         }
     }
 
-    /** Remove the rights for {@code scope} on any subject; private for the reason {@link #setGrant} is. */
-    private void removeGrant(String tenant, Subject subject, String scope) throws IOException {
+    /** Remove the rights for {@code scope} on any subject, re-deriving a group's members so the removal is in
+     *  force on the next request for exactly the reason {@link #setGrant} re-derives them. Public for the reason
+     *  {@link #setGrant} is: a surface that can give a group rights has to be able to take them back. */
+    public void removeGrant(String tenant, Subject subject, String scope) throws IOException {
         require();
         mutate(grantsPath(tenant, subject), grants -> grants.remove(scope));
+        if (subject.kind() == Kind.GROUP) {
+            rederiveGroup(tenant, subject.id());
+        }
     }
 
     /** Set or clear a credential's expiry; {@code null} removes it (the key no longer expires) unless the tenant
@@ -1540,6 +1770,42 @@ public final class Authorization {
 
     private static String metadataPath(String tenant, Subject subject) {
         return subjectPath(tenant, subject) + "/metadata";
+    }
+
+    /**
+     * Where a group's members live: one small object per member, under the group's own subject path.
+     *
+     * <p>One object each rather than one document listing them all, which is the shape this store learned the hard
+     * way on console membership. A single document cannot be paged, is re-read whole on every lost compare-and-set,
+     * and makes two administrators adding two <em>unrelated</em> people contend; a group is exactly where that
+     * hurts, because the thing that fills one is an identity provider pushing a few hundred members at once.
+     */
+    private static String memberPath(String tenant, String group, String principal) {
+        return membersPrefix(tenant, group) + "/" + segment(principal);
+    }
+
+    private static String membersPrefix(String tenant, String group) {
+        return subjectPath(tenant, Subject.group(group)) + "/members";
+    }
+
+    /**
+     * Where a principal's <em>effective</em> group rights are kept: the union of every group they belong to, as one
+     * document read by one point read.
+     *
+     * <p>It exists because the honest computation is a fan-out. Effective rights are a union over the caller's own
+     * grants and every group's, and enumerating a principal's groups on the authorization path would make the cost
+     * of a request a function of how an operator organises their directory - which is the unbounded read the
+     * project's own rule forbids, on the hottest path there is. So it takes the shape the stored listings take:
+     * computed off the request path, maintained by every write that could change it, and read as it is.
+     *
+     * <p>Derived state can drift - a node that dies between writing a group's grants and re-deriving the last of
+     * its members leaves that member stale - so it is repaired rather than trusted, and the repair is
+     * {@link #rederive}. It is deliberately a separate document from {@code grants}: a direct grant and a grant
+     * held through a group are different facts about a person, one revocable on its own and one not, and a
+     * repair that recomputed a document holding both would erase the half it does not own.
+     */
+    private static String derivedPath(String tenant, Subject subject) {
+        return subjectPath(tenant, subject) + "/derived";
     }
 
     /**

@@ -153,12 +153,10 @@ class PrincipalGrantTest {
     @Test
     void granting_to_a_kind_authorize_cannot_resolve_is_refused() {
         // The rule this whole change is ordered by: a kind becomes writable in the change that makes it
-        // enforceable. A group's rights arrive with membership resolution and the keyless caller's from
-        // configuration, so a grant to either would read as access and confer none.
-        assertThatIllegalArgumentException()
-                .isThrownBy(() -> authorization.setGrant("acme",
-                        Authorization.Subject.group("developers"), "*", Authorization.REPOSITORY_READ))
-                .withMessageContaining("confer");
+        // enforceable. The group half of this assertion has gone, and going is what it was for - membership
+        // resolution exists now, so a group grant confers what it says and GroupGrantTest holds it to that. The
+        // keyless caller's rights still arrive from configuration, so granting to that subject would still read
+        // as access and confer none.
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> authorization.setGrant("acme",
                         Authorization.Subject.ANONYMOUS, "*", Authorization.REPOSITORY_READ))

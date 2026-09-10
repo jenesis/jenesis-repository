@@ -146,6 +146,10 @@ public class RepositoryAutoConfiguration {
                 .withLifetimes(properties.getCredentialDefaultLifetime(), properties.getCredentialMaxLifetime())
                 .withAnonymousRights(anonymousRights);
         bootstrap(authorization, properties.getBootstrapKey().strip());
+        // The other boot obligation an enforcing deployment's authorization carries, beside the bootstrap key:
+        // repair what an interrupted group derivation left behind. Both editions honour it here, in the same
+        // place and for the same reason - a process that died mid-derivation is a process that is starting now.
+        authorization.repairDerivedGrants();
         return authorization;
     }
 
@@ -197,6 +201,14 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public CredentialsController credentialsController(Authorization authorization, CredentialContext context) {
         return new CredentialsController(authorization, context);
+    }
+
+    /** The one group surface, declared beside the credential one and named the same way and for the same reason:
+     *  a console that renders group pages would otherwise collide with it on an unqualified bean name. */
+    @Bean("repositoryGroupsController")
+    @ConditionalOnMissingBean
+    public GroupsController groupsController(Authorization authorization, CredentialContext context) {
+        return new GroupsController(authorization, context);
     }
 
     /**
