@@ -145,7 +145,19 @@ public interface ArtifactLayout extends EcosystemLayout {
      *  through the format's own index), so a cleanup pass enumerates and unpublishes every pointer under them from the
      *  coordinate alone - no layout knowledge in the caller. Empty when the coordinate maps nowhere, and empty by
      *  design for a format that serves from a blobs namespace rather than from the published tree - see the class
-     *  note above before reading that as a missing mapping. */
+     *  note above before reading that as a missing mapping.
+     *
+     *  <p><b>These two overloads split on "touches the store", where a caller's real question is "opens a blob".</b>
+     *  That is worth knowing before writing a layout whose pattern is per-repository: it would want a third shape -
+     *  a bounded read of its own small configuration document, which opens no artifact - and neither overload
+     *  expresses it, so such a layout must either use this one and be excluded from every read path that must not
+     *  buffer a blob, or fix one pattern for the whole deployment.
+     *
+     *  <p>The standing rule is the second, and it is a decision rather than an omission: a layout's pattern is
+     *  deployment-wide. Nothing installed needs otherwise, and both alternatives are worse until something does -
+     *  narrowing this overload means moving Maven's module-view mirror to a seam of its own, and three overloads on
+     *  one concern is the shape a reader misreads. {@link #describe(String, ArtifactStore)} already carries the
+     *  read direction for a per-repository layout, so only this direction is deferred. */
     List<String> paths(String coordinate, String version, ArtifactStore store);
 
     /** The request-path folders a coordinate version occupies computed from the coordinate alone - no artifact read,
