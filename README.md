@@ -47,10 +47,14 @@ second entry point on port 8081, which is why an older reading of this file desc
 profile swaps its OAuth sign-in for a built-in `admin`/`admin` form login:
 
 ```bash
-SPRING_PROFILES_ACTIVE=dev JENREG_UI_SECURE_COOKIE=false \
-JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
+SPRING_PROFILES_ACTIVE=dev JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
   java -Djenesis.execute.module=source+bundle build/jenesis/Execute.java
 ```
+
+The profile also lets the session cookie travel over plain http, which it must to survive a sign-in without
+TLS. That used to be a variable an operator set (`JENREG_UI_SECURE_COOKIE=false`); a switch that turns session
+hardening off in a deployment is not one worth having, so it belongs to the profile that already means "this
+is not a deployment".
 
 The image is built by the build rather than by a hand-written `Dockerfile`: `source/bundle` requires every
 implementation, its `bundle=true` packaging emits the resolved runtime closure, and its `docker=` packaging
