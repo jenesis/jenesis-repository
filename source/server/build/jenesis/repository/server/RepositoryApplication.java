@@ -3,7 +3,6 @@ import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.format.ProxyFormat;
-import org.springframework.boot.SpringApplication;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -11,7 +10,7 @@ import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 
 /**
- * The Spring Boot entry point for the dual-layout repository. The framework-neutral logic - the dual layout, the
+ * The Spring Boot composition for the dual-layout repository. The framework-neutral logic - the dual layout, the
  * {@link Authorization} credential model, the {@link build.jenesis.repository.format.RepositoryFormat} plugins, the
  * pull-through {@link PullThroughCache} proxy and the {@link ImportJobs} migration - is plain domain code; this
  * module only assembles it behind Spring MVC ({@link RepositoryController}), wires the beans
@@ -22,14 +21,15 @@ import org.springframework.context.ConfigurableApplicationContext;
  * {@code @SpringBootApplication}, so the module carries no beans that a consumer cannot override. The storage backend
  * is selected by {@code jenreg.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem
  * fallback).
+ *
+ * <p><b>It is not a launcher.</b> The one artifact this edition ships is the all-in-one bundle, which imports this
+ * composition; what is left here is {@link #start(int)}, the seam an embedder or a test boots the real server
+ * through. A {@code main} beside it would be a second entry point with no artifact behind it - and a second place
+ * for a boot-time decision to sit where nothing shipped would apply it.
  */
 @SpringBootConfiguration
 @EnableAutoConfiguration
 public class RepositoryApplication {
-
-    public static void main(String[] args) {
-        SpringApplication.run(RepositoryApplication.class, args);
-    }
 
     /**
      * Boot the server on the given port ({@code 0} picks an ephemeral one) and return a handle exposing the bound

@@ -29,7 +29,6 @@
  * @jenesis.release 25
  * @jenesis.alias hdrhistogram org.hdrhistogram/HdrHistogram
  * @jenesis.exclude spring.boot.starter.jetty org.apache.tomcat.embed/tomcat-embed-el
- * @jenesis.main build.jenesis.repository.server.RepositoryApplication
  *
  * @jenesis.pin ch.qos.logback.classic 1.6.1
  * @jenesis.pin ch.qos.logback.core 1.6.1

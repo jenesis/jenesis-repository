@@ -1,13 +1,12 @@
 package build.jenesis.repository.ui;
 
-import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.ConfigurableApplicationContext;
 
 /**
- * The Spring Boot entry point for the repository web console. It replaces the former hand-wired JDK-httpserver skeleton
+ * The Spring Boot composition for the repository web console. It replaces the former hand-wired JDK-httpserver skeleton
  * with a mainstream Spring stack (Spring Boot on embedded Jetty, Thymeleaf views, Spring
  * Security with OAuth2/OIDC login), so a downstream distribution extends this shell rather than forking it. The console is
  * an open shell: sections are contributed as {@link ConsoleCard} plugins discovered with {@code ServiceLoader} and bridged
@@ -15,14 +14,14 @@ import org.springframework.context.ConfigurableApplicationContext;
  * requires a fork of the console. The console is store-agnostic - it reads whatever {@code ArtifactStore} backend is on
  * the module path (filesystem, S3, Azure), selected by {@code jenreg.ui.store} - so a deployment or a test supplies
  * the backend, the shell names none.
+ *
+ * <p><b>It is not a launcher.</b> The console ships inside the all-in-one bundle rather than as a node of its own,
+ * so what is left here is {@link #start(int)} - the seam an embedder or a test boots the real console through - and
+ * the composition the bundle imports.
  */
 @SpringBootApplication
 @ConfigurationPropertiesScan
 public class Application {
-
-    public static void main(String[] args) {
-        SpringApplication.run(Application.class, args);
-    }
 
     /**
      * Boot the console on the given port ({@code 0} picks an ephemeral one) and return a handle exposing the bound port
