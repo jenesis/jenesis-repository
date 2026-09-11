@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.testkit;
 
 import module java.base;
+import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
@@ -203,6 +204,51 @@ public interface FormatFixture {
 
     /** The contract properties this format's protocol does not have, each mapped to the reason and to where the
      *  property <em>is</em> proven instead. Empty by default: an exclusion is a deliberate, reviewable statement. */
+    /**
+     * What inbound publisher signatures this format's artifacts carry, or the reason they carry none.
+     *
+     * <p>It has no default on purpose. A format that has signatures and simply never mentioned them is
+     * indistinguishable from one that genuinely has none, and the difference is the whole capability: the first is an
+     * unscreened supply chain and the second is a fact about the ecosystem. Left defaulted, the answer to "which
+     * formats do we verify" would be whatever happened to be implemented first, discovered years later.
+     *
+     * <p>So every fixture answers, and an answer of {@link Signatures#none} carries a reason a reader can check
+     * against the ecosystem rather than a shrug. "No standard exists" is a real answer; "not yet" is not one.
+     */
+    Signatures signatures();
+
+    /**
+     * A format's signature story: the schemes its artifacts can carry, or none with the reason why.
+     *
+     * @param schemes   the schemes an artifact of this format may arrive signed with; empty for a format with none
+     * @param rationale why there are none - required when {@code schemes} is empty, and meaningless otherwise
+     */
+    record Signatures(Set<ArtifactSignatures.Scheme> schemes, String rationale) {
+
+        public Signatures {
+            schemes = schemes == null ? Set.of() : Set.copyOf(schemes);
+            if (schemes.isEmpty() && (rationale == null || rationale.isBlank())) {
+                throw new IllegalArgumentException("A format that carries no signatures says why, so that a reader "
+                        + "can tell an ecosystem without a signing standard from one nobody has got to yet");
+            }
+        }
+
+        /** A format whose artifacts carry signatures of these schemes. */
+        public static Signatures of(ArtifactSignatures.Scheme... schemes) {
+            return new Signatures(Set.of(schemes), null);
+        }
+
+        /** A format whose artifacts carry no publisher signature, and why. */
+        public static Signatures none(String rationale) {
+            return new Signatures(Set.of(), rationale);
+        }
+
+        /** Whether this format carries any inbound signature at all. */
+        public boolean any() {
+            return !schemes.isEmpty();
+        }
+    }
+
     default Map<FormatContract.Property, String> unsupported() {
         return Map.of();
     }

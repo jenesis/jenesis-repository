@@ -2,6 +2,7 @@ package build.jenesis.repository.format.testkit;
 
 import module java.base;
 import build.jenesis.repository.format.ArtifactLayout;
+import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -73,6 +74,12 @@ public final class FormatContract {
         /** A published artifact serves back byte for byte, repeatably, from its content-addressed blob
          *  ({@code RepositoryFormat} clauses 2 and 4). */
         PUBLISH_SERVES_EXACT_BYTES,
+        /** The format's declared signature story matches what it implements: a format whose fixture names schemes
+         *  implements {@code ArtifactSignatures} and expects them for its own artifact, and one that declares none
+         *  implements nothing. This is the property that stops "which formats do we verify signatures for" being
+         *  answered by whichever was written first - a format with signatures that never declared them would be an
+         *  unscreened supply chain nobody had decided to leave unscreened. */
+        SIGNATURE_STORY_IS_DECLARED,
         /** A {@code HEAD} answers {@code 200} with the artifact's length taken from the store's metadata and
          *  <em>without opening the blob</em>; an absent path answers {@code 404} (clause 4). */
         HEAD_ANSWERS_FROM_METADATA,
@@ -142,6 +149,9 @@ public final class FormatContract {
                 new Check(Property.PUBLISH_SERVES_EXACT_BYTES,
                         "a published artifact serves back byte for byte from its content-addressed blob",
                         FormatContract::publishServesExactBytes),
+                new Check(Property.SIGNATURE_STORY_IS_DECLARED,
+                        "the declared signature story matches what the format implements",
+                        FormatContract::signatureStoryIsDeclared),
                 new Check(Property.HEAD_ANSWERS_FROM_METADATA,
                         "a HEAD answers from the store's metadata without opening the artifact",
                         FormatContract::headAnswersFromMetadata),
@@ -753,6 +763,34 @@ public final class FormatContract {
     }
 
     // --- helpers -----------------------------------------------------------------------------------------------
+
+    /**
+     * The format's declared signature story against what it actually implements.
+     *
+     * <p>Both directions matter. A fixture naming schemes over a format that implements nothing is a supply chain
+     * nobody is checking while the fixture says otherwise; a fixture declaring none over a format that does implement
+     * the seam is a declaration that has fallen behind the code. The rationale on a "none" is held to being an
+     * argument rather than a placeholder, because an exemption nobody can check is how a gap becomes permanent.
+     */
+    private static void signatureStoryIsDeclared(FormatFixture fixture, ArtifactStore store) {
+        FormatFixture.Signatures declared = fixture.signatures();
+        boolean implemented = fixture.serving() instanceof ArtifactSignatures;
+        if (declared.any() && !implemented) {
+            throw failure(fixture, "declares signature schemes " + declared.schemes() + ", but the format does not "
+                    + "implement ArtifactSignatures - so nothing reads them and every artifact of this format "
+                    + "publishes and proxies with its signature unexamined.");
+        }
+        if (!declared.any() && implemented) {
+            throw failure(fixture, "declares no signatures (\"" + declared.rationale() + "\"), but the format "
+                    + "implements ArtifactSignatures. One of the two has moved on without the other; the declaration "
+                    + "is what a reader trusts, so it is the one that must be right.");
+        }
+        if (!declared.any() && declared.rationale().strip().length() < 40) {
+            throw failure(fixture, "declares no signatures with the reason \"" + declared.rationale() + "\", which "
+                    + "is too thin to check. Name what the ecosystem does instead - a transparency log, a signed "
+                    + "index, nothing at all - so the next reader can tell a settled answer from an unfinished one.");
+        }
+    }
 
     private static ProxyFormat proxying(FormatFixture fixture, Property property) {
         if (fixture.serving() instanceof ProxyFormat proxy) {

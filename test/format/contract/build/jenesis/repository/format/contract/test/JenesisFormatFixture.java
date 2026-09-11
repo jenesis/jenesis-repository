@@ -25,6 +25,13 @@ final class JenesisFormatFixture implements FormatFixture {
     }
 
     @Override
+    public Signatures signatures() {
+        return Signatures.none("the module layout is a view over artifacts published through another format, which carries the "
+                + "signature story for them - a module mirror points at the same blob as its coordinate, and "
+                + "checking it twice would report one artifact under two names.");
+    }
+
+    @Override
     public String providerClass() {
         return "build.jenesis.repository.format.jenesis.JenesisFormat";
     }

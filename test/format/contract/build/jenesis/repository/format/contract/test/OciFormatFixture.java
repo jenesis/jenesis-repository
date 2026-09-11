@@ -5,6 +5,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatContract;
+import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.testkit.FormatFixture;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.store.ArtifactStore;
@@ -26,6 +27,11 @@ final class OciFormatFixture implements FormatFixture {
     @Override
     public String format() {
         return "oci";
+    }
+
+    @Override
+    public Signatures signatures() {
+        return Signatures.of(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE);
     }
 
     @Override
@@ -113,6 +119,9 @@ final class OciFormatFixture implements FormatFixture {
     @Override
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
+                FormatContract.Property.SIGNATURE_STORY_IS_DECLARED,
+                        "cosign stores a signature as its own OCI artifact, found by the referrers API or the sha256-<digest>.sig tag convention; neither is implemented, so a signed image and an unsigned one are the same thing here - the declaration above records what the ecosystem really does, and this entry is the burn-down note that we do not yet read it",
+
                 FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
                 "every path this format proxies is a manifest or a blob, and a client that asks for either has "
                         + "already been told it exists - by a tag it resolved or by a digest a manifest named - so a "

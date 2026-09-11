@@ -6,6 +6,7 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.ContractHold;
 import build.jenesis.repository.format.testkit.FormatContract;
+import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.testkit.FormatFixture;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.store.ArtifactStore;
@@ -36,6 +37,11 @@ final class MavenFormatFixture implements FormatFixture {
     @Override
     public String format() {
         return "maven";
+    }
+
+    @Override
+    public Signatures signatures() {
+        return Signatures.of(ArtifactSignatures.Scheme.OPENPGP_DETACHED);
     }
 
     @Override
