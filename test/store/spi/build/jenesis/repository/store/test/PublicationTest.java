@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.PublishInterceptor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -31,6 +32,40 @@ class PublicationTest {
 
     private static ByteArrayInputStream bytes(String content) {
         return new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void a_sidecar_of_a_held_artifact_is_invisible_to_a_serving_read_and_visible_to_a_held_one() throws IOException {
+        // The two content views, and the deadlock the second one exists to break. A sidecar is withheld by its
+        // subject's hold, so an artifact held FOR THE WANT of its signature cannot be released by that signature
+        // arriving: the re-assessment asks what a client would see, is answered by the hold it is deciding about, and
+        // confirms it. Reading the stored pointer instead is what lets the evidence be read back exactly once, by the
+        // gate deciding whether to release - never by a client, which is the leg below.
+        String held = publication.storeBlob(bytes("the artifact"));
+        String signature = publication.storeBlob(bytes("the signature over it"));
+        Publication withholding = new Publication(store, List.of(new Withholding("/maven/a/lib-1.0.jar")));
+        withholding.link("/maven/a/lib-1.0.jar", held);
+        withholding.link("/maven/a/lib-1.0.jar.asc", signature);
+
+        assertThat(withholding.located("/maven/a/lib-1.0.jar.asc"))
+                .as("a sidecar is withheld by its subject's hold, so no client reads it")
+                .isEmpty();
+        assertThat(withholding.contentOf(held).sibling("/maven/a/lib-1.0.jar.asc"))
+                .as("the serving view answers the same way, which is what made the hold self-confirming")
+                .isEmpty();
+        assertThat(withholding.heldContentOf(held).sibling("/maven/a/lib-1.0.jar.asc"))
+                .as("the held view reads what is stored, so the evidence that would release the hold is legible")
+                .isPresent();
+    }
+
+    /** An interceptor that withholds one path - the shape a compliance hold has from this module's point of view,
+     *  which knows nothing about why anything is held. */
+    private record Withholding(String path) implements PublishInterceptor {
+
+        @Override
+        public boolean withheld(String requestPath, ArtifactStore store) {
+            return path.equals(requestPath);
+        }
     }
 
     @Test

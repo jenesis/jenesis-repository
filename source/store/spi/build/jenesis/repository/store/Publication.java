@@ -1165,6 +1165,42 @@ public final class Publication {
      * @param hash the content hash of the blob to read through {@link PublishInterceptor.Content#open()}
      */
     public PublishInterceptor.Content contentOf(String hash) {
+        return contentOf(hash, this::located);
+    }
+
+    /**
+     * As {@link #contentOf}, for bytes that are <em>currently held</em>: the sibling reads resolve the stored pointer
+     * rather than the serving one, so a companion that exists is visible even while nothing would serve it.
+     *
+     * <p>The distinction is not a nicety, and the case that forced it cannot be fixed anywhere else. A sidecar is
+     * withheld by its subject's hold ({@link ServableNames}) - deliberately, so a hold does not leak the artifact's
+     * checksums and signature to a client. An artifact held <em>for the want of</em> a sidecar therefore cannot be
+     * released by the sidecar arriving: the moment it lands it inherits the subject's hold, the re-assessment asks
+     * what a client would see, sees nothing, and confirms the hold that hides it. That is a deadlock, and it is
+     * reachable by any dimension whose evidence is a sidecar of the path it judges - for publisher signatures it is
+     * every artifact, since {@code mvn deploy} always sends the {@code .asc} after the thing it signs.
+     *
+     * <p>Reading the stored state here is not a leak of withheld bytes: the subject's own body is already being read
+     * back from its {@code /quarantine} pointer, the sidecar is material of the same publish, and the only consumer
+     * is the gate deciding whether that publish may be released. Nothing reached by this view is served; what a
+     * client may see is still decided by {@link #located}, which is untouched.
+     *
+     * @param hash the content hash of the held blob
+     */
+    public PublishInterceptor.Content heldContentOf(String hash) {
+        // blob() answers the content hash of what is stored; located() answers the key a serve would stream. The
+        // blob key is the same either way, so the difference between the two views is exactly the withhold decision.
+        return contentOf(hash, path -> blob(path).map(stored -> "blobs/" + stored));
+    }
+
+    /** How a sibling request path resolves to a store key - the one thing the two content views above differ in. */
+    @FunctionalInterface
+    private interface Resolve {
+        Optional<String> apply(String requestPath) throws IOException;
+    }
+
+    /** The two views above, differing only in how a sibling request path resolves to a stored key. */
+    private PublishInterceptor.Content contentOf(String hash, Resolve sibling) {
         return new PublishInterceptor.Content() {
             @Override
             public ArtifactStore store() {
@@ -1201,7 +1237,7 @@ public final class Publication {
                 if (limit <= 0) {
                     throw new IllegalArgumentException("a bounded sibling read needs a positive limit, not " + limit);
                 }
-                Optional<String> key = located(path);
+                Optional<String> key = sibling.apply(path);
                 if (key.isEmpty()) {
                     return Optional.empty();
                 }
