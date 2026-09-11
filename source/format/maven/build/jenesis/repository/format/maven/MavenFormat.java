@@ -5,6 +5,7 @@ import module org.slf4j;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.format.ArtifactLayout;
+import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -26,7 +27,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * module name reaches the same blob - the bridge between the two layouts, exposed only between them and never on the
  * public SPI. Discovered like any other format; the core knows nothing of it.
  */
-public final class MavenFormat implements RepositoryFormat, ProxyFormat, ArtifactLayout, RepositoryImporter {
+public final class MavenFormat implements RepositoryFormat, ProxyFormat, ArtifactLayout, ArtifactSignatures,
+        RepositoryImporter {
 
     private static final List<ModuleView> MODULE_VIEWS = ModuleView.installed();
 
@@ -52,6 +54,52 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     @Override
     public String ecosystem() {
         return ECOSYSTEM;
+    }
+
+    /**
+     * Maven's inbound signature story: a detached OpenPGP signature at {@code <artifact>.asc}, covering the artifact's
+     * own bytes, and <em>expected</em> rather than optional - the upstream this layout mirrors has demanded one on
+     * every release since the early 2010s, and Sigstore bundle validation was added beside that requirement rather
+     * than in place of it.
+     *
+     * <p>{@code maven-metadata.xml} is excluded because no publisher signs it: it is a listing the repository
+     * reconciles rather than a release artifact, so demanding a signature for it would report every well-signed
+     * deployment as partly unsigned. The checksum and signature siblings are excluded because a sidecar carries no
+     * sidecar of its own.
+     */
+    private static final ArtifactSignatures SIGNATURES = ArtifactSignatures.detachedSidecar(
+            ECOSYSTEM, ".asc", ArtifactSignatures.Scheme.OPENPGP_DETACHED,
+            MavenFormat::signable, ArtifactSignatures.Coverage.REQUIRED);
+
+    /**
+     * Whether a request path names a released artifact a publisher's signature would cover.
+     *
+     * <p>Only the {@code /maven/} tree. The {@code /module/} mirror this format cross-publishes for a modular jar
+     * points at the <em>same blob</em> as its coordinate does, so the bytes are already checked under the canonical
+     * path; claiming both would report one artifact's signature twice and, where it is missing, hold one artifact
+     * under two names.
+     */
+    private static boolean signable(String path) {
+        return path.startsWith("/maven/")
+                && !isChecksum(path)
+                && !path.endsWith("/maven-metadata.xml")
+                && !path.endsWith("/");
+    }
+
+    @Override
+    public List<ArtifactSignatures.Expectation> expects(String path) {
+        return SIGNATURES.expects(path);
+    }
+
+    @Override
+    public Optional<String> covers(String path) {
+        return SIGNATURES.covers(path);
+    }
+
+    @Override
+    public List<ArtifactSignatures.Evidence> evidence(String path, ArtifactSignatures.Material material)
+            throws IOException {
+        return SIGNATURES.evidence(path, material);
     }
 
     @Override
