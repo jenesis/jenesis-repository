@@ -231,8 +231,12 @@ public final class Retries {
      * mutation retries, and double-applies on a replay exactly as it did before this check existed. The paths the
      * replay cost was measured on - a publish's pointers, its blobs, its inventory sections, its listings - are
      * every one of them fixed points, which is why the repair reaches the cost without reaching the correctness.
-     * A mutation whose rendering is not deterministic is not one either - a document serialized through
-     * {@code Properties.store} carries a timestamp comment, so it differs from itself and always retries.
+     * A mutation whose rendering is not deterministic is not one either, and that is a trap worth naming because
+     * it is invisible at the call site: {@link Properties#store(java.io.OutputStream, String)} writes a
+     * {@code #<date>} line unasked, so a document rendered straight through it differs from itself every second
+     * and can never settle. The product's own property documents do not have that problem - they render through
+     * {@link Documents#bytes}, which exists to strip it - but anything reaching for {@code store} directly
+     * reintroduces it, and pays a full retry on every phantom loss without anything saying so.
      *
      * <p>It is deliberately a comparison of content and not of tokens: a token says who wrote last, and the
      * question here is what the key holds.
