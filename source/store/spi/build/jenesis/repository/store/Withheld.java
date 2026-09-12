@@ -110,7 +110,17 @@ public final class Withheld {
     }
 
     /** Whether the blob with this hash is withheld - the read a blobs-namespace serve makes before streaming, so a
-     *  held version answers absent (a 404) exactly as a withheld {@code publish/} pointer does. */
+     *  held version answers absent (a 404) exactly as a withheld {@code publish/} pointer does.
+     *
+     *  <p><b>This read is the floor of a download, and it stays a read.</b> It is the last of a download's three
+     *  (the pointer, this, the open) and the one that cannot fold into the pointer: the marker is keyed by content,
+     *  so one hash backs many paths and a hold on it would have to fan out over every alias, including the ones no
+     *  hold writer enumerated - which is the disclosure the marker exists to close. Nor can it be cached on a node:
+     *  a hold placed on one node would then not be honoured on a peer until the entry lapsed, which is not a trade
+     *  to make on a security control. The one design that was costed instead (2026-09-12) - a tiny versioned holds
+     *  epoch, cached, with the markers consulted only when it moves - does not pay for itself: the epoch either is
+     *  read on every serve, which is this read under another key, or is cached, which is the same staleness under
+     *  another name. Three reads is where a download stops. */
     public static boolean is(ArtifactStore store, String hash) throws IOException {
         return store.readVersioned(ROOT + hash).isPresent();
     }

@@ -8,6 +8,7 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.ReadMemo;
 
 /**
  * The ingress write edge for the free repository: it runs the discovered {@link build.jenesis.repository.store.PublishInterceptor}
@@ -70,7 +71,10 @@ public final class ScreenedDispatch {
         }
         RepositoryFormat format = owner.get();
         if (isSingleBodyWrite(exchange.method()) && format.screened()) {
-            screen(format, exchange, store);
+            // One memo for the one operation: the edge, the screen, the layout and the after-commit observers each
+            // resolve the same serving pointer, review pointer and version document, and pay the store once for
+            // each (ReadMemo). Dropped with the request; a compare-and-set never acts on a remembered token.
+            screen(format, exchange, ReadMemo.over(store));
             return true;
         }
         return dispatcher.dispatch(exchange, store);
