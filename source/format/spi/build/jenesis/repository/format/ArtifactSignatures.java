@@ -41,10 +41,14 @@ import build.jenesis.repository.store.PublishInterceptor;
  * manifest shape; npm and PyPI provenance attest to a build rather than to bytes. In each, the artifact itself
  * carries no signature and is nonetheless covered.
  *
- * <p>A format in that family can only answer {@code expects} with {@code OPTIONAL} or nothing at all, which is why
- * {@code DebianFormat} declares {@code OPTIONAL} and says so - reporting every well-run Debian archive as unsigned
- * would be worse than saying nothing. The consequence is that the dimension above this seam sees "no signature" for
- * an artifact whose provenance is in fact established, one hop away, by a document it never looks at.
+ * <p>A format in that family can only answer {@code expects} with {@code OPTIONAL} or nothing at all - or, since
+ * 2026-09-12, with {@link Coverage#REQUIRED_WHEN_TRUSTED}, which is what {@code DebianFormat} declares: an ordinary
+ * Debian package carries no signature and reporting every well-run archive as unsigned would be worse than saying
+ * nothing, but a deployment that has provisioned a keyring of trusted Debian signers has opted in to per-package
+ * signatures, and an unsigned package is then a finding. That declaration is still pure - it reads no store - and
+ * the state it depends on is read where a store is already in hand, by the trust the inspector is handed. The
+ * consequence that remains is that the dimension above this seam sees "no signature" for an artifact whose
+ * provenance is in fact established, one hop away, by a document it never looks at.
  *
  * <p>Closing that needs a second kind of evidence - roughly "this artifact is named, by digest, in a document signed
  * by X" - and it is deliberately not bolted on per format. Two things make it worth doing once, properly: the
@@ -154,7 +158,20 @@ public interface ArtifactSignatures extends EcosystemLayout {
         REQUIRED,
 
         /** The artifact may carry one; its absence says nothing. */
-        OPTIONAL
+        OPTIONAL,
+
+        /**
+         * The artifact may carry one until the deployment has stated whom it trusts to sign this ecosystem's
+         * artifacts, and is expected to carry one from then on - so provisioning trust is how an operator opts in
+         * to per-artifact signatures for an ecosystem whose own trust runs through a signed index.
+         *
+         * <p>The declaration stays a pure function of the path; what it depends on is answered by the trust the
+         * caller holds ({@code SignerTrust.anchored(ecosystem)} in the compliance dimension), read where a store is
+         * already in hand rather than by a store read a serving path would then pay. Debian declares this: apt's
+         * trust runs through the signed {@code Release}, so an unsigned {@code .deb} is ordinary - until a keyring
+         * of trusted signers is provisioned, when it is exactly what the keyring was provisioned to catch.
+         */
+        REQUIRED_WHEN_TRUSTED
     }
 
     /** One scheme this format's artifact at a path may carry, and whether it is expected to. */
@@ -173,6 +190,11 @@ public interface ArtifactSignatures extends EcosystemLayout {
         /** A scheme the artifact may carry. */
         public static Expectation optional(Scheme scheme) {
             return new Expectation(scheme, Coverage.OPTIONAL);
+        }
+
+        /** A scheme the artifact is expected to carry once the deployment trusts signers for its ecosystem. */
+        public static Expectation requiredWhenTrusted(Scheme scheme) {
+            return new Expectation(scheme, Coverage.REQUIRED_WHEN_TRUSTED);
         }
     }
 

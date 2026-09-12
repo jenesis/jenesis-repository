@@ -57,6 +57,17 @@ public final class ReadMemo implements ArtifactStore {
         return store instanceof ReadMemo;
     }
 
+    /**
+     * The store beneath a memoising view, or {@code store} itself - for a holder that outlives the operation. A
+     * memo is right for exactly one operation and wrong for anything that keeps a store: a shared cache created
+     * during a screened publish over the request's memo would read through it for the life of the process and
+     * answer, after every expiry, what the memo remembered from one request. {@link StoreCache#of} unwraps here,
+     * and so must anything else that keys a long-lived store reference by identity.
+     */
+    public static ArtifactStore underlying(ArtifactStore store) {
+        return store instanceof ReadMemo memo ? memo.delegate : store;
+    }
+
     /** Forget everything remembered, so the next read of every key is the store's. */
     public synchronized void forget() {
         remembered.clear();

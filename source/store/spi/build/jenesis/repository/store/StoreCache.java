@@ -92,6 +92,8 @@ public final class StoreCache {
      * the shared cache as it is.
      */
     public static StoreCache of(String name, ArtifactStore store, Duration ttl) {
+        // Never over a request's read memo: this cache outlives the request, and a memo answers what it remembered.
+        store = ReadMemo.underlying(store);
         String key = store.identity() + "\u0000" + name;
         synchronized (SHARED) {
             WeakReference<StoreCache> reference = SHARED.get(key);
