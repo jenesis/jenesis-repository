@@ -42,6 +42,13 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * cannot land its change within {@value #ATTEMPTS} attempts regenerates the document in place, and
  * reports {@code false} rather than failing the publish whose pointer already landed.
  *
+ * <p>A {@linkplain #rebuild regeneration} rides the same lane as a change, and the reason is the derivation. A
+ * document's twin is written from the document the writer just produced, so two writers of one document produce
+ * two twins, and only the lane orders them: a rebuild that ran outside it wrote a twin from an older snapshot after
+ * the publish's twin had landed. Measured 2026-09-12 under load: a CocoaPods shard line fell behind its pod
+ * document by up to three publishes for half a minute at a time, every time the listing-rebuild pass regenerated
+ * the pod document beside a publish, and the node's conflict counter showed the two writers meeting.
+ *
  * <p>Every method is thread-safe; the lanes are keyed by the store's {@link ArtifactStore#identity identity} and the
  * document key, so two scopes with same-named listings never share a queue.
  */
@@ -913,9 +920,14 @@ public final class StoredListing {
             batch.add(store, spec, changes);      // applied once, when the batch closes or a key fills
             return true;
         }
+        return enqueue(store, spec, new Pending(changes.asMap(), Set.copyOf(changes.prefixes), false,
+                new CompletableFuture<>())).landed();
+    }
+
+    /** Queue one change set or regeneration on the document's lane and wait for the round that carries it. */
+    private static Applied enqueue(ArtifactStore store, Spec spec, Pending mine) throws IOException {
         LaneKey laneKey = new LaneKey(store.identity(), spec.key());
         Lane lane = LANES.computeIfAbsent(laneKey, ignored -> new Lane());
-        Pending mine = new Pending(changes.asMap(), Set.copyOf(changes.prefixes), new CompletableFuture<>());
         boolean runner;
         synchronized (lane) {
             if (lane.running && lane.runner == Thread.currentThread()) {
@@ -1248,11 +1260,34 @@ public final class StoredListing {
     });
 
     /**
-     * Regenerate the listing from the store and replace whatever is stored - the rebuild pass's verb. A concurrent
-     * incremental writer is not lost: the replace is a compare-and-set against the document the generation started
-     * from, so a change that landed meanwhile makes this regenerate again.
+     * Regenerate the listing from the store and replace whatever is stored - the rebuild pass's verb. It is queued
+     * on the document's lane like a change and run in its turn, so on one node a regeneration and the changes
+     * around it write the document, and derive its twins, in one order; across nodes the replace is a
+     * compare-and-set against the document the generation started from, so a change that landed meanwhile makes
+     * this regenerate again. A generator or derivation rebuilding the listing it belongs to is refused as a
+     * re-entrant update, exactly as an update from there is.
+     *
+     * <p>It used to run outside the lane, as a compare-and-set loop of its own. The document was safe that way -
+     * the token decides - but its <em>derivation</em> was not ordered against a concurrent change's: the
+     * listing-rebuild pass, regenerating a CocoaPods pod document beside a publish of that pod, wrote the pod's
+     * shard line from the older document after the publish had written it from the newer one, and the shard then
+     * lacked versions the pod document listed until the next publish rewrote the line. The class comment carries
+     * the measurement.
      */
     public static Header rebuild(ArtifactStore store, Spec spec) throws IOException {
+        Applied applied = enqueue(store, spec, new Pending(Map.of(), Set.of(), true, new CompletableFuture<>()));
+        if (applied.header() == null) {
+            throw new IOException("could not rebuild " + spec.key());
+        }
+        return applied.header();
+    }
+
+    /**
+     * The regeneration of last resort, run by a lane's own runner after {@value #ATTEMPTS} lost compare-and-sets:
+     * the same replace-under-token loop {@link #rebuild} used to be, kept for the one caller that is already inside
+     * the lane and so cannot queue on it.
+     */
+    private static Header regenerate(ArtifactStore store, Spec spec) throws IOException {
         String key = spec.key();
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
             // The token before the header, for the reason apply() gives: a document that moves between the two
@@ -1353,8 +1388,13 @@ public final class StoredListing {
     private record LaneKey(Object identity, String key) {
     }
 
-    private record Pending(Map<String, Optional<byte[]>> changes, Set<String> prefixes,
-                           CompletableFuture<Boolean> outcome) {
+    /** One queued round member: a change set, or a regeneration of the whole document from its generator. */
+    private record Pending(Map<String, Optional<byte[]>> changes, Set<String> prefixes, boolean regenerate,
+                           CompletableFuture<Applied> outcome) {
+    }
+
+    /** What a round did: whether the changes landed within the attempts, and the header written when it wrote. */
+    private record Applied(boolean landed, Header header) {
     }
 
     private static final class Lane {
@@ -1384,9 +1424,9 @@ public final class StoredListing {
                 COALESCED.add(batch.size() - 1);
             }
             try {
-                boolean landed = apply(store, spec, batch);
+                Applied applied = apply(store, spec, batch);
                 for (Pending pending : batch) {
-                    pending.outcome().complete(landed);
+                    pending.outcome().complete(applied);
                 }
             } catch (Throwable failure) {
                 for (Pending pending : batch) {
@@ -1410,8 +1450,10 @@ public final class StoredListing {
         }
     }
 
-    private static boolean apply(ArtifactStore store, Spec spec, List<Pending> batch) throws IOException {
+    private static Applied apply(ArtifactStore store, Spec spec, List<Pending> batch) throws IOException {
         String key = spec.key();
+        boolean regenerate = batch.stream().anyMatch(Pending::regenerate);
+        boolean changes = batch.stream().anyMatch(pending -> !pending.changes().isEmpty() || !pending.prefixes().isEmpty());
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
             // The token is read BEFORE the body, and the order carries the correctness. If the document moves
             // between the two reads, the compare-and-set below is made against the older token, fails, and this
@@ -1419,11 +1461,19 @@ public final class StoredListing {
             // computed from older bytes - a lost update rather than a conflict, and a silent one.
             Object token = store.version(key).orElse(null);
             Optional<Served> stored = token == null ? Optional.empty() : openStored(store, key);
-            if (stored.isEmpty()) {
-                boolean onlyRemovals = batch.stream().allMatch(pending ->
-                        pending.changes().values().stream().noneMatch(Optional::isPresent));
-                if (onlyRemovals) {
-                    return true;   // nothing to take out of a document that does not exist: it is not created for it
+            if (stored.isEmpty() || regenerate) {
+                if (stored.isEmpty() && !regenerate && batch.stream().allMatch(pending ->
+                        pending.changes().values().stream().noneMatch(Optional::isPresent))) {
+                    // nothing to take out of a document that does not exist: it is not created for it
+                    return new Applied(true, null);
+                }
+                // A regeneration replaces the stored document under its token and continues its sequence; neither
+                // read touches the body, which for a repository-wide index is every package in the suite.
+                long seq = 0L;
+                if (stored.isPresent()) {
+                    try (Served served = stored.get()) {
+                        seq = served.header().seq();
+                    }
                 }
                 // Generated and changed in ONE write. Materialising first and merging on the next attempt would
                 // be tidier to read and wrong to watch: it publishes two documents where a first publish always
@@ -1442,13 +1492,15 @@ public final class StoredListing {
                     Files.deleteIfExists(generated.file);
                 }
                 try {
-                    Header header = Header.of(sequence(0L), created.size, created.md5, created.sha256,
+                    Header header = Header.of(sequence(seq), created.size, created.md5, created.sha256,
                             created.entries);
-                    if (write(store, key, header, created, null)) {
-                        UPDATES.increment();
+                    if (write(store, key, header, created, token)) {
+                        if (changes) {
+                            UPDATES.increment();
+                        }
                         MATERIALISED.increment();
                         derived(store, spec, header, created);
-                        return true;
+                        return new Applied(true, header);
                     }
                     CONFLICTS.increment();
                     Retries.backoff(attempt);
@@ -1465,14 +1517,15 @@ public final class StoredListing {
             }
             try {
                 if (rendered.sha256.equals(header.sha256())) {
-                    return true;   // the changes leave the document as it is: nothing to write, nothing to derive
+                    // the changes leave the document as it is: nothing to write, nothing to derive
+                    return new Applied(true, header);
                 }
                 Header updated = Header.of(sequence(header.seq()), rendered.size, rendered.md5,
                         rendered.sha256, rendered.entries);
                 if (write(store, key, updated, rendered, token)) {
                     UPDATES.increment();
                     derived(store, spec, updated, rendered);
-                    return true;
+                    return new Applied(true, updated);
                 }
                 // A refused write is not proof the write did not happen - see Retries.settled for the mechanism
                 // and the measurement. Here the check is a digest rather than a comparison of bytes, because the
@@ -1488,7 +1541,7 @@ public final class StoredListing {
                 if (rendered.sha256.equals(storedDigest(store, key))) {
                     REPLAYED.increment();
                     derived(store, spec, updated, rendered);
-                    return true;
+                    return new Applied(true, updated);
                 }
                 CONFLICTS.increment();
                 Retries.backoff(attempt);
@@ -1504,8 +1557,7 @@ public final class StoredListing {
         // as the publish that lost it. It stays on the publishing thread for the reason update() states: the entry
         // must be visible when the publish answers.
         FORGOTTEN.increment();
-        rebuild(store, spec);
-        return false;
+        return new Applied(false, regenerate(store, spec));
     }
 
     /** The SHA-256 the key's stored header carries, or {@code null} where nothing is stored - the cheap half of
@@ -1542,7 +1594,7 @@ public final class StoredListing {
         }
     }
 
-    private static boolean await(CompletableFuture<Boolean> outcome) throws IOException {
+    private static Applied await(CompletableFuture<Applied> outcome) throws IOException {
         try {
             return outcome.get();
         } catch (InterruptedException e) {

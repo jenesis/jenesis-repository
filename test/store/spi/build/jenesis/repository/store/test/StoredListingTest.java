@@ -73,6 +73,62 @@ class StoredListingTest {
         assertThat(seen).containsExactly("a", "b", "c");
     }
 
+    /**
+     * A regeneration queued behind a change derives after it. The document itself was always safe either way - the
+     * compare-and-set decides - but a derived twin is written from the document its writer produced, and a rebuild
+     * that ran outside the lane could write a twin from the older document after the change had written one from
+     * the newer. Held here with the change's derivation blocked: the rebuild must not have derived while it is.
+     */
+    @Test
+    void a_rebuild_derives_after_the_change_it_was_queued_behind() throws Exception {
+        List<String> derived = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch deriving = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        StoredListing.Spec spec = lines("ordered", () -> entries("a 1")).deriving(document -> {
+            String body = new String(document.body(), StandardCharsets.UTF_8).trim();
+            derived.add(body);
+            if (body.contains("b 2")) {
+                deriving.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        });
+        StoredListing.read(store, spec);
+        derived.clear();   // the first materialisation derived once; the claim is about what follows it
+        List<Throwable> failures = Collections.synchronizedList(new ArrayList<>());
+        Thread changing = new Thread(() -> {
+            try {
+                StoredListing.put(store, spec, "b", "b 2".getBytes(StandardCharsets.UTF_8));
+            } catch (IOException failure) {
+                failures.add(failure);
+            }
+        });
+        changing.start();
+        assertThat(deriving.await(10, TimeUnit.SECONDS)).as("the change is deriving").isTrue();
+        Thread rebuilding = new Thread(() -> {
+            try {
+                StoredListing.rebuild(store, spec);
+            } catch (IOException failure) {
+                failures.add(failure);
+            }
+        });
+        rebuilding.start();
+        rebuilding.join(500);
+
+        assertThat(derived).as("the rebuild's derivation waits for the change's to finish")
+                .containsExactly("a 1\nb 2");
+
+        release.countDown();
+        changing.join();
+        rebuilding.join();
+        assertThat(failures).isEmpty();
+        assertThat(derived).as("then the rebuild derives, from the document it regenerated")
+                .containsExactly("a 1\nb 2", "a 1");
+    }
+
     private static SortedMap<String, byte[]> entries(String... lines) {
         SortedMap<String, byte[]> entries = new TreeMap<>();
         for (String line : lines) {
