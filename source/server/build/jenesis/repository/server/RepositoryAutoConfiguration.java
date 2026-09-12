@@ -16,6 +16,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.importer.ImportSourceProvider;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Features;
@@ -491,6 +492,13 @@ public class RepositoryAutoConfiguration {
     @Bean(destroyMethod = "close")
     public StoredListing.Deferred deferredListingDerivations() {
         return new StoredListing.Deferred();
+    }
+
+    /** The deferred counters ({@code StoredCounter.addLater}): a stopping node writes what it still holds before
+     *  its context closes, and holds nothing for a store that is gone - see {@link StoredCounter#settle()}. */
+    @Bean(destroyMethod = "close")
+    public StoredCounter.Settling deferredCounters() {
+        return new StoredCounter.Settling();
     }
 
     /** The free edition's scheduled driver of the shared rebuild pass (see {@link RebuildScheduler}): a daemon cadence

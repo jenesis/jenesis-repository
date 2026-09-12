@@ -35,7 +35,13 @@ import io.micrometer.observation.Observation;
  * <p>Each proxy-eligible read is wrapped in a {@code jenreg.proxy.fetch} {@link Observations observation} tagged
  * with the {@code format} and the {@code outcome} - {@code hit} (served locally, no upstream call), {@code miss}
  * (fetched from upstream) or {@code negative} (upstream also missed) - so the upstream leg is visible in metrics,
- * logs and traces from one instrumentation point. Given an {@link ObservationRegistry#NOOP NOOP} registry (the
+ * logs and traces from one instrumentation point. A leg that asked the upstream also carries what the upstream
+ * <em>answered</em> as {@code upstream}: the status of the last request the fetcher made ({@code 200},
+ * {@code 404}, {@code 503}), {@code unreachable} where the transport got no answer, and {@code unasked} where the
+ * format's leg declined the path before any request was sent. A {@code negative} alone was a verdict without its
+ * observation: the proxy answered {@code 404} for a path rubygems.org was serving {@code 200} at that moment, and
+ * the metric could only say the fetch had failed - an hour of reproduction to learn that the format had never asked
+ * (it does not serve the legacy {@code specs.4.8.gz} index), which this tag now says in the log line. Given an {@link ObservationRegistry#NOOP NOOP} registry (the
  * default constructor, and every test that builds this directly) the wrapper is inert.
  */
 public final class PullThroughCache {
@@ -90,6 +96,9 @@ public final class PullThroughCache {
         }
         Observations.observe(observations, "jenreg.proxy.fetch", null, null, observation -> {
             observation.lowCardinalityKeyValue("format", format.name());
+            // Present on every outcome, because a meter's tag keys must not vary with its value: a hit never asks
+            // the upstream, and says so, rather than carrying one key fewer than a miss.
+            observation.lowCardinalityKeyValue("upstream", "unasked");
             // Consult the edition BEFORE the local-first serve, so a cached hit is verified against the current gate
             // before any byte is written. The free NONE hook returns serveThrough with no store read, so the hit path
             // below is byte-for-byte as before; the decision is made ahead of serving, never by wrapping the stream.
@@ -143,15 +152,66 @@ public final class PullThroughCache {
         });
     }
 
-    /** Fetch the missed path from the upstream through the format, screened by the hooks, and record the outcome. */
+    /** Fetch the missed path from the upstream through the format, screened by the hooks, and record the outcome -
+     *  and, beside it, what the upstream answered, so a {@code negative} is a reading rather than a prompt to
+     *  reproduce. */
     private void fetch(FormatExchange exchange, ArtifactStore store, RepositoryFormat format, ProxyFormat proxy,
                        URI upstream, Observation observation) throws IOException {
-        if (proxy.proxy(exchange, store, upstream, hooks.screenFetch(exchange.path(), fetcher, store))) {
+        Answered answered = new Answered(hooks.screenFetch(exchange.path(), fetcher, store));
+        boolean served;
+        try {
+            served = proxy.proxy(exchange, store, upstream, answered);
+        } finally {
+            observation.lowCardinalityKeyValue("upstream", answered.last());
+        }
+        if (served) {
             observation.lowCardinalityKeyValue("outcome", "miss");
             observePublish(format, exchange.path(), store);
         } else {
             observation.lowCardinalityKeyValue("outcome", "negative");
             exchange.respond(404);
+        }
+    }
+
+    /**
+     * The fetcher a leg is handed, remembering what the upstream answered to the last request made through it: the
+     * status, {@code unreachable} for the transport's empty answer, and {@code unasked} until a leg asks at all. A
+     * decorator over all three legs, kept whole rather than derived (see {@link ProxyFormat.Fetcher.Buffered} for why
+     * a decorator that inherits a derivation collapses the streaming path).
+     */
+    private static final class Answered implements ProxyFormat.Fetcher {
+
+        private final ProxyFormat.Fetcher delegate;
+        private volatile String last = "unasked";
+
+        private Answered(ProxyFormat.Fetcher delegate) {
+            this.delegate = delegate;
+        }
+
+        String last() {
+            return last;
+        }
+
+        @Override
+        public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException {
+            Optional<ProxyFormat.Fetched> fetched = delegate.fetch(url, requestHeaders);
+            last = fetched.map(response -> Integer.toString(response.status())).orElse("unreachable");
+            return fetched;
+        }
+
+        @Override
+        public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders)
+                throws IOException {
+            Optional<ProxyFormat.Download> download = delegate.download(url, requestHeaders);
+            last = download.map(response -> Integer.toString(response.status())).orElse("unreachable");
+            return download;
+        }
+
+        @Override
+        public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
+            Optional<ProxyFormat.Head> head = delegate.head(url, requestHeaders);
+            last = head.map(response -> Integer.toString(response.status())).orElse("unreachable");
+            return head;
         }
     }
 

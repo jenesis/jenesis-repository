@@ -88,4 +88,21 @@ class StoredCounterTest {
         assertThat(new StoredCounter(store, "quota/used").read()).as("a recompute supersedes a pending delta").isEqualTo(50);
     }
 
+    @Test
+    void a_closing_node_settles_what_it_still_holds_and_holds_nothing_afterwards() throws IOException {
+        StoredCounter counter = new StoredCounter(store, "quota/settled");
+        counter.set(10);
+        counter.addLater(5);
+        assertThat(counter.read()).as("pending, counted here").isEqualTo(15);
+        try (StoredCounter.Settling closing = new StoredCounter.Settling()) {
+            assertThat(closing).isNotNull();
+        }
+        assertThat(new StoredCounter(store, "quota/settled").read()).as("written at the close").isEqualTo(15);
+        // Nothing is held any more: a store that the closed node wrote to may be gone, and a delta written into
+        // it at the next tick would recreate the path it stood at.
+        FaultInjectingStore counting = FaultInjectingStore.wrap(store);
+        assertThat(StoredCounter.flushNow()).as("no pending delta survives a settle").isZero();
+        assertThat(counting.calls(FaultInjectingStore.Op.WRITE_VERSIONED)).isZero();
+    }
+
 }

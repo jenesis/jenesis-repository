@@ -90,6 +90,17 @@ public final class Features {
     }
 
     /**
+     * {@link #enabled(String)} for a feature whose posture when the key is unset is not the usual on - the installed
+     * lookup with the default stated at the gate, exactly as {@link #enabled(UnaryOperator, String, boolean)} states
+     * it for a lookup the caller supplies. It exists so a consumer that rides on another feature's toggle can ask
+     * after that feature with its real default, rather than reading the two-argument form and answering ENABLED on a
+     * deployment the catalogue, the console and the operator all describe as switched off.
+     */
+    public static boolean enabled(String feature, boolean byDefault) {
+        return enabled(settings(), feature, byDefault);
+    }
+
+    /**
      * Whether {@code feature} is enabled in a lookup the CALLER supplies, keyed by the bare feature name.
      *
      * <p>The same question as {@link #enabled(String)}, asked of a key space this class does not own: a maintenance

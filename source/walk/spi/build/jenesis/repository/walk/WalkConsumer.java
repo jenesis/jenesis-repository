@@ -68,7 +68,8 @@ import build.jenesis.repository.store.Features;
  *     the one outcome this SPI exists to prevent. The pass generation and {@link WalkPass#started()} are what a
  *     consumer stamps onto its projection so a reader can tell how fresh it is.</li>
  * <li><b>Lifecycle / ownership.</b> Instances come from {@link #discovered()}, which builds a fresh list per call from
- *     {@link ServiceLoader} and drops the ones a {@code jenreg.<name>=false} toggle disables. A consumer
+ *     {@link ServiceLoader} and drops the ones a {@code jenreg.<name>=false} toggle disables, and the ones whose
+ *     {@link #enabled()} says the feature they repair is off. A consumer
  *     therefore owns no threads and no clients, and - because a process death is indistinguishable from a fresh
  *     start - keeps no cross-pass state it cannot rebuild from the store.</li>
  * <li><b>Ordering / concurrency.</b> Within one worker: {@link #onPassStarted} fires before that worker's first
@@ -185,6 +186,24 @@ public interface WalkConsumer {
 
     /** The consumer's name - its signal and settings namespace, and its {@code walks/<name>/} pass-state scope. */
     String name();
+
+    /**
+     * Whether this consumer has anything to do on this deployment at all, beyond its own {@code jenreg.<name>}
+     * toggle: {@code true} by default, and {@code false} from a consumer that repairs a feature which is switched
+     * off. Such a consumer is not {@link #discovered()}, so it is not driven by the walk, not charged for the
+     * deliveries it declares, and not shown on the walks screen - it reports itself absent, which is what a repair
+     * of nothing is.
+     *
+     * <p>It exists because the toggle alone made every consumer ride unless an operator knew its key by name.
+     * Forwarding is off unless configured, and its repair consumer has its own key ({@code forwarding-repair},
+     * also defaulting on): a deployment that never forwards anywhere still paid that consumer on every walk pass,
+     * and switching forwarding off did nothing about it. A consumer answers here with the same read its feature's
+     * own provider makes - {@link Features#enabled(String, boolean)} with the feature's real default - so the two
+     * cannot disagree about whether the feature is on.
+     */
+    default boolean enabled() {
+        return true;
+    }
 
     /**
      * The families this consumer listens on (clause 13); the pointers alone by default.
@@ -366,12 +385,13 @@ public interface WalkConsumer {
     }
 
     /** Every enabled consumer discovered via {@link ServiceLoader} (a parallel SPI: a
-     *  {@code jenreg.<name>=false} skips one, {@link Features}), in discovery order - what the scheduled
-     *  walk pass drives from its one enumeration. */
+     *  {@code jenreg.<name>=false} skips one, {@link Features}, and so does the consumer's own {@link #enabled()}
+     *  answering that the feature it repairs is off), in discovery order - what the scheduled walk pass drives
+     *  from its one enumeration. */
     static List<WalkConsumer> discovered() {
         List<WalkConsumer> consumers = new ArrayList<>();
         for (WalkConsumer consumer : ServiceLoader.load(WalkConsumer.class)) {
-            if (Features.enabled(consumer.name())) {
+            if (Features.enabled(consumer.name()) && consumer.enabled()) {
                 consumers.add(consumer);
             }
         }

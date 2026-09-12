@@ -49,5 +49,6 @@ open module build.jenesis.repository.walk.test {
     requires org.junit.jupiter;
     requires org.assertj.core;
     provides build.jenesis.repository.walk.WalkConsumer
-            with build.jenesis.repository.walk.test.DiscoverableWalkConsumer;
+            with build.jenesis.repository.walk.test.DiscoverableWalkConsumer,
+                 build.jenesis.repository.walk.test.FeatureGatedWalkConsumer;
 }

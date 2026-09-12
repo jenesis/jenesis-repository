@@ -36,8 +36,10 @@ public final class Retries {
     /** How often a compare-and-set is tried before its conflict is given up. */
     public static final int COMPARE_AND_SET = 12;
 
+    private static final LongAdder TRIED = new LongAdder();
     private static final LongAdder REPLAYED = new LongAdder();
-    private static final LongAdder LOST = new LongAdder();
+    private static final LongAdder LOST_TO_PEER = new LongAdder();
+    private static final LongAdder LOST_UNSETTLED = new LongAdder();
 
     private Retries() {
     }
@@ -146,8 +148,11 @@ public final class Retries {
                 store.delete(key);
                 return Optional.of(verdict);
             }
-            if (verdict.body() == null
-                    || store.writeVersioned(key, verdict.body(), current.map(ArtifactStore.Versioned::token).orElse(null))) {
+            if (verdict.body() == null) {
+                return Optional.of(verdict);
+            }
+            TRIED.increment();
+            if (store.writeVersioned(key, verdict.body(), current.map(ArtifactStore.Versioned::token).orElse(null))) {
                 return Optional.of(verdict);
             }
             Optional<Verdict<T>> resolved = settled(store, key, decision, verdict);
@@ -181,8 +186,11 @@ public final class Retries {
     private static boolean tryOnce(ArtifactStore store, String key, Mutation mutation) throws IOException {
         Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
         byte[] body = mutation.apply(current);
-        return body == null
-                || store.writeVersioned(key, body, current.map(ArtifactStore.Versioned::token).orElse(null))
+        if (body == null) {
+            return true;
+        }
+        TRIED.increment();
+        return store.writeVersioned(key, body, current.map(ArtifactStore.Versioned::token).orElse(null))
                 || settled(store, key, mutation, body);
     }
 
@@ -245,12 +253,12 @@ public final class Retries {
             throws IOException {
         Optional<ArtifactStore.Versioned> now = store.readVersioned(key);
         if (now.isEmpty() || !Arrays.equals(now.get().content(), tried)) {
-            LOST.increment();
+            LOST_TO_PEER.increment();
             return false;
         }
         byte[] again = mutation.apply(now);
         boolean settled = again == null || Arrays.equals(now.get().content(), again);
-        (settled ? REPLAYED : LOST).increment();
+        (settled ? REPLAYED : LOST_UNSETTLED).increment();
         return settled;
     }
 
@@ -278,12 +286,12 @@ public final class Retries {
                                                     Verdict<T> tried) throws IOException {
         Optional<ArtifactStore.Versioned> now = store.readVersioned(key);
         if (now.isEmpty() || !Arrays.equals(now.get().content(), tried.body())) {
-            LOST.increment();
+            LOST_TO_PEER.increment();
             return Optional.empty();
         }
         Verdict<T> again = decision.decide(now);
         if (again.delete()) {
-            LOST.increment();
+            LOST_UNSETTLED.increment();
             return Optional.empty();                 // a delete is work outstanding, not a settled key
         }
         if (again.body() == null) {
@@ -294,8 +302,18 @@ public final class Retries {
             REPLAYED.increment();
             return Optional.of(tried);
         }
-        LOST.increment();
+        LOST_UNSETTLED.increment();
         return Optional.empty();
+    }
+
+    /**
+     * Every conditional write these loops have asked the store for - one per try that had a body to write, landed or
+     * refused. The denominator the three verdicts below are read against: a refusal count means nothing until it is
+     * a share of the tries, and the share is what tells a store that refuses one write in a thousand from one that
+     * refuses every other one.
+     */
+    public static long tried() {
+        return TRIED.sum();
     }
 
     /** Compare-and-sets refused by the store that {@link #settled(ArtifactStore, String, Mutation, byte[])} found had
@@ -307,8 +325,30 @@ public final class Retries {
 
     /** Compare-and-sets the re-application did not find settled - either a real loss, or a replay of a mutation
      *  whose re-application cannot recognise itself. Both are retried, which is right for the first and is the
-     *  documented limit for the second. */
+     *  documented limit for the second. The sum of {@link #lostToPeer()} and {@link #lostUnsettled()}. */
     public static long lost() {
-        return LOST.sum();
+        return LOST_TO_PEER.sum() + LOST_UNSETTLED.sum();
+    }
+
+    /**
+     * Refusals where the re-read found the key holding something other than this try's bytes, or nothing at all: a
+     * peer wrote the key between the read and the write, or deleted it. The honest loss, and the one a replay can
+     * never be mistaken for, because a replayed write leaves the key holding exactly what this try wrote.
+     *
+     * <p>Kept apart from {@link #lostUnsettled()} because the two answer different questions. On a serial publish -
+     * no peer, nothing to lose to - this figure must stay at zero on every backing; one that climbs there is a store
+     * refusing a write it did not, in fact, refuse for a reason this loop can see. Measured on the store-operations
+     * canary of 2026-09-12 the question was open, because the two verdicts were one counter that nothing read.
+     */
+    public static long lostToPeer() {
+        return LOST_TO_PEER.sum();
+    }
+
+    /** Refusals where the key held this try's bytes but the re-application still had work to do - an accumulation
+     *  whose delta must be applied once more, a claim whose loser must not be handed the win, a decision whose answer
+     *  is a delete. Retried, and on a genuine replay double-applied, which is the documented limit of the fixed-point
+     *  check rather than a fault in the store. */
+    public static long lostUnsettled() {
+        return LOST_UNSETTLED.sum();
     }
 }

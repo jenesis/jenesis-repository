@@ -140,6 +140,38 @@ public final class StoredCounter {
         return written;
     }
 
+    /**
+     * Fold every deferred delta into its counter now and forget them all - what a node does as it closes its store,
+     * through the {@link Settling} bean its composition root declares.
+     *
+     * <p>The flusher is one per process and keeps a closed node's deltas beside a live node's, keyed by store, so
+     * without this a delta pending when a node stopped was written at the next tick into a store that was gone. In
+     * a test JVM that boots servers over temporary directories that is a directory recreated under one JUnit has
+     * just deleted, reported as {@code Failed to close extension context} with a {@code DirectoryNotEmptyException}
+     * naming a repository nobody wrote to after the suite ended - the shape measured 2026-09-12 on
+     * {@code RoutedServingE2ETest}, a suite that never mentions a counter. Forgetting every entry rather than the
+     * closing store's alone is deliberate: an early flush of a live node's delta is always correct, and matching a
+     * scoped view's identity to its root's is a per-backend question this class should not have to answer.
+     */
+    public static int settle() {
+        int written = flushNow();
+        DEFERRED.clear();
+        return written;
+    }
+
+    /** The deferred counters as a closeable for a node's shutdown: closing it {@linkplain #settle() settles} them,
+     *  the way {@code StoredListing.Deferred} finishes the derived twins a stopping node queued. */
+    public static final class Settling implements AutoCloseable {
+
+        public Settling() {
+        }
+
+        @Override
+        public void close() {
+            settle();
+        }
+    }
+
     /** What this node still holds for this key, unwritten. */
     private long pending() {
         Deferred deferred = DEFERRED.get(deferredKey());
