@@ -116,12 +116,40 @@ public final class Documents {
         return store.writeVersioned(path, bytes(properties), expected);
     }
 
-    /** A document as the bytes it is stored as. No comment line, so two writes of equal content are equal bytes -
-     *  which is what lets a store dedupe them and a reader compare them. */
-    private static byte[] bytes(Properties properties) throws IOException {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        properties.store(bytes, null);
-        return bytes.toByteArray();
+    /**
+     * A document as the bytes it is stored as: no comment line, so two writes of equal content really are equal
+     * bytes - which is what lets a store dedupe them, a reader compare them, and a refused compare-and-set be
+     * recognised as a write that landed rather than retried on the chance that it did not.
+     *
+     * <p><b>It said all of that before, in three places, and none of them was true.</b>
+     * {@link Properties#store(OutputStream, String)} writes a {@code #<date>} line whether or not a comment was
+     * asked for - passing {@code null} suppresses the caller's comment and not that one - so a document written
+     * twice a second apart differed in its first line. This class, the store walk's private copy and the
+     * delegating cache storage's each carried a sentence promising byte-equality over the same wrong call, the
+     * last one spelling out why it mattered. Measured rather than reasoned: the same three keys, rendered a
+     * second apart, differ.
+     *
+     * <p>What is <em>not</em> a hazard, having been checked rather than assumed: the key order. Since the
+     * internal map stopped being a bucket-ordered {@code Hashtable} the rendering is independent of the order the
+     * keys were set in - 120 keys in three different insertion orders render identically - so nothing here needs
+     * to sort, and a sequenced variant would only put the order back in play.
+     *
+     * <p>The comment is dropped from the rendered bytes rather than by handing {@code store} a filtering
+     * {@link java.io.Writer}, which is how the build tool's own house-brand properties type does it. The writer
+     * form would be the same idea, but {@code store(Writer, ..)} does not escape non-Latin-1 while
+     * {@code store(OutputStream, ..)} does, and one of these documents holds artifact paths - so the filter
+     * belongs after the escaping, not instead of it. Line endings are normalised for the same reason a fleet is
+     * not required to be one platform: {@code store} ends its lines with the local separator.
+     */
+    public static byte[] bytes(Properties properties) throws IOException {
+        ByteArrayOutputStream rendered = new ByteArrayOutputStream();
+        properties.store(rendered, null);
+        StringBuilder document = new StringBuilder();
+        rendered.toString(StandardCharsets.ISO_8859_1)
+                .lines()
+                .dropWhile(line -> line.startsWith("#"))
+                .forEach(line -> document.append(line).append('\n'));
+        return document.toString().getBytes(StandardCharsets.ISO_8859_1);
     }
 
     /** Delete every document under {@code prefix}, a bounded page at a time.

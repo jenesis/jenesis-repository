@@ -4,6 +4,7 @@ import module java.base;
 import module org.slf4j;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Documents;
 
 /**
  * The durable half of a mirrored feed: one catalogue snapshot and the staleness stamp that says when it was fetched,
@@ -266,9 +267,8 @@ public final class FeedSnapshots {
             properties.setProperty("bytes", Long.toString(snapshot.bytes()));
             properties.setProperty("fetchedAt", snapshot.fetchedAt().toString());
         });
-        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            properties.store(out, null);
-            return out.toByteArray();
+        try {
+            return Documents.bytes(properties);
         } catch (IOException e) {
             throw new IllegalStateException("A feed stamp could not be rendered", e);
         }

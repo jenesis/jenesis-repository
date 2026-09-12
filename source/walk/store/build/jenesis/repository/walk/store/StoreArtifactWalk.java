@@ -6,6 +6,7 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.Trees;
 import build.jenesis.repository.walk.WalkPass;
@@ -215,7 +216,7 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
                     : current.isPresent() ? Math.max(1, clock.millis()) : 1;
             List<String> ordered = roots.stream().distinct().sorted().toList();
             Manifest fresh = new Manifest(generation, clock.instant(), ordered, plan(store, ordered), false);
-            if (store.writeVersioned(key, bytes(serialize(fresh)),
+            if (store.writeVersioned(key, Documents.bytes(serialize(fresh)),
                     current.map(ArtifactStore.Versioned::token).orElse(null))) {
                 return fresh;
             }
@@ -330,7 +331,7 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
             // above): reclaiming it is a takeover resuming from its committed cursor, the jenreg.walk.resumes
             // signal. A pending or stale-generation segment is a fresh claim, not a resume.
             boolean takeover = !stale && segment.state() == WalkSegment.State.CLAIMED;
-            byte[] content = bytes(serialize(manifest.generation(), index, manifest.ranges().get(index),
+            byte[] content = Documents.bytes(serialize(manifest.generation(), index, manifest.ranges().get(index),
                     WalkSegment.State.CLAIMED, holder, now.plus(ttl), cursor));
             if (!store.writeVersioned(key, content, current.map(ArtifactStore.Versioned::token).orElse(null))) {
                 continue; // another worker won this segment between the read and the write
@@ -357,7 +358,7 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
             if (latest != null && latest.generation() == manifest.generation() && !latest.complete()) {
                 Manifest complete = new Manifest(latest.generation(), latest.started(), latest.roots(),
                         latest.ranges(), true);
-                store.writeVersioned(manifestKey(scope), bytes(serialize(complete)), current.get().token());
+                store.writeVersioned(manifestKey(scope), Documents.bytes(serialize(complete)), current.get().token());
             }
             Manifest flipped = parseManifest(store.readVersioned(manifestKey(scope)).orElse(null));
             return pass(store, scope, flipped != null ? flipped : manifest);
@@ -492,7 +493,7 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
          *  standing and the re-visit replays what the flush lost. */
         private void commit(WalkSegment.State state) throws IOException {
             visitor.beforeCheckpoint(cursor);
-            byte[] content = bytes(serialize(generation, index, range, state, holder, clock.instant().plus(ttl),
+            byte[] content = Documents.bytes(serialize(generation, index, range, state, holder, clock.instant().plus(ttl),
                     cursor));
             if (!store.writeVersioned(key, content, token)) {
                 throw new ClaimLost();
@@ -649,12 +650,6 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
         } catch (IOException | RuntimeException _) {
             return null;
         }
-    }
-
-    private static byte[] bytes(Properties properties) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        properties.store(out, null);
-        return out.toByteArray();
     }
 
     private static Properties properties(byte[] content) throws IOException {

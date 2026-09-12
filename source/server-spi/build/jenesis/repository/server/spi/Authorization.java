@@ -6,6 +6,7 @@ import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.Durations;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.store.Epoch;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.StoreCache;
@@ -1831,18 +1832,14 @@ public final class Authorization {
                 properties.load(new ByteArrayInputStream(current.get().content()));
             }
             change.accept(properties);
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            properties.store(bytes, null);
-            return bytes.toByteArray();
+            return Documents.bytes(properties);
         });
         cache.invalidate(path);
         mutated();
     }
 
     private void write(String path, Properties properties) throws IOException {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        properties.store(bytes, null);
-        cache.write(path, bytes.toByteArray());
+        cache.write(path, Documents.bytes(properties));
         mutated();
     }
 
