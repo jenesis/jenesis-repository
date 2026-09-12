@@ -87,6 +87,11 @@ public final class ScreenedDispatch {
      *  write has, now with the body already screened. */
     private void screen(RepositoryFormat format, FormatExchange exchange, ArtifactStore store) throws IOException {
         ArtifactDescriptor descriptor = describe(format, exchange.path(), store);
+        // The format's answer to an accepted write is held here until commit has returned - that is, until every
+        // after-commit observer has run - because the servlet exchange commits a response the moment the format
+        // closes its stream, and a client acknowledged before the publish's consequences have happened races them
+        // with its next request (DeferredResponse records what that cost).
+        DeferredResponse[] answer = new DeferredResponse[1];
         // The one hosted-publish choreography: Publication.commit screens once, hands the accepted blob to the layout
         // below, and fires published() itself once visibility has committed - so this edge no longer re-assembles the
         // screen/layout/notify sequence by hand, and cannot get its order wrong.
@@ -108,12 +113,18 @@ public final class ScreenedDispatch {
                     // An opaque format-SPI layout: RepositoryFormat.handle writes the format's own namespace and its
                     // response, so it links its own serving pointer inside this callback rather than declaring it.
                     // The ingress census asserts the pointer-last ordering behaviourally for this shape.
-                    format.handle(new RestreamExchange(exchange, accepted), store);
+                    DeferredResponse held = new DeferredResponse(new RestreamExchange(exchange, accepted));
+                    format.handle(held, store);
+                    answer[0] = held;
                     return Publication.Visibility.laidOut();
                 });
         switch (commit.disposition()) {
-            // ACCEPT responded inside the layout above - the format writes its own 201, and a refusal its own status.
+            // ACCEPT was answered inside the layout above - the format writes its own 201, and a refusal its own
+            // status - and the answer reaches the client now, once everything the publish causes has happened.
             case ACCEPT -> {
+                if (answer[0] != null) {
+                    answer[0].release();
+                }
             }
             case QUARANTINE -> {
                 // The held branch: the body is stored for review, not laid out. An edition records its replay context

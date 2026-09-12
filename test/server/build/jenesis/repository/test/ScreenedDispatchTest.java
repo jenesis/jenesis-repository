@@ -78,6 +78,8 @@ public class ScreenedDispatchTest {
         private final String method;
         private final String path;
         private final byte[] body;
+        private final Map<String, String> headers = new LinkedHashMap<>();
+        private final ByteArrayOutputStream responded = new ByteArrayOutputStream();
         private int status = -1;
 
         private FakeExchange(String method, String path, byte[] body) {
@@ -113,12 +115,13 @@ public class ScreenedDispatchTest {
 
         @Override
         public void setResponseHeader(String name, String value) {
+            headers.put(name, value);
         }
 
         @Override
         public OutputStream respond(int status, long contentLength) {
             this.status = status;
-            return new ByteArrayOutputStream();
+            return responded;
         }
     }
 
@@ -146,6 +149,51 @@ public class ScreenedDispatchTest {
                 .isEqualTo("payload".getBytes(StandardCharsets.UTF_8));
         assertThat(CountingInterceptor.count()).as("the edge screened the body exactly once (the format did not re-screen)")
                 .isEqualTo(1);
+    }
+
+    /**
+     * The client hears of an accepted write only after the edge's commit has returned, which is after every
+     * after-commit observer has run. The format answers inside the layout, and the servlet exchange commits a
+     * response as soon as the format closes its stream - so without the edge holding the answer, a client was
+     * acknowledged while the publish's consequences were still running and its next request raced them. The probe
+     * is the outer exchange's status as seen from inside the format's own layout: still unanswered there, answered
+     * once the dispatch returns.
+     */
+    @Test
+    void an_accepted_write_is_answered_only_after_its_commit_has_returned() throws IOException {
+        FakeExchange put = new FakeExchange("PUT", "/heldanswer/thing", "payload".getBytes(StandardCharsets.UTF_8));
+        int[] seenInsideLayout = {Integer.MIN_VALUE};
+        RepositoryFormat format = new RepositoryFormat() {
+
+            @Override
+            public String name() {
+                return "heldanswer";
+            }
+
+            @Override
+            public boolean handles(String path) {
+                return path.startsWith("/heldanswer/");
+            }
+
+            @Override
+            public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
+                try (InputStream in = exchange.requestStream()) {
+                    in.readAllBytes();
+                }
+                exchange.setResponseHeader("Location", exchange.path());
+                exchange.respond(201, "laid out".getBytes(StandardCharsets.UTF_8));
+                seenInsideLayout[0] = put.status;
+            }
+        };
+
+        assertThat(edge(format).dispatch(put, store)).isTrue();
+
+        assertThat(seenInsideLayout[0]).as("the format's answer had not reached the client while its layout ran")
+                .isEqualTo(-1);
+        assertThat(put.status).as("the answer reached the client once the dispatch returned").isEqualTo(201);
+        assertThat(put.responded.toByteArray()).as("the body the format wrote, byte for byte")
+                .isEqualTo("laid out".getBytes(StandardCharsets.UTF_8));
+        assertThat(put.headers).containsEntry("Location", "/heldanswer/thing");
     }
 
     @Test
