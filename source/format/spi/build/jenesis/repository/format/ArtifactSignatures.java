@@ -31,6 +31,32 @@ import build.jenesis.repository.store.PublishInterceptor;
  * a signature is kilobytes, and the two-pass read ({@code _gpgorigin} lifted first, the large members streamed into the
  * verifier afterwards) is how a multi-gigabyte {@code .deb} is verified in bounded heap today.
  *
+ * <h2>What this seam does not yet express: coverage by a signed manifest</h2>
+ *
+ * Every shape above is <em>direct</em> - a signature over bytes derived from this one artifact. A large family of
+ * ecosystems does not work that way: they sign an <b>index</b>, and the index commits to each artifact by digest. An
+ * apt client's trust runs through the signed {@code Release}, which commits to {@code Packages}, which commits to
+ * each {@code .deb}; a Terraform provider is covered by a {@code SHA256SUMS} the publisher signs once for the whole
+ * release; dnf's {@code gpgcheck} has a per-package header signature but its {@code repo_gpgcheck} is the same
+ * manifest shape; npm and PyPI provenance attest to a build rather than to bytes. In each, the artifact itself
+ * carries no signature and is nonetheless covered.
+ *
+ * <p>A format in that family can only answer {@code expects} with {@code OPTIONAL} or nothing at all, which is why
+ * {@code DebianFormat} declares {@code OPTIONAL} and says so - reporting every well-run Debian archive as unsigned
+ * would be worse than saying nothing. The consequence is that the dimension above this seam sees "no signature" for
+ * an artifact whose provenance is in fact established, one hop away, by a document it never looks at.
+ *
+ * <p>Closing that needs a second kind of evidence - roughly "this artifact is named, by digest, in a document signed
+ * by X" - and it is deliberately not bolted on per format. Two things make it worth doing once, properly: the
+ * verifier work is shared (the manifest is itself a signed document this seam already describes), and the trust
+ * question is the interesting one, because a manifest signature says something about the <em>repository</em> that
+ * published a set rather than about the publisher of one artifact. Those are different claims and a design that
+ * flattened them would report the second when it had only checked the first.
+ *
+ * <p>Until then this seam is honest about its scope rather than approximating: a format whose ecosystem works this
+ * way declares what it really does, in its fixture, with its reason. That is the census entry, not a gap nobody
+ * wrote down.
+ *
  * <h2>Contract</h2>
  * This is a role sub-interface of {@code RepositoryFormat}, so that contract still binds and the clauses below state
  * what producing inbound signature evidence adds. The format testkit's {@code FormatContract} proves them over every
