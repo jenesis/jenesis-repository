@@ -298,11 +298,13 @@ public interface PublishInterceptor extends PublicationObserver {
         return Disposition.ACCEPT;
     }
 
-    /** Whether the artifact published at this request path is currently withheld from serving - the quarantine read
-     *  side: a screen that diverts a fresh upload can also retract an already-linked path when its verdict changes
-     *  after the fact (a new advisory against an artifact that has served for months). Consulted by
+    /** Whether the artifact published at this request path is currently withheld from serving - the read side of a
+     *  hold this screen places by a means of its own (a staging subtree, a record keyed some other way). Consulted by
      *  {@link Publication#located} against the same scoped store the publication serves from, on every read - so an
-     *  implementation keeps it cheap. Serves ({@code false}) by default. */
+     *  implementation keeps it cheap, and a screen that holds through the {@code /quarantine<path>} review pointer
+     *  answers nothing here: that hold is copied onto the serving pointer by {@link Publication#link} and read off
+     *  it, so a probe of the review pointer would pay on every download a read the pointer already answers. Serves
+     *  ({@code false}) by default. */
     default boolean withheld(String path, ArtifactStore store) throws IOException {
         return false;
     }

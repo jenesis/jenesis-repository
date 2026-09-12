@@ -313,7 +313,7 @@ public final class WalkConsumerContract {
                 continue;
             }
             // The length the pointer records rides along: the re-spelling changes the hash's dialect and nothing else.
-            byte[] requalified = ServableNames.Pointer.render("sha256:" + parsed.hash(), parsed.size());
+            byte[] requalified = ServableNames.Pointer.render("sha256:" + parsed.hash(), parsed.size(), parsed.held());
             if (!store.writeVersioned(key, requalified, pointer.get().token())) {
                 throw failure(fixture, "re-spelling the pointer at " + key + " lost its compare-and-set, so the "
                         + "corpus this check needs was never established");

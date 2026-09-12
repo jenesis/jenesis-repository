@@ -51,6 +51,39 @@ class ServableNamesTest {
     }
 
     @Test
+    void a_serving_pointer_carrying_the_hold_flag_is_withheld_with_no_chain_and_no_marker() throws IOException {
+        MapStore store = new MapStore();
+        store.objects.put("publish/maven/g/a/1/held.jar", (HASH_A + " 12 held").getBytes(StandardCharsets.UTF_8));
+        store.objects.put("publish/maven/g/a/1/held-unsized.jar", (HASH_A + " held").getBytes(StandardCharsets.UTF_8));
+        store.pointer("publish/maven/g/a/1/served.jar", HASH_A);
+        store.objects.put("publish/maven/g/a/1/held.jar.sha1", (HASH_B + " 40").getBytes(StandardCharsets.UTF_8));
+        store.blob(HASH_A);
+        store.blob(HASH_B);
+        ServableNames names = new ServableNames(store, new Publication(store, List.of()));
+
+        assertThat(names.state("/maven/g/a/1/held.jar")).as("the flag alone withholds").isEqualTo(State.WITHHELD);
+        assertThat(names.state("/maven/g/a/1/held-unsized.jar")).isEqualTo(State.WITHHELD);
+        assertThat(names.state("/maven/g/a/1/served.jar")).as("the same bytes serve at an unflagged path")
+                .isEqualTo(State.SERVABLE);
+        assertThat(names.state("/maven/g/a/1/held.jar.sha1")).as("a sidecar is held by its subject's flag")
+                .isEqualTo(State.WITHHELD);
+        assertThat(names.disclosable("/maven/g/a/1/held.jar", Policy.HIDE_WITHHELD)).isFalse();
+        assertThat(names.located("/maven/g/a/1/held.jar").state()).isEqualTo(State.WITHHELD);
+
+        assertThat(ServableNames.parse(HASH_A + " 12 held")).isEqualTo(new ServableNames.Pointer(HASH_A, 12L, true));
+        assertThat(ServableNames.parse(HASH_A + " held 12")).as("token order after the hash is not significant")
+                .isEqualTo(new ServableNames.Pointer(HASH_A, 12L, true));
+        assertThat(ServableNames.parse(HASH_A + " held")).isEqualTo(new ServableNames.Pointer(HASH_A, -1L, true));
+        assertThat(ServableNames.parse(HASH_A + " 12")).isEqualTo(new ServableNames.Pointer(HASH_A, 12L, false));
+        assertThat(new String(ServableNames.Pointer.render(HASH_A, 12L, true), StandardCharsets.UTF_8))
+                .isEqualTo(HASH_A + " 12 held");
+        assertThat(new String(ServableNames.Pointer.render(HASH_A, -1L, true), StandardCharsets.UTF_8))
+                .isEqualTo(HASH_A + " held");
+        assertThat(new String(ServableNames.parse(HASH_A + " 12 held").render(false), StandardCharsets.UTF_8))
+                .as("lifting the flag changes nothing else").isEqualTo(HASH_A + " 12");
+    }
+
+    @Test
     void a_checksum_sidecar_is_held_by_the_hold_on_the_artifact_it_describes() throws IOException {
         // Found by the ecosystem matrix's maven ADMIN_VIEW row. A gate quarantines the artifact it can screen - the
         // jar and the POM - and the checksums the publisher uploaded beside them are unclaimed content no inspector

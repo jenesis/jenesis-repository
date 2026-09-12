@@ -17,8 +17,10 @@ import build.jenesis.repository.store.Publication;
  * pointer key - {@code publish<request-path>} for {@link #state}, the format's own key for {@link #keyState} - and
  * then run the identical probe order: chain, pointer, {@link Withheld withheld/&lt;hash&gt;} marker, blob stat. That
  * symmetry is the point rather than an implementation detail, because the two halves of a hold cover different
- * things: a {@code /quarantine<path>} pointer holds ONE alias, and the marker holds the BYTES wherever they are
- * served. A {@code publish/} face that read only the chain therefore let a content-addressed hold be escaped by any
+ * things: a {@code /quarantine<path>} pointer holds ONE alias - and the serving pointer at that alias carries a copy
+ * of it (the {@code held} token {@link Publication#link} writes onto the body when the review pointer is linked and
+ * lifts when it is unpublished), so the serve reads the path half off the one pointer it reads anyway rather than
+ * probing a second key - and the marker holds the BYTES wherever they are served. A {@code publish/} face that read only the chain therefore let a content-addressed hold be escaped by any
  * alias the hold writer's path enumeration did not name - the Maven cross-publish's {@code /module/<name>/<name>.jar}
  * "latest" view being the driven case: it belongs to no single version, so neither {@code paths} overload of
  * the Maven layout that placed the jar reports it - both are version-addressed - and so no hold writer ever links a
@@ -134,16 +136,21 @@ public final class ServableNames {
         return null;
     }
 
-    /** Whether the path itself is held - the interceptor chain, then the {@link Withheld withheld/<hash>} marker on
-     *  the hash its pointer names. The half of the withhold decision that does not consider the subject a sidecar
-     *  describes, so {@link #state} and {@link #disclosable} can ask it about both and stay one statement of the rule.
-     *  Stats no blob. */
+    /** Whether the path itself is held - the interceptor chain, then the pointer's own hold flag, then the
+     *  {@link Withheld withheld/<hash>} marker on the hash its pointer names; and for a path with no serving pointer
+     *  to carry the flag (a subject quarantined at publish, whose sidecar arrived and was accepted as unclaimed
+     *  content), the {@code /quarantine} review pointer itself, which is the one case the copy cannot answer. The
+     *  half of the withhold decision that does not consider the subject a sidecar describes, so {@link #state} and
+     *  {@link #disclosable} can ask it about both and stay one statement of the rule. Stats no blob. */
     private boolean held(String requestPath) throws IOException {
         if (publication.withheld(requestPath)) {
             return true;
         }
-        Optional<String> hash = publication.blob(requestPath);
-        return hash.isPresent() && Withheld.is(store, hash.get());
+        Optional<Pointer> pointer = publication.pointer(requestPath);
+        if (pointer.isEmpty()) {
+            return Publication.reviewPending(store, requestPath);
+        }
+        return pointer.get().held() || Withheld.is(store, pointer.get().hash());
     }
 
     /** The number of a version folder's leaves the interceptor chain is probed against in
@@ -199,13 +206,15 @@ public final class ServableNames {
 
     /** Full discrimination of one request path ({@code "/maven/g/a/1/a-1.jar"}), and the decision
      *  {@link Publication#located} is a wrapper over: (1) interceptor chain withheld -&gt; {@link State#WITHHELD};
-     *  (2) {@code publish<path>} pointer absent -&gt; {@link State#UNPUBLISHED}; (3) a {@link Withheld withheld/<hash>}
-     *  marker on the hash the pointer names -&gt; {@link State#WITHHELD}; (4) the path is a checksum/signature
-     *  {@linkplain #subject sidecar} of a held path -&gt; {@link State#WITHHELD}; (5) {@code blobs/<hash>} stat -&gt;
-     *  {@link State#SERVABLE} : {@link State#BLOB_GONE}. A probe that throws a {@link RuntimeException} (a hostile
+     *  (2) {@code publish<path>} pointer absent -&gt; {@link State#UNPUBLISHED}; (3) the pointer's own
+     *  {@link Pointer#held() hold flag} - the copy of the {@code /quarantine<path>} review pointer that
+     *  {@link Publication#link} writes onto the serving pointer - -&gt; {@link State#WITHHELD}; (4) a
+     *  {@link Withheld withheld/<hash>} marker on the hash the pointer names -&gt; {@link State#WITHHELD}; (5) the
+     *  path is a checksum/signature {@linkplain #subject sidecar} of a held path -&gt; {@link State#WITHHELD}; (6)
+     *  {@code blobs/<hash>} stat -&gt; {@link State#SERVABLE} : {@link State#BLOB_GONE}. A probe that throws a {@link RuntimeException} (a hostile
      *  name) fails closed to {@link State#WITHHELD} - never disclosed, never thrown.
      *
-     *  <p>Step (3) is the same probe {@link #keyState} makes in the same position, and it is what makes
+     *  <p>Step (4) is the same probe {@link #keyState} makes in the same position, and it is what makes
      *  {@link State#WITHHELD}'s own definition true of this face: a hold has a path half (the
      *  {@code /quarantine<path>} pointer an interceptor reads) and a content half (the marker), and only the second
      *  reaches an alias no hold writer enumerated. It sits BEFORE the blob stat deliberately - a path that is both
@@ -246,6 +255,14 @@ public final class ServableNames {
             if (pointer.isEmpty()) {
                 return new Location(State.UNPUBLISHED, null, -1L);
             }
+            if (pointer.get().held()) {
+                // The path half of a hold, read off the pointer the serve reads anyway: the /quarantine review pointer
+                // that placed it is the queue and the authority, and this flag is its copy on the serving pointer
+                // (Publication.link writes it, unpublish lifts it, the rebuild walk reconciles the two). Measured
+                // 2026-09-12 as the first of a download's four reads on every backing - the probe of a second key
+                // this copy retires.
+                return new Location(State.WITHHELD, null, -1L);
+            }
             String hash = pointer.get().hash();
             if (Withheld.is(store, hash)) {
                 return new Location(State.WITHHELD, null, -1L);
@@ -282,11 +299,11 @@ public final class ServableNames {
                 if (publication.withheld(requestPath)) {
                     return false;
                 }
-                Optional<String> hash = publication.blob(requestPath);
-                if (hash.isEmpty()) {
+                Optional<Pointer> pointer = publication.pointer(requestPath);
+                if (pointer.isEmpty()) {
                     return true;
                 }
-                if (Withheld.is(store, hash.get())) {
+                if (pointer.get().held() || Withheld.is(store, pointer.get().hash())) {
                     return false;
                 }
                 String subject = subject(requestPath);
@@ -429,8 +446,8 @@ public final class ServableNames {
     }
 
     /**
-     * What a serving pointer's body says: the content hash it names, and the blob's stored length where the writer
-     * recorded one - {@code -1} where it did not.
+     * What a serving pointer's body says: the content hash it names, the blob's stored length where the writer
+     * recorded one - {@code -1} where it did not - and whether the path is {@linkplain #held held} from serving.
      *
      * <p>The body of a {@code publish/} or blobs-namespace pointer is the lower-case SHA-256 hex followed, since
      * 2026-09-12, by a space and the blob's length in decimal bytes: {@code <hash> <length>}. The length is a pure
@@ -442,14 +459,46 @@ public final class ServableNames {
      * stat on the request path - a fallback there would be the very read the length exists to remove. The OCI
      * tag-pointer dialect ({@code sha256:<hex>}) carries no length and never will; its blobs are served by digest
      * through the Distribution API, which has its own length.
+     *
+     * <p>A {@code publish/} pointer may end in the token {@value #HELD}: {@code <hash> <length> held}. It is the
+     * path half of a hold, copied onto the serving pointer from the {@code /quarantine<path>} review pointer that
+     * placed it - written when that review pointer is linked, lifted when it is unpublished, and brought back into
+     * line by the rebuild walk should a crash separate the two writes - so a serve answers 404 for a held path off
+     * the one pointer it reads anyway, where it used to probe the review pointer as a second key on every download.
+     * The review pointer stays the queue and the authority (the review screens, the hold lifecycle and the miss-path
+     * guard read it); the flag is the read path's copy of it and nothing decides from the flag alone but a serve.
+     * A body carrying only the hash and the token ({@code <hash> held}) is a held pointer whose length was never
+     * recorded; token order after the hash is not significant.
      */
-    public record Pointer(String hash, long size) {
+    public record Pointer(String hash, long size, boolean held) {
 
-        /** The body {@link Publication#link} and its blobs-namespace twin write for this hash and length: the hash
-         *  alone where the length is unknown, so a torn link a reconcile repairs is written as it always was. */
+        /** The token that marks a serving pointer's path as held from serving - see the record's javadoc. */
+        public static final String HELD = "held";
+
+        /** The body {@link Publication#link} and its blobs-namespace twin write for this hash and length, not held:
+         *  the hash alone where the length is unknown, so a torn link a reconcile repairs is written as it always
+         *  was. */
         public static byte[] render(String hash, long size) {
-            String body = size < 0 ? hash : hash + " " + size;
-            return body.getBytes(StandardCharsets.UTF_8);
+            return render(hash, size, false);
+        }
+
+        /** {@link #render(String, long)} with the path's hold flag, the form a {@code publish/} pointer under a
+         *  {@code /quarantine} review pointer is written in. */
+        public static byte[] render(String hash, long size, boolean held) {
+            StringBuilder body = new StringBuilder(hash);
+            if (size >= 0) {
+                body.append(' ').append(size);
+            }
+            if (held) {
+                body.append(' ').append(HELD);
+            }
+            return body.toString().getBytes(StandardCharsets.UTF_8);
+        }
+
+        /** This pointer's body with its hold flag set to {@code held} and nothing else changed - the one rewrite a
+         *  hold or a release makes to a serving pointer. */
+        public byte[] render(boolean held) {
+            return render(hash, size, held);
         }
     }
 
@@ -464,26 +513,24 @@ public final class ServableNames {
      * marker and stats no blob: it can only ever hide more, never disclose more.
      */
     public static Pointer parse(String pointerBody) {
-        String trimmed = pointerBody.trim();
-        int space = trimmed.indexOf(' ');
-        String first = space < 0 ? trimmed : trimmed.substring(0, space);
+        String[] tokens = pointerBody.trim().split("\\s+");
+        String first = tokens[0];
         int colon = first.indexOf(':');
         String hash = colon < 0 ? first : first.substring(colon + 1);
         long size = -1L;
-        if (space >= 0) {
-            String rest = trimmed.substring(space + 1).trim();
-            int end = rest.indexOf(' ');
-            String length = end < 0 ? rest : rest.substring(0, end);
-            try {
-                size = Long.parseLong(length);
-            } catch (NumberFormatException notALength) {
-                size = -1L;
-            }
-            if (size < 0) {
-                size = -1L;
+        boolean held = false;
+        for (int index = 1; index < tokens.length; index++) {
+            if (tokens[index].equals(Pointer.HELD)) {
+                held = true;
+            } else if (size < 0) {
+                try {
+                    size = Math.max(-1L, Long.parseLong(tokens[index]));
+                } catch (NumberFormatException notALength) {
+                    size = -1L;
+                }
             }
         }
-        return new Pointer(hash, size);
+        return new Pointer(hash, size, held);
     }
 
     /** The raw marker probe ({@code store.readVersioned("withheld/" + sha256)}, via {@link Withheld#is}) - the

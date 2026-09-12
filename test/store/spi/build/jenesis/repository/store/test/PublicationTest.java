@@ -70,6 +70,88 @@ class PublicationTest {
         assertThat(counting.calls(FaultInjectingStore.Op.SIZE)).isEqualTo(1);
     }
 
+    /**
+     * The hold rides the serving pointer: linking the {@code /quarantine<path>} review pointer flags the pointer at
+     * {@code <path>}, unpublishing it lifts the flag, and in between the path is withheld with no interceptor in the
+     * chain and no marker on the bytes - the read a serve makes is the pointer it reads anyway. Measured 2026-09-12:
+     * the review-pointer probe was the first of a download's four reads on every backing.
+     */
+    @Test
+    void a_quarantine_link_flags_the_serving_pointer_and_its_unpublish_lifts_the_flag() throws IOException {
+        Publication bare = new Publication(store, List.of());
+        String hash = bare.storeBlob(bytes("the artifact"));
+        bare.link("/maven/a/lib-1.0.jar", hash, 12L);
+        assertThat(bare.located("/maven/a/lib-1.0.jar")).isPresent();
+
+        bare.link("/quarantine/maven/a/lib-1.0.jar", hash);
+        assertThat(body("publish/maven/a/lib-1.0.jar")).as("the serving pointer carries the hold")
+                .isEqualTo(hash + " 12 held");
+        assertThat(bare.located("/maven/a/lib-1.0.jar")).as("withheld off the pointer alone").isEmpty();
+        assertThat(new ServableNames(store, bare).state("/maven/a/lib-1.0.jar"))
+                .isEqualTo(ServableNames.State.WITHHELD);
+        assertThat(bare.blob("/maven/a/lib-1.0.jar")).as("blob() still answers the bare hash").contains(hash);
+
+        String republished = bare.storeBlob(bytes("a corrected artifact"));
+        bare.link("/maven/a/lib-1.0.jar", republished, 20L);
+        assertThat(body("publish/maven/a/lib-1.0.jar")).as("a republish under a hold stays held")
+                .isEqualTo(republished + " 20 held");
+
+        bare.unpublish("/quarantine/maven/a/lib-1.0.jar");
+        assertThat(body("publish/maven/a/lib-1.0.jar")).as("the release lifts the flag and changes nothing else")
+                .isEqualTo(republished + " 20");
+        assertThat(bare.located("/maven/a/lib-1.0.jar")).contains("blobs/" + republished);
+    }
+
+    @Test
+    void a_first_link_of_a_path_under_a_pending_review_is_written_held() throws IOException {
+        Publication bare = new Publication(store, List.of());
+        String held = bare.storeBlob(bytes("quarantined at publish"));
+        bare.link("/quarantine/maven/a/lib-2.0.jar", held);   // a fresh quarantine: no serving pointer exists yet
+        assertThat(store.readVersioned("publish/maven/a/lib-2.0.jar")).isEmpty();
+
+        String clean = bare.storeBlob(bytes("a clean re-publish"));
+        FaultInjectingStore counting = FaultInjectingStore.wrap(store);
+        new Publication(counting, List.of()).link("/maven/a/lib-2.0.jar", clean, 18L);
+        assertThat(body("publish/maven/a/lib-2.0.jar")).as("written held: the review pointer stands")
+                .isEqualTo(clean + " 18 held");
+        assertThat(counting.calls(FaultInjectingStore.Op.READ_VERSIONED))
+                .as("the compare-and-set read of the absent pointer, and one read of the review pointer").isEqualTo(2);
+
+        new Publication(counting, List.of()).link("/maven/a/lib-2.0.jar", clean, 18L);
+        assertThat(counting.calls(FaultInjectingStore.Op.READ_VERSIONED))
+                .as("a link over an existing pointer carries its flag and reads no review pointer").isEqualTo(3);
+
+        bare.unpublish("/quarantine/maven/a/lib-2.0.jar");
+        assertThat(body("publish/maven/a/lib-2.0.jar")).isEqualTo(clean + " 18");
+        assertThat(bare.located("/maven/a/lib-2.0.jar")).contains("blobs/" + clean);
+    }
+
+    @Test
+    void suppress_is_idempotent_and_touches_nothing_that_is_not_a_serving_pointer() throws IOException {
+        Publication bare = new Publication(store, List.of());
+        String hash = bare.storeBlob(bytes("the artifact"));
+        bare.link("/raw/a.bin", hash, 12L);
+        store.writeVersioned("publish/raw/notes", "2026-09-12 a sidecar row".getBytes(StandardCharsets.UTF_8), null);
+        FaultInjectingStore counting = FaultInjectingStore.wrap(store);
+        Publication counted = new Publication(counting, List.of());
+
+        counted.suppress("/raw/a.bin", true);
+        counted.suppress("/raw/a.bin", true);
+        assertThat(body("publish/raw/a.bin")).isEqualTo(hash + " 12 held");
+        assertThat(counting.calls(FaultInjectingStore.Op.WRITE_VERSIONED)).as("the second call wrote nothing").isEqualTo(1);
+        counted.suppress("/raw/absent.bin", true);
+        assertThat(store.readVersioned("publish/raw/absent.bin")).as("nothing is invented for an absent path").isEmpty();
+        counted.suppress("/raw/notes", true);
+        assertThat(body("publish/raw/notes")).as("a body naming no hash is never rewritten").isEqualTo("2026-09-12 a sidecar row");
+        assertThat(counting.calls(FaultInjectingStore.Op.WRITE_VERSIONED)).isEqualTo(1);
+        counted.suppress("/raw/a.bin", false);
+        assertThat(body("publish/raw/a.bin")).isEqualTo(hash + " 12");
+    }
+
+    private String body(String key) throws IOException {
+        return new String(store.readVersioned(key).orElseThrow().content(), StandardCharsets.UTF_8);
+    }
+
     @Test
     void a_sidecar_of_a_held_artifact_is_invisible_to_a_serving_read_and_visible_to_a_held_one() throws IOException {
         // The two content views, and the deadlock the second one exists to break. A sidecar is withheld by its

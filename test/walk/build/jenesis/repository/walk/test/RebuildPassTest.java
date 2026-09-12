@@ -254,6 +254,50 @@ class RebuildPassTest {
                 .doesNotContainKey("/quarantine/maven/held-1.0.jar");
     }
 
+    /**
+     * The serving pointer's hold flag is a copy of its {@code /quarantine} review pointer, written second on a hold
+     * and removed second on a release, so a crash between the two writes leaves the copy behind the original in one
+     * direction or the other. The pass brings the two back into line, one read per held pointer: a review pointer
+     * whose served path stands unflagged is flagged, and a flagged pointer whose review pointer is gone is lifted.
+     * The lifted one is delivered as served in the same pass (its own visit repairs it before delivery); the flagged
+     * one is repaired when the walk reaches its review pointer, which sorts after the served tree, so the pass that
+     * finds it delivers the torn state it found and the next pass withholds it.
+     */
+    @Test
+    void a_pass_brings_a_serving_pointers_hold_flag_back_into_line_with_its_review_pointer() throws IOException {
+        ArtifactStore store = store("hold-copy");
+        Publication publication = new Publication(store, List.of());
+        String served = publish(store, "/maven/app-1.0.jar", "served payload");
+        // A hold that lost its second write: the review pointer landed, the flag never did.
+        String underHeld = publish(store, "/maven/app-1.1.jar", "held, flag lost");
+        publish(store, "/quarantine/maven/app-1.1.jar", "held, flag lost");
+        // A release that lost its second write: the review pointer is gone, the flag is still set.
+        String overHeld = store.writeBlob(new ByteArrayInputStream("released, flag left".getBytes(StandardCharsets.UTF_8)));
+        store.writeVersioned("publish/maven/app-1.2.jar", (overHeld + " 19 held").getBytes(StandardCharsets.UTF_8), null);
+        Recording consumer = new Recording();
+
+        Optional<WalkPass> pass = RebuildPass.run(walk(), store, publication, List.of("publish"), List.of(consumer));
+
+        assertThat(pass).hasValueSatisfying(result -> assertThat(result.complete()).isTrue());
+        assertThat(new String(store.readVersioned("publish/maven/app-1.1.jar").orElseThrow().content(), StandardCharsets.UTF_8))
+                .as("the flag is copied from the review pointer the pass found").endsWith(" held");
+        assertThat(new String(store.readVersioned("publish/maven/app-1.2.jar").orElseThrow().content(), StandardCharsets.UTF_8))
+                .as("the flag is lifted where no review pointer stands").isEqualTo(overHeld + " 19");
+        assertThat(publication.located("/maven/app-1.1.jar")).as("held, as the queue says").isEmpty();
+        assertThat(publication.located("/maven/app-1.2.jar")).as("released, as the queue says").isPresent();
+        assertThat(consumer.derived).as("the over-held path is lifted before it is delivered; the under-held one is "
+                        + "delivered as the pass found it, its review pointer sorting after it")
+                .containsOnlyKeys("/maven/app-1.0.jar", "/maven/app-1.1.jar", "/maven/app-1.2.jar")
+                .containsEntry("/maven/app-1.0.jar", served)
+                .containsEntry("/maven/app-1.1.jar", underHeld)
+                .containsEntry("/maven/app-1.2.jar", overHeld);
+
+        Recording next = new Recording();
+        RebuildPass.run(walk(), store, publication, List.of("publish"), List.of(next));
+        assertThat(next.derived).as("the next pass withholds the path the repaired flag now holds")
+                .containsOnlyKeys("/maven/app-1.0.jar", "/maven/app-1.2.jar");
+    }
+
     @Test
     void a_withheld_and_gc_reclaimed_pointer_is_skipped_not_delivered_as_torn() throws IOException {
         ArtifactStore store = store("withheld-and-gone");

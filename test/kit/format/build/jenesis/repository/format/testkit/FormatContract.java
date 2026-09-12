@@ -7,7 +7,10 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Known;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.Withheld;
 
 /**
  * The executable {@link RepositoryFormat} / {@link ProxyFormat} / {@link ArtifactLayout} contract: one parameterized
@@ -79,6 +82,12 @@ public final class FormatContract {
          *  response, so the open is the existence check; a torn write the reconcile has not reached, or the
          *  collector's two-pass grace mid-way, is the state this guards. */
         GONE_BLOB_IS_A_CLEAN_404,
+        /** A published artifact held by both halves of the hold convention - the {@code /quarantine<path>} review
+         *  pointer and the {@code withheld/<hash>} marker - answers {@code 404} with no byte disclosed, and serves
+         *  the original bytes again, byte for byte, once both are lifted. The hold is copied onto the serving pointer
+         *  and the release must restore it: a serve that read the hold off its pointer but whose release left the
+         *  copy behind would 404 a released artifact forever, which is the defect this exists to catch. */
+        HELD_THEN_RELEASED_SERVES_AGAIN,
         /** The format's declared signature story matches what it implements: a format whose fixture names schemes
          *  implements {@code ArtifactSignatures} and expects them for its own artifact, and one that declares none
          *  implements nothing. This is the property that stops "which formats do we verify signatures for" being
@@ -157,6 +166,9 @@ public final class FormatContract {
                 new Check(Property.GONE_BLOB_IS_A_CLEAN_404,
                         "a pointer whose blob is gone answers a clean 404, never a truncated 200",
                         FormatContract::goneBlobIsACleanNotFound),
+                new Check(Property.HELD_THEN_RELEASED_SERVES_AGAIN,
+                        "a held artifact answers 404, and serves the original bytes again once released",
+                        FormatContract::heldThenReleasedServesAgain),
                 new Check(Property.SIGNATURE_STORY_IS_DECLARED,
                         "the declared signature story matches what the format implements",
                         FormatContract::signatureStoryIsDeclared),
@@ -261,6 +273,35 @@ public final class FormatContract {
         equal(get.status(), 404, fixture, "a GET of a pointer whose blob is gone answers 404 - the open before the "
                 + "commit is the existence check, and a 200 here would be a truncated body a client caches as empty");
         equal(get.responseLength(), 0L, fixture, "and writes no body");
+    }
+
+    /**
+     * The hold's round trip, driven the way the gate and the retroactive sweeps place one: the review pointer at
+     * {@code /quarantine<path>} (which {@code Publication.link} copies onto the serving pointer as its hold flag)
+     * and the content-addressed marker, then both lifted. Written red-first against the copy: with the flag written
+     * on the hold and nothing lifting it on the release, every publish/-namespace format failed the second leg,
+     * which is the failure a fold of the hold into the pointer has to be held against.
+     */
+    private static void heldThenReleasedServesAgain(FormatFixture fixture, ArtifactStore store) throws Exception {
+        byte[] body = ramp(ARTIFACT_BYTES);
+        FormatFixture.Published published = fixture.publish(store, body);
+        Publication publication = new Publication(store, List.of());
+        String review = Publication.QUARANTINE_PATH + published.servedPath();
+
+        publication.link(review, published.contentHash());
+        Withheld.mark(store, published.contentHash());
+        ContractExchange held = get(fixture, published.servedPath());
+        fixture.serving().handle(held, store);
+        equal(held.status(), 404, fixture, "a held artifact answers 404");
+        equal(held.responseLength(), 0L, fixture, "and discloses no byte of it");
+
+        publication.unpublish(review);
+        Withheld.clear(store, published.contentHash(), Known.absent());
+        ContractExchange released = get(fixture, published.servedPath());
+        fixture.serving().handle(released, store);
+        equal(released.status(), 200, fixture, "released, the path serves again - a hold that was copied onto the "
+                + "serving pointer must have been lifted from it by the release");
+        equal(released.responseSha256(), published.contentHash(), fixture, "and it serves the original bytes");
     }
 
     private static void headAnswersFromMetadata(FormatFixture fixture, ArtifactStore store) throws Exception {

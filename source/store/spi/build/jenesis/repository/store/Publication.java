@@ -362,6 +362,19 @@ public final class Publication {
      * it stored - passes it, and a caller that has not ({@code -1}) lets this method read it once: one stat at the
      * one moment a pointer is written, against the stat a download would otherwise pay on every read. A blob the
      * stat cannot find is linked without a length, as a torn link always was, for the reconcile pass to repair.
+     *
+     * <p><b>The hold rides the serving pointer.</b> A {@code /quarantine<path>} link is a hold on {@code <path>},
+     * and this is where the serving pointer learns of it: after the review pointer lands, the serving pointer at
+     * {@code <path>}, if one exists, is rewritten with its {@link ServableNames.Pointer#held() hold flag} set
+     * ({@link #suppress}), and {@link #unpublish} of the review pointer lifts it again. A serve therefore answers a
+     * held path off the pointer it reads anyway, where every download used to probe the review pointer as a second
+     * key. An ordinary link keeps the flag its predecessor carried - a republish under a hold stays held - and a
+     * first link of a path whose review pointer already stands is written held, one read of that pointer on the
+     * first link of a path only, so a clean re-publish over a pending review is not served past the hold. The
+     * review pointer is written first and the flag second: a crash between the two leaves the path serving until
+     * the rebuild walk copies the flag from the review pointer it finds, which is the direction a walk can repair
+     * without ever undoing a release (the reverse order would have a walk lift a flag whose review pointer was a
+     * moment from landing).
      */
     public String link(String requestPath, String hash, long size) throws IOException {
         // The one cheap check the publish hot path pays: a non-quarantine link is exactly the write below and nothing
@@ -373,12 +386,21 @@ public final class Publication {
         boolean quarantine = isQuarantinePath(requestPath);
         String key = "publish" + requestPath;
         long length = size < 0 ? store.size("blobs/" + hash) : size;
-        byte[] body = ServableNames.Pointer.render(hash, length);
-        Optional<ArtifactStore.Versioned> prior = Retries.decide(store, key,
-                current -> Retries.Verdict.write(body, current));
+        Optional<ArtifactStore.Versioned> prior = Retries.decide(store, key, current -> {
+            boolean held = !quarantine && (current.isPresent()
+                    ? ServableNames.parse(current.get().content()).held()
+                    : reviewPending(store, requestPath));
+            return Retries.Verdict.write(ServableNames.Pointer.render(hash, length, held), current);
+        });
         String condemned = "gc/condemned/" + hash;
         if (store.exists(condemned)) {
             store.delete(condemned);
+        }
+        if (quarantine) {
+            // The serving pointer's copy of the hold, after the review pointer and before the observers hear of it,
+            // so a listing observer re-deciding the entry reads the path as held. Every /quarantine link, fresh or
+            // a sweep's idempotent re-link, converges the flag; only a fresh one is a transition to announce.
+            suppress(requestPath.substring(QUARANTINE_PATH.length()), true);
         }
         if (quarantine && prior.isEmpty()) {
             notifyWithheld(ArtifactDescriptor.at(null, requestPath.substring(QUARANTINE_PATH.length()))
@@ -391,6 +413,36 @@ public final class Publication {
         return prior.map(versioned -> ServableNames.hash(versioned.content()))
                 .filter(previous -> !previous.isEmpty())
                 .orElse(null);
+    }
+
+    /**
+     * Set or lift the hold flag on the serving pointer at {@code servedPath} - the serving pointer's copy of "a
+     * {@code /quarantine<servedPath>} review pointer stands", which is what a serve reads instead of probing the
+     * review pointer. A compare-and-set rewrite of the pointer's body with nothing but the flag changed; a path with
+     * no serving pointer, or whose flag already reads {@code held}, is left untouched (one read, no write), and a
+     * body that names no hash (a sidecar row under the served tree) is never rewritten. {@link #link} calls it after
+     * a review pointer lands and {@link #unpublish} after one is removed; the rebuild walk calls it to bring a flag
+     * back into line with the review pointer it copies after a crash separated the two writes.
+     */
+    public void suppress(String servedPath, boolean held) throws IOException {
+        Retries.decide(store, "publish" + servedPath, current -> {
+            if (current.isEmpty()) {
+                return Retries.Verdict.keep(null);
+            }
+            ServableNames.Pointer pointer = ServableNames.parse(current.get().content());
+            if (pointer.held() == held || !hash(pointer.hash())) {
+                return Retries.Verdict.keep(null);
+            }
+            return Retries.Verdict.write(pointer.render(held), null);
+        });
+    }
+
+    /** Whether a {@code /quarantine<servedPath>} review pointer stands - the queue's own answer, read where the
+     *  serving pointer's copy of it cannot answer: a path that has no serving pointer yet (a fresh quarantine, or a
+     *  first link under a pending review), and the router's miss path deciding whether a local 404 is a hold that
+     *  ends its walk or an absence that falls through to an upstream. One point read of the review pointer. */
+    public static boolean reviewPending(ArtifactStore store, String servedPath) throws IOException {
+        return store.readVersioned(quarantineKey(servedPath)).isPresent();
     }
 
     /** The content hash a path currently points at, or empty if nothing is published there - the bare hash, whatever
@@ -521,6 +573,11 @@ public final class Publication {
             return;
         }
         store.delete("publish" + requestPath);
+        if (isQuarantinePath(requestPath)) {
+            // The serving pointer's copy of the hold is lifted after the review pointer goes and before any observer
+            // hears of it, so a listing observer re-deciding the entry reads the path as served again.
+            suppress(requestPath.substring(QUARANTINE_PATH.length()), false);
+        }
         ServableNames.Pointer parsed = ServableNames.parse(pointer.get().content());
         String named = parsed.hash();
         ArtifactDescriptor removed = ArtifactDescriptor.at(null, requestPath);
@@ -545,6 +602,9 @@ public final class Publication {
             return;
         }
         store.delete("publish" + described.path());
+        if (isQuarantinePath(described.path())) {
+            suppress(described.path().substring(QUARANTINE_PATH.length()), false);   // as the string variant
+        }
         ServableNames.Pointer parsed = ServableNames.parse(pointer.get().content());
         String named = parsed.hash();
         notifyDeleted(described.hash() == null && hash(named)

@@ -380,6 +380,7 @@ public final class RebuildPass {
         private final ArtifactWalk walk;
         private final ArtifactStore store;
         private final ServableNames names;
+        private final Publication publication;
         private final List<WalkConsumer> consumers;
         private final Map<WalkConsumer.Family, List<WalkConsumer>> listening;
         private final Map<String, WalkConsumer.Family> familyByRoot;
@@ -405,6 +406,7 @@ public final class RebuildPass {
             this.walk = walk;
             this.store = store;
             this.names = new ServableNames(store, publication);
+            this.publication = publication;
             this.consumers = consumers;
             this.listening = listening;
             this.familyByRoot = familyByRoot;
@@ -590,8 +592,12 @@ public final class RebuildPass {
             // Two reads per pointer per pass - the quarantine chain and the content-addressed withheld marker -
             // paid only when a consumer listening here distinguishes a held pointer from a served one. With none
             // that does, every pointer is delivered as published, which is what such a consumer asked for.
+            // Under publish/ the pointer's own hold flag - the serving pointer's copy of its /quarantine review
+            // pointer - is first brought back into line with the review pointer (a crash between a hold's or a
+            // release's two writes), then read as the path half of the hold before the chain and the marker.
+            boolean flagged = key.startsWith("publish/") ? reconcileHold(path, parsed) : parsed.held();
             boolean held = heldWanted
-                    && (key.startsWith("publish/") ? withheld(path, named) : Withheld.is(store, named));
+                    && (key.startsWith("publish/") ? flagged || withheld(path, named) : Withheld.is(store, named));
             if (!started) {
                 started(walk.pass(store, scope)
                         .orElseThrow(() -> new IOException("no rebuild pass to deliver under")));
@@ -609,7 +615,8 @@ public final class RebuildPass {
             if (length < 0) {
                 length = store.size("blobs/" + named);
                 if (length >= 0 && !new String(pointer.get().content(), StandardCharsets.UTF_8).contains(":")) {
-                    store.writeVersioned(key, ServableNames.Pointer.render(named, length), pointer.get().token());
+                    store.writeVersioned(key, ServableNames.Pointer.render(named, length, flagged),
+                            pointer.get().token());
                 }
             }
             ArtifactDescriptor artifact = new ArtifactDescriptor(null, null, null, path, null, false, named, length);
@@ -627,11 +634,38 @@ public final class RebuildPass {
             }
         }
 
+        /**
+         * Bring a serving pointer's hold flag back into line with the {@code /quarantine} review pointer it copies,
+         * and answer the flag as it now stands. {@code Publication.link} writes the review pointer and then the flag,
+         * {@code unpublish} removes the review pointer and then the flag; a crash between either pair leaves the copy
+         * behind the original in one direction, and this is the one place it is repaired - at the cost of one read
+         * per HELD pointer per pass, never one per pointer. A review pointer whose served path stands unflagged is
+         * flagged (a hold that lost its second write, under-holding until now); a flagged pointer whose review
+         * pointer is gone is lifted (a release that lost its second write, over-holding until now). Both converge on
+         * the review pointer, which is the queue and the authority; the ordering of the two writes is what keeps this
+         * repair from ever undoing a release or lifting a hold a moment from landing.
+         */
+        private boolean reconcileHold(String requestPath, ServableNames.Pointer parsed) throws IOException {
+            if (requestPath.startsWith("/quarantine/")) {
+                String served = requestPath.substring("/quarantine".length());
+                Optional<ArtifactStore.Versioned> serving = store.readVersioned("publish" + served);
+                if (serving.isPresent() && !ServableNames.parse(serving.get().content()).held()) {
+                    publication.suppress(served, true);
+                }
+                return parsed.held();
+            }
+            if (parsed.held() && !Publication.reviewPending(store, requestPath)) {
+                publication.suppress(requestPath, false);
+                return false;
+            }
+            return parsed.held();
+        }
+
         /** Whether a pointer is withheld from serving - the interceptor chain's hold on the path, the content-addressed
          *  marker under {@code withheld/} for its hash, or the quarantine path itself. Two point reads, where the
          *  servability probe this used to go through read the pointer again and stat the blob as well: a rebuild has
          *  already read the pointer and has the hash in hand, and a withheld-and-reclaimed pointer reads WITHHELD by
-         *  its marker alone. */
+         *  its marker alone. The pointer's own hold flag is read by the caller, off the body it already parsed. */
         private boolean withheld(String requestPath, String hash) throws IOException {
             if (requestPath.equals("/quarantine") || requestPath.startsWith("/quarantine/")) {
                 return true;
