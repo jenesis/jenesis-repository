@@ -195,9 +195,13 @@ public final class Publication {
     }
 
     /** As {@link #located}, with the blob's length beside the key - the face a {@code GET} sets its
-     *  {@code Content-Length} from and a {@code HEAD} answers from, so neither probes the blob a second time for a
-     *  number the probe that found it already returned. Measured before: a Maven download read the pointer, the
-     *  withheld marker, the blob's existence, then its length, then its bytes - two round trips for one fact. */
+     *  {@code Content-Length} from and a {@code HEAD} answers from. The length is read off the pointer, where
+     *  {@link #link} recorded it, so a serve probes the blob not at all: it opens the blob for the bytes, and the
+     *  open is what proves it present. Measured before: a Maven download read the pointer, the withheld marker, the
+     *  blob's existence, then its length, then its bytes - two round trips for one fact - and then, once the length
+     *  came out of the existence probe, four reads and a stat that only proved what the open proves anyway. A
+     *  pointer written before the length was recorded answers {@code -1}, and a serve answers it without a length
+     *  rather than through a stat; the reconcile pass regenerates such a pointer. */
     public Optional<Located> locate(String requestPath) throws IOException {
         // Delegate the servable-vs-not discrimination to the one enumeration seam so serve and enumeration can never
         // disagree (located empty iff state != SERVABLE); the seam composes this same publication's interceptor chain
@@ -227,13 +231,47 @@ public final class Publication {
      *  network to storage without being buffered whole in memory. The primitive a staging deploy or a cross-publish
      *  uses to hold bytes before any view points at them. */
     public String storeBlob(InputStream content) throws IOException {
+        return stored(content).hash();
+    }
+
+    /** A blob {@link #stored} content-addressed: its hash and its length, so a layout that links it passes the length
+     *  to {@link #link(String, String, long)} and the pointer records it without a stat. */
+    public record Blob(String hash, long size) {
+    }
+
+    /**
+     * {@link #storeBlob} answering the length beside the hash. A body the edge already stored ({@link Stored}) answers
+     * both without a read or a write; anything else streams through the content-addressed write with its bytes
+     * counted as they pass, so the length costs nothing a store of the bytes did not already cost.
+     */
+    public Blob stored(InputStream content) throws IOException {
         // The edge restreams an accepted body into the format's layout through a Stored stream; the bytes are in the
-        // store already, so the layout's own storeBlob answers the hash it carries and neither reads nor writes.
+        // store already, so the layout's own store answers the hash it carries and neither reads nor writes.
         // Measured before: every screened publish wrote its blob twice and read it once more for the second write.
         if (content instanceof Stored stored) {
-            return stored.hash();
+            return new Blob(stored.hash(), stored.size());
         }
-        return store.writeBlob(content);
+        long[] counted = {0L};
+        String hash = store.writeBlob(new FilterInputStream(content) {
+            @Override
+            public int read() throws IOException {
+                int one = super.read();
+                if (one >= 0) {
+                    counted[0]++;
+                }
+                return one;
+            }
+
+            @Override
+            public int read(byte[] buffer, int offset, int length) throws IOException {
+                int read = super.read(buffer, offset, length);
+                if (read > 0) {
+                    counted[0] += read;
+                }
+                return read;
+            }
+        });
+        return new Blob(hash, counted[0]);
     }
 
     /**
@@ -255,6 +293,11 @@ public final class Publication {
         /** The content hash of the stored bytes - the answer a store of this stream gives without storing. */
         public String hash() {
             return accepted.hash();
+        }
+
+        /** The stored bytes' length, known since the edge stored them. */
+        public long size() {
+            return accepted.size();
         }
 
         private InputStream open() throws IOException {
@@ -309,6 +352,18 @@ public final class Publication {
      *  collecting sweep's final marker re-read. One existence probe per link, a no-op wherever collection never
      *  condemned the blob; the marker key is the store-layout convention the {@code gc} SPI documents. */
     public String link(String requestPath, String hash) throws IOException {
+        return link(requestPath, hash, -1L);
+    }
+
+    /**
+     * {@link #link(String, String)} with the blob's stored length in hand, so the pointer records it without the
+     * stat the two-argument form pays to learn it. The length is what {@link #locate} answers a serve from, so a
+     * caller that has it - the commit point, a layout handed an {@link Acceptance}, a fill that counted the bytes
+     * it stored - passes it, and a caller that has not ({@code -1}) lets this method read it once: one stat at the
+     * one moment a pointer is written, against the stat a download would otherwise pay on every read. A blob the
+     * stat cannot find is linked without a length, as a torn link always was, for the reconcile pass to repair.
+     */
+    public String link(String requestPath, String hash, long size) throws IOException {
         // The one cheap check the publish hot path pays: a non-quarantine link is exactly the write below and nothing
         // more. A /quarantine<path> link is the pointer face of the withhold-change feed - a hold writer (the gate's
         // QUARANTINE branch, a retroactive KEV/license/reachability sweep) links a review pointer here - so a FRESH one
@@ -317,8 +372,10 @@ public final class Publication {
         // no event.
         boolean quarantine = isQuarantinePath(requestPath);
         String key = "publish" + requestPath;
+        long length = size < 0 ? store.size("blobs/" + hash) : size;
+        byte[] body = ServableNames.Pointer.render(hash, length);
         Optional<ArtifactStore.Versioned> prior = Retries.decide(store, key,
-                current -> Retries.Verdict.write(hash.getBytes(StandardCharsets.UTF_8), current));
+                current -> Retries.Verdict.write(body, current));
         String condemned = "gc/condemned/" + hash;
         if (store.exists(condemned)) {
             store.delete(condemned);
@@ -331,22 +388,32 @@ public final class Publication {
         // contribution with an equal one, so a consumer folding a delta must see it and compute zero; filtering it
         // out here as "nothing was replaced" is what makes such a publish count twice, and is the defect this value
         // exists to close.
-        return prior.map(versioned -> new String(versioned.content(), StandardCharsets.UTF_8).trim())
+        return prior.map(versioned -> ServableNames.hash(versioned.content()))
                 .filter(previous -> !previous.isEmpty())
                 .orElse(null);
     }
 
-    /** The content hash a path currently points at, or empty if nothing is published there. */
+    /** The content hash a path currently points at, or empty if nothing is published there - the bare hash, whatever
+     *  else the pointer's body records ({@link ServableNames.Pointer}), because callers compose store keys from it
+     *  ({@code "blobs/" + hash}) and a body answered here instead would compose a key nothing is stored under.
+     *  {@link #heldContentOf} resolves a held artifact's own evidence through exactly that composition. */
     public Optional<String> blob(String requestPath) throws IOException {
-        return pointer("publish" + requestPath);
+        return hashAt("publish" + requestPath);
     }
 
-    /** The hash body of an arbitrary pointer object, or empty when nothing is stored at the key - the keyed face of
+    /** The pointer a path currently carries - its hash and the blob's recorded length - or empty if nothing is
+     *  published there. The face {@link ServableNames#located} reads, so a serve learns the length from the pointer. */
+    Optional<ServableNames.Pointer> pointer(String requestPath) throws IOException {
+        return store.readVersioned("publish" + requestPath)
+                .map(versioned -> ServableNames.parse(versioned.content()));
+    }
+
+    /** The hash an arbitrary pointer object names, or empty when nothing is stored at the key - the keyed face of
      *  {@link #blob}, so the republish policy can probe a format's own serving-pointer namespace (an {@code npm/},
      *  {@code nuget/}, {@code pypi/} key) rather than only the {@code publish/} one this primitive owns. */
-    private Optional<String> pointer(String key) throws IOException {
+    private Optional<String> hashAt(String key) throws IOException {
         return store.readVersioned(key)
-                .map(versioned -> new String(versioned.content(), StandardCharsets.UTF_8).trim());
+                .map(versioned -> ServableNames.hash(versioned.content()));
     }
 
     /**
@@ -454,9 +521,10 @@ public final class Publication {
             return;
         }
         store.delete("publish" + requestPath);
-        String named = new String(pointer.get().content(), StandardCharsets.UTF_8).trim();
+        ServableNames.Pointer parsed = ServableNames.parse(pointer.get().content());
+        String named = parsed.hash();
         ArtifactDescriptor removed = ArtifactDescriptor.at(null, requestPath);
-        notifyDeleted(hash(named) ? removed.withBlob(named, -1L) : removed);
+        notifyDeleted(hash(named) ? removed.withBlob(named, parsed.size()) : removed);
         // The pointer face of the withhold-change feed's transition-OFF leg: removing a /quarantine<servedPath> review
         // pointer clears that hold, so fire onWithholdCleared with the served path (the /quarantine prefix stripped) and
         // the pointer's hash - IN ADDITION TO the onDeleted above, which for a quarantine path carries no coordinate the
@@ -477,8 +545,11 @@ public final class Publication {
             return;
         }
         store.delete("publish" + described.path());
-        String named = new String(pointer.get().content(), StandardCharsets.UTF_8).trim();
-        notifyDeleted(described.hash() == null && hash(named) ? described.withBlob(named, described.size()) : described);
+        ServableNames.Pointer parsed = ServableNames.parse(pointer.get().content());
+        String named = parsed.hash();
+        notifyDeleted(described.hash() == null && hash(named)
+                ? described.withBlob(named, described.size() < 0 ? parsed.size() : described.size())
+                : described);
         // The withhold-change feed's transition-OFF pointer leg, exactly as the string variant: a removed
         // /quarantine<servedPath> pointer fires onWithholdCleared with the stripped served path and the pointer's hash.
         if (isQuarantinePath(described.path())) {
@@ -888,7 +959,9 @@ public final class Publication {
      *  pointer (an OCI tag object, an ecosystem's version file) without this primitive knowing that layout. */
     @FunctionalInterface
     public interface Serving {
-        void link(String hash, ArtifactStore store) throws IOException;
+        /** Point the format's own pointer at the accepted blob: its hash, its stored length (for the pointer to record,
+         *  so a serve never stats the blob for it), and the scoped store. */
+        void link(String hash, long size, ArtifactStore store) throws IOException;
     }
 
     /** The format-specific half of a hosted publish: write the parse results and sidecars for an accepted blob, then
@@ -1064,10 +1137,10 @@ public final class Publication {
             if (step.requestPath() != null) {
                 // The first step is the artifact's own request path; a later one is a cross-published mirror, whose
                 // replacement is a different path's business. Only the first is what this publish overwrote.
-                String overwritten = link(step.requestPath(), hash);
+                String overwritten = link(step.requestPath(), hash, stored.size());
                 replaced = replaced == null ? overwritten : replaced;
             } else {
-                step.serving().link(hash, store);
+                step.serving().link(hash, stored.size(), store);
             }
         }
         ArtifactDescriptor committed;
@@ -1091,7 +1164,7 @@ public final class Publication {
             return;
         }
         String key = republish.key(artifact);
-        Optional<String> current = pointer(key);
+        Optional<String> current = hashAt(key);
         if (current.isEmpty() || (republish.mode() == Republish.Mode.IDEMPOTENT && current.get().equals(hash))) {
             return;
         }

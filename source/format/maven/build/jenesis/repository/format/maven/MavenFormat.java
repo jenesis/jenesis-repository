@@ -245,15 +245,28 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         String key = located.get().key();
         long size = located.get().size();
         if (head) {
-            // A HEAD is answered from the stored size (Content-Length), 200 with no body, without opening the blob -
-            // the read-first HEAD-from-metadata contract OciFormat/RawFormat already follow, so a HEAD never streams
-            // the whole artifact just to discard it.
-            exchange.setResponseHeader("Content-Length", Long.toString(size));
+            // A HEAD is answered from the pointer's recorded size (Content-Length), 200 with no body, without
+            // touching the blob - the read-first HEAD-from-metadata contract OciFormat/RawFormat already follow, so a
+            // HEAD never streams the whole artifact just to discard it, and since the length rides the pointer it
+            // probes nothing at all.
+            if (size >= 0) {
+                exchange.setResponseHeader("Content-Length", Long.toString(size));
+            }
             exchange.respond(200);
             return;
         }
-        try (OutputStream out = exchange.respond(200, size)) {
-            store.read(key, out);
+        // Opened BEFORE the response is committed, so the open is the existence check: a pointer whose blob is
+        // gone - a torn write the reconcile has not reached, the collector's two-pass grace mid-way - answers a
+        // clean 404 here rather than a 200 whose body ends after the headers.
+        InputStream in;
+        try {
+            in = store.open(key);
+        } catch (NoSuchFileException gone) {
+            exchange.respond(404);
+            return;
+        }
+        try (in; OutputStream out = exchange.respond(200, size)) {
+            in.transferTo(out);
         }
     }
 
@@ -271,7 +284,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      *  {@link Publication#located} serves over) is kept. The restreamed body dedupes to the same {@code blobs/<hash>}, so reading
      *  the module name back is identical to before. Returns the content-addressed blob hash. */
     public static String layout(ArtifactStore store, String path, InputStream body) throws IOException {
-        return layout(store, path, new Publication(store).storeBlob(body));
+        Publication.Blob blob = new Publication(store).stored(body);
+        return layout(store, path, blob.hash(), blob.size());
     }
 
     /**
@@ -302,7 +316,13 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      * first-hand. The exposure the first step buys is the exposure a successful publish buys anyway, one moment later.
      */
     public static String layout(ArtifactStore store, String path, String hash) throws IOException {
-        new Publication(store).link(path, hash);
+        return layout(store, path, hash, -1L);
+    }
+
+    /** {@link #layout(ArtifactStore, String, String)} with the blob's length in hand, so the pointer records it
+     *  without the stat the length-less form pays to learn it ({@link Publication#link(String, String, long)}). */
+    public static String layout(ArtifactStore store, String path, String hash, long size) throws IOException {
+        new Publication(store).link(path, hash, size);
         String[] coordinate = JavaLayout.mavenCoordinate(path);
         if (!path.endsWith(".jar") || coordinate == null) {
             return hash;
@@ -457,7 +477,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 // digest be computed while the body streams, without buffering it (§1); the unreferenced blob a
                 // refused fill leaves behind is exactly the object garbage collection exists to reclaim.
                 MessageDigest sha1 = sha1();
-                String hash = new Publication(store).storeBlob(new DigestInputStream(download.body(), sha1));
+                Publication.Blob stored = new Publication(store).stored(new DigestInputStream(download.body(), sha1));
+                String hash = stored.hash();
                 URI sibling = URI.create(prefix + rest + ".sha1");
                 Sha1 expected = upstreamSha1(fetcher, sibling);
                 if (expected.unreadable() != null) {
@@ -488,7 +509,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                             ? undecided(prefix + rest, exchange, "it does not match the SHA-1 the upstream publishes")
                             : false;
                 }
-                layout(store, path, hash);
+                layout(store, path, hash, stored.size());
             }
         }
         handle(exchange, store);

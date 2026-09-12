@@ -53,8 +53,8 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                 // Layout-only (EPIC 26): screening rides the ingress edge, which screens the body to ACCEPT and
                 // restreams the stored blob into this format. Store content-addressed (streamed, never buffered) and
                 // link the path, then respond 201 - verdicts are the edge's business, not the format's.
-                String hash = publication.storeBlob(exchange.requestStream());
-                publication.link(path, hash);
+                Publication.Blob blob = publication.stored(exchange.requestStream());
+                publication.link(path, blob.hash(), blob.size());
                 // The directory pages are written here, on the publish: the file joins its folder's stored page and
                 // the folder its ancestors', rather than the folder being enumerated and screened on every listing.
                 new RawListings(store).refresh(path);
@@ -79,7 +79,9 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                     return;
                 }
                 exchange.setResponseHeader("Content-Type", "application/octet-stream");
-                exchange.setResponseHeader("Content-Length", Long.toString(located.get().size()));
+                if (located.get().size() >= 0) {
+                    exchange.setResponseHeader("Content-Length", Long.toString(located.get().size()));
+                }
                 exchange.respond(200);
             }
             default -> {
@@ -93,8 +95,17 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                     return;
                 }
                 exchange.setResponseHeader("Content-Type", "application/octet-stream");
-                try (OutputStream out = exchange.respond(200, located.get().size())) {
-                    store.read(located.get().key(), out);
+                // Opened before the response is committed, so the open is the existence check and a pointer whose
+                // blob is gone answers a clean 404 rather than a truncated 200 (the same shape MavenFormat serves).
+                InputStream in;
+                try {
+                    in = store.open(located.get().key());
+                } catch (NoSuchFileException gone) {
+                    exchange.respond(404);
+                    return;
+                }
+                try (in; OutputStream out = exchange.respond(200, located.get().size())) {
+                    in.transferTo(out);
                 }
             }
         }
@@ -125,8 +136,8 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
             // Layout-only (EPIC 26): screening rides the ingress edge (under downstream the proxy ingress is already
             // screened by ProxyScreen/harden), so this lays the fetched body out - store it content-addressed
             // (streamed, never buffered) and link the path - and the handle() re-dispatch serves it.
-            String hash = publication.storeBlob(download.body());
-            publication.link(path, hash);
+            Publication.Blob blob = publication.stored(download.body());
+            publication.link(path, blob.hash(), blob.size());
         }
         handle(exchange, store);
         return true;

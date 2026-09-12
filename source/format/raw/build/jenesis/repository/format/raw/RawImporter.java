@@ -40,7 +40,7 @@ public final class RawImporter implements RepositoryImporter {
         // Layout-only (EPIC 26): screening rides the ingress edge (the import walk screens each asset before handing it
         // here), so this lays the asset out - store it content-addressed (streamed, never buffered) and link its
         // /raw/ path.
-        String hash = publication.storeBlob(content);
-        publication.link("/raw/" + relative, hash);
+        Publication.Blob blob = publication.stored(content);
+        publication.link("/raw/" + relative, blob.hash(), blob.size());
     }
 }

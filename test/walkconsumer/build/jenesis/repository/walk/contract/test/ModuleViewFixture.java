@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.format.maven.MavenFormat;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServedAliases;
+import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.testkit.WalkConsumerFixture;
 
 /**
@@ -107,7 +108,7 @@ final class ModuleViewFixture implements WalkConsumerFixture {
             String body = KitCorpus.text(store, prefix);
             String path = prefix.substring("publish".length());
             if (body != null && !path.equals(FIRST_HAND)) {
-                views.put(path, body);
+                views.put(path, ServableNames.parse(body).hash());   // the hash alone: the length the link recorded is not the projection
             }
             return;
         }

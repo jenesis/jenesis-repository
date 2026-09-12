@@ -385,7 +385,6 @@ public final class RebuildPass {
         private final Map<String, WalkConsumer.Family> familyByRoot;
         private final String scope;
         /** Whether any consumer listening on POINTERS reads the blob's size - resolved once, not per pointer. */
-        private final boolean sizeWanted;
         /** Whether any of them distinguishes a withheld pointer from a served one - likewise resolved once. */
         private final boolean heldWanted;
         /** Whether any listener uses a pointer delivery at all; with none, no pointer body is read. */
@@ -410,8 +409,6 @@ public final class RebuildPass {
             this.listening = listening;
             this.familyByRoot = familyByRoot;
             this.scope = scope;
-            this.sizeWanted = listening.getOrDefault(WalkConsumer.Family.POINTERS, List.of()).stream()
-                    .anyMatch(WalkConsumer::needsBlobSize);
             this.heldWanted = listening.getOrDefault(WalkConsumer.Family.POINTERS, List.of()).stream()
                     .anyMatch(WalkConsumer::needsWithheldStatus);
             this.pointersWanted = listening.getOrDefault(WalkConsumer.Family.POINTERS, List.of()).stream()
@@ -582,7 +579,8 @@ public final class RebuildPass {
             // instead threw every tag pointer away as "not a serving pointer", so a consumer over an OCI root was
             // handed nothing and then reported itself converged - the silently-incomplete view §5 forbids, and the
             // same normalisation ServableNames.hash was introduced for on the withhold screen.
-            String named = ServableNames.hash(pointer.get().content());
+            ServableNames.Pointer parsed = ServableNames.parse(pointer.get().content());
+            String named = parsed.hash();
             if (!hash(named)) {
                 return; // a sidecar row, marker or index - not a serving pointer, never delivered
             }
@@ -598,13 +596,23 @@ public final class RebuildPass {
                 started(walk.pass(store, scope)
                         .orElseThrow(() -> new IOException("no rebuild pass to deliver under")));
             }
-            // The blob's size is a HEAD on a key this walk is not enumerating, so unlike the pointer's own size
-            // no listing can answer it: one round trip per pointer per pass, measured on a node counting by key
-            // family as 4.80 reads per blob held, a fifth of what a collection reads. Paid when a consumer
-            // listening here says it will read it; -1 is the descriptor's own "unknown", which is what such a
-            // consumer would see anyway.
-            ArtifactDescriptor artifact = new ArtifactDescriptor(null, null, null, path, null, false, named,
-                    sizeWanted ? store.size("blobs/" + named) : -1);
+            // The blob's size comes off the pointer, where the link recorded it. A pointer written before the length
+            // was recorded has none, and for that one the walk pays, ONCE, what it used to pay per pointer per pass
+            // - a HEAD on a key it is not enumerating, measured on a node counting by key family as 4.80 reads per
+            // blob held - and writes the length back into the pointer, so that every serve and every later pass
+            // reads it there: this is the regeneration a cut-over store gets, one walk after the cutover, and the
+            // only place a lengthless pointer is ever completed. The OCI tag dialect (sha256:<hex>) is left as it
+            // is - its blobs are served by digest through the Distribution API, which carries its own length - so
+            // only a bare-hash body is rewritten, under compare-and-set against the body just read. -1 stays the
+            // descriptor's own "unknown" where the blob is gone, which is what a consumer would have seen anyway.
+            long length = parsed.size();
+            if (length < 0) {
+                length = store.size("blobs/" + named);
+                if (length >= 0 && !new String(pointer.get().content(), StandardCharsets.UTF_8).contains(":")) {
+                    store.writeVersioned(key, ServableNames.Pointer.render(named, length), pointer.get().token());
+                }
+            }
+            ArtifactDescriptor artifact = new ArtifactDescriptor(null, null, null, path, null, false, named, length);
             delivered[WalkConsumer.Family.POINTERS.ordinal()]++;
             for (WalkConsumer consumer : listening.get(WalkConsumer.Family.POINTERS)) {
                 if (held) {

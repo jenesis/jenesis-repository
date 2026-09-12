@@ -228,16 +228,12 @@ public interface WalkConsumer {
     /**
      * Whether this consumer reads {@link ArtifactDescriptor#size()} off the pointers it is handed.
      *
-     * <p>{@code true} by default, because most consumers do and one that has not thought about it must not
-     * silently be handed a {@code -1} it would read as "unknown". Declaring {@code false} lets the walk skip a
-     * round trip that no listing can answer: a pointer's own size comes from the listing that enumerated it, but
-     * the size of the <em>blob</em> it names is a different key, so it costs a HEAD per pointer per pass.
-     * Measured 2026-09-08 on a node counting by key family, that probe was 4.80 reads per blob held - a fifth of
-     * everything a collection reads. The walk pays it when any consumer listening on {@link Family#POINTERS}
-     * says it will read it, so the saving is real for a walk whose listeners do not - the daily retention walk
-     * carries the retention sweep and the roll-up, and neither reads a blob's size.
-     *
-     * @return whether the blob's size must be resolved for this consumer.
+     * <p>{@code true} by default. It used to be a cost dial: the size was a HEAD on the blob per pointer per pass,
+     * measured 2026-09-08 as 4.80 reads per blob held, paid only when a listener declared it would read the size.
+     * Since 2026-09-12 the length rides the pointer itself, so every consumer gets it for nothing and the walk stats
+     * a blob only for a pointer written before the length was recorded - once, writing the length back. The
+     * declaration stays for what it still says about the consumer, and so that a walk over a store the cutover
+     * has not reached yet is charged for the one stat by the consumer that wanted it.
      */
     default boolean needsBlobSize() {
         return true;

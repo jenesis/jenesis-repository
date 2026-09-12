@@ -128,8 +128,8 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
             // Layout-only (EPIC 26): screening rides the ingress edge, which screens the body to ACCEPT and restreams
             // the stored blob into this format, so this branch stores the body content-addressed (streamed, never
             // buffered) and links its path, then responds 201 - verdicts are the edge's business, not the format's.
-            String hash = publication.storeBlob(exchange.requestStream());
-            publication.link(path, hash);
+            Publication.Blob blob = publication.stored(exchange.requestStream());
+            publication.link(path, blob.hash(), blob.size());
             exchange.respond(201);
             return;
         }
@@ -141,14 +141,25 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
         String key = located.get().key();
         long size = located.get().size();
         if (exchange.method().equals("HEAD")) {
-            // A HEAD is answered from the stored size (Content-Length), 200 with no body, without opening the blob -
-            // the same HEAD-from-metadata contract OciFormat/RawFormat follow, rather than streaming the whole blob.
-            exchange.setResponseHeader("Content-Length", Long.toString(size));
+            // A HEAD is answered from the pointer's recorded size (Content-Length), 200 with no body, without
+            // touching the blob - the same HEAD-from-metadata contract OciFormat/RawFormat follow.
+            if (size >= 0) {
+                exchange.setResponseHeader("Content-Length", Long.toString(size));
+            }
             exchange.respond(200);
             return;
         }
-        try (OutputStream out = exchange.respond(200, size)) {
-            store.read(key, out);
+        // Opened before the response is committed, so the open is the existence check and a pointer whose blob is
+        // gone answers a clean 404 rather than a truncated 200 (the shape MavenFormat and RawFormat serve).
+        InputStream in;
+        try {
+            in = store.open(key);
+        } catch (NoSuchFileException gone) {
+            exchange.respond(404);
+            return;
+        }
+        try (in; OutputStream out = exchange.respond(200, size)) {
+            in.transferTo(out);
         }
     }
 }

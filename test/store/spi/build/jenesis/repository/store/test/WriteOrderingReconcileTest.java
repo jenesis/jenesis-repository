@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.store.testkit.StoreInvariants;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -67,9 +68,13 @@ class WriteOrderingReconcileTest {
         assertThatThrownBy(() -> new StoreInvariants(store).assertNoDanglingPointer())
                 .as("the dangling pointer is detected").isInstanceOf(AssertionError.class);
 
-        // The reconcile: remove the dangling pointer with the bare delete primitive - it serves nothing anyway, since
-        // located() already filters a pointer whose blob is gone to empty.
-        assertThat(new Publication(store).located("/raw/x")).as("a dangling pointer already serves nothing").isEmpty();
+        // The reconcile: remove the dangling pointer with the bare delete primitive - it serves nothing anyway: the
+        // serve opens the blob before it commits and the open of a missing blob is the typed absence it turns into
+        // a 404, while the enumeration face lists the blob and calls the pointer BLOB_GONE.
+        assertThat(new ServableNames(store).state("/raw/x")).as("a dangling pointer is seen for what it is")
+                .isEqualTo(ServableNames.State.BLOB_GONE);
+        assertThatThrownBy(() -> store.open("blobs/" + missing)).as("and the serve's open answers the absence")
+                .isInstanceOf(NoSuchFileException.class);
         store.delete("publish/raw/x");
 
         // Converged to fully-absent, and a re-check (the idempotent re-run) is a clean no-op.

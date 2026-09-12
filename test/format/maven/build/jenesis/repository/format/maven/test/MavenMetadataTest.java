@@ -7,6 +7,7 @@ import build.jenesis.repository.format.maven.MavenMetadata;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.ServableNames;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -148,8 +149,10 @@ class MavenMetadataTest {
         assertThat(xml).contains("<version>1.0</version>");
         assertThat(xml).as("latest/release are re-derived over the surviving set only")
                 .contains("<latest>1.0</latest>").contains("<release>1.0</release>");
-        // Its own artifact GET already 404s (located empty), so hiding the name only closes the enumeration leak.
-        assertThat(new Publication(store).located("/maven/org/example/lib/2.0/lib-2.0.jar")).isEmpty();
+        // Its own artifact GET already 404s (the path is not servable), so hiding the name only closes the
+        // enumeration leak.
+        assertThat(new ServableNames(store).state("/maven/org/example/lib/2.0/lib-2.0.jar"))
+                .isNotEqualTo(ServableNames.State.SERVABLE);
     }
 
     @Test
@@ -163,8 +166,9 @@ class MavenMetadataTest {
                 StandardCharsets.UTF_8);
 
         assertThat(xml).contains("<version>1.0</version>").contains("<version>3.0</version>");
-        assertThat(new Publication(store).located("/maven/org/example/lib/3.0/lib-3.0.jar"))
-                .as("blob is genuinely absent - the version is listed anyway, it is not withheld").isEmpty();
+        assertThat(new ServableNames(store).state("/maven/org/example/lib/3.0/lib-3.0.jar"))
+                .as("blob is genuinely absent - the version is listed anyway, it is not withheld")
+                .isEqualTo(ServableNames.State.BLOB_GONE);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package build.jenesis.repository.store.gcs;
 
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
@@ -101,6 +102,10 @@ public final class GcsArtifactStore implements ArtifactStore {
         try {
             return storage.objects().get(bucket, keyPrefix + key).executeMediaAsInputStream();
         } catch (GoogleJsonResponseException e) {
+            // The SPI's typed absence: a serve opens the blob before it commits and turns this into a clean 404.
+            if (e.getStatusCode() == 404) {
+                throw (IOException) new NoSuchFileException(key).initCause(e);
+            }
             throw new IOException("Could not read " + key, e);
         }
     }

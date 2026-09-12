@@ -114,7 +114,7 @@ final class OciManifests {
                     accepted.sidecar("oci/types/" + accepted.hash(), (mediaTypeOrNull == null
                             ? OCI_MANIFEST : mediaTypeOrNull).getBytes(StandardCharsets.UTF_8));
                     return Publication.Visibility
-                            .through((hex, target) -> {
+                            .through((hex, _, target) -> {
                                 if (!reference.startsWith("sha256:")) {
                                     OciFormat.linkTag(target, "oci/" + name + "/tags/" + reference, "sha256:" + hex);
                                     // The served tag list (and through it the catalog) is written here, on the
@@ -122,7 +122,7 @@ final class OciManifests {
                                     new OciListings(target).refresh(name, reference);
                                 }
                             })
-                            .andThrough((hex, target) -> clearStaleHold(target, path, hex, descriptor));
+                            .andThrough((hex, _, target) -> clearStaleHold(target, path, hex, descriptor));
                 });
         String hex = commit.hash();
         if (commit.disposition() != PublishInterceptor.Disposition.ACCEPT) {

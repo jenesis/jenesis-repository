@@ -132,12 +132,19 @@ class ServableNamesTest {
 
         for (String path : List.of("/maven/g/a/1/served.jar", "/maven/g/a/1/gone.jar",
                 "/maven/g/a/1/held.jar", "/maven/g/a/1/never.jar")) {
-            boolean servable = names.state(path) == State.SERVABLE;
+            // One truth for the withhold decision: serve and enumeration agree on WITHHELD and UNPUBLISHED exactly.
+            // The one state they read differently is a torn pointer: located() answers the pointer (the serve's
+            // open of the blob is what then answers a clean 404), while state() lists the blob and says BLOB_GONE
+            // - the stat the serve stopped paying, kept for the faces that enumerate rather than open.
+            State state = names.state(path);
+            boolean pointed = state == State.SERVABLE || state == State.BLOB_GONE;
             assertThat(publication.located(path).isPresent())
-                    .as("located(%s) present must equal state==SERVABLE", path)
-                    .isEqualTo(servable);
+                    .as("located(%s) present must equal state in {SERVABLE, BLOB_GONE}, state was %s", path, state)
+                    .isEqualTo(pointed);
         }
         assertThat(publication.located("/maven/g/a/1/served.jar")).contains("blobs/" + HASH_A);
+        assertThat(names.state("/maven/g/a/1/gone.jar")).as("the torn pointer is told apart where it is listed")
+                .isEqualTo(State.BLOB_GONE);
     }
 
     @Test

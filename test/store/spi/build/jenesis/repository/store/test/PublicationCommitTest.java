@@ -151,7 +151,7 @@ class PublicationCommitTest {
 
         Publication.Commit commit = publication.commit(descriptor("/raw/a"), bytes("payload"),
                 Publication.Republish.overwrite(), _ -> Publication.Visibility.at("/raw/a")
-                        .andThrough((hash, target) -> {
+                        .andThrough((hash, _, target) -> {
                             order.add("native:" + hash);
                             target.write("mirror/a", new ByteArrayInputStream(hash.getBytes(StandardCharsets.UTF_8)));
                         })
@@ -334,7 +334,7 @@ class PublicationCommitTest {
 
         Publication.Commit first = publication.commit(ArtifactDescriptor.at("npm", "/envelope"), bytes("payload"),
                 Publication.Republish.refused("npm/left-pad/tarballs/left-pad-1.3.0.tgz"),
-                _ -> Publication.Visibility.through((hash, target) ->
+                _ -> Publication.Visibility.through((hash, _, target) ->
                         target.write("npm/left-pad/tarballs/left-pad-1.3.0.tgz",
                                 new ByteArrayInputStream(hash.getBytes(StandardCharsets.UTF_8)))));
 
@@ -538,7 +538,7 @@ class PublicationCommitTest {
         Publication publication = new Publication(faulty, List.of(), List.of(observer));
 
         assertThatThrownBy(() -> publication.commit(descriptor("/raw/a"), bytes("payload"),
-                Publication.Republish.overwrite(), _ -> Publication.Visibility.through((hash, target) ->
+                Publication.Republish.overwrite(), _ -> Publication.Visibility.through((hash, _, target) ->
                         target.write("mirror/a", new ByteArrayInputStream(hash.getBytes(StandardCharsets.UTF_8))))))
                 .isInstanceOf(IOException.class);
 

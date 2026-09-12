@@ -45,6 +45,11 @@ public abstract class S3CompatibleArtifactStore implements ArtifactStore {
         try {
             return s3.getObject(b -> b.bucket(bucket).key(keyPrefix + key));
         } catch (S3Exception e) {
+            // The SPI's typed absence: a serve opens the blob before it commits and turns this into a clean 404,
+            // where any other failure is the store being unreachable and stays the error it is.
+            if (e.statusCode() == 404) {
+                throw (IOException) new NoSuchFileException(key).initCause(e);
+            }
             throw new IOException("Could not read " + key, e);
         }
     }

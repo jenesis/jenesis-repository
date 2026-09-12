@@ -199,8 +199,9 @@ class MavenFormatTest {
 
     @Test
     void a_download_probes_its_blob_once() throws IOException {
-        // The pointer, the withheld marker, the blob's length, the bytes: four reads for a GET and three for a HEAD.
-        // Measured before this held: an existence probe and then a length probe of the same blob, five and four.
+        // The pointer, the withheld marker, the open of the blob for its bytes: three reads for a GET and two for a
+        // HEAD, the length coming off the pointer. Measured before this held: a stat of the blob for its length beside
+        // the open (four and three), and before that an existence probe and then a length probe (five and four).
         MavenFormat.layout(store, "/maven/org/example/lib/1.0/lib-1.0.jar",
                 new java.io.ByteArrayInputStream(automaticModuleJar("org.example.lib")));
 
@@ -209,16 +210,17 @@ class MavenFormatTest {
         format.handle(download, get);
         assertThat(download.status()).isEqualTo(200);
         assertThat(get.calls(FaultInjectingStore.Op.READ_VERSIONED)).as("the pointer and the withheld marker").isEqualTo(2);
-        assertThat(get.calls(FaultInjectingStore.Op.SIZE)).as("the blob's length, which also proves it present").isEqualTo(1);
-        assertThat(get.calls(FaultInjectingStore.Op.EXISTS)).as("no existence probe beside the length").isZero();
-        assertThat(get.calls(FaultInjectingStore.Op.READ)).as("the bytes").isEqualTo(1);
+        assertThat(get.calls(FaultInjectingStore.Op.SIZE)).as("no stat: the length rides the pointer").isZero();
+        assertThat(get.calls(FaultInjectingStore.Op.EXISTS)).as("no existence probe: the open proves the blob present").isZero();
+        assertThat(get.calls(FaultInjectingStore.Op.OPEN)).as("the bytes, opened before the status is committed").isEqualTo(1);
+        assertThat(get.calls(FaultInjectingStore.Op.READ)).as("never a second read of the same blob").isZero();
 
         FaultInjectingStore head = FaultInjectingStore.wrap(store);
         FakeExchange probe = new FakeExchange("HEAD", "/maven/org/example/lib/1.0/lib-1.0.jar");
         format.handle(probe, head);
         assertThat(probe.status()).isEqualTo(200);
         assertThat(probe.responseHeader("Content-Length")).isEqualTo(Long.toString(automaticModuleJar("org.example.lib").length));
-        assertThat(head.calls(FaultInjectingStore.Op.SIZE)).isEqualTo(1);
+        assertThat(head.calls(FaultInjectingStore.Op.SIZE)).as("a HEAD answers its length off the pointer").isZero();
         assertThat(head.calls(FaultInjectingStore.Op.EXISTS)).isZero();
         assertThat(head.calls(FaultInjectingStore.Op.READ) + head.calls(FaultInjectingStore.Op.OPEN)).as("a HEAD opens no blob").isZero();
     }

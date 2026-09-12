@@ -7,6 +7,8 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
+import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -32,6 +34,40 @@ class PublicationTest {
 
     private static ByteArrayInputStream bytes(String content) {
         return new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * The pointer records the blob's length beside its hash, and a serve reads the length off the pointer rather
+     * than off the blob: {@code locate} stats nothing, {@code blob} still answers the bare hash whatever the body
+     * carries (the composition {@code "blobs/" + hash} depends on it), and a pointer written before the length was
+     * recorded answers no length rather than a stat - the reconcile pass regenerates it. Measured 2026-09-12: the
+     * stat was the fifth of a download's five reads on every backing.
+     */
+    @Test
+    void the_pointer_records_the_length_and_a_serve_reads_it_there() throws IOException {
+        Publication publication = new Publication(store, List.of());
+        String hash = publication.storeBlob(bytes("twelve bytes"));
+        FaultInjectingStore counting = FaultInjectingStore.wrap(store);
+        Publication counted = new Publication(counting, List.of());
+
+        counted.link("/raw/sized.bin", hash, 12L);
+        assertThat(counting.calls(FaultInjectingStore.Op.SIZE)).as("a link handed the length stats nothing").isZero();
+        assertThat(new String(store.readVersioned("publish/raw/sized.bin").orElseThrow().content(), StandardCharsets.UTF_8))
+                .as("the pointer body is the hash and the length").isEqualTo(hash + " 12");
+        assertThat(counted.blob("/raw/sized.bin")).as("blob() answers the bare hash, not the body").contains(hash);
+        assertThat(counted.locate("/raw/sized.bin")).as("a serve reads the length off the pointer")
+                .contains(new Publication.Located("blobs/" + hash, 12L));
+        assertThat(counting.calls(FaultInjectingStore.Op.SIZE)).as("and stats no blob for it").isZero();
+
+        counted.link("/raw/counted.bin", hash);
+        assertThat(counting.calls(FaultInjectingStore.Op.SIZE)).as("a link without the length stats it once").isEqualTo(1);
+        assertThat(counted.locate("/raw/counted.bin")).contains(new Publication.Located("blobs/" + hash, 12L));
+        assertThat(counting.calls(FaultInjectingStore.Op.SIZE)).as("and the serve still stats nothing").isEqualTo(1);
+
+        store.writeVersioned("publish/raw/older.bin", hash.getBytes(StandardCharsets.UTF_8), null);
+        assertThat(counted.locate("/raw/older.bin")).as("a pointer without a length is served without one, never "
+                + "through a stat").contains(new Publication.Located("blobs/" + hash, -1L));
+        assertThat(counting.calls(FaultInjectingStore.Op.SIZE)).isEqualTo(1);
     }
 
     @Test
@@ -219,7 +255,18 @@ class PublicationTest {
         publication.link("/raw/r", hash);
         store.delete("blobs/" + hash);
         assertThat(publication.blob("/raw/r")).as("the pointer still exists").contains(hash);
-        assertThat(publication.located("/raw/r")).as("but the blob it referenced is gone").isEmpty();
+        // The pointer says servable and locate believes it: a serve learns the blob is gone from the open it makes
+        // before committing its response (a clean 404, held by the format contract), not from a stat here - that
+        // stat was the fifth read of every download and proved only what the open proves anyway. The enumeration
+        // face, which lists rather than opens, is the one that still tells a torn pointer apart.
+        assertThat(publication.located("/raw/r")).as("locate answers the pointer, and the open answers the blob")
+                .contains("blobs/" + hash);
+        assertThat(new ServableNames(store, publication).state("/raw/r"))
+                .as("the enumeration face still sees the torn pointer for what it is")
+                .isEqualTo(ServableNames.State.BLOB_GONE);
+        assertThatThrownBy(() -> store.open("blobs/" + hash))
+                .as("and the open a serve makes before it commits is the typed absence it turns into a 404")
+                .isInstanceOf(NoSuchFileException.class);
     }
 
     @Test

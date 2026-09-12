@@ -2,6 +2,7 @@ package build.jenesis.repository.store.testkit;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * Asserts the store-primitive consistency invariants a crash-recovery test checks once a repair pass has run - the two
@@ -72,7 +73,7 @@ public final class StoreInvariants {
     /** The blob hash a pointer holds, trimmed, or null if the object is absent. */
     private String read(String pointer) throws IOException {
         return store.readVersioned(pointer)
-                .map(versioned -> new String(versioned.content(), StandardCharsets.UTF_8).trim())
+                .map(versioned -> ServableNames.hash(versioned.content()))
                 .orElse(null);
     }
 

@@ -214,7 +214,13 @@ public final class ServableNames {
      *  on a path that already reads its pointer, and it can only ever hide more: a pointer naming a hash no marker
      *  covers answers exactly as before. */
     public State state(String requestPath) throws IOException {
-        return located(requestPath).state();
+        Location location = located(requestPath);
+        if (location.state() != State.SERVABLE) {
+            return location.state();
+        }
+        // The stat the serve no longer pays: an enumeration face asking for serve parity (browse, the raw listing,
+        // /assets) still distinguishes a torn pointer from a servable one, because it lists rather than opens.
+        return store.exists("blobs/" + location.hash()) ? State.SERVABLE : State.BLOB_GONE;
     }
 
     /** Whether the interceptor chain withholds {@code requestPath} - the hold probe alone, for a caller that already
@@ -223,11 +229,11 @@ public final class ServableNames {
         return publication.withheld(requestPath);
     }
 
-    /** A path's state and, when it is {@link State#SERVABLE}, the content hash its pointer resolved to - so a serve
-     *  that has just decided a path is servable streams {@code blobs/<hash>} without reading the pointer again. */
-    /** Where a request path stands, and for a {@link State#SERVABLE} one the hash its pointer names and the blob's
-     *  stored length - read in the one stat that proves the blob present, so a serve sets its {@code Content-Length}
-     *  without probing the same object again. {@code -1} where there is no blob to measure. */
+    /** Where a request path stands, and for a {@link State#SERVABLE} one the hash its pointer names and the length
+     *  the pointer records - so a serve sets its {@code Content-Length} without a stat and opens the blob for the
+     *  bytes, the open being what proves the blob present. {@code -1} where the pointer records no length (one
+     *  written before the length rode the pointer, until the rebuild walk backfills it), which a serve answers
+     *  without a {@code Content-Length}. */
     public record Location(State state, String hash, long size) {
     }
 
@@ -236,11 +242,12 @@ public final class ServableNames {
             if (publication.withheld(requestPath)) {
                 return new Location(State.WITHHELD, null, -1L);
             }
-            Optional<String> hash = publication.blob(requestPath);
-            if (hash.isEmpty()) {
+            Optional<Pointer> pointer = publication.pointer(requestPath);
+            if (pointer.isEmpty()) {
                 return new Location(State.UNPUBLISHED, null, -1L);
             }
-            if (Withheld.is(store, hash.get())) {
+            String hash = pointer.get().hash();
+            if (Withheld.is(store, hash)) {
                 return new Location(State.WITHHELD, null, -1L);
             }
             // A sidecar is held by its subject's hold. Read AFTER the pointer, so a path that is not published pays
@@ -250,10 +257,12 @@ public final class ServableNames {
             if (subject != null && held(subject)) {
                 return new Location(State.WITHHELD, null, -1L);
             }
-            long size = store.size("blobs/" + hash.get());
-            return size < 0
-                    ? new Location(State.BLOB_GONE, null, -1L)
-                    : new Location(State.SERVABLE, hash.get(), size);
+            // The blob's length comes off the pointer, never off the blob: a serve sets its Content-Length from it
+            // and opens the blob for the bytes, and that open is what proves the blob present (a pointer whose blob
+            // is gone answers a clean 404 from the open, never a truncated 200). Step (5) of the javadoc above - the
+            // stat - is therefore the enumeration faces' alone, in state(); measured 2026-09-12 as the fifth of a
+            // download's five reads on every backing, and the one this location no longer pays.
+            return new Location(State.SERVABLE, hash, pointer.get().size());
         } catch (RuntimeException hostile) {
             LOGGER.warn("servable-name probe of {} failed; treating as withheld (fail-closed)", requestPath, hostile);
             return new Location(State.WITHHELD, null, -1L);
@@ -411,14 +420,70 @@ public final class ServableNames {
      * hand-edited pointer) still matches no marker, exactly as before.
      */
     public static String hash(byte[] pointerBody) {
-        return hash(new String(pointerBody, StandardCharsets.UTF_8));
+        return parse(pointerBody).hash();
     }
 
     /** {@link #hash(byte[])} over an already-decoded pointer body. */
     public static String hash(String pointerBody) {
+        return parse(pointerBody).hash();
+    }
+
+    /**
+     * What a serving pointer's body says: the content hash it names, and the blob's stored length where the writer
+     * recorded one - {@code -1} where it did not.
+     *
+     * <p>The body of a {@code publish/} or blobs-namespace pointer is the lower-case SHA-256 hex followed, since
+     * 2026-09-12, by a space and the blob's length in decimal bytes: {@code <hash> <length>}. The length is a pure
+     * function of an immutable hash - no authority moves, nothing can go stale - and recording it costs no write,
+     * the pointer being written anyway; reading it is what lets a download set its {@code Content-Length} without
+     * a stat of the blob, and a {@code HEAD} answer without touching the blob at all. A pointer written before the
+     * length was recorded parses with {@code -1}: it is served without a length (a chunked body, a {@code HEAD}
+     * without {@code Content-Length}) until the reconcile pass regenerates it with one, and is never read through a
+     * stat on the request path - a fallback there would be the very read the length exists to remove. The OCI
+     * tag-pointer dialect ({@code sha256:<hex>}) carries no length and never will; its blobs are served by digest
+     * through the Distribution API, which has its own length.
+     */
+    public record Pointer(String hash, long size) {
+
+        /** The body {@link Publication#link} and its blobs-namespace twin write for this hash and length: the hash
+         *  alone where the length is unknown, so a torn link a reconcile repairs is written as it always was. */
+        public static byte[] render(String hash, long size) {
+            String body = size < 0 ? hash : hash + " " + size;
+            return body.getBytes(StandardCharsets.UTF_8);
+        }
+    }
+
+    /** {@link #parse(String)} over a pointer's stored bytes. */
+    public static Pointer parse(byte[] pointerBody) {
+        return parse(new String(pointerBody, StandardCharsets.UTF_8));
+    }
+
+    /**
+     * The one place a pointer's dialect is read - see {@link Pointer} for the shapes. A body that is none of them (a
+     * torn or hand-edited pointer) yields whatever its first token is as the hash and no length, which matches no
+     * marker and stats no blob: it can only ever hide more, never disclose more.
+     */
+    public static Pointer parse(String pointerBody) {
         String trimmed = pointerBody.trim();
-        int colon = trimmed.indexOf(':');
-        return colon < 0 ? trimmed : trimmed.substring(colon + 1);
+        int space = trimmed.indexOf(' ');
+        String first = space < 0 ? trimmed : trimmed.substring(0, space);
+        int colon = first.indexOf(':');
+        String hash = colon < 0 ? first : first.substring(colon + 1);
+        long size = -1L;
+        if (space >= 0) {
+            String rest = trimmed.substring(space + 1).trim();
+            int end = rest.indexOf(' ');
+            String length = end < 0 ? rest : rest.substring(0, end);
+            try {
+                size = Long.parseLong(length);
+            } catch (NumberFormatException notALength) {
+                size = -1L;
+            }
+            if (size < 0) {
+                size = -1L;
+            }
+        }
+        return new Pointer(hash, size);
     }
 
     /** The raw marker probe ({@code store.readVersioned("withheld/" + sha256)}, via {@link Withheld#is}) - the

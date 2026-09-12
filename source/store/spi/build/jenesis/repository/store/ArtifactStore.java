@@ -370,8 +370,14 @@ public interface ArtifactStore {
      * Open the blob at this key for reading, so a caller that must pull the bytes through an existing stream
      * consumer - the SHA-256 concatenation that finalizes a chunked upload, or the jar inspection that reads a
      * just-stored artifact back rather than buffering it from the network - streams it without holding it whole in
-     * memory. The symmetric counterpart of {@link #write(String, InputStream)}. The key must exist; the caller
-     * closes the returned stream.
+     * memory. The symmetric counterpart of {@link #write(String, InputStream)}. The caller closes the returned
+     * stream.
+     *
+     * <p>A key that holds nothing throws {@link java.nio.file.NoSuchFileException} <em>from this call</em>, before
+     * any byte is read - never a stream that fails on its first read, and never a generic failure. A serve opens the
+     * blob before it commits its response, so that the open is the existence check: a pointer whose blob is gone
+     * answers a clean {@code 404} from the typed failure, while a store that is down surfaces as the error it is.
+     * The store contract kit holds every backend to this.
      */
     InputStream open(String key) throws IOException;
 

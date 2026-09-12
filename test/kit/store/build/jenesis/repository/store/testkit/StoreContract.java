@@ -259,6 +259,10 @@ public final class StoreContract {
         equal(store.size(key), -1L, "an unwritten key sizes to -1 rather than 0");
         throwsIo(() -> store.read(key, new ByteArrayOutputStream()), "reading an absent key");
         throwsIo(() -> drain(store.open(key)), "opening an absent key");
+        // Typed, and from the open itself: a serve opens the blob before it commits its response and turns this
+        // into a clean 404, so a backend that answered a stream failing on its first read would have it write a
+        // truncated 200, and one that answered a generic failure would have it report an outage for an absence.
+        throwsNoSuchFile(() -> store.open(key), "opening an absent key, before any byte is read");
 
         store.write(key, new ByteArrayInputStream(body));
         isTrue(store.exists(key), "a written key exists");
@@ -937,6 +941,18 @@ public final class StoreContract {
     }
 
     /** A body that must fail with an {@link IOException} - the SPI's transport-failure shape. */
+    private static void throwsNoSuchFile(Fallible body, String what) {
+        try {
+            body.run();
+        } catch (NoSuchFileException expected) {
+            return;
+        } catch (Exception e) {
+            throw failure(what + " - expected a NoSuchFileException but " + e.getClass().getName()
+                    + " was thrown: " + e.getMessage());
+        }
+        throw failure(what + " - expected a NoSuchFileException but nothing was thrown");
+    }
+
     private static void throwsIo(Fallible body, String what) {
         try {
             body.run();

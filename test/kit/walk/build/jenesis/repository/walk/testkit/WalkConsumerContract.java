@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
+import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.RebuildPass;
 import build.jenesis.repository.walk.Trees;
 import build.jenesis.repository.walk.WalkConsumer;
@@ -284,8 +285,8 @@ public final class WalkConsumerContract {
     }
 
     /**
-     * Re-spell every second bare-hex pointer body under the fixture's roots as {@code sha256:<hex>} and answer how many
-     * were re-spelled. A versioned rewrite against the token just read, so the kit changes a pointer exactly as a
+     * Re-spell every second bare-hex pointer body under the fixture's roots as {@code sha256:<hex>} - the recorded
+     * length, where the body carries one, riding along unchanged - and answer how many were re-spelled. A versioned rewrite against the token just read, so the kit changes a pointer exactly as a
      * writer of that pointer would; a leaf that is not a pointer at all (a sidecar row, a marker) is left alone,
      * because the corpus's non-pointer leaves are what make the delivery count meaningful in the first place.
      */
@@ -295,7 +296,7 @@ public final class WalkConsumerContract {
             Trees.descend(store, root, keys::add);
         }
         keys.sort(Comparator.naturalOrder());
-        int requalified = 0;
+        int count = 0;
         boolean turn = false;
         for (String key : keys) {
             Optional<ArtifactStore.Versioned> pointer = store.readVersioned(key);
@@ -303,24 +304,27 @@ public final class WalkConsumerContract {
                 continue;
             }
             String body = new String(pointer.get().content(), StandardCharsets.UTF_8).trim();
-            if (!bareHash(body)) {
+            ServableNames.Pointer parsed = ServableNames.parse(body);
+            if (body.contains(":") || !bareHash(parsed.hash())) {
                 continue;
             }
             turn = !turn;
             if (!turn) {
                 continue;
             }
-            if (!store.writeVersioned(key, ("sha256:" + body).getBytes(StandardCharsets.UTF_8),
-                    pointer.get().token())) {
+            // The length the pointer records rides along: the re-spelling changes the hash's dialect and nothing else.
+            byte[] requalified = ServableNames.Pointer.render("sha256:" + parsed.hash(), parsed.size());
+            if (!store.writeVersioned(key, requalified, pointer.get().token())) {
                 throw failure(fixture, "re-spelling the pointer at " + key + " lost its compare-and-set, so the "
                         + "corpus this check needs was never established");
             }
-            requalified++;
+            count++;
         }
-        return requalified;
+        return count;
     }
 
-    /** Whether a pointer body is the bare lower-case SHA-256 hex - the dialect this check re-spells away from. */
+    /** Whether a pointer's hash token is the bare lower-case SHA-256 hex - the dialect this check re-spells away
+     *  from; the body's second token, the length the pointer records, is not part of the question. */
     private static boolean bareHash(String body) {
         if (body.length() != 64) {
             return false;

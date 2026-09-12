@@ -74,6 +74,11 @@ public final class FormatContract {
         /** A published artifact serves back byte for byte, repeatably, from its content-addressed blob
          *  ({@code RepositoryFormat} clauses 2 and 4). */
         PUBLISH_SERVES_EXACT_BYTES,
+        /** A pointer whose blob is gone answers a clean {@code 404} - never a {@code 200} whose body ends after the
+         *  headers. The serve reads the blob's length off the pointer and opens the blob before it commits its
+         *  response, so the open is the existence check; a torn write the reconcile has not reached, or the
+         *  collector's two-pass grace mid-way, is the state this guards. */
+        GONE_BLOB_IS_A_CLEAN_404,
         /** The format's declared signature story matches what it implements: a format whose fixture names schemes
          *  implements {@code ArtifactSignatures} and expects them for its own artifact, and one that declares none
          *  implements nothing. This is the property that stops "which formats do we verify signatures for" being
@@ -149,6 +154,9 @@ public final class FormatContract {
                 new Check(Property.PUBLISH_SERVES_EXACT_BYTES,
                         "a published artifact serves back byte for byte from its content-addressed blob",
                         FormatContract::publishServesExactBytes),
+                new Check(Property.GONE_BLOB_IS_A_CLEAN_404,
+                        "a pointer whose blob is gone answers a clean 404, never a truncated 200",
+                        FormatContract::goneBlobIsACleanNotFound),
                 new Check(Property.SIGNATURE_STORY_IS_DECLARED,
                         "the declared signature story matches what the format implements",
                         FormatContract::signatureStoryIsDeclared),
@@ -232,6 +240,27 @@ public final class FormatContract {
         isTrue(missing.status() >= 400, fixture,
                 "an unpublished path this format claims answers a client error, never an empty 200 (was "
                         + missing.status() + ")");
+    }
+
+    /**
+     * The one way an open-before-commit serve can go wrong, driven: the artifact is published, its blob deleted out
+     * from under the pointer, and a GET must answer a clean 404 with no body. Before the serve opened first, the
+     * length came from a stat that doubled as the existence check; once the length rides the pointer that stat is
+     * gone, and a serve that committed its headers before opening the blob would answer 200 and then nothing - the
+     * shape a client caches as an empty artifact.
+     */
+    private static void goneBlobIsACleanNotFound(FormatFixture fixture, ArtifactStore store) throws Exception {
+        byte[] body = ramp(ARTIFACT_BYTES);
+        FormatFixture.Published published = fixture.publish(store, body);
+        String blob = "blobs/" + published.contentHash();
+        isTrue(store.exists(blob), fixture, "the artifact is stored content-addressed at " + blob);
+
+        store.delete(blob);
+        ContractExchange get = get(fixture, published.servedPath());
+        fixture.serving().handle(get, store);
+        equal(get.status(), 404, fixture, "a GET of a pointer whose blob is gone answers 404 - the open before the "
+                + "commit is the existence check, and a 200 here would be a truncated body a client caches as empty");
+        equal(get.responseLength(), 0L, fixture, "and writes no body");
     }
 
     private static void headAnswersFromMetadata(FormatFixture fixture, ArtifactStore store) throws Exception {
