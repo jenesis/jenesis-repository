@@ -38,7 +38,13 @@ public final class FaultInjectingStore implements ArtifactStore {
         /** Delegate, then throw - the mutation lands but the caller sees a failure (a crash after the write). */
         THROW_AFTER,
         /** Return {@code false} from {@code writeVersioned} - a benign compare-and-set conflict, no exception. */
-        CONFLICT
+        CONFLICT,
+        /** Delegate the write, then return {@code false} - the write LANDS and the caller is told it lost.
+         *  The SDK-replay shape: a conditional PUT that succeeded at the server and whose response was lost is
+         *  retried by the client, the retry fails its precondition because the first attempt moved the ETag, and
+         *  a write that happened is reported as a conflict. Distinct from {@link #CONFLICT}, where nothing was
+         *  written and the loss is real. */
+        CONFLICT_AFTER
     }
 
     private static final class Rule {
@@ -165,6 +171,12 @@ public final class FaultInjectingStore implements ArtifactStore {
      *  caller's retry loop runs rather than the exception path. */
     public FaultInjectingStore conflictNext(Predicate<String> key) {
         return arm(new Rule(Op.WRITE_VERSIONED, key, Mode.CONFLICT, 0, 1));
+    }
+
+    /** Make the next matching {@code writeVersioned} land its write and then return {@code false} - the caller is
+     *  told it lost a compare-and-set it won. See {@link Mode#CONFLICT_AFTER} for why a real store does this. */
+    public FaultInjectingStore conflictAfterNext(Predicate<String> key) {
+        return arm(new Rule(Op.WRITE_VERSIONED, key, Mode.CONFLICT_AFTER, 0, 1));
     }
 
     private synchronized FaultInjectingStore arm(Rule rule) {
@@ -374,6 +386,9 @@ public final class FaultInjectingStore implements ArtifactStore {
         boolean written = delegate.writeVersioned(key, content, expected);
         if (mode == Mode.THROW_AFTER) {
             throw fault(Op.WRITE_VERSIONED, key);
+        }
+        if (mode == Mode.CONFLICT_AFTER) {
+            return false;                                        // it landed; the caller is told otherwise
         }
         return written;
     }

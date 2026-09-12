@@ -43,6 +43,41 @@ class RetriesTest {
         return store.readVersioned(KEY).map(v -> new String(v.content(), StandardCharsets.UTF_8)).orElse(null);
     }
 
+    /**
+     * A write that landed and was reported lost is recognised as landed, and the mutation does not run again.
+     *
+     * <p><b>The shape this defends against.</b> Between the caller and an object store sits an SDK that retries. A
+     * conditional PUT that succeeds at the server and whose response is lost in transit is sent again; the second
+     * attempt fails its precondition, because the first already moved the ETag; and the store reports a lost
+     * compare-and-set for a write that happened. Without the re-read the caller believes it, re-reads, recomputes
+     * against its own bytes and writes again - which for a mutation that appends is not merely wasteful but
+     * <em>wrong</em>: it would append twice.
+     *
+     * <p>Measured 2026-09-11/12 by {@code StoreOperationsE2ETest}'s two-size claim: a serial publish - no peer,
+     * nothing it could honestly lose to - paying twelve extra read-write pairs on azure-blob in one lane, eleven on
+     * s3 two lanes later, none on the filesystem in any of them. Reads and writes rose by exactly the same amount,
+     * which is what a caller-level retry costs and what distinguishes this from a probe or a larger document.
+     *
+     * <p>The sibling above is the honest loss: nothing was written, the mutation must run again, and it does.
+     */
+    @Test
+    void a_write_that_landed_and_was_reported_lost_is_not_applied_twice() throws IOException {
+        store.writeVersioned(KEY, bytes("a"), null);
+        FaultInjectingStore replaying = FaultInjectingStore.wrap(store);
+        replaying.conflictAfterNext(FaultInjectingStore.keyContaining(KEY));
+        AtomicInteger asked = new AtomicInteger();
+
+        Retries.update(replaying, KEY, current -> {
+            asked.incrementAndGet();
+            return bytes(new String(current.orElseThrow().content(), StandardCharsets.UTF_8) + "x");
+        });
+
+        assertThat(content()).as("appended once, not once per phantom loss").isEqualTo("ax");
+        assertThat(asked.get()).as("the mutation ran once: the refusal was re-read and the write had landed")
+                .isEqualTo(1);
+        assertThat(replaying.calls(Op.WRITE_VERSIONED)).as("and no second write was attempted").isEqualTo(1);
+    }
+
     @Test
     void a_lost_race_is_retried_against_a_fresh_read_and_the_mutation_runs_again() throws IOException {
         store.writeVersioned(KEY, bytes("a"), null);

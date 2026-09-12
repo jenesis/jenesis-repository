@@ -61,6 +61,7 @@ public final class StoredListing {
 
     private static final LongAdder UPDATES = new LongAdder();
     private static final LongAdder CONFLICTS = new LongAdder();
+    private static final LongAdder REPLAYED = new LongAdder();
     private static final LongAdder COALESCED = new LongAdder();
     private static final LongAdder MATERIALISED = new LongAdder();
     private static final LongAdder FORGOTTEN = new LongAdder();
@@ -1473,6 +1474,15 @@ public final class StoredListing {
                     derived(store, spec, updated, rendered);
                     return true;
                 }
+                // A refused write is not proof the write did not happen - see Retries.landed for the mechanism and
+                // the measurement. Here the check is a digest rather than a comparison of bytes, because the header
+                // already carries one and the body may be sized by the whole repository: if the stored document's
+                // sha256 is the one this attempt rendered, the write landed and the derivations still owe their run.
+                if (rendered.sha256.equals(storedDigest(store, key))) {
+                    REPLAYED.increment();
+                    derived(store, spec, updated, rendered);
+                    return true;
+                }
                 CONFLICTS.increment();
                 Retries.backoff(attempt);
             } finally {
@@ -1489,6 +1499,19 @@ public final class StoredListing {
         FORGOTTEN.increment();
         rebuild(store, spec);
         return false;
+    }
+
+    /** The SHA-256 the key's stored header carries, or {@code null} where nothing is stored - the cheap half of
+     *  the {@link Retries} replay check, since a listing's body may be sized by the whole repository and its
+     *  header already holds the digest. */
+    private static String storedDigest(ArtifactStore store, String key) throws IOException {
+        Optional<Served> stored = openStored(store, key);
+        if (stored.isEmpty()) {
+            return null;
+        }
+        try (Served document = stored.get()) {
+            return document.header().sha256();
+        }
     }
 
     /** A derived twin that could not be written leaves the listing itself correct and is re-derived by the next

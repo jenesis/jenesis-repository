@@ -36,6 +36,9 @@ public final class Retries {
     /** How often a compare-and-set is tried before its conflict is given up. */
     public static final int COMPARE_AND_SET = 12;
 
+    private static final LongAdder REPLAYED = new LongAdder();
+    private static final LongAdder LOST = new LongAdder();
+
     private Retries() {
     }
 
@@ -147,6 +150,9 @@ public final class Retries {
                     || store.writeVersioned(key, verdict.body(), current.map(ArtifactStore.Versioned::token).orElse(null))) {
                 return Optional.of(verdict);
             }
+            if (landed(store, key, verdict.body())) {
+                return Optional.of(verdict);
+            }
             backoff(tries);
         }
         return Optional.empty();
@@ -175,6 +181,51 @@ public final class Retries {
         Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
         byte[] body = mutation.apply(current);
         return body == null
-                || store.writeVersioned(key, body, current.map(ArtifactStore.Versioned::token).orElse(null));
+                || store.writeVersioned(key, body, current.map(ArtifactStore.Versioned::token).orElse(null))
+                || landed(store, key, body);
+    }
+
+    /**
+     * Whether the key already holds the body this attempt tried to write - the difference between losing a
+     * compare-and-set and being told you lost one you won.
+     *
+     * <p><b>Why a refused write is not proof the write did not happen.</b> Between the caller and an object store
+     * sits an SDK that retries. A conditional PUT that succeeds at the server and whose response is lost in
+     * transit is sent again; the second attempt fails its precondition, because the first already moved the ETag;
+     * and the store reports a lost compare-and-set for a write that landed. The caller then re-reads, recomputes
+     * against its own bytes and writes again - once per retry, one read and one write each - which is why the
+     * symptom is a publish whose read and write counts rise by <em>exactly the same</em> amount.
+     *
+     * <p>Measured 2026-09-11/12 by {@code StoreOperationsE2ETest}'s two-size claim: a serial publish - no peer,
+     * nothing it could honestly lose to - paying twelve extra read-write pairs on azure-blob in one lane, eleven
+     * on s3 two lanes later, and none on the filesystem in any of them. An SDK is the one thing an object store
+     * has in that path and the filesystem does not.
+     *
+     * <p>So a refusal is re-read once before it is believed. If the stored bytes are the ones this attempt meant
+     * to write, the write landed and the attempt won: either this caller's PUT reached the server, or a peer wrote
+     * the identical body, and both leave the key in the state the caller was asking for. If they differ, the loss
+     * is real and the loop backs off as before. The check costs one read on the losing path only, against a whole
+     * read-write cycle for the retry it replaces.
+     *
+     * <p>It is deliberately a comparison of content and not of tokens: a token says who wrote last, and the
+     * question here is what the key holds.
+     */
+    private static boolean landed(ArtifactStore store, String key, byte[] body) throws IOException {
+        Optional<ArtifactStore.Versioned> now = store.readVersioned(key);
+        boolean landed = now.isPresent() && Arrays.equals(now.get().content(), body);
+        (landed ? REPLAYED : LOST).increment();
+        return landed;
+    }
+
+    /** Compare-and-sets refused by the store whose body the key turned out to hold anyway - a write reported lost
+     *  that had landed. A number that climbs on an object store and stays at zero on a filesystem is the SDK-replay
+     *  shape {@link #landed} describes. */
+    public static long replayed() {
+        return REPLAYED.sum();
+    }
+
+    /** Compare-and-sets refused by the store whose body the key does not hold - a loss that is real. */
+    public static long lost() {
+        return LOST.sum();
     }
 }
