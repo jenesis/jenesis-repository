@@ -50,32 +50,121 @@ class RetriesTest {
      * conditional PUT that succeeds at the server and whose response is lost in transit is sent again; the second
      * attempt fails its precondition, because the first already moved the ETag; and the store reports a lost
      * compare-and-set for a write that happened. Without the re-read the caller believes it, re-reads, recomputes
-     * against its own bytes and writes again - which for a mutation that appends is not merely wasteful but
-     * <em>wrong</em>: it would append twice.
+     * against its own bytes and writes again - a whole read-write cycle spent to reach the state the key is
+     * already in.
      *
      * <p>Measured 2026-09-11/12 by {@code StoreOperationsE2ETest}'s two-size claim: a serial publish - no peer,
      * nothing it could honestly lose to - paying twelve extra read-write pairs on azure-blob in one lane, eleven on
      * s3 two lanes later, none on the filesystem in any of them. Reads and writes rose by exactly the same amount,
      * which is what a caller-level retry costs and what distinguishes this from a probe or a larger document.
      *
+     * <p><b>What the re-read asks.</b> Not "are these my bytes" - which cannot be answered, because a peer
+     * writing the identical body leaves the key looking exactly the same - but "does this mutation still have
+     * anything to do". A mutation whose re-application is a fixed point is settled either way, and that covers
+     * every path the replay cost was measured on. One that is not says so, and is retried; the sibling below is
+     * that case, and it is a deliberate limit rather than an oversight.
+     *
      * <p>The sibling above is the honest loss: nothing was written, the mutation must run again, and it does.
      */
     @Test
-    void a_write_that_landed_and_was_reported_lost_is_not_applied_twice() throws IOException {
+    void a_write_that_landed_and_was_reported_lost_is_recognised_by_its_fixed_point() throws IOException {
         store.writeVersioned(KEY, bytes("a"), null);
         FaultInjectingStore replaying = FaultInjectingStore.wrap(store);
         replaying.conflictAfterNext(FaultInjectingStore.keyContaining(KEY));
         AtomicInteger asked = new AtomicInteger();
+        long replayed = Retries.replayed();
 
-        Retries.update(replaying, KEY, current -> {
+        Retries.update(replaying, KEY, _ -> {
             asked.incrementAndGet();
-            return bytes(new String(current.orElseThrow().content(), StandardCharsets.UTF_8) + "x");
+            return bytes("b");
         });
 
-        assertThat(content()).as("appended once, not once per phantom loss").isEqualTo("ax");
-        assertThat(asked.get()).as("the mutation ran once: the refusal was re-read and the write had landed")
+        assertThat(content()).as("the write that landed stands").isEqualTo("b");
+        assertThat(replaying.calls(Op.WRITE_VERSIONED)).as("no second write was attempted").isEqualTo(1);
+        assertThat(asked.get())
+                .as("asked twice: once to compute the body, once to ask the key what is left to do")
+                .isEqualTo(2);
+        assertThat(Retries.replayed() - replayed).as("counted as a replay rather than a loss").isEqualTo(1);
+    }
+
+    /**
+     * A mutation whose re-application is not a fixed point is retried, and double-applies on a phantom loss.
+     *
+     * <p>This is the bound on the check above, asserted so that nobody removes it by "improving" the comparison.
+     * The evidence that separates "my conditional PUT landed and the response was lost" from "a peer wrote the
+     * same bytes" is not in the store: both leave one key holding one body. So the loop cannot decide it, and the
+     * two ways of being wrong are not equal. Guessing that the write landed silently drops the caller's
+     * contribution - an accumulation loses a delta, a claim is granted to a node that lost it. Guessing that it
+     * did not costs a second application of something the caller already declared repeatable, because a
+     * compare-and-set loop may ask again at any time.
+     *
+     * <p>So the loop errs toward asking again, which is also exactly what it did before the check existed: this
+     * adds a repair where it is sound and changes nothing where it is not.
+     */
+    @Test
+    void a_mutation_that_is_not_a_fixed_point_is_retried_rather_than_guessed() throws IOException {
+        store.writeVersioned(KEY, bytes("a"), null);
+        FaultInjectingStore replaying = FaultInjectingStore.wrap(store);
+        replaying.conflictAfterNext(FaultInjectingStore.keyContaining(KEY));
+        long lost = Retries.lost();
+
+        Retries.update(replaying, KEY, current ->
+                bytes(new String(current.orElseThrow().content(), StandardCharsets.UTF_8) + "x"));
+
+        assertThat(content())
+                .as("appended again: nothing in the store can say the first append was this caller's")
+                .isEqualTo("axx");
+        assertThat(Retries.lost() - lost)
+                .as("not settled - the re-application asks for bytes the key does not hold")
                 .isEqualTo(1);
-        assertThat(replaying.calls(Op.WRITE_VERSIONED)).as("and no second write was attempted").isEqualTo(1);
+    }
+
+    /**
+     * A claim that meets its own stamp on the re-read is told the claim stands, not handed the win it computed.
+     *
+     * <p>A claim - a stamp a node writes to take a rebuild - is the shape where "someone wrote these bytes" and
+     * "I wrote these bytes" differ most sharply, because two nodes entering within one millisecond compute the
+     * same stamp. Answering the verdict the first application produced would hand both of them the rebuild. So a
+     * re-application that <em>keeps</em> is answered as it stands: it is the decision, asked of reality, saying
+     * there is nothing to write.
+     *
+     * <p>The cost is deliberate and is the safe direction. Here the write really did land, so this caller is being
+     * told it lost a claim it won - a rebuild that waits for a staleness takeover instead of starting now. That is
+     * a liveness cost. The other direction is two nodes rebuilding one identity at once, which is not.
+     */
+    @Test
+    void a_claim_that_meets_its_own_stamp_is_told_the_claim_stands() throws IOException {
+        FaultInjectingStore colliding = FaultInjectingStore.wrap(store);
+        colliding.conflictAfterNext(FaultInjectingStore.keyContaining(KEY));
+
+        Optional<Retries.Verdict<String>> verdict = Retries.tryDecide(colliding, KEY, current -> current.isEmpty()
+                ? Retries.Verdict.write(bytes("stamp"), "mine")
+                : Retries.Verdict.keep("in flight elsewhere"));
+
+        assertThat(verdict.orElseThrow().result())
+                .as("the re-application sees a claim standing and keeps; the first application's win is not restored")
+                .isEqualTo("in flight elsewhere");
+    }
+
+    /**
+     * A replayed write answers the state it replaced, not the state its own write left behind.
+     *
+     * <p>The other half of the verdict question, and the reason a settled write answers the verdict that was
+     * <em>tried</em> rather than the one the re-application produced. A pointer write carries the prior it
+     * replaced back to its caller, and a caller folding that transition - or firing an event that hangs off the
+     * pointer being fresh - needs the state this attempt read. Answering the re-application's verdict would report
+     * a fresh write as an overwrite of itself, which silently drops the freshness.
+     */
+    @Test
+    void a_replayed_write_answers_the_state_it_replaced() throws IOException {
+        FaultInjectingStore replaying = FaultInjectingStore.wrap(store);
+        replaying.conflictAfterNext(FaultInjectingStore.keyContaining(KEY));
+
+        Optional<ArtifactStore.Versioned> prior = Retries.decide(replaying, KEY,
+                current -> Retries.Verdict.write(bytes("sha-1"), current));
+
+        assertThat(prior).as("a fresh write stays fresh: the event hanging off freshness must still fire").isEmpty();
+        assertThat(content()).isEqualTo("sha-1");
     }
 
     @Test

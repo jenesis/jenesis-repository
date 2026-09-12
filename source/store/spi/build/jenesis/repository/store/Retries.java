@@ -150,8 +150,9 @@ public final class Retries {
                     || store.writeVersioned(key, verdict.body(), current.map(ArtifactStore.Versioned::token).orElse(null))) {
                 return Optional.of(verdict);
             }
-            if (landed(store, key, verdict.body())) {
-                return Optional.of(verdict);
+            Optional<Verdict<T>> resolved = settled(store, key, decision, verdict);
+            if (resolved.isPresent()) {
+                return resolved;
             }
             backoff(tries);
         }
@@ -182,7 +183,7 @@ public final class Retries {
         byte[] body = mutation.apply(current);
         return body == null
                 || store.writeVersioned(key, body, current.map(ArtifactStore.Versioned::token).orElse(null))
-                || landed(store, key, body);
+                || settled(store, key, mutation, body);
     }
 
     /**
@@ -201,30 +202,108 @@ public final class Retries {
      * on s3 two lanes later, and none on the filesystem in any of them. An SDK is the one thing an object store
      * has in that path and the filesystem does not.
      *
-     * <p>So a refusal is re-read once before it is believed. If the stored bytes are the ones this attempt meant
-     * to write, the write landed and the attempt won: either this caller's PUT reached the server, or a peer wrote
-     * the identical body, and both leave the key in the state the caller was asking for. If they differ, the loss
-     * is real and the loop backs off as before. The check costs one read on the losing path only, against a whole
-     * read-write cycle for the retry it replaces.
+     * <p>So a refusal is re-read once before it is believed - and the question asked of the re-read is not "are
+     * these my bytes" but "does this mutation still have anything to do". The mutation is applied to what the key
+     * holds now: if it answers nothing to write, or bytes the key already holds, then the key is in the state the
+     * mutation asks for and the caller's work is done however it got there. If it answers something else, the loss
+     * is real - or is a replay this test cannot recognise - and the loop backs off as before. The check costs one
+     * read and one further application on the losing path, against a whole read-write cycle for the retry it
+     * replaces. The re-application is reached only where the key turned out to hold the bytes this try wrote,
+     * because that is the only state a replay of this try could have left: a refusal over anything else is an
+     * honest loss with no replay to recognise, and is retried without asking the mutation anything. So a mutation
+     * that counts its own invocations sees one extra only on the path where its write may already have landed.
+     *
+     * <p><b>Why a fixed point rather than a comparison against the bytes this try wrote.</b> That was the first
+     * cut, and it is wrong for two shapes of mutation, because for them "someone wrote these bytes" and "I wrote
+     * these bytes" are different facts. An <em>accumulation</em> - {@link StoredCounter#add}'s
+     * {@code current + delta} - gives two writers reading one base and flushing one delta byte-identical bodies,
+     * so the loser reads its own arithmetic back and reports a success that dropped a delta, silently, where that
+     * class documents a drop as {@code false} for the caller to log against the pass that repairs it. A
+     * <em>claim</em> - a stamp a node writes to take a rebuild, whose whole point is which node holds it -
+     * collides the same way for two nodes entering within one millisecond, and both would believe they hold it.
+     * Re-applying catches both with nothing declared at the call site: the accumulator computes
+     * {@code base + 2d} against a stored {@code base + d} and is not settled, and the claim's re-application sees
+     * a rebuild in flight and keeps, which is the right answer for a loser.
+     *
+     * <p><b>What it therefore cannot do, deliberately.</b> A mutation whose re-application is not a fixed point
+     * cannot be rescued from an SDK replay by reading the store, because the evidence that separates "my PUT
+     * landed" from "a peer wrote the same bytes" is not in the store: both leave one key holding one body. Such a
+     * mutation retries, and double-applies on a replay exactly as it did before this check existed. The paths the
+     * replay cost was measured on - a publish's pointers, its blobs, its inventory sections, its listings - are
+     * every one of them fixed points, which is why the repair reaches the cost without reaching the correctness.
+     * A mutation whose rendering is not deterministic is not one either - a document serialized through
+     * {@code Properties.store} carries a timestamp comment, so it differs from itself and always retries.
      *
      * <p>It is deliberately a comparison of content and not of tokens: a token says who wrote last, and the
      * question here is what the key holds.
      */
-    private static boolean landed(ArtifactStore store, String key, byte[] body) throws IOException {
+    private static boolean settled(ArtifactStore store, String key, Mutation mutation, byte[] tried)
+            throws IOException {
         Optional<ArtifactStore.Versioned> now = store.readVersioned(key);
-        boolean landed = now.isPresent() && Arrays.equals(now.get().content(), body);
-        (landed ? REPLAYED : LOST).increment();
-        return landed;
+        if (now.isEmpty() || !Arrays.equals(now.get().content(), tried)) {
+            LOST.increment();
+            return false;
+        }
+        byte[] again = mutation.apply(now);
+        boolean settled = again == null || Arrays.equals(now.get().content(), again);
+        (settled ? REPLAYED : LOST).increment();
+        return settled;
     }
 
-    /** Compare-and-sets refused by the store whose body the key turned out to hold anyway - a write reported lost
-     *  that had landed. A number that climbs on an object store and stays at zero on a filesystem is the SDK-replay
-     *  shape {@link #landed} describes. */
+    /**
+     * {@link #settled(ArtifactStore, String, Mutation, byte[])} for a {@link Decision}, which answers a value as well as a
+     * body and so has one more case to get right.
+     *
+     * <p>A re-application that <em>keeps</em> - no body - is the decision saying that, given what the key holds,
+     * there is nothing to write; its verdict is answered, because that is what the next try would have concluded
+     * and because a decision declining on reality must not be overruled by the one that was made against a state
+     * the store has moved past. A claim is the case that makes this load-bearing: the loser of a stamp collision
+     * re-applies, sees a rebuild in flight and keeps, and must be told so rather than handed the win the first
+     * application computed.
+     *
+     * <p>A re-application that writes bytes the key already holds is the fixed point, and there the verdict that
+     * was <em>tried</em> is answered rather than the new one: this attempt's write is the one that landed, so the
+     * state it read is the state it replaced, and a caller folding that transition needs the prior it saw and not
+     * the value its own write left behind. Where two peers wrote identical bodies at once, both credit the same
+     * transition; that over-counts a delta a recomputing pass corrects, which is the lesser of the two errors -
+     * the other would report a fresh write as an overwrite and lose the event that hangs off freshness.
+     */
+    private static <T> Optional<Verdict<T>> settled(ArtifactStore store,
+                                                    String key,
+                                                    Decision<T> decision,
+                                                    Verdict<T> tried) throws IOException {
+        Optional<ArtifactStore.Versioned> now = store.readVersioned(key);
+        if (now.isEmpty() || !Arrays.equals(now.get().content(), tried.body())) {
+            LOST.increment();
+            return Optional.empty();
+        }
+        Verdict<T> again = decision.decide(now);
+        if (again.delete()) {
+            LOST.increment();
+            return Optional.empty();                 // a delete is work outstanding, not a settled key
+        }
+        if (again.body() == null) {
+            REPLAYED.increment();
+            return Optional.of(again);
+        }
+        if (Arrays.equals(now.get().content(), again.body())) {
+            REPLAYED.increment();
+            return Optional.of(tried);
+        }
+        LOST.increment();
+        return Optional.empty();
+    }
+
+    /** Compare-and-sets refused by the store that {@link #settled(ArtifactStore, String, Mutation, byte[])} found had
+     *  nothing left to do - a write reported lost that had landed. A number that climbs on an object store and
+     *  stays at zero on a filesystem is the SDK-replay shape that method describes. */
     public static long replayed() {
         return REPLAYED.sum();
     }
 
-    /** Compare-and-sets refused by the store whose body the key does not hold - a loss that is real. */
+    /** Compare-and-sets the re-application did not find settled - either a real loss, or a replay of a mutation
+     *  whose re-application cannot recognise itself. Both are retried, which is right for the first and is the
+     *  documented limit for the second. */
     public static long lost() {
         return LOST.sum();
     }

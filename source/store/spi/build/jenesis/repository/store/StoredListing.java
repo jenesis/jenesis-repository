@@ -1474,10 +1474,17 @@ public final class StoredListing {
                     derived(store, spec, updated, rendered);
                     return true;
                 }
-                // A refused write is not proof the write did not happen - see Retries.landed for the mechanism and
-                // the measurement. Here the check is a digest rather than a comparison of bytes, because the header
-                // already carries one and the body may be sized by the whole repository: if the stored document's
-                // sha256 is the one this attempt rendered, the write landed and the derivations still owe their run.
+                // A refused write is not proof the write did not happen - see Retries.settled for the mechanism
+                // and the measurement. Here the check is a digest rather than a comparison of bytes, because the
+                // header already carries one and the body may be sized by the whole repository: if the stored
+                // document's sha256 is the one this attempt rendered, the write landed and the derivations still
+                // owe their run.
+                //
+                // Comparing against THIS attempt's own bytes is sound here where the general loop has to re-apply
+                // the mutation to find out. The mutation is fixed and it is a set insertion or removal, so a peer
+                // that rendered the identical document put or removed the identical entry: "the key holds these
+                // bytes" and "this writer's entry is in the document" are the same fact. Retries takes whatever
+                // mutation a caller hands it, and for an accumulation or a claim those two facts come apart.
                 if (rendered.sha256.equals(storedDigest(store, key))) {
                     REPLAYED.increment();
                     derived(store, spec, updated, rendered);
