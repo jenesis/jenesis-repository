@@ -453,6 +453,15 @@ public final class Publication {
         return hashAt("publish" + requestPath);
     }
 
+    /** Whether the serving pointer at {@code requestPath} names exactly {@code hash} and carries no hold: the bytes
+     *  a client would be given there right now are these, which is what lets a hold for them be joined to the
+     *  admission that already serves them ({@link #screen}). One point read of the serving pointer. */
+    private boolean serves(String requestPath, String hash) throws IOException {
+        return pointer(requestPath)
+                .filter(pointer -> hash.equals(pointer.hash()) && !pointer.held())
+                .isPresent();
+    }
+
     /** The pointer a path currently carries - its hash and the blob's recorded length - or empty if nothing is
      *  published there. The face {@link ServableNames#located} reads, so a serve learns the length from the pointer. */
     Optional<ServableNames.Pointer> pointer(String requestPath) throws IOException {
@@ -818,8 +827,10 @@ public final class Publication {
      * Store an upload content-addressed and run the {@link PublishInterceptor} chain over its neutral
      * {@link ArtifactDescriptor} <em>without linking any serving pointer of its own</em>: an accepted upload links no
      * pointer - the caller owns the accepted write, laying the content out in its own layout from the returned hash -
-     * while a quarantined one is still diverted to the {@code /quarantine} view for review and a rejected one leaves
-     * only the unreferenced blob for garbage collection. The blob is inert until a pointer references it, so the chain
+     * while a quarantined one is still diverted to the {@code /quarantine} view for review - unless the path already
+     * serves exactly these bytes unheld, in which case the hold is superseded by the admission that serves them and
+     * the upload is accepted as the identical artifact (the reasoning is at the check itself) - and a rejected one
+     * leaves only the unreferenced blob for garbage collection. The blob is inert until a pointer references it, so the chain
      * gates before any link - nothing is buffered and there is no published-then-retracted window. With the default
      * empty chain this is exactly a {@link #storeBlob} that always {@code ACCEPT}s.
      *
@@ -849,6 +860,23 @@ public final class Publication {
             if (verdict.compareTo(disposition) > 0) {
                 disposition = verdict;
             }
+        }
+        if (disposition == PublishInterceptor.Disposition.QUARANTINE && serves(artifact.path(), hash)) {
+            // The served state wins over a hold for the very bytes it serves. Two clients deploying one version at
+            // once each send the artifact before its signature, so each is screened while no signature is stored
+            // and each verdict is a hold; the first signature to land releases the path, and the other client's
+            // hold - decided before that release, landing after it - would hold the path again with its signature
+            // present and nothing left to re-assess it (measured 2026-09-12 under soak load: twelve of 1,541 such
+            // versions ended served and unlisted). Identical bytes are one artifact, and the release that judged
+            // them with their signature is not undone by a verdict reached over the same bytes while the signature
+            // was in flight - so the upload is accepted as the identical artifact already admitted, its layout lands
+            // the same state again, and the interceptors hear ACCEPT with their own verdict still in hand, which is
+            // how an edition records the hold as superseded. Other bytes than the path serves are held as before: a
+            // corrected republish under review is exactly what the hold is for. A path held already serves nothing,
+            // so a hold for its bytes converges the hold as before, too.
+            LOGGER.info("Hold of {} superseded: the path already serves these bytes ({}), admitted before this "
+                    + "upload's verdict landed", artifact.path(), hash);
+            disposition = PublishInterceptor.Disposition.ACCEPT;
         }
         switch (disposition) {
             // ACCEPT links no pointer of its own: the screening edge owns the accepted write and lays the stored blob

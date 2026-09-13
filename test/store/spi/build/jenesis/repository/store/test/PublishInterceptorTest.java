@@ -340,4 +340,59 @@ class PublishInterceptorTest {
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("sibling");
     }
+
+    @Test
+    void a_quarantine_verdict_for_the_bytes_the_path_already_serves_holds_nothing() throws IOException {
+        // Two clients deploying one version at once are each screened before the other's signature lands: the first
+        // signature to arrive releases the path, and the other client's hold - decided before that release, landing
+        // after it - must not hold the path again for the very bytes it serves. The served state wins, so the upload
+        // is accepted as the identical artifact already admitted, and the interceptor hears ACCEPT with its own
+        // verdict still in hand.
+        Publication admitted = new Publication(store, List.of());
+        Publication.Published first = admitted.screen(descriptor("/raw/a"), bytes("payload"));
+        admitted.link("/raw/a", first.hash());
+        Fixed gate = new Fixed(PublishInterceptor.Disposition.QUARANTINE);
+
+        Publication.Published second = new Publication(store, List.of(gate)).screen(descriptor("/raw/a"), bytes("payload"));
+
+        assertThat(second.hash()).isEqualTo(first.hash());
+        assertThat(second.disposition()).as("the identical upload joins the admission that serves it")
+                .isEqualTo(PublishInterceptor.Disposition.ACCEPT);
+        assertThat(gate.committed).isEqualTo(PublishInterceptor.Disposition.ACCEPT);
+        assertThat(Publication.reviewPending(store, "/raw/a")).as("nothing is held").isFalse();
+        assertThat(admitted.located("/raw/a")).as("and the path keeps serving").contains("blobs/" + first.hash());
+    }
+
+    @Test
+    void a_quarantine_verdict_for_other_bytes_than_the_path_serves_holds_it() throws IOException {
+        Publication admitted = new Publication(store, List.of());
+        admitted.link("/raw/a", admitted.screen(descriptor("/raw/a"), bytes("payload")).hash());
+        Fixed gate = new Fixed(PublishInterceptor.Disposition.QUARANTINE);
+
+        Publication.Published corrected = new Publication(store, List.of(gate))
+                .screen(descriptor("/raw/a"), bytes("payload, corrected"));
+
+        assertThat(corrected.disposition()).as("a corrected republish under review is what a hold is for")
+                .isEqualTo(PublishInterceptor.Disposition.QUARANTINE);
+        assertThat(gate.committed).isEqualTo(PublishInterceptor.Disposition.QUARANTINE);
+        assertThat(Publication.reviewPending(store, "/raw/a")).isTrue();
+        assertThat(admitted.located("/raw/a")).as("the path is held while the review pends").isEmpty();
+    }
+
+    @Test
+    void a_quarantine_verdict_for_the_bytes_of_a_path_already_held_holds_as_before() throws IOException {
+        Publication admitted = new Publication(store, List.of());
+        String hash = admitted.screen(descriptor("/raw/a"), bytes("payload")).hash();
+        admitted.link("/raw/a", hash);
+        admitted.link("/quarantine/raw/a", hash);
+        assertThat(admitted.located("/raw/a")).as("arranged: the path is held").isEmpty();
+        Fixed gate = new Fixed(PublishInterceptor.Disposition.QUARANTINE);
+
+        Publication.Published again = new Publication(store, List.of(gate)).screen(descriptor("/raw/a"), bytes("payload"));
+
+        assertThat(again.disposition()).as("a held path serves nothing, so there is no admission to join")
+                .isEqualTo(PublishInterceptor.Disposition.QUARANTINE);
+        assertThat(Publication.reviewPending(store, "/raw/a")).isTrue();
+        assertThat(admitted.located("/raw/a")).isEmpty();
+    }
 }
