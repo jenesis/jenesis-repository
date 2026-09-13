@@ -144,6 +144,10 @@ public interface ArtifactSignatures extends EcosystemLayout {
         /** A PKCS#7 / CMS signed-data structure with its certificate chain (NuGet's {@code .signature.p7s}). */
         PKCS7,
 
+        /** A bare RSA signature (PKCS#1 v1.5 over a digest) with no envelope at all, the key named by the material's
+         *  own file name - an {@code .apk}'s {@code .SIGN.RSA256.<keyfile>} member over its control segment. */
+        RSA_DETACHED,
+
         /** A Sigstore bundle - a DSSE envelope with a Fulcio certificate and a Rekor inclusion proof. */
         SIGSTORE_BUNDLE,
 
