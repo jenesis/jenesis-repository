@@ -3,6 +3,7 @@ package build.jenesis.repository.format.oci;
 import module java.base;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.Listings;
@@ -36,8 +37,28 @@ import build.jenesis.repository.format.Checksums;
  * a reference scan that reads pointer bodies alone sees a fraction of what an image serves. {@link #references} lends
  * the rest, which is the whole of what stands between a garbage collection pass and a live image whose manifest pulls
  * {@code 200} while its layers {@code 404}.
+ *
+ * <h2>Inbound signatures: cosign's tag convention</h2>
+ *
+ * {@code cosign sign} pushes a signature as an OCI artifact of its own, tagged {@code sha256-<manifest hex>.sig}
+ * beside the image: a manifest whose layers are simple-signing payloads, each naming the image by manifest digest,
+ * annotated with the signature over the payload ({@code dev.cosignproject.cosign/signature}), the Fulcio certificate
+ * and chain ({@code dev.sigstore.cosign/certificate}, {@code /chain}) and the transparency-log receipt
+ * ({@code dev.sigstore.cosign/bundle}). This format implements {@link ArtifactSignatures} over that shape: a
+ * manifest's evidence is each such layer, with the layer's annotations as the signature material, the payload blob
+ * as the signed document and the manifest digest the payload names as the binding, which is what makes a signature
+ * over a payload naming another image a finding rather than a match. The signature manifest is a sidecar of the
+ * image it names ({@link #covers}), so one pushed after its image re-derives the image's verdict as a late
+ * {@code .asc} does. The referrers API, which newer cosign versions can attach a whole Sigstore bundle through, is
+ * not served here yet; the tag convention is what every cosign version pushes by default.
  */
-public final class OciFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, BlobReferences {
+public final class OciFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, BlobReferences,
+        ArtifactSignatures {
+
+    /** cosign's tag for the signature artifact of the manifest {@code sha256:<hex>}: {@code sha256-<hex>.sig}. */
+    private static final String SIGNATURE_TAG_PREFIX = "sha256-", SIGNATURE_TAG_SUFFIX = ".sig";
+    /** The layer annotation carrying the signature over the payload, base64 - the one that makes a layer a signature. */
+    private static final String COSIGN_SIGNATURE = "dev.cosignproject.cosign/signature";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -1282,6 +1303,138 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         JsonNode token = JSON.readTree(new String(response.get().body(), StandardCharsets.UTF_8));
         String bearer = token.path("token").asString(null);
         return bearer != null ? bearer : token.path("access_token").asString(null);
+    }
+
+    // ---- inbound signatures ----
+
+    @Override
+    public String ecosystem() {
+        // The one string the manifest screen stamps its descriptors with and the inventory layout declares, so a
+        // signature this format produces evidence for lands on the same coordinate space as every other OCI record.
+        return "oci";
+    }
+
+    @Override
+    public List<ArtifactSignatures.Expectation> expects(String path) {
+        // An image manifest may carry a cosign signature; the signature manifest itself, a blob, a tag list or an
+        // upload never does. Optional: most images are unsigned, and a deployment that wants them signed pins the
+        // identities it admits and raises the dial.
+        return manifest(path).filter(reference -> !isSignatureTag(reference[1])).isPresent()
+                ? List.of(ArtifactSignatures.Expectation.optional(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE))
+                : List.of();
+    }
+
+    @Override
+    public Optional<String> covers(String path) {
+        return manifest(path)
+                .filter(reference -> isSignatureTag(reference[1]))
+                .map(reference -> "/v2/" + reference[0] + "/manifests/sha256:" + reference[1].substring(
+                        SIGNATURE_TAG_PREFIX.length(), reference[1].length() - SIGNATURE_TAG_SUFFIX.length()));
+    }
+
+    @Override
+    public List<ArtifactSignatures.Evidence> evidence(String path, ArtifactSignatures.Material material)
+            throws IOException {
+        Optional<String[]> reference = manifest(path).filter(named -> !isSignatureTag(named[1]));
+        Optional<ArtifactSignatures.Signed> body = material.body();
+        if (reference.isEmpty() || body.isEmpty()) {
+            return List.of();
+        }
+        String name = reference.get()[0];
+        // The signature artifact is found by the manifest's own digest, whatever tag the manifest was pushed under, so
+        // the body is hashed rather than the tag pointer read: this is the one derivation that cannot disagree with
+        // what cosign computed on the client.
+        String hex = digest(body.get());
+        String signaturePath = "/v2/" + name + "/manifests/" + SIGNATURE_TAG_PREFIX + hex + SIGNATURE_TAG_SUFFIX;
+        Optional<byte[]> signatureManifest = material.sibling(signaturePath, ArtifactSignatures.Material.LARGEST_SIGNATURE)
+                .filter(bounded -> !bounded.truncated())
+                .map(bounded -> bounded.content());
+        if (signatureManifest.isEmpty()) {
+            return List.of();
+        }
+        JsonNode layers;
+        try {
+            layers = JSON.readTree(new String(signatureManifest.get(), StandardCharsets.UTF_8)).path("layers");
+        } catch (RuntimeException notJson) {
+            throw new IOException("the signature manifest at " + signaturePath + " is not a JSON manifest");
+        }
+        List<ArtifactSignatures.Evidence> evidence = new ArrayList<>();
+        int index = 0;
+        for (JsonNode layer : layers) {
+            JsonNode annotations = layer.path("annotations");
+            String layerHex = hex(layer.path("digest").asString(""));
+            if (annotations.path(COSIGN_SIGNATURE).asString("").isEmpty() || !Checksums.isSha256Hex(layerHex)) {
+                index++;
+                continue;   // a layer that is not a signature - cosign's manifest carries nothing else, but a
+            }               // hand-made one may
+            Optional<byte[]> payload = material.sibling("/v2/" + name + "/blobs/sha256:" + layerHex,
+                            ArtifactSignatures.Material.LARGEST_SIGNATURE)
+                    .filter(bounded -> !bounded.truncated())
+                    .map(bounded -> bounded.content());
+            if (payload.isEmpty()) {
+                // Clause 6 of the seam: a signature manifest naming a payload the registry does not hold is material
+                // that is present and cannot be read, never an unsigned image.
+                throw new IOException("the signature manifest at " + signaturePath + " names a payload sha256:"
+                        + layerHex + " the registry does not hold");
+            }
+            byte[] document = payload.get();
+            evidence.add(ArtifactSignatures.Evidence.covering(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE,
+                    JSON.writeValueAsBytes(annotations), () -> new ByteArrayInputStream(document),
+                    signaturePath + "#" + index, OciFormat::imageNamed));
+            index++;
+        }
+        return evidence;
+    }
+
+    /** The manifest digest a cosign simple-signing payload names, {@code critical.image.docker-manifest-digest}, as
+     *  bare hex - empty for bytes that are no such payload. */
+    static Optional<String> imageNamed(byte[] payload) {
+        try {
+            String digest = JSON.readTree(new String(payload, StandardCharsets.UTF_8))
+                    .path("critical").path("image").path("docker-manifest-digest").asString("");
+            String hex = hex(digest);
+            return Checksums.isSha256Hex(hex) ? Optional.of(hex.toLowerCase(Locale.ROOT)) : Optional.empty();
+        } catch (RuntimeException notAPayload) {
+            return Optional.empty();
+        }
+    }
+
+    /** The image name and reference of a manifest request path, both well-formed, or empty for any other path. */
+    private static Optional<String[]> manifest(String path) {
+        if (!path.startsWith("/v2/")) {
+            return Optional.empty();
+        }
+        int manifests = path.indexOf("/manifests/");
+        if (manifests < "/v2/".length()) {
+            return Optional.empty();
+        }
+        String name = path.substring("/v2/".length(), manifests);
+        String reference = path.substring(manifests + "/manifests/".length());
+        boolean digest = reference.startsWith("sha256:");
+        if (!isImageName(name) || (digest ? !Checksums.isSha256Hex(hex(reference)) : !OciTags.isTag(reference))) {
+            return Optional.empty();
+        }
+        return Optional.of(new String[] {name, reference});
+    }
+
+    private static boolean isSignatureTag(String reference) {
+        return reference.startsWith(SIGNATURE_TAG_PREFIX) && reference.endsWith(SIGNATURE_TAG_SUFFIX)
+                && Checksums.isSha256Hex(reference.substring(SIGNATURE_TAG_PREFIX.length(),
+                        reference.length() - SIGNATURE_TAG_SUFFIX.length()));
+    }
+
+    /** The SHA-256 of a signed body, streamed, lower-case hex. */
+    private static String digest(ArtifactSignatures.Signed body) throws IOException {
+        try (InputStream in = body.open()) {
+            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            for (int n = in.read(buffer); n != -1; n = in.read(buffer)) {
+                sha256.update(buffer, 0, n);
+            }
+            return HexFormat.of().formatHex(sha256.digest());
+        } catch (NoSuchAlgorithmException unavailable) {
+            throw new IOException(unavailable);
+        }
     }
 
     private static String hex(String digest) {

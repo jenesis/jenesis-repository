@@ -31,15 +31,26 @@ import build.jenesis.repository.store.PublishInterceptor;
  * a signature is kilobytes, and the two-pass read ({@code _gpgorigin} lifted first, the large members streamed into the
  * verifier afterwards) is how a multi-gigabyte {@code .deb} is verified in bounded heap today.
  *
- * <h2>What this seam does not yet express: coverage by a signed manifest</h2>
+ * <h2>Coverage by a signed document</h2>
  *
- * Every shape above is <em>direct</em> - a signature over bytes derived from this one artifact. A large family of
- * ecosystems does not work that way: they sign an <b>index</b>, and the index commits to each artifact by digest. An
- * apt client's trust runs through the signed {@code Release}, which commits to {@code Packages}, which commits to
- * each {@code .deb}; a Terraform provider is covered by a {@code SHA256SUMS} the publisher signs once for the whole
- * release; dnf's {@code gpgcheck} has a per-package header signature but its {@code repo_gpgcheck} is the same
- * manifest shape; npm and PyPI provenance attest to a build rather than to bytes. In each, the artifact itself
- * carries no signature and is nonetheless covered.
+ * Every shape above is <em>direct</em> - a signature over bytes derived from this one artifact. Not every ecosystem
+ * signs that way: cosign signs a small <em>payload</em> that names the image by manifest digest, and the image itself
+ * carries nothing; npm and PyPI provenance attest to a build in a statement whose subjects name the file. For those
+ * the seam has {@link Evidence#covering}: the signed bytes are the document, and a {@link Named} the format supplies
+ * reads out of it the digest it names for the artifact at this path. The verifier checks the signature over the
+ * document exactly as over an artifact; what is added is one comparison, made above this seam, of the digest the
+ * document names against the digest of the artifact under judgement - equal is coverage, different is tampering
+ * and never "unsigned", and a document naming nothing for the artifact is material that could not be read. The
+ * signer of such a document is still the publisher's identity, so trust and continuity apply unchanged.
+ *
+ * <p>What the seam still does not express is coverage by a repository's <b>index</b>, signed once for a set: an apt
+ * client's trust runs through the signed {@code Release}, which commits to {@code Packages}, which commits to each
+ * {@code .deb}; a Terraform provider is covered by a {@code SHA256SUMS} the publisher signs once for a release;
+ * dnf's {@code repo_gpgcheck} is the same shape over {@code repomd.xml}. Two hops rather than one, indexes that run
+ * to tens of megabytes, and - the interesting part - a signature that speaks for the repository that published a
+ * set rather than for the publisher of one artifact, which a record must keep distinguishable from the direct
+ * kind. This deployment's own indexes are its own signatures (the first paragraph), and a proxied mirror's are
+ * streamed through rather than stored, so no installed format holds such a document today.
  *
  * <p>A format in that family can only answer {@code expects} with {@code OPTIONAL} or nothing at all - or, since
  * 2026-09-12, with {@link Coverage#REQUIRED_WHEN_TRUSTED}, which is what {@code DebianFormat} declares: an ordinary
@@ -48,18 +59,11 @@ import build.jenesis.repository.store.PublishInterceptor;
  * signatures, and an unsigned package is then a finding. That declaration is still pure - it reads no store - and
  * the state it depends on is read where a store is already in hand, by the trust the inspector is handed. The
  * consequence that remains is that the dimension above this seam sees "no signature" for an artifact whose
- * provenance is in fact established, one hop away, by a document it never looks at.
+ * provenance is in fact established, one hop away, by an index it never looks at.
  *
- * <p>Closing that needs a second kind of evidence - roughly "this artifact is named, by digest, in a document signed
- * by X" - and it is deliberately not bolted on per format. Two things make it worth doing once, properly: the
- * verifier work is shared (the manifest is itself a signed document this seam already describes), and the trust
- * question is the interesting one, because a manifest signature says something about the <em>repository</em> that
- * published a set rather than about the publisher of one artifact. Those are different claims and a design that
- * flattened them would report the second when it had only checked the first.
- *
- * <p>Until then this seam is honest about its scope rather than approximating: a format whose ecosystem works this
- * way declares what it really does, in its fixture, with its reason. That is the census entry, not a gap nobody
- * wrote down.
+ * <p>Until an index is stored here, this seam is honest about its scope rather than approximating: a format whose
+ * ecosystem works this way declares what it really does, in its fixture, with its reason. That is the census
+ * entry, not a gap nobody wrote down.
  *
  * <h2>Contract</h2>
  * This is a role sub-interface of {@code RepositoryFormat}, so that contract still binds and the clauses below state
@@ -209,9 +213,12 @@ public interface ArtifactSignatures extends EcosystemLayout {
     /**
      * One signature and the bytes it commits to: the {@code signature} as the scheme encodes it, a {@link Signed} the
      * caller opens to feed a verifier, and the {@code location} the material was found at - a sibling request path, or
-     * a name inside the artifact - which is what an operator reads when a verification fails.
+     * a name inside the artifact - which is what an operator reads when a verification fails. {@code signer} is the
+     * signer material an artifact keeps outside its signature (a gem's X.509 chain), and {@code named} is set on
+     * {@linkplain #covering covering} evidence alone: the signed bytes are then a document, and it reads the digest
+     * that document names for the artifact.
      */
-    record Evidence(Scheme scheme, byte[] signature, Signed signed, String location, byte[] signer) {
+    record Evidence(Scheme scheme, byte[] signature, Signed signed, String location, byte[] signer, Named named) {
 
         public Evidence {
             Objects.requireNonNull(scheme, "scheme");
@@ -220,12 +227,37 @@ public interface ArtifactSignatures extends EcosystemLayout {
             Objects.requireNonNull(location, "location");
         }
 
-        /** Evidence for a scheme whose signature names or carries its signer, so nothing rides beside it. The
-         *  five-argument form carries {@code signer}: the signer material an artifact keeps outside its signature -
-         *  a gem's X.509 chain from its gemspec, as concatenated PEM. */
+        /** Evidence for a scheme whose signature names or carries its signer, so nothing rides beside it. */
         public Evidence(Scheme scheme, byte[] signature, Signed signed, String location) {
-            this(scheme, signature, signed, location, null);
+            this(scheme, signature, signed, location, null, null);
         }
+
+        /** Evidence carrying {@code signer}: the signer material an artifact keeps outside its signature - a gem's
+         *  X.509 chain from its gemspec, as concatenated PEM. */
+        public Evidence(Scheme scheme, byte[] signature, Signed signed, String location, byte[] signer) {
+            this(scheme, signature, signed, location, signer, null);
+        }
+
+        /**
+         * Evidence whose signed bytes are a <em>document</em> naming the artifact by digest rather than the artifact
+         * itself - cosign's payload over an image - with the {@link Named} that reads the digest out of it. The
+         * document is read whole by the caller, so it is bounded like a signature, never like an artifact.
+         */
+        public static Evidence covering(Scheme scheme, byte[] signature, Signed document, String location,
+                                        Named named) {
+            return new Evidence(scheme, signature, document, location, null, Objects.requireNonNull(named, "named"));
+        }
+    }
+
+    /**
+     * The SHA-256 a signed document names for the artifact under judgement, lower-case hex, or empty when the
+     * document names none - which the caller reports as material it could not read, not as coverage. A format
+     * supplies one per document grammar it understands; the caller compares, and never parses.
+     */
+    @FunctionalInterface
+    interface Named {
+
+        Optional<String> sha256(byte[] document);
     }
 
     /**
