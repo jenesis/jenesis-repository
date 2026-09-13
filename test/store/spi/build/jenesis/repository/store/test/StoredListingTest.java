@@ -473,4 +473,130 @@ class StoredListingTest {
             }
         }
     }
+
+    // ---- entries derived from another document carry its sequence ----
+
+    /** A derived listing whose generator reads a snapshot the test controls: each source's line at the sequence
+     *  the snapshot holds for it, absent when the snapshot lists nothing for it. */
+    private StoredListing.Spec derived(String listing, Map<String, Long> snapshot, Map<String, String> lines) {
+        return StoredListing.Spec.of(listing, LINES, sink -> {
+            for (Map.Entry<String, Long> source : new TreeMap<>(snapshot).entrySet()) {
+                String line = lines.get(source.getKey());
+                if (line == null) {
+                    sink.absent(source.getKey(), source.getValue());
+                } else {
+                    sink.accept(source.getKey(), line.getBytes(StandardCharsets.UTF_8), source.getValue());
+                }
+            }
+        });
+    }
+
+    @Test
+    void a_sourced_put_lands_at_or_above_the_stored_entrys_source_and_is_dropped_below_it() throws IOException {
+        StoredListing.Spec spec = derived("shard", Map.of("a", 1L), Map.of("a", "a 1.0"));
+        StoredListing.read(store, spec);
+
+        assertThat(StoredListing.put(store, spec, "a", "a 1.0/1.1".getBytes(StandardCharsets.UTF_8), 2L)).isTrue();
+        assertThat(body("shard")).isEqualTo("a 1.0/1.1\n");
+        assertThat(StoredListing.put(store, spec, "a", "a 1.0".getBytes(StandardCharsets.UTF_8), 1L))
+                .as("a put from an older source is dropped, not failed").isTrue();
+        assertThat(body("shard")).as("the fresher line stands").isEqualTo("a 1.0/1.1\n");
+        assertThat(StoredListing.put(store, spec, "a", "a 1.0/1.1/1.2".getBytes(StandardCharsets.UTF_8), 2L))
+                .isTrue();
+        assertThat(body("shard")).as("the same source again lands: at or above").isEqualTo("a 1.0/1.1/1.2\n");
+        assertThat(StoredListing.sources(store, "shard").entries()).containsExactly(Map.entry("a", 2L));
+        assertThat(StoredListing.sources(store, "shard").removed()).isEmpty();
+    }
+
+    @Test
+    void a_regeneration_from_a_stale_snapshot_keeps_the_entry_a_later_source_put() throws IOException {
+        // The C-1 shape: the rebuild pass reads pod documents into a snapshot, a publish writes pod a's document
+        // and derives its shard line from it, and the pass's regeneration lands after that - from the snapshot.
+        Map<String, Long> snapshot = new HashMap<>(Map.of("a", 1L, "b", 1L));
+        Map<String, String> lines = new HashMap<>(Map.of("a", "a 1.0", "b", "b 1.0"));
+        StoredListing.Spec spec = derived("shard", snapshot, lines);
+        StoredListing.read(store, spec);
+        StoredListing.put(store, spec, "a", "a 1.0/1.1".getBytes(StandardCharsets.UTF_8), 2L);   // the publish
+        StoredListing.put(store, spec, "c", "c 1.0".getBytes(StandardCharsets.UTF_8), 1L);   // a pod the walk missed
+
+        StoredListing.rebuild(store, spec);   // regenerated from the snapshot, which still reads a at 1
+
+        assertThat(body("shard")).as("the publish's line survives the snapshot's, and the pod the walk never read "
+                + "survives the walk").isEqualTo("a 1.0/1.1\nb 1.0\nc 1.0\n");
+        assertThat(StoredListing.sources(store, "shard").entries())
+                .containsExactly(Map.entry("a", 2L), Map.entry("b", 1L), Map.entry("c", 1L));
+
+        snapshot.put("a", 3L);
+        lines.put("a", "a 1.0/1.1/2.0");
+        StoredListing.rebuild(store, spec);
+        assertThat(body("shard")).as("a walk that read the source later than the publish did wins")
+                .isEqualTo("a 1.0/1.1/2.0\nb 1.0\nc 1.0\n");
+    }
+
+    @Test
+    void a_sourced_removal_leaves_a_tombstone_an_older_put_cannot_pass() throws IOException {
+        Map<String, Long> snapshot = new HashMap<>(Map.of("a", 1L, "b", 1L));
+        Map<String, String> lines = new HashMap<>(Map.of("a", "a 1.0", "b", "b 1.0"));
+        StoredListing.Spec spec = derived("shard", snapshot, lines);
+        StoredListing.read(store, spec);
+
+        StoredListing.remove(store, spec, "a", 2L);   // a's document now lists nothing
+
+        assertThat(body("shard")).isEqualTo("b 1.0\n");
+        assertThat(StoredListing.sources(store, "shard").removed()).containsExactly(Map.entry("a", 2L));
+        assertThat(StoredListing.put(store, spec, "a", "a 1.0".getBytes(StandardCharsets.UTF_8), 1L)).isTrue();
+        assertThat(body("shard")).as("the snapshot's older line cannot resurrect what a later source removed")
+                .isEqualTo("b 1.0\n");
+        StoredListing.rebuild(store, spec);   // the snapshot still holds a at 1
+        assertThat(body("shard")).as("nor can a regeneration from it").isEqualTo("b 1.0\n");
+        assertThat(StoredListing.put(store, spec, "a", "a 3.0".getBytes(StandardCharsets.UTF_8), 3L)).isTrue();
+        assertThat(body("shard")).as("a later source puts it back").isEqualTo("a 3.0\nb 1.0\n");
+        assertThat(StoredListing.sources(store, "shard").removed()).isEmpty();
+
+        // A regeneration that read a source listing nothing removes the entry only if nothing later put it.
+        snapshot.put("b", 1L);
+        lines.remove("b");
+        StoredListing.put(store, spec, "b", "b 1.0/1.1".getBytes(StandardCharsets.UTF_8), 2L);
+        StoredListing.rebuild(store, spec);
+        assertThat(body("shard")).as("the walk's absence at 1 does not remove the line put at 2")
+                .isEqualTo("a 3.0\nb 1.0/1.1\n");
+        snapshot.put("b", 3L);
+        StoredListing.rebuild(store, spec);
+        assertThat(body("shard")).as("an absence read later than the put removes it").isEqualTo("a 3.0\n");
+        assertThat(StoredListing.sources(store, "shard").removed()).containsExactly(Map.entry("b", 3L));
+    }
+
+    @Test
+    void the_sources_are_invisible_to_a_reader_and_survive_a_rewrite() throws IOException {
+        StoredListing.Spec spec = derived("shard", Map.of("a", 1L, "b", 1L), Map.of("a", "a 1.0", "b", "b 1.0"));
+        StoredListing.read(store, spec);
+        StoredListing.put(store, spec, "z", "z 1.0".getBytes(StandardCharsets.UTF_8));   // unsourced, beside them
+
+        try (StoredListing.Served served = StoredListing.open(store, spec).orElseThrow()) {
+            assertThat(served.header().size()).isEqualTo("a 1.0\nb 1.0\nz 1.0\n".length());
+            assertThat(new String(served.bytes(), StandardCharsets.UTF_8)).isEqualTo("a 1.0\nb 1.0\nz 1.0\n");
+        }
+        assertThat(body("shard")).isEqualTo("a 1.0\nb 1.0\nz 1.0\n");
+        assertThat(StoredListing.sources(store, "shard").entries())
+                .as("the unsourced entry carries no source; the others kept theirs through the rewrite")
+                .containsExactly(Map.entry("a", 1L), Map.entry("b", 1L));
+
+        StoredListing.rebuild(store, spec);
+        assertThat(body("shard")).as("a regeneration replaces an unsourced entry it does not emit, and keeps the "
+                + "sourced ones").isEqualTo("a 1.0\nb 1.0\n");
+    }
+
+    @Test
+    void a_listing_written_without_sources_is_as_it_always_was() throws IOException {
+        StoredListing.Spec spec = lines("plain", () -> entries("a 1"));
+        StoredListing.read(store, spec);
+        StoredListing.put(store, spec, "b", "b 2".getBytes(StandardCharsets.UTF_8));
+
+        assertThat(StoredListing.sources(store, "plain").entries()).isEmpty();
+        assertThat(StoredListing.sources(store, "plain").removed()).isEmpty();
+        StoredListing.put(store, spec, "b", "b 3".getBytes(StandardCharsets.UTF_8));
+        assertThat(body("plain")).as("the last writer wins").isEqualTo("a 1\nb 3\n");
+        StoredListing.rebuild(store, spec);
+        assertThat(body("plain")).as("a regeneration replaces it whole").isEqualTo("a 1\n");
+    }
 }

@@ -49,6 +49,23 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * document by up to three publishes for half a minute at a time, every time the listing-rebuild pass regenerated
  * the pod document beside a publish, and the node's conflict counter showed the two writers meeting.
  *
+ * <h2>Entries derived from another document carry its sequence</h2>
+ *
+ * A two-level listing - a CocoaPods shard built from its pods' documents, a compact index built from every gem's
+ * info document, a catalogue built from every image's tag list - has two writers of one entry: the source
+ * document's {@link Derivation}, which puts the entry the moment the source is written, and the rebuild pass, which
+ * regenerates the whole derived document from a walk over the sources. The walk is a snapshot, and a snapshot can
+ * be a beat behind: measured 2026-09-13 under the sixth soak, a shard regenerated from a pod document one version
+ * old landed after the publish had put the pod's fresh line, and the shard lacked the version until the next
+ * publish rewrote the line. So an entry may carry the <em>sequence of the source document it was derived from</em>
+ * ({@link Changes#put(String, byte[], long)}, {@link Generator.Sink#accept(String, byte[], long)}), the document
+ * keeps every entry's source in a trailer after its body - invisible to a reader, since the header's size bounds
+ * what is served - and a write of an entry lands only at or above the source the stored entry carries: a stale
+ * put is dropped and counted ({@code jenreg.listing.superseded}), a stale regeneration keeps the fresher entry,
+ * and a removal leaves a tombstone at its source so an older put cannot resurrect what a newer source removed.
+ * An entry written without a source, by a writer that derives it from nothing, behaves exactly as before: the
+ * last writer wins, and a regeneration replaces it whole.
+ *
  * <p>Every method is thread-safe; the lanes are keyed by the store's {@link ArtifactStore#identity identity} and the
  * document key, so two scopes with same-named listings never share a queue.
  */
@@ -64,6 +81,12 @@ public final class StoredListing {
 
     private static final String MAGIC = "jenesis-listing/1";
 
+    /** The line that opens a document's source trailer, after the body the header's size bounds. */
+    private static final String SOURCES = "#sources";
+
+    /** No source: an entry a writer derives from no other document, which the last writer of it always wins. */
+    public static final long NO_SOURCE = -1L;
+
     private static final ConcurrentMap<LaneKey, Lane> LANES = new ConcurrentHashMap<>();
 
     private static final LongAdder UPDATES = new LongAdder();
@@ -72,6 +95,7 @@ public final class StoredListing {
     private static final LongAdder COALESCED = new LongAdder();
     private static final LongAdder MATERIALISED = new LongAdder();
     private static final LongAdder FORGOTTEN = new LongAdder();
+    private static final LongAdder SUPERSEDED = new LongAdder();
 
     private StoredListing() {
     }
@@ -487,6 +511,23 @@ public final class StoredListing {
         interface Sink {
 
             void accept(String id, byte[] entry) throws IOException;
+
+            /**
+             * An entry derived from a source document read at sequence {@code source}, so that a regeneration
+             * never puts it over an entry a later write of that source already derived. {@link StoredListing#NO_SOURCE}
+             * is {@link #accept(String, byte[])}.
+             */
+            default void accept(String id, byte[] entry, long source) throws IOException {
+                accept(id, entry);
+            }
+
+            /**
+             * A source document read at sequence {@code source} that yields no entry - a pod whose document lists
+             * nothing - so that a regeneration removes the entry only if nothing newer than what it read put it,
+             * and leaves a tombstone an older put cannot pass. Emitted in ascending id order with the entries.
+             */
+            default void absent(String id, long source) throws IOException {
+            }
         }
     }
 
@@ -659,11 +700,21 @@ public final class StoredListing {
     public static final class Served implements Closeable {
 
         private final Header header;
+        private final InputStream stored;
         private final InputStream body;
 
-        Served(Header header, InputStream body) {
+        /** Over the stored bytes after the header: the body, which the header's size bounds, and whatever the
+         *  writer stored after it - the source trailer - which no reader of the body ever sees. */
+        Served(Header header, InputStream stored) {
             this.header = header;
-            this.body = body instanceof BufferedInputStream ? body : new BufferedInputStream(body, 1 << 16);
+            this.stored = stored instanceof BufferedInputStream ? stored : new BufferedInputStream(stored, 1 << 16);
+            // Bounded, and closing it closes nothing: a codec reader closes the body it was given, and the trailer
+            // after it is still to be read from the same stream. The document is closed once, by close().
+            this.body = new FilterInputStream(limited(this.stored, header.size())) {
+                @Override
+                public void close() {
+                }
+            };
         }
 
         public Header header() {
@@ -672,6 +723,13 @@ public final class StoredListing {
 
         public InputStream body() {
             return body;
+        }
+
+        /** The stored bytes after the body - the source trailer, or nothing - positioned by draining what is left
+         *  of the body, so the stream is where the trailer starts whether or not the body was read. */
+        InputStream rest() throws IOException {
+            body.transferTo(OutputStream.nullOutputStream());
+            return stored;
         }
 
         /**
@@ -762,7 +820,7 @@ public final class StoredListing {
 
         @Override
         public void close() throws IOException {
-            body.close();
+            stored.close();
         }
     }
 
@@ -852,8 +910,34 @@ public final class StoredListing {
         if (stored.isEmpty()) {
             return Optional.empty();
         }
-        Document document = parse(stored.get().content(), key);
-        return Optional.of(new Served(document.header(), new ByteArrayInputStream(document.body())));
+        byte[] framed = stored.get().content();
+        int end = headerEnd(framed, key);
+        Header header = header(new String(framed, 0, end, StandardCharsets.US_ASCII), key);
+        // The body and whatever follows it, as the streamed path hands them over: Served bounds the body itself.
+        return Optional.of(new Served(header, new ByteArrayInputStream(framed, end + 2, framed.length - end - 2)));
+    }
+
+    /** The provenance a listing records for its entries - each id to the source sequence it was derived at, the
+     *  entries and the tombstones apart - or both empty for a listing written without sources. A whole-trailer
+     *  read, sized by the listing: a diagnostic and a test's face, never a request's. */
+    public static Sources sources(ArtifactStore store, String listing) throws IOException {
+        Optional<Served> stored = openStored(store, key(listing));
+        SortedMap<String, Long> entries = new TreeMap<>();
+        SortedMap<String, Long> removed = new TreeMap<>();
+        if (stored.isEmpty()) {
+            return new Sources(entries, removed);
+        }
+        try (Served served = stored.get(); SourceReader sources = new SourceReader(served.rest())) {
+            for (Optional<Source> source = sources.next(); source.isPresent(); source = sources.next()) {
+                (source.get().absent() ? removed : entries).put(source.get().id(), source.get().seq());
+            }
+        }
+        return new Sources(entries, removed);
+    }
+
+    /** What {@link StoredListing#sources} answers: the source sequence of every entry that carries one, and of every
+     *  tombstone. */
+    public record Sources(SortedMap<String, Long> entries, SortedMap<String, Long> removed) {
     }
 
     /** Read the listing whole, materialising it first when it is absent. */
@@ -920,7 +1004,7 @@ public final class StoredListing {
             batch.add(store, spec, changes);      // applied once, when the batch closes or a key fills
             return true;
         }
-        return enqueue(store, spec, new Pending(changes.asMap(), Set.copyOf(changes.prefixes), false,
+        return enqueue(store, spec, new Pending(changes.entries(), Set.copyOf(changes.prefixes), false,
                 new CompletableFuture<>())).landed();
     }
 
@@ -981,13 +1065,7 @@ public final class StoredListing {
             specs.putIfAbsent(key, spec);
             stores.putIfAbsent(key, store);
             Changes mine = collected.computeIfAbsent(key, ignored -> new Changes());
-            changes.asMap().forEach((id, fragment) -> {
-                if (fragment.isPresent()) {
-                    mine.put(id, fragment.get());
-                } else {
-                    mine.remove(id);
-                }
-            });
+            changes.changes.forEach(mine.changes::put);   // sources ride along: a batched put keeps its provenance
             if (mine.changes.size() >= BATCH_FLUSH) {
                 flush(key);
             }
@@ -1058,25 +1136,44 @@ public final class StoredListing {
     }
 
     public static boolean put(ArtifactStore store, Spec spec, String id, byte[] fragment) throws IOException {
-        return update(store, spec, Map.of(id, Optional.of(fragment)));
+        return update(store, spec, new Changes().put(id, fragment));
+    }
+
+    /** {@link #put(ArtifactStore, Spec, String, byte[])} of an entry derived from a source document at sequence
+     *  {@code source}: it lands only if the stored entry was derived from that source at or below {@code source},
+     *  and is dropped - counted as superseded, answered {@code true} - when a later derivation already landed. */
+    public static boolean put(ArtifactStore store, Spec spec, String id, byte[] fragment, long source)
+            throws IOException {
+        return update(store, spec, new Changes().put(id, fragment, source));
     }
 
     /** {@link #update} with one entry removed. */
     public static boolean remove(ArtifactStore store, Spec spec, String id) throws IOException {
-        return update(store, spec, Map.of(id, Optional.empty()));
+        return update(store, spec, new Changes().remove(id));
+    }
+
+    /** {@link #remove(ArtifactStore, Spec, String)} decided from a source document at sequence {@code source}: the
+     *  entry goes only if nothing newer put it, and a tombstone at {@code source} keeps an older put from
+     *  resurrecting it. */
+    public static boolean remove(ArtifactStore store, Spec spec, String id, long source) throws IOException {
+        return update(store, spec, new Changes().remove(id, source));
+    }
+
+    /** One change: the fragment to store, or empty to remove, and the source sequence it was derived at. */
+    private record Change(Optional<byte[]> fragment, long source) {
     }
 
     /** A change set for {@link #update}: puts and removals collected before one write. */
     public static final class Changes {
 
-        private final Map<String, Optional<byte[]>> changes = new LinkedHashMap<>();
+        private final Map<String, Change> changes = new LinkedHashMap<>();
         private final Set<String> prefixes = new LinkedHashSet<>();
 
         public Changes() {
         }
 
         Changes(Map<String, Optional<byte[]>> changes) {
-            this.changes.putAll(changes);
+            changes.forEach((id, fragment) -> this.changes.put(id, new Change(fragment, NO_SOURCE)));
         }
 
         /** Remove every entry whose id starts with {@code prefix} - applied before the puts, so a put under the
@@ -1087,12 +1184,22 @@ public final class StoredListing {
         }
 
         public Changes put(String id, byte[] fragment) {
-            changes.put(id, Optional.of(fragment));
+            return put(id, fragment, NO_SOURCE);
+        }
+
+        /** Put an entry derived from a source document at sequence {@code source} - see the class comment. */
+        public Changes put(String id, byte[] fragment, long source) {
+            changes.put(id, new Change(Optional.of(fragment), sourced(id, source)));
             return this;
         }
 
         public Changes remove(String id) {
-            changes.put(id, Optional.empty());
+            return remove(id, NO_SOURCE);
+        }
+
+        /** Remove an entry as decided from a source document at sequence {@code source} - see the class comment. */
+        public Changes remove(String id, long source) {
+            changes.put(id, new Change(Optional.empty(), sourced(id, source)));
             return this;
         }
 
@@ -1101,8 +1208,23 @@ public final class StoredListing {
         }
 
         public Map<String, Optional<byte[]>> asMap() {
+            Map<String, Optional<byte[]>> fragments = new LinkedHashMap<>();
+            changes.forEach((id, change) -> fragments.put(id, change.fragment()));
+            return Collections.unmodifiableMap(fragments);
+        }
+
+        Map<String, Change> entries() {
             return Map.copyOf(changes);
         }
+    }
+
+    /** A source sequence is recorded on a line of its own, so an id that cannot be written on one is refused. */
+    private static long sourced(String id, long source) {
+        if (source != NO_SOURCE && (source < 0 || id.indexOf('\n') >= 0 || id.indexOf('\t') >= 0)) {
+            throw new IllegalArgumentException("a sourced entry needs a non-negative source and an id without a "
+                    + "newline or a tab: " + id + " at " + source);
+        }
+        return source;
     }
 
     /**
@@ -1283,54 +1405,94 @@ public final class StoredListing {
     }
 
     /**
-     * The regeneration of last resort, run by a lane's own runner after {@value #ATTEMPTS} lost compare-and-sets:
-     * the same replace-under-token loop {@link #rebuild} used to be, kept for the one caller that is already inside
-     * the lane and so cannot queue on it.
+     * The one regeneration: the rebuild pass's turn on the lane, a first write into a document that does not
+     * exist, and the regeneration of last resort a lane's runner falls back to after {@value #ATTEMPTS} lost
+     * compare-and-sets. The generator is rendered to a temporary file, the batch's changes are merged over it, and
+     * the result replaces the stored document under its token, continuing its sequence.
+     *
+     * <p>The token is read before the header, for the reason {@link #apply} gives: a document that moves between
+     * the two reads fails the compare-and-set below against the older token and this attempt retries. Streamed,
+     * like the first materialisation: this is the daily repair pass, and it regenerates a repository-wide listing
+     * whole. Rebuilt per attempt rather than hoisted, because a lost compare-and-set below means the store moved
+     * and the document has to be produced against it again. Rendered outside heap - this is the DAILY pass's path
+     * for every listing in the deployment, so it is the one that meets the largest documents most often, and it
+     * was the half left buffering when materialise() was streamed, which is a defect the attribution build found
+     * by never finishing: a repository-wide rebuild simply ran out of memory on its own thread, where the only
+     * symptom a reader sees is a document that never appears.
+     *
+     * <p><b>A generator that states its sources does not replace the stored document; it is merged into it.</b>
+     * The class comment says why: the walk it ran over the sources is a snapshot, and an entry a source's own
+     * derivation put from a later write of that source is fresher than what the snapshot read. So every stored
+     * entry that carries a source is kept unless the generator read that source at the same sequence or a later
+     * one; a stored entry without a source is replaced whole, as a regeneration always did; and a source the
+     * generator read that yields nothing removes the entry only under the same rule, leaving its tombstone. The
+     * stored document is copied to a temporary file first - the merge needs its trailer beside its body, and a
+     * stream has one end - which on the repair pass costs a file rather than the heap.
      */
-    private static Header regenerate(ArtifactStore store, Spec spec) throws IOException {
+    private static Applied regenerate(ArtifactStore store, Spec spec, List<Pending> batch) throws IOException {
         String key = spec.key();
+        boolean changes = batch.stream().anyMatch(pending -> !pending.changes().isEmpty() || !pending.prefixes().isEmpty());
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
-            // The token before the header, for the reason apply() gives: a document that moves between the two
-            // reads fails the compare-and-set below against the older token and this attempt retries. Neither read
-            // touches the body: the token is the store's version face and the sequence is the streamed header. This
-            // used to read the document whole for those two fields, which for a repository-wide index is every
-            // package in the suite - the debian-gzip canary measured the rebuild pass failing with an
-            // OutOfMemoryError at three hundred thousand stanzas under 512 MiB, after the twin's own read was
-            // streamed, and named this line.
             Object token = store.version(key).orElse(null);
+            Optional<Served> stored = token == null ? Optional.empty() : openStored(store, key);
             long seq = 0L;
-            if (token != null) {
-                Optional<Served> stored = openStored(store, key);
-                if (stored.isPresent()) {
-                    try (Served served = stored.get()) {
-                        seq = served.header().seq();
-                    }
+            Rendered created;
+            try (Served served = stored.orElse(null)) {
+                if (served != null) {
+                    seq = served.header().seq();
                 }
+                created = regenerated(spec, served, batch);
             }
-            // Streamed, like the first materialisation: this is the daily repair pass, and it regenerates a
-            // repository-wide listing whole. Rebuilt per attempt rather than hoisted, because a lost
-            // compare-and-set below means the store moved and the document has to be produced against it again.
-            // Rendered outside heap, exactly as the first materialisation is. This is the DAILY pass's path for
-            // every listing in the deployment, so it is the one that meets the largest documents most often - and
-            // it was the half left buffering when materialise() was streamed, which is a defect the attribution
-            // build found by never finishing: a repository-wide rebuild simply ran out of memory on its own thread,
-            // where the only symptom a reader sees is a document that never appears.
-            Rendered rendered = render(spec);
             try {
-                Header header = Header.of(sequence(seq), rendered.size, rendered.md5, rendered.sha256,
-                        rendered.entries);
-                if (write(store, key, header, rendered, token)) {
+                Header header = Header.of(sequence(seq), created.size, created.md5, created.sha256, created.entries);
+                if (write(store, key, header, created, token)) {
+                    if (changes) {
+                        UPDATES.increment();
+                    }
                     MATERIALISED.increment();
-                    derived(store, spec, header, rendered);
-                    return header;
+                    derived(store, spec, header, created);
+                    return new Applied(true, header);
                 }
+                CONFLICTS.increment();
+                Retries.backoff(attempt);
             } finally {
-                Files.deleteIfExists(rendered.file);
+                created.discard();
             }
-            CONFLICTS.increment();
-            Retries.backoff(attempt);
         }
         throw new IOException("could not rebuild " + key + " after " + ATTEMPTS + " version conflicts");
+    }
+
+    /** The generator rendered, folded into the stored document per entry when it states sources, and the batch's
+     *  changes merged over the result - each stage a streamed merge of temporary files, none of it in heap. */
+    private static Rendered regenerated(Spec spec, Served stored, List<Pending> batch) throws IOException {
+        Rendered generated = render(spec);
+        Rendered base = generated;
+        try {
+            if (stored != null && generated.sources != null) {
+                Rendered copy = copy(spec, stored);
+                try (Joined storedSide = joined(spec, copy); Joined generatedSide = joined(spec, generated)) {
+                    base = merge(spec, storedSide, generatedSide, List.of(), true, Set.of());
+                } finally {
+                    copy.discard();
+                }
+                generated.discard();
+            }
+            if (!batch.stream().anyMatch(pending -> !pending.changes().isEmpty() || !pending.prefixes().isEmpty())) {
+                return base;
+            }
+            Rendered folded;
+            try (Joined baseSide = joined(spec, base)) {
+                folded = merge(spec, baseSide, items(batch), prefixes(batch), false, Set.of());
+            }
+            base.discard();
+            return folded;
+        } catch (IOException | RuntimeException failed) {
+            base.discard();
+            if (base != generated) {
+                generated.discard();
+            }
+            throw failed;
+        }
     }
 
     /**
@@ -1389,7 +1551,7 @@ public final class StoredListing {
     }
 
     /** One queued round member: a change set, or a regeneration of the whole document from its generator. */
-    private record Pending(Map<String, Optional<byte[]>> changes, Set<String> prefixes, boolean regenerate,
+    private record Pending(Map<String, Change> changes, Set<String> prefixes, boolean regenerate,
                            CompletableFuture<Applied> outcome) {
     }
 
@@ -1452,7 +1614,9 @@ public final class StoredListing {
 
     private static Applied apply(ArtifactStore store, Spec spec, List<Pending> batch) throws IOException {
         String key = spec.key();
-        boolean regenerate = batch.stream().anyMatch(Pending::regenerate);
+        if (batch.stream().anyMatch(Pending::regenerate)) {
+            return regenerate(store, spec, batch);
+        }
         boolean changes = batch.stream().anyMatch(pending -> !pending.changes().isEmpty() || !pending.prefixes().isEmpty());
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
             // The token is read BEFORE the body, and the order carries the correctness. If the document moves
@@ -1461,40 +1625,23 @@ public final class StoredListing {
             // computed from older bytes - a lost update rather than a conflict, and a silent one.
             Object token = store.version(key).orElse(null);
             Optional<Served> stored = token == null ? Optional.empty() : openStored(store, key);
-            if (stored.isEmpty() || regenerate) {
-                if (stored.isEmpty() && !regenerate && batch.stream().allMatch(pending ->
-                        pending.changes().values().stream().noneMatch(Optional::isPresent))) {
+            if (stored.isEmpty()) {
+                if (batch.stream().allMatch(pending ->
+                        pending.changes().values().stream().noneMatch(change -> change.fragment().isPresent()))) {
                     // nothing to take out of a document that does not exist: it is not created for it
                     return new Applied(true, null);
-                }
-                // A regeneration replaces the stored document under its token and continues its sequence; neither
-                // read touches the body, which for a repository-wide index is every package in the suite.
-                long seq = 0L;
-                if (stored.isPresent()) {
-                    try (Served served = stored.get()) {
-                        seq = served.header().seq();
-                    }
                 }
                 // Generated and changed in ONE write. Materialising first and merging on the next attempt would
                 // be tidier to read and wrong to watch: it publishes two documents where a first publish always
                 // published one, so every derivation downstream fires twice and the sequence advances twice. So
                 // the generator is rendered to a temporary file and the batch merged over that - the same merge
                 // the stored path runs, against the document that is about to exist rather than one that does.
-                // Holding the generated entries instead would put a first publish into a repository big enough to
-                // need this back on the heap the rest of the method exists to stay off.
-                Rendered generated = render(spec);
-                Rendered created;
-                try (InputStream body = new BufferedInputStream(Files.newInputStream(generated.file));
-                     Served source = new Served(Header.of(0L, generated.size, generated.md5, generated.sha256,
-                             generated.entries), body)) {
-                    created = merge(spec, source, batch);
-                } finally {
-                    Files.deleteIfExists(generated.file);
-                }
+                // A lost create is a peer that materialised first: the next attempt reads its document and merges.
+                Rendered created = regenerated(spec, null, batch);
                 try {
-                    Header header = Header.of(sequence(seq), created.size, created.md5, created.sha256,
+                    Header header = Header.of(sequence(0L), created.size, created.md5, created.sha256,
                             created.entries);
-                    if (write(store, key, header, created, token)) {
+                    if (write(store, key, header, created, null)) {
                         if (changes) {
                             UPDATES.increment();
                         }
@@ -1505,18 +1652,20 @@ public final class StoredListing {
                     CONFLICTS.increment();
                     Retries.backoff(attempt);
                 } finally {
-                    Files.deleteIfExists(created.file);
+                    created.discard();
                 }
                 continue;
             }
             Header header;
             Rendered rendered;
+            String trailer;
             try (Served document = stored.get()) {
                 header = document.header();
-                rendered = merge(spec, document, batch);
+                rendered = merge(store, key, spec, document, batch);
+                trailer = rendered.storedTrailer;
             }
             try {
-                if (rendered.sha256.equals(header.sha256())) {
+                if (rendered.sha256.equals(header.sha256()) && rendered.trailerDigest.equals(trailer)) {
                     // the changes leave the document as it is: nothing to write, nothing to derive
                     return new Applied(true, header);
                 }
@@ -1546,7 +1695,7 @@ public final class StoredListing {
                 CONFLICTS.increment();
                 Retries.backoff(attempt);
             } finally {
-                Files.deleteIfExists(rendered.file);
+                rendered.discard();
             }
         }
         LOGGER.warn("listing {} could not be updated after {} version conflicts; regenerating it in place", key,
@@ -1557,7 +1706,7 @@ public final class StoredListing {
         // as the publish that lost it. It stays on the publishing thread for the reason update() states: the entry
         // must be visible when the publish answers.
         FORGOTTEN.increment();
-        return new Applied(false, regenerate(store, spec));
+        return new Applied(false, regenerate(store, spec, List.of()).header());
     }
 
     /** The SHA-256 the key's stored header carries, or {@code null} where nothing is stored - the cheap half of
@@ -1637,35 +1786,73 @@ public final class StoredListing {
                 derived(store, spec, header, rendered);
             }
         } finally {
-            Files.deleteIfExists(rendered.file);
+            rendered.discard();
         }
     }
 
-    /** A document rendered outside heap, with what its header needs already computed. */
-    private record Rendered(Path file, long size, String md5, String sha256, long entries) {
+    /**
+     * A document rendered outside heap, with what its header needs already computed: the body in {@code file},
+     * and - when any entry carries a source - the source trailer in {@code sources}, with its length and digest,
+     * and the digest of the trailer the stored document carried when this was merged from one ({@code ""} when it
+     * carried none), so a write that would change only the provenance is still a write.
+     */
+    private record Rendered(Path file, long size, String md5, String sha256, long entries, Path sources,
+                            long trailer, String trailerDigest, String storedTrailer) {
+
+        Rendered(Path file, long size, String md5, String sha256, long entries) {
+            this(file, size, md5, sha256, entries, null, 0L, "", "");
+        }
+
+        void discard() throws IOException {
+            Files.deleteIfExists(file);
+            if (sources != null) {
+                Files.deleteIfExists(sources);
+            }
+        }
     }
 
-    /** Render {@code spec}'s generator into a temporary file, digesting as it goes. */
+    /** Render {@code spec}'s generator into a temporary file, digesting as it goes; the sources it states go to
+     *  a second file beside it, in the order they are emitted. */
     private static Rendered render(Spec spec) throws IOException {
         Path file = OwnerOnly.createTempFile("jenreg-listing", ".tmp");
         Counter counter = new Counter();
         MessageDigest sha256 = digest("SHA-256");
         MessageDigest md5 = spec.md5() ? digest("MD5") : null;
-        long size;
+        SourceWriter sources = new SourceWriter();
         try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(file));
              OutputStream digesting = digesting(out, sha256, md5);
              Codec.Appender appender = spec.codec().append(digesting)) {
-            spec.generator().generate((id, entry) -> {
-                appender.append(id, entry);
-                counter.count++;
+            spec.generator().generate(new Generator.Sink() {
+                @Override
+                public void accept(String id, byte[] entry) throws IOException {
+                    appender.append(id, entry);
+                    counter.count++;
+                }
+
+                @Override
+                public void accept(String id, byte[] entry, long source) throws IOException {
+                    accept(id, entry);
+                    if (source != NO_SOURCE) {
+                        sources.line(id, sourced(id, source), false);
+                    }
+                }
+
+                @Override
+                public void absent(String id, long source) throws IOException {
+                    if (source != NO_SOURCE) {
+                        sources.line(id, sourced(id, source), true);
+                    }
+                }
             });
         } catch (IOException | RuntimeException failed) {
             Files.deleteIfExists(file);
+            sources.discard();
             throw failed;
         }
-        size = Files.size(file);
-        return new Rendered(file, size, md5 == null ? "" : HexFormat.of().formatHex(md5.digest()),
-                HexFormat.of().formatHex(sha256.digest()), counter.count);
+        sources.close();
+        return new Rendered(file, Files.size(file), md5 == null ? "" : HexFormat.of().formatHex(md5.digest()),
+                HexFormat.of().formatHex(sha256.digest()), counter.count, sources.file, sources.size, sources.digest(),
+                "");
     }
 
     /**
@@ -1681,57 +1868,464 @@ public final class StoredListing {
      * earlier removal cleared. Replaying gives the final state of every id the batch mentions; a stored id the
      * batch never mentions can only be affected by a prefix removal, so those are applied to it directly.
      */
-    private static Rendered merge(Spec spec, Served stored, List<Pending> batch) throws IOException {
-        SortedMap<String, Optional<byte[]>> resolved = new TreeMap<>();
-        List<String> prefixes = new ArrayList<>();
+    private static Rendered merge(ArtifactStore store, String key, Spec spec, Served stored, List<Pending> batch)
+            throws IOException {
+        // Phase one: the body, merged as if every change lands - which is every change, unless the trailer says
+        // a stored entry's source has moved past one. The body comes first in the stream and the trailer after
+        // it, and a stream has one end; reading the trailer first would mean holding it, sized by the listing.
+        // So the body is merged optimistically, the trailer is then read once and merged into the new trailer as
+        // it goes, and only when it names a stale change - a rare event, a rebuild's snapshot meeting a publish -
+        // is the body merged again from a second read, with the stale changes left out.
+        SortedMap<String, Change> resolved = resolve(batch);
+        List<String> prefixes = prefixes(batch);
+        Rendered body = merge(spec, joined(spec, stored.body(), stored.header().size(), SourceReader.none()),
+                items(resolved), prefixes, false, Set.of());
+        try {
+            TrailerMerge trailer = mergeTrailer(stored.rest(), resolved, prefixes);
+            try {
+                if (!trailer.stale.isEmpty()) {
+                    SUPERSEDED.add(trailer.stale.size());
+                    body.discard();
+                    body = null;
+                    Optional<Served> again = openStored(store, key);
+                    if (again.isEmpty()) {
+                        throw new IOException("listing " + key + " vanished while it was being merged");
+                    }
+                    try (Served second = again.get()) {
+                        body = merge(spec, joined(spec, second.body(), second.header().size(), SourceReader.none()),
+                                items(resolved), prefixes, false, trailer.stale);
+                    }
+                }
+                if (body.sources != null) {
+                    Files.deleteIfExists(body.sources);   // phase one's provenance: the merged trailer replaces it
+                }
+                return new Rendered(body.file, body.size, body.md5, body.sha256, body.entries, trailer.file,
+                        trailer.size, trailer.digest, trailer.storedDigest);
+            } catch (IOException | RuntimeException failed) {
+                if (trailer.file != null) {
+                    Files.deleteIfExists(trailer.file);
+                }
+                throw failed;
+            }
+        } catch (IOException | RuntimeException failed) {
+            if (body != null) {
+                body.discard();
+            }
+            throw failed;
+        }
+    }
+
+    /** The batch replayed into one answer per id: order is meaningful within it, because a prefix removal in one
+     *  pending change can take out an entry an earlier one added, and a later change can re-add under a prefix an
+     *  earlier removal cleared. */
+    private static SortedMap<String, Change> resolve(List<Pending> batch) {
+        SortedMap<String, Change> resolved = new TreeMap<>();
         for (Pending pending : batch) {
             for (String prefix : pending.prefixes()) {
-                prefixes.add(prefix);
-                resolved.replaceAll((id, value) -> id.startsWith(prefix) ? Optional.empty() : value);
+                resolved.replaceAll((id, change) -> id.startsWith(prefix) ? new Change(Optional.empty(), NO_SOURCE)
+                        : change);
             }
             resolved.putAll(pending.changes());
         }
+        return resolved;
+    }
+
+    private static List<String> prefixes(List<Pending> batch) {
+        List<String> prefixes = new ArrayList<>();
+        for (Pending pending : batch) {
+            prefixes.addAll(pending.prefixes());
+        }
+        return prefixes;
+    }
+
+    private static Items items(List<Pending> batch) {
+        return items(resolve(batch));
+    }
+
+    private static Items items(SortedMap<String, Change> resolved) {
+        Iterator<Map.Entry<String, Change>> changes = resolved.entrySet().iterator();
+        return () -> {
+            if (!changes.hasNext()) {
+                return Optional.empty();
+            }
+            Map.Entry<String, Change> change = changes.next();
+            return Optional.of(new Item(change.getKey(), change.getValue().fragment(), change.getValue().source()));
+        };
+    }
+
+    /**
+     * Render {@code stored} with {@code incoming} applied, holding neither.
+     *
+     * <p>Both sides are in ascending id order - a stored document is, a change set is collected into a sorted
+     * map, a generator emits so - so applying one to the other is a single linear merge, and the update costs a
+     * buffer rather than the repository. Per id: a stored item the incoming side never names survives, unless a
+     * prefix removal covers it or - under a regeneration - it carries no source, in which case the generator's
+     * silence about it is its removal; an incoming item the stored side never names lands; and where both name
+     * an id the incoming wins, unless both carry a source and the stored one is the later, or the id is one the
+     * caller already found stale, in which case the stored item stays. A put's source becomes the entry's; a
+     * removal's source becomes a tombstone's; no source, no line.
+     */
+    private static Rendered merge(Spec spec, Joined stored, Items incoming, List<String> prefixes, boolean regenerate,
+                                  Set<String> stale) throws IOException {
         Path file = OwnerOnly.createTempFile("jenreg-listing", ".tmp");
         Counter counter = new Counter();
         MessageDigest sha256 = digest("SHA-256");
         MessageDigest md5 = spec.md5() ? digest("MD5") : null;
+        SourceWriter sources = new SourceWriter();
         try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(file));
              OutputStream digesting = digesting(out, sha256, md5);
              Codec.Appender appender = spec.codec().append(digesting);
-             Codec.Reader reader = spec.codec().read(stored.body(), stored.header().size())) {
-            Iterator<Map.Entry<String, Optional<byte[]>>> changes = resolved.entrySet().iterator();
-            Map.Entry<String, Optional<byte[]>> change = changes.hasNext() ? changes.next() : null;
-            Optional<Map.Entry<String, byte[]>> entry = reader.next();
-            while (entry.isPresent() || change != null) {
+             Joined kept = stored) {
+            Optional<Item> entry = kept.next();
+            Optional<Item> change = incoming.next();
+            while (entry.isPresent() || change.isPresent()) {
                 int order = entry.isEmpty() ? 1
-                        : change == null ? -1
-                        : entry.get().getKey().compareTo(change.getKey());
+                        : change.isEmpty() ? -1
+                        : entry.get().id().compareTo(change.get().id());
                 if (order < 0) {
-                    // A stored entry the batch never names: it survives unless a prefix removal covers it.
-                    String id = entry.get().getKey();
-                    if (prefixes.stream().noneMatch(id::startsWith)) {
-                        appender.append(id, entry.get().getValue());
-                        counter.count++;
+                    Item item = entry.get();
+                    boolean covered = prefixes.stream().anyMatch(item.id()::startsWith);
+                    if (!covered && (item.source() != NO_SOURCE || (!regenerate && item.entry().isPresent()))) {
+                        emit(appender, sources, counter, item);
                     }
-                    entry = reader.next();
+                    entry = kept.next();
                 } else {
-                    // The batch's own answer for this id, which already accounts for every prefix removal in it.
-                    if (change.getValue().isPresent()) {
-                        appender.append(change.getKey(), change.getValue().get());
-                        counter.count++;
+                    Item item = change.get();
+                    // Stale: the caller found it so against the trailer, or both sides carry a source and the
+                    // stored one is the later. A stale change with nothing stored under its id - a tombstone the
+                    // caller read - lands nothing; the trailer's own merge kept the tombstone.
+                    boolean keep = stale.contains(item.id()) || (order == 0
+                            && item.source() != NO_SOURCE && entry.get().source() != NO_SOURCE
+                            && item.source() < entry.get().source());
+                    if (!keep) {
+                        emit(appender, sources, counter, item);
+                    } else if (order == 0) {
+                        if (regenerate) {
+                            SUPERSEDED.increment();
+                        }
+                        emit(appender, sources, counter, entry.get());
                     }
                     if (order == 0) {
-                        entry = reader.next();   // the change replaced or removed the stored entry
+                        entry = kept.next();
                     }
-                    change = changes.hasNext() ? changes.next() : null;
+                    change = incoming.next();
                 }
             }
         } catch (IOException | RuntimeException failed) {
             Files.deleteIfExists(file);
+            sources.discard();
             throw failed;
         }
+        sources.close();
         return new Rendered(file, Files.size(file), md5 == null ? "" : HexFormat.of().formatHex(md5.digest()),
-                HexFormat.of().formatHex(sha256.digest()), counter.count);
+                HexFormat.of().formatHex(sha256.digest()), counter.count, sources.file, sources.size, sources.digest(),
+                "");
+    }
+
+    private static void emit(Codec.Appender appender, SourceWriter sources, Counter counter, Item item)
+            throws IOException {
+        if (item.entry().isPresent()) {
+            appender.append(item.id(), item.entry().get());
+            counter.count++;
+        }
+        if (item.source() != NO_SOURCE) {
+            sources.line(item.id(), item.source(), item.entry().isEmpty());
+        }
+    }
+
+    /**
+     * The trailer of a stored document merged with a change set, read once as a stream after the body: every
+     * stored line survives unless the change set names its id - then the change's source replaces it, no source
+     * meaning no line - or a prefix removal covers it; a change whose source is below the stored line's is stale,
+     * keeps the stored line, and is reported so the body can be merged again without it.
+     */
+    private static TrailerMerge mergeTrailer(InputStream rest, SortedMap<String, Change> resolved,
+                                             List<String> prefixes) throws IOException {
+        Set<String> stale = new HashSet<>();
+        SourceWriter merged = new SourceWriter();
+        try (SourceReader stored = new SourceReader(rest)) {
+            Iterator<Map.Entry<String, Change>> changes = resolved.entrySet().iterator();
+            Map.Entry<String, Change> change = changes.hasNext() ? changes.next() : null;
+            Optional<Source> line = stored.next();
+            while (line.isPresent() || change != null) {
+                int order = line.isEmpty() ? 1
+                        : change == null ? -1
+                        : line.get().id().compareTo(change.getKey());
+                if (order < 0) {
+                    Source source = line.get();
+                    if (prefixes.stream().noneMatch(source.id()::startsWith)) {
+                        merged.line(source.id(), source.seq(), source.absent());
+                    }
+                    line = stored.next();
+                } else {
+                    Change incoming = change.getValue();
+                    if (order == 0 && incoming.source() != NO_SOURCE && incoming.source() < line.get().seq()) {
+                        stale.add(change.getKey());
+                        merged.line(line.get().id(), line.get().seq(), line.get().absent());
+                    } else if (incoming.source() != NO_SOURCE) {
+                        merged.line(change.getKey(), incoming.source(), incoming.fragment().isEmpty());
+                    }
+                    if (order == 0) {
+                        line = stored.next();
+                    }
+                    change = changes.hasNext() ? changes.next() : null;
+                }
+            }
+            merged.close();
+            return new TrailerMerge(merged.file, merged.size, merged.digest(), stored.digest(), stale);
+        } catch (IOException | RuntimeException failed) {
+            merged.discard();
+            throw failed;
+        }
+    }
+
+    /** What merging a stored trailer with a change set produced: the new trailer (or none), the stored one's
+     *  digest, and the ids whose change the stored provenance refuses. */
+    private record TrailerMerge(Path file, long size, String digest, String storedDigest, Set<String> stale) {
+    }
+
+    /** A local copy of a stored document's body and trailer, so a regeneration can merge into it from re-openable
+     *  files: the daily pass's cost is a temporary file, never the heap. */
+    private static Rendered copy(Spec spec, Served stored) throws IOException {
+        Path file = OwnerOnly.createTempFile("jenreg-listing", ".tmp");
+        Path trailer = OwnerOnly.createTempFile("jenreg-listing-sources", ".tmp");
+        try {
+            try (OutputStream out = Files.newOutputStream(file)) {
+                stored.body().transferTo(out);
+            }
+            long size;
+            try (OutputStream out = Files.newOutputStream(trailer)) {
+                size = stored.rest().transferTo(out);
+            }
+            if (size == 0) {
+                Files.deleteIfExists(trailer);   // a document with no trailer: nothing to reopen
+            }
+            return new Rendered(file, Files.size(file), "", "", Header.UNKNOWN, size == 0 ? null : trailer, size, "",
+                    "");
+        } catch (IOException | RuntimeException failed) {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(trailer);
+            throw failed;
+        }
+    }
+
+    /** One id on one side of a merge: its entry, or empty for a tombstone, and its source or {@link StoredListing#NO_SOURCE}. */
+    private record Item(String id, Optional<byte[]> entry, long source) {
+    }
+
+    /** A side of a merge: items in ascending id order, empty once exhausted. */
+    @FunctionalInterface
+    private interface Items {
+
+        Optional<Item> next() throws IOException;
+    }
+
+    /** A rendered document's entries beside its sources, walked in lockstep by id: an entry with a source line
+     *  carries it, an entry without one carries none, and a source line without an entry is a tombstone. */
+    private static final class Joined implements Items, Closeable {
+
+        private final Codec.Reader entries;
+        private final SourceReader sources;
+        private Optional<Map.Entry<String, byte[]>> entry;
+        private Optional<Source> source;
+
+        Joined(Codec.Reader entries, SourceReader sources) throws IOException {
+            this.entries = entries;
+            this.sources = sources;
+            entry = entries.next();
+            source = sources.next();
+        }
+
+        @Override
+        public Optional<Item> next() throws IOException {
+            if (entry.isEmpty() && source.isEmpty()) {
+                return Optional.empty();
+            }
+            int order = entry.isEmpty() ? 1
+                    : source.isEmpty() ? -1
+                    : entry.get().getKey().compareTo(source.get().id());
+            Item item;
+            if (order < 0) {
+                item = new Item(entry.get().getKey(), Optional.of(entry.get().getValue()), NO_SOURCE);
+                entry = entries.next();
+            } else if (order > 0) {
+                item = new Item(source.get().id(), Optional.empty(), source.get().seq());
+                source = sources.next();
+            } else {
+                item = new Item(entry.get().getKey(), Optional.of(entry.get().getValue()), source.get().seq());
+                entry = entries.next();
+                source = sources.next();
+            }
+            return Optional.of(item);
+        }
+
+        @Override
+        public void close() throws IOException {
+            try (Codec.Reader closing = entries; SourceReader also = sources) {
+                // both closed, whichever throws
+            }
+        }
+    }
+
+    private static Joined joined(Spec spec, InputStream body, long size, SourceReader sources) throws IOException {
+        return new Joined(spec.codec().read(body, size), sources);
+    }
+
+    /** A rendered document reopened for a further merge: its body and, when it has one, its trailer. */
+    private static Joined joined(Spec spec, Rendered rendered) throws IOException {
+        InputStream body = new BufferedInputStream(Files.newInputStream(rendered.file));
+        try {
+            SourceReader sources = rendered.sources == null ? SourceReader.none()
+                    : new SourceReader(new BufferedInputStream(Files.newInputStream(rendered.sources)));
+            try {
+                return new Joined(spec.codec().read(body, rendered.size), sources);
+            } catch (IOException | RuntimeException failed) {
+                sources.close();
+                throw failed;
+            }
+        } catch (IOException | RuntimeException failed) {
+            body.close();
+            throw failed;
+        }
+    }
+
+    /** One line of a source trailer: an id, the source sequence, and whether it is a tombstone. */
+    private record Source(String id, long seq, boolean absent) {
+    }
+
+    /**
+     * The source trailer read as a stream, digested as it goes so an unchanged trailer is recognised without
+     * being held: a blank line, the {@value StoredListing#SOURCES} line, then one {@code id<TAB>seq[<TAB>absent]} line per
+     * id in ascending order. Bytes that do not open so are no trailer, which is what every document written
+     * before sources existed has after its body: nothing.
+     */
+    private static final class SourceReader implements Closeable {
+
+        private final BufferedReader lines;
+        private final MessageDigest sha256 = StoredListing.digest("SHA-256");
+        private boolean started;
+        private boolean exhausted;
+        private long read;
+
+        SourceReader(InputStream rest) {
+            lines = new BufferedReader(new InputStreamReader(new DigestInputStream(new CountingInput(rest), sha256),
+                    StandardCharsets.UTF_8));
+        }
+
+        static SourceReader none() {
+            return new SourceReader(InputStream.nullInputStream());
+        }
+
+        Optional<Source> next() throws IOException {
+            if (exhausted) {
+                return Optional.empty();
+            }
+            if (!started) {
+                started = true;
+                String blank = lines.readLine();
+                String magic = blank == null ? null : lines.readLine();
+                if (!"".equals(blank) || !SOURCES.equals(magic)) {
+                    exhausted = true;
+                    return Optional.empty();
+                }
+            }
+            String line = lines.readLine();
+            if (line == null || line.isEmpty()) {
+                exhausted = true;
+                return Optional.empty();
+            }
+            String[] parts = line.split("\t", -1);
+            if (parts.length < 2) {
+                throw new IOException("malformed source line: " + line);
+            }
+            try {
+                return Optional.of(new Source(parts[0], Long.parseLong(parts[1]), parts.length > 2));
+            } catch (NumberFormatException malformed) {
+                throw new IOException("malformed source line: " + line, malformed);
+            }
+        }
+
+        /** The digest of the trailer's bytes once it has been read to its end, {@code ""} when there was none -
+         *  the value a rendered trailer's digest is compared against. */
+        String digest() throws IOException {
+            while (!exhausted) {
+                next();
+            }
+            lines.transferTo(Writer.nullWriter());
+            return read == 0 ? "" : HexFormat.of().formatHex(sha256.digest());
+        }
+
+        @Override
+        public void close() throws IOException {
+            lines.close();
+        }
+
+        private final class CountingInput extends FilterInputStream {
+
+            CountingInput(InputStream in) {
+                super(in);
+            }
+
+            @Override
+            public int read() throws IOException {
+                int b = super.read();
+                if (b >= 0) {
+                    read++;
+                }
+                return b;
+            }
+
+            @Override
+            public int read(byte[] buffer, int offset, int length) throws IOException {
+                int n = super.read(buffer, offset, length);
+                if (n > 0) {
+                    read += n;
+                }
+                return n;
+            }
+        }
+    }
+
+    /** The source trailer written as a stream to a temporary file that exists only once a first line is written,
+     *  digested as it goes; {@link #file} is {@code null} for a document with no sources. */
+    private static final class SourceWriter {
+
+        private Path file;
+        private OutputStream out;
+        private final MessageDigest sha256 = StoredListing.digest("SHA-256");
+        private long size;
+
+        void line(String id, long seq, boolean absent) throws IOException {
+            if (out == null) {
+                file = OwnerOnly.createTempFile("jenreg-listing-sources", ".tmp");
+                out = new DigestOutputStream(new BufferedOutputStream(Files.newOutputStream(file)), sha256);
+                write("\n" + SOURCES + "\n");
+            }
+            write(id + "\t" + seq + (absent ? "\tabsent" : "") + "\n");
+        }
+
+        private void write(String text) throws IOException {
+            byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+            out.write(bytes);
+            size += bytes.length;
+        }
+
+        void close() throws IOException {
+            if (out != null) {
+                out.close();
+            }
+        }
+
+        String digest() {
+            return file == null ? "" : HexFormat.of().formatHex(sha256.digest());
+        }
+
+        void discard() throws IOException {
+            close();
+            if (file != null) {
+                Files.deleteIfExists(file);
+            }
+        }
     }
 
     /** The conditional write of a rendered document: its header and its bytes, streamed, never joined in heap. */
@@ -1739,8 +2333,11 @@ public final class StoredListing {
             throws IOException {
         byte[] head = head(header);
         try (InputStream body = Files.newInputStream(rendered.file);
-             InputStream framed = new SequenceInputStream(new ByteArrayInputStream(head), body)) {
-            return store.writeVersioned(key, framed, head.length + rendered.size, expected);
+             InputStream trailer = rendered.sources == null ? InputStream.nullInputStream()
+                     : Files.newInputStream(rendered.sources);
+             InputStream framed = new SequenceInputStream(Collections.enumeration(
+                     List.of(new ByteArrayInputStream(head), body, trailer)))) {
+            return store.writeVersioned(key, framed, head.length + rendered.size + rendered.trailer, expected);
         }
     }
 
@@ -1878,7 +2475,9 @@ public final class StoredListing {
     private static Document parse(byte[] framed, String key) throws IOException {
         int end = headerEnd(framed, key);
         Header header = header(new String(framed, 0, end, StandardCharsets.US_ASCII), key);
-        return new Document(header, Arrays.copyOfRange(framed, end + 2, framed.length));
+        // The body alone: a source trailer stored after it is the writer's, never the document a reader is given.
+        int body = (int) Math.min(header.size(), framed.length - end - 2L);
+        return new Document(header, Arrays.copyOfRange(framed, end + 2, end + 2 + body));
     }
 
     private static int headerEnd(byte[] framed, String key) throws IOException {
@@ -2054,7 +2653,11 @@ public final class StoredListing {
                             MATERIALISED.sum(), "documents"),
                     Metric.counter("jenreg.listing.forgotten",
                             "Listing documents dropped for regeneration after a write could not land",
-                            FORGOTTEN.sum(), "documents"));
+                            FORGOTTEN.sum(), "documents"),
+                    Metric.counter("jenreg.listing.superseded",
+                            "Listing entries a write would have put from a source the stored entry had already "
+                                    + "moved past - a rebuild's snapshot meeting a publish - kept as stored",
+                            SUPERSEDED.sum(), "entries"));
         }
     }
 }

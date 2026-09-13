@@ -204,16 +204,20 @@ final class OciListings {
             // The header already counts the entries, so this asks it rather than splitting the body into a map of
             // every tag to see whether the map is empty - a whole document parsed, on every tag push, to answer a
             // question that is one field of the header the same write just computed.
+            // Stated at the tag list's sequence, so the rebuild pass's regeneration of the catalogue - a walk over
+            // every image's tag list, which can be a beat behind this write - never takes an image out that a
+            // later write of its tag list put in, nor puts one back that a later write took out.
             if (document.header().entries() == 0) {
-                StoredListing.remove(store, catalogSpec(), name);
+                StoredListing.remove(store, catalogSpec(), name, document.header().seq());
             } else {
-                StoredListing.put(store, catalogSpec(), name, quoted(name).getBytes(StandardCharsets.UTF_8));
+                StoredListing.put(store, catalogSpec(), name, quoted(name).getBytes(StandardCharsets.UTF_8),
+                        document.header().seq());
             }
         });
     }
 
     StoredListing.Spec catalogSpec() {
-        return StoredListing.Spec.materialising(CATALOG, REPOSITORIES, this::generateCatalog);
+        return StoredListing.Spec.of(CATALOG, REPOSITORIES, sink -> collect("oci", "", sink));
     }
 
     /**
@@ -254,16 +258,14 @@ final class OciListings {
      * document - which the codecs and the cursor paging both assume is ascending, and which nothing
      * would report.
      */
-    private SortedMap<String, byte[]> generateCatalog() throws IOException {
-        SortedMap<String, byte[]> entries = new TreeMap<>();
-        collect("oci", "", entries);
-        return entries;
-    }
-
     /** Every image name under the {@code oci/} tree - a name is a node carrying a {@code tags} container - with a
-     *  listed tag; the tree is walked once here, on first materialisation, never per request. */
-    private void collect(String prefix, String name, SortedMap<String, byte[]> entries) throws IOException {
-        for (String child : store.list(prefix)) {
+     *  listed tag, each stated at the sequence of the tag list it was read from; the tree is walked once here, on
+     *  first materialisation or the rebuild pass, never per request. Names are visited in order, as a generator
+     *  emits: a node's own {@code tags} before its children, and children by name. */
+    private void collect(String prefix, String name, StoredListing.Generator.Sink sink) throws IOException {
+        List<String> children = new ArrayList<>(store.list(prefix));
+        children.sort(Comparator.comparing((String child) -> !child.equals("tags")).thenComparing(child -> child));
+        for (String child : children) {
             if (child.equals("uploads") || child.equals("upload-sessions") || child.equals("types")) {
                 continue;
             }
@@ -274,11 +276,13 @@ final class OciListings {
                 // ask whether the map is empty made building the catalogue cost every tag in the registry.
                 // Deliberately not tagsSpec(name): that one derives the catalogue, which is what is being built.
                 Optional<StoredListing.Served> document = StoredListing.open(store,
-                        StoredListing.Spec.of(tags(name), TAGS, sink -> generateTags(name, sink)));
+                        StoredListing.Spec.of(tags(name), TAGS, tagged -> generateTags(name, tagged)));
                 if (document.isPresent()) {
                     try (StoredListing.Served served = document.get()) {
                         if (served.header().entries() > 0) {
-                            entries.put(name, quoted(name).getBytes(StandardCharsets.UTF_8));
+                            sink.accept(name, quoted(name).getBytes(StandardCharsets.UTF_8), served.header().seq());
+                        } else {
+                            sink.absent(name, served.header().seq());
                         }
                     }
                 }
@@ -287,7 +291,7 @@ final class OciListings {
             if (child.equals("manifests")) {
                 continue;
             }
-            collect(prefix + "/" + child, childName, entries);
+            collect(prefix + "/" + child, childName, sink);
         }
     }
 
