@@ -88,6 +88,13 @@ public final class FormatContract {
          *  and the release must restore it: a serve that read the hold off its pointer but whose release left the
          *  copy behind would 404 a released artifact forever, which is the defect this exists to catch. */
         HELD_THEN_RELEASED_SERVES_AGAIN,
+        /** Every path a publish writes at is one the format's {@code describe} places. The gate links a review pointer
+         *  at the request path of a publish it quarantines, and a release's cross-alias guard asks the installed
+         *  formats to place every review pointer it meets: a path none describes answers Unknown for every hash
+         *  still open, which leaves every marker that release should lift standing. Measured 2026-09-12: 3,102
+         *  releases in a quarter of an hour left theirs behind one CocoaPods pointer at a path its format did not
+         *  describe. The paths are the ones the fixture's own publish wrote, recorded by the kit's exchange. */
+        PUBLISH_PATHS_ARE_DESCRIBED,
         /** The format's declared signature story matches what it implements: a format whose fixture names schemes
          *  implements {@code ArtifactSignatures} and expects them for its own artifact, and one that declares none
          *  implements nothing. This is the property that stops "which formats do we verify signatures for" being
@@ -169,6 +176,9 @@ public final class FormatContract {
                 new Check(Property.HELD_THEN_RELEASED_SERVES_AGAIN,
                         "a held artifact answers 404, and serves the original bytes again once released",
                         FormatContract::heldThenReleasedServesAgain),
+                new Check(Property.PUBLISH_PATHS_ARE_DESCRIBED,
+                        "every path a publish writes at is one the format's describe places",
+                        FormatContract::publishPathsAreDescribed),
                 new Check(Property.SIGNATURE_STORY_IS_DECLARED,
                         "the declared signature story matches what the format implements",
                         FormatContract::signatureStoryIsDeclared),
@@ -842,6 +852,40 @@ public final class FormatContract {
      * the seam is a declaration that has fallen behind the code. The rationale on a "none" is held to being an
      * argument rather than a placeholder, because an exemption nobody can check is how a gap becomes permanent.
      */
+    private static void publishPathsAreDescribed(FormatFixture fixture, ArtifactStore store) throws Exception {
+        ContractExchange.recordWrites();
+        List<String> written;
+        try {
+            fixture.publish(store, ramp(ARTIFACT_BYTES));
+        } finally {
+            written = ContractExchange.recordedWrites();
+        }
+        describesAll(fixture, written);
+    }
+
+    /** The shared judgement: every recorded write path is placed by the format's own describe, which is what a
+     *  release's cross-alias guard asks of a review pointer's path. */
+    public static void describesAll(FormatFixture fixture, List<String> written) {
+        if (written.isEmpty()) {
+            throw failure(fixture, "the publish wrote through no kit exchange, so the property saw no path; a "
+                    + "fixture publishes through ContractExchange so that what it wrote can be read back");
+        }
+        if (!(fixture.serving() instanceof ArtifactLayout layout)) {
+            // A format without coordinates has nothing to place, and a review pointer at one of its paths keeps
+            // no sibling hashes: the release guard answers Absent for a path an installed format handles and no
+            // layout describes, which the gate's own test holds it to. The property is about what describe
+            // places, so it has nothing to say here.
+            return;
+        }
+        for (String path : written) {
+            if (layout.describe(path).isEmpty()) {
+                throw failure(fixture, "publishes at " + path + ", which its own describe() does not place; a review "
+                        + "pointer the gate links there answers Unknown to every release's cross-alias guard, which "
+                        + "then leaves every marker it should have lifted standing");
+            }
+        }
+    }
+
     private static void signatureStoryIsDeclared(FormatFixture fixture, ArtifactStore store) {
         FormatFixture.Signatures declared = fixture.signatures();
         boolean implemented = fixture.serving() instanceof ArtifactSignatures;

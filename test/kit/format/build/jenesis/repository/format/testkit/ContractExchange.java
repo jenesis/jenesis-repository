@@ -44,11 +44,35 @@ public final class ContractExchange implements FormatExchange {
     private int status = -1;
     private boolean buffered;
 
+    /**
+     * The request paths of every write exchange built on this thread since {@link #recordWrites()}: what a contract
+     * property reads back after a fixture's publish, so it learns where the publish wrote without the fixture having
+     * to say - and cannot be passed over a path the fixture never drove, since the fixture drives every write through
+     * this exchange.
+     */
+    private static final ThreadLocal<List<String>> WRITES = new ThreadLocal<>();
+
+    /** Start recording the paths of the write exchanges this thread builds. */
+    public static void recordWrites() {
+        WRITES.set(new ArrayList<>());
+    }
+
+    /** The paths recorded since {@link #recordWrites()}, in order, and the end of the recording. */
+    public static List<String> recordedWrites() {
+        List<String> written = WRITES.get();
+        WRITES.remove();
+        return written == null ? List.of() : List.copyOf(written);
+    }
+
     private ContractExchange(String method, String path, Map<String, String> query,
                              Map<String, String> requestHeaders, UnaryOperator<String> settings,
                              Supplier<InputStream> requestBody) {
         this.method = method;
         this.path = path;
+        List<String> recording = WRITES.get();
+        if (recording != null && (method.equals("PUT") || method.equals("POST") || method.equals("PATCH"))) {
+            recording.add(path);
+        }
         this.query = Map.copyOf(query);
         this.requestHeaders = Map.copyOf(requestHeaders);
         this.settings = settings;
