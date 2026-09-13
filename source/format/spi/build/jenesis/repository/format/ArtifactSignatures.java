@@ -148,6 +148,10 @@ public interface ArtifactSignatures extends EcosystemLayout {
          *  own file name - an {@code .apk}'s {@code .SIGN.RSA256.<keyfile>} member over its control segment. */
         RSA_DETACHED,
 
+        /** A bare RSA signature whose signer's X.509 chain the artifact carries itself, as {@link Evidence#signer} -
+         *  a gem's {@code data.tar.gz.sig} beside the {@code cert_chain} in its gemspec. */
+        X509_DETACHED,
+
         /** A Sigstore bundle - a DSSE envelope with a Fulcio certificate and a Rekor inclusion proof. */
         SIGSTORE_BUNDLE,
 
@@ -207,13 +211,20 @@ public interface ArtifactSignatures extends EcosystemLayout {
      * caller opens to feed a verifier, and the {@code location} the material was found at - a sibling request path, or
      * a name inside the artifact - which is what an operator reads when a verification fails.
      */
-    record Evidence(Scheme scheme, byte[] signature, Signed signed, String location) {
+    record Evidence(Scheme scheme, byte[] signature, Signed signed, String location, byte[] signer) {
 
         public Evidence {
             Objects.requireNonNull(scheme, "scheme");
             Objects.requireNonNull(signature, "signature");
             Objects.requireNonNull(signed, "signed");
             Objects.requireNonNull(location, "location");
+        }
+
+        /** Evidence for a scheme whose signature names or carries its signer, so nothing rides beside it. The
+         *  five-argument form carries {@code signer}: the signer material an artifact keeps outside its signature -
+         *  a gem's X.509 chain from its gemspec, as concatenated PEM. */
+        public Evidence(Scheme scheme, byte[] signature, Signed signed, String location) {
+            this(scheme, signature, signed, location, null);
         }
     }
 
