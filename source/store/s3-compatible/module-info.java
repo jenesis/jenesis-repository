@@ -5,61 +5,69 @@
  * in how a conditional write is expressed. This module owns what they share so a fix to paging, scanning or
  * reading lands in both at once.
  *
+ * <p>Netty 4.2 split {@code netty-codec} into codecs whose descriptors require their optional peers without
+ * {@code static} ({@code netty-codec-marshalling} wants {@code org.jboss.marshalling}, {@code netty-codec-protobuf}
+ * {@code protobuf.javanano}), so a module-path boot layer carrying them fails on the missing module. The S3 SDK pulls
+ * netty for its async client, which this store never uses, and this module's flattened POM is where every consumer
+ * of the S3 stores meets that closure - so the exclusion below is declared here as well as on the S3 store, since a
+ * Maven exclusion drops an artifact only from the path it names (measured 2026-09-13).
+ *
  * @jenesis.release 25
+ * @jenesis.exclude software.amazon.awssdk.services.s3 io.netty/netty-codec-marshalling io.netty/netty-codec-protobuf
  * @jenesis.pin com.github.ben-manes.caffeine/caffeine 3.2.4 SHA-256/9d9d2cfd681fd9272ded3d27c9930db12f89f732345975aa113ebc223bbf1224
- * @jenesis.pin com.google.errorprone/error_prone_annotations 2.49.0 SHA-256/3b1003e51b8ae56fdbd7c71073e81d1683b97e6c4dff5a9151164d59b769d13c
- * @jenesis.pin io.netty/netty-buffer 4.1.135.Final SHA-256/2a194f99fc93d07c4d442d04ac71bd2dc56d3188cd0e4270cdc2a953d1956bf9
- * @jenesis.pin io.netty/netty-codec 4.1.135.Final SHA-256/7252171264dbb5bb8ed38e77f89643b31e3cabc96144ec27b6882435d718a61e
- * @jenesis.pin io.netty/netty-codec-http 4.1.135.Final SHA-256/4018529d3d6aecf4044b98c75d9a90c91839ddf49c7aa484c5ac81c90a15da02
- * @jenesis.pin io.netty/netty-codec-http2 4.1.135.Final SHA-256/aa4e81ab5fa3b7b243eb3e814aa582ab26c073d31b0abffdbb58ee150fa49c16
- * @jenesis.pin io.netty/netty-common 4.1.135.Final SHA-256/26775ca95820711403cf065fa2ec0134a0a04ff5417c688c0237aee68b55838d
- * @jenesis.pin io.netty/netty-handler 4.1.135.Final SHA-256/245e74e04b6f4e8ef98853152412e3bf1499ce6fcf15329b798c8ce36c3537e2
- * @jenesis.pin io.netty/netty-resolver 4.1.135.Final SHA-256/77dd03865965b6c12b9e521bddec82f035caeb33156e09c158289c5094318481
- * @jenesis.pin io.netty/netty-transport 4.1.135.Final SHA-256/6bde734d1ec073142eed31b1e68cd5d68fbf241e060b37f07a164e5ecb15631c
- * @jenesis.pin io.netty/netty-transport-classes-epoll 4.1.135.Final SHA-256/9d9537ab9e15164c9f0dc0748884c148814a18d78ac6dfa65cf4b3d06068ce01
- * @jenesis.pin io.netty/netty-transport-native-unix-common 4.1.135.Final SHA-256/a7895075f112611d1640a596c2678a28aab92d5681c1c14755b109b8998f995e
- * @jenesis.pin org.apache.httpcomponents.client5/httpclient5 5.6.1 SHA-256/1e3d8444c3c27772e4b9d42a790f06b3345a8ece4fd16d00981f2f2460e1e772
- * @jenesis.pin org.apache.httpcomponents.core5/httpcore5 5.4.2 SHA-256/7c34a25506e7207b6748cef9e91163ed03081bee805cef930d82e1d8761d62f1
- * @jenesis.pin org.apache.httpcomponents.core5/httpcore5-h2 5.4 SHA-256/2e0f4ace15db2d1609c2b06eca6012e7582afe4a99ad8d15073f62dd8edb3460
- * @jenesis.pin org.jspecify/jspecify 1.0.0 SHA-256/1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab
+ * @jenesis.pin com.google.errorprone/error_prone_annotations 2.50.0 SHA-256/4667724877f1d37a689202da191e23efa7657c62eef93ccdac406eccfe5cdd0a
+ * @jenesis.pin io.netty/netty-buffer 4.2.18.Final SHA-256/fdf236d2b76aa9710684401fdad7dff9dec56e43da5d39172c9a55ba5f14b360
+ * @jenesis.pin io.netty/netty-codec 4.2.18.Final SHA-256/439645eb5061f8f50fbf27afacce394e4cecc4d373e1f7a384837e4661d5f430
+ * @jenesis.pin io.netty/netty-codec-base 4.2.18.Final SHA-256/7e4612bead7ba88ac6f7908fa722f90ad6835ea96505c9e40b2f93686c1f61f3
+ * @jenesis.pin io.netty/netty-codec-compression 4.2.18.Final SHA-256/9d8a4b9a6a2a166ec5a4bbe51a78b4f6a726457c51d81495743c7e7ccb9f4765
+ * @jenesis.pin io.netty/netty-codec-http 4.2.18.Final SHA-256/2d50765eb58591ce35146c54ca032a257808d2165d8985a8522c70ea1470e8d7
+ * @jenesis.pin io.netty/netty-codec-http2 4.2.18.Final SHA-256/a45a2b06c377b9c87c21ae2b37f04c8d808192590a73d977e7a60fd59921f283
+ * @jenesis.pin io.netty/netty-codec-marshalling 4.2.18.Final SHA-256/eccf83cbbd1319db879424c4559d465dc43251fe1a8ff759c4320b5adbcf26b7
+ * @jenesis.pin io.netty/netty-codec-protobuf 4.2.18.Final SHA-256/1bcaedd0da94f8579477f0848e910c24aced8b1ed7c3e1bff16d56fd0229b516
+ * @jenesis.pin io.netty/netty-common 4.2.18.Final SHA-256/5d97cae5669685872339698efe13f74fe3cdb2dccdb36963b2352bd95acf7070
+ * @jenesis.pin io.netty/netty-handler 4.2.18.Final SHA-256/6d5a08d9dd6d7d0211202e22dbb1629b23a62550335c7e80892da1d4cb115540
+ * @jenesis.pin io.netty/netty-resolver 4.2.18.Final SHA-256/68373ec544cf769ba17bf2ef455166d98f2c260dff536edf35ef57067a9c155f
+ * @jenesis.pin io.netty/netty-transport 4.2.18.Final SHA-256/eac4f12068db4489e60c6520fad663e5d872f0436a7c641aa9e08db649947863
+ * @jenesis.pin io.netty/netty-transport-classes-epoll 4.2.18.Final SHA-256/3677ca998f3db749d3fdb0fb1b1674f9809f4fbe8f819a346f4858dfb16c4d95
+ * @jenesis.pin io.netty/netty-transport-native-unix-common 4.2.18.Final SHA-256/cada7023d09136af128511ca94421d69dc84d0f1f64c9e1f127a1271bb62932a
+ * @jenesis.pin org.apache.httpcomponents.client5/httpclient5 5.6.4 SHA-256/bdef5f8841145cd76c4c605ff301bc840eea0d5292332b7b892a93316c0d8ee1
+ * @jenesis.pin org.apache.httpcomponents.core5/httpcore5 5.4.3 SHA-256/18bfbbabb478dfb67f31aeaf428c387f3c3df654582e1309f708ee1f3086830a
+ * @jenesis.pin org.apache.httpcomponents.core5/httpcore5-h2 5.4.3 SHA-256/c7db7026b8e2dea39132b04a6069f6671e2858309b20a146ec5c7dd6ed73a0b6
+ * @jenesis.pin org.jspecify/jspecify 1.0.1 SHA-256/070d75f261fe4c5b8202508366715f7f2d4660f88c8ef7e6d3575e48c9683b66
  * @jenesis.pin org.reactivestreams/reactive-streams 1.0.4 SHA-256/f75ca597789b3dac58f61857b9ac2e1034a68fa672db35055a8fb4509e325f28
- * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
- * @jenesis.pin software.amazon.awssdk.auth 2.46.17
- * @jenesis.pin software.amazon.awssdk.core 2.46.17
- * @jenesis.pin software.amazon.awssdk.http.urlconnection 2.46.17
- * @jenesis.pin software.amazon.awssdk.regions 2.46.17
- * @jenesis.pin software.amazon.awssdk.services.s3 2.46.17
- * @jenesis.pin software.amazon.awssdk/annotations 2.46.17 SHA-256/98f9f6b41781620d4b625cf84bc180860d5824a294012e7074ff77f49e129392
- * @jenesis.pin software.amazon.awssdk/apache5-client 2.46.17 SHA-256/5dbcf96d87c75bfa4e4bb4243aa2f3ac041b7696ddfd3af5ef159375768c587c
- * @jenesis.pin software.amazon.awssdk/arns 2.46.17 SHA-256/f7ddb5641f77b8009437dd6278334bf81d992db831bd7a4db3b73d66f3a610c5
- * @jenesis.pin software.amazon.awssdk/auth 2.46.17 SHA-256/ea469f078a7fb945f05fc0e18b2f1f9e9f6d7fa97f822a3a413c53c6e08dc89c
- * @jenesis.pin software.amazon.awssdk/aws-core 2.46.17 SHA-256/3281031ab23504626ddbb76a2192f28da22091472e9ee4cddfad72f7f3535467
- * @jenesis.pin software.amazon.awssdk/aws-query-protocol 2.46.17 SHA-256/4586f9bfeee34ba08ea37e5c6ef67064b037d3de401f1f8121b0190769251c89
- * @jenesis.pin software.amazon.awssdk/aws-xml-protocol 2.46.17 SHA-256/8cbfda0698a4df4be9802637da2b5a68b8d325645ad57b83cb2e71ec1299b63c
- * @jenesis.pin software.amazon.awssdk/checksums 2.46.17 SHA-256/785a062e218d18846f5ce4ba3268924a7f29ed9af269873bcea8611fe31fca45
- * @jenesis.pin software.amazon.awssdk/checksums-spi 2.46.17 SHA-256/7c9e338beb0d5495c49c70c4f32e097423082405a24401a393a68c09057dd59c
- * @jenesis.pin software.amazon.awssdk/crt-core 2.46.17 SHA-256/f1f16f156a42f4920a029148489ecf0f7317a80a2b4cca010264993f8af09afd
- * @jenesis.pin software.amazon.awssdk/endpoints-spi 2.46.17 SHA-256/aa4e9cab7d29d9289bc00e18a9eef2ae7939cb1d4cbc8ee63890a360e6111437
- * @jenesis.pin software.amazon.awssdk/http-auth 2.46.17 SHA-256/5d52a9bfbb491c4f505123461c80c1acfe1e0bae1acdc494b9667089f52da607
- * @jenesis.pin software.amazon.awssdk/http-auth-aws 2.46.17 SHA-256/d588b14c191129e97cd7f6c8d53c22b469ae4ddf3d6cd407ef8c6442e605d282
- * @jenesis.pin software.amazon.awssdk/http-auth-aws-eventstream 2.46.17 SHA-256/d89ced4eb8e32a26ca931ac4247472a01d00c60f431326b601100842a1914096
- * @jenesis.pin software.amazon.awssdk/http-auth-spi 2.46.17 SHA-256/2fe8cc03ae5180a854afa4f60f0c1b39b4e51d753ef358ab85109f184f0b9fca
- * @jenesis.pin software.amazon.awssdk/http-client-spi 2.46.17 SHA-256/ba0b3d37b30c977b75f4e959297e98dae31912a14539d30e74b9d9ec02a95182
- * @jenesis.pin software.amazon.awssdk/identity-spi 2.46.17 SHA-256/6fc4ebdc03089d97d5d7eb32baf9a8a77ba5db012ce14ccc9cd372ab494c7326
- * @jenesis.pin software.amazon.awssdk/json-utils 2.46.17 SHA-256/72ec5509482efdc8ece656ce166b4d4dc349f9253e2f3fcea3f6ccdfd5c94913
- * @jenesis.pin software.amazon.awssdk/metrics-spi 2.46.17 SHA-256/66ba37e5e06180fa0f2118f3b1e3780ac46e901a2e9055ff087437fda04a0702
- * @jenesis.pin software.amazon.awssdk/netty-nio-client 2.46.17 SHA-256/92e1df3f7314869aef2b19eaa1c385b5050689c42b6b241c792a0de3c3b0197b
- * @jenesis.pin software.amazon.awssdk/profiles 2.46.17 SHA-256/c537e290eeccb21e7f15ea8095d4e1ef8ed2f45afa4b467cca432ede02ce5541
- * @jenesis.pin software.amazon.awssdk/protocol-core 2.46.17 SHA-256/b4d047127f67f25417204d8fd3d460302a0b2bc76ca12477a2f80512bc5327c9
- * @jenesis.pin software.amazon.awssdk/regions 2.46.17 SHA-256/22625109ed8d9f703b97a34fd7bb43ea785de2c8605c07b129ab802c8775bed1
- * @jenesis.pin software.amazon.awssdk/retries 2.46.17 SHA-256/d139a0b137055782e0e273249592c04ef46e4e365ebb0b9f6121c634cc080af8
- * @jenesis.pin software.amazon.awssdk/retries-spi 2.46.17 SHA-256/526014a15604513d0e28a201de4252dff52e2d12fcdc1c124e7cd941ab8e6998
- * @jenesis.pin software.amazon.awssdk/s3 2.46.17 SHA-256/e98f0e11c9efa321bc1bca4d05d018ec354cf3f14a735016819ca23fe9e59322
- * @jenesis.pin software.amazon.awssdk/sdk-core 2.46.17 SHA-256/129fa9e17b2847913f7e95e3a47de751f84348259473c360e17f6184f7107e85
- * @jenesis.pin software.amazon.awssdk/third-party-jackson-core 2.46.17 SHA-256/702689c84d4124db958e658112a84cface9933f7fd20ac5ada2497d1c54ae7bb
- * @jenesis.pin software.amazon.awssdk/url-connection-client 2.46.17 SHA-256/9a58a158c45ab62012c4e75f496dee202036532f0cbd8655dfd77dc136cc9be3
- * @jenesis.pin software.amazon.awssdk/utils 2.46.17 SHA-256/4f9ee28ee6b6d9771fad18bac10cb806d7bebc0b0abfb6515fc7b4952fbb8507
- * @jenesis.pin software.amazon.awssdk/utils-lite 2.46.17 SHA-256/1d5bcc1929c7adb9d82d3f66e95b410602bd567c7704f8c73aca4e62c35ab5dd
+ * @jenesis.pin org.slf4j/slf4j-api 2.0.19 SHA-256/e91ff6d720609e7a194ffe758c3ed5c84e798617ae07b0a0f6a4fe229741b4bb
+ * @jenesis.pin software.amazon.awssdk.core 2.54.17 SHA-256/e359d931e304774f8053fa0b7e1268a0dab8d034ba20d4a82324d71805dff880
+ * @jenesis.pin software.amazon.awssdk.services.s3 2.54.17 SHA-256/36f93b70181dbd91aa5efe2bf124c9b25e7359b13b281da0b2a4b82e83cc5b58
+ * @jenesis.pin software.amazon.awssdk/annotations 2.54.17 SHA-256/f136c28a8841bff1e538bf10b4d9dc8c54621d2f812a1612985da9daecccb388
+ * @jenesis.pin software.amazon.awssdk/apache5-client 2.54.17 SHA-256/871e7b53b7329bd1fc19b7252dcadbaeb9cb072fde2b05fe005b815d64a9d50e
+ * @jenesis.pin software.amazon.awssdk/arns 2.54.17 SHA-256/c95c78e5fa26d4d88cb252988d3ac87ee40f3a03662b5dee7adaf259b18c97f2
+ * @jenesis.pin software.amazon.awssdk/auth 2.54.17 SHA-256/ab9ff0c662d8653ea9acb59f79a95e34a6eca3a824e75497add8cf2c89252fca
+ * @jenesis.pin software.amazon.awssdk/aws-core 2.54.17 SHA-256/1d9644f510edc6d9a28e5cdd933a2e57a343fe714b216836233b648361c7bd75
+ * @jenesis.pin software.amazon.awssdk/aws-query-protocol 2.54.17 SHA-256/1998851761d17faaca6d627fb321920f632c2dbf4a352cbc537373625ed0cc52
+ * @jenesis.pin software.amazon.awssdk/aws-xml-protocol 2.54.17 SHA-256/5bfe77d8449c1e4d78203365aaafd33bd5dcfa2d9a151d3d2979168d1ccd5db8
+ * @jenesis.pin software.amazon.awssdk/checksums 2.54.17 SHA-256/f3b4db1b2648b1aa0b55811e9548cfef544e901c1c9c785eea402e37d834af5a
+ * @jenesis.pin software.amazon.awssdk/checksums-spi 2.54.17 SHA-256/dbb45658bd5be8b4232ebc626a16c850d8155c6ad0ac38c7950ef31db1cf6053
+ * @jenesis.pin software.amazon.awssdk/crt-core 2.54.17 SHA-256/6c82723f00fdb48a895225dea278274db8f7755678a1204f0490b374434e91b0
+ * @jenesis.pin software.amazon.awssdk/endpoints-spi 2.54.17 SHA-256/9c303d27894ba63a53a1cc141a08f0331e37e903a9b0144d1179bf7f49a0264b
+ * @jenesis.pin software.amazon.awssdk/http-auth 2.54.17 SHA-256/f2b75db255e032e1c88f0019a2064079b35d8895aa5d8f9a1151686380b421f4
+ * @jenesis.pin software.amazon.awssdk/http-auth-aws 2.54.17 SHA-256/6b9c8a7cb7fe56fd9da4cec47295cb8ee177cc8c369cd34afb3c1fe25012bc28
+ * @jenesis.pin software.amazon.awssdk/http-auth-aws-eventstream 2.54.17 SHA-256/5a480d2cb1190ccbbef273f511bd8aab76ca1fd52d313022afd4f5e31451095e
+ * @jenesis.pin software.amazon.awssdk/http-auth-spi 2.54.17 SHA-256/c9ec1fcea7936beb7c18d73ccd5011653125b950de3590a0000676f7c06eded3
+ * @jenesis.pin software.amazon.awssdk/http-client-spi 2.54.17 SHA-256/77848741c05636c40e23eb00aac514d4aae57d420582e03063e4d0543e78a409
+ * @jenesis.pin software.amazon.awssdk/identity-spi 2.54.17 SHA-256/2919de075f4fc66a0aae12721e98f489a18bdcb340fc77aa592fca2027ac3834
+ * @jenesis.pin software.amazon.awssdk/json-utils 2.54.17 SHA-256/b62027fa942806962802c4fa01f89a26ed5e6a54aade4ddbd5b8ef110c1938e5
+ * @jenesis.pin software.amazon.awssdk/metrics-spi 2.54.17 SHA-256/7db7c26c858f809c4ec28a055bae927198473c902b566a7255f2a1ba3a8aef92
+ * @jenesis.pin software.amazon.awssdk/netty-nio-client 2.54.17 SHA-256/4faaae2db7a602c2ae6241fc6c0fe9d55f0e46886c3713cd5d2fef2f677ea64a
+ * @jenesis.pin software.amazon.awssdk/profiles 2.54.17 SHA-256/fb7fe665153ed20af07e302cd296a271c2b183659a90a8f011bb9933701da81d
+ * @jenesis.pin software.amazon.awssdk/protocol-core 2.54.17 SHA-256/ebcfffe2ec348d028a84e4c9f918ba03c5b12907189f724a1a09c0270ef8f8c6
+ * @jenesis.pin software.amazon.awssdk/regions 2.54.17 SHA-256/f45d1e32510d0aadd8072298ad207576dec507caa627c8b5f3f690ed8a2a4f7e
+ * @jenesis.pin software.amazon.awssdk/retries 2.54.17 SHA-256/89a743b5f9cdd7fc32c406c3d7a25de7fb899ed68b5dc6d1a4a7ff6461caf8fb
+ * @jenesis.pin software.amazon.awssdk/retries-spi 2.54.17 SHA-256/140c4ec460ab7c6b1aca606ddfd866223e7f5a1b143aa4bcc0a4261ce2af31c5
+ * @jenesis.pin software.amazon.awssdk/s3 2.54.17 SHA-256/36f93b70181dbd91aa5efe2bf124c9b25e7359b13b281da0b2a4b82e83cc5b58
+ * @jenesis.pin software.amazon.awssdk/sdk-core 2.54.17 SHA-256/e359d931e304774f8053fa0b7e1268a0dab8d034ba20d4a82324d71805dff880
+ * @jenesis.pin software.amazon.awssdk/third-party-jackson-core 2.54.17 SHA-256/fb432be8d025865e3aa31af909c7d61fd69613dd3e2a992dc14fd8dbebd79ca0
+ * @jenesis.pin software.amazon.awssdk/utils 2.54.17 SHA-256/8fd44e79dd8ef4c4115af13ce9f9453b7200a7cce949b79fb58ed8bbaf010dcd
+ * @jenesis.pin software.amazon.awssdk/utils-lite 2.54.17 SHA-256/42e8a092447ce5b722dd55352515ec14fa62a73d829a16f1823469575782d33f
  * @jenesis.pin software.amazon.eventstream/eventstream 1.0.1 SHA-256/0c37d8e696117f02c302191b8110b0d0eb20fa412fce34c3a269ec73c16ce822
  */
 module build.jenesis.repository.store.s3compatible {

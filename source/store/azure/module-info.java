@@ -6,61 +6,71 @@
  * {@code jenreg.store=azure-blob}. The version token is the blob ETag, giving a true
  * cross-node compare-and-set on conditional writes (see {@code AzureArtifactStore}).
  *
+ * <p>Netty 4.2 split {@code netty-codec} into codecs, and {@code netty-codec-marshalling} declares
+ * {@code requires org.jboss.marshalling} without {@code static} for a dependency its own POM marks optional, so a
+ * module-path boot layer that carries it fails on the missing module (measured 2026-09-13: nine test JVMs).
+ * {@code netty-codec-protobuf} has the same shape ({@code protobuf.javanano}). Nothing here marshals or speaks
+ * protobuf; the exclusion below drops both codecs from what the Azure HTTP client pulls in.
+ *
  * @jenesis.release 25
- * @jenesis.pin com.azure.storage.blob 12.35.0
- * @jenesis.pin com.azure/azure-core 1.58.1 SHA-256/7b339126e92af79b07fcf96fe16fa5ba2a2854bb8ce7e03ac4776b9474fe7df5
- * @jenesis.pin com.azure/azure-core-http-netty 1.16.5 SHA-256/61091ba5634e711e396721edfcca5c6782be1c1e86f2ecf856eb57aa20260c0c
+ * @jenesis.exclude com.azure.storage.blob io.netty/netty-codec-marshalling io.netty/netty-codec-protobuf
+ * @jenesis.pin com.azure.storage.blob 12.35.1 SHA-256/087bd34819f9d443cb9f745318e38548d5377f664959481f8acffa72f194e7d0
+ * @jenesis.pin com.azure/azure-core 1.59.1 SHA-256/d8b1b21eeb0a60e7d1f98d435553278f1a8984bec1373d722a890bbaa7fffba5
+ * @jenesis.pin com.azure/azure-core-http-netty 1.16.7 SHA-256/11a6f17d5b9efefaaba48f051c1beead12366b2dd1c2a5cf0092b42c2406aeb4
  * @jenesis.pin com.azure/azure-json 1.5.1 SHA-256/bad21d5eb306d82b85951b58a1d9e501a9b09970e452bee6d4d445fd5a91c519
- * @jenesis.pin com.azure/azure-storage-blob 12.35.0 SHA-256/c1f7dac599b0c057e406db76e7684bf2a5aae8f960f58bcecc18233298092eb8
- * @jenesis.pin com.azure/azure-storage-common 12.34.0 SHA-256/9ddbf4a4e7680e6d062995928b3933e496353d1e62449f2ce5662f9db0820325
- * @jenesis.pin com.azure/azure-storage-internal-avro 12.20.0 SHA-256/b80addb78cdc7ea6af99b8e76ac91c9a553e1a088850391bf2d7b3f7e2bc8dab
+ * @jenesis.pin com.azure/azure-storage-blob 12.35.1 SHA-256/087bd34819f9d443cb9f745318e38548d5377f664959481f8acffa72f194e7d0
+ * @jenesis.pin com.azure/azure-storage-common 12.34.1 SHA-256/47f0fdd29ebcd05503131852dfc3e85f46697a6c7cdb7cfc7867e16290fb33ef
+ * @jenesis.pin com.azure/azure-storage-internal-avro 12.20.1 SHA-256/6db9c9b6d2b0e6d063932443b3b4ae1134db725757fa48a777b2daf570ea7f07
  * @jenesis.pin com.azure/azure-xml 1.2.1 SHA-256/08b458481b656554605215ab0b165f68e6025359e52bea4736d032328d40ba3b
- * @jenesis.pin com.fasterxml.jackson.core/jackson-annotations 2.18.7 SHA-256/4c992ecef3569e73f19cd6b3be027108fb73139bb67d55d1218ac72e92219ebc
- * @jenesis.pin com.fasterxml.jackson.core/jackson-core 2.18.7 SHA-256/e1c578d374f519aa9aa74cbdc251c6705ffa08ac78faea5fa36bad213de30dc8
- * @jenesis.pin com.fasterxml.jackson.core/jackson-databind 2.18.7 SHA-256/aa3c034534fce966b6dbd706b1f466b8a15c266127e5a15f96522091093dbd9b
- * @jenesis.pin com.fasterxml.jackson.datatype/jackson-datatype-jsr310 2.18.7 SHA-256/29b8f1f8e055653297b07c3844a056541bdbf5c8199517598d9fa6edbefcc82e
+ * @jenesis.pin com.fasterxml.jackson.core/jackson-annotations 2.22 SHA-256/21ddb598807d3a51a876704eb979d9296e1c6a6f47ab1826ff88c6d6a127a2d0
+ * @jenesis.pin com.fasterxml.jackson.core/jackson-core 2.22.2 SHA-256/ff167a6317be15895706c26668f45b898efe40ab8780970658210fe1393d52a6
+ * @jenesis.pin com.fasterxml.jackson.core/jackson-databind 2.22.2 SHA-256/d0da14c12b16b5d54719aa172d83b542ff4abeb8b0fb7db476fde8ceece760ca
+ * @jenesis.pin com.fasterxml.jackson.datatype/jackson-datatype-jsr310 2.22.2 SHA-256/9df71cc7fb3781fd0bed6c05eebbfa8b39292a49f5619e76fdd0d889f64c8f33
  * @jenesis.pin com.github.ben-manes.caffeine/caffeine 3.2.4 SHA-256/9d9d2cfd681fd9272ded3d27c9930db12f89f732345975aa113ebc223bbf1224
- * @jenesis.pin com.google.code.findbugs/jsr305 3.0.2 SHA-256/766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7
- * @jenesis.pin com.google.code.gson/gson 2.8.9 SHA-256/d3999291855de495c94c743761b8ab5176cfeabe281a5ab0d8e8d45326fd703e
- * @jenesis.pin com.google.errorprone/error_prone_annotations 2.49.0 SHA-256/3b1003e51b8ae56fdbd7c71073e81d1683b97e6c4dff5a9151164d59b769d13c
- * @jenesis.pin commons-io/commons-io 2.20.0 SHA-256/df90bba0fe3cb586b7f164e78fe8f8f4da3f2dd5c27fa645f888100ccc25dd72
- * @jenesis.pin io.netty/netty-buffer 4.1.135.Final SHA-256/2a194f99fc93d07c4d442d04ac71bd2dc56d3188cd0e4270cdc2a953d1956bf9
- * @jenesis.pin io.netty/netty-codec 4.1.135.Final SHA-256/7252171264dbb5bb8ed38e77f89643b31e3cabc96144ec27b6882435d718a61e
- * @jenesis.pin io.netty/netty-codec-dns 4.1.135.Final SHA-256/5e996d7ac7597f368ab114fbb91d16788918c7e5bf166345c51e56db54d50fd1
- * @jenesis.pin io.netty/netty-codec-http 4.1.135.Final SHA-256/4018529d3d6aecf4044b98c75d9a90c91839ddf49c7aa484c5ac81c90a15da02
- * @jenesis.pin io.netty/netty-codec-http2 4.1.135.Final SHA-256/aa4e81ab5fa3b7b243eb3e814aa582ab26c073d31b0abffdbb58ee150fa49c16
- * @jenesis.pin io.netty/netty-codec-socks 4.1.135.Final SHA-256/ec7a39e8d7d7e223014115a021273f011c3cb1e8fb187cbfb90a74e76d68c25c
- * @jenesis.pin io.netty/netty-common 4.1.135.Final SHA-256/26775ca95820711403cf065fa2ec0134a0a04ff5417c688c0237aee68b55838d
- * @jenesis.pin io.netty/netty-handler 4.1.135.Final SHA-256/245e74e04b6f4e8ef98853152412e3bf1499ce6fcf15329b798c8ce36c3537e2
- * @jenesis.pin io.netty/netty-handler-proxy 4.1.135.Final SHA-256/75661010630a44468f0e85d7ed8be7779c0cb1369fe85d30799cedc52e9ed3b7
- * @jenesis.pin io.netty/netty-resolver 4.1.135.Final SHA-256/77dd03865965b6c12b9e521bddec82f035caeb33156e09c158289c5094318481
- * @jenesis.pin io.netty/netty-resolver-dns 4.1.135.Final SHA-256/ca25581e4cebd55797ef3b4d0953b75df32c1af77fe771b96bfaa9e701cdb7c3
- * @jenesis.pin io.netty/netty-resolver-dns-classes-macos 4.1.135.Final SHA-256/4aab49a507dbbe446ad2c6a7587fe69c511defa6c273ce1a559e3458a3378a5b
- * @jenesis.pin io.netty/netty-tcnative-boringssl-static 2.0.78.Final SHA-256/0e21ede32de7363affc2ae1bc412ed612853957c7081d87ca5320281db3f30bf
- * @jenesis.pin io.netty/netty-tcnative-classes 2.0.78.Final SHA-256/3ca66d8c6c0f003242f954cc1822a32445109ac25b8582840ba3d8e3c92f0a3e
- * @jenesis.pin io.netty/netty-transport 4.1.135.Final SHA-256/6bde734d1ec073142eed31b1e68cd5d68fbf241e060b37f07a164e5ecb15631c
- * @jenesis.pin io.netty/netty-transport-classes-epoll 4.1.135.Final SHA-256/9d9537ab9e15164c9f0dc0748884c148814a18d78ac6dfa65cf4b3d06068ce01
- * @jenesis.pin io.netty/netty-transport-classes-kqueue 4.1.135.Final SHA-256/b1f2c39d9bf7af4ecd1eb40b6bb92c5741460623aabf351de166beecbd06827d
- * @jenesis.pin io.netty/netty-transport-native-unix-common 4.1.135.Final SHA-256/a7895075f112611d1640a596c2678a28aab92d5681c1c14755b109b8998f995e
- * @jenesis.pin io.projectreactor.netty/reactor-netty-core 1.2.18 SHA-256/2d1ff55147102d4284c6f9c59c06d4288e3a59b1921da01647fef24869cfefc3
- * @jenesis.pin io.projectreactor.netty/reactor-netty-http 1.2.18 SHA-256/5b8409741ebe7fd95ae44519a90115352fb4bf9d32f2af579c89da7003b0db10
- * @jenesis.pin io.projectreactor/reactor-core 3.7.18 SHA-256/7d9b507c0d651de30a20dac634e7cb7ca908a7c23d57ce05e71bbb9bb79bf0c4
- * @jenesis.pin main/maven/io.netty/netty-resolver-dns-native-macos/jar/osx-x86_64 4.1.135.Final SHA-256/0c86fa27317c4172fff03a0c20286e2c62ef9d60ad78f389a83ede48a5bb54cd
- * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/linux-aarch_64 2.0.78.Final SHA-256/85f6e25942df7308c9a6e66015a5ba87589d6f239231fb5b175138afe451b592
- * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/linux-x86_64 2.0.78.Final SHA-256/bb830d661dc70fac2df8d147ffb64d61566211455272bb75d09d1662ec843aae
- * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/osx-aarch_64 2.0.78.Final SHA-256/29019bf2e3045acaf4fd17b9e4033536141c8971939cd78cc82a12fe74fe24c1
- * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/osx-x86_64 2.0.78.Final SHA-256/6c6c574bf9ee85b53f176d7de1101d348cf4374014df2ea26b691e7f335d69ba
- * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/windows-x86_64 2.0.78.Final SHA-256/c720390d4733fa4997f4648327fcb63a688a72afd3ddd05d368759c6c65aef6b
- * @jenesis.pin main/maven/io.netty/netty-transport-native-epoll/jar/linux-x86_64 4.1.135.Final SHA-256/18a40063da3364cffff81c6c2097fb6ebcb45c62264dabcce45aade4fdac3125
- * @jenesis.pin main/maven/io.netty/netty-transport-native-kqueue/jar/osx-x86_64 4.1.135.Final SHA-256/412e10daef5aa4647984397fa6728acf88dffd0d4c53ad91f486ea6492f8f08f
- * @jenesis.pin net.bytebuddy/byte-buddy 1.12.19 SHA-256/030704139e46f32c38d27060edee9e0676b0a0fff8a8be53461515154ba8a7be
- * @jenesis.pin net.bytebuddy/byte-buddy-agent 1.12.19 SHA-256/3a70240de7cdcde04e7c504c2327d7035b9c25ae0206881e3bf4e6798a273ed8
- * @jenesis.pin org.javassist 3.32.0-GA
- * @jenesis.pin org.javassist/javassist 3.32.0-GA SHA-256/712ef75bc3406782bb4529b0408cce8155b53f2124c6ae03d2c5fbfa13d62c1c
- * @jenesis.pin org.jspecify/jspecify 1.0.0 SHA-256/1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab
+ * @jenesis.pin com.google.errorprone/error_prone_annotations 2.50.0 SHA-256/4667724877f1d37a689202da191e23efa7657c62eef93ccdac406eccfe5cdd0a
+ * @jenesis.pin io.netty/netty-buffer 4.2.18.Final SHA-256/fdf236d2b76aa9710684401fdad7dff9dec56e43da5d39172c9a55ba5f14b360
+ * @jenesis.pin io.netty/netty-codec 4.2.18.Final SHA-256/439645eb5061f8f50fbf27afacce394e4cecc4d373e1f7a384837e4661d5f430
+ * @jenesis.pin io.netty/netty-codec-base 4.2.18.Final SHA-256/7e4612bead7ba88ac6f7908fa722f90ad6835ea96505c9e40b2f93686c1f61f3
+ * @jenesis.pin io.netty/netty-codec-classes-quic 4.2.18.Final SHA-256/d1c4c4327fde2bf6ec773b070344907a7a4844f1843528ae917905e2c3547478
+ * @jenesis.pin io.netty/netty-codec-compression 4.2.18.Final SHA-256/9d8a4b9a6a2a166ec5a4bbe51a78b4f6a726457c51d81495743c7e7ccb9f4765
+ * @jenesis.pin io.netty/netty-codec-dns 4.2.18.Final SHA-256/6f4b6da1483a82a637804740c2fb61385c9337a5e7ae5e357720cc03ba60b728
+ * @jenesis.pin io.netty/netty-codec-http 4.2.18.Final SHA-256/2d50765eb58591ce35146c54ca032a257808d2165d8985a8522c70ea1470e8d7
+ * @jenesis.pin io.netty/netty-codec-http2 4.2.18.Final SHA-256/a45a2b06c377b9c87c21ae2b37f04c8d808192590a73d977e7a60fd59921f283
+ * @jenesis.pin io.netty/netty-codec-http3 4.2.18.Final SHA-256/cc1652ece111e35a7677c8260499cc6709950061998f9d1a36496b352f456273
+ * @jenesis.pin io.netty/netty-codec-marshalling 4.2.18.Final SHA-256/eccf83cbbd1319db879424c4559d465dc43251fe1a8ff759c4320b5adbcf26b7
+ * @jenesis.pin io.netty/netty-codec-protobuf 4.2.18.Final SHA-256/1bcaedd0da94f8579477f0848e910c24aced8b1ed7c3e1bff16d56fd0229b516
+ * @jenesis.pin io.netty/netty-codec-socks 4.2.18.Final SHA-256/25dea7bc1ad990ab8959065f0690b63574d8db4f51033cd98458fc84c59367f3
+ * @jenesis.pin io.netty/netty-common 4.2.18.Final SHA-256/5d97cae5669685872339698efe13f74fe3cdb2dccdb36963b2352bd95acf7070
+ * @jenesis.pin io.netty/netty-handler 4.2.18.Final SHA-256/6d5a08d9dd6d7d0211202e22dbb1629b23a62550335c7e80892da1d4cb115540
+ * @jenesis.pin io.netty/netty-handler-proxy 4.2.18.Final SHA-256/d7786de71c0d405b80b4262e0c585618e6f20e7fd3188cb4f599ffc4029ee9ea
+ * @jenesis.pin io.netty/netty-resolver 4.2.18.Final SHA-256/68373ec544cf769ba17bf2ef455166d98f2c260dff536edf35ef57067a9c155f
+ * @jenesis.pin io.netty/netty-resolver-dns 4.2.18.Final SHA-256/7dd3ec96bef04abc91a0f461f8acc19ebc0738c257ea653aea9dd0ad67b3b1ce
+ * @jenesis.pin io.netty/netty-resolver-dns-classes-macos 4.2.18.Final SHA-256/377abd8b198bde174d18b74ef9bac84251b56c8e5ce373d7099bde0d297055c7
+ * @jenesis.pin io.netty/netty-tcnative-boringssl-static 2.0.84.Final SHA-256/15fe111906d28b1075da6362db6b76590b232dd400e1401cf4af36fc4f321add
+ * @jenesis.pin io.netty/netty-tcnative-classes 2.0.84.Final SHA-256/7a4437abf98b0cec053af4443fe321177d2cfccfec7bcad4e7d8b75571bbec4d
+ * @jenesis.pin io.netty/netty-transport 4.2.18.Final SHA-256/eac4f12068db4489e60c6520fad663e5d872f0436a7c641aa9e08db649947863
+ * @jenesis.pin io.netty/netty-transport-classes-epoll 4.2.18.Final SHA-256/3677ca998f3db749d3fdb0fb1b1674f9809f4fbe8f819a346f4858dfb16c4d95
+ * @jenesis.pin io.netty/netty-transport-classes-kqueue 4.2.18.Final SHA-256/be48ee5b8a2328a1f4f2160270344175612dd9567787727de0dbaecb694beb51
+ * @jenesis.pin io.netty/netty-transport-native-unix-common 4.2.18.Final SHA-256/cada7023d09136af128511ca94421d69dc84d0f1f64c9e1f127a1271bb62932a
+ * @jenesis.pin io.projectreactor.netty/reactor-netty-core 1.3.7 SHA-256/8bf232cbaef9ee7445adecc714999aa8ccc8f027d00d881a686cc99c1a4952e9
+ * @jenesis.pin io.projectreactor.netty/reactor-netty-http 1.3.7 SHA-256/f351ff98022e1b73dd93aa59283c3e69cdbb11e21ba217bed732cc0a7d9b83fa
+ * @jenesis.pin io.projectreactor/reactor-core 3.8.7 SHA-256/9a5f1bfc5ad0416a410ff63beaa279cc30c2da3ae9b111a678c83c99298a1551
+ * @jenesis.pin main/maven/io.netty/netty-codec-native-quic/jar/linux-aarch_64 4.2.18.Final SHA-256/df4d14edc1f6e03b27ba63ed8a72687b23c021cae2979c5ab76ef46e9af9fa38
+ * @jenesis.pin main/maven/io.netty/netty-codec-native-quic/jar/linux-x86_64 4.2.18.Final SHA-256/45952dcfa200317add275fbbedf32967cb3e5528fc84a5d2b7ccc4439e8d3f88
+ * @jenesis.pin main/maven/io.netty/netty-codec-native-quic/jar/osx-aarch_64 4.2.18.Final SHA-256/f99bd674139c0e70d82aee64911047a7bd69e5a8fb7c28fc828e1076490a9471
+ * @jenesis.pin main/maven/io.netty/netty-codec-native-quic/jar/osx-x86_64 4.2.18.Final SHA-256/827c871846eab219e222d24af19c3b713549a51ecbc6769c70ec118eea03eefc
+ * @jenesis.pin main/maven/io.netty/netty-codec-native-quic/jar/windows-x86_64 4.2.18.Final SHA-256/149bdc03262c145ab509a6464d27be4f32fa5a02723d178e1f2c445766f5102f
+ * @jenesis.pin main/maven/io.netty/netty-resolver-dns-native-macos/jar/osx-x86_64 4.2.18.Final SHA-256/144823796e9b8222cce8ee8ab3f632f263564bdb4231c8569615506530df83f4
+ * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/linux-aarch_64 2.0.84.Final SHA-256/610f92fa30ee2a4f5022ddb005728b6914b53101de195a99266f526ce1aeda1e
+ * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/linux-x86_64 2.0.84.Final SHA-256/19d7cd7c3081c80ebe417af870e2fe62be1ca5969683d9cd402bb3ebc754d257
+ * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/osx-aarch_64 2.0.84.Final SHA-256/00e078d2296c987206a10a40bcc2328800e2233b1517a8254ed324a223301206
+ * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/osx-x86_64 2.0.84.Final SHA-256/06131177483011b3fc5c7a6636da89df53551cca0ea0f843b3f2fbf932c147ec
+ * @jenesis.pin main/maven/io.netty/netty-tcnative-boringssl-static/jar/windows-x86_64 2.0.84.Final SHA-256/1aed01f988166b8c9c16381f885e5c521652167789b9d822e84f9992f9c1bae0
+ * @jenesis.pin main/maven/io.netty/netty-transport-native-epoll/jar/linux-x86_64 4.2.18.Final SHA-256/32a340971182d901cea513588549cfadc392bb7342f930379a6e34d853a331f0
+ * @jenesis.pin main/maven/io.netty/netty-transport-native-kqueue/jar/osx-x86_64 4.2.18.Final SHA-256/ad0a842bc9f8064dec6ee3c264e0f24131ebe690e9757616c4700490956d7f1f
+ * @jenesis.pin org.jspecify/jspecify 1.0.1 SHA-256/070d75f261fe4c5b8202508366715f7f2d4660f88c8ef7e6d3575e48c9683b66
  * @jenesis.pin org.reactivestreams/reactive-streams 1.0.4 SHA-256/f75ca597789b3dac58f61857b9ac2e1034a68fa672db35055a8fb4509e325f28
- * @jenesis.pin org.reflections/reflections 0.10.2 SHA-256/938a2d08fe54050d7610b944d8ddc3a09355710d9e6be0aac838dbc04e9a2825
- * @jenesis.pin org.slf4j/slf4j-api 2.0.18 SHA-256/44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55
+ * @jenesis.pin org.slf4j/slf4j-api 2.0.19 SHA-256/e91ff6d720609e7a194ffe758c3ed5c84e798617ae07b0a0f6a4fe229741b4bb
  */
 module build.jenesis.repository.store.azure {
     exports build.jenesis.repository.store.azure to build.jenesis.repository.store.azure.test,
