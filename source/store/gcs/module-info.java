@@ -23,11 +23,20 @@
  * against {@code jsr305}. What is left is 21 jars and 5.7 MB, and every module required below declares its name.
  * {@code grpc-api} stays: OpenCensus, which the HTTP client instruments its requests with, reaches
  * {@code io.grpc.Context} through it. Guava is stated as its JRE flavour: negotiated, a closure takes the Android one.
+ * Each of those jars is dropped on both paths that reach it - the API client required here, and the storage service
+ * that depends on the same client - because an exclusion is scoped to the path it is declared on, and the client's
+ * own requirement resolves in a second pass once it is aliased (the alias names the artifact, since the hosted module
+ * index maps {@code google.api.client} 2.9.1 to another artifact), by which time the service's path has reached the
+ * client without it. Measured 2026-09-14: aliasing the client alone brought the Apache transport back through the
+ * service's path and the two annotation jars through the client's own second-pass subtree, which the exclusion
+ * under {@code com.google.auth.oauth2} no longer reached.
  *
  * @jenesis.release 25
+ * @jenesis.alias google.api.client com.google.api-client/google-api-client
  * @jenesis.bom pin-repository.properties
  * @jenesis.exclude com.google.auth.oauth2 com.google.auto.value/auto-value-annotations javax.annotation/javax.annotation-api
- * @jenesis.exclude google.api.client com.google.http-client/google-http-client-apache-v2 org.apache.httpcomponents/httpclient org.apache.httpcomponents/httpcore
+ * @jenesis.exclude google.api.client com.google.http-client/google-http-client-apache-v2 org.apache.httpcomponents/httpclient org.apache.httpcomponents/httpcore com.google.auto.value/auto-value-annotations javax.annotation/javax.annotation-api
+ * @jenesis.exclude com.google.api.services.storage com.google.http-client/google-http-client-apache-v2 org.apache.httpcomponents/httpclient org.apache.httpcomponents/httpcore com.google.auto.value/auto-value-annotations javax.annotation/javax.annotation-api
  */
 module build.jenesis.repository.store.gcs {
     exports build.jenesis.repository.store.gcs to build.jenesis.repository.store.gcs.test,
