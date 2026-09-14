@@ -17,9 +17,9 @@ The core: the repository / build-cache server modules consumed by downstream edi
   `-Djenesis.dependency.signature=declared` checks every covered artifact and its POM with a local gpg that already
   holds the keys (`gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys` the fingerprints in the file; importing
   admits nothing). A rotated upstream key fails verification naming both fingerprints, and is accepted by adding
-  the new one on a line of its own. Some keys are known and commented out because they have expired and gpg
-  reports a signature by an expired key as `EXPKEYSIG`, which the tool refuses even where the signature predates
-  the expiry; the file says which.
+  the new one on a line of its own. An expired key is judged by `jenesis.signature.expiry`, `signing` by
+  default: what it signed before expiring verifies. Keys whose releases were signed after the expiry are kept
+  commented out, and the file says which.
 
 ## Local gotchas (a red here is often the environment, not a regression)
 
