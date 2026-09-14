@@ -121,9 +121,10 @@ public final class ServableNames {
      *  <p>Deliberately not a format question. Every path-addressed ecosystem spells its sidecars this way, the rule
      *  is the same for all of them, and a format that had to remember to hold its own checksums is a format that will
      *  forget. A Sigstore bundle is a sidecar for the same reason as a signature: {@code x.jar.sigstore.json} carries
-     *  the digest of {@code x.jar} and the identity that signed it, which is everything a hold means to withhold. */
+     *  the digest of {@code x.jar} and the identity that signed it, which is everything a hold means to withhold; so
+     *  is a registry's attestations document kept beside the artifact it attests. */
     private static final List<String> SIDECAR_SUFFIXES =
-            List.of(".md5", ".sha1", ".sha256", ".sha512", ".asc", ".sig", ".sigstore.json");
+            List.of(".md5", ".sha1", ".sha256", ".sha512", ".asc", ".sig", ".sigstore.json", ".attestations.json");
 
     /** The path a sidecar describes, or {@code null} when this path is not one. Strips exactly one suffix and never
      *  recurses: {@code x.jar.sha1.md5} names {@code x.jar.sha1}, whose own hold is then read directly, so a chain of

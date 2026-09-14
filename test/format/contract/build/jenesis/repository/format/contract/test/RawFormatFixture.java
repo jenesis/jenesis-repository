@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.contract.test;
 
 import module java.base;
+import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
@@ -31,8 +32,7 @@ final class RawFormatFixture implements FormatFixture {
 
     @Override
     public Signatures signatures() {
-        return Signatures.none("the raw layout has no packaging and no ecosystem convention: it stores whatever bytes are put at "
-                + "a path, so there is no sidecar or member a signature could be expected at.");
+        return Signatures.of(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE);
     }
 
     @Override
