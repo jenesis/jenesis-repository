@@ -14,9 +14,10 @@ The core: the repository / build-cache server modules consumed by downstream edi
   identity is published; every descriptor names the file with `@jenesis.signature signature-repository.properties`
   beside its `@jenesis.bom` line. The fingerprints were read off the `.asc` files the repositories publish for the
   pinned versions, never typed from documentation. Verification is off by default:
-  `-Djenesis.dependency.signature=declared` checks every covered artifact and its POM with a local gpg that already
-  holds the keys (`gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys` the fingerprints in the file; importing
-  admits nothing). A rotated upstream key fails verification naming both fingerprints, and is accepted by adding
+  `-Djenesis.dependency.signature=declared` checks every covered artifact and its POM with `gpgv` over a keyring
+  the build assembles from the declared fingerprints alone, fetched by fingerprint from the `jenesis.openpgp.uri`
+  servers into `.jenesis/keys`; nothing is imported by hand, and a key the keyring holds is a key a line declares.
+  A rotated upstream key fails verification naming both fingerprints, and is accepted by adding
   the new one on a line of its own. An expired key is judged by `jenesis.signature.expiry`, `signing` by
   default: what it signed before expiring verifies. Keys whose releases were signed after the expiry are kept
   commented out, and the file says which.
