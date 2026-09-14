@@ -43,14 +43,20 @@ import build.jenesis.repository.store.PublishInterceptor;
  * and never "unsigned", and a document naming nothing for the artifact is material that could not be read. The
  * signer of such a document is still the publisher's identity, so trust and continuity apply unchanged.
  *
- * <p>What the seam still does not express is coverage by a repository's <b>index</b>, signed once for a set: an apt
- * client's trust runs through the signed {@code Release}, which commits to {@code Packages}, which commits to each
- * {@code .deb}; a Terraform provider is covered by a {@code SHA256SUMS} the publisher signs once for a release;
- * dnf's {@code repo_gpgcheck} is the same shape over {@code repomd.xml}. Two hops rather than one, indexes that run
- * to tens of megabytes, and - the interesting part - a signature that speaks for the repository that published a
- * set rather than for the publisher of one artifact, which a record must keep distinguishable from the direct
- * kind. This deployment's own indexes are its own signatures (the first paragraph), and a proxied mirror's are
- * streamed through rather than stored, so no installed format holds such a document today.
+ * <p>Coverage by a repository's <b>index</b>, signed once for a set, is the same evidence with a second hop the
+ * format makes: an apt client's trust runs through the clearsigned {@code InRelease}, which commits to
+ * {@code Packages}, which commits to each {@code .deb}; a Terraform provider is covered by a {@code SHA256SUMS} the
+ * publisher signs once for a release; dnf's {@code repo_gpgcheck} is the same shape over {@code repomd.xml}. The
+ * middle document runs to tens of megabytes and is never read under the signature bound: a proxy leg takes its
+ * digest as it streams past and records, per artifact, what it declared, and keeps the small signed document whole
+ * - both under the format's own keys, read back through {@link Material#recorded}. The evidence is then the signed
+ * document, and its {@link Named} first checks that the document names the index by the digest that streamed, and
+ * only then answers with the digest that index declared for the artifact; a document that does not name the index
+ * in hand vouches for nothing and is no evidence at all, since the two were relayed either side of a refresh and
+ * nothing was tampered with. What the record keeps distinguishable is who signed: the identity is the repository's
+ * key rather than a publisher's, and the location names the index the coverage came through, so a screen never
+ * presents an archive's signature as a maintainer's. Debian's proxy leg is the implementor; this deployment's own
+ * indexes are its own signatures (the first paragraph).
  *
  * <p>A format in that family can only answer {@code expects} with {@code OPTIONAL} or nothing at all - or, since
  * 2026-09-12, with {@link Coverage#REQUIRED_WHEN_TRUSTED}, which is what {@code DebianFormat} declares: an ordinary
@@ -306,6 +312,17 @@ public interface ArtifactSignatures extends EcosystemLayout {
          * knows the difference between that and an artifact that carries none.
          */
         Optional<Signed> body();
+
+        /**
+         * Up to {@code limit} bytes of a document this format itself recorded, under a key of its own, while an
+         * index went past that it could not keep - the digest a mirror's {@code Packages} declared for a package,
+         * the suite's signed {@code InRelease} - or empty when nothing is recorded there. Nothing recorded is
+         * published at a request path, which is why {@link #sibling} cannot reach it; the caller still makes the
+         * read and its bound still governs. A caller with no store behind it has nothing recorded, and says so.
+         */
+        default Optional<PublishInterceptor.Content.Bounded> recorded(String key, int limit) throws IOException {
+            return Optional.empty();
+        }
     }
 
     /**
