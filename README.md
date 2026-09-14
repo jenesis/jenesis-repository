@@ -67,6 +67,20 @@ a baked-in `VOLUME` cannot be un-declared by a consumer, so an object-store depl
 volume on every run that it never writes to. So the image declares no store root: name one with
 `JENREG_FILESYSTEM_ROOT` and mount a volume there, or select an object store.
 
+### Dependency versions, and the ones held back
+
+Every dependency's version and checksum is an entry in `build.jenesis/pin-repository.properties`, which every
+module imports with `@jenesis.bom`; no descriptor pins anything of its own. A refresh rewrites the file through the
+build tool - `java -Xmx4g -Djenesis.dependency.pin=versions -Djenesis.test.skip=true
+-Djenesis.pin.file=build.jenesis/pin-repository.properties build/jenesis/Make.java pin` - and the writer keeps no
+comments, so the versions deliberately held below what a `-Djenesis.resolver.maven=stable` refresh proposes are
+listed here with the reason. A refresh that moves one of these is reverted by hand before it is committed:
+
+- **`commons-fileupload` 1.5.** 1.6.0's module descriptor requires `servlet.api` and `portlet.api` without
+  `static`, which its own POM marks provided, so a module-path boot layer fails on a module nothing carries.
+- **WireMock 4.0.0-beta.38**, the whole `org.wiremock` family. The 4.x beta is used by decision; the stable line
+  is 3.x, so a stable refresh would move back to it.
+
 ## Module layout
 
 Every module is a Java module under `source/`, and the split into `spi` and implementations is the extension
