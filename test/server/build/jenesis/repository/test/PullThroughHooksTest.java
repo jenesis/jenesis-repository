@@ -3,6 +3,7 @@ package build.jenesis.repository.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -10,6 +11,7 @@ import build.jenesis.repository.server.PullThroughCache;
 import build.jenesis.repository.server.PullThroughHooks;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Publication;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -116,9 +118,96 @@ public class PullThroughHooksTest {
         assertThat(format.fetches.get()).as("a local re-verify never fetches upstream").isZero();
     }
 
+    @Test
+    void companions_are_fetched_before_the_screen_and_kept_beside_a_served_artifact() throws IOException {
+        SpyFormat format = new SpyFormat();
+        byte[] signature = "-----BEGIN PGP SIGNATURE-----".getBytes(StandardCharsets.UTF_8);
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/lib.jar", UPSTREAM);
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/lib.jar.asc", signature);
+        // no .sigstore.json upstream: absence, never a failure
+        format.companions = List.of(
+                new ProxyFormat.Companion("/spyproxy/lib.jar.asc", URI.create(UPSTREAM_BASE + "spyproxy/lib.jar.asc")),
+                new ProxyFormat.Companion("/spyproxy/lib.jar.sigstore.json",
+                        URI.create(UPSTREAM_BASE + "spyproxy/lib.jar.sigstore.json")));
+        SpyHooks hooks = new SpyHooks();
+        FakeExchange exchange = new FakeExchange("GET", "/spyproxy/lib.jar");
+        new PullThroughCache(format.fetcher, hooks).serve(format, format, UPSTREAM_BASE, exchange, store);
+        assertThat(exchange.status).isEqualTo(200);
+        assertThat(hooks.companions).as("the screen was handed what arrived, keyed by the path it is kept at")
+                .containsOnlyKeys("/spyproxy/lib.jar.asc");
+        assertThat(hooks.companions.get("/spyproxy/lib.jar.asc")).isEqualTo(signature);
+        assertThat(format.fetches.get()).as("one fetch per companion, once, beside the artifact's own").isEqualTo(3);
+        Publication publication = new Publication(store);
+        Optional<String> kept = publication.located("/spyproxy/lib.jar.asc");
+        assertThat(kept).as("a companion of a served artifact is linked at its own path").isPresent();
+        assertThat(store.exists(kept.get())).isTrue();
+        assertThat(publication.located("/spyproxy/lib.jar.sigstore.json"))
+                .as("a companion the upstream does not publish is kept nowhere").isEmpty();
+    }
+
+    @Test
+    void a_companion_past_the_bound_or_of_an_artifact_that_did_not_fill_is_not_kept() throws IOException {
+        SpyFormat format = new SpyFormat();
+        byte[] oversized = new byte[ArtifactSignatures.Material.LARGEST_SIGNATURE + 1];
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/big.jar", UPSTREAM);
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/big.jar.asc", oversized);
+        format.companions = List.of(
+                new ProxyFormat.Companion("/spyproxy/big.jar.asc", URI.create(UPSTREAM_BASE + "spyproxy/big.jar.asc")));
+        SpyHooks hooks = new SpyHooks();
+        new PullThroughCache(format.fetcher, hooks).serve(format, format, UPSTREAM_BASE,
+                new FakeExchange("GET", "/spyproxy/big.jar"), store);
+        assertThat(hooks.companions).as("a companion past the signature bound is not a signature we can check").isEmpty();
+        assertThat(new Publication(store).located("/spyproxy/big.jar.asc")).isEmpty();
+
+        // The artifact itself is absent upstream: its companion, present or not, is kept nowhere, since there is
+        // nothing for it to be a sidecar of.
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/gone.jar.asc", "sig".getBytes(StandardCharsets.UTF_8));
+        format.companions = List.of(
+                new ProxyFormat.Companion("/spyproxy/gone.jar.asc", URI.create(UPSTREAM_BASE + "spyproxy/gone.jar.asc")));
+        FakeExchange miss = new FakeExchange("GET", "/spyproxy/gone.jar");
+        new PullThroughCache(format.fetcher, hooks).serve(format, format, UPSTREAM_BASE, miss, store);
+        assertThat(miss.status).isEqualTo(404);
+        assertThat(new Publication(store).located("/spyproxy/gone.jar.asc")).isEmpty();
+    }
+
+    @Test
+    void a_format_that_keeps_a_companion_itself_has_it_linked_nowhere_else() throws IOException {
+        SpyFormat format = new SpyFormat();
+        byte[] document = "[]".getBytes(StandardCharsets.UTF_8);
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/widget.gem", UPSTREAM);
+        format.upstream.put(UPSTREAM_BASE + "api/attestations/widget.json", document);
+        format.companions = List.of(new ProxyFormat.Companion("/spyproxy/attestations/widget.json",
+                URI.create(UPSTREAM_BASE + "api/attestations/widget.json")));
+        format.keeps = true;
+        new PullThroughCache(format.fetcher, new SpyHooks()).serve(format, format, UPSTREAM_BASE,
+                new FakeExchange("GET", "/spyproxy/widget.gem"), store);
+        assertThat(format.kept).as("the format was handed the document to keep under a key of its own")
+                .containsEntry("/spyproxy/attestations/widget.json", document);
+        assertThat(new Publication(store).located("/spyproxy/attestations/widget.json"))
+                .as("and the cache linked it nowhere, since the format answered that it kept it").isEmpty();
+    }
+
     /** A spy format that is also its own {@link ProxyFormat}: a local map answers hits, an upstream map answers the
      *  proxy leg, and counters record how often it served locally and fetched upstream. */
     private static final class SpyFormat implements RepositoryFormat, ProxyFormat {
+        private List<ProxyFormat.Companion> companions = List.of();
+        private boolean keeps;
+        private final Map<String, byte[]> kept = new HashMap<>();
+
+        @Override
+        public List<ProxyFormat.Companion> companions(FormatExchange exchange, URI upstream) {
+            return companions;
+        }
+
+        @Override
+        public boolean keep(ArtifactStore store, ProxyFormat.Companion companion, byte[] body) {
+            if (!keeps) {
+                return false;
+            }
+            kept.put(companion.path(), body);
+            return true;
+        }
+
 
         private final Map<String, byte[]> local = new HashMap<>();
         private final Map<String, byte[]> upstream = new HashMap<>();
@@ -176,6 +265,7 @@ public class PullThroughHooksTest {
         private final List<String> verifyHitPaths = new ArrayList<>();
         private final List<String> screenFetchPaths = new ArrayList<>();
         private final AtomicInteger decoratedFetches = new AtomicInteger();
+        private Map<String, byte[]> companions = Map.of();
         private RepositoryFormat verifiedFormat;
         private ArtifactStore verifiedStore;
         private HitDecision decision = HitDecision.serveThrough();
@@ -186,6 +276,13 @@ public class PullThroughHooksTest {
             verifiedFormat = format;
             verifiedStore = store;
             return decision;
+        }
+
+        @Override
+        public ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream, ArtifactStore store,
+                                               Map<String, byte[]> companions) {
+            this.companions = companions;
+            return screenFetch(path, upstream, store);
         }
 
         @Override

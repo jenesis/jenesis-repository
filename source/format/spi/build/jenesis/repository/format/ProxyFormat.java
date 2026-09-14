@@ -182,6 +182,58 @@ public interface ProxyFormat {
     }
 
     /**
+     * The documents an upstream publishes <em>about</em> an artifact, fetched beside it on a fill so the screen sees
+     * them before it decides: a detached signature, a Sigstore bundle, a registry's attestations for the version. A
+     * client never asks for most of them - nothing in a Maven resolution requests the {@code .asc}, and no gem client
+     * fetches the attestations API - so without this a proxied artifact was screened with whatever sidecar an earlier
+     * client request had left in the store, which is usually nothing, and the missing-signature dial softened to
+     * ALLOW on the proxy leg for exactly that reason.
+     *
+     * <p>Each companion names the request path it is kept at and the upstream URL it is fetched from. The caller
+     * fetches every companion once per fill, bounded to {@link ArtifactSignatures.Material#LARGEST_SIGNATURE},
+     * through the same fetcher the artifact comes through - so a negative answer is remembered the way any upstream
+     * miss is - hands what arrived to the screen, and keeps it afterwards: through {@link #keep} where the format has
+     * a place of its own for it, else linked at the companion's path, where it is a sidecar of the artifact and hidden
+     * with it while the artifact is held. A companion the upstream does not publish is absence, never a failure; a
+     * transport failure is logged and the fill goes on, since the artifact's own integrity check does not depend on
+     * it. The default declares none, which is right for every format whose ecosystem publishes nothing beside the
+     * artifact.
+     *
+     * @param exchange the request being filled - its path, and the settings a companion's location may be
+     *                 configured through
+     * @param upstream the upstream root the fill is served from
+     */
+    default List<Companion> companions(FormatExchange exchange, URI upstream) {
+        return List.of();
+    }
+
+    /**
+     * Keep a fetched companion where this format reads it from, when that is not the companion's own request path:
+     * a registry document the format stores under a key of its own and renders through an endpoint of its own, the
+     * way PyPI keeps a provenance document as the attestations its integrity endpoint serves. Answering {@code false}
+     * has the caller link the bytes at {@link Companion#path()} instead, which is the sidecar case and the default.
+     */
+    default boolean keep(ArtifactStore store, Companion companion, byte[] body) throws IOException {
+        return false;
+    }
+
+    /** One document published beside an artifact: the request {@code path} this repository keeps it at - a sidecar
+     *  of the artifact's path for a signature or a bundle, a document of the format's own for an attestations
+     *  listing - the upstream {@code url} it is fetched from, and the request {@code headers} that fetch needs. */
+    record Companion(String path, URI url, Map<String, String> headers) {
+
+        public Companion {
+            Objects.requireNonNull(path, "path");
+            Objects.requireNonNull(url, "url");
+            headers = headers == null ? Map.of() : Map.copyOf(headers);
+        }
+
+        public Companion(String path, URI url) {
+            this(path, url, Map.of());
+        }
+    }
+
+    /**
      * The upstream HTTP fetch, isolated behind an interface so a test answers from a fixed upstream without the
      * network. {@code requestHeaders} are sent upstream (e.g. {@code Accept} for OCI manifest negotiation, an
      * {@code Authorization} bearer token). An empty result is a transport failure; an HTTP error is a

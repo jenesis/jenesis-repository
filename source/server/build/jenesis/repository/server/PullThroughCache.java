@@ -2,13 +2,17 @@ package build.jenesis.repository.server;
 
 import module java.base;
 import build.jenesis.repository.format.ArtifactLayout;
+import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.ServableNames;
 import io.micrometer.observation.ObservationRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import build.jenesis.repository.store.SingleFlight;
 import io.micrometer.observation.Observation;
 
@@ -45,6 +49,11 @@ import io.micrometer.observation.Observation;
  * default constructor, and every test that builds this directly) the wrapper is inert.
  */
 public final class PullThroughCache {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PullThroughCache.class);
+
+    /** How much of a companion is read: a signature or a bundle longer than this is not one that can be checked. */
+    private static final int COMPANION_BOUND = ArtifactSignatures.Material.LARGEST_SIGNATURE;
 
     private final ProxyFormat.Fetcher fetcher;
     /**
@@ -157,7 +166,12 @@ public final class PullThroughCache {
      *  reproduce. */
     private void fetch(FormatExchange exchange, ArtifactStore store, RepositoryFormat format, ProxyFormat proxy,
                        URI upstream, Observation observation) throws IOException {
-        Answered answered = new Answered(hooks.screenFetch(exchange.path(), fetcher, store));
+        // The documents the upstream publishes beside the artifact are fetched first, so the screen inside the fill
+        // decides over the signature the upstream publishes rather than over what an earlier request left here; they
+        // are kept only once the fill has an artifact for them to be a sidecar of - served, or held for review.
+        List<ProxyFormat.Companion> companions = proxy.companions(exchange, upstream);
+        Map<String, byte[]> fetched = companions(exchange.path(), companions);
+        Answered answered = new Answered(hooks.screenFetch(exchange.path(), fetcher, store, fetched));
         boolean served;
         try {
             served = proxy.proxy(exchange, store, upstream, answered);
@@ -165,11 +179,84 @@ public final class PullThroughCache {
             observation.lowCardinalityKeyValue("upstream", answered.last());
         }
         if (served) {
+            keep(proxy, store, companions, fetched);
             observation.lowCardinalityKeyValue("outcome", "miss");
             observePublish(format, exchange.path(), store);
         } else {
+            if (!fetched.isEmpty() && held(store, exchange.path())) {
+                keep(proxy, store, companions, fetched);
+            }
             observation.lowCardinalityKeyValue("outcome", "negative");
             exchange.respond(404);
+        }
+    }
+
+    /** Every companion the upstream answered with a document, keyed by the path it is kept at: a 404 is absence, a
+     *  transport failure or an oversized answer is logged and the fill goes on, since the artifact's own integrity
+     *  check owes nothing to them. Read through the streaming download so a body past the bound costs the bound. */
+    private Map<String, byte[]> companions(String path, List<ProxyFormat.Companion> companions) {
+        if (companions.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, byte[]> fetched = new LinkedHashMap<>();
+        for (ProxyFormat.Companion companion : companions) {
+            try {
+                Optional<ProxyFormat.Download> download = fetcher.download(companion.url(), companion.headers());
+                if (download.isEmpty()) {
+                    LOGGER.warn("The companion {} of the proxied {} could not be fetched from {}; the artifact is "
+                            + "screened without it", companion.path(), path, companion.url());
+                    continue;
+                }
+                try (ProxyFormat.Download response = download.get()) {
+                    if (response.status() != 200) {
+                        continue;
+                    }
+                    byte[] body = response.body().readNBytes(COMPANION_BOUND + 1);
+                    if (body.length > COMPANION_BOUND) {
+                        LOGGER.warn("The companion {} of the proxied {} exceeds {} bytes and is not kept: a "
+                                + "signature longer than the bound is not one this repository can check",
+                                companion.path(), path, COMPANION_BOUND);
+                        continue;
+                    }
+                    fetched.put(companion.path(), body);
+                }
+            } catch (IOException | RuntimeException failure) {
+                LOGGER.warn("The companion {} of the proxied {} could not be read from {}: {}", companion.path(),
+                        path, companion.url(), failure.toString());
+            }
+        }
+        return fetched;
+    }
+
+    /** Keep what arrived: through the format where it has a place of its own for the document, else linked at the
+     *  companion's path as a sidecar of the artifact. A failure to keep one is logged, never a failed serve. */
+    private static void keep(ProxyFormat proxy, ArtifactStore store, List<ProxyFormat.Companion> companions,
+                             Map<String, byte[]> fetched) {
+        for (ProxyFormat.Companion companion : companions) {
+            byte[] body = fetched.get(companion.path());
+            if (body == null) {
+                continue;
+            }
+            try {
+                if (!proxy.keep(store, companion, body)) {
+                    Publication publication = new Publication(store);
+                    publication.link(companion.path(), publication.storeBlob(new ByteArrayInputStream(body)),
+                            body.length);
+                }
+            } catch (IOException | RuntimeException failure) {
+                LOGGER.warn("The companion {} could not be kept: {}", companion.path(), failure.toString());
+            }
+        }
+    }
+
+    /** Whether a fill that served nothing held the artifact for review, which is the other case a companion is worth
+     *  keeping for: the re-assessment that releases the hold reads the stored sidecars. */
+    private static boolean held(ArtifactStore store, String path) {
+        try {
+            return new ServableNames(store).located("/" + ServableNames.QUARANTINE + path).state()
+                    != ServableNames.State.UNPUBLISHED;
+        } catch (IOException | RuntimeException _) {
+            return false;
         }
     }
 

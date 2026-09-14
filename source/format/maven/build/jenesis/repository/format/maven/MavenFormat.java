@@ -529,6 +529,24 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     /**
+     * What Central publishes beside a released file and a client never asks for: its {@code .asc} and, where the
+     * publisher signed with Sigstore, its {@code .sigstore.json}. Both are fetched on a fill so the proxy screen
+     * judges a proxied artifact by the signature its upstream publishes rather than by what an earlier client request
+     * happened to leave here; a listing, a checksum or a signature itself has none.
+     */
+    @Override
+    public List<ProxyFormat.Companion> companions(FormatExchange exchange, URI upstream) {
+        String path = exchange.path();
+        if (!signable(path) || MavenMetadata.isMetadataRequest(path) || !ArtifactStore.traversalFree(path)) {
+            return List.of();
+        }
+        String root = upstream.toString();
+        String target = (root.endsWith("/") ? root : root + "/") + path.substring("/maven/".length());
+        return List.of(new ProxyFormat.Companion(path + ".asc", URI.create(target + ".asc")),
+                new ProxyFormat.Companion(path + ".sigstore.json", URI.create(target + ".sigstore.json")));
+    }
+
+    /**
      * Answer a {@code maven-metadata.xml} request this repository could not put to its upstream - a transport failure,
      * or an upstream that answered something other than the document - with a {@code 502} rather than the local
      * {@code 404}, and say in the log which target failed and how.

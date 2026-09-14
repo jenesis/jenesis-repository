@@ -71,6 +71,19 @@ public interface PullThroughHooks {
     }
 
     /**
+     * As {@link #screenFetch(String, ProxyFormat.Fetcher, ArtifactStore)}, with the companions the cache fetched
+     * beside the artifact - the format's {@link ProxyFormat#companions}, keyed by the request path each is kept at -
+     * so a screen can read the signature or the bundle the upstream publishes before it decides on the artifact they
+     * cover, rather than only what an earlier client request left in the store. Handed over rather than stored first
+     * because the screen runs inside the fill, before anything is linked. The default drops them and delegates,
+     * which is right for a hook that screens nothing.
+     */
+    default ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream, ArtifactStore store,
+                                            Map<String, byte[]> companions) {
+        return screenFetch(path, upstream, store);
+    }
+
+    /**
      * How a {@link #verifyHit} hook tells the cache to handle a locally cached artifact, decided BEFORE any hit byte is
      * served. Deliberately <em>not</em> a bare {@code boolean}: a "false" that dumped the request onto the upstream miss
      * leg would re-fetch cached-but-unverified bytes (wasteful, and closed-for-the-wrong-reason when upstream is down),
