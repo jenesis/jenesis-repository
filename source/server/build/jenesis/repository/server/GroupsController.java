@@ -61,7 +61,7 @@ public final class GroupsController {
                     authorization.grants(tenant, Authorization.Subject.group(name))));
         }
         if (page.next() != null) {
-            response.setHeader("X-Next-Cursor", page.next());
+            response.setHeader("Jenesis-Next-Cursor", page.next());
         }
         return views;
     }
@@ -76,7 +76,7 @@ public final class GroupsController {
         Authorization.SubjectPage page = authorization.members(context.tenant(key), group(name),
                 after == null || after.isBlank() ? null : after, pageSize(http.getParameter("limit")));
         if (page.next() != null) {
-            response.setHeader("X-Next-Cursor", page.next());
+            response.setHeader("Jenesis-Next-Cursor", page.next());
         }
         return page.ids();
     }

@@ -60,7 +60,7 @@ public final class PrincipalsController {
                     authorization.grants(tenant, subject)));
         }
         if (page.next() != null) {
-            response.setHeader("X-Next-Cursor", page.next());
+            response.setHeader("Jenesis-Next-Cursor", page.next());
         }
         return views;
     }

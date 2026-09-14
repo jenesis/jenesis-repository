@@ -237,7 +237,7 @@ public class RepositoryProperties {
         this.proxyMissTtl = proxyMissTtl;
     }
 
-    /** Whether a publish request carrying the {@code X-Jenesis-Explode} header is walked as an archive and exploded
+    /** Whether a publish request carrying the {@code Jenesis-Explode} header is walked as an archive and exploded
      *  into a per-entry publish through {@link BatchIngestion}; off by default, so the header is inert and an archive
      *  is stored verbatim as one artifact unless a deployment opts in. */
     public boolean isBatchUpload() {

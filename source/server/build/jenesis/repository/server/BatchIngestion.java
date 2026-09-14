@@ -28,8 +28,11 @@ import tools.jackson.databind.node.ObjectNode;
  */
 public final class BatchIngestion {
 
-    /** The request header naming the archive encoding to explode; only {@code zip} is understood. */
-    public static final String EXPLODE_HEADER = "X-Jenesis-Explode";
+    /** The request header naming the archive encoding to explode; only {@code zip} is understood. Bare, like every
+     *  header of this product's: the {@code X-} prefix was deprecated (RFC 6648) because a header that graduates
+     *  from experiment to protocol keeps its name forever, and it was cut over rather than accepted beside the
+     *  new name. */
+    public static final String EXPLODE_HEADER = "Jenesis-Explode";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 

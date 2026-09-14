@@ -46,11 +46,11 @@ public final class CredentialsController {
         this.context = Objects.requireNonNull(context, "context");
     }
 
-    /** The most credentials one answer lists; a caller past it follows the {@code X-Next-Cursor} header. */
+    /** The most credentials one answer lists; a caller past it follows the {@code Jenesis-Next-Cursor} header. */
     static final int MAX_PAGE = 500;
 
     /** The tenant's credentials, one page per request: at most {@code limit} (default and at most {@link #MAX_PAGE})
-     *  in key order from {@code after}, with the cursor of the next page in the {@code X-Next-Cursor} header when
+     *  in key order from {@code after}, with the cursor of the next page in the {@code Jenesis-Next-Cursor} header when
      *  more remain - a tenant that has minted and rotated keys for years is a listing to page, not to render. */
     @GetMapping("/api/credentials")
     @ResponseBody
@@ -67,7 +67,7 @@ public final class CredentialsController {
             credential.ifPresent(value -> views.add(view(value)));
         }
         if (page.next() != null) {
-            response.setHeader("X-Next-Cursor", page.next());
+            response.setHeader("Jenesis-Next-Cursor", page.next());
         }
         return views;
     }
