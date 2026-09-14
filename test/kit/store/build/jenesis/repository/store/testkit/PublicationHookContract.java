@@ -7,6 +7,7 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.store.HeldBy;
 import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.Delivery;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.Interceptor;
@@ -720,10 +721,14 @@ public final class PublicationHookContract {
     }
 
     /** The keys {@link Publication} itself owns - not the hook's, and not evidence of an escape. The withhold marker
-     *  root is taken from {@link Withheld} rather than spelled out, so this stays one convention with one owner. */
+     *  root is taken from {@link Withheld} and the review index's from {@link HeldBy} rather than spelled out, so
+     *  each stays one convention with one owner. The index is entered by the quarantine link and forgotten by the
+     *  unpublish, and a release that finds a repository from before it backfills and stamps it - all of it the
+     *  primitive's own bookkeeping of its review pointers, whichever hook's release drove the surface. */
     private static boolean isPublicationKey(String key) {
         return key.startsWith("blobs/") || key.startsWith(ServableNames.PUBLISHED + "/")
-                || key.startsWith(Withheld.ROOT) || key.startsWith("gc/");
+                || key.startsWith(Withheld.ROOT) || key.startsWith(HeldBy.ROOT) || key.equals(HeldBy.COMPLETE)
+                || key.startsWith("gc/");
     }
 
     // --- shared drivers, so every check runs the one choreography ---------------------------------------------------

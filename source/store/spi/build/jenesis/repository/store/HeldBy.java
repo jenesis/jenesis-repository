@@ -35,7 +35,7 @@ public final class HeldBy {
     public static final String ROOT = "quarantine/by-hash/";
 
     /** The stamp a completed backfill leaves, so readers know the index describes every review pointer. */
-    static final String COMPLETE = "quarantine/by-hash-complete";
+    public static final String COMPLETE = "quarantine/by-hash-complete";
 
     private HeldBy() {
     }
