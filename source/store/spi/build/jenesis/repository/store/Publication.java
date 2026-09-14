@@ -386,6 +386,13 @@ public final class Publication {
         boolean quarantine = isQuarantinePath(requestPath);
         String key = "publish" + requestPath;
         long length = size < 0 ? store.size("blobs/" + hash) : size;
+        if (quarantine) {
+            // The review index's entry for the hash this pointer names, BEFORE the pointer: a reader that finds the
+            // entry and no pointer yet has met a hold in flight, not a stale entry, and counts it as no holder while
+            // leaving the entry, so the pointer that lands next is indexed. Written the other way round, a release
+            // between the two writes would lift the marker this hold is about to need with nothing to say so.
+            HeldBy.record(store, hash, requestPath.substring(QUARANTINE_PATH.length()));
+        }
         Optional<ArtifactStore.Versioned> prior = Retries.decide(store, key, current -> {
             boolean held = !quarantine && (current.isPresent()
                     ? ServableNames.parse(current.get().content()).held()
@@ -589,6 +596,11 @@ public final class Publication {
         }
         ServableNames.Pointer parsed = ServableNames.parse(pointer.get().content());
         String named = parsed.hash();
+        if (isQuarantinePath(requestPath) && hash(named)) {
+            // The review index's entry, after the pointer is gone: a crash between the two leaves an entry whose
+            // pointer no reader finds live, which is ignored, never a pointer the index does not know.
+            HeldBy.forget(store, named, requestPath.substring(QUARANTINE_PATH.length()));
+        }
         ArtifactDescriptor removed = ArtifactDescriptor.at(null, requestPath);
         notifyDeleted(hash(named) ? removed.withBlob(named, parsed.size()) : removed);
         // The pointer face of the withhold-change feed's transition-OFF leg: removing a /quarantine<servedPath> review
@@ -616,6 +628,9 @@ public final class Publication {
         }
         ServableNames.Pointer parsed = ServableNames.parse(pointer.get().content());
         String named = parsed.hash();
+        if (isQuarantinePath(described.path()) && hash(named)) {
+            HeldBy.forget(store, named, described.path().substring(QUARANTINE_PATH.length()));   // as the string variant
+        }
         notifyDeleted(described.hash() == null && hash(named)
                 ? described.withBlob(named, described.size() < 0 ? parsed.size() : described.size())
                 : described);
