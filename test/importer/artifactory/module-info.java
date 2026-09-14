@@ -8,6 +8,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.importer.artifactory
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.importer.artifactory.test {
     requires build.jenesis.repository.importer.artifactory;

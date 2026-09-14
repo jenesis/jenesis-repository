@@ -8,6 +8,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.importer.nexus
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.importer.nexus.test {
     requires build.jenesis.repository.importer.nexus;

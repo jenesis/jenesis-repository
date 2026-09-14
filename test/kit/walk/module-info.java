@@ -27,6 +27,7 @@
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.walk.testkit {
     requires transitive build.jenesis.repository.walk;

@@ -9,6 +9,17 @@ The core: the repository / build-cache server modules consumed by downstream edi
 - `-Djenreg.*` system properties go **before** the `Project.java` path; bare selectors go **after** it.
 - `java build/jenesis/Make.java help` documents every selector and `-D` flag (`export` produces the deliverable repository).
 - **Every dependency's version and checksum lives in `build.jenesis/pin-repository.properties`, and no module descriptor carries a `@jenesis.pin` line of its own.** Each descriptor imports the file with `@jenesis.bom pin-repository.properties`; a new module declares that line and nothing else. To move a version, edit the file - a bare version will do - and run `pin`: it writes a `@jenesis.pin` line into a descriptor only for what the file does not yet say, the checksum it resolved included, and that line is then moved into the file (a downstream build that consumes this tree in-build carries the script that does it; by hand it is one line per coordinate). A line left in a descriptor overrides the file for that module alone, which is never what is wanted here. A `# held: <why>` comment above an entry records a version deliberately kept below the newest stable (`-Djenesis.resolver.maven=stable` proposes the newest release without a pre-release qualifier) and why.
+- **Every dependency's signing key is declared in `build.jenesis/signature-repository.properties`**, one OpenPGP
+  fingerprint per line with the groups it signs, a comment above each naming the key's user id and where its
+  identity is published; every descriptor names the file with `@jenesis.signature signature-repository.properties`
+  beside its `@jenesis.bom` line. The fingerprints were read off the `.asc` files the repositories publish for the
+  pinned versions, never typed from documentation. Verification is off by default:
+  `-Djenesis.dependency.signature=declared` checks every covered artifact and its POM with a local gpg that already
+  holds the keys (`gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys` the fingerprints in the file; importing
+  admits nothing). A rotated upstream key fails verification naming both fingerprints, and is accepted by adding
+  the new one on a line of its own. Some keys are known and commented out because they have expired and gpg
+  reports a signature by an expired key as `EXPKEYSIG`, which the tool refuses even where the signature predates
+  the expiry; the file says which.
 
 ## Local gotchas (a red here is often the environment, not a regression)
 

@@ -22,6 +22,7 @@
  * @jenesis.exclude spring.security.oauth2.client com.nimbusds/oauth2-oidc-sdk
  *
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.ui {
     requires build.jenesis.repository.format;

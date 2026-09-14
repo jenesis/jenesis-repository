@@ -10,6 +10,7 @@
  * @jenesis.test build.jenesis.repository.ui
  * @jenesis.attach org.mockito
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.ui.test {
     requires build.jenesis.repository.ui;

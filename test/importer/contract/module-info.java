@@ -24,6 +24,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.importer.testkit
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.importer.contract.test {
     requires build.jenesis.repository.importer;

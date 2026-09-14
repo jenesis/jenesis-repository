@@ -15,6 +15,7 @@
  * @jenesis.release 25
  * @jenesis.exclude com.azure.storage.blob io.netty/netty-codec-marshalling io.netty/netty-codec-protobuf
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.store.azure {
     exports build.jenesis.repository.store.azure to build.jenesis.repository.store.azure.test,

@@ -13,6 +13,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.importer.index
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.importer.index.test {
     requires build.jenesis.repository.importer.index;

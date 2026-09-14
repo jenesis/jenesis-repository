@@ -15,6 +15,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.walk
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.walk.test {
     requires build.jenesis.repository.walk;

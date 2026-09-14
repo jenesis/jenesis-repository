@@ -14,6 +14,7 @@
  * @jenesis.alias wiremock.jetty org.wiremock/wiremock-jetty
  * @jenesis.alias wiremock.httpclient org.wiremock/wiremock-httpclient-apache5
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.store.azure.test {
     requires build.jenesis.repository.store.azure;

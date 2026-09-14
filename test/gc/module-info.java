@@ -18,6 +18,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.gc
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.gc.test {
     requires build.jenesis.repository.gc;

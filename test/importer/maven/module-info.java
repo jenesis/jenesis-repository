@@ -14,6 +14,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.importer.maven
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.importer.maven.test {
     requires build.jenesis.repository.importer.maven;

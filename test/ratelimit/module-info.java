@@ -9,6 +9,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.ratelimit
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.ratelimit.test {
     requires build.jenesis.repository.ratelimit;

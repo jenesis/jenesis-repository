@@ -7,6 +7,7 @@
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.format.jenesis {
     requires build.jenesis.repository.format;

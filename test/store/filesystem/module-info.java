@@ -12,6 +12,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.store.filesystem
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.store.filesystem.test {
     requires build.jenesis.repository.store;

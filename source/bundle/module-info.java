@@ -19,6 +19,7 @@
  * @jenesis.release 25
  * @jenesis.main build.jenesis.repository.bundle.Server
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.bundle {
     exports build.jenesis.repository.bundle;

@@ -9,6 +9,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.format.maven
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.format.maven.test {
     requires build.jenesis.repository.format.maven;

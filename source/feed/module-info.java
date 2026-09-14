@@ -22,6 +22,7 @@
  * implementation that fetches, never leaked through the seam that declares.
  *
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  * @jenesis.release 25
  */
 module build.jenesis.repository.feed {

@@ -10,6 +10,7 @@
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.feed
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.feed.test {
     requires build.jenesis.repository.feed;

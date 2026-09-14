@@ -12,6 +12,7 @@
  * @jenesis.alias wiremock.httpclient org.wiremock/wiremock-httpclient-apache5
  * @jenesis.attach org.mockito
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.test {
     requires build.jenesis.repository.scope;

@@ -15,6 +15,7 @@
  * @jenesis.release 25
  * @jenesis.exclude software.amazon.awssdk.services.s3 io.netty/netty-codec-marshalling io.netty/netty-codec-protobuf
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.store.s3compatible {
     requires build.jenesis.repository.store;

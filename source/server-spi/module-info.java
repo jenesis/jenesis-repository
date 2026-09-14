@@ -27,6 +27,7 @@
  * @jenesis.main build.jenesis.repository.server.spi.MintKey
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.server.spi {
     requires build.jenesis.repository.scope;

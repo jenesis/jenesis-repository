@@ -31,6 +31,7 @@
  * @jenesis.exclude spring.boot.starter.jetty org.apache.tomcat.embed/tomcat-embed-el
  *
  * @jenesis.bom pin-repository.properties
+ * @jenesis.signature signature-repository.properties
  *
  */
 open module build.jenesis.repository.server {
