@@ -117,7 +117,8 @@ public final class MavenMetadata {
         int file = body.lastIndexOf('/');
         int version = file < 0 ? -1 : body.lastIndexOf('/', file - 1);
         if (version > 0 && !isMetadataRequest(requestPath) && !body.endsWith(".sha1") && !body.endsWith(".md5")
-                && !body.endsWith(".sha256") && !body.endsWith(".sha512") && !body.endsWith(".asc")) {
+                && !body.endsWith(".sha256") && !body.endsWith(".sha512") && !body.endsWith(".asc")
+                && !body.endsWith(".sigstore.json")) {
             listing.refresh(body.substring(0, version), body.substring(version + 1, file));
         }
     }
@@ -459,7 +460,8 @@ public final class MavenMetadata {
                     // here (MavenFormat.isChecksum accepts those) - or a stray checksum sibling is a "version".
                     if (child.equals("maven-metadata.xml") || child.startsWith("maven-metadata.xml.")
                             || child.endsWith(".sha1") || child.endsWith(".md5") || child.endsWith(".sha256")
-                            || child.endsWith(".sha512") || child.endsWith(".asc")) {
+                            || child.endsWith(".sha512") || child.endsWith(".asc")
+                            || child.endsWith(".sigstore.json")) {
                         return;
                     }
                     versions.add(child);

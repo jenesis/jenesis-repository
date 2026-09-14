@@ -393,4 +393,62 @@ public interface ArtifactSignatures extends EcosystemLayout {
             }
         };
     }
+
+    /**
+     * Several conventions over one layout, answering as one format: the expectations are the union of the legs',
+     * a sidecar is covered by whichever leg spells it, and the evidence is everything every leg found.
+     *
+     * <p>One format has to answer for all of its sidecars, and this is why it exists. The completion observer that
+     * re-derives an artifact's verdict when a sidecar lands asks each installed format what the sidecar covers and
+     * takes the first answer, so a layout that reads two sidecar conventions - Maven's {@code .asc} beside its
+     * {@code .sigstore.json} - cannot be two formats and cannot answer for one convention only. Each leg still
+     * decides its own {@code signable} and {@code coverage}; what is shared is only the joining, and a leg's
+     * {@code signable} is expected to exclude the other legs' suffixes as well as its own, since a signature never
+     * covers another signature.
+     *
+     * @param ecosystem the delegating format's {@link EcosystemLayout#ecosystem()}
+     * @param legs      the conventions, each typically a {@link #detachedSidecar}
+     */
+    static ArtifactSignatures composed(String ecosystem, ArtifactSignatures... legs) {
+        Objects.requireNonNull(ecosystem, "ecosystem");
+        List<ArtifactSignatures> parts = List.of(legs);
+        if (parts.isEmpty()) {
+            throw new IllegalArgumentException("A composed signature story names at least one leg");
+        }
+        return new ArtifactSignatures() {
+            @Override
+            public String ecosystem() {
+                return ecosystem;
+            }
+
+            @Override
+            public List<Expectation> expects(String path) {
+                List<Expectation> expectations = new ArrayList<>();
+                for (ArtifactSignatures leg : parts) {
+                    expectations.addAll(leg.expects(path));
+                }
+                return List.copyOf(expectations);
+            }
+
+            @Override
+            public Optional<String> covers(String path) {
+                for (ArtifactSignatures leg : parts) {
+                    Optional<String> covered = leg.covers(path);
+                    if (covered.isPresent()) {
+                        return covered;
+                    }
+                }
+                return Optional.empty();
+            }
+
+            @Override
+            public List<Evidence> evidence(String path, Material material) throws IOException {
+                List<Evidence> evidence = new ArrayList<>();
+                for (ArtifactSignatures leg : parts) {
+                    evidence.addAll(leg.evidence(path, material));
+                }
+                return List.copyOf(evidence);
+            }
+        };
+    }
 }

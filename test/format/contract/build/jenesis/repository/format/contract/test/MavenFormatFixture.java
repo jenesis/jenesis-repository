@@ -41,7 +41,7 @@ final class MavenFormatFixture implements FormatFixture {
 
     @Override
     public Signatures signatures() {
-        return Signatures.of(ArtifactSignatures.Scheme.OPENPGP_DETACHED);
+        return Signatures.of(ArtifactSignatures.Scheme.OPENPGP_DETACHED, ArtifactSignatures.Scheme.SIGSTORE_BUNDLE);
     }
 
     @Override

@@ -57,19 +57,31 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     /**
-     * Maven's inbound signature story: a detached OpenPGP signature at {@code <artifact>.asc}, covering the artifact's
-     * own bytes, and <em>expected</em> rather than optional - the upstream this layout mirrors has demanded one on
-     * every release since the early 2010s, and Sigstore bundle validation was added beside that requirement rather
-     * than in place of it.
+     * Maven's inbound signature story, two sidecars beside one artifact. A detached OpenPGP signature at
+     * {@code <artifact>.asc}, covering the artifact's own bytes, and <em>expected</em> rather than optional - the
+     * upstream this layout mirrors has demanded one on every release since the early 2010s. And a Sigstore bundle at
+     * {@code <artifact>.sigstore.json}, the file the sigstore-maven-plugin writes for each file it publishes and
+     * Central has copied and validated beside the {@code .asc} since 2025, <em>optional</em> because Central does not
+     * require it: measured 2026-09-14, 2 of the 373 artifacts this product's own build pins carry one. The bundle is
+     * keyless - it names a certificate identity under an OIDC issuer rather than a key - so a bundle that verifies is
+     * VALID only where an operator's pin names that identity, and otherwise UNTRUSTED under the same dial a
+     * signature by an unknown key falls under; holding the Sigstore root vouches for nobody.
+     *
+     * <p>Both are sidecars of the artifact: neither is signable itself, both are excluded from the listings, and
+     * both inherit the artifact's hold, which is why each suffix is in {@link #isChecksum} and in the served-name
+     * sidecar family. One format answers for both, because the completion observer that re-derives a verdict when a
+     * sidecar lands takes the first format whose {@code covers} answers.
      *
      * <p>{@code maven-metadata.xml} is excluded because no publisher signs it: it is a listing the repository
      * reconciles rather than a release artifact, so demanding a signature for it would report every well-signed
      * deployment as partly unsigned. The checksum and signature siblings are excluded because a sidecar carries no
      * sidecar of its own.
      */
-    private static final ArtifactSignatures SIGNATURES = ArtifactSignatures.detachedSidecar(
-            ECOSYSTEM, ".asc", ArtifactSignatures.Scheme.OPENPGP_DETACHED,
-            MavenFormat::signable, ArtifactSignatures.Coverage.REQUIRED);
+    private static final ArtifactSignatures SIGNATURES = ArtifactSignatures.composed(ECOSYSTEM,
+            ArtifactSignatures.detachedSidecar(ECOSYSTEM, ".asc", ArtifactSignatures.Scheme.OPENPGP_DETACHED,
+                    MavenFormat::signable, ArtifactSignatures.Coverage.REQUIRED),
+            ArtifactSignatures.detachedSidecar(ECOSYSTEM, ".sigstore.json", ArtifactSignatures.Scheme.SIGSTORE_BUNDLE,
+                    MavenFormat::signable, ArtifactSignatures.Coverage.OPTIONAL));
 
     /**
      * Whether a request path names a released artifact a publisher's signature would cover.
@@ -566,10 +578,12 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MavenFormat.class);
 
-    /** A Maven checksum or signature sibling - itself the integrity token, so it is proxied as-is, not re-verified. */
+    /** A Maven checksum or signature sibling - itself the integrity token, so it is proxied as-is, not re-verified,
+     *  and never asked to carry a signature of its own. The Sigstore bundle is one: Central publishes no {@code .sha1}
+     *  for it, and a proxied bundle held to one would never serve. */
     private static boolean isChecksum(String rest) {
         return rest.endsWith(".sha1") || rest.endsWith(".md5") || rest.endsWith(".sha256")
-                || rest.endsWith(".sha512") || rest.endsWith(".asc");
+                || rest.endsWith(".sha512") || rest.endsWith(".asc") || rest.endsWith(".sigstore.json");
     }
 
     private static MessageDigest sha1() {
