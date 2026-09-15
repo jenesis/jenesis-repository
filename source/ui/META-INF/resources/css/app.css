@@ -705,6 +705,19 @@ button.app-danger:hover,
     color: var(--pico-muted-color);
 }
 
+/* A row of these breaks inside a word when it has to, and the rule sits on the row rather than on whichever child
+   turns out to be too wide - overflow-wrap inherits, so one statement covers the lot.
+
+   Everything in such a row is a name somebody else chose: the JPMS module a knob or a provider is attributed to,
+   the key, the description carrying the endpoint an operator is meant to paste, the value they typed. Any of them
+   may be one long token with nothing in it a line may break at, and a rule naming today's longest would be wrong
+   the next time a module or a feed URL is longer. Measured 2026-09-15 at a 345px viewport: the settings screen
+   scrolled five pixels past it, then the modules screen did the same for the identical reason on a different row,
+   which is why the two are named together rather than fixed one at a time. */
+.setting, .setting-doc, .module-card {
+    overflow-wrap: anywhere;
+}
+
 /* The computed marks' palette, dark. Same buckets, lighter tints - the figure is a stroke on a dark ground, so the
    direction reverses while the bucket a name maps to does not. Both blocks, because the console honours an explicit
    [data-theme=dark] choice as well as the system preference. */
