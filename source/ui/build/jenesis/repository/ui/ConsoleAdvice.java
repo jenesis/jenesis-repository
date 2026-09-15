@@ -32,12 +32,35 @@ public class ConsoleAdvice {
 
     private final List<PrincipalNameResolver> principalNames;
 
+    /**
+     * Every installed module's nav links, discovered once.
+     *
+     * <p>The contract's lifecycle clause says the discovered nav "is computed once at startup - a module's
+     * providers are static for a JVM - and never re-discovered on the request path". It was: {@link #entries}
+     * called {@code ConsoleModuleProvider.enabled} on every render, and twice on each, since the bar and the
+     * administration dropdown are two model attributes over the same fan-out. Each call walked the module graph's
+     * service declarations, re-instantiated all eight providers, re-sorted them and rebuilt the duplicate-name and
+     * duplicate-class maps that make a packaging error throw - to answer the same thing every time.
+     *
+     * <p>It is a field rather than a holder because the answer depends on this console's {@link Environment}, which
+     * is this bean's own: a second console in the same JVM with a different one gets its own. What stays on the
+     * request path is what actually varies with the request - the section and who is asking.
+     */
+    private final List<NavEntry> contributed;
+
     public ConsoleAdvice(Environment environment, PostureSource source, CurrentTenant current,
                          List<PrincipalNameResolver> principalNames) {
         this.environment = environment;
         this.source = source;
         this.current = current;
         this.principalNames = principalNames;
+        this.contributed = ConsoleModuleProvider.enabled(Features.namespaced(environment::getProperty)).stream()
+                // Contained for the same reason the URL space is: a module whose nav declaration throws costs its
+                // own links, never the page. The admin console's fan-out has been contained since a hostile-module
+                // fixture proved it had to be; this one had not.
+                .flatMap(module -> Contributions.declared(module,
+                        ConsoleModuleProvider::navEntries, List.<NavEntry>of()).stream())
+                .toList();
     }
 
     /**
@@ -157,14 +180,7 @@ public class ConsoleAdvice {
 
     private List<NavEntry> entries(Authentication authentication, NavEntry.Section section) {
         boolean admin = authority(authentication, "ROLE_ADMIN");
-        return Stream.concat(
-                        OWN.stream(),
-                        // Contained for the same reason the URL space is: a module whose nav declaration throws
-                        // costs its own links, never the page. The admin console's fan-out has been contained
-                        // since a hostile-module fixture proved it had to be; this one had not.
-                        ConsoleModuleProvider.enabled(Features.namespaced(environment::getProperty)).stream()
-                                .flatMap(module -> Contributions.declared(module,
-                                        ConsoleModuleProvider::navEntries, List.<NavEntry>of()).stream()))
+        return Stream.concat(OWN.stream(), contributed.stream())
                 .filter(entry -> entry.section() == section)
                 .filter(entry -> permitted(entry, authentication != null, admin))
                 .toList();

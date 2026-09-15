@@ -43,8 +43,10 @@ import build.jenesis.repository.icon.IconContributor;
  *     refresh and at nav-discovery time; a provider that reached the store or the network to decide its name or its
  *     links would make the rendered shell depend on something else being up.</li>
  * <li><b>Lifecycle / ownership.</b> {@code ServiceLoader} instances are created by {@link #installed()} and
- *     {@link #enabled}, are not cached across calls, own no threads or clients and are never closed, so a provider
- *     must be cheap to build and must open nothing. The {@link #configuration()} class is owned by Spring, which
+ *     {@link #enabled} - which do not cache, so each call re-instantiates every provider - and own no threads or
+ *     clients and are never closed, so a provider must be cheap to build and must open nothing. A caller that asks
+ *     on a repeated path holds the answer itself rather than asking again: the console's shell discovers the nav
+ *     once when its advice is built, which is what makes the last sentence of this clause true. The {@link #configuration()} class is owned by Spring, which
  *     instantiates it once per context; the provider never instantiates it. The discovered nav is computed once at
  *     startup - a module's providers are static for a JVM - and never re-discovered on the request path.</li>
  * <li><b>Ordering / determinism.</b> Import and nav order never depend on module-path order: both statics sort

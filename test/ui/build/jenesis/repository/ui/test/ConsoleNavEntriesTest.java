@@ -62,6 +62,40 @@ class ConsoleNavEntriesTest {
         assertThat(labels(advice.navEntries(user("ROLE_USER")))).doesNotContain("Operators");
     }
 
+    /**
+     * The nav is discovered when the advice is built, and never again - the lifecycle clause of
+     * {@code ConsoleModuleProvider}'s contract, made executable.
+     *
+     * <p>It was not true when this was written. {@code entries} asked {@code ConsoleModuleProvider.enabled} on
+     * every render, and twice on each, since the bar and the administration dropdown are two model attributes over
+     * one fan-out: every page walked the module graph's service declarations, re-instantiated all eight providers,
+     * re-sorted them and rebuilt the duplicate-name and duplicate-class maps that make a packaging error throw.
+     * Nothing was wrong with the answer, which is why nothing was red - the cost was the defect, and a contract
+     * clause stating the opposite was the only thing that said so.
+     *
+     * <p>Counting asks rather than timing anything is deliberate: a timing assertion on a saturated machine is the
+     * flake this repository keeps having to remove, and the claim here is not "it is fast" but "it happens once".
+     */
+    @Test
+    void the_contributed_nav_is_discovered_once_and_never_on_the_request_path() {
+        NavigatingConsoleModule.forget();
+        ConsoleAdvice built = new ConsoleAdvice(ENVIRONMENT,
+                PostureSource.ofEnvironment(ENVIRONMENT::getProperty), () -> "default", List.of());
+        int afterConstruction = NavigatingConsoleModule.asked();
+        assertThat(afterConstruction)
+                .as("building the advice is what discovers the modules, so the fan-out happens here or nowhere")
+                .isPositive();
+
+        for (int render = 0; render < 25; render++) {
+            built.navEntries(user("ROLE_USER", "ROLE_ADMIN"));
+            built.adminNav(user("ROLE_USER", "ROLE_ADMIN"));
+        }
+        assertThat(NavigatingConsoleModule.asked())
+                .as("fifty renders asked the installed modules nothing further; a module re-asked per render is "
+                        + "the whole module graph walked per page, which is what the clause forbids")
+                .isEqualTo(afterConstruction);
+    }
+
     @Test
     void an_unauthenticated_request_is_offered_nothing() {
         // The error page renders the shell outside any authenticated request, so this is a real path rather than a
