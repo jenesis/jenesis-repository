@@ -122,6 +122,30 @@ public interface ArtifactSignatures extends EcosystemLayout {
     List<Expectation> expects(String path);
 
     /**
+     * Whether the evidence for a path this format {@linkplain #expects expects} a signature at rides in the
+     * artifact's <em>own bytes</em> rather than beside it.
+     *
+     * <p>It exists because a screen decides whether to claim an artifact before it opens one. The claim probe hands
+     * a format a body that is present and never read - so a sidecar that is there is a claim, and a signature
+     * inside the archive answers nothing. That silence is correct for most layouts and wrong for one shape: a
+     * format whose publish endpoint is not its serving path, where the descriptor carries the endpoint's address
+     * and the coordinate is only readable once the body is parsed. NuGet is that shape, and until this existed no
+     * pushed package had its signature judged at all - the expectation was empty at the one moment the bytes were
+     * in front of the gate.
+     *
+     * <p><b>Declaring it costs a read only where it yields one, which is the point of declaring it.</b> A format
+     * that says {@code true} is claimed on the strength of its declaration, and the screen reads a claimed
+     * artifact's head once and hands the same bytes to every inspector that claimed it - so where the layout's own
+     * inspector already claims the path, as NuGet's does, the marginal cost is nothing. A format that says nothing
+     * is untouched: no probe opens a body on its account.
+     *
+     * <p>{@code false} by default, because a sidecar is the ordinary shape and it is already visible.
+     */
+    default boolean embedsEvidence(String path) {
+        return false;
+    }
+
+    /**
      * The artifact a separately-addressed piece of signature material covers, for a format whose material is its own
      * request path - {@code foo-1.0.jar} for {@code foo-1.0.jar.asc}. Empty by default, which is the right answer for
      * every embedded scheme: a {@code .deb}'s signature has no path of its own.
