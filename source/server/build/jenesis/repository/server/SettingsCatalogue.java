@@ -13,6 +13,19 @@ import module java.base;
  * deploy-time bootstrap key, and {@link #keys()} is how a caller asks which. A key added with no home is stranded -
  * unreachable without hand-editing a store object - so adding one here is part of adding the read.
  *
+ * <p><b>Nothing reads this catalogue, and the guard described below does not exist.</b> No class in this tree
+ * and no test references {@link #ALL} or {@link #keys()}: the declaration is complete and current - dials are
+ * still being added to it by hand - and it is consumed by nothing, so a key's presence here makes it neither
+ * discoverable nor settable. The "test's bootstrap allowlist" named below is a suite that was never written, so
+ * nothing holds a key the code reads to being declared here either. Both halves of the claim - that this is the
+ * free product's settings surface, and that a guard keeps it honest - are aspirations stated as fact.
+ *
+ * <p>The effect is not cosmetic: a dial the core reads and declares here is, to an operator, exactly as reachable
+ * as one that is declared nowhere. {@code jenreg.auth.cache-ttl} is the case that surfaced this - free code reads
+ * it, it is absent from this list, and no guard noticed. Whether to wire this catalogue to a surface or to delete
+ * it is an open decision; until it is taken, do not read a key's presence here as meaning a deployment can see or
+ * change it.
+ *
  * <p>Deploy-time / bootstrap keys are deliberately NOT here: the store backend and its credentials (the
  * {@code JENESIS_*} env), the fixed-tenant routing ({@code jenreg.tenant}), the auth and read-only
  * deployment flags, and the per-node consistency enable/identity ({@code jenreg.consistency.enabled} /
