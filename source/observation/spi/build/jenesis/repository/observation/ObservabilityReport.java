@@ -88,9 +88,28 @@ public record ObservabilityReport(List<HealthCheck> healthChecks, List<Metric> m
 
     /** Collect the signals of every {@link ServiceLoader}-discovered {@link ObservabilitySource}. */
     public static ObservabilityReport discover() {
-        return from(ServiceLoader.load(ObservabilitySource.class).stream()
+        return from(Installed.SOURCES);
+    }
+
+    /**
+     * The sources, discovered once for the life of the class loader.
+     *
+     * <p>Held because the callers are request handlers: the observability screen, the cache's own observability
+     * endpoint and the settings admin each asked for a report per request, and this static walked the module
+     * graph's service declarations and re-instantiated every source before collecting anything from it. What the
+     * sources <em>report</em> is read fresh on every call, which is the part that has to be; which sources exist
+     * is a property of what is installed and cannot change within a JVM.
+     */
+    private static final class Installed {
+
+        private static final List<ObservabilitySource> SOURCES = ServiceLoader.load(ObservabilitySource.class)
+                .stream()
                 .map(ServiceLoader.Provider::get)
-                .toList());
+                .map(ObservabilitySource.class::cast)
+                .toList();
+
+        private Installed() {
+        }
     }
 
     /**

@@ -94,4 +94,33 @@ class PostureVisibilityTest {
                 .contains("jenreg.auth.open", "jenreg.tls.acme", "jenreg.tls.globex");
         assertThat(report().scoped(Scope.TENANT)).as("and two of them really are tenant-scoped").hasSize(2);
     }
+
+    /**
+     * The advisors are discovered once, however many reports are asked for.
+     *
+     * <p>{@code PostureReport.discover} is called from request handlers - {@code GET /api/posture}, its admin twin
+     * and the console's posture badge - and used to walk the module graph's service declarations and re-instantiate
+     * every advisor on each one, before asking a single advisor anything. The answer still depends on the
+     * configuration handed in, so only the discovery is held; this is what says so.
+     *
+     * <p>It counts constructions rather than timing anything: the claim is "once", not "fast", and a timing
+     * assertion on a busy machine is the flake this repository keeps removing.
+     */
+    @Test
+    void the_advisors_are_discovered_once_however_many_reports_are_asked_for() {
+        PostureReport.discover(key -> null);
+        int afterFirst = SampleSafetyAdvisor.built();
+        assertThat(afterFirst)
+                .as("discovery has to have happened at least once, or this proves nothing")
+                .isPositive();
+
+        for (int report = 0; report < 20; report++) {
+            PostureReport.discover(key -> null);
+        }
+        assertThat(SampleSafetyAdvisor.built())
+                .as("twenty further reports built no further advisors; one per report is the whole module graph "
+                        + "walked per request, which is what the discovery rule forbids of a caller and what a "
+                        + "holder here prevents for all of them")
+                .isEqualTo(afterFirst);
+    }
 }

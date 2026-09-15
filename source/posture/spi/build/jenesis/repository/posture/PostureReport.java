@@ -146,9 +146,32 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
 
     /** Evaluate every {@link ServiceLoader}-discovered {@link SafetyAdvisor} against {@code config}. */
     public static PostureReport discover(Configuration config) {
-        return from(ServiceLoader.load(SafetyAdvisor.class).stream()
+        return from(Installed.ADVISORS, config);
+    }
+
+    /**
+     * The advisors, discovered once for the life of the class loader.
+     *
+     * <p>Held because the callers are request handlers. {@code GET /api/posture}, its admin twin and the console's
+     * posture badge each asked for a report per request, and this static walked the whole module graph's service
+     * declarations and re-instantiated every advisor before a single one was asked anything. The advisor set is a
+     * property of what is installed, so it cannot differ between two requests of one JVM; the <em>answer</em>
+     * depends on the configuration handed in, which is why only the discovery is held and {@link #from} still runs
+     * per call.
+     *
+     * <p>Safe to hold because the contract already requires it: an advisor "holds no mutable state", answers from
+     * what it is given, and must stand when every external source is down - so one instance answering many
+     * configurations is the shape the contract describes rather than an assumption about the implementations.
+     */
+    private static final class Installed {
+
+        private static final List<SafetyAdvisor> ADVISORS = ServiceLoader.load(SafetyAdvisor.class).stream()
                 .map(ServiceLoader.Provider::get)
-                .toList(), config);
+                .map(SafetyAdvisor.class::cast)
+                .toList();
+
+        private Installed() {
+        }
     }
 
     /** The total number of advisories - the count the console badge shows. */

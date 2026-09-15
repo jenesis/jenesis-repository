@@ -17,6 +17,17 @@ public final class SampleSafetyAdvisor implements SafetyAdvisor {
     /** The key a test flips to prove the advisor fires and that a report discovers it. */
     public static final String KEY = "jenreg.sample.unsafe";
 
+    private static final AtomicInteger BUILT = new AtomicInteger();
+
+    /** How many instances discovery has created - what proves the discovery is held rather than repeated. */
+    public static int built() {
+        return BUILT.get();
+    }
+
+    public SampleSafetyAdvisor() {
+        BUILT.incrementAndGet();
+    }
+
     @Override
     public List<SecurityAdvisory> advise(Configuration config) {
         if (!config.flag(KEY, false)) {
