@@ -297,19 +297,13 @@ public interface RepositoryFormat extends IconContributor {
      *  that is not an error - see {@link EcosystemLayout}. Every consumer that maps an ecosystem back to a layout
      *  therefore fans out over this set rather than taking a first match. */
     static List<RepositoryFormat> installed() {
-        return installed(Features.settings());
+        return FormatDiscovery.installed();
     }
 
     /** As {@link #installed()}, against a lookup the caller supplies, keyed by bare feature names - the Spring
      *  {@code Environment} a configuration class holds while the global lookup may not be configured yet. */
     static List<RepositoryFormat> installed(UnaryOperator<String> config) {
-        List<RepositoryFormat> active = new ArrayList<>();
-        for (RepositoryFormat format : declared()) {
-            if (Features.active(config, format.name(), format.requiredConfig())) {
-                active.add(format);
-            }
-        }
-        return List.copyOf(active);
+        return FormatDiscovery.installed(config);
     }
 
 
