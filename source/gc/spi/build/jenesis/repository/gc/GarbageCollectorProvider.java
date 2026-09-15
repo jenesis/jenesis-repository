@@ -99,8 +99,34 @@ public interface GarbageCollectorProvider {
      *  than a discovery-order winner, and only an <em>unselected</em> deployment with no collector installed resolves
      *  to empty - the no-op default, never {@code null}. */
     static Optional<GarbageCollector> resolve(UnaryOperator<String> config) {
+        return resolve(providers(), config);
+    }
+
+    /**
+     * The collector providers this deployment installs, discovered here because discovery belongs to the SPI home.
+     *
+     * <p>It does not cache, which is the convention: a caller on a repeated path holds the list and hands it to
+     * {@link #resolve(Iterable, UnaryOperator)}. Nothing could hold it before, because the only way in discovered
+     * on every call - which is what the two maintenance routes were doing per request.
+     */
+    static List<GarbageCollectorProvider> providers() {
+        return ServiceLoader.load(GarbageCollectorProvider.class).stream()
+                .map(ServiceLoader.Provider::get)
+                .toList();
+    }
+
+    /**
+     * The collector this configuration selects from {@code providers}.
+     *
+     * <p>Split from the discovery because only the discovery is fixed: which providers exist is a property of the
+     * module path, while which one answers is decided per call from {@code jenreg.gc} and each provider's required
+     * configuration, and {@code create} is invoked per call against the configuration handed in. A caller that
+     * holds the list is therefore still served the right collector when a deployment changes its selection.
+     */
+    static Optional<GarbageCollector> resolve(Iterable<GarbageCollectorProvider> providers,
+                                              UnaryOperator<String> config) {
         return Providers.optionalUnique("gc",
-                ServiceLoader.load(GarbageCollectorProvider.class),
+                providers,
                 GarbageCollectorProvider::name,
                 Features.selection("gc"),
                 provider -> Features.active(provider.name(), provider.requiredConfig()),
