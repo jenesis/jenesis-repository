@@ -68,7 +68,7 @@ class ConsoleNavEntriesTest {
      *
      * <p>It was not true when this was written. {@code entries} asked {@code ConsoleModuleProvider.enabled} on
      * every render, and twice on each, since the bar and the administration dropdown are two model attributes over
-     * one fan-out: every page walked the module graph's service declarations, re-instantiated all eight providers,
+     * one fan-out: every page walked the module graph's service declarations, re-instantiated every installed provider,
      * re-sorted them and rebuilt the duplicate-name and duplicate-class maps that make a packaging error throw.
      * Nothing was wrong with the answer, which is why nothing was red - the cost was the defect, and a contract
      * clause stating the opposite was the only thing that said so.

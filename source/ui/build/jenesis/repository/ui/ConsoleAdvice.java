@@ -39,7 +39,7 @@ public class ConsoleAdvice {
      * providers are static for a JVM - and never re-discovered on the request path". It was: {@link #entries}
      * called {@code ConsoleModuleProvider.enabled} on every render, and twice on each, since the bar and the
      * administration dropdown are two model attributes over the same fan-out. Each call walked the module graph's
-     * service declarations, re-instantiated all eight providers, re-sorted them and rebuilt the duplicate-name and
+     * service declarations, re-instantiated every installed provider, re-sorted them and rebuilt the duplicate-name and
      * duplicate-class maps that make a packaging error throw - to answer the same thing every time.
      *
      * <p>It is a field rather than a holder because the answer depends on this console's {@link Environment}, which
