@@ -39,6 +39,11 @@ public class RepositoryController {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryController.class);
 
+    /** The capability contributors, discovered once: this endpoint is read on every CLI {@code 404}, and
+     *  which contributors are installed cannot differ between two requests of one JVM. What each one *answers*
+     *  is still resolved per request, through the caller's own effective-value chain. */
+    private final List<CapabilityContributor> contributors = CapabilityContributor.installed();
+
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /** A routable repository name, the same traversal-free segment shape the multi-tenant edition validates, so a
@@ -330,7 +335,7 @@ public class RepositoryController {
         // mapping-suppression stopgap). Base keys win a conflict; with no contributor the body is the base map
         // unchanged. The discovery itself lives in the SPI home, not here, so this surface and every other consumer
         // of the same flags read one answer from one pipeline rather than each loading its own.
-        CapabilityContributor.Merged merged = CapabilityContributor.resolve(base, settings);
+        CapabilityContributor.Merged merged = CapabilityContributor.merge(base, contributors, settings);
         report(merged);
         response.setHeader("Content-Type", "application/json");
         respond(response, 200, JSON.writeValueAsString(merged.capabilities()));

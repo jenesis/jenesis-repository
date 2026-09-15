@@ -170,7 +170,23 @@ public interface CapabilityContributor {
      * @param configuration the caller's effective-value chain, handed to each contributor.
      */
     static Merged resolve(Map<String, Object> base, UnaryOperator<String> configuration) {
-        return merge(base, ServiceLoader.load(CapabilityContributor.class), configuration);
+        return merge(base, installed(), configuration);
+    }
+
+    /**
+     * The contributors this deployment installs, discovered here because discovery belongs to the SPI home.
+     *
+     * <p>It does not cache - this SPI's lifecycle clause says so, and that is the convention: a caller on a
+     * repeated path holds the list itself and hands it to {@link #merge}. {@code GET /api/capabilities} is such a
+     * caller, and a busy one: the CLI reads that endpoint on every {@code 404} to tell a capability this
+     * deployment does not carry from a coordinate that is simply absent, which is what its exit code 3 means. It
+     * held nothing before this existed, because the only way in was {@link #resolve}, which discovers on every
+     * call.
+     */
+    static List<CapabilityContributor> installed() {
+        return ServiceLoader.load(CapabilityContributor.class).stream()
+                .map(ServiceLoader.Provider::get)
+                .toList();
     }
 
     /**
