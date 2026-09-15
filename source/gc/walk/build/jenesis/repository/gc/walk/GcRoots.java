@@ -17,8 +17,24 @@ import build.jenesis.repository.store.Known;
  * of the ecosystems the store has seen, which a deployment may or may not keep, so it is contributed rather than
  * assumed: a deployment that keeps one refuses instead of guessing, and one that does not is not made to invent it.
  *
- * <p>Deletion is unrecoverable, so the contract is asymmetric. An implementation may always answer unknown and cost
- * only a deferred sweep; it may answer known only when it can account for everything stored.
+ * <h2>Contract</h2>
+ *
+ * <ol>
+ * <li><b>The answer is asymmetric, because deletion is unrecoverable.</b> An implementation may ALWAYS answer
+ * unknown, and costs only a deferred sweep by doing so; it may answer known only when it can account for
+ * everything the store holds. An implementation that is unsure answers unknown - guessing here deletes a live
+ * blob, and there is nothing to undo it with.</li>
+ * <li><b>Known means complete, not best-effort.</b> A returned list must name every namespace a live pointer can
+ * sit in, including those of a format this deployment no longer installs. A list that is merely everything the
+ * caller could think of is an unknown answer wearing a known answer's clothes.</li>
+ * <li><b>Thread-safety.</b> One instance per deployment, discovered once and called from the collector's own
+ * threads; implementations are stateless or safely shared, as every SPI here is.</li>
+ * <li><b>Failure is unknown, never empty.</b> A read that cannot complete - a store that will not answer, a
+ * record that will not parse - is an unknown answer naming why. An empty list means "this store has no roots",
+ * which is a statement that every blob in it is garbage.</li>
+ * <li><b>Discovery.</b> Through {@link #installed()} alone, which answers the contributed implementation where a
+ * deployment installs one and {@link #declared} otherwise. Nothing else loads the service.</li>
+ * </ol>
  */
 @FunctionalInterface
 public interface GcRoots {
