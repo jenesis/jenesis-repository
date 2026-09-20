@@ -116,8 +116,14 @@ public final class StoreCache {
     /** {@code setting} as a duration: {@code 0} is off, an ISO-8601 duration or a suffixed one ({@code 500ms},
      *  {@code 30s}, {@code 5m}, {@code 1h}) is itself, empty is {@link #DEFAULT_TTL}, anything else is refused. */
     public static Duration ttl(String setting) {
+        return duration(setting, TTL_SETTING, DEFAULT_TTL);
+    }
+
+    /** {@code setting} as a duration in the forms {@link #ttl} accepts, empty as {@code fallback}, anything else
+     *  refused naming {@code key} - the one parser the cache ttls share. */
+    static Duration duration(String setting, String key, Duration fallback) {
         if (setting == null || setting.isBlank()) {
-            return DEFAULT_TTL;
+            return fallback;
         }
         String value = setting.trim();
         if (value.equals("0")) {
@@ -141,7 +147,7 @@ public final class StoreCache {
         } catch (DateTimeParseException | NumberFormatException _) {
             // fall through to the refusal below
         }
-        throw new IllegalArgumentException(Features.key(TTL_SETTING) + "=" + setting + " is not a duration; accepted: "
+        throw new IllegalArgumentException(Features.key(key) + "=" + setting + " is not a duration; accepted: "
                 + "0 (off), an ISO-8601 duration (PT5M, PT30S) or a suffixed one (500ms, 30s, 5m, 1h)");
     }
 
@@ -264,14 +270,15 @@ public final class StoreCache {
         }
     }
 
-    /** Clear every cache in this process - the node-local clear the admin surfaces reach - and answer how many
-     *  entries went. */
+    /** Clear every cache in this process - the node-local clear the admin surfaces reach - and the node's
+     *  {@link MissMemory memory of misses} and {@link DocumentMemory memory of listings} with them, and answer how
+     *  many entries went. */
     public static int clearAll() {
         int dropped = 0;
         for (StoreCache cache : caches()) {
             dropped += cache.clear();
         }
-        return dropped;
+        return dropped + MissMemory.node().clear() + DocumentMemory.node().clear();
     }
 
     @Override

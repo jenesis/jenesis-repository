@@ -64,7 +64,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
 
     @Override
     public ArtifactStore scope(String tenant) {
-        return new FilesystemArtifactStore(root.resolve(ArtifactStore.segment(tenant)), locks);
+        return new FilesystemArtifactStore(root.resolve(FileNames.encode(ArtifactStore.segment(tenant))), locks);
     }
 
     @Override
@@ -73,7 +73,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     private Path resolve(String key) {
-        Path path = root.resolve(key).normalize();
+        Path path = root.resolve(FileNames.encode(key)).normalize();
         if (!path.startsWith(root.normalize())) {
             throw new IllegalArgumentException("Path escapes the store root: " + key);
         }
@@ -253,6 +253,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
                     // Skip an atomic write's in-flight .upload*.tmp file, a sibling here until it is renamed
                     // into place, so a concurrent listing never returns it as if it were a stored entry.
                     .filter(name -> !(name.startsWith(".upload") && name.endsWith(".tmp")))
+                    .map(FileNames::decode)
                     .sorted().toList();
         } catch (NoSuchFileException | NotDirectoryException _) {
             return List.of();
@@ -288,7 +289,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         TreeMap<String, Listed> smallest = new TreeMap<>();
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(dir)) {
             for (Path path : entries) {
-                String name = path.getFileName().toString();
+                String name = FileNames.decode(path.getFileName().toString());
                 // The same in-flight .upload*.tmp filter as list(), so a concurrent atomic write never pages out.
                 if (name.startsWith(".upload") && name.endsWith(".tmp") || path.equals(locks) || name.compareTo(startAfter) <= 0) {
                     continue;
@@ -378,7 +379,8 @@ public final class FilesystemArtifactStore implements ArtifactStore {
                     }
                     return FileVisitResult.CONTINUE;
                 }
-                String key = rootPath.relativize(path.normalize()).toString().replace(File.separatorChar, '/');
+                String key = FileNames.decode(
+                        rootPath.relativize(path.normalize()).toString().replace(File.separatorChar, '/'));
                 if (key.compareTo(after) <= 0) {
                     return FileVisitResult.CONTINUE;
                 }
@@ -684,5 +686,76 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         Files.createDirectories(locks);
         return FileChannel.open(locks.resolve(Integer.toString(stripe)),
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+    }
+
+    /**
+     * How a key becomes a file name and back: every byte of a key outside ASCII is written as {@code %XX} of its
+     * UTF-8 encoding, upper-case, and a name is read back by decoding exactly those. An ASCII key is its own file
+     * name, so nothing already on disk moves.
+     *
+     * <p>It exists because a path is resolved through the JVM's file-name encoding ({@code sun.jnu.encoding}),
+     * which follows the process locale: under a POSIX or C locale it is ASCII, and {@code Path.resolve} of a key
+     * carrying a non-ASCII character throws {@code InvalidPathException} - measured 2026-09-20 on a node whose
+     * locale was unset, where a Maven version folder named {@code na\u00efve} could not be published, listed or
+     * served while the same store on a UTF-8 node held it. A repository's keys are the client's coordinates, and
+     * whether one can be stored must not depend on how the node's shell was started; nor may two nodes over one
+     * share name one key two ways. So the mapping is decided here, once, from the key's bytes alone.
+     *
+     * <p>Only {@code %} followed by a hex byte at or above {@code 0x80} decodes; {@code %2F} and {@code %25}, which
+     * a scope segment already writes for a slash and a percent sign, are ASCII and pass through unchanged in both
+     * directions. A raw non-ASCII name an earlier UTF-8 node wrote decodes to itself and is not the name this
+     * mapping resolves the key to; such a key is addressed under its new name from now on.
+     */
+    static final class FileNames {
+
+        private static final char[] HEX = "0123456789ABCDEF".toCharArray();
+
+        private FileNames() {
+        }
+
+        static String encode(String key) {
+            boolean ascii = true;
+            for (int index = 0; index < key.length() && ascii; index++) {
+                ascii = key.charAt(index) < 0x80;
+            }
+            if (ascii) {
+                return key;
+            }
+            StringBuilder name = new StringBuilder(key.length() + 16);
+            for (byte b : key.getBytes(StandardCharsets.UTF_8)) {
+                int value = b & 0xFF;
+                if (value < 0x80) {
+                    name.append((char) value);
+                } else {
+                    name.append('%').append(HEX[value >> 4]).append(HEX[value & 0xF]);
+                }
+            }
+            return name.toString();
+        }
+
+        static String decode(String name) {
+            if (name.indexOf('%') < 0) {
+                return name;
+            }
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream(name.length());
+            for (int index = 0; index < name.length(); index++) {
+                char c = name.charAt(index);
+                if (c == '%' && index + 2 < name.length()) {
+                    int high = Character.digit(name.charAt(index + 1), 16);
+                    int low = Character.digit(name.charAt(index + 2), 16);
+                    if (high >= 8 && low >= 0) {
+                        bytes.write((high << 4) | low);
+                        index += 2;
+                        continue;
+                    }
+                }
+                if (c < 0x80) {
+                    bytes.write(c);
+                } else {
+                    bytes.writeBytes(String.valueOf(c).getBytes(StandardCharsets.UTF_8));
+                }
+            }
+            return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+        }
     }
 }

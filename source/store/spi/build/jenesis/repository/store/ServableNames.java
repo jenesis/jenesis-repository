@@ -250,11 +250,21 @@ public final class ServableNames {
 
     public Location located(String requestPath) throws IOException {
         try {
+            // A path this node recently read and found unpublished is unpublished still, from memory: nothing is
+            // published, so there is nothing to withhold, and neither the interceptor probe nor the pointer read is
+            // paid. The memory is the store's - only a store a composition decorated remembers, every write through
+            // it forgets the key, and the ttl bounds what another node's publish can look like from here.
+            Optional<MissMemory> memory = NodeMemoStore.misses(store);
+            String pointerKey = "publish" + requestPath;
+            if (memory.isPresent() && memory.get().remembered(store, pointerKey)) {
+                return new Location(State.UNPUBLISHED, null, -1L);
+            }
             if (publication.withheld(requestPath)) {
                 return new Location(State.WITHHELD, null, -1L);
             }
             Optional<Pointer> pointer = publication.pointer(requestPath);
             if (pointer.isEmpty()) {
+                memory.ifPresent(remembering -> remembering.remember(store, pointerKey));
                 return new Location(State.UNPUBLISHED, null, -1L);
             }
             if (pointer.get().held()) {

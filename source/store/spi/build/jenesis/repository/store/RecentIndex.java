@@ -108,7 +108,7 @@ public final class RecentIndex {
      *  sharing a millisecond. */
     private String key(Instant at, String identity) {
         long milli = Math.max(0L, at.toEpochMilli());
-        return root + "/" + String.format("%0" + ORDER_KEY_DIGITS + "d", Long.MAX_VALUE - milli)
+        return root + "/" + String.format(Locale.ROOT, "%0" + ORDER_KEY_DIGITS + "d", Long.MAX_VALUE - milli)
                 + "-" + digest(identity);
     }
 

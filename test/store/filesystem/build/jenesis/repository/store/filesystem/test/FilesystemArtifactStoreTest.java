@@ -42,6 +42,36 @@ class FilesystemArtifactStoreTest {
     }
 
     @Test
+    void a_non_ascii_key_round_trips_whatever_the_nodes_locale_and_is_ascii_on_disk() throws IOException {
+        // A key is the client's coordinate; whether the store can hold it must not depend on the process locale,
+        // and two nodes over one share must name it one way. So the file name is decided from the key's bytes,
+        // never through the JVM's locale-dependent file-name encoding - which under a C locale is ASCII and used
+        // to refuse this very key with an InvalidPathException.
+        String key = "publish/maven/org/example/lib/na\u00efve/lib-caf\u00e9.jar";
+        store.write(key, bytes("bytes"));
+
+        assertThat(store.exists(key)).isTrue();
+        assertThat(store.list("publish/maven/org/example/lib")).containsExactly("na\u00efve");
+        assertThat(store.list("publish/maven/org/example/lib/na\u00efve")).containsExactly("lib-caf\u00e9.jar");
+        List<String> paged = new ArrayList<>();
+        store.page("publish/maven/org/example/lib/na\u00efve", "", 10, paged::add);
+        assertThat(paged).containsExactly("lib-caf\u00e9.jar");
+        ByteArrayOutputStream read = new ByteArrayOutputStream();
+        store.read(key, read);
+        assertThat(read.toString(StandardCharsets.UTF_8)).isEqualTo("bytes");
+
+        try (Stream<Path> files = Files.walk(root)) {
+            assertThat(files.filter(Files::isRegularFile).map(path -> root.relativize(path).toString()))
+                    .as("the on-disk name is ASCII, the same on every node, and an ASCII key is its own name")
+                    .anySatisfy(name -> assertThat(name)
+                            .isEqualTo("publish/maven/org/example/lib/na%C3%AFve/lib-caf%C3%A9.jar"));
+        }
+
+        store.delete(key);
+        assertThat(store.exists(key)).isFalse();
+    }
+
+    @Test
     void delete_removes_the_blob_and_tidies_the_empty_containers_it_leaves() throws IOException {
         store.write("a/b/c.bin", bytes("x"));
         store.delete("a/b/c.bin");
