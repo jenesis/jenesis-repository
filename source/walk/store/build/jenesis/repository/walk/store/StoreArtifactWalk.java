@@ -237,7 +237,7 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
                     // without listing the (possibly millions of) children at all.
                     List<String> cuts = new ArrayList<>();
                     for (int value = 0; value < 256; value++) {
-                        cuts.add(root + "/" + String.format("%02x", value));
+                        cuts.add(root + "/" + String.format(Locale.ROOT, "%02x", value));
                     }
                     pack(root, cuts, target, ranges);
                 } else {
@@ -554,7 +554,7 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
     }
 
     private static String segmentKey(String scope, int index) {
-        return "walks/" + scope + "/segments/" + String.format("%03d", index);
+        return "walks/" + scope + "/segments/" + String.format(Locale.ROOT, "%03d", index);
     }
 
     private Properties serialize(Manifest manifest) {

@@ -190,9 +190,9 @@ class StoredListingTest {
             generated.incrementAndGet();
             return entries("a 1");
         };
-        assertThat(StoredListing.put(store, lines("l", generator), "c", "c 3".getBytes())).isTrue();
-        assertThat(StoredListing.put(store, lines("l", generator), "b", "b 2".getBytes())).isTrue();
-        assertThat(StoredListing.put(store, lines("l", generator), "a", "a 9".getBytes())).isTrue();
+        assertThat(StoredListing.put(store, lines("l", generator), "c", "c 3".getBytes(StandardCharsets.UTF_8))).isTrue();
+        assertThat(StoredListing.put(store, lines("l", generator), "b", "b 2".getBytes(StandardCharsets.UTF_8))).isTrue();
+        assertThat(StoredListing.put(store, lines("l", generator), "a", "a 9".getBytes(StandardCharsets.UTF_8))).isTrue();
         assertThat(StoredListing.remove(store, lines("l", generator), "c")).isTrue();
         assertThat(body("l")).isEqualTo("a 9\nb 2\n");
         assertThat(generated).as("generated once, on the first write, never again").hasValue(1);
@@ -202,8 +202,8 @@ class StoredListingTest {
     void the_sequence_grows_with_every_write_and_the_derivation_sees_each_document() throws IOException {
         List<Long> seen = new ArrayList<>();
         StoredListing.Derivation derivation = document -> seen.add(document.header().seq());
-        StoredListing.put(store, lines("s").deriving(derivation), "a", "a 1".getBytes());
-        StoredListing.put(store, lines("s").deriving(derivation), "b", "b 2".getBytes());
+        StoredListing.put(store, lines("s").deriving(derivation), "a", "a 1".getBytes(StandardCharsets.UTF_8));
+        StoredListing.put(store, lines("s").deriving(derivation), "b", "b 2".getBytes(StandardCharsets.UTF_8));
         assertThat(seen).hasSize(2);
         assertThat(seen.get(1)).isGreaterThan(seen.get(0));
         assertThat(StoredListing.header(store, "s").orElseThrow().seq()).isEqualTo(seen.get(1));
@@ -220,7 +220,7 @@ class StoredListingTest {
                 String id = "w" + String.format("%02d", i);
                 outcomes.add(pool.submit(() -> {
                     go.await();
-                    return StoredListing.put(store, lines("busy"), id, (id + " x").getBytes());
+                    return StoredListing.put(store, lines("busy"), id, (id + " x").getBytes(StandardCharsets.UTF_8));
                 }));
             }
             go.countDown();
@@ -239,28 +239,28 @@ class StoredListingTest {
 
     @Test
     void a_writer_that_loses_the_compare_and_set_retries_on_the_fresh_document() throws IOException {
-        StoredListing.put(store, lines("raced"), "a", "a 1".getBytes());
+        StoredListing.put(store, lines("raced"), "a", "a 1".getBytes(StandardCharsets.UTF_8));
         // A second node's write between this node's read and write: simulated by a store whose identity differs
         // (the wrapper's own, so no lane is shared) writing straight through the same root.
         ArtifactStore other = FaultInjectingStore.peer(store);
         assertThat(other.identity()).isNotEqualTo(store.identity());
         StoredListing.Generator.Materialising racing = () -> {
-            StoredListing.put(other, lines("raced"), "z", "z 26".getBytes());
+            StoredListing.put(other, lines("raced"), "z", "z 26".getBytes(StandardCharsets.UTF_8));
             return new TreeMap<>();
         };
         // Forget, so this node's next write materialises through `racing`, which sneaks a write in first: the
         // atomic create then conflicts, and the retry reads z back before adding b.
         StoredListing.forget(store, "raced");
-        assertThat(StoredListing.put(store, lines("raced", racing), "b", "b 2".getBytes())).isTrue();
+        assertThat(StoredListing.put(store, lines("raced", racing), "b", "b 2".getBytes(StandardCharsets.UTF_8))).isTrue();
         assertThat(body("raced")).isEqualTo("b 2\nz 26\n");
     }
 
     @Test
     void derived_documents_are_ordered_by_sequence() throws IOException {
-        assertThat(StoredListing.derive(store, "d.gz", 10L, "ten".getBytes())).isTrue();
-        assertThat(StoredListing.derive(store, "d.gz", 5L, "five".getBytes())).as("older than stored").isFalse();
-        assertThat(StoredListing.derive(store, "d.gz", 10L, "ten again".getBytes())).as("same sequence").isFalse();
-        assertThat(StoredListing.derive(store, "d.gz", 11L, "eleven".getBytes())).isTrue();
+        assertThat(StoredListing.derive(store, "d.gz", 10L, "ten".getBytes(StandardCharsets.UTF_8))).isTrue();
+        assertThat(StoredListing.derive(store, "d.gz", 5L, "five".getBytes(StandardCharsets.UTF_8))).as("older than stored").isFalse();
+        assertThat(StoredListing.derive(store, "d.gz", 10L, "ten again".getBytes(StandardCharsets.UTF_8))).as("same sequence").isFalse();
+        assertThat(StoredListing.derive(store, "d.gz", 11L, "eleven".getBytes(StandardCharsets.UTF_8))).isTrue();
         try (StoredListing.Served served = StoredListing.openDerived(store, "d.gz").orElseThrow()) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             served.copyTo(out);
@@ -272,11 +272,11 @@ class StoredListingTest {
 
     @Test
     void forget_makes_the_next_read_regenerate_and_rebuild_replaces() throws IOException {
-        StoredListing.put(store, lines("r"), "stale", "stale 0".getBytes());
+        StoredListing.put(store, lines("r"), "stale", "stale 0".getBytes(StandardCharsets.UTF_8));
         StoredListing.forget(store, "r");
         assertThat(StoredListing.present(store, "r")).isFalse();
         assertThat(body("r")).isEmpty();
-        StoredListing.put(store, lines("r"), "stale", "stale 0".getBytes());
+        StoredListing.put(store, lines("r"), "stale", "stale 0".getBytes(StandardCharsets.UTF_8));
         // rebuild writes the document without ever holding it, so it answers with the header rather than the
         // bytes - the count and the digest are what it can report for free, and the document itself is read back
         // by whoever needs it.
@@ -291,8 +291,8 @@ class StoredListingTest {
                 .filter(line -> line.startsWith("Package: ")).findFirst().orElseThrow().substring(9));
         SortedMap<String, byte[]> entries = entries("zlib 1", "acl 2");
         entries.clear();
-        entries.put("zlib", "Package: zlib\nVersion: 1".getBytes());
-        entries.put("acl", "Package: acl\nVersion: 2".getBytes());
+        entries.put("zlib", "Package: zlib\nVersion: 1".getBytes(StandardCharsets.UTF_8));
+        entries.put("acl", "Package: acl\nVersion: 2".getBytes(StandardCharsets.UTF_8));
         byte[] joined = stanzas.join(entries);
         assertThat(new String(joined, StandardCharsets.UTF_8))
                 .isEqualTo("Package: acl\nVersion: 2\n\nPackage: zlib\nVersion: 1\n\n");

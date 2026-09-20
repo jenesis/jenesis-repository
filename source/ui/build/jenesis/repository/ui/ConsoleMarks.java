@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui;
 
+import java.util.Locale;
+
 import build.jenesis.repository.icon.Mark;
 
 /**
@@ -27,7 +29,7 @@ final class ConsoleMarks {
      */
     static String tint(Mark mark) {
         return mark.tint().stream()
-                .mapToObj(bucket -> String.format("app-mark--t%02d", bucket))
+                .mapToObj(bucket -> String.format(Locale.ROOT, "app-mark--t%02d", bucket))
                 .findFirst()
                 .orElse("");
     }

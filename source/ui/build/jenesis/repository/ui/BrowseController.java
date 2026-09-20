@@ -155,7 +155,7 @@ public class BrowseController {
                 case '\t' -> escaped.append("\\t");
                 default -> {
                     if (c < 0x20) {
-                        escaped.append(String.format("\\u%04x", (int) c));
+                        escaped.append(String.format(Locale.ROOT, "\\u%04x", (int) c));
                     } else {
                         escaped.append(c);
                     }
@@ -317,6 +317,6 @@ public class BrowseController {
             value /= 1024;
             unit++;
         } while (value >= 1024 && unit < units.length - 1);
-        return String.format("%.1f %s", value, units[unit]);
+        return String.format(Locale.ROOT, "%.1f %s", value, units[unit]);
     }
 }
