@@ -4,7 +4,8 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.MissMemoStore;
+import build.jenesis.repository.store.DocumentMemory;
+import build.jenesis.repository.store.NodeMemoStore;
 import build.jenesis.repository.store.MissMemory;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
@@ -63,7 +64,7 @@ class MissMemoryTest {
         counting = FaultInjectingStore.wrap(filesystem);
         clock = new Moving();
         memory = new MissMemory(Duration.ofSeconds(10), clock);
-        store = MissMemoStore.over(counting, memory);
+        store = NodeMemoStore.over(counting, memory, new DocumentMemory(Duration.ZERO, clock));
     }
 
     private ServableNames.Location locate() throws IOException {
@@ -144,7 +145,7 @@ class MissMemoryTest {
 
     @Test
     void with_the_ttl_off_every_probe_is_the_stores() throws IOException {
-        ArtifactStore off = MissMemoStore.over(counting, new MissMemory(Duration.ZERO, clock));
+        ArtifactStore off = NodeMemoStore.over(counting, new MissMemory(Duration.ZERO, clock), new DocumentMemory(Duration.ZERO, clock));
         new ServableNames(off, new Publication(off)).located(PATH);
         new ServableNames(off, new Publication(off)).located(PATH);
         assertThat(counting.calls(FaultInjectingStore.Op.READ_VERSIONED)).isEqualTo(2);
@@ -157,7 +158,7 @@ class MissMemoryTest {
         assertThat(counting.calls(FaultInjectingStore.Op.READ_VERSIONED))
                 .as("only a composition that opted in pays the window; a raw store probes as before")
                 .isEqualTo(2);
-        assertThat(MissMemoStore.memory(counting)).isEmpty();
+        assertThat(NodeMemoStore.misses(counting)).isEmpty();
     }
 
     @Test

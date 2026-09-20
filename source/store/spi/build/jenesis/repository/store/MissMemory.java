@@ -17,7 +17,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  * a miss. A read that failed is not remembered either, since an error is not an answer.
  *
  * <h2>Write-through on the node, a ttl across nodes</h2>
- * Every write and delete through a {@link MissMemoStore} forgets its key here, so the node that published a path
+ * Every write and delete through a {@link NodeMemoStore} forgets its key here, so the node that published a path
  * serves it at once whatever it remembered, and a hold released here is served here. Another node learns of a
  * publish only when its entry expires, which is what the ttl bounds: a fresh artifact may answer 404 from a
  * second node for up to the ttl, and the default is short for that reason. A deployment that cannot afford the
@@ -132,7 +132,7 @@ public final class MissMemory {
         recorded.incrementAndGet();
     }
 
-    /** Forget {@code key} in {@code store} - what every write and delete through a {@link MissMemoStore} does, so
+    /** Forget {@code key} in {@code store} - what every write and delete through a {@link NodeMemoStore} does, so
      *  the node that wrote serves what it wrote at once. */
     public void forget(ArtifactStore store, String key) {
         if (ttl.isZero()) {

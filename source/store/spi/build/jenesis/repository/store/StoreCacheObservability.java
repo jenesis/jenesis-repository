@@ -40,6 +40,15 @@ public final class StoreCacheObservability implements ObservabilitySource {
                 memory.recorded(), "reads"));
         metrics.add(Metric.gauge("jenreg.cache.misses.entries", "Keys this node currently remembers as absent, "
                 + "bounded and dropped with the caches by POST /api/admin/caches/clear.", memory.size(), "entries"));
+        DocumentMemory listings = DocumentMemory.node();
+        metrics.add(Metric.counter("jenreg.cache.documents.hits", "Listing reads this node served from its memory "
+                + "of documents instead of the store - the reads jenreg.cache.document-ttl spares a burst of builds.",
+                listings.hits(), "reads"));
+        metrics.add(Metric.counter("jenreg.cache.documents.misses", "Listing reads this node took to the store and "
+                + "remembered, each for jenreg.cache.document-ttl; a write of the key on this node forgets it sooner.",
+                listings.misses(), "reads"));
+        metrics.add(Metric.gauge("jenreg.cache.documents.bytes", "Bytes of listings this node currently remembers, "
+                + "bounded and dropped with the caches by POST /api/admin/caches/clear.", listings.bytes(), "bytes"));
         metrics.addAll(each);
         return metrics;
     }

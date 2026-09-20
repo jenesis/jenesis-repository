@@ -254,7 +254,7 @@ public final class ServableNames {
             // published, so there is nothing to withhold, and neither the interceptor probe nor the pointer read is
             // paid. The memory is the store's - only a store a composition decorated remembers, every write through
             // it forgets the key, and the ttl bounds what another node's publish can look like from here.
-            Optional<MissMemory> memory = MissMemoStore.memory(store);
+            Optional<MissMemory> memory = NodeMemoStore.misses(store);
             String pointerKey = "publish" + requestPath;
             if (memory.isPresent() && memory.get().remembered(store, pointerKey)) {
                 return new Location(State.UNPUBLISHED, null, -1L);

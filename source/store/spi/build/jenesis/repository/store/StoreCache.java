@@ -271,13 +271,14 @@ public final class StoreCache {
     }
 
     /** Clear every cache in this process - the node-local clear the admin surfaces reach - and the node's
-     *  {@link MissMemory memory of misses} with them, and answer how many entries went. */
+     *  {@link MissMemory memory of misses} and {@link DocumentMemory memory of listings} with them, and answer how
+     *  many entries went. */
     public static int clearAll() {
         int dropped = 0;
         for (StoreCache cache : caches()) {
             dropped += cache.clear();
         }
-        return dropped + MissMemory.node().clear();
+        return dropped + MissMemory.node().clear() + DocumentMemory.node().clear();
     }
 
     @Override
