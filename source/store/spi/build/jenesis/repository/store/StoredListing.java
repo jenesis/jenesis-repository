@@ -888,10 +888,24 @@ public final class StoredListing {
     /** Open a stored document as a stream - through the store's stream face, or, for a backend that answers a
      *  versioned write only through its versioned read, from the whole versioned read. */
     private static Optional<Served> openStored(ArtifactStore store, String key) throws IOException {
+        return openStored(store, key, false);
+    }
+
+    /**
+     * As {@link #openStored(ArtifactStore, String)}, and {@code base} says the document is about to become the
+     * base of a compare-and-set, so it must not be served from the node's listing memory.
+     *
+     * <p>A serving read may be a ttl old and that is the memory's whole purpose. An updating read may not: the
+     * token beside it always comes from the store, so a remembered body would be merged and written under a token
+     * that is genuinely current, the compare-and-set would see nothing wrong, and a peer's entries would be gone
+     * for good. That is a lost write rather than a stale read, and no retry recovers it - the retry re-reads the
+     * same memory.
+     */
+    private static Optional<Served> openStored(ArtifactStore store, String key, boolean base) throws IOException {
         if (store.exists(key)) {
             InputStream in;
             try {
-                in = store.open(key);
+                in = base ? NodeMemoStore.openUnremembered(store, key) : store.open(key);
             } catch (NoSuchFileException gone) {
                 in = null;   // dropped between the probe and the open: read as absent below
             }
@@ -1434,7 +1448,7 @@ public final class StoredListing {
         boolean changes = batch.stream().anyMatch(pending -> !pending.changes().isEmpty() || !pending.prefixes().isEmpty());
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
             Object token = store.version(key).orElse(null);
-            Optional<Served> stored = token == null ? Optional.empty() : openStored(store, key);
+            Optional<Served> stored = token == null ? Optional.empty() : openStored(store, key, true);
             long seq = 0L;
             Rendered created;
             try (Served served = stored.orElse(null)) {
@@ -1624,7 +1638,7 @@ public final class StoredListing {
             // attempt retries. Reading the body first would let a newer token authorise a write of a merge
             // computed from older bytes - a lost update rather than a conflict, and a silent one.
             Object token = store.version(key).orElse(null);
-            Optional<Served> stored = token == null ? Optional.empty() : openStored(store, key);
+            Optional<Served> stored = token == null ? Optional.empty() : openStored(store, key, true);
             if (stored.isEmpty()) {
                 if (batch.stream().allMatch(pending ->
                         pending.changes().values().stream().noneMatch(change -> change.fragment().isPresent()))) {

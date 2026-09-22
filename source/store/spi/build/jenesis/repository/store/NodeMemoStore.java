@@ -54,6 +54,28 @@ public final class NodeMemoStore implements ArtifactStore {
                 : Optional.empty();
     }
 
+    /**
+     * {@code key} read past the listing memory, for the one caller that may not be served a remembered document:
+     * the base of a compare-and-set.
+     *
+     * <p><b>A remembered body under a freshly read token is a lost write, not a stale read.</b> {@link #version}
+     * always asks the store while {@link #open} may answer from memory, so an update that pairs them builds its
+     * new document on a base up to a ttl old and then writes it under a token that is genuinely current. The
+     * compare-and-set sees nothing wrong - the token really is the store's - and a peer's entries are erased for
+     * good. Staleness is fine for serving a listing to a client and is the whole point of the memory; it is never
+     * fine underneath a read-modify-write.
+     *
+     * <p><b>Evicting the entry first would not do.</b> A concurrent reader can repopulate the memory between the
+     * eviction and the open, with bytes it read before the writer took its token - the same lost write, rarer and
+     * harder to find. The read has to miss the memory rather than empty it, which is what this is for.
+     */
+    public static InputStream openUnremembered(ArtifactStore store, String key) throws IOException {
+        ArtifactStore underlying = ReadMemo.underlying(store);
+        return underlying instanceof NodeMemoStore remembering
+                ? remembering.delegate.open(key)
+                : store.open(key);
+    }
+
     @Override
     public ArtifactStore scope(String tenant) {
         return new NodeMemoStore(delegate.scope(tenant), misses, documents);
