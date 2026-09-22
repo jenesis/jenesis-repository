@@ -38,10 +38,7 @@ public class DevSecurityConfig {
                                       .AuthorizeHttpRequestsConfigurer<org.springframework.security.config.annotation
                                       .web.builders.HttpSecurity>.AuthorizationManagerRequestMatcherRegistry auth) {
                 auth
-                        .requestMatchers("/actuator/health", "/actuator/health/liveness",
-                                "/actuator/health/readiness", "/login", "/login/**",
-                                "/error", "/favicon.ico").permitAll()
-                        .requestMatchers("/css/**", "/js/**").permitAll()
+                        .requestMatchers(ConsoleUrlSpace.ANONYMOUS.toArray(String[]::new)).permitAll()
                         .requestMatchers(HttpMethod.POST, "/logout").permitAll()
                         .requestMatchers("/no-access").authenticated()
                         .requestMatchers(HttpMethod.POST, "/**").hasRole("ADMIN")

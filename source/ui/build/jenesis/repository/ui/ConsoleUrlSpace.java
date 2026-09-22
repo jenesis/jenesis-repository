@@ -44,9 +44,28 @@ public final class ConsoleUrlSpace {
             "/logout",
             "/no-access",
             "/oauth2/**",
-            "/css/**", "/js/**", "/assets/**", "/webjars/**",
+            "/css/**", "/js/**", "/img/**", "/assets/**", "/webjars/**",
             "/console", "/console/**",
             "/browse", "/browse/**");
+
+    /**
+     * The subset a browser reaches before it has a principal: the probes a platform calls unauthenticated, the
+     * sign-in and token-exchange endpoints, the error and favicon paths, and the static asset directories.
+     *
+     * <p>Declared here because three chains permit it - this console's, its development profile's, and the admin
+     * console's - and three copies of a list is three chances to leave something out. They had: {@code /oauth2/**}
+     * and {@code /login/**} were permitted by one, two and one of them respectively, and {@code /img/**} by none,
+     * although the brand fragment every page renders asks for two files under it. A static asset directory carries
+     * nothing a principal protects, so all of them are here rather than the two that happened to be noticed.
+     *
+     * <p>{@code POST /logout} is not in the list: it is permitted by method as well as path, so a chain spells it
+     * out on its own line.
+     */
+    public static final List<String> ANONYMOUS = List.of(
+            "/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness",
+            "/login", "/login/**", "/oauth2/**",
+            "/error", "/favicon.ico",
+            "/css/**", "/js/**", "/img/**", "/assets/**", "/webjars/**");
 
     private ConsoleUrlSpace() {
     }

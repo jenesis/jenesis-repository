@@ -52,9 +52,7 @@ public class ConsoleSecurityConfig {
         http
                 .securityMatcher(ConsoleUrlSpace.space().toArray(String[]::new))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness", "/login", "/error", "/favicon.ico").permitAll()
-                        .requestMatchers("/css/**", "/js/**").permitAll()
-                        .requestMatchers("/oauth2/**", "/login/**").permitAll()
+                        .requestMatchers(ConsoleUrlSpace.ANONYMOUS.toArray(String[]::new)).permitAll()
                         .requestMatchers(HttpMethod.POST, "/logout").permitAll()
                         // The destination of the access check below, so it cannot itself be behind it - a check in
                         // front of this screen would send a principal that holds nothing to the screen for
