@@ -7,11 +7,18 @@ jenesis-repository
 > ### [Jenesis](https://jenesis.build) - a modern Java build tool
 > _Java-native config, plugin-free, with `module-info.java` treated as a feature, not an afterthought._
 
-**A dual-layout artifact repository.** It serves the same artifacts under the Maven layout, so any Maven,
-Gradle or Jenesis build resolves them, and under the Jenesis module layout, so a modular build resolves them
-by module name - publish a modular jar once and both ecosystems resolve it. It is also a
-standards-compliant OCI registry over the same store, so `docker push` works against it too. Every layout,
-storage backend, importer and console panel is a `ServiceLoader` plugin over one content-addressed store.
+**An artifact repository for twenty-five package formats.** npm, PyPI, Go, Cargo, NuGet, RubyGems, Debian,
+RPM, apk, Conda, Conan, CocoaPods, Composer, Swift, Helm, Homebrew, Hugging Face, Terraform, winget, Ivy -
+and Maven, OCI, raw and the Jenesis module layout.
+
+It is dual-layout at its core: the same artifacts resolve under the Maven layout, so any Maven, Gradle or
+Jenesis build finds them, and under the Jenesis module layout, so a modular build resolves them by module
+name - publish a modular jar once and both ecosystems resolve it. It is also a standards-compliant OCI
+registry over the same store, so `docker push` works against it too.
+
+Every format, storage backend, importer and console panel is a `ServiceLoader` plugin over one
+content-addressed store, so twenty of those formats dedupe against each other: an npm tarball and a PyPI
+wheel of identical bytes are stored once, and one reference scan answers for all of them.
 
 📖 **The user documentation lives at [jenesis.build/repository](https://jenesis.build/repository/)** -
 deploying it, the formats, storage backends, proxying, authentication, import, observability and the
@@ -90,8 +97,8 @@ seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by 
 |------|--------|
 | `source/server`, `source/server-spi` | The format-neutral dispatcher: routing, auth, the publish edge, the pull-through serve loop, and the `/api` surface. Knows no layout. |
 | `source/store/{spi,filesystem,s3,gcs,azure}` | The content-addressed store and its backends. |
-| `source/format/{spi,maven,java,oci,raw}` | The layouts, each a plugin: Maven, the Jenesis module layout, OCI/Docker, and raw. |
-| `source/importer/{spi,maven,nexus,artifactory,index}` | Migration connectors that walk another repository and pull its artifacts in. |
+| `source/format/*` | Twenty-five layouts, each a plugin. `{spi,maven,java,oci,raw,jenesis,lifecycle}` are the published-tree ones; the rest - npm, PyPI, Go, Cargo, NuGet, gems, Debian, RPM, apk, Conda, Conan, CocoaPods, Composer, Swift, Helm, Homebrew, Hugging Face, Terraform, winget, Ivy - keep their bytes in the shared `blobs/` namespace. `signing` is the OpenPGP release signing three of them share. |
+| `source/importer/*`, and an importer inside fifteen formats | Migration connectors that walk another repository and replay each asset through the owning format's real publish path. |
 | `source/proxy` | The upstream fetcher behind pull-through caching, with revalidation and a negative cache. |
 | `source/walk/{spi,store}`, `source/gc/{spi,store}` | The resumable artifact walk, and mark-sweep garbage collection over it. |
 | `source/ui` | The web console (`/console`, `/browse`) and its design system. |
