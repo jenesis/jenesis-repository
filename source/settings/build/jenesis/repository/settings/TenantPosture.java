@@ -15,7 +15,7 @@ import build.jenesis.repository.posture.Severity;
  * warning about it are never described in two places.
  *
  * <h2>What a TENANT-scoped advisory promises</h2>
- * The free core declares {@link build.jenesis.repository.posture.Scope#TENANT} and
+ * The posture model declares {@link build.jenesis.repository.posture.Scope#TENANT} and
  * {@link build.jenesis.repository.posture.PostureReport#forTenant} as the multi-tenant extension point; this is the
  * first advisor to raise one, and it is what such a row means here:
  * <ol>
@@ -23,7 +23,7 @@ import build.jenesis.repository.posture.Severity;
  *       derived only from the configuration handed to {@link #advise}, and a tenant-scoped read is collected over
  *       <em>one</em> tenant's effective chain ({@link #scoped}), so a row can never carry a condition observed in
  *       another tenant's settings. The absence of a tenant is not a licence to guess: with {@link #TENANT_KEY} unset
- *       this advisor is silent rather than folding a tenant's data into a deployment-wide row (the free core's
+ *       this advisor is silent rather than folding a tenant's data into a deployment-wide row (the
  *       {@code SafetyAdvisor} contract, clause 6).</li>
  *   <li><b>Every setting key it names is one that tenant can actually change.</b> A row whose fix is a
  *       deployment-wide dial would be addressed to an audience that cannot act on it, so each key an advisory here

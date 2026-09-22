@@ -17,7 +17,7 @@ import build.jenesis.repository.icon.IconContributor;
  * Blob) without a compile-time dependency on it - the backend module is added to the module graph at
  * deploy time and bound here through {@code provides}.
  *
- * <p>This is the cache-side sibling of the free core's {@code ArtifactStoreProvider}: the same
+ * <p>This is the cache-side sibling of {@code ArtifactStoreProvider}: the same
  * <em>exclusive-with-default</em> policy, resolved through the same shared {@link Providers} primitives, so the two
  * store selections cannot drift apart in what they accept, what they refuse and what they say when they refuse.
  *

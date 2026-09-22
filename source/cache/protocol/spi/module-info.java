@@ -7,9 +7,9 @@
  * so it reaches no servlet, no framework and not the cache itself. That is what lets one be driven by calling it,
  * and what keeps the serving - one read and one store over the same cache, the metering and the refusals - in the
  * one place every protocol funnels into rather than reimplemented per tool. The single dependency beyond
- * {@code java.base} is the free core's {@code Providers}/{@code Features} resolution, so this family is discovered
- * and validated by the same primitives as every other (&sect;2 - shared mechanism lives in the free core and is
- * reused, never copied).
+ * {@code java.base} is the {@code Providers}/{@code Features} resolution, so this family is discovered and
+ * validated by the same primitives as every other (&sect;2 - shared mechanism has one home and is reused, never
+ * copied).
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

@@ -89,19 +89,18 @@ public final class ImportHostGuard {
      * import source's own probe gives the operator a better message ("host that cannot answer") than a guard masking
      * it would. That divergence is about the <em>host</em> half only; the transport rule is shared verbatim.
      *
-     * <p><b>Parity with the free core.</b> The free core's own import edge screens the same two halves under the same
-     * dial ({@code ImportScreen.refusalReason}), so the divergence recorded here - this edition refusing
-     * cleartext while the free {@code ImportEdgeController.isPublicImportUrl} still admitted it - is closed at the
-     * rule level: blocked ranges, unresolvable-host allowance, fail-closed default and transport now agree in both
-     * editions. The wording of each refusal is each edition's own; the decision is not.
+     * <p><b>Parity with the import edge.</b> The import edge screens the same two halves under the same dial
+     * ({@code ImportScreen.refusalReason}), so the divergence recorded here - this guard refusing cleartext while
+     * {@code ImportEdgeController.isPublicImportUrl} still admitted it - is closed at the rule level: blocked
+     * ranges, unresolvable-host allowance, fail-closed default and transport now agree on both paths. The wording
+     * of each refusal is its own; the decision is not.
      *
-     * <p><b>What this guard does <em>not</em> cover, in either edition.</b> It judges the URL the operator submitted.
-     * The URLs a migration <em>source</em> hands back - a Nexus listing's per-asset {@code downloadUrl}, an index's
-     * enumerated coordinate URL - are a remote party's choice, and they are screened at the fetch instead, by the free
-     * core's {@code ImportScreen} riding on the {@code ProxyFormat.Fetcher} a connector is handed. This
-     * edition's {@code ImportController} picks that up when the free-core pin next moves: it builds its source with
-     * {@code provider.create(request, fetcher)}, and the screened form is {@code ImportSourceProvider.open(provider,
-     * request, fetcher)}.
+     * <p><b>What this guard does <em>not</em> cover.</b> It judges the URL the operator submitted. The URLs a
+     * migration <em>source</em> hands back - a Nexus listing's per-asset {@code downloadUrl}, an index's enumerated
+     * coordinate URL - are a remote party's choice, and they are screened at the fetch instead, by
+     * {@code ImportScreen} riding on the {@code ProxyFormat.Fetcher} a connector is handed. An importing
+     * controller picks that up by building its source with {@code provider.create(request, fetcher)}; the screened
+     * form is {@code ImportSourceProvider.open(provider, request, fetcher)}.
      */
     public static String refusalReason(String url, boolean blockPrivateHosts) {
         if (!blockPrivateHosts) {

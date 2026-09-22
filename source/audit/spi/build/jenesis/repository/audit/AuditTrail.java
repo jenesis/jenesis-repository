@@ -123,8 +123,7 @@ public interface AuditTrail {
      * Emit {@code trail}'s whole {@link #query(String, Instant, Instant, String)} answer to {@code sink} event by
      * event - the explicit, named form of the fallback {@link #stream} inherits, for a trail whose events are already
      * in memory (the none trail, an in-process recorder). It is bounded, and the bound throws: see
-     * {@link InheritedBound}, which holds the ceiling and the refusal for every SPI in this edition that ships this
-     * shape.
+     * {@link InheritedBound}, which holds the ceiling and the refusal for every SPI that ships this shape.
      *
      * @throws IllegalStateException when the filter matches more events than {@link InheritedBound} permits an
      *                               inherited default to materialise

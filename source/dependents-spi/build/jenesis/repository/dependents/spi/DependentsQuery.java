@@ -55,7 +55,7 @@ public interface DependentsQuery {
      * (an in-process index, a fixture) and for which a "native" paging would be this code anyway.
      *
      * <p>It is bounded, and the bound throws: see {@link InheritedBound}, which holds the ceiling and the refusal for
-     * every SPI in this edition that ships this shape.
+     * every SPI that ships this shape.
      *
      * @throws IllegalStateException when the index holds more than {@link ArtifactStore#MAX_INHERITED_CHILDREN}
      *                               coordinates

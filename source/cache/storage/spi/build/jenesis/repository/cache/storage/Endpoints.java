@@ -9,12 +9,12 @@ import module java.base;
  * HMAC secret, an Azure account key - and every cached byte over a plaintext transport a MITM can read and tamper
  * with, and nothing anywhere says so.
  *
- * <p><strong>This is the free core's rule, not a second one (&sect;2).</strong> {@code S3ArtifactStoreProvider} and
+ * <p><strong>This is the artifact store's rule, not a second one (&sect;2).</strong> {@code S3ArtifactStoreProvider} and
  * {@code GcsArtifactStoreProvider} already refuse a non-https endpoint override unless
  * {@code JENREG_S3_ALLOW_INSECURE_ENDPOINT} / {@code JENREG_GCS_ALLOW_INSECURE_ENDPOINT} is {@code true}, and the
  * rule, the opt-out spelling and the {@link Boolean#parseBoolean} reading of it are reproduced here verbatim so one
  * environment variable governs both stores of a deployment that runs them side by side (the combined image runs
- * exactly that). The free core's own copy cannot be called: {@code build.jenesis.repository.store.s3} exports its
+ * exactly that). The store's own copy cannot be called: {@code build.jenesis.repository.store.s3} exports its
  * package only to its own test module, and a cache backend must not take a compile-time dependency on an
  * artifact-store backend to reach a five-line predicate. So the <em>mechanism</em> is stated once here, in the SPI
  * module the four backends already share with {@link Names}, rather than a fourth time in each backend - the same

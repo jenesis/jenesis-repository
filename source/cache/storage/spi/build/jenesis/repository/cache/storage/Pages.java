@@ -11,11 +11,11 @@ import build.jenesis.repository.walk.Traversal;
  * chances to disagree, and a backend that reads a cursor one segment differently from its siblings does not fail - it
  * quietly skips or re-delivers a page, which is precisely the silent incompleteness paging exists to remove.
  *
- * <p>The outcome vocabulary is deliberately <em>not</em> defined here. {@link Traversal.Result} is the free core's,
+ * <p>The outcome vocabulary is deliberately <em>not</em> defined here. {@link Traversal.Result} is the store's,
  * shared with every bounded traversal in the product (&sect;2), and it is the type in which "truncated without a
  * continuation cursor" and "exhausted with one" cannot be constructed at all. This class only assembles one.
  *
- * <p><strong>A cursor is a key.</strong> Exactly as it is for the free core's traversals: the cursor an enumeration
+ * <p><strong>A cursor is a key.</strong> Exactly as it is for the store's traversals: the cursor an enumeration
  * hands back is the last delivered thing's key relative to the storage scope - the bare name for a project, the child
  * key {@code <prefix>/<name>} for a container, {@code <project>/<step>/<inputs>} for an entry - and a caller hands it
  * back verbatim. Because it is a key and not an opaque token, it survives a restart, is comparable, and names the
@@ -149,7 +149,7 @@ public final class Pages {
     }
 
     /** The cursor a delivered child composes to: its key under {@code prefix}, or its bare name at the scope root -
-     *  the same "a child's name already is its key at the root" rule the free core's traversals follow. */
+     *  the same "a child's name already is its key at the root" rule the store's traversals follow. */
     private static String key(String prefix, String name) {
         String parent = normalised(prefix);
         return parent.isEmpty() ? name : parent + "/" + name;

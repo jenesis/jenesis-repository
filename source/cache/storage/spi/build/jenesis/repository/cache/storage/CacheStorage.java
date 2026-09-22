@@ -89,7 +89,7 @@ import build.jenesis.repository.walk.Traversal;
  *     when the scope was seen whole, {@code TRUNCATED} plus a continuation cursor when it was not. A short answer is
  *     therefore never silent: the outcome carries the truncation, and {@link Traversal.Result} makes "truncated
  *     without a cursor" and "exhausted with one" unrepresentable, so a caller cannot mistake a page for a listing.
- *     The bias is one-way, as it is for the free core's traversals: a backend may under-claim completeness and cost
+ *     The bias is one-way, as it is for the store's traversals: a backend may under-claim completeness and cost
  *     the caller one extra empty round, and may never over-claim it. There is deliberately no whole-store sweep in
  *     this SPI - the union across projects is composed by the one caller that needs it (the free-space reclaim),
  *     project by project, so no backend is asked to materialise every entry of every project in heap. A backend must
@@ -172,7 +172,7 @@ public interface CacheStorage {
     /**
      * The bound a caller uses when it has no reason of its own to pick one: large enough that a page is a useful unit
      * of work, small enough that one call's working set is a bounded, committable allocation whatever the store holds.
-     * It is the same order as the free core's shared walk caps, because it answers the same question - how large may
+     * It is the same order as the shared walk caps, because it answers the same question - how large may
      * one bounded read's working set get.
      */
     int PAGE = 1_000;

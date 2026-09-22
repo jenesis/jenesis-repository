@@ -53,7 +53,7 @@ public final class PrivateHostGuard {
      *
      * <p>{@code allowInternal} is the single explicit opt-out for both halves, deployment-global by design: an
      * operator running a trusted internal receiver on a plain HTTP port says so once, and no per-tenant dial can put
-     * that deployment's traffic on the wire in cleartext. It is the same posture the free core's
+     * that deployment's traffic on the wire in cleartext. It is the same posture
      * {@code S3ArtifactStoreProvider} takes over {@code JENREG_S3_ENDPOINT} (https unless
      * {@code JENREG_S3_ALLOW_INSECURE_ENDPOINT} says otherwise): a capability that cannot be honoured safely is
      * refused visibly rather than degraded silently (&sect;9).
