@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Deploy')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Deploy an artifact')}"></header>
+
+    <p><small>Publishing here goes through the same ingress edge a build tool's upload takes: the artifact is
+        screened by the compliance gate before any format lays it out, so a held artifact lands in quarantine and a
+        refused one is not published at all. <strong>A build tool is how artifacts normally arrive</strong> - this
+        screen is for the occasional artifact that has no build behind it.</small></p>
+
+    <article>
+        <!--/* The CSRF token rides the action URL rather than a hidden field. There is no MultipartResolver in this
+             application - it would drain an artifact upload before the format read it - so nothing parses the
+             multipart body before the security filter runs, and a token in the body would never be seen. The
+             settings-bundle import carries its token the same way and for the same reason. */-->
+        <form method="post" th:action="@{/deploy(_csrf=${_csrf.token})}" enctype="multipart/form-data">
+            <label>Repository
+                <input type="text" name="repository" required placeholder="releases"
+                       th:attr="aria-describedby='deploy-repository-help'">
+            </label>
+            <small id="deploy-repository-help">A hosted repository in
+                <strong th:text="${tenant}">tenant</strong>. A proxy or a group view is served from its backings and
+                takes no direct write.</small>
+
+            <label>Path
+                <input type="text" name="path" required placeholder="/maven/com/example/demo/1.0/demo-1.0.jar"
+                       th:attr="aria-describedby='deploy-path-help'">
+            </label>
+            <small id="deploy-path-help">Where the artifact lands, as its format lays it out - the same path a
+                client would publish to, without the repository prefix. The format that claims the path is the one
+                that stores it; a path no installed format claims publishes nothing.</small>
+
+            <label>File
+                <input type="file" name="artifact" required>
+            </label>
+
+            <button type="submit">Publish</button>
+        </form>
+    </article>
+</main>
+</body>
+</html>

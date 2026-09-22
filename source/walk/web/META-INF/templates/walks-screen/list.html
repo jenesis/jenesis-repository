@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Walks')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Walks of the store')}"></header>
+
+    <p><small><strong>A walk reads every object in the store</strong>, and a scheduled walk is a recurring cost:
+        every run pays a read per pointer, per inventory row and per blob it hands its consumers - a round trip
+        each over an object store - and whatever the consumers riding it read and write on top. Nothing here is
+        needed while every node shuts down cleanly: every change is applied on the write path, and a walk exists to
+        repair what a crash left behind. Schedule as many walks as you like, each a cron expression in UTC and the
+        consumers that ride it, and read what the last run of each one measured before you shorten a cadence. The
+        same document is the <code>walks</code> setting the settings screen, <code>/api/settings</code> and the
+        CLI edit.</small></p>
+
+    <article>
+        <h2>Now</h2>
+        <form method="post" th:action="@{/walks/run}" class="setting-edit">
+            <button type="submit">Walk the store now</button>
+            <small>Every node picks the request up within half a minute; the <code>rebuild</code> entry's consumers
+                ride it, and a node that did not shut down cleanly asks for the same walk on its own.</small>
+        </form>
+        <p th:if="${overview.requests.isEmpty()}"><small>No walk is requested.</small></p>
+        <ul th:unless="${overview.requests.isEmpty()}">
+            <li th:each="r : ${overview.requests}">
+                <strong th:text="${r.subject}">walk</strong> requested at <span th:text="${r.at}">when</span>:
+                <span th:text="${r.reason}">why</span>
+            </li>
+        </ul>
+    </article>
+
+    <article th:each="e : ${overview.entries}" class="setting-group">
+        <h2 th:text="${e.name}">rebuild</h2>
+        <p class="setting-values">
+            <span>next run: <strong th:text="${e.next.isPresent() ? e.next.get() : 'never (switched off)'}">when</strong></span>
+            <span th:if="${e.run.isPresent()}">last run on this node: finished
+                <span th:text="${e.run.get().finished}">when</span>, took
+                <span th:text="${e.run.get().duration}">how long</span>,
+                <span th:text="${e.run.get().reads}">0</span> read and
+                <span th:text="${e.run.get().writes}">0</span> write operations,
+                <span th:text="${e.run.get().failed ? 'failed' : 'clean'}">clean</span></span>
+            <span th:unless="${e.run.isPresent()}">last run on this node: none yet</span>
+            <span th:if="${e.cost.isPresent()}">objects handed over last time:
+                <strong th:text="${e.cost.get().objects()}">0</strong>
+                (<span th:text="${e.cost.get().pointers}">0</span> pointers,
+                <span th:text="${e.cost.get().inventory}">0</span> inventory rows,
+                <span th:text="${e.cost.get().blobs}">0</span> blobs,
+                <span th:text="${e.cost.get().derived}">0</span> derived rows) over
+                <span th:text="${e.cost.get().repositories}">0</span> repositories</span>
+        </p>
+        <form method="post" th:action="@{/walks/save}" class="setting-edit">
+            <input type="hidden" name="name" th:value="${e.name}">
+            <label>Cron expression (UTC; six fields, seconds first)
+                <input type="text" name="cron" required th:value="${e.cron}" th:attr="aria-label=|Cron expression of ${e.name}|">
+            </label>
+            <label>
+                <input type="checkbox" name="enabled" th:checked="${e.enabled}" th:attr="aria-label=|${e.name} switched on|"> Switched on
+            </label>
+            <fieldset>
+                <legend>Consumers that ride this walk</legend>
+                <label th:each="c : ${overview.consumers}">
+                    <input type="checkbox" name="consumers" th:value="${c.name}"
+                           th:checked="${e.consumers.contains('*') or e.consumers.contains(c.name)}">
+                    <strong th:text="${c.name}">name</strong>
+                    <small th:text="${c.description}">what it repairs and what it costs</small>
+                    <small th:if="${!c.settings.isEmpty()}">Governed by:
+                        <span th:each="d : ${c.settings}"><code th:text="${d.key}">key</code>
+                            = <span th:text="${d.value}">value</span>
+                            (<a th:href="@{/settings}" th:text="${d.label}">label</a>)</span></small>
+                </label>
+            </fieldset>
+            <button type="submit">Save</button>
+        </form>
+        <form method="post" th:action="@{/walks/remove}" class="setting-revert"
+              th:attr="data-confirm=|Remove the walk ${e.name}? The consumers it carries ride no walk until another entry names them.|">
+            <input type="hidden" name="name" th:value="${e.name}">
+            <button class="secondary outline" type="submit">Remove</button>
+        </form>
+    </article>
+
+    <article class="setting-group">
+        <h2>Add a walk</h2>
+        <form method="post" th:action="@{/walks/save}" class="setting-edit">
+            <label>Name (lower case, letters, digits and dashes)
+                <input type="text" name="name" required pattern="[a-z][a-z0-9-]*" placeholder="nightly">
+            </label>
+            <label>Cron expression (UTC; six fields, seconds first)
+                <input type="text" name="cron" required placeholder="0 0 1 * * *">
+            </label>
+            <label><input type="checkbox" name="enabled" checked> Switched on</label>
+            <fieldset>
+                <legend>Consumers that ride this walk</legend>
+                <label th:each="c : ${overview.consumers}">
+                    <input type="checkbox" name="consumers" th:value="${c.name}">
+                    <strong th:text="${c.name}">name</strong>
+                    <small th:text="${c.description}">what it repairs and what it costs</small>
+                </label>
+            </fieldset>
+            <button type="submit">Add</button>
+        </form>
+        <p><small>The default document, for reference: <code th:text="${defaultDocument}">[]</code></small></p>
+    </article>
+</main>
+</body>
+</html>
