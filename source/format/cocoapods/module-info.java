@@ -33,7 +33,8 @@ module build.jenesis.repository.format.cocoapods {
     requires org.slf4j;
     requires tools.jackson.databind;
     exports build.jenesis.repository.format.cocoapods to
-            build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test;
+            build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test,
+            build.jenesis.repository.gateway.contract.test;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.cocoapods.CocoaPodsFormat;
     provides build.jenesis.repository.store.PublicationObserver

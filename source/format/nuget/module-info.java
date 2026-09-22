@@ -22,7 +22,8 @@ module build.jenesis.repository.format.nuget {
     requires build.jenesis.repository.multipart;
     requires tools.jackson.databind;
     exports build.jenesis.repository.format.nuget to
-            build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test;
+            build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test,
+            build.jenesis.repository.gateway.contract.test;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.nuget.NuGetFormat;
     provides build.jenesis.repository.store.PublicationObserver

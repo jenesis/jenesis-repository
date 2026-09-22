@@ -32,7 +32,8 @@ module build.jenesis.repository.format.debian {
     requires com.github.luben.zstd_jni;
     exports build.jenesis.repository.format.debian to
             build.jenesis.repository.compliance.debian,
-            build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test;
+            build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test,
+            build.jenesis.repository.gateway.contract.test;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.debian.DebianFormat;
     provides build.jenesis.repository.store.PublicationObserver

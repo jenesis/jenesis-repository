@@ -22,7 +22,8 @@ module build.jenesis.repository.format.gems {
     requires build.jenesis.repository.multipart;
     requires tools.jackson.databind;
     exports build.jenesis.repository.format.gems to
-            build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test;
+            build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test,
+            build.jenesis.repository.gateway.contract.test;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.gems.RubyGemsFormat;
     provides build.jenesis.repository.store.PublicationObserver

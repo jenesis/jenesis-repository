@@ -33,7 +33,8 @@ module build.jenesis.repository.format.oci.inventory {
     exports build.jenesis.repository.format.oci.inventory to build.jenesis.repository.server.kernel.test,
             // the walk-consumer census and OciInventoryBackfillFixture, which names this module's consumer
             // as the edition's one adopter, moved to test/server-principles.
-            build.jenesis.repository.server.principles.test;
+            build.jenesis.repository.server.principles.test,
+            build.jenesis.repository.server.kernel.contract.test;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.oci.inventory.OciBlobLayout;
 }

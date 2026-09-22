@@ -24,7 +24,8 @@ module build.jenesis.repository.format.pypi {
     exports build.jenesis.repository.format.pypi to
             build.jenesis.repository.gateway.test,
             build.jenesis.repository.gateway.census.test,
-            build.jenesis.repository.reclamation.test;
+            build.jenesis.repository.reclamation.test,
+            build.jenesis.repository.gateway.contract.test;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.pypi.PyPiFormat;
     provides build.jenesis.repository.store.PublicationObserver

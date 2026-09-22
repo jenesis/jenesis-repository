@@ -1,0 +1,74 @@
+package build.jenesis.repository.server.kernel;
+
+import module java.base;
+
+import build.jenesis.repository.server.RepositoryRouting;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+/**
+ * Binds the request's tenant to the publishing thread for the artifact write/serve surfaces, so the discovered
+ * compliance gate resolves that tenant's own policy without the publication-interceptor chain carrying a
+ * tenant name. This is the tenant-resolution concern the retired {@code DeployController} used to open inline around its
+ * {@code Publication.screen} call: the fork bound {@link PublishTenant#open the scope} itself, but with writes
+ * now flowing through {@code RepositoryController} the binding must be opened <em>around</em> that controller -
+ * so it moves to this servlet filter, which wraps the whole dispatch on the one request thread the screening and the
+ * publish run on.
+ *
+ * <p>The filter matches the two surfaces a write can land on: {@code /repository/**} (every format's own path under the
+ * multi-tenant repo-segmented shape and the fixed-tenant repo-less one) AND the host-rooted OCI registry {@code /v2/**}
+ * (whose manifest choke point publishes too, so it needs the tenant bound as well). The tenant is resolved through the
+ * active {@link RepositoryRouting} - exactly the tenant that scopes the request's store - not the
+ * {@code Jenesis-Repository-Key} header alone. That distinction is load-bearing under path- and host-tenancy: there the
+ * tenant rides in the URL path or the request Host, not the key, so a keyless write to {@code /repository/acme/...}
+ * must be screened with {@code acme}'s own gate policy, not the default tenant's. Under multi- and fixed-tenancy the
+ * routing derives the tenant from the key (or the fixed default) just as before, so the binding is unchanged there. The
+ * scope restores the previous binding on close (a reused request thread never leaks a tenant into the next request), and
+ * other paths pass straight through unbound.
+ */
+public final class PublishTenantFilter extends OncePerRequestFilter {
+
+    private final RepositoryRouting routing;
+
+    public PublishTenantFilter(RepositoryRouting routing) {
+        this.routing = routing;
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        if (!binds(request.getRequestURI())) {
+            chain.doFilter(request, response);
+            return;
+        }
+        // Bind the tenant the ACTIVE routing resolves for this request - the same tenant that scopes the store - so the
+        // free edge's screen and the DeployEdgeHooks bean resolve that tenant's own gate policy. Under path/host tenancy
+        // the tenant comes from the path/host (a keyless CDN write names a non-default tenant), which the key header
+        // alone could not see; the key-must-agree precedence in those routings still confines a keyed request.
+        String tenant;
+        try {
+            tenant = routing.route(request).tenant();
+        } catch (RuntimeException rejected) {
+            // A routing rejection (a traversal-suspect segment -> 400, a key that disagrees with the path/host tenant
+            // -> 403) is the controller's to translate into an HTTP status: a ResponseStatusException thrown here, in a
+            // servlet Filter ahead of the DispatcherServlet, would surface as a 500 instead. Leave the tenant unbound
+            // and let the request proceed - the controller re-runs the same routing and raises the proper status.
+            chain.doFilter(request, response);
+            return;
+        }
+        try (PublishTenant.Scope _ = PublishTenant.open(tenant)) {
+            chain.doFilter(request, response);
+        }
+    }
+
+    /** The two artifact surfaces a write can reach: the {@code /repository} tree and the host-rooted OCI {@code /v2}
+     *  registry. Everything else (the console, the {@code /api} management surfaces) publishes no artifact and needs no
+     *  tenant bound. */
+    private static boolean binds(String uri) {
+        return uri.equals("/repository") || uri.startsWith("/repository/")
+                || uri.equals("/v2") || uri.startsWith("/v2/");
+    }
+}
