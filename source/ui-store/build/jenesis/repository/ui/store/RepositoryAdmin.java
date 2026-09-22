@@ -1,0 +1,80 @@
+package build.jenesis.repository.ui.store;
+
+import module java.base;
+
+import build.jenesis.repository.ui.CurrentTenant;
+import build.jenesis.repository.cleanup.Release;
+import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.ServableNames;
+import io.micrometer.observation.ObservationRegistry;
+
+/**
+ * The console's listing of the artifact repository, scoped to the signed-in user's tenant: the tenant's named
+ * repositories and, per repository, its storage namespaces and its published releases. The browse, search and
+ * compliance-review families it once also held now live in sibling services in this package - {@link RepositoryBrowse}
+ * (the browse tree, artifact detail, search, license inventory and published-index card) and {@code ComplianceReview}
+ * (quarantine review, the vulnerability and findings panels, the license blast radius and dependents) - alongside the
+ * write and lifecycle families - {@link TenantLimits} (quota and rate limit), {@link RepositoryLifecycle} (staging,
+ * retention, pins, cleanup and forwarding retry) and {@link RepositoryImports} (migration jobs) - all over the same
+ * {@link TenantScope} confinement to the repository {@link ArtifactStore} scoped to {@code <tenant>/<repo>}. The
+ * console's own per-tenant role model authorizes these calls (see SecurityConfig); the repository's key-based
+ * authorization is the path for programmatic clients.
+ */
+public class RepositoryAdmin extends TenantScope {
+
+    public RepositoryAdmin(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations) {
+        super(repositoryStore, current, observations);
+    }
+
+    /** The named repositories in the current tenant. */
+    public List<String> repositories() {
+        List<String> repositories = new ArrayList<>();
+        for (String name : root.scope(tenant()).list("")) {
+            if (validRepository(name)) {
+                repositories.add(name);
+            }
+        }
+        return repositories;
+    }
+
+    /** The top-level storage namespaces of a repository - the first key segment its stored objects sit under. A
+     *  format writes its layout under its own request prefix, which is the top-level key its content occupies
+     *  ({@code npm/...}, {@code pypi/...}, the Maven layout under {@code publish/...}, content-addressed bytes
+     *  under {@code blobs/...}), so the console maps a namespace a format claims to that format's icon and leaves
+     *  the bookkeeping namespaces unmarked. A single prefix listing, never a tree scan. */
+    public List<String> namespaces(String repository) {
+        return scope(repository).list("");
+    }
+
+    /**
+     * The most-recently-published releases of a repository (up to {@code limit}, newest first) and the total published
+     * count. A bounded window streamed through a size-limited heap over the published set, so the detail hub renders a
+     * recent slice rather than buffering and emitting one table row per release of a repository with a very large
+     * published set - the full, paged list is the browse page. The stream is complete here (a walk-less inventory).
+     */
+    public Releases recentReleases(String repository, int limit) throws IOException {
+        StoreRepositoryInventory inventory = inventory(repository);
+        List<Release> shown = new ArrayList<>();
+        String after = null;
+        boolean more = true;
+        // The newest-first index is read a page at a time and screened as it goes: a row whose release has since
+        // been held or removed is skipped, and the next page is asked for only while the window is not yet full -
+        // never a walk of the publish facts to find the newest few hundred.
+        while (shown.size() < limit && more) {
+            StoreRepositoryInventory.ReleasePage page = inventory.recent(after, limit - shown.size());
+            for (Release release : page.releases()) {
+                if (shown.size() < limit && inventory.disclosable(release.ecosystem(), release.coordinate(),
+                        release.version(), ServableNames.Policy.HIDE_WITHHELD_AND_GONE)) {
+                    shown.add(release);
+                }
+            }
+            after = page.next();
+            more = after != null;
+        }
+        return new Releases(List.copyOf(shown), more);
+    }
+
+    public record Releases(List<Release> shown, boolean more) {
+    }
+}
