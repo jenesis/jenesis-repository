@@ -11,8 +11,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * whole-list sibling is correct and unbounded at once: it emits the right rows in the right order while buffering
  * everything the sibling can answer to do it, which is the opposite of what the paged or streaming signature
  * promises. Every shipped implementation overrides such a default - which is exactly why nothing catches it - so
- * its cost is invisible until a plug-in author inherits it over a deployment-sized ledger. The free core settled
- * this on {@code ArtifactStore.page}: keep the default, because a small implementation genuinely wants it,
+ * its cost is invisible until a plug-in author inherits it over a deployment-sized ledger. This was settled
+ * on {@code ArtifactStore.page}: keep the default, because a small implementation genuinely wants it,
  * and make it <em>fail visibly</em> at a stated ceiling instead of degrading silently. This is that ruling as one
  * call, so every SPI that copies the idiom refuses the same way with the same message rather than
  * hand-rolling its own check.

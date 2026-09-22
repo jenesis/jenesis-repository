@@ -43,7 +43,7 @@ import org.apache.commons.fileupload2.core.ParameterParser;
  *       yields {@link Optional#empty()}, which the caller maps to a visible refusal. A truncated value that still
  *       parsed would be the dangerous outcome - a half-read settings bundle imported as if it were whole, or a cut-off
  *       {@code name} field forging a different project coordinate. This mirrors
- *       {@code ArchiveInflation#entry}, the free core.s one archive-inflation read and the same doctrine; it is
+ *       {@code ArchiveInflation#entry}, the one archive-inflation read and the same doctrine; it is
  *       restated rather than required here because a multipart FIELD is not an archive member - the shared bound is
  *       about how far one archive entry may inflate, and this is about how long a form field may be.</li>
  *   <li><b>Before this reader existed there was no field bound at all:</b> the PyPI upload accumulated its

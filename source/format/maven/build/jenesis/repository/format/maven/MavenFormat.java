@@ -352,7 +352,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     /** The reverse index the module name is recorded under, by blob hash ({@code by/module/<hash>}): one small object
      *  beside the jar, written when the name is first read - at publish by the cross-link, or by the first rebuild
      *  pass over a repository from before the record - so a pass reads it rather than opening every jar in the
-     *  repository. {@code by/} is the free core's space for reverse indexes by content hash; a collected blob's record
+     *  repository. {@code by/} is the space for reverse indexes by content hash; a collected blob's record
      *  is left behind, a few bytes that cost nothing to keep and a listing to find. */
     public static final String MODULE_INDEX = "by/module";
 
