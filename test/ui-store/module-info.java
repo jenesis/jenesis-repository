@@ -1,6 +1,7 @@
 /**
- * The console's domain layer over a real store: what an eviction plan selects and what it refuses to touch,
- * and how a provisioning token is minted, matched and revoked.
+ * The console's domain layer over a real store: what an eviction plan selects and what it refuses to
+ * touch, how a provisioning token is minted, matched and revoked, and what a credential service
+ * refuses an anonymous caller.
  *
  * <p>In process against the code under test, so it answers in the quickest lane.
  *
@@ -13,6 +14,8 @@ open module build.jenesis.repository.ui.store.test {
     requires build.jenesis.repository.ui.store;
     requires build.jenesis.repository.ui;
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.audit;
+    requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.cache.storage;
