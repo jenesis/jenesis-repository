@@ -1,0 +1,20 @@
+# License identification table - the ordered substring rules License.identify applies to a lower-cased "<name> <url>"
+# match, most-specific first (so the GPL family resolves before the broad permissive fallbacks). This mirrors the
+# build tool's compliance step; it is data, not code, so a new mapping is a line here rather than another branch in a
+# focal method. The first rule any of whose tokens is a substring of the match wins; no match is License.UNKNOWN.
+#
+# Format, tab-separated: <spdx-id> <TAB> <category> <TAB> <token>[|<token>...]   (tokens are OR-ed, already lower-case)
+AGPL-3.0	network-copyleft	affero
+LGPL	weak-copyleft	lesser general public|lgpl
+GPL	strong-copyleft	general public license|/gpl
+Apache-2.0	permissive	apache
+BSD-3-Clause	permissive	eclipse distribution
+EPL-2.0	weak-copyleft	eclipse public|/epl
+MPL-2.0	weak-copyleft	mozilla public|mpl
+CDDL-1.1	weak-copyleft	common development and distribution|cddl
+BSD	permissive	bsd
+MIT	permissive	mit license|licenses/mit|(mit)
+BSL-1.0	permissive	boost software
+Unlicense	permissive	unlicense
+CC0-1.0	permissive	cc0|public domain
+ISC	permissive	isc

@@ -1,0 +1,5 @@
+build.jenesis.repository.format.signing.OpenPgpDetachedScheme
+build.jenesis.repository.format.signing.OpenPgpClearsignedScheme
+build.jenesis.repository.format.signing.Pkcs7Scheme
+build.jenesis.repository.format.signing.RsaDetachedScheme
+build.jenesis.repository.format.signing.X509DetachedScheme
