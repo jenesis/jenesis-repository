@@ -21,7 +21,8 @@ open module build.jenesis.repository.ui.store {
     requires build.jenesis.repository.ui;
     requires build.jenesis.repository.index.keys;
     requires org.slf4j;
-    exports build.jenesis.repository.ui.store to build.jenesis.repository.ui.identity, build.jenesis.repository.server.kernel.test, build.jenesis.repository.ui.admin, build.jenesis.repository.server.kernel, build.jenesis.repository.console.api, build.jenesis.repository.auth.oidc.test, build.jenesis.repository.auth.saml.test, build.jenesis.repository.scim, build.jenesis.repository.ui.admin.test,
+    exports build.jenesis.repository.ui.store to build.jenesis.repository.ui.store.test,
+        build.jenesis.repository.ui.identity, build.jenesis.repository.server.kernel.test, build.jenesis.repository.ui.admin, build.jenesis.repository.server.kernel, build.jenesis.repository.console.api, build.jenesis.repository.auth.oidc.test, build.jenesis.repository.auth.saml.test, build.jenesis.repository.scim, build.jenesis.repository.ui.admin.test,
         build.jenesis.repository.compliance.web,
         build.jenesis.repository.search.web,
         build.jenesis.repository.dependents.web, build.jenesis.repository.forwarding.web;
