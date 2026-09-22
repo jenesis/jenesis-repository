@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<!--
+  artifact.html — the generic artifact detail view: one published path's coordinate, versions, checksum, size,
+  publish date, compliance/quarantine verdict and provenance link, for any format.
+
+  Rendered by RepositoryAdminController from RepositoryBrowse.artifact, which reads only small objects — the publish/
+  pointer (whose value is the content-addressed SHA-256 checksum), the referenced blob's recorded size, the neutral
+  coordinate the owning format's ArtifactLayout describes for the path, the publish-time sidecars and the quarantine
+  log — never the artifact body. Reached from a browse leaf; the coordinate block is shown only for a path a
+  descriptive format claims (a raw file resolves to its checksum and size alone).
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Artifact')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Artifact')}"></header>
+    <p>
+        <a th:href="@{/repositories/{repo}/browse(repo=${repo},prefix=${parent})}">&larr; back to folder</a>
+        &nbsp;·&nbsp;
+        <a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
+    </p>
+
+    <article>
+        <p><code th:text="${detail.path}">/maven/org/acme/lib/1.0/lib-1.0.jar</code></p>
+        <p th:unless="${detail.present}"><small>No blob is currently published at this path (it may be a generated
+            index, a released quarantine hold, or already collected).</small></p>
+
+        <figure>
+        <table>
+            <tbody>
+            <tr th:if="${!detail.coordinate.isEmpty()}">
+                <th scope="row">Coordinate</th>
+                <td><code th:text="${detail.coordinate}">org.acme:lib</code>
+                    <a th:if="${capabilities.findings() and !detail.version.isEmpty()}"
+                       th:href="@{'/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + detail.version})}">
+                        findings &rarr;</a></td>
+            </tr>
+            <tr th:if="${!detail.version.isEmpty()}">
+                <th scope="row">Version</th>
+                <td th:text="${detail.version}">1.0</td>
+            </tr>
+            <tr th:if="${!detail.ecosystem.isEmpty()}">
+                <th scope="row">Ecosystem</th>
+                <td th:text="${detail.ecosystem}">Maven</td>
+            </tr>
+            <tr th:if="${!detail.published.isEmpty()}">
+                <th scope="row">Published</th>
+                <td th:text="${detail.published}">2026-06-01T00:00:00Z</td>
+            </tr>
+            <tr th:if="${downloadsTracked && !detail.published.isEmpty()}">
+                <th scope="row">Downloads</th>
+                <td><span th:text="${detail.downloads}">7</span>
+                    <small th:if="${!detail.lastDownloaded.isEmpty()}" th:text="'last ' + ${detail.lastDownloaded}">last 2026-06-05T12:00:00Z</small>
+                    <small th:if="${!downloadsLag.isEmpty()}" th:text="'(up to ' + ${downloadsLag} + ' behind)'">(up to 6 hours behind)</small></td>
+            </tr>
+            <tr th:if="${detail.present}">
+                <th scope="row">Size</th>
+                <td><span th:text="${detail.size}">13 B</span>
+                    <small th:if="${detail.sizeBytes >= 0}" th:text="'(' + ${detail.sizeBytes} + ' bytes)'">(13 bytes)</small></td>
+            </tr>
+            <tr th:if="${!detail.hash.isEmpty()}">
+                <th scope="row">SHA-256</th>
+                <td><code th:text="${detail.hash}">abc&hellip;</code>
+                    <br><small>The content address the blob is stored under — its checksum, read from the pointer,
+                    never by re-hashing the body.</small></td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+    </article>
+
+    <article th:if="${detail.quarantine != null}">
+        <h2>Compliance verdict</h2>
+        <p><small>The most recent compliance-gate decision recorded against this path, on the publish or the
+            proxy-fetch leg.</small></p>
+        <figure>
+        <table>
+            <tbody>
+            <tr>
+                <th scope="row">Verdict</th>
+                <td><span class="app-badge app-badge--warn" th:text="${detail.quarantine.verdict}">QUARANTINE</span></td>
+            </tr>
+            <tr>
+                <th scope="row">Reasons</th>
+                <td><small th:text="${#strings.listJoin(detail.quarantine.reasons, '; ')}">reason</small></td>
+            </tr>
+            <tr>
+                <th scope="row">When</th>
+                <td th:text="${detail.quarantine.when}">2026-06-01T00:00:00Z</td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+        <p><a th:href="@{'/repositories/' + ${repo} + '#quarantine'}">Review the quarantine queue &rarr;</a></p>
+    </article>
+
+    <!-- Quality-inspection subsection: a scoped error state, rendered on the shared subsectionError wrapper, only when
+         this coordinate carries an inspection-failed finding (the compliance screen could not parse the artifact, so it
+         was screened from its path coordinate alone). It errors JUST this panel - every sibling article above and below
+         renders normally, so one subsection's derive-failure never blanks the artifact view (PRINCIPLES 5/10). -->
+    <th:block th:if="${detail.inspection != null}">
+        <div th:replace="~{fragments :: subsectionError('Quality inspection',
+             'This artifact could not be fully parsed by its quality inspector, so it was screened only from its path coordinate - not fully screened.',
+             ${detail.inspection?.reason})}"></div>
+    </th:block>
+
+    <article th:if="${!detail.versions.isEmpty()}">
+        <h2>Versions</h2>
+        <p><small>The published versions of this coordinate in this repository, newest first.</small></p>
+        <p th:if="${downloadsTracked && !downloadsLag.isEmpty()}"><small
+                th:text="'Download counts and times can be up to ' + ${downloadsLag} + ' behind.'">Download counts and times can be up to 6 hours behind.</small></p>
+        <figure>
+            <table>
+                <thead>
+                <tr>
+                    <th scope="col">Version</th>
+                    <th scope="col">Published</th>
+                    <th scope="col">Pinned</th>
+                    <th scope="col" th:if="${downloadsTracked}">Downloads</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="v : ${detail.versions}">
+                    <td>
+                        <strong th:if="${v.current}" th:text="${v.version}" aria-current="true">1.0</strong>
+                        <span th:unless="${v.current}" th:text="${v.version}">0.9</span>
+                    </td>
+                    <td><small th:text="${v.published}">2026-06-01T00:00:00Z</small></td>
+                    <td th:text="${v.pinned} ? 'yes' : ''">yes</td>
+                    <td th:if="${downloadsTracked}">
+                        <span th:text="${v.downloads}">7</span>
+                        <small th:if="${!v.lastDownloaded.isEmpty()}" th:text="'last ' + ${v.lastDownloaded}">last 2026-06-05T12:00:00Z</small>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+            <p th:if="${detail.moreVersions()}">
+                <small>Showing the first <span th:text="${detail.versions().size()}">100</span> versions;</small>
+                <a th:href="@{/repositories/{repo}/coordinate(repo=${repo}, ecosystem=${detail.ecosystem()},
+                        coordinate=${detail.coordinate()})}">all versions &rarr;</a>
+            </p>
+        </figure>
+    </article>
+
+    <!--/* The publisher's signature on these bytes. Distinct from Provenance below, which is a claim about how the
+         artifact was BUILT (which pipeline, from which source): this one is "who vouched for exactly these bytes".
+         An artifact can easily have one and not the other, so they are two panels rather than one trust panel -
+         folding them would make the absent half read as a failure of the present one.
+
+         Rendered from the durable summary the gate recorded at publish; the page re-verifies nothing, because a
+         screen that ran cryptography on render would cost more the more it is looked at and would disagree with the
+         gate the moment a key changed. */-->
+    <article>
+        <h2>Signature</h2>
+        <p th:if="${detail.signature == null}">
+            <small>No publisher signature has been recorded for this version. It may predate signature checking on
+                this deployment, or its format may not carry one.</small>
+        </p>
+        <div th:if="${detail.signature != null}">
+            <p>
+                <strong th:if="${detail.signature.trusted()}">Signed and trusted</strong>
+                <strong th:if="${detail.signature.invalid()}">Signature does not match these bytes</strong>
+                <strong th:if="${!detail.signature.trusted() and !detail.signature.invalid()}"
+                        th:text="${detail.signature.outcome()}">OUTCOME</strong>
+            </p>
+            <dl>
+                <dt th:if="${detail.signature.signer() != null}">Signer</dt>
+                <dd th:if="${detail.signature.signer() != null}">
+                    <code th:text="${detail.signature.signer()}">identity</code>
+                </dd>
+                <!--/* A keyless signer is an issuer and a subject joined into one identity; shown apart, since the
+                     operator reads "GitHub Actions" and "this workflow of this repository" as two facts. */-->
+                <dt th:if="${detail.signature.issuer() != null}">Issuer</dt>
+                <dd th:if="${detail.signature.issuer() != null}" th:text="${detail.signature.issuer()}">issuer</dd>
+                <dt th:if="${detail.signature.subject() != null}">Subject</dt>
+                <dd th:if="${detail.signature.subject() != null}">
+                    <a th:if="${detail.signature.link() != null}" th:href="${detail.signature.link()}"
+                       th:text="${detail.signature.subject()}" rel="noopener">subject</a>
+                    <span th:if="${detail.signature.link() == null}" th:text="${detail.signature.subject()}">subject</span>
+                </dd>
+                <dt th:if="${detail.signature.admittedBy() != null}">Admitted by</dt>
+                <dd th:if="${detail.signature.admittedBy() != null}" th:text="${detail.signature.admittedBy()}">source</dd>
+                <dt th:if="${detail.signature.logIndex() != null}">Transparency log</dt>
+                <dd th:if="${detail.signature.logIndex() != null}">
+                    entry <code th:text="${detail.signature.logIndex()}">index</code><span
+                        th:if="${detail.signature.integratedTime() != null}">, recorded
+                        <span th:text="${detail.signature.integratedTime()}">time</span></span>
+                </dd>
+                <dt th:if="${detail.signature.grade() != null}">Signature quality</dt>
+                <dd th:if="${detail.signature.grade() != null}" th:text="${detail.signature.grade()}">STRONG</dd>
+                <dt th:if="${detail.signature.location() != null}">Material</dt>
+                <dd th:if="${detail.signature.location() != null}">
+                    <code th:text="${detail.signature.location()}">location</code>
+                </dd>
+            </dl>
+        </div>
+    </article>
+
+    <article>
+        <h2>Provenance</h2>
+        <p th:if="${detail.provenance}">
+            <small>A signed in-toto attestation can be served for this artifact.</small><br>
+            <a th:href="@{/api/provenance(repo=${repo},path=${detail.path})}">View provenance attestation &rarr;</a>
+        </p>
+        <p th:unless="${detail.provenance}"><small>No provenance signer is configured on this deployment.</small></p>
+    </article>
+
+    <!--/* T25.6 item 3 (over T25.4's OriginSection): the origin acquisition rows - where THIS deployment's bytes for
+         this coordinate version came from. Distinct from the provenance attestation ("who built it"): origin answers
+         "which supply channel the operator acquired it through - a hand upload, or via which fallback". Origin is
+         neutral - the gate does not consume it - so this is a plain display. Rendered from the durable metadata section
+         (a small read, never the artifact body); empty when nothing has been recorded (or no metadata module is on the
+         deployment). The machine-readable twin is GET /repositories/{repo}/artifact/origin. */-->
+    <article th:if="${origin != null and !origin.isEmpty()}">
+        <h2>Origin</h2>
+        <p><small>Where this deployment's bytes for this coordinate version came from - uploaded locally, or fetched
+            from which fallback (stored or passed through), and how often a no-copy serve re-served them.</small></p>
+        <figure>
+            <table>
+                <thead>
+                <tr>
+                    <th scope="col">Source</th>
+                    <th scope="col">Acquired</th>
+                    <th scope="col">SHA-256</th>
+                    <th scope="col">Stored</th>
+                    <th scope="col">Screening</th>
+                    <th scope="col">Serves</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="o : ${origin}">
+                    <td>
+                        <span th:if="${o.upload()}" class="app-badge" title="A hand upload through the publish path">uploaded</span>
+                        <th:block th:if="${o.fallback()}">
+                            <span class="app-badge">via fallback</span>
+                            <code th:text="${o.repository}">frontdoor</code>
+                            <span th:if="${o.fallbackIndex >= 0}" th:text="'#' + ${o.fallbackIndex}">#0</span>
+                            <br th:if="${!o.target.isEmpty()}"><small th:if="${!o.target.isEmpty()}"><a th:href="${o.target}" th:text="${o.target}">upstream url</a></small>
+                        </th:block>
+                    </td>
+                    <td><small th:text="${o.at}">2026-06-01T00:00:00Z</small></td>
+                    <td><code th:if="${!o.sha256.isEmpty()}" th:text="${o.sha256}">abc&hellip;</code></td>
+                    <td th:if="${o.fallback()}" th:text="${o.stored} ? 'cached' : 'pass-through'">cached</td>
+                    <td th:unless="${o.fallback()}">—</td>
+                    <td th:text="${o.screening}">default</td>
+                    <td>
+                        <th:block th:if="${o.fallback()}">
+                            <span th:text="${o.serves}">12</span>
+                            <small th:if="${!o.lastServed.isEmpty()}" th:text="'(last ' + ${o.lastServed} + ')'">(last &hellip;)</small>
+                        </th:block>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+    </article>
+</main>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head(${project.name})}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <p><a href="/projects">&larr; All projects</a></p>
+    <header th:replace="~{base :: pageHeader(${project.name})}"></header>
+    <!--/* The count is a stored figure from the last pass - a count, or an eviction, both of which walk every
+           entry and so run in the background - never a sweep on the request. */-->
+    <p th:if="${project.stats.known()}">
+        <span th:text="${project.entryCount}">0</span> entries ·
+        <span th:text="${@format.bytes(project.totalBytes)}">0 B</span> on disk
+        <small>as of <span th:text="${project.stats.countedAt()}">time</span></small>
+    </p>
+    <p th:unless="${project.stats.known()}"><small>The entries have not been counted yet.</small></p>
+    <th:block th:if="${project.stats.counting()}">
+        <p th:replace="~{base :: running(|A ${project.stats.lastAction()} is running.|)}"></p>
+    </th:block>
+    <p th:if="${!project.stats.counting() and !#strings.isEmpty(project.stats.lastOutcome())}"><small>Last
+        <span th:text="${project.stats.lastAction()}">count</span>: <span th:text="${project.stats.lastOutcome()}">outcome</span>.</small></p>
+    <form th:if="${isEditor and !project.stats.counting()}" method="post"
+          th:action="@{'/projects/' + ${project.name} + '/recount'}">
+        <button type="submit" class="secondary">Count entries now</button>
+    </form>
+
+    <article>
+        <h2>Cache settings</h2>
+        <form method="post" th:action="@{'/projects/' + ${project.name} + '/cache'}">
+            <label>Size cap <small>(bytes; blank = no cap)</small>
+                <input name="size" th:value="${project.size}" inputmode="numeric" placeholder="(none)">
+            </label>
+            <label>Eviction order
+                <select name="lru">
+                    <option value="true" th:selected="${project.lru}">least-recently-used first</option>
+                    <option value="false" th:selected="${!project.lru}">most-recently-used first</option>
+                </select>
+            </label>
+            <label>TTL <small>(ISO-8601 duration, e.g. P30D or PT12H; blank = none)</small>
+                <input name="ttl" th:value="${project.ttl}" placeholder="P30D">
+            </label>
+            <button type="submit" th:disabled="${!isEditor}">Save settings</button>
+        </form>
+    </article>
+
+    <article>
+        <h2>Eviction</h2>
+        <p><small>Runs the cache server's own sweep directly on the volume, in the background; the outcome and the
+            entries left are shown above when it lands.</small></p>
+        <div class="grid">
+            <form method="post" th:action="@{'/projects/' + ${project.name} + '/evict/size'}">
+                <button type="submit" th:disabled="${!isEditor}">Enforce size cap now</button>
+            </form>
+            <form method="post" th:action="@{'/projects/' + ${project.name} + '/evict/ttl'}">
+                <button type="submit" th:disabled="${!isEditor}">Expire stale (ttl) now</button>
+            </form>
+            <form method="post" th:action="@{'/projects/' + ${project.name} + '/evict/clear'}"
+                  onsubmit="return confirm('Delete ALL cached entries for this project?');">
+                <button type="submit" class="secondary" th:disabled="${!isEditor}">Clear all entries</button>
+            </form>
+        </div>
+    </article>
+
+    <article>
+        <h2>Access</h2>
+        <p>Access is granted per credential, not per project. A credential is a hashed key under
+            <code>.users/&lt;hash&gt;/projects.properties</code> mapping this project to a role
+            (<code>read</code>, <code>write</code>, or <code>read,write</code>); <code>*</code> grants every
+            project. Manage them on the <a href="/credentials">Credentials</a> page.</p>
+    </article>
+</main>
+</body>
+</html>

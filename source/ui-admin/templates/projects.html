@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Projects')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Projects')}"></header>
+    <figure th:unless="${projects.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col" class="app-list__num">Entries</th>
+                <th scope="col" class="app-list__num">Size on disk</th>
+                <th scope="col">Counted</th>
+                <th scope="col">Size cap</th>
+                <th scope="col">TTL</th>
+            </tr>
+            </thead>
+            <tbody>
+            <!--/* The entries and bytes are the figure the last pass stored, never a sweep of the cache per row:
+                   a project that has never been counted says so, and its page offers the count. */-->
+            <tr th:each="p : ${projects}">
+                <td><a th:href="@{'/projects/' + ${p.name}}" th:text="${p.name}">name</a></td>
+                <td class="app-list__num" th:text="${p.stats.known()} ? ${p.entryCount} : '?'">0</td>
+                <td class="app-list__num" th:text="${p.stats.known()} ? ${@format.bytes(p.totalBytes)} : '?'">0 B</td>
+                <td><small th:if="${p.stats.counting()}">counting&hellip;</small>
+                    <small th:if="${!p.stats.counting() and p.stats.known()}" th:text="${p.stats.countedAt()}">time</small>
+                    <small th:if="${!p.stats.counting() and !p.stats.known()}">never</small></td>
+                <td th:text="${#strings.isEmpty(p.sizeCap)} ? '-' : ${p.sizeCap}">-</td>
+                <td th:text="${#strings.isEmpty(p.ttl)} ? '-' : ${p.ttl}">-</td>
+            </tr>
+            </tbody>
+        </table>
+    </figure>
+    <th:block th:if="${projects.isEmpty()}">
+        <div th:replace="~{base :: empty('No projects yet. Create one below to start caching builds.')}"></div>
+    </th:block>
+
+    <article th:if="${isEditor}">
+        <h2>New project</h2>
+        <form method="post" th:action="@{/projects}">
+            <label>Name
+                <input name="name" required pattern="[A-Za-z0-9_]+" placeholder="my_project">
+            </label>
+            <button type="submit">Create project</button>
+        </form>
+    </article>
+</main>
+</body>
+</html>

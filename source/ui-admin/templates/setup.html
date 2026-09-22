@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('First-run setup')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('First-run setup')}"></header>
+    <p><small>The decisions a new deployment should make, in order. Every value here is the same runtime setting the
+        <a th:href="@{/settings}">settings screen</a>, the <code>/api/settings</code> endpoint and the CLI edit, shown
+        with its own documentation, its default and its effective value; a save applies exactly as it would there.
+        Nothing on this screen has to be answered now - skip it and it stays reachable under Administration.</small></p>
+
+    <form method="post" th:action="@{/setup/skip}" class="setup-skip">
+        <button class="secondary outline" type="submit">Skip for now</button>
+    </form>
+
+    <article th:each="step : ${steps}" class="setting-group setup-step" th:id="|setup-${step.id}|">
+        <h2 th:text="${step.title}">Step</h2>
+        <p class="setting-doc" th:text="${step.why}">Why this is asked now.</p>
+
+        <th:block th:if="${step.id == 'starter-credential'}">
+            <ul class="setup-credential">
+                <li th:if="${starterSession}"><strong>This session is signed in with the starter key.</strong>
+                    Anything it does is recorded against the key, not a person.</li>
+                <li th:unless="${starterSession}">This session is a real identity, not the starter key.</li>
+                <li th:if="${adminKeySet}">The console's admin key (<code>jenreg.ui.admin-key</code>) is set: it grants
+                    super-admin over every tenant and is re-provisioned on every boot until the variable is unset.</li>
+                <li th:unless="${adminKeySet}">The console's admin key (<code>jenreg.ui.admin-key</code>) is not set.</li>
+                <li th:if="${bootstrapKeySet}">The API's bootstrap key (<code>jenreg.bootstrap-key</code>) is set: a
+                    non-expiring credential holding every right, re-provisioned on every boot until the variable is
+                    unset.</li>
+                <li th:unless="${bootstrapKeySet}">The API's bootstrap key (<code>jenreg.bootstrap-key</code>) is not set.</li>
+            </ul>
+            <p class="setting-values">
+                <a th:href="@{/admin}">Grant a real administrator</a>
+                <a th:href="@{/credentials}">Issue a real credential</a>
+            </p>
+        </th:block>
+
+        <th:block th:each="s : ${step.settings}">
+            <div th:replace="~{fragments :: settingRow(${s}, '/setup')}"></div>
+        </th:block>
+        <p th:if="${step.settings.isEmpty() and step.id != 'starter-credential'}"><small>None of this step's settings
+            is carried by this deployment's image.</small></p>
+    </article>
+
+    <p th:unless="${wizardOn}"><small>The first-run redirect is switched off for this deployment; this screen was
+        opened from the menu.</small></p>
+</main>
+</body>
+</html>

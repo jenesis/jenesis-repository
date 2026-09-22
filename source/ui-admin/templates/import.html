@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Migrate')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <p><a th:href="@{'/repositories/' + ${repo}}">&larr; Repository <span th:text="${repo}">name</span></a></p>
+    <header th:replace="~{base :: pageHeader('Migrate into ' + ${repo})}"></header>
+
+    <article>
+        <h2>Start a migration</h2>
+        <p><small>Walk a repository on another artifact manager into this one. The migration runs in the
+            background and regenerates this repository's own indexes; re-running is safe (identical content is
+            deduplicated). The sources it can walk and the formats it can import are the importer and format modules
+            on this deployment's module path. Credentials, when given, are used for this run only and never
+            stored.</small></p>
+        <p th:unless="${capabilities.importAvailable()}"><small>No import source modules are installed on this
+            deployment.</small></p>
+        <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
+        <form th:if="${isEditor and capabilities.importAvailable()}" method="post"
+              th:action="@{'/repositories/' + ${repo} + '/import'}">
+            <div class="grid">
+                <label>Source
+                    <select name="source">
+                        <option th:each="s : ${capabilities.importSources()}"
+                                th:value="${s.name()}" th:text="${s.label()}">source</option>
+                    </select>
+                </label>
+                <label>Base URL
+                    <input name="url" placeholder="https://repo.example.com" required></label>
+                <label>Source repository
+                    <input name="repository" placeholder="releases" required></label>
+                <label>Format
+                    <input name="format" placeholder="required for some sources"></label>
+            </div>
+            <div class="grid">
+                <label>Username <small>(optional)</small>
+                    <input name="username" autocomplete="off"></label>
+                <label>Password / token <small>(optional)</small>
+                    <input name="password" type="password" autocomplete="off"></label>
+            </div>
+            <button type="submit">Start migration</button>
+        </form>
+    </article>
+
+    <article>
+        <h2>Migrations</h2>
+        <th:block th:if="${running}">
+            <p th:replace="~{base :: running('A migration is running.')}"></p>
+        </th:block>
+        <figure th:unless="${jobs.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Job</th>
+                    <th scope="col">State</th>
+                    <th scope="col" class="app-list__num">Imported</th>
+                    <th scope="col" class="app-list__num">Skipped</th>
+                    <th scope="col" class="app-list__num">Held</th>
+                    <th scope="col" class="app-list__num">Rejected</th>
+                    <th scope="col">Dropped</th>
+                    <th scope="col">Detail</th>
+                    <th scope="col" th:if="${isEditor}"><span class="app-sr-only">Actions</span></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="job : ${jobs}">
+                    <td><code th:text="${job.id}">id</code></td>
+                    <!--/* The state as a status badge: in-flight is info, a failed run (it recorded an error) is
+                         danger, a finished one is pass - the word itself always carries the meaning. */-->
+                    <td><span class="app-badge"
+                              th:classappend="${job.state == 'running'} ? 'app-badge--info' : (${job.error} ? 'app-badge--danger' : 'app-badge--pass')"
+                              th:text="${job.state}">running</span></td>
+                    <td class="app-list__num" th:text="${job.imported}">0</td>
+                    <td class="app-list__num" th:text="${job.skipped}">0</td>
+                    <td class="app-list__num" th:text="${job.held}">0</td>
+                    <!--/* Rendered as a warning when non-zero, and shown on every job rather than only failed ones:
+                         a COMPLETED job with 0 imported and 0 dropped is an empty source, and one with 0 imported and
+                         a non-zero count here is a source whose every row was refused. Those read identically without
+                         this column, which is the whole of D-155. */-->
+                    <td class="app-list__num">
+                        <span th:if="${job.dropped > 0}" class="app-badge app-badge--danger"
+                              th:text="${job.dropped}">0</span>
+                        <span th:unless="${job.dropped > 0}">0</span>
+                    </td>
+                    <td>
+                        <small th:if="${job.error}" class="app-danger-text" role="alert" th:text="${job.error}">error</small>
+                        <small th:if="${job.asset}" th:with="label=${job.state == 'running' ? 'importing' : 'last imported'}">
+                            <span th:text="${label}">importing</span> <code th:text="${job.asset}">org/x/1.0/x-1.0.jar</code><br></small>
+                        <small th:if="${job.cursor}">resume cursor <code th:text="${job.cursor}">page2</code></small>
+                    </td>
+                    <td th:if="${isEditor}">
+                        <details th:if="${job.state != 'running' and job.cursor and job.url}" style="margin:0">
+                            <summary>Resume</summary>
+                            <p><small>Continues <code th:text="${job.source}">nexus</code>
+                                <code th:text="${job.url}">url</code>/<code th:text="${job.sourceRepository}">repo</code>
+                                from the cursor; re-enter the credentials (they are never stored).</small></p>
+                            <form method="post" th:action="@{'/repositories/' + ${repo} + '/import'}">
+                                <input type="hidden" name="resume" th:value="${job.id}">
+                                <input type="hidden" name="source" th:value="${job.source}">
+                                <input type="hidden" name="url" th:value="${job.url}">
+                                <input type="hidden" name="repository" th:value="${job.sourceRepository}">
+                                <input type="hidden" name="format" th:value="${job.format}">
+                                <div class="grid">
+                                    <input name="username" placeholder="username" autocomplete="off">
+                                    <input name="password" type="password" placeholder="password / token"
+                                           autocomplete="off">
+                                </div>
+                                <button type="submit">Resume from cursor</button>
+                            </form>
+                        </details>
+                        <form th:if="${job.state != 'running'}" method="post" style="margin:.3rem 0 0 0"
+                              th:action="@{'/repositories/' + ${repo} + '/import/' + ${job.id} + '/dismiss'}">
+                            <button class="secondary outline" type="submit">Dismiss</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+            <p th:if="${next != null or paged}"><small>
+                <a th:if="${paged}" th:href="@{/repositories/{repo}/import(repo=${repo})}">&larr; first page</a>
+                <a th:if="${next != null}" th:href="@{/repositories/{repo}/import(repo=${repo}, after=${next})}">more
+                    migrations &rarr;</a></small></p>
+        </figure>
+        <th:block th:if="${jobs.isEmpty() and !paged}">
+            <div th:replace="~{base :: empty('No migrations yet. Start one above to walk another repository into this one.')}"></div>
+        </th:block>
+    </article>
+</main>
+</body>
+</html>

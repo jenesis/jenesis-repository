@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Error')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <article>
+        <!-- The page header is the base module's shared fragment (resolved cross-module from its
+             META-INF/templates through SharedShellConfig), not a local copy. -->
+        <header th:replace="~{base :: pageHeader('Something went wrong')}"></header>
+        <p class="app-alert app-alert--danger" role="alert"
+           th:text="${error} ?: (${message} ?: 'Unexpected error.')">Unexpected error.</p>
+        <p th:if="${status}"><small>Status <span th:text="${status}">500</span></small></p>
+        <a href="/projects" role="button">Back to projects</a>
+    </article>
+</main>
+</body>
+</html>

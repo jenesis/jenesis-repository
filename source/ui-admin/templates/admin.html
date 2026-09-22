@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Admin')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Administration')}"></header>
+    <p>Console members of tenant <strong th:text="${tenant}">default</strong>.
+        <a href="/projects">&larr; Projects</a></p>
+
+    <article>
+        <h2>Console members</h2>
+        <p><small>Who may sign in to this tenant and at what role (viewer, editor or admin). Keyed by the
+            provider-qualified id (e.g. <code>github/1024025</code>); the login is shown for convenience only.</small></p>
+        <figure th:unless="${users.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Id</th>
+                    <th scope="col">Login</th>
+                    <th scope="col">Role</th>
+                    <th scope="col" th:if="${isAdmin}"><span class="app-sr-only">Actions</span></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="u : ${users}">
+                    <td th:text="${u.id}">0</td>
+                    <td th:text="${#strings.isEmpty(u.login)} ? '-' : ${u.login}">-</td>
+                    <td th:text="${u.role.label()}">viewer</td>
+                    <td th:if="${isAdmin}">
+                        <form method="post" th:action="@{/admin/users/remove}"
+                              onsubmit="return confirm('Remove this user?');" style="margin:0">
+                            <input type="hidden" name="id" th:value="${u.id}">
+                            <button class="secondary outline" type="submit">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <p th:if="${nextCursor != null}"><small>Showing the first <span th:text="${users.size()}">200</span> members;
+            <a th:href="@{/admin(cursor=${nextCursor})}">more</a>.</small></p>
+        <th:block th:if="${users.isEmpty()}">
+            <div th:replace="~{base :: empty('No members yet — an env super-admin (JENREG_UI_ADMINS) can add the first one below.')}"></div>
+        </th:block>
+        <form th:if="${isAdmin}" method="post" th:action="@{/admin/users}">
+            <div class="grid">
+                <!--/* The suggestion list is what makes this field usable: a provider subject is opaque, and an
+                     administrator has no way to learn one except from the person themselves. Every id here is
+                     somebody who has actually signed in to this deployment. Values are rendered as text through
+                     th:value/th:text, never interpolated into markup. */-->
+                <label>Provider-qualified id
+                    <input name="id" required placeholder="github/1024025" list="known-principals"
+                           autocomplete="off">
+                </label>
+                <datalist id="known-principals">
+                    <option th:each="seen : ${knownPrincipals}" th:value="${seen.id()}"
+                            th:text="${seen.label()}"></option>
+                </datalist>
+                <label>Login <small>(optional)</small> <input name="login" placeholder="octocat"></label>
+                <label>Role
+                    <select name="role">
+                        <option value="viewer">viewer</option>
+                        <option value="editor">editor</option>
+                        <option value="admin">admin</option>
+                    </select>
+                </label>
+            </div>
+            <button type="submit">Add / update user</button>
+        </form>
+    </article>
+
+    <!--/* Groups: the third surface for the primitive the API and the CLI already reach. Every value here is
+         rendered as text through th:text/th:value - a group name and a member id come from the store, and this
+         screen produces no markup from either. */-->
+    <article>
+        <h2>Groups</h2>
+        <p><small>A group holds rights exactly as a person or a key does, and everyone in it holds them too — which
+            is how "everyone in <em>developers</em> may read this tenant" is said once instead of once per person.
+            A member holds the group's rights from their next request. A group with members and no grants confers
+            nothing, so it is safe to fill one before deciding what it may do.</small></p>
+        <figure th:unless="${groups.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Group</th>
+                    <th scope="col">Grants</th>
+                    <th scope="col">Members</th>
+                    <th th:if="${isAdmin}" scope="col">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="g : ${groups}">
+                    <td><code th:text="${g.name()}">developers</code></td>
+                    <td>
+                        <span th:if="${g.grants().isEmpty()}"><small>grants nothing</small></span>
+                        <span th:each="grant : ${g.grants()}">
+                            <code th:text="${grant.key} + ' → ' + ${grant.value}">* → repository:read</code>
+                            <form th:if="${isAdmin}" method="post" th:action="@{/admin/groups/revoke-grant}"
+                                  style="display:inline">
+                                <input type="hidden" name="name" th:value="${g.name()}">
+                                <input type="hidden" name="scope" th:value="${grant.key}">
+                                <button type="submit" class="secondary">Revoke</button>
+                            </form>
+                        </span>
+                    </td>
+                    <td>
+                        <span th:if="${g.members().isEmpty()}"><small>nobody yet</small></span>
+                        <span th:each="member : ${g.members()}">
+                            <code th:text="${member}">oidc/ada</code>
+                            <form th:if="${isAdmin}" method="post" th:action="@{/admin/groups/members/remove}"
+                                  style="display:inline">
+                                <input type="hidden" name="name" th:value="${g.name()}">
+                                <input type="hidden" name="id" th:value="${member}">
+                                <button type="submit" class="secondary">Remove</button>
+                            </form>
+                        </span>
+                        <!--/* The preview is capped so this screen costs the same on a group of eight and one of
+                             eight hundred; the rest are reachable through the API. */-->
+                        <small th:if="${g.more()}">and more</small>
+                    </td>
+                    <td th:if="${isAdmin}">
+                        <form method="post" th:action="@{/admin/groups/remove}">
+                            <input type="hidden" name="name" th:value="${g.name()}">
+                            <button type="submit" class="secondary">Delete group</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <th:block th:if="${groups.isEmpty()}">
+            <div th:replace="~{base :: empty('No groups yet — grant one below and everyone in it holds those rights.')}"></div>
+        </th:block>
+        <form th:if="${isAdmin}" method="post" th:action="@{/admin/groups/grant}">
+            <div class="grid">
+                <label>Group <input name="name" required placeholder="developers"></label>
+                <label>Scope <small>(a repository, or <code>*</code>)</small>
+                    <input name="scope" required placeholder="*" value="*"></label>
+                <label>Rights <small>(comma-separated)</small>
+                    <input name="tokens" required placeholder="repository:read"></label>
+            </div>
+            <button type="submit">Grant to the group</button>
+        </form>
+        <form th:if="${isAdmin}" method="post" th:action="@{/admin/groups/members}">
+            <div class="grid">
+                <label>Group <input name="name" required placeholder="developers"></label>
+                <label>Provider-qualified id
+                    <input name="id" required placeholder="oidc/8f3c1a" list="known-principals"
+                           autocomplete="off">
+                </label>
+            </div>
+            <button type="submit">Add to the group</button>
+        </form>
+    </article>
+
+    <article th:if="${isAdmin and capabilities.scim()}">
+        <h2>SCIM provisioning</h2>
+        <p><small>Let this tenant's identity provider provision members automatically at
+            <code>POST /scim/v2/<span th:text="${tenant}">default</span>/Users</code>. Generate a token and set it as
+            the Bearer secret on the IdP's SCIM connector. The token is scoped to this tenant and shown once; only its
+            hash is stored. Status:
+            <strong th:text="${scimConfigured} ? 'configured' : 'not configured'">not configured</strong>.</small></p>
+        <div class="grid">
+            <form method="post" th:action="@{/admin/scim-token}">
+                <button type="submit" th:text="${scimConfigured} ? 'Regenerate token' : 'Generate token'">Generate token</button>
+            </form>
+            <form th:if="${scimConfigured}" method="post" th:action="@{/admin/scim-token/clear}"
+                  onsubmit="return confirm('Disable SCIM for this tenant?');">
+                <button class="secondary outline" type="submit">Clear token</button>
+            </form>
+        </div>
+    </article>
+
+    <article th:if="${isAdmin}">
+        <h2>Read caches on this node</h2>
+        <p><small>Credentials, settings, ceilings and the tenant list are read through a time-bounded cache on each
+            node, so a request pays for nothing twice; a write on this node is seen here at once, and another node's
+            within the ttl. This node is <strong th:text="${node}">node</strong>; every other node keeps its own
+            caches until their ttl.</small></p>
+        <figure th:if="${!caches.isEmpty()}">
+            <table class="app-list">
+                <thead><tr><th scope="col">Cache</th><th scope="col">ttl</th><th scope="col">hits</th>
+                    <th scope="col">misses</th><th scope="col">entries</th></tr></thead>
+                <tbody>
+                <tr th:each="cache : ${caches}">
+                    <td th:text="${cache.name()}">authorization</td>
+                    <td th:text="${cache.ttl()}">PT5M</td>
+                    <td th:text="${cache.hits()}">0</td>
+                    <td th:text="${cache.misses()}">0</td>
+                    <td th:text="${cache.entries()}">0</td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <form method="post" th:action="@{/admin/caches/clear}"
+              onsubmit="return confirm('Drop every cached entry on this node?');">
+            <button class="secondary outline" type="submit">Clear caches on this node</button>
+        </form>
+    </article>
+</main>
+</body>
+</html>

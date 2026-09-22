@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Repositories')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Repositories')}"></header>
+    <p><small>Named artifact repositories in this tenant. Publishing creates them; open one to browse its
+        releases and manage staging, retention and pins.</small></p>
+
+    <!--/* T25.6 item 4: a non-blocking notice for every VALID-but-risky repository definition - a mixed screening
+         strength (a hardened upstream beside a weaker one, T23.5b), an unscreened upstream, or a plaintext upstream.
+         These parse (they are not refused - a broken definition is refused loud at write time and never stored), so
+         the operator still sees the loud ⚑ the log emits, not just refusals. */-->
+    <article th:if="${!definitionWarnings.isEmpty()}" class="app-subsection-error" aria-live="polite" role="alert">
+        <h2>⚑ Definition warnings</h2>
+        <p><small>These repository definitions are valid and serving, but risky - review them.</small></p>
+        <ul>
+            <li th:each="w : ${definitionWarnings}">
+                <code th:text="${w.repository}">repo</code> — <span th:text="${w.message}">warning</span>
+            </li>
+        </ul>
+    </article>
+
+    <figure th:unless="${repositories.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Repository</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="r : ${repositories}">
+                <td class="app-list__name">
+                    <!--/* The marks of the formats this repository holds (W4.2b), rendered inline so each mark's
+                         stroke="currentColor" inherits the text colour and inverts with the theme; sized uniformly by
+                         .format-icon. The SVG is a trusted document built from module-embedded constants and from
+                         geometry - never from a name - so th:utext is safe here; the title/aria-label carry the
+                         contributor the mark attributes to, for every reader a drawing does not reach. A repository
+                         no installed format marks draws the one neutral figure instead. */-->
+                    <span th:each="mark : ${r.marks}" class="format-icon"
+                          th:title="${mark.title}" role="img" th:attr="aria-label=${mark.title}"
+                          th:utext="${mark.svg}"></span>
+                    <span th:if="${#lists.isEmpty(r.marks)}" class="format-icon"
+                          title="no installed format marks this repository" role="img"
+                          aria-label="no installed format marks this repository" th:utext="${neutralMark}"></span>
+                    <a th:href="@{'/repositories/' + ${r.name}}" th:text="${r.name}">name</a>
+                    <!--/* EPIC 23: a hardened proxy enforces full-body screening of every untrusted upstream body
+                         before releasing a byte. Badge it so an operator sees which repositories enforce it. */-->
+                    <span th:if="${r.hardened}" class="app-badge" title="Hardening proxy - full upstream screening enforced">hardened</span>
+                    <!--/* T25.6 item 2: the repository's SHAPE from its parsed Definition - writable (accepts uploads)
+                         vs read-only, the host+proxy hybrid, and per-fallback badges (store/no-store + screen strength
+                         for an upstream; an inner-repo reference for a repository fallback). */-->
+                    <span th:replace="~{fragments :: shapeBadges(${r.shape})}"></span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </figure>
+    <th:block th:if="${repositories.isEmpty()}">
+        <div th:replace="~{base :: empty('No repositories yet. Publishing an artifact creates its repository.')}"></div>
+    </th:block>
+    <article>
+        <h2>Storage quota</h2>
+        <p><small>A tenant-wide cap on stored content across every repository; a publish that would exceed it is
+            refused. Currently storing <strong th:text="${quota.usedBytes}">0</strong> bytes<span
+                    th:if="${quota.maxBytes > 0}"> of <strong th:text="${quota.maxBytes}">0</strong></span><span
+                    th:if="${quota.maxBytes == 0}"> (no limit set)</span>.</small></p>
+        <form th:if="${isEditor}" method="post" th:action="@{/repositories/quota}">
+            <label>Maximum bytes (0 = unlimited)
+                <input type="number" name="maxBytes" min="0" th:value="${quota.maxBytes}"></label>
+            <button type="submit">Save quota</button>
+        </form>
+    </article>
+    <article th:if="${capabilities.rateLimit()}">
+        <h2>Rate limit</h2>
+        <p><small>A ceiling on this tenant's request rate; excess requests are answered <code>429 Too Many
+            Requests</code>. <span th:if="${rateLimit > 0}">Currently <strong th:text="${rateLimit}">0</strong>
+            permits per minute.</span><span th:if="${rateLimit == 0}">Currently using the deployment
+            default.</span></small></p>
+        <form th:if="${isEditor}" method="post" th:action="@{/repositories/rate-limit}">
+            <label>Permits per minute (0 = deployment default)
+                <input type="number" name="permitsPerMinute" min="0" th:value="${rateLimit}"></label>
+            <button type="submit">Save rate limit</button>
+        </form>
+    </article>
+</main>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Audit')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Audit trail')}"></header>
+    <p><small>Security-relevant changes for this tenant, newest first.
+        <a th:href="@{/admin/audit.csv(action=${action})}">Export CSV</a></small></p>
+    <form method="get" th:action="@{/admin/audit}">
+        <div class="grid">
+            <label>Action filter <small>(optional, exact - e.g. credential.mint)</small>
+                <input name="action" th:value="${action}" placeholder="credential.mint">
+            </label>
+        </div>
+        <button type="submit">Filter</button>
+    </form>
+    <figure th:unless="${events.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th>
+                <th scope="col">Target</th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${events}">
+                <td th:text="${e.at}">2026-06-30T00:00:00Z</td>
+                <td><code th:text="${e.actor}">hash</code></td>
+                <td th:text="${e.action}">credential.mint</td>
+                <td><code th:text="${e.target}">target</code></td>
+            </tr>
+            </tbody>
+        </table>
+    </figure>
+    <th:block th:if="${events.isEmpty()}">
+        <div th:replace="~{base :: empty('No audit events recorded for this tenant yet.')}"></div>
+    </th:block>
+    <nav th:if="${hasPrev or more}" aria-label="Audit trail pages">
+        <a th:if="${hasPrev}" th:href="@{/admin/audit(action=${action},limit=${limit})}">Newest</a>
+        <a th:if="${more}" th:href="@{/admin/audit(action=${action},after=${next},limit=${limit})}">Older</a>
+    </nav>
+</main>
+</body>
+</html>

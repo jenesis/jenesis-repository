@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Settings')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Settings')}"></header>
+    <p><small>Deployment-wide runtime configuration, shared by every repository node. The same values the
+        <code>/api/settings</code> endpoint and the CLI edit, so the three administration surfaces stay equal. Each
+        knob shows its documentation, its effective value against the default, and whether a change applies
+        <strong>live</strong> (a node's next scheduled re-read) or only <strong>on restart</strong>. A blank value
+        reverts to the default.</small></p>
+
+    <label class="setting-filter">
+        Filter settings
+        <input type="search" id="setting-filter" autocomplete="off"
+               placeholder="Filter by name or what a setting does&hellip;"
+               aria-label="Filter settings by name or description">
+    </label>
+    <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
+
+    <article th:each="g : ${groups}" class="setting-group">
+        <h2 th:text="${g.name}">Group</h2>
+        <th:block th:each="s : ${g.settings}">
+            <div th:replace="~{fragments :: settingRow(${s}, '/settings')}"></div>
+        </th:block>
+    </article>
+
+    <article>
+        <h2>Repository definitions</h2>
+        <p><small>Named repositories routed at runtime: <code>hosted</code>, <code>proxy &lt;url&gt; [nocache]</code>
+            or <code>group a,b push=x</code>. They add to or override the deployment's file-configured repositories
+            and route on the next request.</small></p>
+        <figure th:if="${!repositories.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Definition</th>
+                <th scope="col"><span class="app-sr-only">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${repositories}">
+                <td><code th:text="${e.key}">name</code></td>
+                <td><code th:text="${e.value}">spec</code></td>
+                <td>
+                    <form method="post" th:action="@{/settings/repositories/remove}" style="margin:0">
+                        <input type="hidden" name="name" th:value="${e.key}">
+                        <button th:replace="~{base :: dangerButton('Remove', 'Remove this repository definition? Requests routed to it stop resolving until it is defined again.')}">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+        <form method="post" th:action="@{/settings/repositories}" class="grid">
+            <input name="name" placeholder="name" required pattern="[A-Za-z0-9_-]+">
+            <input name="definition" placeholder="hosted | proxy <url> | group a,b,c" required>
+            <button type="submit">Save</button>
+        </form>
+    </article>
+
+    <article>
+        <h2>Format upstreams</h2>
+        <p><small>The proxy upstream each format pulls its local misses through, over the format's own default and
+            the deployment default.</small></p>
+        <figure th:if="${!upstreams.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Format</th>
+                <th scope="col">Upstream</th>
+                <th scope="col"><span class="app-sr-only">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${upstreams}">
+                <td><code th:text="${e.key}">format</code></td>
+                <td><code th:text="${e.value}">url</code></td>
+                <td>
+                    <form method="post" th:action="@{/settings/upstreams/remove}" style="margin:0">
+                        <input type="hidden" name="format" th:value="${e.key}">
+                        <button th:replace="~{base :: dangerButton('Remove', 'Remove this format''s proxy upstream? Misses stop being pulled through until it is set again.')}">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+        <form method="post" th:action="@{/settings/upstreams}" class="grid">
+            <input name="format" placeholder="format name" required pattern="[A-Za-z0-9_-]+">
+            <input name="url" placeholder="upstream URL" required>
+            <button type="submit">Save</button>
+        </form>
+    </article>
+
+    <article th:if="${capabilities.upstreamCredentials()}">
+        <h2>Upstream credentials</h2>
+        <p><small>Credentials the pull-through proxies send to a private upstream (an internal registry or an
+            authenticated mirror), keyed by host. The secret is write-only - only the hosts are listed, never the
+            credential.</small></p>
+        <figure th:if="${!upstreamAuthHosts.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Host</th>
+                <th scope="col"><span class="app-sr-only">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="h : ${upstreamAuthHosts}">
+                <td><code th:text="${h}">registry.internal</code></td>
+                <td>
+                    <form method="post" th:action="@{/settings/upstream-auth/remove}" style="margin:0">
+                        <input type="hidden" name="host" th:value="${h}">
+                        <button th:replace="~{base :: dangerButton('Remove', 'Remove the stored credential for this host? The secret is not recoverable and must be entered again.')}">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+        <form method="post" th:action="@{/settings/upstream-auth}">
+            <div class="grid">
+                <input name="host" placeholder="registry.internal" required pattern="[A-Za-z0-9.-]+">
+                <select name="scheme">
+                    <option value="basic">basic (username + password)</option>
+                    <option value="bearer">bearer (token)</option>
+                    <option value="header">header (custom name + value)</option>
+                </select>
+            </div>
+            <div class="grid">
+                <input name="username" placeholder="username (basic)" autocomplete="off">
+                <input name="password" type="password" placeholder="password (basic)" autocomplete="off">
+            </div>
+            <div class="grid">
+                <input name="header" placeholder="header name (header)">
+                <input name="token" type="password" placeholder="token (bearer) or header value" autocomplete="off">
+            </div>
+            <button type="submit">Save credential</button>
+        </form>
+    </article>
+
+    <article>
+        <h2>Backup &amp; restore</h2>
+        <p><small>Download every stored setting as one JSON bundle, or restore one - the same bundle the
+            <code>/api/settings/export</code> endpoint and the CLI produce. The bundle is credential-free by
+            construction - every secret-kind setting is excluded, so a stored secret never travels in the backup. An
+            import is validated first and refused whole if any value would not resolve, then it replaces the current
+            stored settings.</small></p>
+        <a class="secondary" role="button" th:href="@{/settings/export}" download="jenesis-settings.json">Download
+            settings bundle</a>
+        <!-- The CSRF token rides in the action URL, not only in the body: this is the one multipart form in the
+             console, and with Spring's multipart resolver deliberately off everywhere (it would drain an artifact
+             upload body before a format read it - D-018) nothing parses the body before the CsrfFilter runs, so a
+             token hidden in the body would never be seen. The body is read by the product's own bounded multipart
+             reader in SettingsController instead. -->
+        <form method="post" th:action="@{/settings/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
+              onsubmit="return window.confirm('Restore settings from this bundle? It replaces the current stored settings.');">
+            <input type="file" name="bundle" accept="application/json,.json" required>
+            <button type="submit">Import bundle</button>
+        </form>
+    </article>
+
+    <script>
+        // In-memory option search (W4.4b): a client-side filter matching each knob's key *and* its
+        // documentation text, so a setting is found by what it does, not only its name. Purely on the
+        // catalogue already rendered - no request, no server round-trip. Each `.setting` carries a
+        // `data-search` string of its key + label + description; a group collapses when all its knobs
+        // are filtered out, and the management panels below the catalogue (repositories, upstreams,
+        // credentials - not documented option knobs) step aside while a filter is active, so the
+        // result stays focused on matching options.
+        (function () {
+            var input = document.getElementById('setting-filter');
+            if (!input) return;
+            var settings = Array.prototype.slice.call(document.querySelectorAll('.setting'));
+            var groups = Array.prototype.slice.call(document.querySelectorAll('.setting-group'));
+            var others = Array.prototype.slice.call(document.querySelectorAll('main > article:not(.setting-group)'));
+            var noMatch = document.getElementById('setting-nomatch');
+            function apply() {
+                var query = input.value.trim().toLowerCase();
+                var anyVisible = false;
+                settings.forEach(function (setting) {
+                    var haystack = (setting.getAttribute('data-search') || '').toLowerCase();
+                    var show = query === '' || haystack.indexOf(query) !== -1;
+                    setting.hidden = !show;
+                    if (show) anyVisible = true;
+                });
+                groups.forEach(function (group) {
+                    group.hidden = !group.querySelector('.setting:not([hidden])');
+                });
+                others.forEach(function (panel) { panel.hidden = query !== ''; });
+                if (noMatch) noMatch.hidden = query === '' || anyVisible;
+            }
+            input.addEventListener('input', apply);
+        })();
+    </script>
+</main>
+</body>
+</html>

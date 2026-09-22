@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<!--
+  coordinate.html — one coordinate of one ecosystem and every version of it this repository holds, whichever way its
+  format stores. A format under the published tree also has its folder in the browse tree; a format in a blobs
+  namespace of its own (npm, PyPI, NuGet, crates.io, conda, Debian, Go, Hugging Face, CocoaPods, Packagist, RubyGems,
+  OCI) has no such folder, and this is the screen a search hit or a release row for it opens.
+
+  Rendered by RepositoryAdminController from RepositoryBrowse.coordinate, which reads the publish facts and the tiny
+  served-path pointers only — never an artifact body. A version that is held or gone is still listed, greyed, so the
+  history reads whole; its paths answer 404 until it is released.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Coordinate')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Coordinate')}"></header>
+    <p>
+        <a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
+        <th:block th:if="${!detail.location.isEmpty()}">
+            &nbsp;·&nbsp;
+            <a th:href="@{/repositories/{repo}/browse(repo=${repo},prefix=${detail.location})}">browse folder &rarr;</a>
+        </th:block>
+    </p>
+
+    <article>
+        <p>
+            <span th:if="${mark != null}"
+                  th:class="${mark.installed} ? 'format-icon' : 'format-icon format-icon--orphaned'"
+                  th:title="${mark.title}" role="img" th:attr="aria-label=${mark.title}" th:utext="${mark.svg}"></span>
+            <code th:text="${detail.coordinate}">left-pad</code>
+            <small th:text="${detail.ecosystem}">npm</small>
+            <small th:if="${mark != null and !mark.installed}">&mdash; no installed format serves this ecosystem</small>
+            <a th:if="${capabilities.findings()}"
+               th:href="@{'/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate})}">findings &rarr;</a>
+        </p>
+    </article>
+
+    <article>
+        <h2>Versions</h2>
+        <p><small>The published versions of this coordinate in this repository, newest first, and the paths each is
+            served at; a long list is paged by name. A held or collected version is listed greyed and its paths
+            answer 404.</small></p>
+        <p th:if="${downloadsTracked && !downloadsLag.isEmpty()}"><small
+                th:text="'Download counts and times can be up to ' + ${downloadsLag} + ' behind.'">Download counts and times can be up to 6 hours behind.</small></p>
+        <div th:if="${detail.versions.isEmpty()}" class="app-empty" role="status">
+            No version of this coordinate is recorded in this repository.
+        </div>
+        <figure th:unless="${detail.versions.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Version</th>
+                    <th scope="col">Published</th>
+                    <th scope="col">Pinned</th>
+                    <th scope="col" th:if="${downloadsTracked}">Downloads</th>
+                    <th scope="col">Served at</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="v : ${detail.versions}" th:style="${v.served} ? '' : 'opacity: 0.6'">
+                    <td>
+                        <code th:text="${v.version}">1.0.0</code>
+                        <small th:unless="${v.served}">(withheld)</small>
+                    </td>
+                    <td><small th:text="${v.published}">2026-06-01T00:00:00Z</small></td>
+                    <td th:text="${v.pinned} ? 'yes' : ''">yes</td>
+                    <td th:if="${downloadsTracked}">
+                        <span th:text="${v.downloads}">7</span>
+                        <small th:if="${!v.lastDownloaded.isEmpty()}" th:text="'last ' + ${v.lastDownloaded}">last 2026-06-05T12:00:00Z</small>
+                    </td>
+                    <td>
+                        <ul th:if="${!v.paths.isEmpty()}" style="margin:0; padding-left:1em">
+                            <li th:each="p : ${v.paths}">
+                                <a th:if="${v.browsable}"
+                                   th:href="@{/repositories/{repo}/artifact(repo=${repo},path=${p})}"
+                                   th:text="${p}">/maven/org/acme/lib/1.0/lib-1.0.jar</a>
+                                <code th:unless="${v.browsable}" th:text="${p}">/npm/left-pad/-/left-pad-1.0.0.tgz</code>
+                            </li>
+                        </ul>
+                        <small th:if="${v.paths.isEmpty()}">&mdash;</small>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+            <p th:if="${detail.next() != null}">
+                <a th:href="@{/repositories/{repo}/coordinate(repo=${repo}, ecosystem=${detail.ecosystem()},
+                        coordinate=${detail.coordinate()}, after=${detail.next()})}">more versions &rarr;</a>
+            </p>
+        </figure>
+    </article>
+</main>
+</body>
+</html>

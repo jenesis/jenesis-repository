@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Tenant settings')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Tenant settings')}"></header>
+    <p><small>The overridable runtime settings for the selected tenant
+        <strong th:text="${tenant}">tenant</strong> — the gate policy, deny list and forward targets a tenant may
+        retune for its own artifact space. The same store of truth the deployment settings and
+        <code>/api/settings?tenant=</code> drive; the deployment-wide dials are managed on the
+        <a th:href="@{/settings}">Settings</a> screen and are not shown here. Each knob's <strong>effective</strong>
+        value follows <em>tenant override, then the deployment value, then the default</em>; a blank value clears the
+        tenant override and falls back to the <strong>deployment</strong> value.</small></p>
+
+    <label class="setting-filter">
+        Filter settings
+        <input type="search" id="setting-filter" autocomplete="off"
+               placeholder="Filter by name or what a setting does&hellip;"
+               aria-label="Filter settings by name or description">
+    </label>
+    <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
+
+    <p th:if="${groups.isEmpty()}"><small>No tenant-overridable settings are installed on this deployment. A tenant
+        may override the compliance gate policy and forward targets when those modules are present.</small></p>
+
+    <article th:each="g : ${groups}" class="setting-group">
+        <h2 th:text="${g.name}">Group</h2>
+        <div class="setting" th:each="s : ${g.settings}"
+             th:attr="data-search=|${s.key} ${s.label} ${s.description} ${s.module}|">
+            <div class="setting-head">
+                <div>
+                    <strong th:text="${s.label}">Label</strong>
+                    <code th:text="${s.key}">key</code>
+                    <small class="setting-module" th:text="${s.module}">module</small>
+                </div>
+                <div class="setting-badges">
+                    <span class="app-badge app-badge--pass" th:if="${s.live}">live</span>
+                    <span class="app-badge" th:unless="${s.live}">↻ restart</span>
+                    <span class="app-badge app-badge--warn" th:if="${s.overridden and !s.pinned}">tenant override</span>
+                    <span class="app-badge" th:if="${s.pinned}"
+                          th:title="|This value is fixed by ${s.pinnedBy} and cannot be changed from the store.|"
+                          th:text="|🔒 pinned by ${s.pinnedBy}|">🔒 pinned</span>
+                    <span class="app-badge app-badge--danger" th:if="${s.highImpact}"
+                          title="A change here can start rejecting or admitting packages.">high-impact</span>
+                    <form method="post" th:action="@{/settings/tenant/save}" class="setting-revert"
+                          th:if="${s.overridden and !s.pinned}"
+                          th:attr="data-confirm=${s.highImpact} ? 'Revert this high-impact policy knob to the deployment value?' : null">
+                        <input type="hidden" name="key" th:value="${s.key}">
+                        <input type="hidden" name="value" value="">
+                        <button class="secondary outline" type="submit">Revert</button>
+                    </form>
+                </div>
+            </div>
+            <p class="setting-doc" th:text="${s.description}">What this setting does.</p>
+            <p class="setting-values">
+                <span>effective: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
+                <span>deployment: <span th:text="${s.defaultDisplay()}">deployment value</span></span>
+            </p>
+            <form method="post" th:action="@{/settings/tenant/save}" class="setting-edit" th:unless="${s.pinned}"
+                  th:attr="data-confirm=${s.highImpact} ? 'Apply this high-impact policy change for this tenant?' : null">
+                <input type="hidden" name="key" th:value="${s.key}">
+                <select name="value" th:if="${s.dropdown()}" th:attr="aria-label=${s.label}">
+                    <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
+                            th:selected="${o == s.value}">option</option>
+                </select>
+                <input th:unless="${s.dropdown()}" name="value" th:type="${s.inputType()}"
+                       th:value="${s.editValue()}" th:attr="aria-label=${s.label}"
+                       th:placeholder="${s.editPlaceholder()}">
+                <button type="submit">Save</button>
+            </form>
+            <div class="setting-edit setting-pinned" th:if="${s.pinned}">
+                <select th:if="${s.dropdown()}" disabled th:attr="aria-label=${s.label}">
+                    <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
+                            th:selected="${o == s.value}">option</option>
+                </select>
+                <input th:unless="${s.dropdown()}" th:type="${s.inputType()}" disabled
+                       th:value="${s.secret()} ? '' : ${s.value}" th:attr="aria-label=${s.label}">
+                <p class="setting-pinned-note" th:text="|Pinned by ${s.pinnedBy} — not editable here.|">
+                    Pinned — not editable here.</p>
+            </div>
+        </div>
+    </article>
+
+    <article>
+        <h2>Restore</h2>
+        <p><small>Restore this tenant's overridable slice from an uploaded JSON bundle (module name to that module's
+            document) — the same shape the deployment bundle carries per tenant. An import is validated first and
+            refused whole if any value would not resolve, then it replaces this tenant's stored overrides, leaving the
+            deployment settings and every other tenant untouched.</small></p>
+        <!-- The CSRF token rides in the action URL, not only in the body: this is the one multipart form in the
+             console, and with Spring's multipart resolver deliberately off everywhere (it would drain an artifact
+             upload body before a format read it - D-018) nothing parses the body before the CsrfFilter runs, so a
+             token hidden in the body would never be seen. The body is read by the product's own bounded multipart
+             reader in SettingsController instead. -->
+        <form method="post" th:action="@{/settings/tenant/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
+              onsubmit="return window.confirm('Restore this tenant from this bundle? It replaces the stored overrides for this tenant.');">
+            <input type="file" name="bundle" accept="application/json,.json" required>
+            <button type="submit">Import tenant bundle</button>
+        </form>
+    </article>
+
+    <script>
+        // In-memory option search: a client-side filter matching each knob's key and its documentation text, so a
+        // setting is found by what it does, not only its name. Purely over the catalogue already rendered - no
+        // request. The restore panel below steps aside while a filter is active, keeping the result focused on
+        // matching options.
+        (function () {
+            var input = document.getElementById('setting-filter');
+            if (!input) return;
+            var settings = Array.prototype.slice.call(document.querySelectorAll('.setting'));
+            var groups = Array.prototype.slice.call(document.querySelectorAll('.setting-group'));
+            var others = Array.prototype.slice.call(document.querySelectorAll('main > article:not(.setting-group)'));
+            var noMatch = document.getElementById('setting-nomatch');
+            function apply() {
+                var query = input.value.trim().toLowerCase();
+                var anyVisible = false;
+                settings.forEach(function (setting) {
+                    var haystack = (setting.getAttribute('data-search') || '').toLowerCase();
+                    var show = query === '' || haystack.indexOf(query) !== -1;
+                    setting.hidden = !show;
+                    if (show) anyVisible = true;
+                });
+                groups.forEach(function (group) {
+                    group.hidden = !group.querySelector('.setting:not([hidden])');
+                });
+                others.forEach(function (panel) { panel.hidden = query !== ''; });
+                if (noMatch) noMatch.hidden = query === '' || anyVisible;
+            }
+            input.addEventListener('input', apply);
+        })();
+    </script>
+</main>
+</body>
+</html>

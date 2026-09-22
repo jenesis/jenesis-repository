@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Instances')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Instances')}"></header>
+    <p><small>An instance is a tenant: its own projects, credentials and members, isolated from the
+        others. Pick one to work in.</small></p>
+    <figure th:unless="${tenants.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Tenant</th>
+                <th scope="col"><span class="app-sr-only">Open</span></th>
+                <th scope="col" th:if="${superadmin}"><span class="app-sr-only">Delete</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="t : ${tenants}">
+                <td>
+                    <code th:text="${t}">acme</code>
+                    <small th:if="${t == selected}">- selected</small>
+                </td>
+                <td>
+                    <form method="post" th:action="@{/instances/select}" style="margin:0">
+                        <input type="hidden" name="tenant" th:value="${t}">
+                        <button type="submit">Open</button>
+                    </form>
+                </td>
+                <td th:if="${superadmin}">
+                    <form method="post" th:action="@{/instances/delete}"
+                          onsubmit="return confirm('Delete tenant and ALL of its projects, credentials and members?');"
+                          style="margin:0">
+                        <input type="hidden" name="name" th:value="${t}">
+                        <button class="secondary outline" type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </figure>
+    <th:block th:if="${tenants.isEmpty()}">
+        <div th:replace="~{base :: empty('No tenants yet.')}"></div>
+    </th:block>
+
+    <article th:if="${superadmin}">
+        <h2>New tenant</h2>
+        <form method="post" th:action="@{/instances/create}">
+            <label>Name
+                <input name="name" required pattern="[A-Za-z0-9_]+" placeholder="acme">
+            </label>
+            <button type="submit">Create tenant</button>
+        </form>
+    </article>
+
+    <article th:if="${superadmin}">
+        <h2>Global disk reclaim</h2>
+        <p>
+            Volume: <strong th:text="${@format.bytes(usableSpace)}">0 B</strong> free of
+            <strong th:text="${@format.bytes(totalSpace)}">0 B</strong>.
+            Configured target: <span th:text="${minFreeBytes}">0</span> bytes /
+            <span th:text="${minFreePercent}">0</span>%.
+        </p>
+        <p><small>Runs a least-recently-used sweep across every tenant's projects until the target is met.</small></p>
+        <form method="post" th:action="@{/instances/reclaim}"
+              onsubmit="return confirm('Run a global LRU sweep across all tenants?');">
+            <div class="grid">
+                <label>Min free bytes <small>(blank = configured)</small>
+                    <input name="minFreeBytes" inputmode="numeric">
+                </label>
+                <label>Min free percent <small>(blank = configured)</small>
+                    <input name="minFreePercent" inputmode="numeric">
+                </label>
+            </div>
+            <button type="submit" class="secondary">Reclaim now</button>
+        </form>
+    </article>
+</main>
+</body>
+</html>
