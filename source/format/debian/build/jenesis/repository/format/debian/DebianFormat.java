@@ -4,6 +4,7 @@ import module java.base;
 import module org.apache.commons.compress;
 
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.format.debian.keys.DebianKeyring;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.Blobs;
@@ -532,17 +533,6 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
      *  upload is refused up front and never buffered whole in heap - the same cap every other format upload applies. */
     private static final int MAX_TRUSTED_KEY = 1024 * 1024;
 
-    /** Where the trusted-signers keyring is stored, under the repository's scope - the material the signature
-     *  dimension's Debian trust reads. */
-    public static final String TRUSTED_KEYRING = "debian/keyring/trusted.asc";
-
-    /** The {@link StoreCache} the dimension reads that keyring through, named here beside the write that changes it
-     *  so provisioning takes effect on this node at once rather than after the cache's ttl; a peer sees it within
-     *  the ttl, as it sees every other cached document. One lowercase word, because a cache's name is a signal
-     *  segment ({@code jenreg.cache.<name>}): the hyphenated name it had before 2026-09-12 broke that grammar, and
-     *  the trust provider's fail-closed catch hid the throw, so the keyring an operator provisioned never verified a
-     *  package through the dimension - a defect only the end-to-end push test could see. */
-    public static final String TRUSTED_KEYRING_CACHE = "debiankeyring";
 
     /** Provision a trusted-signers key: an armored public key uploaded here is merged into the trusted keyring, and
      *  from then on the signature dimension expects every pushed {@code .deb} to carry an embedded signature that
@@ -559,11 +549,12 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             return;
         }
         ByteArrayOutputStream existing = new ByteArrayOutputStream();
-        byte[] merged = blobs.read(TRUSTED_KEYRING, existing)
+        byte[] merged = blobs.read(DebianKeyring.KEY, existing)
                 ? OpenPgpSigner.mergePublicKeyrings(existing.toByteArray(), key, Instant.EPOCH)
                 : key;
-        blobs.write(TRUSTED_KEYRING, merged);
-        StoreCache.of(TRUSTED_KEYRING_CACHE, blobs.store(), StoreCache.configuredTtl()).invalidate(TRUSTED_KEYRING);
+        blobs.write(DebianKeyring.KEY, merged);
+        StoreCache.of(DebianKeyring.CACHE, blobs.store(), StoreCache.configuredTtl())
+                .invalidate(DebianKeyring.KEY);
         exchange.respond(201);
     }
 

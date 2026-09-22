@@ -30,8 +30,11 @@ module build.jenesis.repository.format.debian {
     requires org.tukaani.xz;
     requires org.apache.commons.compress;
     requires com.github.luben.zstd_jni;
+    // The keyring's store key and cache namespace, which anything verifying a Debian signature must spell
+    // the same way as the format that writes it. Unqualified, because agreeing on a key is not access to a
+    // format's implementation - and a clause naming its readers by name could not name one it does not carry.
+    exports build.jenesis.repository.format.debian.keys;
     exports build.jenesis.repository.format.debian to
-            build.jenesis.repository.compliance.debian,
             build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test,
             build.jenesis.repository.gateway.contract.test;
     provides build.jenesis.repository.format.RepositoryFormat
