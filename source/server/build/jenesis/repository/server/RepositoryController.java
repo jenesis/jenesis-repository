@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The HTTP surface of the free repository, mirroring {@link RepositoryApplication}'s framework-neutral
+ * The HTTP surface of the repository, mirroring {@link RepositoryApplication}'s framework-neutral
  * dispatch but over Spring MVC. A catch-all resolves the request to its artifact space through {@link RepositoryRouting}
  * (fixed-tenant by default) and offers it the {@link RepositoryFormat} plugins over that doubly-scoped store through the
  * shared {@link FormatDispatcher}: the first format whose {@code handles(path)} is true serves or accepts the request
@@ -71,7 +71,7 @@ public class RepositoryController {
     private volatile List<String> reportedCapabilityProblems = List.of();
 
     /**
-     * The free single-tenant entry point: routing, dispatch, import sources and a pull-through fetcher, with every
+     * The single-tenant entry point: routing, dispatch, import sources and a pull-through fetcher, with every
      * optional concern left off - no batch ingestion, no deployment settings, no un-scoped root, no routed serving
      * and no edition hooks. It is the shape a deployment that configures none of those gets.
      */
@@ -103,7 +103,7 @@ public class RepositoryController {
      *                  across its backings; {@link RoutedServing#NONE} leaves every repository on its own store.
      * @param hooks     an edition's ingress concerns - tenant binding, release-immutability, quarantine dispatch,
      *                  deploy observation - threaded into the one shared screening edge rather than forked into a
-     *                  second deploy controller; {@link EdgeHooks#NONE} is the free no-op.
+     *                  second deploy controller; {@link EdgeHooks#NONE} is the no-op.
      */
     public RepositoryController(RepositoryRouting routing,
                                 FormatDispatcher dispatcher,
@@ -228,7 +228,7 @@ public class RepositoryController {
     }
 
     /**
-     * The paged asset enumeration - the free product's first {@code /api} surface and the outbound mirror of the
+     * The paged asset enumeration - the product's first {@code /api} surface and the outbound mirror of the
      * import connectors, so a jenesis instance can be walked by another tool (or another jenesis) and getting your
      * data out is never an afterthought. {@code GET /api/assets?repo=<name>&cursor=<token>&limit=<n>} returns a
      * flat, stably-ordered slice of the repository's published assets: each entry's {@code path}, {@code size} and
@@ -310,15 +310,15 @@ public class RepositoryController {
      * {@code ServiceLoader}-discovered {@link CapabilityContributor} is {@linkplain CapabilityContributor#merge merged}
      * into it: a richer distribution (the downstream edition) contributes its formats / import-sources / module-flags
      * onto this one free-served endpoint by shipping a contributor module - the server already {@code uses} the SPI, so
-     * no core change is needed. With no contributor installed (the free product) the served map is exactly the base map,
+     * no core change is needed. With no contributor installed (the product) the served map is exactly the base map,
      * byte-for-byte unchanged. On a key conflict the base key wins (see {@link CapabilityContributor}'s merge rule), so a
-     * contributor can only extend the free product's own flags, never shadow them.
+     * contributor can only extend the product's own flags, never shadow them.
      *
      * <p>What the rule <em>refuses</em> is served too. A contributed key the base already owns, or a contributor that
      * threw building its view, is named in the body under {@code capabilityConflicts} / {@code capabilityFailures} and
      * logged once here - never dropped in silence, which would leave an operator debugging a console that renders the
      * wrong thing with nothing anywhere to explain it. The endpoint still answers: a plugin's mistake costs that
-     * plugin's entry, never the free product's own capability advertisement (&sect;3). A healthy deployment reports
+     * plugin's entry, never the product's own capability advertisement (&sect;3). A healthy deployment reports
      * nothing, so neither key appears and the zero-contributor body is unchanged.
      */
     @GetMapping("/api/capabilities")

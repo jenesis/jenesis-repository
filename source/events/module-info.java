@@ -4,7 +4,7 @@
  * a newly recorded finding, a staging promotion, a hold's release or discard - and a delivery module
  * ({@code webhook}) turns into an outbound notification. Every {@link build.jenesis.repository.events.EventType}
  * constant travels the seam, which is asserted rather than claimed: the publish and unpublish producers are
- * this module's own {@link build.jenesis.repository.events.EventPublicationObserver}, riding the free store's
+ * this module's own {@link build.jenesis.repository.events.EventPublicationObserver}, riding the store's
  * after-commit hook, because a producer that wrote into a delivery module's own store would leave every other sink
  * blind to a publish. The
  * emit fan-out ({@link build.jenesis.repository.events.EventSink#emit}) lives here in the SPI home that

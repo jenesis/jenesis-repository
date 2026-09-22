@@ -31,7 +31,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * snapshot space - ambient deployment state a provider must be handed rather than reach for - and every durable
  * staleness stamp is taken from it, so a test crosses a refresh interval without sleeping (the CISA catalogue already
  * hand-rolls its own {@code LongSupplier} seam for exactly this). The HTTP transport is deliberately absent: it lives
- * in the free {@code build.jenesis.repository.feed} support module, which carries {@code java.net.http}, and this is an
+ * in the {@code build.jenesis.repository.feed} support module, which carries {@code java.net.http}, and this is an
  * SPI contract module that stays {@code java.base}-light (plus the store contract the VEX seam already needs). A feed
  * builds its own transport in its own module, where the vendor's authentication, timeouts and decorators belong.
  *

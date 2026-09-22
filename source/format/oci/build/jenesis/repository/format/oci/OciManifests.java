@@ -149,7 +149,7 @@ final class OciManifests {
      * pointer: a byte-identical sibling image held under a DIFFERENT alias keeps its own {@code /quarantine} pointer
      * body == hex, which the same-path probe never sees, so an accepted re-push under a released alias would
      * un-withhold the still-held sibling. The cross-alias scan ({@code Publication.quarantineAlias} - the
-     * downstream release paths' {@code withheldByAnotherAlias} proof, homed in the free store that owns the
+     * downstream release paths' {@code withheldByAnotherAlias} proof, homed in the store that owns the
      * {@code /quarantine} convention) closes that: clear only when no OTHER live quarantine pointer outside this
      * manifest's own served path still holds the hash. Fail-closed - it only ever NARROWS the clear, so worst case a
      * marker that should clear waits for the review flow.

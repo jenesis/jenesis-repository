@@ -49,7 +49,7 @@ import build.jenesis.repository.store.ServableNames;
  *     method here answers empty rather than composing a pointer key carrying a {@code .} or {@code ..} segment. This
  *     is not cosmetic: {@link #blobKeys} is what an eviction <em>deletes</em>, and {@code ArtifactStore.delete} is not
  *     screened - only writes are - so a traversal-shaped coordinate that composed a key here would aim that delete at
- *     a neighbouring key space. It is deliberately the same rule the free {@code ArtifactLayout.addressable} states
+ *     a neighbouring key space. It is deliberately the same rule the {@code ArtifactLayout.addressable} states
  *     for the {@code publish/}-namespace layouts, applied per {@code /}-separated part so a legitimately multi-segment
  *     coordinate (an npm {@code @scope/name}, a Go module path, an RPM {@code <repo>/<name>}) still resolves.</li>
  * <li><b>Read purity (&sect;10).</b> {@link #describe} derives from the request path <em>alone</em> - no store read, no
@@ -94,7 +94,7 @@ public interface BlobLayout extends BlobRoots {
      * multi-segment for several formats (npm's {@code @scope/name}, a Go module path, RPM's {@code <repo>/<name>}),
      * so screening the whole string would refuse every scoped package while screening nothing extra. Stated once here
      * for all fourteen layouts rather than re-derived per format, exactly as {@code ArtifactLayout.addressable} is
-     * stated once for the {@code publish/}-namespace ones (&sect;13). The free rule carries the control-character
+     * stated once for the {@code publish/}-namespace ones (&sect;13). The rule carries the control-character
      * screen the request seam already applies, so the two seams refuse the same shapes.
      */
     static boolean addressable(String coordinate, String version) {

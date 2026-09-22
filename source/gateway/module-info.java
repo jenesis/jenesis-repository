@@ -1,7 +1,7 @@
 /**
  * The integration around the repository's routed serving: the repository router (hosted, proxy and
  * group definitions over named repositories) and the proxy-path screen that gates a pull-through fetch. The
- * publish-path compliance screening itself rides the free publication-interceptor chain as the {@code gate}
+ * publish-path compliance screening itself rides the publication-interceptor chain as the {@code gate}
  * module's discovered {@code ComplianceScreen}; this module consumes its {@code QuarantineLog} for the
  * proxy-path audit. Reviewing a hold is the gate's own - {@code GatedRepository} lives there with the
  * {@code HoldLifecycle} primitive it is a facade over.

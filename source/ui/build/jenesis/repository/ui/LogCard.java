@@ -6,7 +6,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * The bundled recent-logs card: the console's window onto the server's {@code GET /api/logs} tail - the bounded
  * in-memory ring a logback appender feeds. Consistent with the downstream console's Logs tab: a level filter, a text
  * search and an auto-tail (a poll that advances the {@code since} cursor), calling the key-auth'd JSON API with the
- * {@code Jenesis-Repository-Key} header (the free console authenticates the human by session, but the server's
+ * {@code Jenesis-Repository-Key} header (the console authenticates the human by session, but the server's
  * {@code /api/logs} read is key-gated like every other {@code /api} surface, so the card carries the key the same way
  * the downstream console does). It reads nothing from the {@link ArtifactStore} - the log tail is a live API read, not
  * store state - and degrades gracefully: before a key is entered, or against a deployment whose ring is empty, it shows

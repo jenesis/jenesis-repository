@@ -2,7 +2,7 @@ package build.jenesis.repository.server.kernel;
 
 /**
  * The tenant of the publish in progress on this thread, so the discovered compliance gate can resolve a tenant's own
- * policy without the publication-interceptor chain carrying a tenant name. The free {@code Publication} and
+ * policy without the publication-interceptor chain carrying a tenant name. The {@code Publication} and
  * {@code PublishInterceptor} hand an interceptor only the already-scoped {@link build.jenesis.repository.store.ArtifactStore}
  * and the {@code ArtifactDescriptor} - never the tenant string - and threading one through them would be a
  * change (a republish). Instead the write path opens this scope around the request through the

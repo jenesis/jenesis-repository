@@ -60,7 +60,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     /**
      * The deployment default as the runtime settings currently resolve it: the {@code rate-limit} setting when an
      * operator has written one - whatever {@code lookup} answers for {@code jenreg.rate-limit}, which is
-     * {@link Features#lookup()} on the free shell and the store-backed chain (pin over stored override over
+     * {@link Features#lookup()} on the shell and the store-backed chain (pin over stored override over
      * environment) on a shell that has one - otherwise {@code fallback}, the boot property's value. A value that does
      * not parse as a non-negative number is ignored in favour of the fallback rather than turning every request
      * into an error: the settings API validates the setting's kind on write, so this only guards a hand-edited store.

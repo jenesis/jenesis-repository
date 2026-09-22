@@ -59,7 +59,7 @@ import module java.base;
  *     it" - and {@code null} is never a legal return from {@link #assess}. {@link #withheld} answers {@code false} for
  *     "serves". {@link Content#sibling(String)} and {@link Content#sibling(String, int)} answer
  *     {@link Optional#empty()} for "nothing is published there", never a zero-length body a caller would parse as an
- *     empty document. The free product ships no interceptor at all, so the shipped chain is empty: every upload is
+ *     empty document. The product ships no interceptor at all, so the shipped chain is empty: every upload is
  *     accepted, nothing is diverted, and {@link Publication} reduces the screen to a plain content-addressed store.</li>
  * <li><b>Selection failure.</b> None: the chain is additive - every discovered interceptor participates, there is
  *     nothing to select and so nothing to fail at resolution. A screen that must not run is one whose module is off

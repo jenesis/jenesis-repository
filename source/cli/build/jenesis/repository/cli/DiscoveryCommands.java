@@ -47,7 +47,7 @@ final class DiscoveryCommands {
         return 0;
     }
 
-    /** The published-asset enumeration - the free {@code /api/assets} walk (path, size, SHA-256 and, where the format
+    /** The published-asset enumeration - the {@code /api/assets} walk (path, size, SHA-256 and, where the format
      *  describes one, the coordinate), the outbound mirror of the import connectors so getting your data out is never
      *  the paid feature. Prints one page and its resume cursor, or with {@code --all} follows the cursor to the end. */
     static int assets(String[] args, Path home) throws Exception {

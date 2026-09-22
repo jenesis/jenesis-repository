@@ -910,7 +910,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
      *
      *  <p>These are RubyGems' own ceilings rather than the shared archive-inflation default, and so are passed
      *  explicitly to {@link build.jenesis.repository.store.ArchiveInflation#entry(InputStream, int)} at the call site
-     *  that chose them (the free clause's own escape hatch): a gemspec legitimately carries the gem's whole
+     *  that chose them (the clause's own escape hatch): a gemspec legitimately carries the gem's whole
      *  description and file list, which is why the {@code RubyGemsQualityInspector} states the identical reason for
      *  its {@code MAX_GEMSPEC}. What is not negotiable, and is what changed here, is that the ceiling is applied by
      *  the shared read - so it can never come back as a prefix, and reaching it is an outcome. */

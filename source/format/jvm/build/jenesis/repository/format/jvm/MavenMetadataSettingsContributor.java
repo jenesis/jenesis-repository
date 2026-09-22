@@ -9,21 +9,21 @@ import build.jenesis.repository.settings.SettingsContributor;
  * Maven layout. Off by default: a {@code maven-metadata.xml} is stored and served verbatim, the
  * full wire-fidelity behaviour. Switching it on has an artifact-level document's {@code <versions>} list reconciled
  * against the stored folders (every other field kept as the publisher wrote it) and a document derived for a
- * coordinate that never had one uploaded - the importer / batch case. The free Maven format reads the value off the
+ * coordinate that never had one uploaded - the importer / batch case. The Maven format reads the value off the
  * exchange from the {@code jenreg.} environment, into which a stored setting is layered at boot, so it is
- * restart-bound ({@code live=false}) and this module describes it without the free format depending on the settings
+ * restart-bound ({@code live=false}) and this module describes it without the format depending on the settings
  * layer.
  *
  * <p>The key is named as the wire string the two sides already agree on (the {@code ratelimit/bundle} sibling does the
  * same for {@code rate-limit}) rather than read off {@code MavenMetadata.COMPUTE_SETTING}: a describing module must not
  * take a compile-time edge to a format implementation just to spell a settings key, or every touch of that format
  * rebuilds every image. The two spellings are held together where the coupling belongs - a test - by
- * {@code MavenMetadataSettingsContributorTest}, which does require the free Maven format and fails the build if the
+ * {@code MavenMetadataSettingsContributorTest}, which does require the Maven format and fails the build if the
  * constant and this literal ever drift apart.
  */
 public final class MavenMetadataSettingsContributor implements SettingsContributor {
 
-    /** The free Maven format's {@code MavenMetadata.COMPUTE_SETTING}, pinned to that constant by the bundle test. */
+    /** The Maven format's {@code MavenMetadata.COMPUTE_SETTING}, pinned to that constant by the bundle test. */
     private static final String COMPUTE_SETTING = "maven-metadata-compute";
 
     @Override

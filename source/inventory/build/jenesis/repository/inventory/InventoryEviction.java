@@ -121,7 +121,7 @@ final class InventoryEviction {
             for (String prefix : layout.paths(release.coordinate(), release.version(), store)) {
                 for (String child : store.list("publish" + prefix)) {
                     // The layout-enriched removal: this eviction already resolved the release's coordinate, so the
-                    // observers' onDeleted carries it (the free primitive completes the blob identity from the
+                    // observers' onDeleted carries it (the primitive completes the blob identity from the
                     // pointer) instead of the bare path the neutral unpublish(String) would report.
                     publication.unpublish(new ArtifactDescriptor(release.ecosystem(), release.coordinate(),
                             release.version(), prefix + "/" + child, null, release.prerelease(), null, -1L));

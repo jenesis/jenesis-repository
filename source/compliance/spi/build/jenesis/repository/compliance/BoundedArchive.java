@@ -19,7 +19,7 @@ import build.jenesis.repository.store.ArchiveWalk;
  * gate's own and have no counterpart on the shared walk.
  *
  * <h2>What that changed, deliberately</h2>
- * Two behaviours the hand-rolled cap got wrong, and the free screen gets right:
+ * Two behaviours the hand-rolled cap got wrong, and the screen gets right:
  * <ul>
  *   <li><b>A truncated walk yields nothing at all.</b> The old walk handed back the best entry it had found <em>with
  *       the truncation flag set</em>, so an archive could place a decoy manifest early and the real one past the
@@ -28,13 +28,13 @@ import build.jenesis.repository.store.ArchiveWalk;
  *       now read "this artifact declares nothing" where they used to read the early find.</li>
  *   <li><b>A budget exactly spent is not a truncation.</b> The old stream reported capped the moment the ceiling was
  *       reached, even when the archive ended on that very byte, so an artifact whose footprint was exactly the bound
- *       cried wolf. The free screen looks one byte ahead before it decides.</li>
+ *       cried wolf. The screen looks one byte ahead before it decides.</li>
  * </ul>
  * Nothing else about the walk moves. In particular a walk that runs out of <em>body</em> part-way through still ends
  * as a walk that did not complete rather than as a corrupt archive: the {@code byte[]} an inspector is handed is
  * itself bounded, at {@link QualityInspector#PREFIX_INSPECTION_LIMIT}, so an archive ending mid-entry is the ordinary
  * shape of a large artifact seen through that window and not a verdict about the artifact. That tier is the gate's to
- * know about, which is why the mapping lives here and not in the free walk.
+ * know about, which is why the mapping lives here and not in the walk.
  *
  * <h2>Which side a caller lands on is the read's ROLE, never the format</h2>
  * A cut-off walk is degraded by one inspector and refused by another, and the criterion is what the entry being looked
@@ -47,7 +47,7 @@ import build.jenesis.repository.store.ArchiveWalk;
  *       {@code .nuspec}, RubyGems' gemspec) - fails closed, saying which of the two happened.</li>
  * </ul>
  * The gate's refusal type is its own ({@link MalformedArtifactException}, which the screens hold fail-closed and record
- * as an inspection failure), so an identity-bearing caller re-words the free seam's refusal rather than inheriting it.
+ * as an inspection failure), so an identity-bearing caller re-words the seam's refusal rather than inheriting it.
  */
 public final class BoundedArchive {
 
@@ -153,7 +153,7 @@ public final class BoundedArchive {
             throw new MalformedArtifactException(artifact + " is not a readable zip archive", cause);
         }
         // A body that ran out is a bound the GATE owns (the prefix tier), so the walk says it stopped early even
-        // though the free screen still had budget - the free walk cannot know the byte[] it was fed is itself a
+        // though the screen still had budget - the walk cannot know the byte[] it was fed is itself a
         // window. The consumed count is the real one, so a refusal still names how far the read got.
         return cutShort[0] && !found.truncated()
                 ? new ArchiveWalk.Found<>(null, ArchiveInflation.Outcome.TRUNCATED, found.consumed())

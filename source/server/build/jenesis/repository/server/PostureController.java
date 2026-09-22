@@ -46,7 +46,7 @@ public final class PostureController {
         // the surface whose whole job is to enumerate the deployment's weaknesses. A caller with no key (auth off,
         // or an anonymous read) resolves to no tenant and sees the deployment rows alone, which is the fail-closed
         // direction. This is the same composition the downstream console's ScopedPosture performs; the primitives
-        // it uses live here, in the free report, and were simply not being called.
+        // it uses live here, in the report, and were simply not being called.
         List<SecurityAdvisory> visible = report.visibleTo(Authorization.tenantOf(PresentedKey.from(request)));
         List<Map<String, Object>> rows = new ArrayList<>();
         for (SecurityAdvisory advisory : visible) {

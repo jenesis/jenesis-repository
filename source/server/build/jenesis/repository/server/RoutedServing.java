@@ -8,7 +8,7 @@ import build.jenesis.repository.format.RepositoryFormat;
 /**
  * The seam that lets a deployment serve a <em>routed</em> repository - one defined as a read-through proxy of an
  * upstream or a group view over other repositories - across its backings on a read, rather than only over its own
- * hosted store. The free {@link RepositoryController} consults it on every {@code GET}/{@code HEAD}: a repository
+ * hosted store. The {@link RepositoryController} consults it on every {@code GET}/{@code HEAD}: a repository
  * that {@link #routes(String) has a routed definition} is served here (a proxy pulls through its own upstream on a
  * local miss and caches per its definition, a group consults its members in order with the first hit winning, a
  * {@code nocache} leg stays a pure view), while a plain hosted repository is left to the {@link FormatDispatcher}
@@ -21,9 +21,9 @@ import build.jenesis.repository.format.RepositoryFormat;
  * proxy leg screens each fetched artifact through the same compliance gate, so a withheld or gate-denied path stays a
  * {@code 404} on a routed read exactly as on a direct one.
  *
- * <p>A deployment with no routed repositories binds {@link #NONE}, so the free single-tenant edition serves every
+ * <p>A deployment with no routed repositories binds {@link #NONE}, so a single-tenant deployment serves every
  * repository over its own store unchanged. The seam holds no framework type; an embedder contributes it as a bean
- * (the free auto-configuration's {@code @ConditionalOnMissingBean} default is {@code NONE}).
+ * (the auto-configuration's {@code @ConditionalOnMissingBean} default is {@code NONE}).
  */
 public interface RoutedServing {
 

@@ -23,7 +23,7 @@ import build.jenesis.repository.store.Publication;
  *
  * <p><b>Amortizer, not sole defense (EPIC 28).</b> The request-time fail-closed <em>guarantee</em> now lives at
  * the serve boundary: {@link HardenedHitVerify} verifies every hardened cache hit against the current gate BEFORE it
- * serves (the free {@link build.jenesis.repository.server.PullThroughHooks} seam #79 closes), so an unverdicted or
+ * serves (the {@link build.jenesis.repository.server.PullThroughHooks} seam #79 closes), so an unverdicted or
  * stale-verdicted hit is never served unverified. This sweep is the §5 bulk <em>complement</em> - it pre-records the
  * digest-pinned verdicts so a steady-state hit-verify is one cheap metadata read rather than a full local re-screen, and
  * it proactively evicts bad cached artifacts including ones never requested again (healing cold corners the on-read

@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The free single-tenant import edge: the repo-less {@code /repository/admin/import} migration trigger and its status
+ * The single-tenant import edge: the repo-less {@code /repository/admin/import} migration trigger and its status
  * read, peeled out of {@link RepositoryController} into its own controller bean so a richer distribution can OWN the
  * import edge without a cross-layer mapping override. It triggers an asynchronous migration through the first
  * {@link ImportSourceProvider} that handles the requested source - discovered with {@code ServiceLoader} like the
@@ -35,7 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
  * edition's tenant-scoped {@code /repository/<repo>/admin/import} with its audited, SSRF-screened choreography - this
  * free controller is simply not created, so its mapping never joins the handler mapping and the distribution's
  * controller is the only import edge: the downstream edition no longer needs a {@code WebMvcRegistrations} bean to
- * suppress the free mapping. With no provider installed (the free product) the edge is served exactly as before,
+ * suppress the mapping. With no provider installed (the product) the edge is served exactly as before,
  * byte-for-byte unchanged.
  *
  * <p>Authorization is not done here: {@link RepositorySecurityAutoConfiguration} gates the wire through the

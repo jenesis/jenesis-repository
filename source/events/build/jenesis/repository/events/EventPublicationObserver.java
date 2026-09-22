@@ -6,7 +6,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 
 /**
- * The publish and unpublish producers of the event seam: the free store's after-commit hook, discovered like any
+ * The publish and unpublish producers of the event seam: the store's after-commit hook, discovered like any
  * {@link PublicationObserver}, turned into an {@link EventSink#emit} fan-out. Because the store contract fires
  * {@link #onPublished} only for an accepted (linked, serving) publish, a quarantined or rejected artifact never raises
  * a publish event - the quarantine leg is the gate's own event - and because it fires {@link #onDeleted} once per

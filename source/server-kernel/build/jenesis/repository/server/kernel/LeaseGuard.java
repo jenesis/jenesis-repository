@@ -15,7 +15,7 @@ import build.jenesis.repository.store.Lease;
  * <p>It is deliberately <strong>store-light and tenant-blind</strong>: it knows a lease object, a holder id, a ttl and
  * a renewal timer, and nothing about tenants, repositories, tasks or meters. It is <strong>not a second exclusion
  * mechanism</strong> - it is the same one {@link Lease} the scheduler always took, with its lifecycle named. The
- * deployment's other distributed claim (the free walk's per-segment claim) operates at a different granularity and
+ * deployment's other distributed claim (the walk's per-segment claim) operates at a different granularity and
  * composes with this one; nothing here duplicates it.
  *
  * <h2>What a lost lease means</h2>

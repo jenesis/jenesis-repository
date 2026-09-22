@@ -11,7 +11,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * {@code jenreg.bootstrap-key}; this card is where every key after it is issued.
  *
  * <p>It calls the key-gated {@code /api/credentials} JSON surface with the {@code Jenesis-Repository-Key} header,
- * exactly as the {@link ConsistencyCard} and {@link LogCard} do: the free console authenticates the human by
+ * exactly as the {@link ConsistencyCard} and {@link LogCard} do: the console authenticates the human by
  * session, while the server's {@code /api} surfaces are key-gated like every other one. Those routes take the
  * {@code manage:} rights at deployment scope, so the key pasted here must carry {@code manage:write} - a key that
  * may publish an artifact deliberately cannot issue more keys.

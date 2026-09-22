@@ -26,7 +26,7 @@ module build.jenesis.repository.compliance {
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.store;
-    // A SignatureScheme reads ArtifactSignatures.Evidence and answers over its Signed: the free format contract is
+    // A SignatureScheme reads ArtifactSignatures.Evidence and answers over its Signed: the format contract is
     // part of this SPI's surface, so an implementor sees it through this module. Transitive for that reason alone.
     requires transitive build.jenesis.repository.format;
     // SignalSourceProvider extends IconContributor: its name() is what a finding records as its source, so the

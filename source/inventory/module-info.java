@@ -3,7 +3,7 @@
  * coordinate an {@code ArtifactLayout} supplies, release enumeration, per-repository retention-policy storage, and
  * the {@code pointerRoots()} union (the {@code publish/} namespace plus every installed blobs-namespace format's
  * declared roots) the discovered garbage collector and rebuild pass judge references from - the reclamation itself
- * moved onto the free {@code GarbageCollector} SPI. Core plumbing shared by the gate, staging, retention and
+ * moved onto the {@code GarbageCollector} SPI. Core plumbing shared by the gate, staging, retention and
  * the console - deliberately a direct seam, not an SPI - in its own module so a feature module reaches it without
  * dragging in the gateway wiring. It also carries its own convergence backstop: a discovered
  * {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider} answering to {@code reconcile} that rebuilds the

@@ -173,7 +173,7 @@ public interface BlobReferences {
     }
 
     /**
-     * Every root a live pointer can sit under: the free {@code publish/} tree plus each installed lender's own
+     * Every root a live pointer can sit under: the {@code publish/} tree plus each installed lender's own
      * blob roots.
      *
      * <p><b>One computation, because two of them is a deletion bug waiting for a divergence.</b> This was derived

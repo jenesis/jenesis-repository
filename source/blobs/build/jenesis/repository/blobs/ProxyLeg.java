@@ -24,7 +24,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>The screen was the <em>stricter</em> of the two that were in use when this seam was written, and that
  * difference is gone: {@link Keys#unsafePath} is today a pure delegation to {@code ArtifactStore.traversalFree},
  * which itself refuses a backslash and a C0 control character alongside the {@code .}/{@code ..} segments. So this
- * seam and the free layouts' own request screens refuse exactly the same shapes, and there is one predicate rather
+ * seam and the layouts' own request screens refuse exactly the same shapes, and there is one predicate rather
  * than two that agree.
  *
  * <p>Said plainly because the older wording read as a live divergence and cost a reader an investigation: the value

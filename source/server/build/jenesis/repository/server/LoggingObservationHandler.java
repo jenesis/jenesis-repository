@@ -9,7 +9,7 @@ import io.micrometer.observation.ObservationHandler;
 /**
  * The logging pillar of the Observation API, in one place beside {@link Observations}: it logs each of this server's
  * observed operations ({@code jenreg.*}) and each HTTP request once it completes, with the observation name, its
- * key-values (repository, tenant, any outcome) and any error. Registered once as a bean by the free auto-configuration, so a single handler lights logging for every
+ * key-values (repository, tenant, any outcome) and any error. Registered once as a bean by the auto-configuration, so a single handler lights logging for every
  * {@code jenreg.*} operation wherever the server module runs - the console, the maintenance sweep, the downstream
  * controllers - instead of each module carrying its own copy. Boot's observation auto-configuration attaches it to
  * the auto-configured {@code ObservationRegistry} alongside the metrics handler (Micrometer, exposed through

@@ -1443,7 +1443,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     /**
-     * Whether an image name may become the {@code oci/<name>/...} key it addresses: the free store's own path rule
+     * Whether an image name may become the {@code oci/<name>/...} key it addresses: the store's own path rule
      * plus the one thing that rule deliberately allows and the Distribution grammar does not - an empty segment.
      *
      * <p>The character half is {@link ArtifactStore#traversalFree}, not a local copy of it. It used to be a copy, and

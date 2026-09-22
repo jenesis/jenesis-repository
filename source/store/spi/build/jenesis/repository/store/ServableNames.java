@@ -96,7 +96,7 @@ public final class ServableNames {
     private static final Logger LOGGER = LoggerFactory.getLogger(ServableNames.class);
 
     /** The reserved review subtree name under {@code publish/} - owned here once (today duplicated as an inline
-     *  {@code "quarantine"} constant in the free {@code BrowseController}, {@code PublishedAssets}, {@code BrowsePanel}
+     *  {@code "quarantine"} constant in the {@code BrowseController}, {@code PublishedAssets}, {@code BrowsePanel}
      *  and the downstream console browse). A held upload's pointer is diverted to {@code publish/quarantine<path>}. */
     public static final String QUARANTINE = "quarantine";
 

@@ -132,7 +132,7 @@ public interface MaintenanceTaskProvider extends IconContributor {
      * so the observability surface reports the pass as failed rather than letting it vanish from a shorter list.
      *
      * <p>Containment covers a provider's own value or construction failure, including one that originates in another
-     * repository's code - a malformed {@code jenreg.gc.grace} reaching the free garbage collector through the
+     * repository's code - a malformed {@code jenreg.gc.grace} reaching the garbage collector through the
      * retention provider - which no provider-local {@code catch} in this repository could fix.
      *
      * <p>An {@link IllegalStateException} is deliberately <em>not</em> contained here either: that is what the shared

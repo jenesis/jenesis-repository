@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
  * {@link SecurityAdvisory} carries the condition and the fix, never a read credential), so this surface, which
  * enumerates the deployment's weaknesses, cannot itself leak one. A clean deployment returns an empty list (the
  * healthy state), so it degrades gracefully. Contributed through the {@code ServerModuleProvider} seam; with this
- * module absent the server carries no {@code /api/admin/posture} endpoint (the free {@code /api/posture} still stands
+ * module absent the server carries no {@code /api/admin/posture} endpoint (the {@code /api/posture} still stands
  * independently).
  *
  * <h2>The chain the server runs on, not the one the store holds</h2>

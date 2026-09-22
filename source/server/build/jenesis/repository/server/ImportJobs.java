@@ -25,7 +25,7 @@ public final class ImportJobs {
     }
 
     /** Start an import in the background, seeded with the given counts (non-zero for a resume), and return at once.
-     *  The free convenience arm: no edition listener and no job-scope decorator, so the job runs exactly as the free
+     *  The convenience arm: no edition listener and no job-scope decorator, so the job runs exactly as the free
      *  import walk does. */
     public void submit(ArtifactStore store, ImportSource source, String jobId, int baseImported, int baseSkipped)
             throws IOException {
@@ -38,7 +38,7 @@ public final class ImportJobs {
      *  controller uses to bind its {@code PublishTenant} around the run, since the import job runs on a fresh
      *  {@link Thread#ofVirtual() virtual thread} where no tenant is bound and the screen would otherwise resolve the
      *  deployment-wide policy rather than the tenant's. The default {@link UnaryOperator#identity() identity} leaves
-     *  the free behaviour unchanged. This job's own progress accounting (counts, cursor, status JSON) always runs;
+     *  the behaviour unchanged. This job's own progress accounting (counts, cursor, status JSON) always runs;
      *  {@code listener} is notified in addition to it. */
     public void submit(ArtifactStore store, ImportSource source, String jobId, int baseImported, int baseSkipped,
                        RepositoryImport.Listener listener, UnaryOperator<Runnable> jobScope) throws IOException {

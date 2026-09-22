@@ -40,7 +40,7 @@ public final class MavenMetadata {
 
     /** The bare setting key (under {@code jenreg.}) that opts a deployment into computing the served
      *  artifact-level {@code maven-metadata.xml} rather than serving the stored bytes verbatim - default off, read
-     *  off the exchange so the free format needs no settings dependency. */
+     *  off the exchange so the format needs no settings dependency. */
     public static final String COMPUTE_SETTING = "maven-metadata-compute";
 
     /** How many stored children of one coordinate a metadata render may examine. Far above any real release history

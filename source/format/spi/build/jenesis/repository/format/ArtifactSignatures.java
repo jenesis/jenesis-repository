@@ -325,7 +325,7 @@ public interface ArtifactSignatures extends EcosystemLayout {
          * {@linkplain PublishInterceptor.Content.Bounded#truncated() truncated} rather than raising, so a format
          * declines to produce evidence rather than asserting something about a prefix.
          *
-         * <p>The bounded pair is the free store contract's own record rather than a third copy of two values that
+         * <p>The bounded pair is the store contract's own record rather than a third copy of two values that
          * already exist twice in this build (&sect;8).
          */
         Optional<PublishInterceptor.Content.Bounded> sibling(String path, int limit) throws IOException;

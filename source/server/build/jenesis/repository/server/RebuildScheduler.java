@@ -215,7 +215,7 @@ public final class RebuildScheduler implements AutoCloseable {
                 lastRun, lastDuration, lastOutcome);
     }
 
-    /** The pointer roots the pass walks: the free {@code publish} namespace and every blobs-namespace root the
+    /** The pointer roots the pass walks: the {@code publish} namespace and every blobs-namespace root the
      *  installed formats declare. */
     static List<String> roots() {
         List<String> roots = new ArrayList<>();

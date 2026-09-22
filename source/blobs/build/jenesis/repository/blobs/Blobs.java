@@ -165,7 +165,7 @@ public final class Blobs {
     /** Point {@code key} at an already-stored blob hash with the same load-bearing compare-and-set retry {@link #write}
      *  uses, so a concurrent republish resolves last-writer-wins and a pointer that cannot land is reported rather than
      *  silently dropped. Once the pointer lands, any garbage collector's {@code gc/condemned/<hash>} marker on the
-     *  blob is cleared - the same guard the free {@code Publication.link} gives its {@code publish/} namespace:
+     *  blob is cleared - the same guard the {@code Publication.link} gives its {@code publish/} namespace:
      *  identical content dedupes to one blob, so a "new" publish through a blobs-namespace format may link a blob a
      *  collector already judged unreferenced, and clearing the marker on the write path un-condemns it before the
      *  collecting sweep's final marker re-read. One existence probe per link, a no-op wherever collection never
@@ -176,7 +176,7 @@ public final class Blobs {
 
     /**
      * {@link #link(String, String)} with the blob's stored length in hand, so the pointer records it without the stat
-     * the two-argument form pays to learn it - the same split the free {@code Publication.link} makes. The length is
+     * the two-argument form pays to learn it - the same split the {@code Publication.link} makes. The length is
      * what {@link #locate} answers a serve from, so a caller that has it (the pipeline's serving step, a
      * {@link #stored} body) passes it, and one that has not lets this method read it once at the moment the pointer
      * is written, against the stat every download would otherwise pay.
@@ -306,7 +306,7 @@ public final class Blobs {
             return Optional.of(new Located(content.get(), store.size(key)));
         }
         // A key this node recently read and found absent is absent still, from the store's memory of misses - the
-        // same memory the free serve probe consults, so a format's own pointer namespace pays the pointer read once
+        // same memory the serve probe consults, so a format's own pointer namespace pays the pointer read once
         // per ttl for a name that is not there, and a link through the store forgets the key at once.
         Optional<MissMemory> memory = NodeMemoStore.misses(store);
         if (memory.isPresent() && memory.get().remembered(store, key)) {

@@ -929,7 +929,7 @@ public final class Publication {
 
         /** What an already-published coordinate means for the incoming upload. */
         public enum Mode {
-            /** Last-writer-wins: no probe at all, the pointer simply moves. The free formats' behaviour today. */
+            /** Last-writer-wins: no probe at all, the pointer simply moves. The formats' behaviour today. */
             OVERWRITE,
             /** A re-publish of <em>identical</em> bytes converges (the layout re-runs and lands the same state, so a
              *  half-written first attempt is repaired); different bytes at a taken coordinate raise

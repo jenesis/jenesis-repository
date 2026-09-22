@@ -7,7 +7,7 @@
  * discovery SPI the feature-web modules implement.
  *
  * <p><b>What is deliberately not here: any feature.</b> This module requires contract homes and the seams beneath
- * them - the free server and its SPI, the store, the settings, maintenance and compliance contracts, the staging,
+ * them - the server and its SPI, the store, the settings, maintenance and compliance contracts, the staging,
  * retention and upstream-credential SPIs, the blobs view and the metering decorator - and no implementation of
  * anything. It used to require the router, the gate, the inventory, the metadata store and the import SPI as well,
  * for six classes: {@code LiveConfig} parsed the router's definitions, {@code Repositories} handed out the gated
@@ -29,7 +29,7 @@
  * seven classes in this package, and the split was measured before it was made: nothing here read them but a path
  * normaliser the manager carried, which moved to {@code RepositoryRequests} where both halves read it. The kernel is
  * therefore the part a single-tenant deployment is entirely served by, and the tenancy module the part that can be
- * left out of one - the free routing is the fixed one and the free authorization manager backs off to the tenancy
+ * left out of one - the routing is the fixed one and the authorization manager backs off to the tenancy
  * module's by bean name, so a composition without it is the plain chain over this kernel.
  *
  * <p>This module carries NO {@code @SpringBootApplication} and no controller: the boot root is

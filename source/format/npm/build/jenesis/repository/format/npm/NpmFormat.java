@@ -833,7 +833,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
      * yields the coordinate {@code @scope} and a version of {@code versions/1.0.0}. Taking the last one yields the
      * package and the version that were actually published.
      *
-     * <p>Screened through {@link BlobLayout#addressable}, which applies the free addressability rule to each part
+     * <p>Screened through {@link BlobLayout#addressable}, which applies the addressability rule to each part
      * of the coordinate - the rule written for exactly this, a blobs-namespace coordinate that is legitimately
      * multi-segment - so a traversal-shaped key decodes to nothing rather than to a row naming a coordinate this
      * format would never have written.

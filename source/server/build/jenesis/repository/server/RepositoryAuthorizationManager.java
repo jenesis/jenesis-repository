@@ -166,7 +166,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
     }
 
     /** The client's source address for the allowlist check: the TCP peer, with a forwarded header honoured only from a
-     *  trusted proxy. No trusted proxies are configured on the free single-token server, so the peer is always the
+     *  trusted proxy. No trusted proxies are configured on the single-token server, so the peer is always the
      *  client and a client-supplied {@code X-Forwarded-For} is ignored (it cannot spoof the allowlist). A deployment
      *  that terminates behind a real proxy contributes a richer manager that passes its trusted-proxy CIDRs here. */
     private static String clientAddress(HttpServletRequest request) {

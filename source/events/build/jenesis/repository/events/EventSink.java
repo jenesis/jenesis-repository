@@ -160,7 +160,7 @@ import build.jenesis.repository.store.Providers;
  *     writes into a delivery module's own store instead of calling {@link #emit} - is not decidable that way and is
  *     not asserted: nothing can see an event that was never modelled as one. (This sentence named that test for a
  *     long time before it existed, which is why it now says what the test does rather than only that it does it.) The six producer sites are the events module's own {@code EventPublicationObserver}
- *     (publish and unpublish, riding the free store's after-commit hook), the gate's quarantine log, the findings
+ *     (publish and unpublish, riding the store's after-commit hook), the gate's quarantine log, the findings
  *     store, the staging store's promotion, and both legs of {@code HoldLifecycle} (release and discard). A sink may
  *     therefore assume it sees every event type; a producer of a new type calls {@link #emit} rather than a delivery
  *     module's own store, and adds itself to that test's inventory in the same change.</li>

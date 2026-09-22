@@ -46,7 +46,7 @@ public final class DemoSeeder {
     /** As {@link #DemoSeeder(List, ProxyFormat.Fetcher)}, binding an edition's {@link PullThroughHooks} into the
      *  {@link FormatDispatcher} {@link #seed} builds - the injection point for the dispatcher-direct demo leg, which
      *  does not pass through the routed gateway's own screening. The other constructor delegates here with
-     *  {@link PullThroughHooks#NONE}, so the free demo seed pulls through exactly as before. */
+     *  {@link PullThroughHooks#NONE}, so the demo seed pulls through exactly as before. */
     public DemoSeeder(List<RepositoryFormat> formats, ProxyFormat.Fetcher fetcher, PullThroughHooks hooks) {
         this.formats = List.copyOf(formats);
         this.fetcher = fetcher;

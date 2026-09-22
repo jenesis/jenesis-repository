@@ -283,7 +283,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     /** Whether this deployment opts into computing {@code maven-metadata.xml} on read (default off), read off the
-     *  exchange so this free format consults the setting without depending on any settings layer. */
+     *  exchange so this format consults the setting without depending on any settings layer. */
     private static boolean metadataCompute(FormatExchange exchange) {
         return Boolean.parseBoolean(exchange.setting(MavenMetadata.COMPUTE_SETTING));
     }

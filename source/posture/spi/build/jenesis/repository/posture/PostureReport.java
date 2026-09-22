@@ -209,7 +209,7 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
      * <p>The composition lives here rather than at each read surface, because getting it wrong is a disclosure and
      * there is more than one surface. This report enumerates a deployment's weaknesses by design, so a surface that
      * renders {@link #advisories()} whole hands one tenant's unsafe settings to every other tenant's readers -
-     * which is exactly what the free {@code /api/posture} did while the downstream console composed the same two
+     * which is exactly what the {@code /api/posture} did while the downstream console composed the same two
      * calls correctly one edition over.
      *
      * <p>Callers that need the two halves apart - a console rendering "your tenant" and "this deployment" as

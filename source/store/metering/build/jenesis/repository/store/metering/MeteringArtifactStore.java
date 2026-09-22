@@ -10,7 +10,7 @@ import io.micrometer.core.instrument.Timer;
  * the operation ({@code op}), the configured backend ({@code backend}: filesystem, s3, azure, ...) and the
  * {@code outcome} ({@code ok}/{@code error}) - so a deployment sees per-backend store latency the same way the
  * quota decorator meters bytes. It is wired only in the distribution, and only when a {@link MeterRegistry} is
- * present, so the free serving path stays inert (no metrics dependency reaches the store SPI). A scoped view meters
+ * present, so the serving path stays inert (no metrics dependency reaches the store SPI). A scoped view meters
  * too, so a tenant/repository operation is timed the same as a root one. The decorator adds nothing to the bytes:
  * a {@link ArtifactStore.RangedSink} target and the content-addressed {@link #writeBlob} pass straight through to
  * the leaf backend.

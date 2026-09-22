@@ -6,11 +6,11 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 
 /**
- * The published index's subscription to the free withhold-change feed (invariant (b) MATERIALIZATION): the after-commit
+ * The published index's subscription to the withhold-change feed (invariant (b) MATERIALIZATION): the after-commit
  * hook that turns a withhold transition into the one thing that can actually retract an immutable, content-addressed,
  * {@code Cache-Control: immutable} index chunk consumers have already cached - a rebuild of the chain. The exemplar is
  * {@code SearchPublicationObserver}, which routes {@code onPublished}/{@code onDeleted} into a {@code DirtyIndexFeed};
- * this is its withhold-face sibling. Discovered on the free {@code store} publish path like any
+ * this is its withhold-face sibling. Discovered on the {@code store} publish path like any
  * {@link PublicationObserver}, so both faces of a hold reach it by construction - a {@code withheld/<hash>} marker
  * written by {@code Withheld.mark} (the KEV/license/OCI sweeps) and a fresh {@code /quarantine<servedPath>} review
  * pointer linked by {@code Publication.link} (every retroactive sweep, the reachability pointer-only hold included).
@@ -24,7 +24,7 @@ import build.jenesis.repository.store.PublicationObserver;
  *
  * <p>Marking is unconditional (no index-exists gate: with the pass disabled the flag is one inert tiny object, simpler
  * than the search index's manifest gate and always safe) and defensive: a withhold transition must never fail because
- * this consumer's flag write threw - the free feed already logs-and-contains an observer's exceptions
+ * this consumer's flag write threw - the feed already logs-and-contains an observer's exceptions
  * ({@code Publication.notifyWithheld}), and this body contains its own {@link RuntimeException} too so a programming
  * error here can never ride back into {@code Withheld.mark} / {@code Publication.link} and block a hold. A lost signal
  * (a crash between the durable write and this notify) is healed by the pass's own periodic rebuild-from-truth, the

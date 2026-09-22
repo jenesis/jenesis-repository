@@ -24,7 +24,7 @@ import build.jenesis.repository.store.Names;
  * layout, so it gains its module view) or dropped. State is persisted, so the lifecycle survives across requests,
  * unlike the in-memory {@link build.jenesis.repository.staging.StagingRepository} model that pins down the same
  * transitions in a unit test. All storage
- * goes through the free repository's {@link Publication}; promotion never copies bytes, it re-points the same
+ * goes through the repository's {@link Publication}; promotion never copies bytes, it re-points the same
  * content-addressed blobs.
  *
  * <p>The persisted {@code staging-state/<id>} marker carries the state <em>and when it was reached</em>

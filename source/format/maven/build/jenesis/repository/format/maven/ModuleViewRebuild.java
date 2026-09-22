@@ -37,7 +37,7 @@ import build.jenesis.repository.walk.WalkConsumer;
  * holds no state between deliveries or passes.
  *
  * <p><b>What drives it.</b> It is discovered like any other consumer and driven by whatever runs the shared pass
- * on a cadence - the free server's {@code RebuildScheduler} (daily unless {@code jenreg.rebuild.interval} says
+ * on a cadence - the server's {@code RebuildScheduler} (daily unless {@code jenreg.rebuild.interval} says
  * otherwise), the downstream {@code RebuildTask}, or an embedder calling {@code RebuildPass.run} itself; a republish
  * of the same bytes still re-runs the whole layout sequence, which is the other repair and needs no scheduler. So
  * the residue is repairable and is repaired unattended on the cadence; between two passes it stands until the next

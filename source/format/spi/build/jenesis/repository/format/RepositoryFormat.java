@@ -37,7 +37,7 @@ import build.jenesis.repository.store.Providers;
  *   <li><b>documented only</b> - clauses 1, 4, 5, 7, 8, 9, 10, 11, 12's bounded-listing half, 13, 14, 15 and 16.
  *       They are stated here in a form a test could be written against, not because one exists.
  *
- *       <p>Clauses 4, 7, 12, 14 and 15 were once approximated by scans over the free tree's source text. They are
+ *       <p>Clauses 4, 7, 12, 14 and 15 were once approximated by scans over the tree's source text. They are
  *       not any more. Such a scan catches a <em>new</em> offending call site, never a wrong one - it reads this
  *       repository's spelling rather than an implementation's behaviour, and every format that got the spelling
  *       right passed whatever it then did. These clauses bind an implementer of this interface, wherever it is
@@ -240,7 +240,7 @@ public interface RepositoryFormat extends IconContributor {
 
     /**
      * Whether this format's single-body writes are screened at the ingress edge (the default). {@code true} means an
-     * edge (the free {@link build.jenesis.repository.store.Publication}-driven write path, the downstream deploy edge)
+     * edge (the {@link build.jenesis.repository.store.Publication}-driven write path, the downstream deploy edge)
      * stores and runs the discovered {@link build.jenesis.repository.store.PublishInterceptor} chain over a claimed
      * {@code PUT}/{@code POST}/{@code PATCH} body <em>before</em> {@link #handle} sees it, then restreams the accepted
      * blob into {@link #handle}, whose job is now pure layout - lay the bytes out in this format's namespace, no

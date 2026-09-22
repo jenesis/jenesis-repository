@@ -11,7 +11,7 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ReadMemo;
 
 /**
- * The ingress write edge for the free repository: it runs the discovered {@link build.jenesis.repository.store.PublishInterceptor}
+ * The ingress write edge for the repository: it runs the discovered {@link build.jenesis.repository.store.PublishInterceptor}
  * screen chain over a claimed single-body write <em>before</em> the format lays it out, so screening lives at the edge
  * and a {@link RepositoryFormat} is a pure layout writer. It runs the shared hosted-publish operation
  * {@link Publication#commit} rather than re-assembling the screen/layout/notify sequence, so the two editions converge
@@ -37,7 +37,7 @@ import build.jenesis.repository.store.ReadMemo;
  * <p>With the core's empty discovered chain {@code screen} degrades to a plain store-then-restream and an
  * accepted {@code PUT} is byte-for-byte what a direct dispatch produced (the same content-addressed blob, the same
  * pointer the format links, the same response). This edge is nonetheless load-bearing for the downstream fixed-tenancy
- * mode ({@code jenreg.tenancy=fixed}), where writes fall through this free controller with the full
+ * mode ({@code jenreg.tenancy=fixed}), where writes fall through this controller with the full
  * {@code ComplianceScreen} chain discovered - so the choreography must be exactly the downstream deploy edge's.
  */
 public final class ScreenedDispatch {
@@ -45,8 +45,8 @@ public final class ScreenedDispatch {
     private final FormatDispatcher dispatcher;
     private final EdgeHooks hooks;
 
-    /** The free edge: no edition plugged in, so the {@link EdgeHooks#NONE no-op hooks} run and the choreography is the
-     *  documented free one. The convenience arm the free {@link RepositoryController} and the existing tests use. */
+    /** The plain edge: nothing plugged in, so the {@link EdgeHooks#NONE no-op hooks} run and the choreography is the
+     *  documented free one. The convenience arm the {@link RepositoryController} and the existing tests use. */
     public ScreenedDispatch(FormatDispatcher dispatcher) {
         this(dispatcher, EdgeHooks.NONE);
     }
@@ -96,12 +96,12 @@ public final class ScreenedDispatch {
         // below, and fires published() itself once visibility has committed - so this edge no longer re-assembles the
         // screen/layout/notify sequence by hand, and cannot get its order wrong.
         Publication.Commit commit = new Publication(store).commit(descriptor, exchange.requestStream(),
-                // Last-writer-wins, the free formats' behaviour: a republish is just a pointer update.
+                // Last-writer-wins, the formats' behaviour: a republish is just a pointer update.
                 Publication.Republish.overwrite(),
                 accepted -> {
                     // The edge plug-in seam runs post-hash but pre-layout: a present Refusal short-circuits (the
                     // downstream edge's release-immutability 409), so nothing is laid out and no published() fires.
-                    // With the free no-op hooks this is always empty and the accepted body lays out exactly as before.
+                    // With the no-op hooks this is always empty and the accepted body lays out exactly as before.
                     Optional<EdgeHooks.Refusal> refusal =
                             hooks.beforeLayout(format, store, descriptor, accepted.hash(), exchange);
                     if (refusal.isPresent()) {
@@ -128,7 +128,7 @@ public final class ScreenedDispatch {
             }
             case QUARANTINE -> {
                 // The held branch: the body is stored for review, not laid out. An edition records its replay context
-                // around the 202 (the downstream QuarantineDispatch record); the free no-op hook does nothing.
+                // around the 202 (the downstream QuarantineDispatch record); the no-op hook does nothing.
                 hooks.held(format, store, exchange.path(), commit.hash(), exchange);
                 exchange.respond(202);
             }

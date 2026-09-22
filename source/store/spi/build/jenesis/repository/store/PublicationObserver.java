@@ -129,7 +129,7 @@ public interface PublicationObserver {
     }
 
     /** React to a removed serving pointer, fired once per pointer with the descriptor richness the removal site has:
-     *  {@link Publication#unpublish} knows the request path and the blob hash the pointer named (the free store knows
+     *  {@link Publication#unpublish} knows the request path and the blob hash the pointer named (the store knows
      *  no layouts - a coordinate-needing observer describes the path through its format), while a layout-aware
      *  eviction enriches the descriptor with ecosystem and coordinate. A garbage collector's blob reclamation fires
      *  nothing - an unreferenced blob serves nothing, so no pointer-derived metadata can reference it, by

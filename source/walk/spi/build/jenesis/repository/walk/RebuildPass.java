@@ -43,7 +43,7 @@ import build.jenesis.repository.store.ServableNames;
  * consumer sees exactly the torn state it exists to repair. A leaf that names no hash (a sidecar row, a marker, an
  * index) is never delivered.
  *
- * <p><b>The withheld screen.</b> Under the free {@code publish/} namespace the pass yields exactly what a {@code GET}
+ * <p><b>The withheld screen.</b> Under the {@code publish/} namespace the pass yields exactly what a {@code GET}
  * would, applying the same withheld screen {@code PublishedAssets} does through {@code ServableNames.state}: the
  * quarantine review subtree ({@code publish/quarantine/...}) is stored but never served, so it is never delivered
  * (no phantom index entry for a held pointer); and a path a screen retracts after the fact (a
@@ -193,7 +193,7 @@ public final class RebuildPass {
     }
 
     /**
-     * Join the shared rebuild pass over {@code pointerRoots} (the free {@code publish} namespace plus every
+     * Join the shared rebuild pass over {@code pointerRoots} (the {@code publish} namespace plus every
      * blobs-namespace root the caller's installed formats declare) and stream every retained pointer to every one
      * of {@code consumers}; empty when there is no consumer to feed - nothing is enumerated and no pass state is
      * touched. Returns the pass as this worker last saw it: {@code COMPLETE} when it just finished, {@code ACTIVE}
@@ -576,7 +576,7 @@ public final class RebuildPass {
                 return; // removed between the walk's listing and this read - nothing is served through it
             }
             // The body's dialect is read through the one seam that owns it, never re-parsed here: a pointer body is
-            // either the bare lower-case hex the free publish/ and blobs/ pointers carry or the algorithm-qualified
+            // either the bare lower-case hex the publish/ and blobs/ pointers carry or the algorithm-qualified
             // sha256:<hex> of the OCI Distribution tag pointers, and both denote the same blob. Reading it as bare hex
             // instead threw every tag pointer away as "not a serving pointer", so a consumer over an OCI root was
             // handed nothing and then reported itself converged - the silently-incomplete view §5 forbids, and the

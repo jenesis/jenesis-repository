@@ -402,7 +402,7 @@ public final class RepositoryClient {
      * The deployment's licence state, read from the {@code Jenesis-License} header any {@code /api/**} answer
      * carries - empty when the deployment sends none.
      *
-     * <p>Empty is the ordinary case and never a warning: a free deployment, or one older than the header, simply
+     * <p>Empty is the ordinary case and never a warning: a deployment that sends no such header simply
      * does not send it, and inventing "unlicensed" out of an absence would be wrong in exactly the direction that
      * annoys people. This is the whole of the CLI's licence knowledge; there is no second endpoint to ask.
      */
@@ -937,7 +937,7 @@ public final class RepositoryClient {
         return JSON.readValue(response.body(), RetroPlan.class);
     }
 
-    /** One page of a repository's published-asset enumeration - the free {@code GET /api/assets} walk, the outbound
+    /** One page of a repository's published-asset enumeration - the {@code GET /api/assets} walk, the outbound
      *  mirror of the import connectors so getting your data out is never the paid feature. {@code cursor} is the opaque
      *  token that fetches the next page (pass it back as {@code after}); it is {@code null} once the walk is exhausted.
      *  {@code limit} caps the page (the server clamps it to its own maximum); a {@code null} limit takes the default. */

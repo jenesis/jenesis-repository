@@ -440,7 +440,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
                 return; // removed between the walk's listing and this read - nothing references through it
             }
             // The body's dialect is read through the one seam that owns it, never re-parsed here: a pointer body is
-            // either the bare lower-case hex the free publish/ and blobs/ pointers carry or the algorithm-qualified
+            // either the bare lower-case hex the publish/ and blobs/ pointers carry or the algorithm-qualified
             // sha256:<hex> of the OCI Distribution tag pointers, and both denote the same blob. Reading it as bare hex
             // instead left every tag pointer unparsed, so the blob it references never entered the reference set and
             // the sweep condemned and then DELETED live content - the one thing this collector may never do. The

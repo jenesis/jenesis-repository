@@ -18,7 +18,7 @@ import java.util.Set;
  * {@link Extension} rather than by knowing a filename.
  *
  * <p><b>These are the fragments that are extension points, not every fragment {@code base.html} defines.</b> A
- * fragment used only within the free console's own pages is that console's business and may change with it; the set
+ * fragment used only within the console's own pages is that console's business and may change with it; the set
  * below is the part other consoles may build on, and is therefore the part that may not change silently.
  */
 public final class ConsoleLayout {

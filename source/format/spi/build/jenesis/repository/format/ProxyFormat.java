@@ -127,7 +127,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     of its own ({@link RepositoryFormat}'s store-then-gate clause). What stands between a proxied body and the
  *     serving pointer is therefore clause 5's integrity check and nothing else, so an ecosystem that advertises no
  *     digest caches an unverified body by construction and says so. A deployment that screens proxied bytes installs
- *     that screen at its own proxy edge, not inside a format; the core ships none, so in the free distribution a
+ *     that screen at its own proxy edge, not inside a format; the core ships none, so in the distribution a
  *     proxied artifact is verified and cached but not gated. This asymmetry with the hosted path is deliberate and
  *     stated here because assuming the symmetry is the fail-open mistake.</li>
  * </ol>

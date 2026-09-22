@@ -18,7 +18,7 @@ public class RepositoryProperties {
     private String store = "filesystem";
     /** Whether pull-through proxy reads that miss locally are fetched from the upstreams, caching and bridging them.
      *  Named {@code proxy-enabled} to sit alongside the {@code jenreg.proxy.<format>} map,
-     *  which owns the per-format upstream URLs (this distribution extends the free schema rather than redefining its
+     *  which owns the per-format upstream URLs (this distribution extends the schema rather than redefining its
      *  {@code proxy} key). */
     private boolean proxyEnabled = Boolean.parseBoolean(CoreDefaults.PROXY_ENABLED);
     /** Per-repository backing definitions, by name. The generalized grammar (EPIC 25) is
@@ -159,7 +159,7 @@ public class RepositoryProperties {
      *  {@code auth=false} is redundant (already fully open) and warns. Decided at the one choke point the
      *  multi-tenant path shares with the dispatcher - {@link build.jenesis.repository.server.spi.Authorization},
      *  handed this grant set by {@code StoreConfig} - so the enforcing multi-tenant path honours the anonymous role
-     *  identically to the free keyless branch. Paired with {@code jenreg.read-only=true} this is the
+     *  identically to the keyless branch. Paired with {@code jenreg.read-only=true} this is the
      *  public-mirror pattern (browsable but immutable). The env spelling is
      *  {@code JENREG_ANONYMOUS_RIGHTS}. */
     private String anonymousRights = "";

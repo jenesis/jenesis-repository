@@ -399,7 +399,7 @@ public class RepositoryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public RoutedServing routedServing() {
-        // No per-repository routing in the free single-tenant edition: every repository serves over its own hosted
+        // No per-repository routing in a single-tenant deployment: every repository serves over its own hosted
         // store. A distribution that offers proxy/group repositories contributes its own RoutedServing bean (backed
         // by its router), which this @ConditionalOnMissingBean default backs off behind.
         return RoutedServing.NONE;
@@ -553,13 +553,13 @@ public class RepositoryAutoConfiguration {
     }
 
     /**
-     * The free single-tenant import edge ({@code POST /repository/admin/import}, {@code GET /repository/admin/import/<id>}),
+     * The single-tenant import edge ({@code POST /repository/admin/import}, {@code GET /repository/admin/import/<id>}),
      * registered as its own controller bean so a richer distribution can OWN the import edge without a cross-layer
      * mapping override. It is registered only when {@link FreeImportEdgeCondition no ImportEdgeProvider is
      * installed}: when a distribution ships an {@link ImportEdgeProvider} - the downstream edition's tenant-scoped,
      * audited import edge - this bean is not created, so its mapping never joins the handler mapping and the
      * distribution's own controller is the only import edge, retiring the {@code WebMvcRegistrations}
-     * mapping-suppression stopgap. With no provider installed (the free product) the edge is served exactly as before.
+     * mapping-suppression stopgap. With no provider installed (the product) the edge is served exactly as before.
      * Named so an embedder can still contribute its own {@code importEdgeController} bean and have this back off.
      */
     @Bean
@@ -574,11 +574,11 @@ public class RepositoryAutoConfiguration {
     }
 
     /**
-     * Matches when <em>no</em> {@link ImportEdgeProvider} is installed, so the free {@link ImportEdgeController} is
+     * Matches when <em>no</em> {@link ImportEdgeProvider} is installed, so the {@link ImportEdgeController} is
      * registered only while a richer distribution has not claimed the import edge. Installs the shared
      * {@link Features} lookup against the effective {@link Environment} first, so the same {@code jenreg.*}
      * enable/disable toggles gate the provider discovery here as everywhere else (and a provider missing its required
-     * config is inert - the free edge is then served).
+     * config is inert - the edge is then served).
      */
     static final class FreeImportEdgeCondition implements Condition {
 

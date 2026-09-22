@@ -9,7 +9,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * and its {@code /api/admin/consistency} admin API: a per-node table (id, live/stale, heartbeat age, index cursor,
  * config generation, quota) and a divergence list (each a stuck-cursor / config / pointer split with a value-free
  * reason), calling the key-auth'd JSON API with the {@code Jenesis-Repository-Key} header exactly as the
- * {@link LogCard} does (the free console authenticates the human by session, but the server's
+ * {@link LogCard} does (the console authenticates the human by session, but the server's
  * {@code /api/consistency} read is key-gated like every other {@code /api} surface).
  *
  * <p>It reads nothing from the {@link ArtifactStore} - the fleet view is a live API read, not store state - and

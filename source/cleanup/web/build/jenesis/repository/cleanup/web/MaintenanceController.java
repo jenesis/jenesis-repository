@@ -377,7 +377,7 @@ public class MaintenanceController {
     public record CleanupReport(long blobsReclaimed, List<String> evicted, int evictedCount, GcView gc) {
     }
 
-    /** The garbage-collection leg of a sweep or dry run, mirroring the free {@code GcPlan}: whether a collector is
+    /** The garbage-collection leg of a sweep or dry run, mirroring the {@code GcPlan}: whether a collector is
      *  installed at all, whether the judgment rests on a completed enumeration, what this pass newly condemned,
      *  spared (re-linked content un-condemned) and collected, a bounded hash sample for a console preview, and
      *  {@code refusal} - why the pass declined to judge anything at all, when it did.

@@ -7,7 +7,7 @@ import build.jenesis.repository.server.PullThroughHooks;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The {@link PullThroughHooks} for the dispatcher-direct proxy leg (demo seeding, the free {@link
+ * The {@link PullThroughHooks} for the dispatcher-direct proxy leg (demo seeding, the {@link
  * build.jenesis.repository.server.FormatDispatcher} loop) whose {@code screenFetch} decorates the miss-leg fetcher with
  * the DEFAULT-strength {@link ProxyScreen} over a supplied gate and store - the SAME decorator the router's DEFAULT
  * fallbacks screen through (EPIC 28). It closes the #79 gap that a demo/dispatcher-direct proxy leg pulls through

@@ -60,7 +60,7 @@ public class CacheConfig {
     @Bean(initMethod = "start", destroyMethod = "close")
     @ConditionalOnMissingBean
     public KeyUsageTracker keyUsageTracker(Authorization authorization, Environment environment) {
-        // Usage tracking is a discovered plugin (the free usage module); NONE when absent.
+        // Usage tracking is a discovered plugin (the usage module); NONE when absent.
         return KeyUsageTrackerProvider.resolve(authorization,
                 key -> environment.getProperty("jenreg.cache." + key));
     }

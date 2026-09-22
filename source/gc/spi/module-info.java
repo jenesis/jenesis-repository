@@ -9,7 +9,7 @@
  * (&sect;9). A {@code GarbageCollector} matches the retention sweeper's shape - {@code plan} is the dry run a
  * maintenance console previews, {@code collect} computes and applies - and is handed the pointer roots by its
  * caller (always {@code publish}; a blobs-namespace format's declared roots are added by the caller that knows
- * them), because which namespaces hold serving pointers is layout knowledge this free primitive deliberately does
+ * them), because which namespaces hold serving pointers is layout knowledge this primitive deliberately does
  * not have. Where naming a root is not enough - a format whose served blobs are reachable only through a stored
  * document, so no pointer body names them - that format lends the rest through
  * {@code build.jenesis.repository.format.BlobReferences}, and an implementation unions what it is told with the

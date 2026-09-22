@@ -17,7 +17,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <ul>
  *   <li>{@link #screenFetch} decorates the upstream fetcher for the MISS leg - the seam the screening firewall
  *       ({@code ProxyScreen}/{@code HardenedScreen}) plugs into on paths that do not pass through the routed gateway
- *       (the free dispatcher loop, demo seeding, fixed-tenancy default upstreams). It is applied at the point the cache
+ *       (the dispatcher loop, demo seeding, fixed-tenancy default upstreams). It is applied at the point the cache
  *       hands the fetcher to {@link ProxyFormat#proxy}.</li>
  *   <li>{@link #verifyHit} closes the cache-HIT bypass: a locally cached artifact is decided <em>before</em> any hit
  *       byte is served, so an edition can refuse a now-withheld artifact or re-screen a cached blob against the current
@@ -26,7 +26,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * </ul>
  *
  * <p>The seam decides before any response byte, so the hit path's streaming {@link PullThroughCache} {@code Deferred}
- * is untouched - it never wraps, buffers or observes the served stream (§1). The free default and any well-behaved
+ * is untouched - it never wraps, buffers or observes the served stream (§1). The default and any well-behaved
  * implementation decide from pointer/metadata reads or a re-openable streamed read of the local blob, never by
  * buffering the whole body.
  */
@@ -40,7 +40,7 @@ public interface PullThroughHooks {
 
     /**
      * Verify a locally cached artifact against the current gate BEFORE a pull-through hit serves it, returning how the
-     * cache should proceed. The free default returns {@link HitDecision#serveThrough()} - the local-first serve runs
+     * cache should proceed. The default returns {@link HitDecision#serveThrough()} - the local-first serve runs
      * exactly as today, and (because the downstream treats "nothing durably local" as serve-through too) a path with no
      * cached blob simply flows on to the miss leg. An implementation reads only pointers/metadata or a re-openable
      * streamed read of the local blob to decide; it must never buffer the whole body (§1).
@@ -54,8 +54,8 @@ public interface PullThroughHooks {
 
     /**
      * Decorate the upstream fetcher for one request {@code path} before the miss-fetch runs - the seam the screening
-     * firewall plugs into on the dispatcher-direct paths (the free dispatcher loop, demo seeding, fixed-tenancy default
-     * upstreams) that do not pass through the routed gateway's own {@code screening()} decoration. The free default
+     * firewall plugs into on the dispatcher-direct paths (the dispatcher loop, demo seeding, fixed-tenancy default
+     * upstreams) that do not pass through the routed gateway's own {@code screening()} decoration. The default
      * returns {@code upstream} unchanged (identity), so the miss leg fetches exactly as today. The decoration is
      * path-bound, so the cache applies it per request at the point it invokes {@link ProxyFormat#proxy}.
      *
@@ -89,7 +89,7 @@ public interface PullThroughHooks {
      * leg would re-fetch cached-but-unverified bytes (wasteful, and closed-for-the-wrong-reason when upstream is down),
      * so a hit is always decided from the LOCAL bytes. Three outcomes:
      * <ul>
-     *   <li>{@link #serveThrough()} - proceed with the format's local-first serve exactly as the free path does (the
+     *   <li>{@link #serveThrough()} - proceed with the format's local-first serve exactly as the path does (the
      *       {@link #NONE} default, and the "nothing durably local / verdict still valid" answer). If the local-first
      *       turns out to be a 404, the request falls through to the (screened) miss leg as always.</li>
      *   <li>{@link #withhold()} - answer {@code 404} without serving the local bytes: a now-retracted or rejected
@@ -101,7 +101,7 @@ public interface PullThroughHooks {
      */
     sealed interface HitDecision {
 
-        /** Proceed with the local-first serve exactly as the free path does - the {@link #NONE} default. */
+        /** Proceed with the local-first serve exactly as the path does - the {@link #NONE} default. */
         static HitDecision serveThrough() {
             return ServeThrough.INSTANCE;
         }

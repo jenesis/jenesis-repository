@@ -109,7 +109,7 @@ public final class PullThroughCache {
             // the upstream, and says so, rather than carrying one key fewer than a miss.
             observation.lowCardinalityKeyValue("upstream", "unasked");
             // Consult the edition BEFORE the local-first serve, so a cached hit is verified against the current gate
-            // before any byte is written. The free NONE hook returns serveThrough with no store read, so the hit path
+            // before any byte is written. The NONE hook returns serveThrough with no store read, so the hit path
             // below is byte-for-byte as before; the decision is made ahead of serving, never by wrapping the stream.
             PullThroughHooks.HitDecision decision = hooks.verifyHit(format, exchange.path(), store);
             if (decision instanceof PullThroughHooks.HitDecision.Withhold) {
@@ -125,7 +125,7 @@ public final class PullThroughCache {
                 serveLocal.serve().serve(format, exchange, store);
                 return null;
             }
-            // serveThrough (the free default): the local-first serve runs exactly as today.
+            // serveThrough (the default): the local-first serve runs exactly as today.
             Deferred deferred = new Deferred(exchange);
             format.handle(deferred, store);
             if (!deferred.missed()) {

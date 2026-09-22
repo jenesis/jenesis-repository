@@ -35,7 +35,7 @@ import module java.base;
  *       Each needs a concurrent or fault-injecting driver the kit does not have; every one of them is stated below in
  *       a form such a driver could assert.
  *
- *       <p>Clause 4 and clause 9's listing rule were once approximated by scans over the free tree's call sites.
+ *       <p>Clause 4 and clause 9's listing rule were once approximated by scans over the tree's call sites.
  *       They are not any more, and the reason is worth stating: such a scan sees a call site, never a backend, so it
  *       reported a store that read a whole blob into memory internally as compliant while failing a caller that
  *       named a method it disliked. It answered a question about this repository's text rather than about an

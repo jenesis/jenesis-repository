@@ -17,7 +17,7 @@ package build.jenesis.repository.ui;
  * because the honest answer is "you are signed in and hold nothing", not "something went wrong".
  *
  * <h2>The two consoles answer it differently, and that difference is the point</h2>
- * The free console is single-tenant: holding something means holding a grant in the deployment's one tenant, or
+ * The console is single-tenant: holding something means holding a grant in the deployment's one tenant, or
  * administering the deployment. A multi-tenant console means membership of at least one tenant. Both are the same
  * question about the same grants; only the shape of "somewhere" differs, which is exactly what a seam is for.
  *

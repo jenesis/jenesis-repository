@@ -127,7 +127,7 @@ public interface WalkConsumer {
      * deployment's to say ({@link RebuildPass.Roots}); the family is the consumer's word for what it wants.
      */
     enum Family {
-        /** The serving pointers: the free {@code publish/} root and every blobs-namespace root a format declares.
+        /** The serving pointers: the {@code publish/} root and every blobs-namespace root a format declares.
          *  Delivered as descriptors through {@link #onRetained} and {@link #onWithheld}. */
         POINTERS,
         /** The inventory's rows per published version - the sidecars under {@code published/} - delivered as keys. */

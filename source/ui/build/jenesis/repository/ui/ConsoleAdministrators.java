@@ -10,7 +10,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * Who administers this deployment - one reader, over grants rather than over a setting.
  *
  * <h2>One key, three readers, three meanings</h2>
- * {@code jenreg.ui.admins} was read in three places that had drifted: the free console honoured its wildcard, the
+ * {@code jenreg.ui.admins} was read in three places that had drifted: the console honoured its wildcard, the
  * downstream super-admin set refused it, and the security advisory asserted the first regardless. The parse was
  * unified first, which stopped them disagreeing about what was <em>written</em>; they still each decided for
  * themselves what it <em>granted</em>. This is the other half: there is one reader, and what it answers is a

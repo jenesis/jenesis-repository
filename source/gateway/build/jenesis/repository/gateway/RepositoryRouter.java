@@ -76,7 +76,7 @@ public final class RepositoryRouter {
     public interface WithheldGuard {
         boolean withheld(String path, ArtifactStore store) throws IOException;
 
-        /** No local withhold guard - every local {@code 404} is a genuine miss (the free single-tenant default, and
+        /** No local withhold guard - every local {@code 404} is a genuine miss (the single-tenant default, and
          *  the gateway default until a deployment wires the discovered chain). */
         WithheldGuard NONE = (path, store) -> false;
     }
@@ -645,7 +645,7 @@ public final class RepositoryRouter {
                              FormatExchange exchange, ArtifactStore body, ArtifactStore records, ArtifactStore spool,
                              UpstreamProbe probe) throws IOException {
         if (format instanceof ProxyFormat proxy) {
-            // Unify both #79 legs through the free pull-through seam: the raw probe is handed to the cache, and
+            // Unify both #79 legs through the pull-through seam: the raw probe is handed to the cache, and
             // the fallback's screening()-composed fetcher is injected on the MISS leg via HardenedHitVerify.screenFetch
             // (one screening decorator, applied once - the eager screening() call still fails loud for a hardened leg
             // with no gate). On the HIT leg the same hooks verify a hardened cache hit fail-closed before it serves; a

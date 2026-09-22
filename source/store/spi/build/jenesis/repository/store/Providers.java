@@ -40,7 +40,7 @@ import module java.base;
  * becomes a second discovery pipeline or provider registry - it is the shared body of the statics that already exist.
  *
  * <p><strong>Policy stays with the caller.</strong> Enablement, selection, construction and configuration validation
- * arrive as functions, so the free {@link Features} (a globally installed lookup) and a distribution's per-call
+ * arrive as functions, so the {@link Features} (a globally installed lookup) and a distribution's per-call
  * {@code config}-threading equivalent both drive the identical primitives, and a helper never invents semantics an
  * SPI did not declare.
  *

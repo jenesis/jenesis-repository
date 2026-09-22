@@ -18,7 +18,7 @@ import build.jenesis.repository.walk.WalkPass;
  * family its consumers listen on - the pointer roots ({@code publish/} plus every installed blobs-namespace
  * format's declared roots, the same {@link StoreRepositoryInventory#pointerRoots() union} the garbage collector
  * judges references from), the inventory rows, the blob pool, the derived rows - and hand every member to the
- * consumers riding this walk: N rebuilders, one enumeration. The free {@link RebuildPass} owns the delivery
+ * consumers riding this walk: N rebuilders, one enumeration. The {@link RebuildPass} owns the delivery
  * contract (descriptor richness, exactly-once per pass, a consumer that fails failing alone and being redelivered
  * by the next generation); this task is the thin scheduled caller, and reads the pass's failure records afterwards
  * to report them. The {@code rebuild} task carries every consumer and is what a standing request runs; every other

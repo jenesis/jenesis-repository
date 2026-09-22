@@ -73,7 +73,7 @@ public final class Repositories {
 
     /** Whether a staging module is installed on this deployment. */
     /**
-     * The key a request presents, read the way the free security chain reads it ({@link PresentedKey}: the native
+     * The key a request presents, read the way the security chain reads it ({@link PresentedKey}: the native
      * header first, then a well-formed key carried as a bearer token or a Basic password in {@code Authorization})
      * plus the NuGet push header - so every ecosystem client's own way of carrying a credential reaches the same
      * credential model. {@code null} when the request presents none.

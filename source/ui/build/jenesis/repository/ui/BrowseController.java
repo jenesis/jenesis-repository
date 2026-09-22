@@ -26,7 +26,7 @@ import org.springframework.web.util.UriComponentsBuilder;
  * and never reads an artifact blob - only the tiny publish pointer (its content is the blob hash) and the blob's
  * stored size feed the size column.
  *
- * <p>This lives in the free base so both consoles share one browse. It is deny-by-default authenticated (a GET
+ * <p>This lives in the base so both consoles share one browse. It is deny-by-default authenticated (a GET
  * caught by {@code anyRequest().authenticated()}), and the {@code path} query parameter is traversal-guarded - any
  * {@code .}/{@code ..}/empty segment is dropped - so a request can never escape the {@code publish/} subtree to read
  * {@code blobs/} or a sibling's data. The reserved {@code publish/quarantine/} review subtree - artifacts the gate is
@@ -77,7 +77,7 @@ public class BrowseController {
     }
 
     /**
-     * The console face of the free {@code GET /api/assets} enumeration: a downloadable, streamed export of every
+     * The console face of the {@code GET /api/assets} enumeration: a downloadable, streamed export of every
      * published asset in the repository as NDJSON (one {@code {"path","size","sha256"}} object per line), the outbound
      * mirror of the import connectors so getting your data out is never an afterthought. It walks the {@code publish/}
      * pointer tree through the shared {@link PublishedAssets} walk the server's {@code /api/assets} catalogue also uses

@@ -290,7 +290,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  can never fail the whole listing.
      *
      *  <p>Returns a {@link ChildPage}: the screened names AND whether stored children remain past this window. The
-     *  truncation flag is the free screened-enumeration primitive's own outcome, not a raw child count the caller
+     *  truncation flag is the screened-enumeration primitive's own outcome, not a raw child count the caller
      *  re-derives - so a screened-out leaf can never shrink the rendered list below the render cap while the directory
      *  is claimed complete. Ask for exactly the render cap and render {@code names()} as-is. */
     public ChildPage children(String prefix, int limit, ServableNames.Policy policy) throws IOException {
@@ -839,7 +839,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * that no installed format can place at all - the three-valued form every reclaiming pass must judge from
      * (the rule applied to the one act that is irreversible).
      *
-     * <p>The free {@code GarbageCollector} sweeps the whole {@code blobs/} namespace against the roots it is handed;
+     * <p>The {@code GarbageCollector} sweeps the whole {@code blobs/} namespace against the roots it is handed;
      * there is no way, through that seam, to spare one root's subtree. So an incomplete root set is not a degraded
      * scan, it is a licence to delete: with a format module absent its pointers are invisible, every blob it serves
      * reads as unreferenced, and the confirming pass deletes the artifact bytes. Deletion is the one unrecoverable
@@ -908,7 +908,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * the stated widening could not have been written.
      *
      * <p>The case it worried about is also unreachable, for a reason worth writing down rather than re-deriving:
-     * the one root-lending format that does not wear {@code BlobRoots} - the free {@code OciFormat} - declares no
+     * the one root-lending format that does not wear {@code BlobRoots} - the {@code OciFormat} - declares no
      * ecosystem <em>at all</em>. Nothing it publishes records one, so no ecosystem of its arrives in the set this
      * test is asked about, and there is no refusal for it to cause.
      *

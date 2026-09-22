@@ -6,15 +6,15 @@ import module java.base;
  * A core extension point for the deployment-wide {@code /api/capabilities} surface, discovered at runtime with
  * {@link ServiceLoader} - so a richer distribution advertises its extra capabilities (a downstream edition's supported
  * formats, import sources, module flags) on the <em>one</em> free-served {@code /api/capabilities} endpoint without a
- * bean override and without a client change. This is exactly the intent the free {@code RepositoryController#capabilities}
+ * bean override and without a client change. This is exactly the intent the {@code RepositoryController#capabilities}
  * javadoc has always stated: "a distribution with more capabilities extends the map without a client change".
  *
- * <p>The free {@code RepositoryController} builds its base map ({@code readOnly}, {@code auth}, {@code anonymousRights}),
- * then {@link #merge merges} every discovered contributor into it. With no contributor installed - the free product -
+ * <p>The {@code RepositoryController} builds its base map ({@code readOnly}, {@code auth}, {@code anonymousRights}),
+ * then {@link #merge merges} every discovered contributor into it. With no contributor installed - the product -
  * the served map is exactly the base map, byte-for-byte unchanged. A distribution adds capabilities simply by shipping
  * a module that {@code provides build.jenesis.repository.server.spi.CapabilityContributor with ...}; the server already
  * {@code uses} it, so no core change is needed. It replaces the former {@code WebMvcRegistrations} mapping-suppression
- * stopgap that dropped the free mapping so a downstream controller could own the same path.
+ * stopgap that dropped the mapping so a downstream controller could own the same path.
  *
  * <h2>Merge / precedence rule</h2>
  * Contributors <b>extend</b> the base map; they never shadow it. On a key conflict the <b>base key always wins</b>, and
@@ -26,7 +26,7 @@ import module java.base;
  * <h2>A losing contribution is reported, never dropped in silence</h2>
  * The precedence rule decides <em>which value is served</em>. It does not license saying nothing about the value that
  * lost. A key a contributor meant to publish and the endpoint does not serve is a deployment defect - a misspelled key,
- * a concept the free base has since claimed, two distributions colliding - and an operator who cannot see it debugs a
+ * a concept the base has since claimed, two distributions colliding - and an operator who cannot see it debugs a
  * console that renders the wrong thing with nothing anywhere to explain why. So {@link #merge} keeps the base-wins
  * outcome and additionally <b>names every contribution it refused</b>, in the returned {@link Merged} report and in the
  * served body itself, under {@value #CONFLICTS_KEY}.
@@ -36,10 +36,10 @@ import module java.base;
  * that could refuse a bad deployment before it serves anything; it runs <em>inside the request</em>, on every GET of
  * {@code /api/capabilities}. An exception there is not a boot failure that an operator fixes once - it is a permanent
  * 500 on the one endpoint whose entire job is to tell a client what this deployment can do, and the first casualties
- * are the free base flags the precedence rule exists to protect: a console could no longer learn that the deployment is
+ * are the base flags the precedence rule exists to protect: a console could no longer learn that the deployment is
  * read-only or that auth is on, because an optional plugin misspelled a key. That is precisely &sect;3's line - an
  * optional module must never be able to take a core surface down, its presence no more than its absence - and a
- * contributor's key-naming mistake is not worth the free product's own capability advertisement.
+ * contributor's key-naming mistake is not worth the product's own capability advertisement.
  *
  * <p>Reporting satisfies &sect;9 on its own terms: the silent-drop &sect;9 forbids is a failure whose loss changes what
  * is served with nothing logged, countered or surfaced, and this is logged, returned as data, and surfaced in the body.
@@ -132,7 +132,7 @@ public interface CapabilityContributor {
 
     /** The served key under which {@link #merge} names the contributions it refused - the entries a base key or an
      *  earlier contributor already owned, each with the key, the contributor that lost it and who holds the served
-     *  value. Absent from the body when there is nothing to report, so the free product's zero-contributor map is
+     *  value. Absent from the body when there is nothing to report, so the product's zero-contributor map is
      *  byte-for-byte unchanged and a healthy deployment serves no diagnostic noise. The merge owns this key: a
      *  contributor claiming it is itself reported as a conflict rather than being allowed to forge the report. */
     String CONFLICTS_KEY = "capabilityConflicts";
@@ -194,13 +194,13 @@ public interface CapabilityContributor {
      * precedence rule: a base key always wins a conflict, and among contributors the first in class-name order wins.
      * The base keys keep their insertion order first; new keys are appended in contributor class-name order. When
      * {@code contributors} is empty the returned map equals {@code base} exactly (same keys, same order, same values) -
-     * the free product's byte-for-byte-unchanged guarantee.
+     * the product's byte-for-byte-unchanged guarantee.
      *
      * <p>Every entry the rule refuses is <b>named</b> rather than dropped: the returned {@link Merged} carries the
      * conflicts and the contributor failures as data, and - when there are any - the served map carries them too under
      * {@value #CONFLICTS_KEY} and {@value #FAILURES_KEY}. This method therefore never throws on account of a
      * contributor: a contributor that throws from {@link #capabilities} is contained and reported, because a plugin's
-     * mistake must not take down the endpoint that advertises the free product's own flags.
+     * mistake must not take down the endpoint that advertises the product's own flags.
      *
      * @param configuration handed to every contributor, so each resolves its answer through the calling surface's
      *                      own effective-value chain rather than composing a second one.
@@ -309,7 +309,7 @@ public interface CapabilityContributor {
      *  claimed it, and the {@code owner} of the value actually served. */
     record Conflict(String key, String contributor, String owner) {
 
-        /** The {@link #owner()} of a key the free base map holds - the read-only gate, the auth flag, the anonymous
+        /** The {@link #owner()} of a key the base map holds - the read-only gate, the auth flag, the anonymous
          *  grant. A contributor may extend the base map, never shadow it. */
         public static final String BASE = "base";
 
@@ -332,7 +332,7 @@ public interface CapabilityContributor {
         /** This conflict as one log-ready line naming what was dropped, who lost it and who holds the served value. */
         public String describe() {
             return "capability key '" + key + "' contributed by " + contributor + " was not served: it is held by "
-                    + (BASE.equals(owner) ? "the free base map"
+                    + (BASE.equals(owner) ? "the base map"
                             : RESERVED.equals(owner) ? "the merge's own report" : "contributor " + owner)
                     + ". A contributor extends /api/capabilities and never shadows it - rename the contributed key, or "
                     + "move the concern into the base map.";

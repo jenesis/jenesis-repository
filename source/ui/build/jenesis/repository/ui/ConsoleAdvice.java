@@ -111,7 +111,7 @@ public class ConsoleAdvice {
         // its attributes run for every handler in the process, the repository's artifact requests included. A
         // badge that collected the whole posture report each time cost every download a listing of the
         // consistency nodes and every advisor's reads (measured: one page of .system/config/consistency/nodes per
-        // GET on the free bundle), so the count is kept for a short while and recomputed after it.
+        // GET on the bundle), so the count is kept for a short while and recomputed after it.
         Badge held = badge;
         long now = System.nanoTime();
         if (held != null && now - held.computedAt < BADGE_TTL_NANOS) {

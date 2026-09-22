@@ -59,7 +59,7 @@ public final class ProxyScreen {
      *  the source, and is not subject to this ceiling at all.
      *  <p>It <em>is</em> the sibling cap rather than a copy of the same number. This constant used to hold
      *  its own {@code 8 * 1024 * 1024} and a comment saying it "mirrors" free {@code Publication.LARGEST_SIBLING},
-     *  which was all the equality could ever be while the free constant was private - two numbers that had to be kept
+     *  which was all the equality could ever be while the constant was private - two numbers that had to be kept
      *  equal by hand across two repositories. the earlier free half published it, so the publish leg (which reads through
      *  {@link build.jenesis.repository.store.PublishInterceptor.Content#sibling(String)}, capped there) and this proxy
      *  leg now cannot drift on what "too large to read whole" means. */

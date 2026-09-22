@@ -10,7 +10,7 @@ import build.jenesis.repository.store.Known;
 /**
  * The pointer roots, answered from the durable ecosystem record this module keeps.
  *
- * <p>The free answer is the union of {@code publish} and every installed format's lent roots, which is complete for
+ * <p>The answer is the union of {@code publish} and every installed format's lent roots, which is complete for
  * what is installed and blind to what is not. The inventory records every ecosystem it has ever stored, so it can
  * see the case that union cannot: content held for a format nobody has installed any more, whose blobs no root
  * names and which a sweep would therefore delete. Where that is so it refuses, and the collection pass defers

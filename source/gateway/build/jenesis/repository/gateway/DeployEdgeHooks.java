@@ -25,7 +25,7 @@ import io.micrometer.observation.ObservationRegistry;
  *   <li>{@link #beforeLayout} fires the release-version immutability {@code 409}: after the screen chain has
  *       assigned the freshly-stored blob its {@code hash} but before the format lays it out, a re-point of an
  *       already-published immutable RELEASE coordinate at DIFFERENT bytes is refused. The refusal short-circuits the
- *       write (the free edge answers it and lays nothing out, fires no {@code published()}), so the original bytes keep
+ *       write (the edge answers it and lays nothing out, fires no {@code published()}), so the original bytes keep
  *       serving. Reads only the incumbent pointer's hash, never the body ({@link ReleaseImmutability} §1).</li>
  *   <li>{@link #held} records the {@link QuarantineDispatch} replay context around the {@code QUARANTINE} {@code 202},
  *       so a later review release can replay {@code plugin.handle} from the stored publish envelope and actually
@@ -40,7 +40,7 @@ import io.micrometer.observation.ObservationRegistry;
  * <p>The tenant a concern needs ({@link ReleaseImmutability#refusesRepoint}'s {@code allow-redeploy} lookup, the
  * observation's tenant tag) is read from {@link PublishTenant#current()}, bound for the request by the
  * {@link PublishTenantFilter} on {@code /repository/**} and {@code /v2/**} - the same per-thread binding the fork opened
- * around its own {@code Publication.screen} call, now opened by the filter so the free edge and this bean both see it.
+ * around its own {@code Publication.screen} call, now opened by the filter so the edge and this bean both see it.
  * {@link ReleaseImmutability}/{@code HoldLifecycle}/{@link QuarantineDispatch}/audit all stay behind the hook; only the
  * {@code EdgeHooks} interface moved down beside the edge for this bean to implement.
  */
