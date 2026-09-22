@@ -21,7 +21,7 @@ import build.jenesis.repository.store.TenantsProvider;
  *
  * <p>The heartbeat runs on this bean's own daemon scheduler, which it starts and closes: it is one of the two
  * periodic drivers core/AGENTS.md names as keeping a private timer rather than riding the composition root's scheduler,
- * because it owns its own lifecycle as a free-core bean.
+ * because it owns its own lifecycle.
  *
  * <p>The fingerprint is cheap to build: the config generation is a hash over the must-match settings <em>and the
  * tenant set</em>, read through the {@link Tenants} view on every heartbeat (a directory read, never a scan) so a node

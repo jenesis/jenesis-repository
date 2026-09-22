@@ -148,7 +148,7 @@ public class RepositoryAutoConfiguration {
                 .withAnonymousRights(anonymousRights);
         bootstrap(authorization, properties.getBootstrapKey().strip());
         // The other boot obligation an enforcing deployment's authorization carries, beside the bootstrap key:
-        // repair what an interrupted group derivation left behind. Both editions honour it here, in the same
+        // repair what an interrupted group derivation left behind. Every composition honours it here, in the same
         // place and for the same reason - a process that died mid-derivation is a process that is starting now.
         authorization.repairDerivedGrants();
         return authorization;
@@ -501,7 +501,7 @@ public class RepositoryAutoConfiguration {
         return new StoredCounter.Settling();
     }
 
-    /** The free edition's scheduled driver of the shared rebuild pass (see {@link RebuildScheduler}): a daemon cadence
+    /** This composition's scheduled driver of the shared rebuild pass (see {@link RebuildScheduler}): a daemon cadence
      *  over the deployment's one repository feeding every discovered walk consumer, inert when there is no walk or no
      *  consumer, {@code jenreg.rebuild.interval=off} to switch it off. A distribution with its own maintenance
      *  scheduler declares a bean of this type to take its place. */

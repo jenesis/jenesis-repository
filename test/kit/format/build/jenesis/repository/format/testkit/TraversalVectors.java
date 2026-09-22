@@ -80,7 +80,7 @@ public final class TraversalVectors {
             // flat one with a backslash in its name everywhere else), which is the divergence the store's key screen
             // exists to keep out rather than a shape any of the fourteen ecosystems publishes.
             new Vector("backslash-separator", "kit\\" + ESCAPE, Kind.DECODED),
-            // The third alphabet, and the one the free core screened nowhere until D-288: a C0 control character.
+            // The third alphabet, and the one screened nowhere until D-288: a C0 control character.
             // It is a DECODED row for the backslash's reason - nothing decodes anything, the layer below simply reads
             // the byte differently. A NUL truncates the key at the first C API that handles it, so a screen that
             // passed the whole string guards a prefix of what is acted on; a newline forges a line in every log

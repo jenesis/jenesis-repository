@@ -19,7 +19,7 @@ import module java.base;
  * module both the validator and the readers can see.
  *
  * <p>It lives beside {@link Features} in the store SPI - the module every other one already requires - rather than
- * in the settings catalogue, because the free core's own dials read it too: the rebuild driver's cadence, the proxy's
+ * in the settings catalogue, because the store's own dials read it too: the rebuild driver's cadence, the proxy's
  * request timeout and negative-cache window, the collector's grace, a credential's lifetime. When the grammar lived
  * in a downstream settings catalogue, each of those carried a parser of its own, and three of them read a bare number as
  * seconds while the catalogue refused it.

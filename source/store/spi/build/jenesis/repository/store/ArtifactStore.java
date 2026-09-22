@@ -291,8 +291,8 @@ public interface ArtifactStore {
      * touches it, so a key screened whole is acted on in part; a {@code CR} or {@code LF} forges a line in every log
      * record, generated index and listing document the key later reaches, so a coordinate can write rows that read as
      * the server's own. Neither is part of a legitimate coordinate in any ecosystem this product serves, so the cost
-     * of refusing them is nothing, and this was the last shape the free core screened nowhere - not here, not in
-     * {@link #key(String)}, not in {@link #segment(String)} - while this edition's downstream request guard had
+     * of refusing them is nothing, and this was the last shape screened nowhere - not here, not in
+     * {@link #key(String)}, not in {@link #segment(String)} - while the downstream request guard had
      * refused it since it was written. Two layers disagreeing about which shapes are legal is the divergence this
      * predicate exists to prevent, so the rule is stated here and the downstream guard delegates to it (&sect;2).
      * The boundary is the C0 range: {@code 0x7F} and the C1 range are left out deliberately, because widening beyond

@@ -19,7 +19,7 @@ import build.jenesis.repository.scope.Scopes;
  */
 public final class Requests {
 
-    /** The one subject the free core knows: a walk of the store, every consumer riding. */
+    /** The one subject this module knows: a walk of the store, every consumer riding. */
     public static final String WALK = "walk";
 
     private static final Pattern SUBJECT = Pattern.compile("[A-Za-z0-9_-]+");

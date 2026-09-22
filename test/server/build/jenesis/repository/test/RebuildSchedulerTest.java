@@ -20,10 +20,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The free edition drives the shared rebuild pass itself: the auto-configuration schedules {@link RebuildScheduler}
+ * This composition drives the shared rebuild pass itself: the auto-configuration schedules {@link RebuildScheduler}
  * over the deployment's one repository, daily unless {@code jenreg.rebuild.interval} says otherwise, inert without a
  * walk or a consumer, and a driven pass streams every retained pointer to every consumer - so a consumer's view
- * converges without an embedder and without a republish. Before this, {@code RebuildPass} shipped in the free core
+ * converges without an embedder and without a republish. Before this, {@code RebuildPass} shipped here
  * with nothing to run it.
  */
 class RebuildSchedulerTest {

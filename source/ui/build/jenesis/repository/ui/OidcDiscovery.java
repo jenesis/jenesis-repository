@@ -14,7 +14,7 @@ import tools.jackson.databind.json.JsonMapper;
  * {@link ClientRegistration.Builder}.
  *
  * <p><b>Why this exists rather than {@code ClientRegistrations.fromIssuerLocation}.</b> That helper is the ONLY
- * reason {@code com.nimbusds:oauth2-oidc-sdk} and its five transitives are on the graph, in both editions - and it
+ * reason {@code com.nimbusds:oauth2-oidc-sdk} and its five transitives are on the graph at all - and it
  * uses the SDK as nothing more than a spec-aware JSON parser. Jackson is already aboard, so the document is a
  * record and a builder. Spring has had "Consider removing com.nimbusds:oauth2-oidc-sdk dependency" open since
  * December 2023, labelled as breaking passivity; it was assigned to 7.0.x, the dependency was updated rather than

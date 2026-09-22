@@ -1265,8 +1265,8 @@ public final class Authorization {
      * only way a derived document goes stale is a node dying between writing a group's grants and re-deriving the
      * last of its members - every ordinary path re-derives before it returns - and a process that died is a
      * process that comes back. A weekly sweep would leave the window open for a week to fix something a restart
-     * closes in seconds, and would need a scheduler the free core does not have: the walk's consumers are handed a
-     * repository-scoped store and no tenant, and the free rebuild driver is switched off in the composition that
+     * closes in seconds, and would need a scheduler this module does not have: the walk's consumers are handed a
+     * repository-scoped store and no tenant, and the rebuild driver is switched off in the composition that
      * has a scheduler of its own.
      *
      * <p>Best effort by construction. A read-only deployment cannot write a derived document and must still start;

@@ -45,7 +45,7 @@ public final class ConsistencyController {
         }
     }
 
-    /** The report as the JSON document both editions serve: the per-node rows, the divergences and the flags, with
+    /** The report as the JSON document the API serves: the per-node rows, the divergences and the flags, with
      *  {@code localNodeId} marking the node that answered. */
     public static Map<String, Object> document(ConsistencyReport report, String localNodeId) {
         List<Map<String, Object>> nodes = new ArrayList<>();

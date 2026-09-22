@@ -362,7 +362,7 @@ public final class StoreContract {
         // the body a level up, while S3, GCS and Azure store it as one literal key with a backslash in the name. The
         // bare "kit\escape" row is the same fact without the traversal: one key, two placements, so a store migration
         // would relocate it. Both are refused at the shared screen, so all four backends stay interchangeable.
-        // The control-character rows are the third alphabet of the same divergence, and the last one the free core
+        // The control-character rows are the third alphabet of the same divergence, and the last one the store
         // screened nowhere - not in traversalFree, not in key, not in segment - while this product's own request
         // guard had refused them since it was written. A NUL truncates the key at the first C API that handles it, so
         // a key screened whole is acted on in part and the four backends need not even agree on which object was

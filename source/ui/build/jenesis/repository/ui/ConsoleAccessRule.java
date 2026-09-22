@@ -15,8 +15,8 @@ import org.springframework.security.web.access.intercept.RequestAuthorizationCon
  *
  * <p>It lives here, once, rather than as a lambda in each chain, for the reason the authorization matrix is also
  * declared once: a security rule copied into a second chain is a rule that will drift, and it drifts towards
- * whichever copy somebody forgets. Every chain that serves a console - production, development, and both editions'
- * - asks this.
+ * whichever copy somebody forgets. Every chain that serves a console, production and development alike, asks
+ * this.
  *
  * <p>An anonymous token is explicitly not a principal. Spring's anonymous authentication reports itself as
  * authenticated, so a check that asked only {@code isAuthenticated()} would hand the console to an unauthenticated

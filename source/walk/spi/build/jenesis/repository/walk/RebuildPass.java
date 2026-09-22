@@ -13,7 +13,7 @@ import build.jenesis.repository.store.ServableNames;
  * The shared rebuild pass: one walk over the pointer roots feeding <em>every</em> {@link WalkConsumer} - so N
  * metadata rebuilders never mean N tree walks. This is the walk half of the two-route derived-metadata contract
  * made runnable: a scheduled surface resolves the walk, gathers {@link WalkConsumer#discovered()} and calls
- * {@link #run} on a cadence - the server's {@code RebuildScheduler} in the free edition, the maintenance
+ * {@link #run} on a cadence - the server's own {@code RebuildScheduler}, or the maintenance
  * scheduler's {@code rebuild} task downstream; steady-state freshness stays with the publication events
  * ({@code PublicationObserver.onPublished} / {@code onDeleted}), and this pass is the first-activation back-fill,
  * the periodic refresh and the self-heal - a consumer enabled late rebuilds its whole view from it.
@@ -221,7 +221,7 @@ public final class RebuildPass {
             derived = normalised(derived);
         }
 
-        /** The pointer roots alone - what the free core's own pass walks. */
+        /** The pointer roots alone - what the built-in pass walks. */
         public static Roots pointers(List<String> pointerRoots) {
             return new Roots(pointerRoots, List.of(), List.of(), List.of());
         }

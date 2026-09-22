@@ -486,7 +486,7 @@ public final class FormatContract {
      * {@link ArtifactLayout#paths} answers empty - which its own javadoc calls the exact answer for a shared-blobs
      * format. Nineteen fixture exclusions all saying that would be worse than saying it once here.
      *
-     * <p>The free-core leg is the non-vacuity anchor and always runs: Maven and Jenesis both place prefixes, so a
+     * <p>The published-tree leg is the non-vacuity anchor and always runs: Maven and Jenesis both place prefixes, so a
      * regression in the shared composition is caught without a container.
      *
      * <p>The sibling version is the real one with a digit appended, which is deliberate rather than convenient:

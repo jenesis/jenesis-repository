@@ -12,9 +12,9 @@ import build.jenesis.repository.store.ArtifactStore;
  * selected at boot, and the implementations were reached by naming their constructors in a Spring configuration -
  * which made tenancy a composition choice rather than an extension point, so a new routing could only be added by
  * editing that configuration. Discovering them needs one thing they can all be built from, and the obstacle
- * looked like the enterprise {@code Repositories} type all three multi-tenant routings take. It is not: between
- * them they call three of its methods, and the one returning an enterprise type is consulted only for a boolean.
- * So the whole dependency fits in a seam the free core can declare, and tenancy becomes discovered like every
+ * looked like the {@code Repositories} type all three multi-tenant routings take. It is not: between them they
+ * call three of its methods, and the one returning a routing type is consulted only for a boolean.
+ * So the whole dependency fits in a seam this module can declare, and tenancy becomes discovered like every
  * other extension point.
  *
  * <p>A provider reads whatever else it needs from {@link #config}, which is the deployment's namespaced settings -

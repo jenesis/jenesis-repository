@@ -127,7 +127,7 @@ public final class Publication {
      * {@code Publication.quarantineKey(path)} themselves - the gate, the inventory browse, four maintenance sweeps, two
      * contract kits and this module's own {@code ServableNames}. They agreed, and agreeing is not the same as
      * having an owner: the space is the largest un-owned one in the tree, and its direct ancestor is a defect where
-     * two pushes shared one pointer path. It lives here because the free core owns {@code publish/} and every
+     * two pushes shared one pointer path. It lives here because this module owns {@code publish/} and every
      * caller sits above this module, which is what "a shared thing goes below everything that needs it" means when
      * a suitable module already exists.
      */

@@ -9,7 +9,7 @@ import build.jenesis.repository.posture.Severity;
 
 /**
  * One collected {@link PostureReport} as a <em>single tenant's view</em> of it - the model the console's
- * Security-posture screen renders, and the containment boundary that makes the free core's
+ * Security-posture screen renders, and the containment boundary that makes
  * {@link PostureReport#forTenant} leg load-bearing rather than decorative.
  *
  * <p>A report is a fan-out over every discovered {@code SafetyAdvisor}, and an advisory names the tenant it concerns

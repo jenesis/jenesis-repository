@@ -11,8 +11,8 @@
  *
  * <p>{@code java.base} only - names and a shape rule, no store - so every module that writes into the store can
  * share it without pulling in any weight, and so the store SPI itself can use it without a cycle. The store keeps
- * bytes under keys and is deliberately ignorant of what the keys mean; this says what they mean, and nothing else. It sits in the free core because the layout it describes is the free
- * product's own, and both editions write into it.
+ * bytes under keys and is deliberately ignorant of what the keys mean; this says what they mean, and nothing else. It sits here because the layout it describes is the free
+ * product's own, and every composition writes into it.
  *
  * @jenesis.release 25
  */
