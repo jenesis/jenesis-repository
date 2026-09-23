@@ -71,13 +71,13 @@ public class GlobalControllerAdvice {
      */
     @ModelAttribute("product")
     public String product() {
-        return "Genesis Depot";
+        return "jenesis-repository";
     }
 
     /** One line under the product name, saying what a visitor is signing in to. */
     @ModelAttribute("tagline")
     public String tagline() {
-        return "Admin console for the Genesis Depot server";
+        return "Admin console for the repository server";
     }
 
     @ModelAttribute("readOnly")

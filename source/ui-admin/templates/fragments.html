@@ -4,7 +4,7 @@
     <!-- The shared list of what every page loads - one place, both consoles. This was a second copy until it
          proved the point: a script added to the shared shell was simply missing here. Only the admin-specific
          stylesheet below is local. -->
-    <th:block th:replace="~{base :: headContents(${title}, 'Genesis Depot')}"></th:block>
+    <th:block th:replace="~{base :: headContents(${title}, 'jenesis-repository')}"></th:block>
     <style>
         code { word-break: break-all; }
         /* SPI-provided format icons (W4.2b): a uniform square box; the inlined SVG fills it and, being
@@ -71,7 +71,7 @@
      links, tenant, posture, sign-out - is the base module's, so both consoles render one shell and a screen moved
      between them changes nothing around it. -->
 <th:block th:fragment="nav">
-    <th:block th:replace="~{base :: shell('Genesis Depot', @{/projects}, 'genesis-depot', ~{__${editionBadges ?: ''}__})}"></th:block>
+    <th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{__${editionBadges ?: ''}__})}"></th:block>
     <!-- The edition badges and the banner above are whatever console module names them: a fragment specification on
          the model (the licence module's, today), preprocessed into a fragment expression, or the empty fragment
          when no module does - so a console composed without a licence module renders nothing in their place. -->
