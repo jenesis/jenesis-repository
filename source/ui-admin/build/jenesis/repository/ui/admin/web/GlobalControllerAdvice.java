@@ -87,8 +87,9 @@ public class GlobalControllerAdvice {
 
     /** The strictly-opt-in anonymous-role grant (WANON.1, {@code jenreg.anonymous-rights}, env
      *  {@code JENREG_ANONYMOUS_RIGHTS}), so every view shows an explicit "Anonymous access" banner when it
-     *  is set - visible, never hidden. This console's mirror of the base console's {@code ConsoleAdvice} banner (the free
-     *  {@code build.jenesis.repository.ui} advice does not ride this richer console). Read straight off the environment,
+     *  is set - visible, never hidden. There was a second advice publishing this and every other attribute below,
+     *  in the shell package, and the two were kept in step by hand until the node that registered it went. Read
+     *  straight off the environment,
      *  like {@link #readOnly()} - the console observes the posture, the {@code Authorization} choke point enforces it.
      *  Blank (the default) ⇒ no anonymous access and no banner. */
     @ModelAttribute("anonymousRights")

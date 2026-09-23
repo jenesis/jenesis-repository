@@ -1,4 +1,4 @@
-package build.jenesis.repository.ui.test;
+package build.jenesis.repository.ui.admin.test;
 
 import module java.base;
 

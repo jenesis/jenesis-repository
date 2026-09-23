@@ -53,7 +53,8 @@ open module build.jenesis.repository.ui.admin.test {
     // A console module whose navEntries() throws. Registered for the whole module on purpose: the fan-out runs
     // at construction, so a regression in its containment fails every suite here rather than one leg.
     provides build.jenesis.repository.ui.ConsoleModuleProvider
-            with build.jenesis.repository.ui.admin.test.HostileConsoleModule;
+            with build.jenesis.repository.ui.admin.test.HostileConsoleModule,
+                    build.jenesis.repository.ui.admin.test.NavigatingConsoleModule;
     provides build.jenesis.repository.server.spi.CapabilityContributor
             with build.jenesis.repository.ui.admin.test.ContributedFlags;
 }

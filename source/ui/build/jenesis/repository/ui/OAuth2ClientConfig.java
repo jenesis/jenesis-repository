@@ -19,11 +19,14 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
  * {@code jenreg.ui.github.client-id} is set, and a generic OpenID Connect provider - its endpoints and JWK set
  * discovered from {@code jenreg.ui.oidc.issuer-uri} - when that issuer and a client id are set (so any OIDC identity
  * provider, e.g. Google, Keycloak, Okta, Azure AD, works). Every bean here exists only when at least one provider is
- * configured, so the app still starts with login disabled ({@link ConsoleSecurityConfig} shows a notice) rather than failing,
- * and Spring Boot's property auto-configuration, which rejects a blank client id, is avoided. Discovery makes a network
+ * configured, so the app still starts with login disabled rather than failing - the sign-in page says so itself,
+ * from the {@link LoginOptions} the installed mechanisms contribute, which is where that notice belongs: a
+ * deployment that installed no mechanism cannot be signed into, and a page with no buttons and no explanation is
+ * the one thing it must not be. Spring Boot's property auto-configuration, which rejects a blank client id, is
+ * avoided for the same reason. Discovery makes a network
  * call to the issuer at startup. The login is contributed to the chain as a {@link LoginContributor}, mapping the
- * signed-in user to authorities through {@link LoginAuthorities} - which is the seam that lets one wiring serve
- * both consoles, since the policy is what differed between them and not the mechanism.
+ * signed-in user to authorities through {@link LoginAuthorities} - the seam whose policy is the only thing that
+ * ever differed, which is why one wiring serves whatever authority model a deployment installs.
  *
  * <p>This existed twice, once here and once as a downstream module, with the condition and the contributor
  * byte-identical and the rest differing only in which properties class bound {@code jenreg.ui.github.*} and
