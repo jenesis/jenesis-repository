@@ -50,13 +50,20 @@ public final class ConsoleUrlSpace {
 
     /**
      * The subset a browser reaches before it has a principal: the probes a platform calls unauthenticated, the
-     * sign-in and token-exchange endpoints, the error and favicon paths, and the static asset directories.
+     * sign-in and token-exchange endpoints, the error and favicon paths, and the directories a console ships
+     * static files under.
      *
      * <p>Declared here because three chains permit it - this console's, its development profile's, and the admin
      * console's - and three copies of a list is three chances to leave something out. They had: {@code /oauth2/**}
      * and {@code /login/**} were permitted by one, two and one of them respectively, and {@code /img/**} by none,
-     * although the brand fragment every page renders asks for two files under it. A static asset directory carries
-     * nothing a principal protects, so all of them are here rather than the two that happened to be noticed.
+     * although the brand fragment every page renders asks for two files under it.
+     *
+     * <p><b>A pattern belongs here only when a module ships files under it.</b> This list briefly carried
+     * {@code /assets/**} too, on the reasoning that an asset directory protects nothing - but {@code /assets} is
+     * not a directory, it is {@link BrowseController}'s export of what the store holds, and permitting it handed
+     * an anonymous caller the repository's contents. Being in {@link #PATTERNS} is a different statement: that
+     * says the console's chain governs the path, which {@code /assets} needs. This says no principal is required,
+     * which it emphatically does not. The census over shipped resource directories finds exactly three.
      *
      * <p>{@code POST /logout} is not in the list: it is permitted by method as well as path, so a chain spells it
      * out on its own line.
@@ -65,7 +72,7 @@ public final class ConsoleUrlSpace {
             "/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness",
             "/login", "/login/**", "/oauth2/**",
             "/error", "/favicon.ico",
-            "/css/**", "/js/**", "/img/**", "/assets/**", "/webjars/**");
+            "/css/**", "/js/**", "/img/**");
 
     private ConsoleUrlSpace() {
     }
