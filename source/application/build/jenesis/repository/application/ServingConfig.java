@@ -47,16 +47,16 @@ import org.springframework.core.env.Environment;
 /**
  * The routing / serving / proxy-dispatch wiring split out of {@link RepositoryConfig}: the upstream
  * credential source and fetcher, the {@link RepositoryRouter} and its {@link RoutedServing} read side, the tenancy
- * routing, the live {@link FormatDispatcher}, batch ingestion, the free {@code RepositoryController} serving/writing
- * bean with the enterprise {@link DeployEdgeHooks} and {@link PublishTenantFilter} plugged in. Every bean is copied
+ * routing, the live {@link FormatDispatcher}, batch ingestion, the {@code RepositoryController} serving/writing
+ * bean with {@link DeployEdgeHooks} and {@link PublishTenantFilter} plugged in. Every bean is copied
  * verbatim from the former monolith; the split is behaviour-preserving.
  *
  * <p><b>import edge (no bean override).</b> The former {@code WebMvcRegistrations} mapping-suppression stopgap
- * that dropped the free controller's import handlers is retired. In 0.8.0 those handlers moved out of
- * {@code RepositoryController} into the free {@code ImportEdgeController}, a bean conditionally registered by
- * {@code FreeImportEdgeCondition} only when no {@code ImportEdgeProvider} is installed. The enterprise now installs
+ * that dropped the controller's import handlers is retired. In 0.8.0 those handlers moved out of
+ * {@code RepositoryController} into the {@code ImportEdgeController}, a bean conditionally registered by
+ * {@code FreeImportEdgeCondition} only when no {@code ImportEdgeProvider} is installed. This composition installs
  * {@link RoutedImportEdge} through that SPI (a hook, not a cross-layer bean override), so the server's own
- * import edge is never created and the enterprise {@link ImportController} - the tenant-scoped
+ * import edge is never created and {@link ImportController} - the tenant-scoped
  * {@code /repository/<repo>/admin/import} with its {@code AuditTrail}, tenant-routed store and screening/SSRF
  * choreography - is the sole import edge, with no {@code /repository/admin/import} free literal left to shadow it
  * and no mapping override.
@@ -76,7 +76,7 @@ public class ServingConfig {
 
     @Bean
     public ProxyFormat.Fetcher upstreamFetcher(UpstreamCredentialSource upstreamCredentials, Environment environment) {
-        // The upstream fetcher is a discovered plugin (the free http module, with revalidation and negative
+        // The upstream fetcher is a discovered plugin (the http module, with revalidation and negative
         // caching composed by its own proxy-miss-ttl key); NONE when absent - the router then serves local
         // content only and imports answer 501. The auth decorator adds per-host upstream credentials around
         // whatever resolves.
@@ -108,7 +108,7 @@ public class ServingConfig {
         // per-artifact ceiling is only reachable at or below the shared in-flight budget the body is spooled through,
         // so a configured ceiling above it fails the boot here rather than never firing.
         HardenedScreen.Bounds hardeningBounds = HardenedScreen.Bounds.fromConfig(config, spool.budget());
-        // EPIC 25 §4.2: the read-side withheld guard is the free core's discovered PublishInterceptor chain (the
+        // EPIC 25 §4.2: the read-side withheld guard is the core's discovered PublishInterceptor chain (the
         // staging withhold) plus the /quarantine review pointer itself, consumed read-only. A local 404 over a path
         // the gate has retracted is then a REFUSED that ends the walk rather than a MISS that falls through to a
         // weaker fallback - the closure for locally-withheld content. The review pointer is read HERE rather than by
@@ -201,9 +201,9 @@ public class ServingConfig {
 
     @Bean
     public RoutedServing routedServing(RepositoryRouter repositoryRouter) {
-        // The read side of the router: the free serving controller consults this on a GET/HEAD, so a routed
+        // The read side of the router: the serving controller consults this on a GET/HEAD, so a routed
         // repository (a per-repository proxy of an upstream, or a group view over members) serves across its
-        // backings behind the free path - retiring the interim where a routed read served only its own hosted
+        // backings behind the path - retiring the interim where a routed read served only its own hosted
         // space. A repository with no definition declines (routes() == false), leaving the free FormatDispatcher to
         // dispatch it over its own store with the deployment-wide format-level pull-through intact. The router is the
         // gating() one, so a routed proxy fetch is screened by the same compliance gate a direct proxy is, and the
@@ -247,7 +247,7 @@ public class ServingConfig {
 
     /** Every discovered format that the {@link Features} convention leaves enabled - one image carries every
      *  format module and {@code jenreg.<format>=false} trims it at boot, degrading exactly like an
-     *  absent module. (The free core applies the same gate inside its own auto-configuration; this shell builds its
+     *  absent module. (The core applies the same gate inside its own auto-configuration; this shell builds its
      *  format list itself, so it applies the convention at its own discovery sites.) */
     static List<RepositoryFormat> enabledFormats(Environment environment) {
         return RepositoryFormat.installed(Features.namespaced(environment::getProperty));
@@ -258,7 +258,7 @@ public class ServingConfig {
                                              ObservationRegistry observations, Environment environment) {
         // The upstream table is a live view over the runtime settings (format-upstream.<format> or the format's
         // own declared default, nothing when the proxy switch is off), so a settings change applies on the next
-        // fetch where the free core's boot-time map could not. The observation registry rides in so a proxied miss
+        // fetch where the core's boot-time map could not. The observation registry rides in so a proxied miss
         // is timed and traced as jenreg.proxy.fetch (format, outcome) through the free PullThroughCache.
         List<RepositoryFormat> formats = enabledFormats(environment);
         // ... and screened. This is the leg every repository WITHOUT a router definition uses, the deployment-wide
@@ -280,7 +280,7 @@ public class ServingConfig {
     @Bean
     public BatchIngestion batchIngestion(LiveConfig liveConfig) {
         // Batch archive ingestion, gated live: off unless the operator switches batch-upload on, its entry cap the
-        // live zip-bomb bound. Driven by the free serving controller for every write (both tenancy modes), so an
+        // live zip-bomb bound. Driven by the serving controller for every write (both tenancy modes), so an
         // exploded entry rides the same discovered compliance gate - and the same EdgeHooks - a single upload does.
         return new BatchIngestion(liveConfig::batchUpload, liveConfig::batchUploadMaxEntries);
     }
@@ -293,19 +293,19 @@ public class ServingConfig {
                                                                                   RoutedServing routedServing,
                                                                                   DeployEdgeHooks deployEdgeHooks,
                                                                                   Environment environment) {
-        // The free controller is the one serving AND writing surface now: reads and writes both dispatch
+        // The controller is the one serving AND writing surface now: reads and writes both dispatch
         // through the routing seam and the free ScreenedDispatch edge. Registered under the bean name
         // "repositoryController" so the free RepositoryAutoConfiguration's own
         // @ConditionalOnMissingBean(name = "repositoryController") backs off - this one richer instance serves, never
         // two - now that the auto-config is no longer excluded. A write is a store-then-screen over the free
-        // Publication with the discovered compliance gate riding the interceptor chain and the enterprise EdgeHooks bean
+        // Publication with the discovered compliance gate riding the interceptor chain and the EdgeHooks bean
         // (deployEdgeHooks) plugged in for the immutability 409 / quarantine record / deploy observation; a batch
         // explode header is walked here too. A format reads a runtime toggle (the Maven metadata computation opt-in) off
         // the exchange, resolved against the jenreg.* environment into which a stored setting is layered at
-        // boot, so the free format needs no settings dependency.
+        // boot, so the format needs no settings dependency.
         List<ImportSourceProvider> importSources =
                 ImportSourceProvider.installed(Features.namespaced(environment::getProperty));
-        // the enterprise EdgeHooks bean is threaded into the free screening edge, retiring the DeployController
+        // the EdgeHooks bean is threaded into the screening edge, retiring the DeployController
         // fork onto this one shared write path. It carries the fork's ingress concerns - the release-immutability 409
         // (beforeLayout), the quarantine-dispatch record (held) and the deploy observation (verdict) - while the tenant
         // binding the gate resolution needs is opened around this controller by the PublishTenantFilter. The write
@@ -318,7 +318,7 @@ public class ServingConfig {
 
     @Bean
     public DeployEdgeHooks deployEdgeHooks(LiveConfig liveConfig, ObservationRegistry observations) {
-        // The enterprise deploy edge's ingress concerns, plugged into the free ScreenedDispatch through the EdgeHooks
+        // The deploy edge's ingress concerns, plugged into the free ScreenedDispatch through the EdgeHooks
         // seam rather than forked into a second controller: the release-immutability 409 (post-hash, pre-layout), the
         // quarantine-dispatch replay record around the 202, and the jenreg.deploy observation. The tenant
         // each concern needs is read from PublishTenant (bound by publishTenantFilter).
@@ -329,7 +329,7 @@ public class ServingConfig {
     public PublishTenantFilter publishTenantFilter(RepositoryRouting routing) {
         // Binds the request's tenant to the publishing thread on /repository/** and /v2/** so the discovered compliance
         // gate resolves that tenant's own policy - the binding the retired DeployController opened inline, now opened
-        // around the free serving controller writes flow through. Resolving through the active routing (not the key
+        // around the serving controller writes flow through. Resolving through the active routing (not the key
         // header alone) is what makes path/host tenancy screen a keyless CDN write with the path-named tenant's policy.
         return new PublishTenantFilter(routing);
     }

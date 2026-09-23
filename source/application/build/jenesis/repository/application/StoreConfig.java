@@ -58,7 +58,7 @@ public class StoreConfig {
      *
      * <p>They used to arrive by redeclaring that bean, which meant restating the resolution and the wrappers
      * around it - and the restatement had dropped the deployment-wide {@code jenreg.quota} cap, so an operator
-     * who set one on the free image and swapped in this one lost it with nothing to read. A contribution cannot
+     * who set one on the image and swapped in this one lost it with nothing to read. A contribution cannot
      * drop what it does not contain.
      *
      * <p>Order is the point: the meter sits closest to the backend and the node's memories above it, so a read
@@ -108,7 +108,7 @@ public class StoreConfig {
                     + "authorization.");
             // WANON.1 guardrail: anonymous-rights is only meaningful under an enforcing deployment. Under auth=false the
             // instance is ALREADY fully open, so a configured anonymous-rights is redundant and ignored - warn so the
-            // operator is not misled into thinking it is narrowing an open deployment (mirrors the free autoconfig).
+            // operator is not misled into thinking it is narrowing an open deployment (mirrors the autoconfig).
             if (!anonymousRights.isEmpty()) {
                 LOGGER.warn("SECURITY: jenreg.anonymous-rights is set but jenreg.auth=false, so "
                         + "the deployment is ALREADY fully open (every request is served anonymously) and the "
@@ -118,9 +118,9 @@ public class StoreConfig {
             return Authorization.anonymous();
         }
         // WANON.1 guardrail 2: a loud startup WARN naming exactly what a keyless caller may do, escalated for
-        // write/admin - the enterprise mirror of the free RepositoryAutoConfiguration WARN (this bean wins over the free
+        // write/admin - the mirror of the free RepositoryAutoConfiguration WARN (this bean wins over the free
         // @ConditionalOnMissingBean authorization bean, so the free WARN never fires here). The
-        // jenreg.anonymous.* security-posture advisories (logged by the free logSecurityPosture at boot, which runs in
+        // jenreg.anonymous.* security-posture advisories (logged by the logSecurityPosture at boot, which runs in
         // this deployment) carry the governance escalation onto the console and GET /api/posture. Default (empty) ⇒ no
         // anonymous access and no warning, byte-for-byte today's behaviour.
         if (!anonymousRights.isEmpty()) {
@@ -138,13 +138,13 @@ public class StoreConfig {
         }
         // The one choke-point: hand the anonymous grant set to the free Authorization the multi-tenant
         // the authorization manager already delegates every decision to (authorize(key, scope, path, required)),
-        // so a keyless request is decided against anonymous-rights identically to the free keyless branch - no second
+        // so a keyless request is decided against anonymous-rights identically to the keyless branch - no second
         // code path. Empty grants ⇒ keyless UNAUTHORIZED, exactly as today.
         Authorization authorization = Authorization.enforcing(store)
                 .withLifetimes(properties.getCredentialDefaultLifetime(), properties.getCredentialMaxLifetime())
                 .withAnonymousRights(anonymousRights);
         // The first credential of an enforcing deployment: every route that could mint one requires one already, so
-        // jenreg.bootstrap-key is provisioned here - the same contract the free server's authorization bean carries,
+        // jenreg.bootstrap-key is provisioned here - the same contract the server's authorization bean carries,
         // which this bean replaces and therefore has to honour. An object-store deployment has no other route in.
         String tenant;
         try {
@@ -180,7 +180,7 @@ public class StoreConfig {
 
     @Bean
     public TokenExchange tokenExchange(Authorization authorization, Environment environment) {
-        // The token exchange is a discovered plugin (the free oidc module); NONE when absent - /api/token then
+        // The token exchange is a discovered plugin (the oidc module); NONE when absent - /api/token then
         // answers 501, and the server carries no OAuth2/JOSE stack.
         return TokenExchangeProvider.resolve(authorization,
                 Features.namespaced(environment::getProperty));
@@ -231,7 +231,7 @@ public class StoreConfig {
 
     @Bean
     public Tenants tenants(ArtifactStore store, LiveConfig liveConfig, Environment environment) {
-        // The tenant directory is a discovered plugin; the enterprise store-backed module answers, so the
+        // The tenant directory is a discovered plugin; a store-backed module answers, so the
         // directory reflects the shared <tenant>/<repository> layout and can grow.
         return TenantsProvider.resolve(store, environment::getProperty, liveConfig.defaultTenant());
     }

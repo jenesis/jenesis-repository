@@ -1,5 +1,5 @@
 /**
- * The enterprise repository server's BOOT MODULE (kernel/boot split): the {@code @SpringBootApplication}
+ * The repository server's BOOT MODULE (kernel/boot split): the {@code @SpringBootApplication}
  * composition root - {@code RepositoryApplication}, the focused {@code @Configuration} groups (store, gate wiring,
  * serving, workers, demo and the {@code RepositoryConfig} import shell), the security composition, the discovered
  * feature-module bridge ({@code ServerModuleImports}/{@code ServerModulesConfig}) and the boot-time probes - split
@@ -38,14 +38,14 @@ open module build.jenesis.repository.application {
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.ui;
     requires jakarta.servlet;
-    // the enterprise rich-capabilities contribution to the ONE free-served /api/capabilities, discovered by the
+    // the rich-capabilities contribution to the ONE /api/capabilities, discovered by the
     // free RepositoryController's ServiceLoader.load(server.CapabilityContributor) - retiring the WebMvcRegistrations
     // capabilities mapping-suppression stopgap in favour of the free-core contributor SPI (a common-SPI hook, not a
     // bean override).
     provides build.jenesis.repository.server.spi.CapabilityContributor
-            with build.jenesis.repository.application.EnterpriseCapabilities;
+            with build.jenesis.repository.application.DeploymentCapabilities;
     // claim the free-core import edge on module presence, so the free ImportEdgeController (conditionally
-    // registered by FreeImportEdgeCondition when no provider is installed) is never created and the enterprise
+    // registered by FreeImportEdgeCondition when no provider is installed) is never created and this composition's
     // tenant-scoped ImportController is the sole import edge - retiring the WebMvcRegistrations mapping-suppression
     // stopgap in favour of the free ImportEdgeProvider SPI.
     provides build.jenesis.repository.server.spi.ImportEdgeProvider

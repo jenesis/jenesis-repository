@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
  * The deployment-info reads: {@code /api/config} (the store, default repository and gate posture) and
  * {@code /api/capabilities} (the installed formats, import sources, report columns and feature flags), so a client -
  * the CLI, a script, the console - renders exactly what the modules on this deployment's module path provide instead
- * of hardcoding any backend. One of the focused core controllers the enterprise {@code RepositoryController}
+ * of hardcoding any backend. One of the focused controllers the {@code RepositoryController}
  * monolith split into.
  */
 @RestController
@@ -77,9 +77,9 @@ public class DeploymentInfoController {
         // bridge this Spring bean's live rich-capabilities view to the free-core CapabilityContributor SPI, which
         // is ServiceLoader-discovered (no Spring context) inside the free RepositoryController.capabilities(). The free
         // controller now serves the ONE /api/capabilities, merging this contribution onto its base map - retiring the
-        // WebMvcRegistrations mapping-suppression stopgap that dropped the free capabilities mapping so this controller
+        // WebMvcRegistrations mapping-suppression stopgap that dropped the capabilities mapping so this controller
         // could own the path. Installed last, after every field is assigned, so the supplier reads a fully-built bean.
-        EnterpriseCapabilities.install(this::capabilityMap);
+        DeploymentCapabilities.install(this::capabilityMap);
     }
 
     @GetMapping("/api/config")
@@ -134,11 +134,11 @@ public class DeploymentInfoController {
                 .orElse("");
     }
 
-    /** The enterprise rich-capabilities view as the flat, JSON-serialisable map the free
+    /** The rich-capabilities view as the flat, JSON-serialisable map the
      *  {@link build.jenesis.repository.server.spi.CapabilityContributor} merges onto {@code /api/capabilities}: the six
      *  {@link CapabilitiesView} components ({@code version}, {@code formats}, {@code importSources}, {@code signals},
      *  {@code modules}, {@code features}) as top-level keys, preserving the exact shape the endpoint served before the
-     *  free controller took ownership of the mapping - the free base keys ({@code readOnly}, {@code auth},
+     *  free controller took ownership of the mapping - the base keys ({@code readOnly}, {@code auth},
      *  {@code anonymousRights}) are then added around it by the merge, a strict superset of the old body. Recomputed
      *  per call off the live settings, so a toggle re-resolves without a restart. */
     public Map<String, Object> capabilityMap() {
@@ -147,7 +147,7 @@ public class DeploymentInfoController {
             view = capabilities();
         } catch (IOException e) {
             // The rich view reads the stored-settings documents; a read failure there surfaces as an unchecked error so
-            // the merge (and the free capabilities() the SPI feeds) fails cleanly rather than serving a half-built body.
+            // the merge (and the capabilities() the SPI feeds) fails cleanly rather than serving a half-built body.
             throw new UncheckedIOException(e);
         }
         Map<String, Object> map = new LinkedHashMap<>();
@@ -163,7 +163,7 @@ public class DeploymentInfoController {
     /** What this deployment carries - the installed formats, import sources, report columns and features - so a
      *  client (the CLI, a script) renders exactly what the modules on this module path provide instead of
      *  hardcoding any backend. {@code version} lets a future shape change be detected. No longer mapped to
-     *  {@code /api/capabilities} directly: the free {@code RepositoryController} owns the single mapping and
+     *  {@code /api/capabilities} directly: the {@code RepositoryController} owns the single mapping and
      *  merges this view through the {@code CapabilityContributor} SPI ({@link #capabilityMap}), so there is no
      *  cross-layer mapping override. */
     public CapabilitiesView capabilities() throws IOException {

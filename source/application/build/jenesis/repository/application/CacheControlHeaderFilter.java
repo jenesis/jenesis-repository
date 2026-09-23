@@ -14,7 +14,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * The CDN-cache precondition (EPIC 29, RD-3, design §8.1): give artifact {@code GET}/{@code HEAD} responses an
  * immutability-driven {@code Cache-Control} so a CDN or proxy in front of the serve plane can actually cache them.
  *
- * <p><b>The problem this solves.</b> The free security chain configures no {@code .headers()}, so Spring Security's
+ * <p><b>The problem this solves.</b> The security chain configures no {@code .headers()}, so Spring Security's
  * default {@code HeaderWriterFilter} blankets <em>every</em> response with
  * {@code Cache-Control: no-cache, no-store, max-age=0, must-revalidate} (plus {@code Pragma}/{@code Expires}) - which
  * forbids any shared-cache retention. This filter overrides that for artifact serve reads only, by the seam Spring's
@@ -53,7 +53,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * "ETag-from-blob-key on streamed bodies", but it is deliberately <em>out of scope</em> for RD-3 and is NOT built
  * here: for immutable artifacts {@code Cache-Control: immutable} means clients never revalidate, so a streamed ETag is
  * moot; mutable indexes/metadata already get buffered ETags free-side (untouched here). Doing it properly needs a
- * free-core {@code ServletFormatExchange} change, which design §8.8 forbids for this wave (enterprise-only). It is
+ * free-core {@code ServletFormatExchange} change, which design §8.8 forbids for this wave. It is
  * recorded as a potential free-core follow-up, not a gap in this ticket.
  */
 public final class CacheControlHeaderFilter extends OncePerRequestFilter {

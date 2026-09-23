@@ -10,12 +10,12 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 /**
- * The enterprise repository server's composition: a Spring Boot configuration whose dual-layout serving, compliance gate,
+ * The repository server's composition: a Spring Boot configuration whose dual-layout serving, compliance gate,
  * staging and cleanup live in the framework-independent {@code build.jenesis.repository.*} modules and are wired by
  * {@link RepositoryConfig} and exposed by the focused core controllers ({@code ConsoleController},
  * {@code ImportController}, {@code BrowseController}, {@code DependentsController}, {@code FormatIconController},
  * {@code DeploymentInfoController}) plus the discovered per-feature {@code web} adapters. Artifact writes ride the free
- * {@code RepositoryController} serving bean, with the enterprise deploy concerns (tenant binding, release immutability,
+ * {@code RepositoryController} serving bean, with the deploy concerns (tenant binding, release immutability,
  * quarantine-dispatch record, deploy observation) plugged in through the
  * {@link build.jenesis.repository.server.kernel.PublishTenantFilter} and the
  * {@link build.jenesis.repository.gateway.DeployEdgeHooks} {@code EdgeHooks} bean (retired the forked
@@ -23,21 +23,21 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
  * The storage backend is selected by
  * {@code jenreg.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem fallback).
  *
- * <p>The free {@code RepositorySecurityAutoConfiguration} is no longer excluded: it now runs and this distribution
- * <em>composes over</em> its chain rather than forking it. The enterprise authorization manager (a
- * {@code @ConditionalOnMissingBean} the free chain picks up), the open routes and the request-body cap ride the free
+ * <p>The {@code RepositorySecurityAutoConfiguration} is no longer excluded: it now runs and this distribution
+ * <em>composes over</em> its chain rather than forking it. A contributed authorization manager (a
+ * {@code @ConditionalOnMissingBean} the chain picks up), the open routes and the request-body cap ride the free
  * security chain through the {@code SecurityChainCustomizer} seam (see {@link RepositorySecurityConfig}); the rate limiter
- * and filter reuse the free classes, re-declared there with the pin-aware live ceiling.
+ * and filter reuse the classes, re-declared there with the pin-aware live ceiling.
  *
- * <p>No free auto-configuration is excluded. The free {@code RepositoryAutoConfiguration} now runs alongside
+ * <p>No free auto-configuration is excluded. The {@code RepositoryAutoConfiguration} now runs alongside
  * the security one: every one of its beans is {@code @ConditionalOnMissingBean}, so each backs off behind this
- * module's richer replacement (the free serving controller is registered here under the bean name
- * {@code repositoryController} so the free one backs off too). The former exclusion existed only because both
+ * module's richer replacement (the serving controller is registered here under the bean name
+ * {@code repositoryController} so the one backs off too). The former exclusion existed only because both
  * distributions bound the same {@code jenreg.repository} prefix with an <em>incompatible schema</em>: the free
  * {@code proxy} is a {@code Map<String,String>} of format upstreams and its {@code repository} a {@code String}, where
  * this distribution once bound a boolean {@code proxy} switch and a {@code repository} map. Those two collisions are
  * gone - this distribution's switch is {@code jenreg.proxy-enabled} and its definitions
- * {@code jenreg.repositories.<name>}, so it <em>extends</em> the free schema over one prefix rather than
+ * {@code jenreg.repositories.<name>}, so it <em>extends</em> the schema over one prefix rather than
  * redefining it, and {@link LegacyPropertyProbe} fails a boot fast that still carries an old key.
  *
  * <p><b>Nothing ships this.</b> It was an image of its own once; the shipped artifact is the bundle,

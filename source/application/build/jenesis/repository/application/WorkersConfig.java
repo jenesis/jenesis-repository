@@ -54,7 +54,7 @@ public class WorkersConfig {
     @Bean(initMethod = "start", destroyMethod = "close")
     public KeyUsageTracker keyUsageTracker(RepositoryProperties properties, Authorization authorization,
                                            Environment environment) {
-        // Usage tracking is a discovered plugin (the free usage module); NONE when absent - nothing records and
+        // Usage tracking is a discovered plugin (the usage module); NONE when absent - nothing records and
         // the worker reports as off. A read-only deployment records nothing either, since the usage counter is a
         // store write.
         if (properties.isReadOnly()) {
@@ -64,12 +64,12 @@ public class WorkersConfig {
                 Features.namespaced(environment::getProperty));
     }
 
-    /** The free core's scheduled rebuild driver stands down here: this edition's maintenance scheduler drives its
+    /** The core's scheduled rebuild driver stands down here: this edition's maintenance scheduler drives its
      *  two jobs - the rebuild walk and the daily stored-listing repair - as the {@code rebuild} and
-     *  {@code listing-rebuild} tasks, per repository and under its lease, so the free driver is declared off rather
+     *  {@code listing-rebuild} tasks, per repository and under its lease, so the driver is declared off rather
      *  than running a second, fixed-tenant pass beside them. The first task is on whenever a walk resolves; the
      *  second is opt-in in code and switched on by the image ({@code Server.DEFAULTS}), which is what keeps this
-     *  edition repairing what the free one repairs. */
+     *  edition repairing what the one repairs. */
     @Bean(initMethod = "start", destroyMethod = "close")
     public RebuildScheduler rebuildScheduler(ArtifactStore store) {
         return new RebuildScheduler(store, store, key -> RebuildScheduler.INTERVAL.equals(key) ? "off" : null,

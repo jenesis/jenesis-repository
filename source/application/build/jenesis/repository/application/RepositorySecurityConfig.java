@@ -17,24 +17,24 @@ import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Composes the enterprise repository's security concerns <em>over</em> the free repository security chain rather than
- * replacing it: the free {@code RepositorySecurityAutoConfiguration} builds the stateless, deny-by-default chain
+ * Composes this composition's security concerns <em>over</em> the server's own security chain rather than
+ * replacing it: the {@code RepositorySecurityAutoConfiguration} builds the stateless, deny-by-default chain
  * (key authentication, rate limiting and the deny-by-default authorization manager), and this contributes to it
  * through the {@link SecurityChainCustomizer} seam.
  *
- * <p><b>The authorization manager is no longer declared here.</b> It used to be, under a name the free chain's
+ * <p><b>The authorization manager is no longer declared here.</b> It used to be, under a name the chain's
  * {@code @ConditionalOnMissingBean(name = ...)} backs off from - a coupling that was a string matched in two
  * modules, where nothing failed when it stopped matching and what failed instead was that every access decision
  * was taken by the weaker manager. The tenancy module offers its manager through
- * {@code AuthorizationManagerProvider} now, which the free declaration resolves as it builds the bean, so the
+ * {@code AuthorizationManagerProvider} now, which the declaration resolves as it builds the bean, so the
  * replacement happens in every composition carrying that module rather than only in whichever one is the
  * composition root.
  *
  * <p>The {@link RateLimitFilter} is declared here rather than reused from the free
  * {@code RepositorySecurityAutoConfiguration}: this wiring resolves the default ceiling through the pin-aware
- * runtime-settings chain, which the free bean does not consult. The
- * filter is still the free class over the free {@code RateLimiterProvider} - shared mechanism reused, only its
- * wiring lives here - and the free chain's {@code @ConditionalOnMissingBean} rate-limit filter backs off in its
+ * runtime-settings chain, which the bean does not consult. The
+ * filter is still the class over the {@code RateLimiterProvider} - shared mechanism reused, only its
+ * wiring lives here - and the chain's {@code @ConditionalOnMissingBean} rate-limit filter backs off in its
  * favour and shed-loads the wire through it.
  *
  * <p>The customizer opens the routes that authenticate by something other than a management key - the console
@@ -43,7 +43,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * ({@code GET /api/provenance/key}), the secret-scanning leak webhook ({@code POST /api/leaked}, authenticated by
  * signature) and the OIDC token-exchange endpoint ({@code POST /api/token}, authenticated by the presented
  * id-token) - and adds the {@link RequestBodyLimitFilter} that caps the unauthenticated write routes so an
- * anonymous caller cannot exhaust memory. Everything else falls through to the free chain's deny-by-default
+ * anonymous caller cannot exhaust memory. Everything else falls through to the chain's deny-by-default
  * {@code anyRequest} rule.
  */
 @Configuration
@@ -62,7 +62,7 @@ public class RepositorySecurityConfig {
     }
 
     @Bean
-    public SecurityChainCustomizer enterpriseSecurityChainCustomizer() {
+    public SecurityChainCustomizer repositorySecurityChainCustomizer() {
         return http -> http
                 .authorizeHttpRequests(authorize -> authorize
                         // The console shell and its format-icon route used to be opened here. They are gone: the

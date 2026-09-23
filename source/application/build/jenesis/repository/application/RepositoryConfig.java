@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * Wires the enterprise repository from {@link RepositoryProperties}: the artifact store (a backend chosen by name
+ * Wires the repository from {@link RepositoryProperties}: the artifact store (a backend chosen by name
  * through {@code ArtifactStoreProvider}), the {@link build.jenesis.repository.server.spi.Authorization} (enforcing or
  * anonymous), the {@code ComplianceGate} (a license allow-list and a CVSS threshold, optionally over a live OSV
  * source), the gated publish path, the store-backed staging and inventory, and the retention policy. Every bean is

@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The admin trigger for a migration off an incumbent manager, asynchronous so the call returns at once. One of the
- * focused core controllers the enterprise {@code RepositoryController} monolith split into: the import surface is
+ * focused controllers the {@code RepositoryController} monolith split into: the import surface is
  * core to the app (it routes writes into the repository's hosted store), not a removable feature.
  */
 @RestController
@@ -123,7 +123,7 @@ public class ImportController {
             String jobId = prior == null ? ImportJobs.newId() : request.resume();
             // The import job runs on a fresh unbound virtual thread (ImportJobs.submit -> Thread.ofVirtual), where
             // PublishTenant.current() is null and the discovered gate would resolve the DEPLOYMENT-wide policy instead
-            // of this tenant's. Bind the tenant around the whole job body through the free job-scope seam, so the screen
+            // of this tenant's. Bind the tenant around the whole job body through the job-scope seam, so the screen
             // on the job thread resolves the tenant's own policy (Q3 subtlety, /).
             UnaryOperator<Runnable> jobScope = body -> () -> {
                 try (PublishTenant.Scope scope = PublishTenant.open(tenant)) {

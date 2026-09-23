@@ -9,17 +9,17 @@ import org.springframework.core.env.PropertySource;
 
 /**
  * Fails a boot fast, before Spring binds {@code jenreg.*}, if the environment still carries one of the
- * pre-enterprise config keys - so an operator sees the key it must rename rather than the cryptic binding error
- * (or, worse, a silent rebind to the free schema's semantics that would flip pull-through or drop repository
- * definitions without a sound). This distribution now <em>extends</em> the free {@code jenreg.repository} schema
+ * superseded config keys - so an operator sees the key it must rename rather than the cryptic binding error
+ * (or, worse, a silent rebind to the schema's semantics that would flip pull-through or drop repository
+ * definitions without a sound). This distribution now <em>extends</em> the {@code jenreg.repository} schema
  * instead of redefining it, so three keys moved:
  *
  * <ul>
  *   <li>{@code jenreg.proxy} (the boolean pull-through switch) is now {@code jenreg.proxy-enabled}
- *       - the plain {@code proxy} key belongs to the free core's {@code jenreg.proxy.<format>} per-format
+ *       - the plain {@code proxy} key belongs to the core's {@code jenreg.proxy.<format>} per-format
  *       upstream map, so a scalar {@code proxy} value can only be the old switch.</li>
  *   <li>{@code jenreg.repository.<name>} (the map of repository definitions) is now
- *       {@code jenreg.repositories.<name>} - the free core's {@code jenreg.repository} is a
+ *       {@code jenreg.repositories.<name>} - the core's {@code jenreg.repository} is a
  *       single {@code String} (the fixed-space name), so a {@code repository.<name>} sub-key can only be the old map.</li>
  *   <li>{@code jenreg.format-proxy-upstream.<format>} (the deploy-time per-format upstream) folded into the
  *       free core's {@code jenreg.proxy.<format>} map (the boot default; {@code format-upstream.<format>}
@@ -28,7 +28,7 @@ import org.springframework.core.env.PropertySource;
  *
  * <p>Runs once the environment is prepared, the same lifecycle point as
  * {@link build.jenesis.repository.server.kernel.SettingsEnvironmentLayer}, so a stored
- * runtime setting layered under a legacy key is caught too. Only the enterprise keys are probed - the free schema
+ * runtime setting layered under a legacy key is caught too. Only this composition's keys are probed - the schema
  * ({@code proxy} as a map, {@code repository} as a string) stands unchanged and is never rejected.
  */
 public final class LegacyPropertyProbe implements ApplicationListener<ApplicationEnvironmentPreparedEvent> {
@@ -47,7 +47,7 @@ public final class LegacyPropertyProbe implements ApplicationListener<Applicatio
         // relaxed-binding aware for the OS environment, so JENREG_PROXY is caught as well.
         if (environment.getProperty("jenreg.proxy") != null) {
             problems.add("'jenreg.proxy' (the pull-through switch) is now 'jenreg.proxy-enabled'"
-                    + " - the plain 'jenreg.proxy.<format>' map now names the free core's per-format upstreams");
+                    + " - the plain 'jenreg.proxy.<format>' map now names the core's per-format upstreams");
         }
         // The sub-keyed forms: scan the enumerable sources for any key under the old map prefixes, matching both the
         // dotted form (system properties, application.properties, -D) and the relaxed UPPER_UNDERSCORE form (env vars).
@@ -71,7 +71,7 @@ public final class LegacyPropertyProbe implements ApplicationListener<Applicatio
                     + " 'jenreg.repositories.<name>' - found " + repositoryMapKeys);
         }
         if (!formatUpstreamKeys.isEmpty()) {
-            problems.add("'jenreg.format-proxy-upstream.<format>' folded into the free core's"
+            problems.add("'jenreg.format-proxy-upstream.<format>' folded into the core's"
                     + " 'jenreg.proxy.<format>' map (a 'format-upstream.<format>' setting stays the live"
                     + " override) - found " + formatUpstreamKeys);
         }
@@ -82,7 +82,7 @@ public final class LegacyPropertyProbe implements ApplicationListener<Applicatio
     }
 
     private static boolean matchesPrefix(String name, String dotted, String relaxed) {
-        // A trailing segment must follow the prefix (a sub-key), so the free scalar keys jenreg.repository
+        // A trailing segment must follow the prefix (a sub-key), so the scalar keys jenreg.repository
         // and the exact prefix stem are never matched.
         return (name.startsWith(dotted) && name.length() > dotted.length())
                 || (name.startsWith(relaxed) && name.length() > relaxed.length());
