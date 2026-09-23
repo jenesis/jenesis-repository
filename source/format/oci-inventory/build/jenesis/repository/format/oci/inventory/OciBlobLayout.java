@@ -26,7 +26,7 @@ import build.jenesis.repository.format.Checksums;
  * staging first-match idioms) serve the FIRST format whose {@code handles} matches in unspecified {@code ServiceLoader}
  * order, so a layout that claimed {@code /v2/} could steal live serving from the real, proxy-capable {@code OciFormat}.
  * This provider is inert on every serving path and exists only to answer the inventory's capability lookups
- * ({@link #describe} / {@link #servedPaths} / {@link #blobKeys} / {@link #blobHashes}), reached through the enterprise
+ * ({@link #describe} / {@link #servedPaths} / {@link #blobKeys} / {@link #blobHashes}), reached through the
  * inventory's non-handling-{@code BlobLayout} fallback seams. {@link #handle} is therefore unreachable and throws.
  *
  * <p><b>Re-reads the conventions, never reaches into {@code OciFormat}'s module</b> (which exports its package only to
@@ -327,7 +327,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * The format-neutral coordinate a manifest request path carries: {@code /v2/<name>/manifests/<ref>} maps to
      * {@code ("oci", name, ref)} with the same image-name / tag / digest-hex validation the format applies. Every
      * other {@code /v2/} path - a blob, {@code _catalog}, {@code tags/list}, an upload - names no version and returns
-     * empty (the honest degrade the {@link BlobLayout#describe} contract prescribes). This is what the enterprise
+     * empty (the honest degrade the {@link BlobLayout#describe} contract prescribes). This is what the
      * inventory's non-handling-{@code BlobLayout} fallback consults for an OCI hold's describe-dependent seams.
      */
     @Override

@@ -8,10 +8,10 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * The JUnit driver for one enterprise format's leg of the shared {@code RepositoryFormat} contract. Everything
+ * The JUnit driver for one ecosystem format's leg of the shared {@code RepositoryFormat} contract. Everything
  * format-specific lives in the {@link EcosystemFormatFixture} a subclass supplies; the checks come from the free
- * core's format testkit, so a new enterprise format is covered by a fixture and a four-line subclass rather than by
- * another hand-written per-format suite - which is how the fourteen enterprise layouts drifted into fourteen ideas of
+ * the format testkit, so a new ecosystem format is covered by a fixture and a four-line subclass rather than by
+ * another hand-written per-format suite - which is how the fourteen ecosystem layouts drifted into fourteen ideas of
  * what a traversal-shaped path, a held version or a proxied digest means.
  *
  * <p>Each contract property becomes one dynamic test named for its format and its expectation, so a divergence reports

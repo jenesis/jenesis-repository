@@ -10,11 +10,11 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Withheld;
 
 /**
- * What an enterprise format adds to the free {@link FormatFixture} seam, and why it needs anything at all.
+ * What an ecosystem format adds to the {@link FormatFixture} seam, and why it needs anything at all.
  *
- * <p><b>The coordinate seam is a different interface here.</b> The free kit's
+ * <p><b>The coordinate seam is a different interface here.</b> The base kit's
  * {@code COORDINATE_TRAVERSAL_REFUSED} property is stated over {@code ArtifactLayout}, the {@code publish/}-namespace
- * coordinate mapping Maven and the Jenesis module layout carry. Every enterprise format serves out of the shared
+ * coordinate mapping Maven and the Jenesis module layout carry. An ecosystem format serves out of the shared
  * {@code blobs/} namespace instead, so its coordinate-to-pointer mapping is {@link BlobLayout} - and that is the seam
  * with teeth, because {@link BlobLayout#blobKeys} is what a retention eviction <em>deletes</em>. {@link #layout()}
  * exposes it and {@link #seed} names one really published coordinate, so {@code BlobLayoutCoordinateSeamTest} can
@@ -78,7 +78,7 @@ interface EcosystemFormatFixture extends FormatFixture {
     }
 
     /**
-     * The one reason every enterprise fixture currently gives for excluding
+     * The one reason every fixture here currently gives for excluding
      * {@link FormatContract.Property#PROXY_REFUSAL_IS_NOT_AN_ABSENCE}, held here rather than restated thirteen times
      * so that it reads as what it is: a single provisional statement, not thirteen independent findings.
      *
@@ -86,7 +86,7 @@ interface EcosystemFormatFixture extends FormatFixture {
      * resolves around rather than reports - the shape Gradle Module Metadata has on the Maven leg, where a refusal
      * spelled as a {@code 404} silently becomes a different resolution instead of a failed build. Answering it for an
      * ecosystem means knowing what its real client does with a miss on each proxied path, which is a per-format audit
-     * and not something the kit can decide. None has been done, so no enterprise fixture may claim its format is free
+     * and not something the kit can decide. None has been done, so no fixture here may claim its format is clear
      * of the shape - and none of these exclusions should be read as claiming it.
      *
      * <p>Written as one shared constant deliberately: a fixture that has actually been audited replaces it, either
@@ -117,7 +117,7 @@ interface EcosystemFormatFixture extends FormatFixture {
      * namespace - which decides whether the blobs-namespace coordinate seam applies to it at all.
      *
      * <p>Read off the namespaces the fixture already declares, so it is one statement rather than two that can
-     * disagree. Every enterprise format served from {@code blobs} until Ivy, which is a {@code publish/} layout
+     * disagree. Every format here served from {@code blobs} until Ivy, which is a {@code publish/} layout
      * like Maven and Jenesis: for those the coordinate maps to a request-path folder through
      * {@code ArtifactLayout.paths} and a hold retracts by unpublishing under it, so there is no pointer key for
      * {@code BlobLayout} to describe and demanding one would be demanding an empty answer.
@@ -135,7 +135,7 @@ interface EcosystemFormatFixture extends FormatFixture {
             return blobLayout;
         }
         throw new AssertionError(format() + ": this format implements no BlobLayout, so its blobs-namespace "
-                + "coordinate seam cannot be proven. Every enterprise format that serves from blobs/ must map its "
+                + "coordinate seam cannot be proven. Every format that serves from blobs/ must map its "
                 + "coordinates to their pointers - that is what makes a retroactive hold able to retract them.");
     }
 

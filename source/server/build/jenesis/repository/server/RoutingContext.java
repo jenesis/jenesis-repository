@@ -56,7 +56,8 @@ public interface RoutingContext {
      * Whether a repository accepts writes. {@code true} for a repository this deployment holds no definition for,
      * which is the hosted default; {@code false} only when something says otherwise (a proxy, a group view, one
      * marked read-only). Deliberately a boolean rather than the definition itself: that is all any routing asks,
-     * and the definition is an enterprise type this seam must not name.
+     * and a repository definition is a type contributed by whatever supplies the routing, which this seam must
+     * not name.
      */
     boolean writable(String repository);
 }

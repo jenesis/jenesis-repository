@@ -62,7 +62,7 @@ open module build.jenesis.repository.format.contract.ecosystem.test {
     // The blobs-namespace seam the coordinate suite drives.
     requires build.jenesis.repository.blobs;
 
-    // Every declared enterprise format module, so the runtime discovery leg can see all fourteen. A module missing
+    // Every declared ecosystem format module, so the runtime discovery leg can see all fourteen. A module missing
     // here is exactly the blind spot the separate static leg exists to catch.
     requires build.jenesis.repository.format.npm;
     requires build.jenesis.repository.format.pypi;

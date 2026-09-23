@@ -146,7 +146,7 @@ final class NuGetFormatFixture implements EcosystemFormatFixture {
                 FormatContract.Property.COORDINATE_TRAVERSAL_REFUSED,
                 "NuGetFormat implements no ArtifactLayout: a package's pointers live in the blobs namespace "
                         + "(nuget/<id>/<version>/...), not under publish/, so its coordinate-to-pointer mapping is the "
-                        + "enterprise BlobLayout - blobKeys/servedPaths - which is what a retention eviction deletes. "
+                        + "BlobLayout seam - blobKeys/servedPaths - which is what a retention eviction deletes. "
                         + "Proven over the same hostile coordinates by BlobLayoutCoordinateSeamTest in this module; "
                         + "the request seam is covered by REQUEST_PATH_TRAVERSAL_REFUSED");
     }

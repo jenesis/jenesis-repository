@@ -27,26 +27,26 @@
 open module build.jenesis.repository.ui.admin {
     exports build.jenesis.repository.ui.admin to build.jenesis.repository.bundle,
             build.jenesis.repository.ui.admin.test,
-            build.jenesis.repository.ui.admin.enterprise.test,
+            build.jenesis.repository.ui.admin.installed.test,
             build.jenesis.repository.ui.admin.browser.test,
             build.jenesis.repository.auth.keylogin.test,
             build.jenesis.repository.bundle.full;
     exports build.jenesis.repository.ui.admin.extension to build.jenesis.repository.server.kernel.test,
             build.jenesis.repository.auth.keylogin.test,
             build.jenesis.repository.ui.admin.test,
-            build.jenesis.repository.ui.admin.enterprise.test;
+            build.jenesis.repository.ui.admin.installed.test;
     exports build.jenesis.repository.ui.admin.security to build.jenesis.repository.auth.oidc.test,
             build.jenesis.repository.auth.saml.test,
             build.jenesis.repository.auth.keylogin.test,
             build.jenesis.repository.ui.admin.test,
-            build.jenesis.repository.ui.admin.enterprise.test,
+            build.jenesis.repository.ui.admin.installed.test,
             build.jenesis.repository.bundle.full.test;
     exports build.jenesis.repository.ui.admin.config to build.jenesis.repository.auth.oidc.test,
             build.jenesis.repository.auth.saml.test,
             build.jenesis.repository.ui.admin.test,
-            build.jenesis.repository.ui.admin.enterprise.test;
+            build.jenesis.repository.ui.admin.installed.test;
     exports build.jenesis.repository.ui.admin.web to build.jenesis.repository.ui.admin.test,
-            build.jenesis.repository.ui.admin.enterprise.test;
+            build.jenesis.repository.ui.admin.installed.test;
     requires transitive build.jenesis.repository.ui.store;
     requires build.jenesis.repository.ui.identity;
     requires build.jenesis.repository.cache.storage;

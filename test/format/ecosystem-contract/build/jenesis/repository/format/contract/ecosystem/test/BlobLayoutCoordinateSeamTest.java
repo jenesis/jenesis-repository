@@ -20,10 +20,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code publish/}-namespace coordinate mapping Maven and the Jenesis module layout carry - and fixed a real
  * escape there with {@link ArtifactLayout#addressable}, on the reasoning that a coordinate arrives from a published
  * name, an advisory feed or a console form and that the paths it composes are handed to eviction, <em>which deletes
- * under them</em>. Every enterprise format serves out of the shared {@code blobs/} namespace instead, so its
+ * under them</em>. An ecosystem format serves out of the shared {@code blobs/} namespace instead, so its
  * coordinate mapping is {@link BlobLayout}, whose {@code blobKeys} is literally the list of pointer keys a retention
  * eviction deletes - and {@code ArtifactStore.delete} is not screened, only writes are. The property therefore has to
- * be proven <em>here</em>, or it is proven for the four free layouts and for none of the fourteen enterprise ones.
+ * be proven <em>here</em>, or it is proven for the four {@code publish/} layouts and for none of the fourteen
+ * that serve from {@code blobs/}.
  *
  * <p>Two halves, deliberately separated:
  * <ul>
@@ -110,8 +111,8 @@ class BlobLayoutCoordinateSeamTest {
     /**
      * Every format whose pointers live in the shared {@code blobs} namespace maps its coordinates to them.
      *
-     * <p>It used to say <em>every enterprise format</em>, and the premise was carried in the message rather than
-     * checked - true only because every enterprise format served from {@code blobs}. Ivy is the first that does
+     * <p>It used to say <em>every format here</em>, and the premise was carried in the message rather than
+     * checked - true only because every one of them served from {@code blobs}. Ivy is the first that does
      * not: it is a {@code publish/} layout like Maven and Jenesis, where a coordinate maps to a request-path
      * folder and a hold retracts by unpublishing under it. Demanding a {@code BlobLayout} of it would be demanding
      * a mapping whose only honest answer is empty, which is how an exemption list starts.
@@ -320,7 +321,7 @@ class BlobLayoutCoordinateSeamTest {
                     .contains(seeded.servedPath());
 
             // ... and the publish/-namespace seam the fixture EXCLUDES the kit's coordinate leg over is really inert,
-            // over the very store the version was just published into. Every enterprise fixture excludes
+            // over the very store the version was just published into. Every fixture here excludes
             // COORDINATE_TRAVERSAL_REFUSED on the ground that its ArtifactLayout answers nothing; seven of the formats
             // do implement that interface, so the ground is checked rather than restated. A format that later wired
             // paths() for real fails here - the signal to delete its exclusion and let the kit's own leg run, instead

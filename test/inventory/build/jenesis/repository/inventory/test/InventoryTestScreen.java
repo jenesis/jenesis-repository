@@ -6,8 +6,8 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
 
 /**
- * A minimal discovered publication screen for the inventory suite - the store-truth read side of the enterprise
- * {@code ComplianceScreen} in miniature, so the facade's own {@code Publication} (which the servable-name seam composes)
+ * A minimal discovered publication screen for the inventory suite - the store-truth read side of a screening
+ * screen in miniature, so the facade's own {@code Publication} (which the servable-name seam composes)
  * has a real withheld chain to consult. A request path is withheld exactly when a {@code publish/quarantine<path>}
  * review pointer exists for it (the review-pointer convention every hold writer uses), so a test can withhold a
  * {@code publish/}-namespace leaf by linking that pointer and see the screened {@code children} page and the

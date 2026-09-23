@@ -27,7 +27,20 @@ import org.springframework.web.util.UriComponentsBuilder;
  * and never reads an artifact blob - only the tiny publish pointer (its content is the blob hash) and the blob's
  * stored size feed the size column.
  *
- * <p>This lives in the base so both consoles share one browse. It is deny-by-default authenticated (a GET
+ * <p><b>No composition that ships registers it.</b> It was written to be the one browse both consoles share, and
+ * the sentence saying so stood here while that stopped being true: {@code ConsoleScreensConfig} names the screens a
+ * composed console imports and this is not among them, so the only context it has ever been a bean in is the shell's
+ * own node - which nothing imports. On the shipped images {@code /browse}, {@code /browse/children} and
+ * {@code /assets} are therefore 404, and nothing links to them. The console that ships browses one repository at a
+ * time, from that repository's page.
+ *
+ * <p>Adding it to that import list is one line and is <em>not</em> obviously the fix, which is why it has not been
+ * taken: this browse reads the {@link ArtifactStore} it is given from the root of the publish tree, tenant-blind,
+ * and the console that would register it is tenant-scoped. The same capability already exists tenant-aware as the
+ * repository server's {@code /api/browse}, resolved through {@code Repositories}. So the open question is whether
+ * this screen should be served from that source or retired, and it wants deciding rather than wiring.
+ *
+ * <p>It is deny-by-default authenticated (a GET
  * caught by {@code anyRequest().authenticated()}), and the {@code path} query parameter is traversal-guarded - any
  * {@code .}/{@code ..}/empty segment is dropped - so a request can never escape the {@code publish/} subtree to read
  * {@code blobs/} or a sibling's data. The reserved {@code publish/quarantine/} review subtree - artifacts the gate is

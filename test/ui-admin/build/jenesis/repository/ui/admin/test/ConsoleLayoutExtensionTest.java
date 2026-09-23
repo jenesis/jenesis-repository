@@ -53,7 +53,7 @@ class ConsoleLayoutExtensionTest {
     /**
      * Every layout fragment the declaring module's own templates reference, read out of the module that ships them.
      *
-     * <p><b>This used to read the source tree</b> - {@code Path.of("enterprise/source/ui/templates")} - behind an
+     * <p><b>This used to read the source tree</b> - a hard-coded path to the templates directory - behind an
      * {@code assumeTrue} that skipped when the directory was absent. Two things were wrong with that and the second
      * is the dangerous one. It answered a question about the product by reading a tree the build never declared as
      * an input, which is the shape this repository removed ninety-two suites' worth of; and the skip meant that the

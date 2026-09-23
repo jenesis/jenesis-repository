@@ -31,7 +31,7 @@ open module build.jenesis.repository.ui.store {
             build.jenesis.repository.auth.saml.test,
             build.jenesis.repository.scim,
             build.jenesis.repository.ui.admin.test,
-            build.jenesis.repository.ui.admin.enterprise.test,
+            build.jenesis.repository.ui.admin.installed.test,
             build.jenesis.repository.compliance.web,
             build.jenesis.repository.search.web,
             build.jenesis.repository.dependents.web,
