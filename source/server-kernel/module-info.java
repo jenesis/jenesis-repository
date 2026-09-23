@@ -1,7 +1,8 @@
 /**
  * The repository server's shared runtime KERNEL (kernel/boot split): the per-tenant resolver
  * ({@code Repositories}), the runtime-config kernel ({@code Settings}, {@code LiveConfig}, {@code PinnedSettings},
- * {@code RepositoryProperties}, the settings contributors and the settings-refresh convergence pass), the
+ * the settings contributors and the settings-refresh convergence pass, over the one
+ * {@link build.jenesis.repository.server.RepositoryProperties} the server binds), the
  * maintenance scheduling kernel ({@code MaintenanceScheduler}, {@code Lease}), the tenant-blind half of the
  * security kernel ({@code RequestBodyLimitFilter}, {@code RepositoryRequests}) and the {@code ServerModuleProvider}
  * discovery SPI the feature-web modules implement.
@@ -46,7 +47,7 @@
 open module build.jenesis.repository.server.kernel {
     // Deliberately kept through the kernel/boot split: LicenseGraphTest's structural guard
     // requires EVERY source/* module to carry the licence module, the kernel included.
-    requires build.jenesis.repository.server;
+    requires transitive build.jenesis.repository.server;
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.walk;

@@ -1,5 +1,6 @@
 package build.jenesis.repository.server.kernel;
 
+import build.jenesis.repository.server.RepositoryProperties;
 import module java.base;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.settings.SecretCipher;

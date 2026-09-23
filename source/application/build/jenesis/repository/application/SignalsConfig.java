@@ -8,7 +8,7 @@ import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.PublishTenant;
 import build.jenesis.repository.server.kernel.Repositories;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.compliance.AdvisorySignal;
 import build.jenesis.repository.compliance.AdvisorySource;

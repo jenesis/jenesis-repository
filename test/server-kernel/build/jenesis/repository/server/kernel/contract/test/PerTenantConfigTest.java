@@ -5,7 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.server.kernel.LiveConfig;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.store.ArtifactStore;

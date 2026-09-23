@@ -5,7 +5,7 @@ import module java.base;
 import build.jenesis.repository.server.kernel.FirstRunHardening;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Repositories;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.importer.ImportSourceProvider;
 import build.jenesis.repository.format.ArtifactLayout;

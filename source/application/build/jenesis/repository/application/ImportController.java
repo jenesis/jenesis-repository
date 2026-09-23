@@ -4,7 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.server.kernel.PublishTenant;
 import build.jenesis.repository.server.kernel.Repositories;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.audit.AuditActions;

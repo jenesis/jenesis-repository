@@ -1,7 +1,7 @@
 package build.jenesis.repository.application;
 
 import build.jenesis.repository.server.kernel.PinnedSettings;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.RequestBodyLimitFilter;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.spi.Authorization;

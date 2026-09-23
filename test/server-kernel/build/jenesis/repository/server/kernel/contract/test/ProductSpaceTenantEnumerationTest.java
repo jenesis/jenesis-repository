@@ -6,7 +6,7 @@ import build.jenesis.repository.cleanup.RetentionProvider;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.Repositories;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.spi.Authorization;

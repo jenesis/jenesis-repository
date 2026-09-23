@@ -42,6 +42,7 @@ open module build.jenesis.repository.server {
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.posture;
+    requires build.jenesis.repository.settings;
     requires build.jenesis.repository.observation;
     requires tools.jackson.databind;
     requires jakarta.servlet;

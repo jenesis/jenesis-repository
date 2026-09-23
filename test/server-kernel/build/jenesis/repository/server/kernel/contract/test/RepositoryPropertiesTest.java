@@ -1,7 +1,7 @@
 package build.jenesis.repository.server.kernel.contract.test;
 
 import module org.junit.jupiter.api;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.settings.ImportHostGuard;
 
 import static org.assertj.core.api.Assertions.assertThat;

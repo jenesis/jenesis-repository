@@ -5,7 +5,7 @@ import module spring.web;
 
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.TaskSchedule;
 import build.jenesis.repository.server.spi.Authorization;

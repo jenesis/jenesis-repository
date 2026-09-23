@@ -4,7 +4,7 @@ import module java.base;
 import build.jenesis.repository.definitions.RepositoryDefinition;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.RepositoryDefinitions;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.settings.SettingsScopes;
 

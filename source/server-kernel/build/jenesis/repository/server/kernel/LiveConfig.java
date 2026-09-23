@@ -1,5 +1,6 @@
 package build.jenesis.repository.server.kernel;
 
+import build.jenesis.repository.server.RepositoryProperties;
 import module java.base;
 import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.cleanup.RetentionPolicy;

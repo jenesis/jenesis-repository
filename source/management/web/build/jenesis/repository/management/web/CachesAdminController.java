@@ -4,7 +4,7 @@ import module java.base;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.Repositories;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.StoreCache;
 import org.springframework.web.bind.annotation.GetMapping;

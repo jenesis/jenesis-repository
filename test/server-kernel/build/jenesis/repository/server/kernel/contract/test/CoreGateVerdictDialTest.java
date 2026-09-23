@@ -7,7 +7,7 @@ import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.server.kernel.LiveConfig;
-import build.jenesis.repository.server.kernel.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
