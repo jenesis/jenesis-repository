@@ -14,31 +14,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
 /**
- * Bridges the framework-neutral console primitives into Spring: the {@link ConsoleCard} plugins (discovered with
- * {@code ServiceLoader}, exactly as the repository server discovers its formats), the {@link ArtifactStore} the cards
- * read (the same backend the server writes, selected by name through {@code ArtifactStoreProvider}), and the
+ * Bridges the framework-neutral console primitives into Spring: the {@link ArtifactStore} the screens read (the
+ * same backend the server writes, selected by name through {@code ArtifactStoreProvider}) and the
  * {@link Principals} authority model. Each bean is {@link ConditionalOnMissingBean conditional}, so a deployment
- * that contributes its own store, card set or authority model overrides the default and this backs off.
+ * that contributes its own store or authority model overrides the default and this backs off.
  */
 @Configuration(proxyBeanMethods = false)
 public class UiConfig {
-
-    /**
-     * The overview's cards, in discovery order.
-     *
-     * <p>It takes no configuration, and that is the shape of the seam rather than an omission: a card that needs
-     * deployment configuration or a collaborator is contributed as a bean and this backs off, which is what the
-     * {@link ConditionalOnMissingBean} is for. The security posture used to be discovered here with the
-     * {@code Environment} threaded in so that its card and the header badge counted one report; it is a screen of
-     * its own now, over the {@link PostureSource} seam both of them read.
-     */
-    @Bean
-    @ConditionalOnMissingBean(name = "cards")
-    public List<ConsoleCard> cards() {
-        List<ConsoleCard> cards = new ArrayList<>();
-        ServiceLoader.load(ConsoleCard.class).forEach(cards::add);
-        return cards;
-    }
 
     /**
      * The store this console reads when it runs alone - {@code @ConditionalOnMissingBean}, so wherever it is

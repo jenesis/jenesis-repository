@@ -12,7 +12,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 /**
  * The repository server's composition: a Spring Boot configuration whose dual-layout serving, compliance gate,
  * staging and cleanup live in the framework-independent {@code build.jenesis.repository.*} modules and are wired by
- * {@link RepositoryConfig} and exposed by the focused core controllers ({@code ConsoleController},
+ * {@link RepositoryConfig} and exposed by the focused core controllers (
  * {@code ImportController}, {@code BrowseController}, {@code DependentsController}, {@code FormatIconController},
  * {@code DeploymentInfoController}) plus the discovered per-feature {@code web} adapters. Artifact writes ride the free
  * {@code RepositoryController} serving bean, with the deploy concerns (tenant binding, release immutability,
