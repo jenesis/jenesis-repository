@@ -61,6 +61,13 @@ public class DomainConfig {
     // trail unconditionally over the store it opens; a composed node excludes that class and takes the repository's
     // own, which is authoritative there. And a deployment carrying no audit implementation is already answered a
     // layer down, by AuditTrailProvider resolving to a trail that records nothing.
+    //
+    // The tree was swept for the same shape afterwards: six bean names are declared by more than one user
+    // configuration with one of them conditional. Four never meet - UiConfig belongs to a console node nothing
+    // imports any more - and the cache node's two (`authorization`, `keyUsageTracker`) are ordered rather than
+    // raced, because a configuration class processes its @ComponentScan before its @Import, so the bundle's scan
+    // of the composition registers both competitors before CacheConfig is ever read. What has no order at all is
+    // two classes picked up by the SAME scan, which is what this one was.
 
     @Bean
     public CacheService cacheService(@Qualifier("cacheTenantStorage") CacheStorage cacheTenantStorage,
