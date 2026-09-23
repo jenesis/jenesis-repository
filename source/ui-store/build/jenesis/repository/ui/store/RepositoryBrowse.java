@@ -76,7 +76,7 @@ public class RepositoryBrowse extends TenantScope {
 
     /** The installed search index, resolved once so its per-repository searchers cache across requests; empty when the
      *  index module is absent, in which case search is the live substring scan and the license inventory is
-     *  unavailable. Mirrors {@code BrowseController}'s single resolve of the same provider. */
+     *  unavailable. Resolved once, the way every caller of this provider should. */
     private final Optional<SearchQueryProvider> search;
 
     public RepositoryBrowse(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations) {
@@ -268,7 +268,7 @@ public class RepositoryBrowse extends TenantScope {
         // The servable-name seam's paged, screened child listing (P-E2/P-E3): it pages one bounded level, forwards
         // folder children unconditionally, suppresses the reserved quarantine review subtree at the root, and drops any
         // non-folder leaf a GET would 404 (withheld, retracted, or a blob a garbage collection reclaimed) - the same WG
-        // serve-parity screen the deployment-wide BrowseController applies, so the browse discloses exactly the paths a GET would.
+        // serve-parity screen the retired deployment-wide browse applied, so this browse discloses exactly the paths a GET would.
         // This replaces the former per-leaf located() screen (the Audit-22 fix) and gains the paging bound the unbounded
         // children(prefix) it called lacked - same disclosure result, now heap-bounded and routed through the one seam.
         StoreRepositoryInventory.ChildPage page =
@@ -621,7 +621,7 @@ public class RepositoryBrowse extends TenantScope {
      *  never by scanning the artifact tree. When the search index module is installed, the match set comes from the
      *  index (honouring {@code license:}/{@code category:} filter tokens the substring scan cannot); otherwise every
      *  release whose {@code coordinate:version} contains the query matches (all for an empty query), the live
-     *  substring scan the endpoint falls back to. Mirrors {@code BrowseController.search}: the index is the read-first
+     *  substring scan the endpoint falls back to: the index is the read-first
      *  path, the scan the graceful degrade. Sorted by coordinate then version so the list is stable. */
     public SearchPage search(String repository, String query) throws IOException {
         StoreRepositoryInventory inventory = inventory(repository);

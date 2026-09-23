@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The publish/ pointer-tree walk now lives once in {@link PublishedAssets}; the server's {@link AssetCatalog}
- * catalogue and the console's NDJSON asset export ({@code BrowseController}) both delegate to it. This pins that the
+ * catalogue and the console browse both delegate to it. This pins that the
  * two callers see one and the same enumeration: the format-enriched {@link AssetCatalog.Asset}s and the neutral
  * {@link PublishedAssets.Entry}s the console renders carry identical path / size / SHA-256, in identical order, with
  * the {@code /quarantine} review subtree excluded from both - so the two surfaces can never disagree about what is

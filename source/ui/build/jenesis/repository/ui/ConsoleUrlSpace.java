@@ -44,9 +44,8 @@ public final class ConsoleUrlSpace {
             "/logout",
             "/no-access",
             "/oauth2/**",
-            "/css/**", "/js/**", "/img/**", "/assets/**", "/webjars/**",
-            "/console", "/console/**",
-            "/browse", "/browse/**");
+            "/css/**", "/js/**", "/img/**", "/webjars/**",
+            "/console", "/console/**");
 
     /**
      * The subset a browser reaches before it has a principal: the probes a platform calls unauthenticated, the
@@ -59,11 +58,13 @@ public final class ConsoleUrlSpace {
      * although the brand fragment every page renders asks for two files under it.
      *
      * <p><b>A pattern belongs here only when a module ships files under it.</b> This list briefly carried
-     * {@code /assets/**} too, on the reasoning that an asset directory protects nothing - but {@code /assets} is
-     * not a directory, it is {@link BrowseController}'s export of what the store holds, and permitting it handed
-     * an anonymous caller the repository's contents. Being in {@link #PATTERNS} is a different statement: that
-     * says the console's chain governs the path, which {@code /assets} needs. This says no principal is required,
-     * which it emphatically does not. The census over shipped resource directories finds exactly three.
+     * {@code /assets/**} too, on the reasoning that an asset directory protects nothing - but {@code /assets} was
+     * not a directory, it was a console export of what the store holds, and permitting it handed an anonymous
+     * caller the repository's contents. That export is gone with the deployment-wide browse it belonged to, and
+     * the enumeration it offered is the repository's own {@code /api/assets}, which is scoped and key-gated. The
+     * lesson survives the route: being in {@link #PATTERNS} says the console's chain governs a path, and being
+     * here says no principal is required, which is a different and much stronger claim. The census over shipped
+     * resource directories finds exactly three.
      *
      * <p>{@code POST /logout} is not in the list: it is permitted by method as well as path, so a chain spells it
      * out on its own line.
