@@ -25,7 +25,8 @@
  *
  */
 open module build.jenesis.repository.ui.admin {
-    exports build.jenesis.repository.ui.admin to build.jenesis.repository.ui.admin.test,
+    exports build.jenesis.repository.ui.admin to build.jenesis.repository.bundle,
+            build.jenesis.repository.ui.admin.test,
             build.jenesis.repository.ui.admin.enterprise.test,
             build.jenesis.repository.ui.admin.browser.test,
             build.jenesis.repository.auth.keylogin.test,

@@ -8,6 +8,7 @@ import build.jenesis.repository.store.Features;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.audit.AuditTrail;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import build.jenesis.repository.format.FormatMarks;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.spi.Authorization;
@@ -48,6 +49,20 @@ import org.springframework.core.env.ConfigurableEnvironment;
  */
 @Configuration
 public class DomainConfig {
+
+    /**
+     * The trail this console records privileged mutations on when nothing installs one.
+     *
+     * <p>A deployment that carries an audit implementation contributes the bean and this steps aside. One that
+     * does not still boots and still runs every screen - the acts simply go unrecorded, which is what "not
+     * installed" means for a capability, and is the alternative to a console that refuses to start because an
+     * optional module is absent.
+     */
+    @Bean
+    @ConditionalOnMissingBean(AuditTrail.class)
+    public AuditTrail auditTrail() {
+        return AuditTrail.none();
+    }
 
     @Bean
     public CacheService cacheService(@Qualifier("cacheTenantStorage") CacheStorage cacheTenantStorage,

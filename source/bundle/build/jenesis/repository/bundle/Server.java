@@ -1,7 +1,9 @@
 package build.jenesis.repository.bundle;
 
 import build.jenesis.repository.server.RepositoryApplication;
-import build.jenesis.repository.ui.ConsoleNode;
+import build.jenesis.repository.ui.admin.AdminConsoleNode;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -32,11 +34,20 @@ import org.springframework.context.annotation.Import;
  */
 @SpringBootConfiguration
 @EnableAutoConfiguration
-@ConfigurationPropertiesScan(basePackages = "build.jenesis.repository.ui")
+@ConfigurationPropertiesScan(basePackages = {"build.jenesis.repository.ui",
+        "build.jenesis.repository.ui.identity"})
 // The console arrives as one importable thing that knows its own gate, rather than as a scan this launcher spells
 // out. A launcher cannot make its own @ComponentScan conditional, so a console that could be switched off had to
 // become a configuration that can be.
-@Import(ConsoleNode.class)
+// It is the admin console: there is one console, and what an edition adds to it arrives through the seams it
+// declares rather than as a second console beside it. A capability this image does not carry reports itself
+// not installed, which is what every absent module already does.
+@Import(AdminConsoleNode.class)
+// The composition itself is scanned rather than imported: it is not optional, it is what this image is. Its
+// own launcher class is excluded so its auto-configuration is not re-triggered by the one this launcher is.
+@ComponentScan(basePackages = "build.jenesis.repository.application",
+        excludeFilters = @ComponentScan.Filter(type = FilterType.REGEX,
+                pattern = "build\\.jenesis\\.repository\\.application\\.RepositoryApplication"))
 public class Server {
 
     private Server() {

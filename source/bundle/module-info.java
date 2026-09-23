@@ -25,6 +25,11 @@ open module build.jenesis.repository.bundle {
     exports build.jenesis.repository.bundle;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.ui;
+    requires build.jenesis.repository.ui.admin;
+    requires build.jenesis.repository.application;
+    // The console's build-cache space resolves through this SPI, and the delegating provider is the default
+    // every composition answers to: without it on the graph the console cannot open its own storage.
+    requires build.jenesis.repository.cache.storage.delegating;
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.store.s3;
     requires build.jenesis.repository.store.gcs;

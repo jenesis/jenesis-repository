@@ -76,6 +76,23 @@ public interface ImportEdgeProvider {
         return Set.of();
     }
 
+    /**
+     * Whether this provider's edge is applicable to the deployment it finds itself in. {@code true} by default:
+     * a provider that ships with its surface and needs nothing else says nothing.
+     *
+     * <p>It exists because {@link #requiredConfig()} can only ask whether an operator set a key, and a provider
+     * may depend on what is *installed* rather than on what is configured. A tenant-scoped import edge is the
+     * case: it replaces a repository-less route with one that names a repository, which is only meaningful where
+     * something routes repositories at all. Claiming the edge regardless leaves a deployment with neither route -
+     * the free one suppressed, the scoped one addressing a repository the URL space does not carry.
+     *
+     * <p>Consulted by {@link #installed()}, so a provider that declines is indistinguishable from one that is
+     * absent, and the free edge stands exactly as it would have.
+     */
+    default boolean applicable() {
+        return true;
+    }
+
     /** Whether any {@link ServiceLoader}-discovered {@link ImportEdgeProvider} is active under the shared
      *  {@link Features} convention - the single question the {@code RepositoryAutoConfiguration} asks to decide
      *  whether to register the {@code ImportEdgeController}. {@code false} (no provider, or every discovered one
@@ -85,6 +102,7 @@ public interface ImportEdgeProvider {
         return !Providers.installedNames("import-edge",
                 ServiceLoader.load(ImportEdgeProvider.class),
                 ImportEdgeProvider::name,
-                provider -> Features.active(provider.name(), provider.requiredConfig())).isEmpty();
+                provider -> Features.active(provider.name(), provider.requiredConfig())
+                        && provider.applicable()).isEmpty();
     }
 }

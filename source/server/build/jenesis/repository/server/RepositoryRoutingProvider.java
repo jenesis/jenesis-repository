@@ -60,6 +60,20 @@ public interface RepositoryRoutingProvider {
      *         the installed names - a deployment that asked for host routing and silently got fixed would serve
      *         every tenant's request out of one space, and find nothing wrong with that.
      */
+    /**
+     * The names of the routings this deployment has installed, empty when none is.
+     *
+     * <p>Asked by a surface whose shape depends on whether repositories are routed at all - an import edge that
+     * names a repository has nothing to name where there is one artifact space. It lives here because this is
+     * the SPI's home, and discovery belongs to the home rather than to whoever is curious.
+     */
+    static SortedSet<String> installedNames() {
+        return Providers.installedNames(SETTING,
+                ServiceLoader.load(RepositoryRoutingProvider.class),
+                RepositoryRoutingProvider::name,
+                provider -> true);
+    }
+
     static RepositoryRouting resolve(String selection, RoutingContext context) {
         List<RepositoryRoutingProvider> discovered = ServiceLoader.load(RepositoryRoutingProvider.class).stream()
                 .map(ServiceLoader.Provider::get)
