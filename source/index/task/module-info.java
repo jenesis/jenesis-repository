@@ -21,6 +21,7 @@
  */
 module build.jenesis.repository.index {
     requires build.jenesis.repository.index.keys;
+    requires tools.jackson.databind;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.cleanup;

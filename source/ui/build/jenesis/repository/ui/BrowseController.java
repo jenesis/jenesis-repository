@@ -3,6 +3,7 @@ package build.jenesis.repository.ui;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import tools.jackson.databind.json.JsonMapper;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.PublishedAssets;
 import build.jenesis.repository.store.ServableNames;
@@ -109,7 +110,8 @@ public class BrowseController {
                     emit(entry, out);
                     last[0] = entry.path();
                 } else {
-                    out.write("{\"cursor\":\"" + jsonEscape(relative(last[0])) + "\"}\n");
+                    out.write(JSON.writeValueAsString(new Continuation(relative(last[0]))));
+                    out.write('\n');
                 }
             });
         }
@@ -117,6 +119,9 @@ public class BrowseController {
 
     /** The most entries one export request emits; a request asks for fewer, never for more. */
     static final int EXPORT_SLICE = 10_000;
+
+    /** One mapper for the export, built once: it is stateless and thread-safe by contract. */
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static int slice(String limit) {
         if (limit == null || limit.isBlank()) {
@@ -135,34 +140,23 @@ public class BrowseController {
     }
 
     /** Render one walked pointer as an NDJSON object; the domain walk already skipped withheld pointers and the
-     *  quarantine subtree, so this is pure presentation - the one thing that legitimately lives in the controller. */
+     *  quarantine subtree, so this is pure presentation - the one thing that legitimately lives in the controller.
+     *
+     *  <p>Written by the mapper rather than by hand. A path is a request path: it can carry a quote, a backslash
+     *  or a control character, and an escaper written for the two fields this export happens to have today is a
+     *  parser's worth of correctness maintained by whoever edits it next. The line ending stays explicit because
+     *  NDJSON's framing is one object per line, which is this method's business and not the mapper's. */
     private static void emit(PublishedAssets.Entry entry, Writer out) throws IOException {
-        out.write("{\"path\":\"" + jsonEscape(entry.path()) + "\",\"size\":" + entry.size()
-                + ",\"sha256\":\"" + jsonEscape(entry.sha256()) + "\"}\n");
+        out.write(JSON.writeValueAsString(new Exported(entry.path(), entry.size(), entry.sha256())));
+        out.write('\n');
     }
 
-    /** Minimal JSON string escaping for the two fields the export carries - a request path and a hex digest - so a path
-     *  segment carrying a quote, backslash or control character stays valid NDJSON. */
-    private static String jsonEscape(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (int index = 0; index < value.length(); index++) {
-            char c = value.charAt(index);
-            switch (c) {
-                case '"' -> escaped.append("\\\"");
-                case '\\' -> escaped.append("\\\\");
-                case '\n' -> escaped.append("\\n");
-                case '\r' -> escaped.append("\\r");
-                case '\t' -> escaped.append("\\t");
-                default -> {
-                    if (c < 0x20) {
-                        escaped.append(String.format(Locale.ROOT, "\\u%04x", (int) c));
-                    } else {
-                        escaped.append(c);
-                    }
-                }
-            }
-        }
-        return escaped.toString();
+    /** One exported pointer: the path a GET would take, its size and its content hash. */
+    private record Exported(String path, long size, String sha256) {
+    }
+
+    /** The last line of a truncated export: where a caller resumes from. */
+    private record Continuation(String cursor) {
     }
 
     /** A page of immediate children under a browse path plus whether the directory held more than the render cap. */
