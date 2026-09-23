@@ -29,6 +29,7 @@ open module build.jenesis.repository.ui.admin {
             build.jenesis.repository.ui.admin.test,
             build.jenesis.repository.ui.admin.installed.test,
             build.jenesis.repository.ui.admin.browser.test,
+            build.jenesis.repository.ui.e2e,
             build.jenesis.repository.auth.keylogin.test,
             build.jenesis.repository.bundle.full;
     exports build.jenesis.repository.ui.admin.extension to build.jenesis.repository.server.kernel.test,

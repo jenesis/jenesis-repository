@@ -1,9 +1,10 @@
 /**
- * End-to-end test of the Spring Boot web console. It boots the real {@link build.jenesis.repository.ui.Application} on
- * an ephemeral port over a temporary filesystem store (supplied here, so the console module itself stays
- * store-agnostic) under the {@code dev} security profile, then drives it over HTTP: the Actuator health endpoint is up,
- * the login page is served anonymously, the console denies an anonymous request, and an authenticated user sees the
- * browse panel rendering the store's real published contents.
+ * Unit tests for the console shell: the layout's extension points, the url space both chains are matched over, the
+ * access and principal seams, the login options a mechanism contributes, and the posture and OIDC discovery reads.
+ *
+ * <p>It drives the classes in process. Booting a console over HTTP is an end-to-end concern and lives in the
+ * other tree with the rest of them, against the console the images actually serve - this module's own shell node
+ * is gone, and with it the temptation to prove the product against a composition nobody runs.
  *
  * @jenesis.release 25
  * @jenesis.exclude spring.security.oauth2.client com.nimbusds/oauth2-oidc-sdk

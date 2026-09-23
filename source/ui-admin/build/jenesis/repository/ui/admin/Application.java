@@ -5,6 +5,8 @@ import build.jenesis.repository.ui.ConsoleScreensConfig;
 import org.springframework.context.annotation.Import;
 import build.jenesis.repository.ui.ConsoleModulesConfig;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 
@@ -39,4 +41,44 @@ public class Application {
      */
     public static final String CONFIG_NAME_PROPERTY = "spring.config.name=ui";
 
+    private Application() {
+    }
+
+    /**
+     * Boot this console on the given port ({@code 0} picks an ephemeral one) and return a handle carrying the bound
+     * port and closing the context, so a test or an embedder drives the real console over HTTP without the Spring
+     * types leaking into its own module.
+     *
+     * <p>The port rides as a run <em>argument</em> rather than a default property, which is not a stylistic
+     * choice: a {@code .properties()} default is Spring's lowest-precedence source and a configuration file on the
+     * closure pins {@code server.port}, so a {@code 0} set that way is silently ignored and the boot takes the
+     * fixed port instead. {@link #CONFIG_NAME_PROPERTY} rides with it for the reason that constant gives.
+     */
+    public static Running start(int port) {
+        ConfigurableApplicationContext context = new SpringApplicationBuilder(Application.class)
+                .run("--" + CONFIG_NAME_PROPERTY, "--server.port=" + port);
+        int bound = Integer.parseInt(context.getEnvironment().getProperty("local.server.port"));
+        return new Running(bound, context);
+    }
+
+    /** A booted console: the port it bound and the context to close. */
+    public static final class Running implements AutoCloseable {
+
+        private final int port;
+        private final ConfigurableApplicationContext context;
+
+        private Running(int port, ConfigurableApplicationContext context) {
+            this.port = port;
+            this.context = context;
+        }
+
+        public int port() {
+            return port;
+        }
+
+        @Override
+        public void close() {
+            context.close();
+        }
+    }
 }

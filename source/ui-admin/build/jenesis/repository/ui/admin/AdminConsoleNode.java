@@ -7,7 +7,6 @@ import build.jenesis.repository.ui.ConsoleAdministrators;
 import build.jenesis.repository.ui.KnownPrincipals;
 import build.jenesis.repository.ui.ConsoleModulesConfig;
 import build.jenesis.repository.ui.identity.UiProperties;
-import build.jenesis.repository.ui.ConsoleNode;
 import build.jenesis.repository.ui.ConsoleScreensConfig;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
@@ -18,12 +17,13 @@ import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 
 /**
- * The admin console, as one thing an application either carries or does not - the richer counterpart of
- * {@link ConsoleNode}, and gated by the same key.
+ * The console, as one thing an application either carries or does not.
  *
- * <p>One key, because an operator switching off "the console" means the one this deployment serves, and which
- * of the two that is is not their concern. The two nodes are never both registered: this console requires the base one
- * for what it reuses and replaces what it does not, and a composition scanning both would register two
+ * <p>There were two nodes once - this one and the shell's own, which imported the shared screens and supplied a
+ * default for every seam this console overrides. Nothing ever imported it, so it was a second console that no
+ * image served, and the {@link #GATE} an operator reads as "the console" was declared on it. The shell is a
+ * library now: the layout, the url space, the extension seams and the screens both consoles rendered. What is
+ * gone is its wiring, and a composition scanning both would have registered two
  * {@code SecurityConfig} classes under one bean name and fail the context outright.
  *
  * <p>The gate is read as the context starts, never from the settings store: it decides whether the console's
@@ -37,7 +37,7 @@ import org.springframework.context.annotation.Import;
 // carries it) and Spring wants the property name. They were one string until the settings
 // reference needed a literal it could read, and a compile-time constant is inlined - so this
 // call site went on compiling while asking for a property called "console" that nothing sets.
-@ConditionalOnProperty(name = "jenreg." + ConsoleNode.GATE, havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "jenreg." + AdminConsoleNode.GATE, havingValue = "true", matchIfMissing = true)
 @ConfigurationPropertiesScan(basePackages = "build.jenesis.repository.ui.admin.config")
 @ComponentScan(basePackages = "build.jenesis.repository.ui.admin",
         excludeFilters = @ComponentScan.Filter(type = FilterType.REGEX,
@@ -50,6 +50,17 @@ import org.springframework.context.annotation.Import;
                         "build\\.jenesis\\.repository\\.ui\\.admin\\.Application"}))
 @Import({ConsoleScreensConfig.class, ConsoleModulesConfig.class, ConsoleIdentityConfig.class})
 public class AdminConsoleNode {
+
+    /**
+     * Whether this deployment serves the console at all. Read before the context starts, so it applies on the next
+     * restart rather than live; the settings catalogue carries it unprefixed, which is why the call sites above
+     * compose {@code "jenreg." + GATE} rather than holding one string for both jobs.
+     *
+     * <p>It lived on the shell's own node until that node went. Nothing imported that node, so the gate it carried
+     * was the gate of a console nobody booted, while the console that ships read the same constant across a module
+     * boundary.
+     */
+    public static final String GATE = "console";
 
     /**
      * Who administers this deployment, seeded from this console's own {@code jenreg.ui.admins}.

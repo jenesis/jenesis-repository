@@ -9,7 +9,6 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.ui.ConsoleAdministrators;
 import build.jenesis.repository.ui.KnownPrincipals;
-import build.jenesis.repository.ui.Principals;
 import build.jenesis.repository.ui.UiProperties;
 import org.mockito.ArgumentCaptor;
 import org.springframework.core.ParameterizedTypeReference;
@@ -34,11 +33,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * The provider-qualified id both principal services construct - the exact string {@link Principals} keys the ADMIN
- * decision on. A GitHub (OAuth2, non-OIDC) sign-in must ask {@code Principals} about {@code github/<login>}; a generic
+ * The provider-qualified id both principal services construct - the exact string {@link AdminListAuthorities} keys the ADMIN
+ * decision on. A GitHub (OAuth2, non-OIDC) sign-in must ask {@code AdminListAuthorities} about {@code github/<login>}; a generic
  * OIDC sign-in about {@code oidc/<sub>}. The user-info fetch is short-circuited (a Mockito {@code RestOperations} mock
  * for the OAuth2 path, {@code retrieveUserInfo=false} for the OIDC path) so the test needs no network - only the id
- * derivation and the authority mapping are under test. The real {@link Principals} is a Mockito spy so its actual
+ * derivation and the authority mapping are under test. The real {@link AdminListAuthorities} is a Mockito spy so its actual
  * authority mapping still runs while the id it was asked about is captured.
  */
 class PrincipalServiceTest {
@@ -48,13 +47,13 @@ class PrincipalServiceTest {
 
     @Test
     void a_github_sign_in_is_keyed_on_the_provider_qualified_login() {
-        Principals principals = spy(principals("github/octocat"));
+        AdminListAuthorities principals = spy(principals("github/octocat"));
         OAuth2PrincipalService service = new OAuth2PrincipalService(principals);
         service.setRestOperations(userInfo(Map.of("login", "octocat", "id", 1)));
 
         OAuth2User user = service.loadUser(new OAuth2UserRequest(githubRegistration(), bearer()));
 
-        assertThat(captured(principals)).as("the id Principals decides ADMIN on is 'github/<login>'")
+        assertThat(captured(principals)).as("the id AdminListAuthorities decides ADMIN on is 'github/<login>'")
                 .isEqualTo("github/octocat");
         assertThat(roles(user)).as("that id is the configured admin, so it maps to ADMIN")
                 .contains("ROLE_USER", "ROLE_ADMIN");
@@ -67,7 +66,7 @@ class PrincipalServiceTest {
 
     @Test
     void a_github_login_that_is_not_the_configured_admin_is_only_a_reader() {
-        Principals principals = spy(principals("github/someone-else"));
+        AdminListAuthorities principals = spy(principals("github/someone-else"));
         OAuth2PrincipalService service = new OAuth2PrincipalService(principals);
         service.setRestOperations(userInfo(Map.of("login", "octocat", "id", 1)));
 
@@ -79,7 +78,7 @@ class PrincipalServiceTest {
 
     @Test
     void an_oidc_sign_in_is_keyed_on_the_provider_qualified_subject() {
-        Principals principals = spy(principals("oidc/subject-123"));
+        AdminListAuthorities principals = spy(principals("oidc/subject-123"));
         OidcPrincipalService service = new OidcPrincipalService(principals);
         // No user-info request: the subject comes straight off the id token, so the test needs no network.
         service.setRetrieveUserInfo(request -> false);
@@ -89,15 +88,15 @@ class PrincipalServiceTest {
                 .subject("subject-123").issuedAt(now).expiresAt(now.plusSeconds(3600)).build();
         OidcUser user = service.loadUser(new OidcUserRequest(oidcRegistration(), bearer(), idToken));
 
-        assertThat(captured(principals)).as("the id Principals decides ADMIN on is 'oidc/<sub>'")
+        assertThat(captured(principals)).as("the id AdminListAuthorities decides ADMIN on is 'oidc/<sub>'")
                 .isEqualTo("oidc/subject-123");
         assertThat(roles(user)).as("that id is the configured admin, so it maps to ADMIN")
                 .contains("ROLE_USER", "ROLE_ADMIN");
         assertThat(user.getSubject()).isEqualTo("subject-123");
     }
 
-    /** The provider-qualified id the service asked {@link Principals} about (the last, if asked more than once). */
-    private static String captured(Principals principals) {
+    /** The provider-qualified id the service asked {@link AdminListAuthorities} about (the last, if asked more than once). */
+    private static String captured(AdminListAuthorities principals) {
         ArgumentCaptor<String> id = ArgumentCaptor.forClass(String.class);
         verify(principals, atLeastOnce()).authorities(id.capture(), any());
         return id.getValue();
@@ -105,12 +104,12 @@ class PrincipalServiceTest {
 
     /** The policy the console builds at boot, seeded with this id - so these drive the grant it really consults
      *  rather than a parsed list, and the sign-in recording that rides the same call. */
-    private Principals principals(String admins) {
+    private AdminListAuthorities principals(String admins) {
         UiProperties properties = new UiProperties();
         properties.setAdmins(admins);
         Authorization authorization = Authorization.enforcing(ArtifactStoreProvider.resolve(
                 "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
-        return new Principals(new ConsoleAdministrators(authorization, properties.getAdmins()),
+        return new AdminListAuthorities(new ConsoleAdministrators(authorization, properties.getAdmins()),
                 new KnownPrincipals(authorization));
     }
 

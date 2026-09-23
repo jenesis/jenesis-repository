@@ -4,7 +4,6 @@ import module java.base;
 
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
-import build.jenesis.repository.ui.ConsoleNode;
 import build.jenesis.repository.ui.admin.web.SetupWizard;
 
 /**
@@ -24,7 +23,7 @@ public final class ConsoleSettingsContributor implements SettingsContributor {
 
     @Override
     public List<Setting> settings() {
-        return List.of(new Setting(ConsoleNode.GATE, "Console", "Admin console",
+        return List.of(new Setting(AdminConsoleNode.GATE, "Console", "Admin console",
                 "Whether this deployment serves the admin console. On by default: an image carrying the console "
                         + "meant to serve it. Switched off, the console's screens and its sign-in chain are not "
                         + "registered at all and the node answers only the repository's own surfaces - which is the "

@@ -9,7 +9,6 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.ReadOnlyArtifactStore;
 import build.jenesis.repository.ui.ConsoleAdministrators;
 import build.jenesis.repository.ui.KnownPrincipals;
-import build.jenesis.repository.ui.Principals;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
@@ -30,7 +29,7 @@ class KnownPrincipalsTest {
     @Test
     void a_first_sign_in_puts_the_person_on_the_list_an_administrator_grants_from() {
         ArtifactStore store = store();
-        Principals policy = policy(store);
+        AdminListAuthorities policy = policy(store);
 
         assertThat(new KnownPrincipals(Authorization.enforcing(store)).page(null, 10))
                 .as("nobody has signed in yet").isEmpty();
@@ -80,14 +79,14 @@ class KnownPrincipalsTest {
         // failing it here would reintroduce - as an exception on the sign-in path - exactly the refusal this whole
         // change removed.
         ArtifactStore readOnly = new ReadOnlyArtifactStore(store());
-        Principals policy = policy(readOnly);
+        AdminListAuthorities policy = policy(readOnly);
 
         assertThatCode(() -> policy.authorities("oidc/8f3c1a", "Ada Lovelace")).doesNotThrowAnyException();
     }
 
-    private Principals policy(ArtifactStore store) {
+    private AdminListAuthorities policy(ArtifactStore store) {
         Authorization authorization = Authorization.enforcing(store);
-        return new Principals(new ConsoleAdministrators(authorization, ""), new KnownPrincipals(authorization));
+        return new AdminListAuthorities(new ConsoleAdministrators(authorization, ""), new KnownPrincipals(authorization));
     }
 
     private ArtifactStore store() {

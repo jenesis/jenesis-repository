@@ -38,7 +38,7 @@ public class QualifiedOidcUserTest {
     void theCollisionGuardIsTheRegistrationQualifiedId() {
         // The re-keying is not a hand-set string: the qualified id the user is named by is derived from the
         // registration id and the raw sub by the very function {@code OidcPrincipalService} applies -
-        // {@link Principals#qualifiedId} - so a change to the qualification scheme is caught here. The same raw
+        // {@link AdminListAuthorities#qualifiedId} - so a change to the qualification scheme is caught here. The same raw
         // sub under two providers must therefore key to two distinct principals. (That the SERVICE actually applies
         // this derivation end to end - registration "oidc" + sub "sub-123" is admitted as "oidc/sub-123" - is
         // proven over a real authorization store in PrincipalServiceLoadUserTest; this pins the composition rule.)
