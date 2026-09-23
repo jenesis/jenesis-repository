@@ -21,6 +21,7 @@ import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.QuotaArtifactStore;
+import org.springframework.beans.factory.ObjectProvider;
 import build.jenesis.repository.store.ReadOnlyArtifactStore;
 import build.jenesis.repository.store.Tenants;
 import build.jenesis.repository.store.TenantsProvider;
@@ -92,8 +93,16 @@ public class RepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public ArtifactStore artifactStore(RepositoryProperties properties, Environment environment) {
-        ArtifactStore store = ArtifactStoreProvider.resolve(properties.getStore(), environment::getProperty);
+    public ArtifactStore artifactStore(RepositoryProperties properties, Environment environment,
+                                       ObjectProvider<ArtifactStoreDecorator> decorators) {
+        ArtifactStore resolved = ArtifactStoreProvider.resolve(properties.getStore(), environment::getProperty);
+        // Every contributed layer, innermost first, between the backend and the wrappers below. A composition
+        // that adds metering or a node memo contributes one rather than redeclaring this bean, so the quota and
+        // read-only wrappers cannot be left out of a copy of this method.
+        ArtifactStore store = resolved;
+        for (ArtifactStoreDecorator decorator : decorators.orderedStream().toList()) {
+            store = decorator.decorate(store);
+        }
         long quota = properties.quotaBytes();
         ArtifactStore quotaed = store;
         if (quota > 0) {

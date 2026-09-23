@@ -66,6 +66,8 @@ open module build.jenesis.repository.test {
     // AuthorizationResult (core) - which the server module requires but does not re-export.
     requires spring.security.web;
     requires spring.security.core;
+    requires spring.beans;
+    requires spring.core;
 
     requires wiremock.core;
     requires wiremock.jetty;
