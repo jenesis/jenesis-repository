@@ -103,7 +103,7 @@ public class UiConfig {
      * request. A deployment that installs a tenants module selects per session and contributes its own
      * {@link CurrentTenant}, which this steps aside for. Neither case is an edition: the same console serves both.
      *
-     * <p>Deliberately not a fresh {@code jenreg.tenant} read of its own. That would be a second single-tenant
+     * <p>Deliberately not a fresh {@code jenreg.default-tenant} read of its own. That would be a second single-tenant
      * implementation beside the one the SPI already has, and the two would answer differently the day one of them
      * learned something the other did not.
      */
@@ -111,7 +111,7 @@ public class UiConfig {
     @ConditionalOnMissingBean(CurrentTenant.class)
     public CurrentTenant currentTenant(ArtifactStore artifactStore, Environment environment) {
         Tenants tenants = TenantsProvider.resolve(artifactStore, environment::getProperty,
-                environment.getProperty("jenreg.tenant", "default"));
+                environment.getProperty("jenreg.default-tenant", "default"));
         return () -> {
             try {
                 // A directory is never empty - the fixed one answers its single tenant - so this is the deployment's

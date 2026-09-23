@@ -22,6 +22,13 @@ import org.springframework.context.ConfigurableApplicationContext;
  * is selected by {@code jenreg.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem
  * fallback).
  *
+ * <p><b>There is a second class of this name</b>, in the composition package, and the difference decides what a
+ * boot of it <em>is</em>. This one is auto-configuration alone: every bean here is a
+ * {@code @ConditionalOnMissingBean} fallback, so a test that boots this seam gets the fallbacks and nothing else.
+ * The other assembles the whole product. Reading a suite's {@code import} as the wrong one of the two is how an
+ * afternoon was spent concluding that a configuration key decided something it did not, so check which is
+ * imported before drawing a conclusion from what a boot of "RepositoryApplication" does.
+ *
  * <p><b>It is not a launcher.</b> The artifact that ships is the bundle, which imports this
  * composition; what is left here is {@link #start(int)}, the seam an embedder or a test boots the real server
  * through. A {@code main} beside it would be a second entry point with no artifact behind it - and a second place

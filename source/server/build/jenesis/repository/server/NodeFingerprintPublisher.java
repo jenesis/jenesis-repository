@@ -38,13 +38,13 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(NodeFingerprintPublisher.class);
 
     /** The settings that must be byte-for-byte identical on every node, so a differing value on any is a real split:
-     *  the store backend, the routed and the default tenant and repository, the operator tenant, the authorization
-     *  mode and the read-only flag. Two editions used to fold two different subsets of this list, so the two peers of
-     *  one mechanism disagreed about what a split is; a setting unset on a deployment folds as blank on every node,
-     *  which is why the union costs nothing. */
-    static final List<String> MUST_MATCH = List.of("jenreg.store", "jenreg.tenant", "jenreg.repository",
-            "jenreg.operator-tenant", "jenreg.default-tenant", "jenreg.default-repository", "jenreg.auth",
-            "jenreg.read-only");
+     *  the store backend, the default tenant and repository, the operator tenant, the authorization mode and the
+     *  read-only flag. Two compositions used to fold two different subsets of this list, so the two peers of one
+     *  mechanism disagreed about what a split is; a setting unset on a deployment folds as blank on every node,
+     *  which is why the union costs nothing. It named a second tenant/repository pair beside these while two keys
+     *  meant one space; that pair is gone and this one always did the deciding. */
+    static final List<String> MUST_MATCH = List.of("jenreg.store", "jenreg.operator-tenant",
+            "jenreg.default-tenant", "jenreg.default-repository", "jenreg.auth", "jenreg.read-only");
 
     private final NodeConsistency consistency;
     private final ArtifactStore store;
@@ -168,7 +168,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
     }
 
     private static String configuredTenant(UnaryOperator<String> config) {
-        String tenant = config.apply("jenreg.tenant");
+        String tenant = config.apply("jenreg.default-tenant");
         return tenant == null || tenant.isBlank() ? "default" : tenant;
     }
 

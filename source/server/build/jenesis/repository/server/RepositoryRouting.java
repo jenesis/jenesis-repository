@@ -15,8 +15,8 @@ import jakarta.servlet.http.HttpServletRequest;
  * deployment between fixed- and multi-tenant routing is a configuration change that finds the data where it was
  * left. Which routing a deployment runs on is <strong>discovered</strong>, through
  * {@link RepositoryRoutingProvider}: {@code jenreg.tenancy} names one of the installed providers, and naming none
- * binds the {@link FixedTenantRouting}, where every request resolves to the configured {@code jenreg.tenant} /
- * {@code jenreg.repository} space (each {@code default} by default) with the request path unchanged beyond the
+ * binds the {@link FixedTenantRouting}, where every request resolves to the configured
+ * {@code jenreg.default-tenant} / {@code jenreg.default-repository} space with the request path unchanged beyond the
  * {@code /repository} prefix strip. A multi-tenant deployment installs a provider; it does not override a bean.
  *
  * <p><strong>Where the tenant comes from is the implementation's business, not this seam's.</strong> A downstream
@@ -64,8 +64,9 @@ public interface RepositoryRouting {
      * <p>It is not "does it exist" and not "may this caller write to it". It is the question a surface that
      * <em>creates</em> a repository has to ask before it tells an operator what will happen: whether the installed
      * routing has any URL at all that reaches a repository by this name. On the {@link FixedTenantRouting} exactly
-     * one name does - every request resolves to the configured {@code jenreg.tenant} / {@code jenreg.repository}
-     * space - while a routing that takes the repository from the request addresses all of them.
+     * one name does - every request resolves to the configured {@code jenreg.default-tenant} /
+     * {@code jenreg.default-repository} space - while a routing that takes the repository from the request
+     * addresses all of them.
      *
      * <p><b>A name this rules out is not thereby useless</b>, which is why the answer feeds a warning rather than a
      * refusal: see {@link #unaddressableWarning}.

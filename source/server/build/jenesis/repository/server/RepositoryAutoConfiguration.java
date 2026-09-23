@@ -46,7 +46,7 @@ import io.micrometer.observation.ObservationRegistry;
  * {@code upstreams} (format name to upstream URI, from {@code jenreg.proxy.*}) and upstream
  * {@link ProxyFormat.Fetcher}, the framework-neutral {@link FormatDispatcher}, the {@link RepositoryRouting} (the
  * {@link FixedTenantRouting} default, resolving every request to the configured
- * {@code jenreg.tenant}/{@code jenreg.repository} artifact space), the {@link Tenants}
+ * {@code jenreg.default-tenant}/{@code jenreg.default-repository} artifact space), the {@link Tenants}
  * directory (resolved through {@code TenantsProvider}; the fixed single tenant unless a tenants module is
  * discovered), and the {@link RepositoryController} itself. Because an auto-configuration is applied after
  * user configuration, a bean an embedder contributes - an audited or replicating {@link ArtifactStore} decorator, a
@@ -371,17 +371,17 @@ public class RepositoryAutoConfiguration {
 
                     @Override
                     public String defaultTenant() {
-                        return properties.getTenant();
+                        return properties.getDefaultTenant();
                     }
 
                     @Override
                     public String defaultRepository() {
-                        return properties.getRepository();
+                        return properties.getDefaultRepository();
                     }
 
                     @Override
                     public String tenantOf(String key) {
-                        return properties.getTenant();   // one tenant here; a key names no other
+                        return properties.getDefaultTenant();   // one tenant here; a key names no other
                     }
 
                     @Override
@@ -402,7 +402,7 @@ public class RepositoryAutoConfiguration {
         // The tenant directory is a discovered plugin (a multi-tenant edition's store-backed module); with none
         // installed the directory is exactly the one configured tenant, and a console gates tenant management on
         // TenantsProvider.installed().
-        return TenantsProvider.resolve(store, environment::getProperty, properties.getTenant());
+        return TenantsProvider.resolve(store, environment::getProperty, properties.getDefaultTenant());
     }
 
     @Bean
@@ -431,7 +431,8 @@ public class RepositoryAutoConfiguration {
         // a background walk after boot, never blocking it, and only against a completely empty artifact space; off by
         // default. It targets the configured fixed-tenant space (root.scope(tenant).scope(repository)), the same
         // space FixedTenantRouting resolves reads to.
-        ArtifactStore scoped = store.scope(properties.getTenant()).scope(properties.getRepository());
+        ArtifactStore scoped = store.scope(properties.getDefaultTenant())
+                .scope(properties.getDefaultRepository());
         // A read-only deployment runs no background job that mutates the store - the seed writes, so it is disabled
         // here rather than left to fail against the read-only store choke point on its worker thread.
         return new DemoSeeding(properties.isDemo() && !properties.isReadOnly(),
@@ -518,7 +519,8 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public RebuildScheduler rebuildScheduler(ArtifactStore store, RepositoryProperties properties,
                                              Environment environment) {
-        return new RebuildScheduler(store, store.scope(properties.getTenant()).scope(properties.getRepository()),
+        return new RebuildScheduler(store,
+                store.scope(properties.getDefaultTenant()).scope(properties.getDefaultRepository()),
                 environment::getProperty);
     }
 

@@ -26,27 +26,22 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * apart that way once, which is why its default carries the account above. Holding copies equal is not a fix, so
  * there is one class.
  *
- * <p><b>Two key pairs name the artifact space, and a composed deployment serves from only one of them.</b>
- * {@link #getDefaultTenant() default-tenant} / {@link #getDefaultRepository() default-repository} are what the
- * routing, the browse, the walk and the maintenance surfaces resolve against. Through <em>this bean</em>,
- * {@link #getTenant() tenant} / {@link #getRepository() repository} are read only by this module's own
- * {@code @ConditionalOnMissingBean} defaults - the routing, tenant directory, demo seeding and rebuild scheduler a
- * bare server composition gets - and a composition supplying its own replaces all four. The two keys are not
- * inert, though: {@code NodeFingerprintPublisher} requires two nodes over one store to agree on both, and the
- * console reads {@code jenreg.tenant} from the environment for the tenant it browses. So an operator who moves
- * {@code jenreg.repository} moves what the nodes must agree on and nothing else, while the space served stays at
- * {@code default-repository} - and the two do not even default alike ({@code default} against {@code releases}).
- * Which pair should survive is a product decision rather than a tidy-up, so both are stated here rather than one
- * being quietly dropped.
+ * <p><b>One pair names the artifact space</b>: {@link #getDefaultTenant() default-tenant} /
+ * {@link #getDefaultRepository() default-repository}, which the routing, the browse, the walk and the
+ * maintenance surfaces all resolve against, and which two nodes over one store must agree on.
+ *
+ * <p>There were two, and they did not even default alike - {@code default} against {@code releases}. The second
+ * pair, {@code jenreg.tenant} / {@code jenreg.repository}, was read only by this module's own
+ * {@code @ConditionalOnMissingBean} fallbacks - the routing, tenant directory, demo seeding and rebuild
+ * scheduler a bare server gets - so a composition that supplies its own replaced every one of them and the pair
+ * then decided nothing, while still being a value two nodes had to agree on. The fallbacks read the surviving
+ * pair now, which is what a composition would have given them anyway; the difference is that a bare server and a
+ * composed one no longer disagree about where the artifacts are.
  */
 @ConfigurationProperties(prefix = "jenreg")
 public class RepositoryProperties {
 
     private String store = "filesystem";
-
-    private String tenant = "default";
-
-    private String repository = "default";
 
     /** Enforce per-credential authorization. On by default - the secure default: a fresh deployment authorizes every
      *  request against a per-credential key. Anonymous/open mode is an <em>explicit opt-out</em>: an operator sets
@@ -142,8 +137,9 @@ public class RepositoryProperties {
      *  {@code ( writable | fallback <source> [nocache] [harden] [unscreened] )*}; the old spellings {@code hosted} |
      *  {@code proxy <url> [nocache] [harden]} | {@code group a,b} desugar to it. Write-delegation ({@code group … push=x})
      *  is a hard parse refusal now (§2.3): declare the front repository {@code writable} instead. Named
-     *  {@code repositories} (the {@code jenreg.repository} is a single {@code String}, the
-     *  fixed-space name) so the two schemas compose over one {@code jenreg.repository} prefix without a type clash. */
+     *  {@code repositories} rather than {@code repository} because a scalar of that name used to hold the
+     *  fixed-space name, and one prefix cannot be both a string and a map; the scalar is gone and the plural
+     *  stays, since renaming a live key to reclaim a dead one would move every deployment's configuration. */
     private Map<String, String> repositories = new LinkedHashMap<>();
 
     /** Tenant a request resolves to when its key carries none (anonymous or keyless). */
@@ -265,26 +261,6 @@ public class RepositoryProperties {
 
     public void setStore(String store) {
         this.store = store;
-    }
-
-    /** The tenant of the fixed artifact space this deployment serves; a multi-tenant routing ignores it and reads
-     *  the tenant from the request instead. */
-    public String getTenant() {
-        return tenant;
-    }
-
-    public void setTenant(String tenant) {
-        this.tenant = tenant;
-    }
-
-    /** The repository of the fixed artifact space this deployment serves; a multi-tenant routing ignores it and
-     *  reads the repository from the request path instead. */
-    public String getRepository() {
-        return repository;
-    }
-
-    public void setRepository(String repository) {
-        this.repository = repository;
     }
 
     public String getQuota() {

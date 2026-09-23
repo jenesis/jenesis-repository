@@ -19,8 +19,9 @@ import org.springframework.core.env.PropertySource;
  *       - the plain {@code proxy} key belongs to the core's {@code jenreg.proxy.<format>} per-format
  *       upstream map, so a scalar {@code proxy} value can only be the old switch.</li>
  *   <li>{@code jenreg.repository.<name>} (the map of repository definitions) is now
- *       {@code jenreg.repositories.<name>} - the core's {@code jenreg.repository} is a
- *       single {@code String} (the fixed-space name), so a {@code repository.<name>} sub-key can only be the old map.</li>
+ *       {@code jenreg.repositories.<name>}. A scalar {@code jenreg.repository} used to hold the fixed-space name,
+ *       which is why the map was the one that had to be renamed; that scalar has since gone, and a
+ *       {@code repository.<name>} sub-key still binds to nothing, so it is still worth refusing by name.</li>
  *   <li>{@code jenreg.format-proxy-upstream.<format>} (the deploy-time per-format upstream) folded into the
  *       free core's {@code jenreg.proxy.<format>} map (the boot default; {@code format-upstream.<format>}
  *       stays the live setting override).</li>
@@ -28,8 +29,8 @@ import org.springframework.core.env.PropertySource;
  *
  * <p>Runs once the environment is prepared, the same lifecycle point as
  * {@link build.jenesis.repository.server.kernel.SettingsEnvironmentLayer}, so a stored
- * runtime setting layered under a legacy key is caught too. Only this composition's keys are probed - the schema
- * ({@code proxy} as a map, {@code repository} as a string) stands unchanged and is never rejected.
+ * runtime setting layered under a legacy key is caught too. Only this composition's keys are probed - the
+ * {@code proxy} map itself stands unchanged and is never rejected.
  */
 public final class LegacyPropertyProbe implements ApplicationListener<ApplicationEnvironmentPreparedEvent> {
 

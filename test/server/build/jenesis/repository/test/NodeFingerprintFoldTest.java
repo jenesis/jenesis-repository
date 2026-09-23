@@ -33,8 +33,6 @@ class NodeFingerprintFoldTest {
         Map<String, String> config = new TreeMap<>();
         config.put("jenreg.consistency.node-id", node);
         config.put("jenreg.store", "filesystem");
-        config.put("jenreg.tenant", "acme");
-        config.put("jenreg.repository", "main");
         config.put("jenreg.operator-tenant", "operator");
         config.put("jenreg.default-tenant", "acme");
         config.put("jenreg.default-repository", "main");
@@ -70,8 +68,6 @@ class NodeFingerprintFoldTest {
     Stream<DynamicTest> every_must_match_setting_makes_two_nodes_diverge(@TempDir Path root) {
         Map<String, String> differing = new LinkedHashMap<>();
         differing.put("jenreg.store", "s3");
-        differing.put("jenreg.tenant", "globex");
-        differing.put("jenreg.repository", "other-main");
         differing.put("jenreg.operator-tenant", "other-operator");
         differing.put("jenreg.default-tenant", "globex");
         differing.put("jenreg.default-repository", "other-main");
