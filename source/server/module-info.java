@@ -75,6 +75,7 @@ open module build.jenesis.repository.server {
     requires spring.boot.starter.security;
     exports build.jenesis.repository.server;
     uses build.jenesis.repository.server.RepositoryRoutingProvider;
+    uses build.jenesis.repository.server.AuthorizationManagerProvider;
 
     provides build.jenesis.repository.server.RepositoryRoutingProvider
             with build.jenesis.repository.server.FixedTenantRoutingProvider;
