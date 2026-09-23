@@ -13,7 +13,7 @@
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
-open module build.jenesis.repository.compliance.contract.test {
+open module build.jenesis.repository.compliance.spi.test {
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.store;
     // SignalContextTest resolves a real filesystem store to assert the snapshot root a mirrored catalogue is

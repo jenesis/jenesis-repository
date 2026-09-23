@@ -1,4 +1,4 @@
-package build.jenesis.repository.compliance.contract.test;
+package build.jenesis.repository.compliance.spi.test;
 
 import module org.junit.jupiter.api;
 import module java.base;
