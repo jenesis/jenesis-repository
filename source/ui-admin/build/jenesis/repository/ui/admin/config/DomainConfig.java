@@ -8,7 +8,6 @@ import build.jenesis.repository.store.Features;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.audit.AuditTrail;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import build.jenesis.repository.format.FormatMarks;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.spi.Authorization;
@@ -50,19 +49,18 @@ import org.springframework.core.env.ConfigurableEnvironment;
 @Configuration
 public class DomainConfig {
 
-    /**
-     * The trail this console records privileged mutations on when nothing installs one.
-     *
-     * <p>A deployment that carries an audit implementation contributes the bean and this steps aside. One that
-     * does not still boots and still runs every screen - the acts simply go unrecorded, which is what "not
-     * installed" means for a capability, and is the alternative to a console that refuses to start because an
-     * optional module is absent.
-     */
-    @Bean
-    @ConditionalOnMissingBean(AuditTrail.class)
-    public AuditTrail auditTrail() {
-        return AuditTrail.none();
-    }
+    // The audit trail is NOT declared here. It used to be, as an @ConditionalOnMissingBean(AuditTrail.class)
+    // fallback returning AuditTrail.none() so a composition installing no audit implementation would still boot.
+    // That condition cannot do what it says between two plain @Configuration classes: it is evaluated as the class
+    // is processed, and which of two user configurations is processed first is not defined. In the console's
+    // standalone node it lost the race, so both this class and RepositoryStoreConfig registered a bean called
+    // auditTrail and the context refused to start at all - the opposite of the boot the fallback existed to
+    // guarantee, and invisible to any lane that does not start a server.
+    //
+    // There is no composition that needs it. The standalone node scans RepositoryStoreConfig, which declares the
+    // trail unconditionally over the store it opens; a composed node excludes that class and takes the repository's
+    // own, which is authoritative there. And a deployment carrying no audit implementation is already answered a
+    // layer down, by AuditTrailProvider resolving to a trail that records nothing.
 
     @Bean
     public CacheService cacheService(@Qualifier("cacheTenantStorage") CacheStorage cacheTenantStorage,
