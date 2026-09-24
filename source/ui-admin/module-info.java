@@ -54,6 +54,7 @@ open module build.jenesis.repository.ui.admin {
     requires build.jenesis.repository.ui.identity;
     requires build.jenesis.repository.cache.storage;
     requires build.jenesis.repository.server;
+    requires build.jenesis.repository.scope;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.gateway;

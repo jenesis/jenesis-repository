@@ -61,6 +61,9 @@ public final class AuditActions {
     /** A walk of the store requested by an operator - a standing request the next scheduler tick runs. */
     public static final String WALKS_RUN = action("walks.run");
 
+    /** A repository created before anything was published into it. */
+    public static final String REPOSITORY_CREATE = action("repository.create");
+
     /** A repository definition written. */
     public static final String REPOSITORY_SET = action("repository.set");
 

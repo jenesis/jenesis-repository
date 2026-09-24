@@ -137,6 +137,21 @@ public class RepositoryAdminController {
         return marks.forEcosystem(ecosystem).orElseGet(() -> Marks.orphaned(ecosystem));
     }
 
+    /** Create a repository before anything is published into it - the way a repository comes into being wherever a
+     *  publish may not create the one it names, and open to an editor whatever that setting says. */
+    @PostMapping("/repositories/create")
+    public String create(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
+        String repository = name.trim();
+        if (!lifecycle.create(repository)) {
+            redirect.addFlashAttribute("message", "Repository '" + repository + "' already exists.");
+            return "redirect:/repositories";
+        }
+        String warning = settings.unaddressable(repository);
+        redirect.addFlashAttribute("message", "Created repository '" + repository + "'."
+                + (warning == null ? "" : " " + warning));
+        return "redirect:/repositories/" + repository;
+    }
+
     @PostMapping("/repositories/quota")
     public String setQuota(@RequestParam(name = "maxBytes", defaultValue = "0") long maxBytes,
                            RedirectAttributes redirect) throws IOException {

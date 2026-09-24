@@ -154,7 +154,7 @@ body {
         [page-start] var(--app-sidebar-width)
         [content-start] minmax(0, calc(var(--app-page-max) - var(--app-sidebar-width)))
         [page-end] minmax(var(--app-space-4), 1fr) [full-end];
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto 1fr;
     min-height: 100vh;
 }
 body:has(.app-notice) {
@@ -174,15 +174,12 @@ body > main {
     grid-row: 2;
     align-self: start;
     min-width: 0;
+    padding-bottom: var(--app-space-6);
 }
 /* A page with no sidebar - a sign-in page, or one rendered for somebody with nothing to navigate - takes the
    whole width of the page. */
 body:not(:has(.app-sidebar)) > main {
     grid-column: page;
-}
-.app-footer {
-    grid-column: page;
-    grid-row: 3;
 }
 
 /* ---- Header ----------------------------------------------------------------------------------------------- */
@@ -242,6 +239,26 @@ body:not(:has(.app-sidebar)) > main {
 }
 .app-tenant:hover {
     color: var(--pico-primary);
+}
+/* No tenant chosen yet: said plainly, and styled as the prompt it is. */
+.app-tenant--none {
+    font-style: italic;
+}
+
+/* The edition, in the session corner: a small pill that leads to the licence page. */
+.app-edition-badge {
+    display: inline-block;
+    padding: 0.05rem var(--app-space-2);
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 999px;
+    font-size: var(--app-font-size-xs);
+    color: var(--pico-muted-color);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.app-edition-badge:hover {
+    color: var(--pico-primary);
+    border-color: var(--pico-primary);
 }
 
 /* The first navigation level: one link per group, muted until it is the one a reader is in. */
@@ -338,7 +355,9 @@ body:not(:has(.app-sidebar)) > main {
 .app-notice > .container {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     align-items: baseline;
+    text-align: center;
     gap: var(--app-space-3);
     max-width: var(--app-page-max);
     margin: 0 auto;
@@ -497,41 +516,25 @@ figure {
     overflow-x: auto;
 }
 
-/* ---- Footer ----------------------------------------------------------------------------------------------- */
-/* A colophon rather than a footer bar: one small centred line naming the product and its edition. */
-.app-footer {
-    padding: 0 0 var(--app-space-5);
-    color: var(--pico-muted-color);
-    font-size: var(--app-font-size-xs);
-    text-align: center;
+/* ---- Panels --------------------------------------------------------------------------------------------- */
+/* A page's own settings - a quota, a ceiling, a form that creates something - in two columns on a wide screen and
+   one under the other below the documentation's breakpoint, where the sections move into the menu too. Each panel
+   is as tall as its row, and its form sits at the bottom, so the buttons of a row line up. */
+.app-panels {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--app-space-4);
+    align-items: stretch;
+    margin-block: var(--app-space-4);
 }
-.app-footer ul {
-    display: inline-flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: baseline;
-    gap: var(--app-space-2);
+.app-panels > article {
+    display: flex;
+    flex-direction: column;
     margin: 0;
-    padding: 0;
-    list-style: none;
 }
-.app-footer li {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-.app-footer li + li::before {
-    content: "·";
-    margin-right: var(--app-space-2);
-}
-.app-footer a {
-    color: inherit;
-}
-.app-footer a:hover {
-    color: var(--pico-primary);
-}
-.app-footer small {
-    font-size: inherit;
+.app-panels > article > form {
+    margin-top: auto;
+    margin-bottom: 0;
 }
 
 /* ---- Page header ------------------------------------------------------------------------------------------ */
@@ -900,12 +903,14 @@ button.app-danger:hover,
 /* Below the documentation's breakpoint the groups leave the header for the sidebar, which folds away behind the
    Menu button, and the page takes the whole width. */
 @media (max-width: 48rem) {
+    .app-panels {
+        grid-template-columns: minmax(0, 1fr);
+    }
     body {
         grid-template-columns: [full-start] var(--app-space-4) [page-start content-start] minmax(0, 1fr) [page-end] var(--app-space-4) [full-end];
-        grid-template-rows: auto auto 1fr auto;
+        grid-template-rows: auto auto 1fr;
     }
-    .app-groups,
-    .app-tenant {
+    .app-groups {
         display: none;
     }
     /* A phone has no room for the brand, the menu and the session on one line, so the bar wraps onto a second
@@ -946,9 +951,6 @@ button.app-danger:hover,
         grid-row: 3;
         margin: var(--app-space-4) 0;
         padding: var(--app-space-4);
-    }
-    .app-footer {
-        grid-row: 4;
     }
     .app-brand__name {
         font-size: var(--app-font-size-base);

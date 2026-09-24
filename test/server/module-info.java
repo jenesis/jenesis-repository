@@ -21,6 +21,7 @@ open module build.jenesis.repository.test {
     // format kit probes every format with, so the importer seam cannot rot into its own private set of shapes.
     requires build.jenesis.repository.format.testkit;
     requires build.jenesis.repository.server;
+    requires build.jenesis.repository.settings;
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;

@@ -8,6 +8,7 @@ import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.PublishTenant;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.RepositoryPresence;
 import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.compliance.AdvisorySignal;
@@ -133,6 +134,18 @@ public class SignalsConfig {
         ServingConfig.registerRedirectTokens();
         definitions.sweepDefinitions();
         return definitions;
+    }
+
+    /**
+     * Whether a request may reach the repository it names, read live: the stored setting over the environment, and
+     * the definitions the router routes by - so creating a repository over the API, as a definition, creates it.
+     */
+    @Bean
+    public RepositoryPresence repositoryPresence(ArtifactStore store, LiveConfig liveConfig, LiveDefinitions definitions,
+                                                 Environment environment) {
+        return new RepositoryPresence(store,
+                key -> liveConfig.effective(key, environment.getProperty(Features.key(key))),
+                name -> definitions.definition(name) != null);
     }
 
     /** A tenant's ingested VEX statements as the gate's {@link Vex} view, through the discovered {@link VexProvider}:

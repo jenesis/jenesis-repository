@@ -60,4 +60,9 @@ public final class FixedTenantRouting implements RepositoryRouting {
     public boolean addresses(String repository) {
         return this.repository.equals(repository);
     }
+
+    @Override
+    public boolean serves(String tenant, String repository) {
+        return this.tenant.equals(tenant) && this.repository.equals(repository);
+    }
 }

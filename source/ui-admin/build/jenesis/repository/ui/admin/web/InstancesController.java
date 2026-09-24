@@ -83,7 +83,7 @@ public class InstancesController {
             throw new IllegalArgumentException("You do not have access to tenant '" + tenant + "'.");
         }
         current.select(tenant);
-        return "redirect:/projects";
+        return "redirect:/repositories";
     }
 
     @PostMapping("/instances/create")

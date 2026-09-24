@@ -857,6 +857,12 @@ public class SettingsAdmin {
         return unroutable.apply(name);
     }
 
+    /** What the routing says about a repository no URL can reach, or {@code null} when some URL reaches it - the one
+     *  wording a definition's save gives, for a surface that creates a repository without defining it. */
+    public String unaddressable(String name) {
+        return unroutable.apply(name);
+    }
+
     public void removeRepository(String name) throws IOException {
         put(SettingsScopes.repositoryKey(name), null);
         audit(AuditActions.REPOSITORY_REMOVE, name);

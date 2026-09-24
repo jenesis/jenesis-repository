@@ -54,9 +54,6 @@ public final class ConsoleLayout {
      *  header with the brand and theme switch, and no navigation, since there is nothing yet to navigate. */
     public static final String SIGN_IN_SHELL = "signInShell";
 
-    /** The line that closes every screen, below its {@code <main>}: the product, its edition and its posture. */
-    public static final String FOOTER = "footer";
-
     /** The deployment-wide notices a screen shows above its content (read-only, anonymous access, flash messages). */
     public static final String MESSAGES = "messages";
 
@@ -78,7 +75,7 @@ public final class ConsoleLayout {
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, HEAD_CONTENTS, DANGER_BUTTON, SHELL, SIGN_IN_SHELL,
-            FOOTER, MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP, RUNNING);
+            MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP, RUNNING);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

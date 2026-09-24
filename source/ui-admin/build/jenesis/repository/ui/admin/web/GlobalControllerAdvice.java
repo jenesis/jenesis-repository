@@ -18,6 +18,7 @@ import build.jenesis.repository.ui.PostureBadge;
 import build.jenesis.repository.ui.store.RepositoryAdmin;
 import build.jenesis.repository.ui.store.SettingsAdmin;
 import jakarta.servlet.http.HttpServletRequest;
+import build.jenesis.repository.ui.admin.config.DomainConfig;
 import org.springframework.core.env.Environment;
 import org.springframework.security.core.Authentication;
 import org.springframework.ui.Model;
@@ -44,6 +45,10 @@ public class GlobalControllerAdvice {
     private final Environment environment;
     private final SettingsAdmin settings;
     private final RepositoryAdmin repositories;
+    private final DomainConfig.Tenancy tenancy;
+
+    /** The sections whose pages are about one tenant. */
+    private static final Set<Group> TENANT_GROUPS = EnumSet.of(Group.REPOSITORIES, Group.BUILD_CACHE, Group.ACCESS);
 
     /**
      * The resolved licence state, injected rather than read from {@code Licenses.state()} statically.
@@ -56,7 +61,8 @@ public class GlobalControllerAdvice {
      */
     public GlobalControllerAdvice(Memberships memberships, CurrentTenant current, CapabilityService capabilities,
                                   List<PrincipalNameResolver> principalNames, Environment environment,
-                                  SettingsAdmin settings, RepositoryAdmin repositories) {
+                                  SettingsAdmin settings, RepositoryAdmin repositories,
+                                  DomainConfig.Tenancy tenancy) {
         this.memberships = memberships;
         this.current = current;
         this.capabilities = capabilities;
@@ -64,6 +70,7 @@ public class GlobalControllerAdvice {
         this.environment = environment;
         this.settings = settings;
         this.repositories = repositories;
+        this.tenancy = tenancy;
     }
 
     /** Whether the deployment runs read-only ({@code jenreg.read-only}), so every view can show a banner
@@ -172,16 +179,11 @@ public class GlobalControllerAdvice {
         return hasSuperadmin(authentication) || memberships.accessibleTo(authentication.getName(), false).size() >= 2;
     }
 
-    /** Whether the passive "Tenant X" nav indicator renders: only when the tenant is an explicit choice, i.e. the
-     *  user can actually reach two or more tenants. A user with a single accessible tenant - and a super-admin of a
-     *  single-tenant deployment - has the selection made implicitly, so they see no tenancy chrome at all (the
-     *  console is still always a tenant-scoped view underneath; only the label is suppressed). */
-    @ModelAttribute("showTenant")
-    public boolean showTenant(Authentication authentication) {
-        if (authentication == null) {
-            return false;
-        }
-        return memberships.accessibleTo(authentication.getName(), hasSuperadmin(authentication)).size() >= 2;
+    /** Whether the header shows the tenant beside the brand: wherever the deployment serves several tenants, since
+     *  there the tenant is a choice - made, or still to be made - and a fixed deployment's one tenant is not. */
+    @ModelAttribute("multiTenant")
+    public boolean multiTenant() {
+        return tenancy.multi();
     }
 
     /**
@@ -234,6 +236,11 @@ public class GlobalControllerAdvice {
         pages.add(new RepositoryPage("Pins", "/pins", Topic.LIFECYCLE));
         pages.addAll(capabilities.moduleRepositoryPages());
         String path = request.getRequestURI().substring(request.getContextPath().length());
+        // Until a tenant is chosen there is nothing tenant-scoped to open: the reader sees what belongs to the
+        // deployment, and the tenant's own sections appear once the header's chooser has been used.
+        if (current.name() == null) {
+            entries.removeIf(entry -> TENANT_GROUPS.contains(entry.group()) || entry.path().equals("/settings/tenant"));
+        }
         return ConsoleNavigation.resolve(
                 entries.stream()
                         .filter(entry -> visibleTo(entry.access(), admin, superadmin) && capabilities.has(entry.requires()))

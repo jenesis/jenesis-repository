@@ -12,6 +12,7 @@
  */
 open module build.jenesis.repository.ui.store.test {
     requires build.jenesis.repository.ui.store;
+    requires build.jenesis.repository.scope;
     requires build.jenesis.repository.ui;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.audit;

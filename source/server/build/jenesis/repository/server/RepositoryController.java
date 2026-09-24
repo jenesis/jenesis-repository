@@ -62,6 +62,7 @@ public class RepositoryController {
     private final UnaryOperator<String> settings;
     private final ArtifactStore root;
     private final RoutedServing routed;
+    private final RepositoryPresence presence;
 
     /** The capability-merge report last written to the log, so a collision is logged when it appears or changes rather
      *  than on every hit of a polled endpoint - which contributions collide is a property of the installed module set,
@@ -79,7 +80,8 @@ public class RepositoryController {
                                 FormatDispatcher dispatcher,
                                 List<ImportSourceProvider> importSources,
                                 ProxyFormat.Fetcher fetcher) {
-        this(routing, dispatcher, importSources, fetcher, null, key -> null, null, RoutedServing.NONE, EdgeHooks.NONE);
+        this(routing, dispatcher, importSources, fetcher, null, key -> null, null, RoutedServing.NONE, EdgeHooks.NONE,
+                RepositoryPresence.ANY);
     }
 
     /**
@@ -104,6 +106,8 @@ public class RepositoryController {
      * @param hooks     an edition's ingress concerns - tenant binding, release-immutability, quarantine dispatch,
      *                  deploy observation - threaded into the one shared screening edge rather than forked into a
      *                  second deploy controller; {@link EdgeHooks#NONE} is the no-op.
+     * @param presence  whether a request may reach the repository it names - one that exists, or any where a publish
+     *                  may create it; {@link RepositoryPresence#ANY} answers every repository.
      */
     public RepositoryController(RepositoryRouting routing,
                                 FormatDispatcher dispatcher,
@@ -113,7 +117,8 @@ public class RepositoryController {
                                 UnaryOperator<String> settings,
                                 ArtifactStore root,
                                 RoutedServing routed,
-                                EdgeHooks hooks) {
+                                EdgeHooks hooks,
+                                RepositoryPresence presence) {
         this.routing = routing;
         this.dispatcher = dispatcher;
         this.screened = new ScreenedDispatch(dispatcher, hooks);
@@ -123,6 +128,7 @@ public class RepositoryController {
         this.settings = settings;
         this.root = root;
         this.routed = routed;
+        this.presence = presence;
     }
 
     /**
@@ -146,6 +152,16 @@ public class RepositoryController {
         // always resolves a writable route, so the core never takes this branch.
         if (isWrite(request.getMethod()) && !route.writable()) {
             response.setStatus(405);
+            return;
+        }
+        // A repository nobody created does not answer, unless a publish may create it: a write would create it, and a
+        // read through a pull-through upstream would fill it, so both are refused before either can.
+        if (!answers(route)) {
+            response.setStatus(404);
+            if (isWrite(request.getMethod())) {
+                response.setContentType("text/plain;charset=UTF-8");
+                response.getWriter().write(absent(route.repository()));
+            }
             return;
         }
         if (batch != null && batch.claims(exchange)) {
@@ -211,11 +227,25 @@ public class RepositoryController {
         if (!route.writable()) {
             return 405;
         }
+        if (!answers(route)) {
+            return 404;
+        }
         CapturingExchange exchange = new CapturingExchange(route.path(), body);
         if (!screened.dispatch(exchange, route.store())) {
             return 404;
         }
         return exchange.status();
+    }
+
+    /** Whether the route's repository answers: the routing serves it, or it exists, or a publish may create it. */
+    private boolean answers(RepositoryRouting.Route route) throws IOException {
+        return routing.serves(route.tenant(), route.repository()) || presence.answers(route.tenant(), route.repository());
+    }
+
+    /** What a publish into a repository that does not exist is told. */
+    static String absent(String repository) {
+        return "Repository '" + repository + "' does not exist. Create it in the console under Repositories, or "
+                + "set '" + RepositoryPresence.SETTING + "' to let a publish create the repository it names.";
     }
 
     private static boolean isRead(String method) {

@@ -86,6 +86,24 @@ public interface RepositoryRouting {
     }
 
     /**
+     * Whether this routing serves a repository of this name in this tenant without anybody having created it - the
+     * one repository a request resolves to when it names none. A deployment that creates repositories deliberately
+     * ({@link RepositoryPresence}) refuses to answer for one that was never created, and this is the exception: the
+     * repository a fixed deployment serves, and the default repository every tenant has, which the OCI registry's
+     * root resolves to and a client probes before it sends anything else.
+     *
+     * <p><b>The default answers {@code false}</b>: a routing that names no default serves no repository nobody
+     * created.
+     *
+     * @param tenant     the tenant.
+     * @param repository the repository within it.
+     * @return whether the repository exists on this routing whether or not it was created.
+     */
+    default boolean serves(String tenant, String repository) {
+        return false;
+    }
+
+    /**
      * What a surface that creates repositories must say about a name {@link #addresses} ruled out - written once
      * here because every such surface must say the same thing.
      *

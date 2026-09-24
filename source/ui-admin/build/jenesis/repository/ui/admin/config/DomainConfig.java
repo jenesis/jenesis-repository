@@ -9,6 +9,8 @@ import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.format.FormatMarks;
+import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
@@ -113,11 +115,15 @@ public class DomainConfig {
      * to create the one tenant the deployment already serves, before any other screen would open. Creating it here
      * makes a fresh deployment's console usable on first sign-in. A deployment of several tenants names its own,
      * and a read-only one writes nothing, so both are left alone.
+     *
+     * <p>The one repository it serves is created beside it, for the same reason: it exists whether or not anything
+     * was published into it, and writing its creation marker is what lists it on the Repositories screen from the
+     * first sign-in rather than from the first publish.
      */
     @Bean
-    public FixedTenant fixedTenant(TenantService tenants, ConfigurableEnvironment environment) {
-        boolean fixed = environment.getProperty("jenreg.tenancy", "fixed").equals("fixed");
-        if (!fixed || environment.getProperty("jenreg.read-only", Boolean.class, false)) {
+    public FixedTenant fixedTenant(TenantService tenants, Tenancy tenancy, ArtifactStore repositoryStore,
+                                   ConfigurableEnvironment environment) {
+        if (!tenancy.fixed() || environment.getProperty("jenreg.read-only", Boolean.class, false)) {
             return new FixedTenant(null);
         }
         String tenant = environment.getProperty("jenreg.default-tenant", "default");
@@ -125,17 +131,41 @@ public class DomainConfig {
             if (!tenants.exists(tenant)) {
                 tenants.create(tenant);
             }
+            String repository = environment.getProperty("jenreg.default-repository",
+                    new RepositoryProperties().getDefaultRepository());
+            ArtifactStore served = repositoryStore.scope(tenant).scope(repository);
+            boolean[] held = {false};
+            served.page("", "", 1, _ -> held[0] = true);
+            if (!held[0]) {
+                served.write(Scopes.CREATED, new ByteArrayInputStream(
+                        Instant.now().toString().getBytes(StandardCharsets.UTF_8)));
+            }
         } catch (IllegalArgumentException raced) {
             // Another node created it between the check and the write - which is the outcome wanted.
         } catch (IOException | RuntimeException e) {
-            LoggerFactory.getLogger(DomainConfig.class).warn("The deployment's tenant '{}' could not be created; "
-                    + "the console lists it once anything is written under it", tenant, e);
+            LoggerFactory.getLogger(DomainConfig.class).warn("The deployment's tenant '{}' or its repository could "
+                    + "not be created; the console lists them once anything is written under them", tenant, e);
         }
         return new FixedTenant(tenant);
     }
 
     /** The tenant a fixed deployment serves, or {@code null} where the deployment names its own tenants. */
     public record FixedTenant(String name) {
+    }
+
+    /** How the deployment routes tenants, read once for the console: the fixed-tenant creation above, the landing
+     *  that decides whether a tenant is chosen for the reader, and the header that shows which one is. */
+    @Bean
+    public Tenancy tenancy(ConfigurableEnvironment environment) {
+        return new Tenancy(environment.getProperty("jenreg.tenancy", "fixed").equals("fixed"));
+    }
+
+    /** Whether the deployment serves one tenant ({@code jenreg.tenancy=fixed}) or several. */
+    public record Tenancy(boolean fixed) {
+
+        public boolean multi() {
+            return !fixed;
+        }
     }
 
     /** The deployment-wide operator tenant (operator-tenant, else default-tenant, else {@code default}): the scope

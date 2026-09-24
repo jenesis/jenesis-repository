@@ -553,6 +553,7 @@ public class RepositoryAutoConfiguration {
                                                      BatchIngestion batch,
                                                      ArtifactStore store,
                                                      RoutedServing routed,
+                                                     RepositoryPresence presence,
                                                      Environment environment) {
         // A format reads a runtime toggle off the exchange (the Maven metadata computation opt-in); resolve the bare
         // setting key against the environment under the shared jenreg.* prefix, into which a stored
@@ -560,7 +561,18 @@ public class RepositoryAutoConfiguration {
         // the /api/assets enumeration can scope to an explicitly named repo within the request's tenant. The routed
         // serving seam (NONE here, a router in a multi-repository distribution) drives a read of a proxy/group repo.
         return new RepositoryController(routing, dispatcher, importSources, fetcher, batch,
-                key -> environment.getProperty(Features.key(key)), store, routed, EdgeHooks.NONE);
+                key -> environment.getProperty(Features.key(key)), store, routed, EdgeHooks.NONE, presence);
+    }
+
+    /**
+     * Whether a request may reach the repository it names, read from the environment as it stood at boot and knowing
+     * no definitions - the shape of a composition without the live configuration. A composition that has it replaces
+     * this with one that reads the stored setting and the definitions live.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public RepositoryPresence repositoryPresence(ArtifactStore store, Environment environment) {
+        return new RepositoryPresence(store, key -> environment.getProperty(Features.key(key)), _ -> false);
     }
 
     /**

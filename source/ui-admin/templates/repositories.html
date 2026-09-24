@@ -59,8 +59,21 @@
         </table>
     </figure>
     <th:block th:if="${repositories.isEmpty()}">
-        <div th:replace="~{base :: empty('No repositories yet. Publishing an artifact creates its repository.')}"></div>
+        <div th:replace="~{base :: empty('No repositories yet. Create one below, then publish into it.')}"></div>
     </th:block>
+    <!--/* The page's own settings, side by side where the screen is wide and one under the other where it is not. */-->
+    <div class="app-panels">
+    <article th:if="${isEditor}">
+        <h2>New repository</h2>
+        <p><small>A repository is created here before anything is published into it; a publish creates one only where
+            <code>create-repository-on-publish</code> is switched on under Settings.</small></p>
+        <form method="post" th:action="@{/repositories/create}">
+            <label>Name
+                <input name="name" required pattern="[A-Za-z0-9_\-]+" placeholder="releases"
+                       title="Letters, digits, hyphens and underscores"></label>
+            <button type="submit">Create repository</button>
+        </form>
+    </article>
     <article>
         <h2>Storage quota</h2>
         <p><small>A tenant-wide cap on stored content across every repository; a publish that would exceed it is
@@ -85,7 +98,7 @@
             <button type="submit">Save rate limit</button>
         </form>
     </article>
+    </div>
 </main>
-<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

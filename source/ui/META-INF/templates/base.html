@@ -86,9 +86,14 @@
         <th:block th:replace="~{__${editionBanner ?: ''}__}"></th:block>
         <div class="app-header__inner">
             <a th:replace="~{base :: brand}"></a>
-            <a th:if="${tenant != null and showTenant}" class="app-tenant" th:href="@{/instances}"
-               th:title="|Working in tenant ${tenant} - switch tenant|">
-                <span class="app-sr-only">Tenant </span><span th:text="${tenant}">default</span></a>
+            <!--/* The tenant, beside the brand, wherever the deployment serves several: the one being worked in, or
+                 that none is chosen yet. Either way it leads to the screen that lists the tenants to choose from. */-->
+            <a th:if="${multiTenant}" class="app-tenant" th:href="@{/instances}"
+               th:classappend="${tenant == null} ? 'app-tenant--none'"
+               th:title="${tenant != null} ? |Working in tenant ${tenant} - switch tenant| : 'Choose a tenant to work in'">
+                <th:block th:if="${tenant != null}"><span class="app-sr-only">Tenant </span><span
+                        th:text="${tenant}">default</span></th:block>
+                <th:block th:if="${tenant == null}">No tenant selected</th:block></a>
             <button th:if="${navigation != null and navigation.present()}" type="button" class="app-menu-toggle"
                     data-menu-toggle aria-expanded="false" aria-controls="app-sidebar">Menu</button>
             <nav th:if="${navigation != null and !navigation.groups().isEmpty()}" class="app-groups"
@@ -97,6 +102,7 @@
                    th:attr="aria-current=${group.current()} ? 'true' : null">Group</a>
             </nav>
             <div class="app-header__session">
+                <th:block th:replace="~{__${editionBadges ?: ''}__}"></th:block>
                 <a th:if="${postureBadge != null and postureBadge.visible()}" class="app-posture app-badge app-badge--warn"
                    th:href="@{/posture}" th:title="${postureBadge.title()}" th:text="${postureBadge.label()}">posture</a>
                 <button th:replace="~{base :: themeToggle}"></button>
@@ -149,19 +155,12 @@
         <div class="app-header__inner">
             <a th:replace="~{base :: brand}"></a>
             <div class="app-header__session">
+                <th:block th:replace="~{__${editionBadges ?: ''}__}"></th:block>
                 <button th:replace="~{base :: themeToggle}"></button>
             </div>
         </div>
     </header>
 </th:block>
-
-<!--/* The colophon: one small line naming the product, and whatever its edition publishes beside it. */-->
-<footer th:fragment="footer" class="app-footer">
-    <ul>
-        <li th:text="${product ?: 'Jenesis Repository'}">Jenesis Repository</li>
-        <th:block th:replace="~{__${editionBadges ?: ''}__}"></th:block>
-    </ul>
-</footer>
 
 <!--/* Page header: just a title. A page needing the primary-action slot renders the .app-page-header markup
      directly or uses pageHeaderCrumbs; this fragment stays presentation-only. */-->

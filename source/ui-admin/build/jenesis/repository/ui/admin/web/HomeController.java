@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.ui.admin.config.DomainConfig;
 import build.jenesis.repository.ui.admin.security.Memberships;
 import build.jenesis.repository.ui.admin.security.SessionCurrentTenant;
 import jakarta.servlet.http.HttpSession;
@@ -10,10 +11,10 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 
 /**
- * The landing routes. After sign-in a user is routed by how many tenants they can reach: a
- * super-admin always goes to the instances list; a user with exactly one accessible tenant has it
- * selected automatically and lands on its projects (never seeing the tenant concept); anyone with
- * several picks one on the instances page.
+ * The landing routes. After sign-in a reader is routed by how many tenants they can reach. On a fixed deployment there
+ * is one, and it is chosen for everyone. On a deployment of several, a member of exactly one tenant is taken into it,
+ * while a deployment administrator - who can reach every tenant - starts with none chosen and picks one from the
+ * instances list, which the header's tenant chooser also leads to; so does anyone who belongs to several.
  */
 @Controller
 public class HomeController {
@@ -21,11 +22,14 @@ public class HomeController {
     private final Memberships memberships;
     private final SessionCurrentTenant current;
     private final SetupWizard setup;
+    private final DomainConfig.Tenancy tenancy;
 
-    public HomeController(Memberships memberships, SessionCurrentTenant current, SetupWizard setup) {
+    public HomeController(Memberships memberships, SessionCurrentTenant current, SetupWizard setup,
+                          DomainConfig.Tenancy tenancy) {
         this.memberships = memberships;
         this.current = current;
         this.setup = setup;
+        this.tenancy = tenancy;
     }
 
     /** The root forwards to the console so a bare host lands on it, keeping {@code /} free of a functional route. */
@@ -39,11 +43,13 @@ public class HomeController {
         if (!authenticated(authentication)) {
             return "redirect:/login";
         }
-        // Where there is one tenant to be in, the reader is in it - a super-admin of a single-tenant deployment as
-        // much as a member of one tenant - and it is chosen before anything else, so no screen the reader opens next
-        // sends them back here for a choice with one answer.
-        List<String> accessible = memberships.accessibleTo(authentication.getName(), hasSuperadmin(authentication));
-        if (accessible.size() == 1) {
+        // Where there is one tenant to be in, the reader is in it, and it is chosen before anything else, so no
+        // screen the reader opens next sends them back here for a choice with one answer. A deployment administrator
+        // of a multi-tenant deployment is the exception: every tenant is theirs to work in, and the one that happens
+        // to exist first is not a choice they made, so they start in none and choose.
+        boolean superadmin = hasSuperadmin(authentication);
+        List<String> accessible = memberships.accessibleTo(authentication.getName(), superadmin);
+        if (current.name() == null && accessible.size() == 1 && !(superadmin && tenancy.multi())) {
             current.select(accessible.get(0));
         }
         // A super-admin on the starter credential is guided first, once per session and while the dial is on -
@@ -53,7 +59,7 @@ public class HomeController {
         if (setup.redirects(authentication, session)) {
             return "redirect:/setup";
         }
-        return accessible.size() == 1 ? "redirect:/repositories" : "redirect:/instances";
+        return current.name() != null ? "redirect:/repositories" : "redirect:/instances";
     }
 
 

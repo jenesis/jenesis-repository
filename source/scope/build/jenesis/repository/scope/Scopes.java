@@ -60,6 +60,12 @@ public final class Scopes {
     /** Per-node state, at the root: {@code nodes/<id>/running} while a node is up, gone after a clean shutdown. */
     public static final String NODES = "nodes";
 
+    /** The object at the root of a repository's own scope that says it was created - by an operator, before anything
+     *  was published into it. It is not a space under {@link #SYSTEM}: it lives inside the repository, so the
+     *  repository is listed like any other the moment it is written, and a leading dot keeps it out of the names a
+     *  user chooses. */
+    public static final String CREATED = ".repository";
+
     /**
      * The product's own spaces, sorted. An inventory, not a denylist: nothing consults it to decide whether a name
      * is allowed, because nothing has to. It exists so a surface that must name them - the storage-namespace purge

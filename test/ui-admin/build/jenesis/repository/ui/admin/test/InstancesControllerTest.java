@@ -59,7 +59,7 @@ public class InstancesControllerTest {
 
     @Test
     public void a_member_may_select_its_own_tenant() {
-        assertThat(controller.select("acme", member("github/1"))).isEqualTo("redirect:/projects");
+        assertThat(controller.select("acme", member("github/1"))).isEqualTo("redirect:/repositories");
         assertThat(selected).isEqualTo("acme");
     }
 
@@ -72,7 +72,7 @@ public class InstancesControllerTest {
 
     @Test
     public void a_super_admin_may_select_any_tenant() {
-        assertThat(controller.select("globex", superadmin("github/9"))).isEqualTo("redirect:/projects");
+        assertThat(controller.select("globex", superadmin("github/9"))).isEqualTo("redirect:/repositories");
         assertThat(selected).isEqualTo("globex");
     }
 
