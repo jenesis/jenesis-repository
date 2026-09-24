@@ -34,6 +34,8 @@ open module build.jenesis.repository.ui.identity {
             build.jenesis.repository.auth.keylogin,
             build.jenesis.repository.auth.saml,
             build.jenesis.repository.auth.oidc,
+            build.jenesis.repository.auth.ldap.test,
+            build.jenesis.repository.auth.ldap.e2e,
             build.jenesis.repository.scim,
             build.jenesis.repository.ui.admin.test,
             build.jenesis.repository.ui.admin.installed.test,

@@ -279,16 +279,21 @@ public class UserDirectory {
     }
 
     /**
-     * The role a tenant grants {@code id}, read straight from that subject's own grants - the cross-tenant check
-     * every authenticated request makes. It is a point read on a key composed from the id, so it costs one small
-     * object whatever the tenant's user population.
+     * The role a tenant grants {@code id}: the rights its own grants hold together with those its groups confer - the
+     * cross-tenant check every authenticated request makes. It reads the subject's grants and the union its group
+     * memberships already derived, two point reads on keys composed from the id, so it costs the same whatever the
+     * tenant's user population. It used to read the subject's own grants alone, so a role granted to a group - by an
+     * operator, or through a directory's membership - reached the repository and never the console.
      */
     public static Optional<Role> roleIn(Authorization authorization, String tenant, String id) {
         if (id == null || id.isBlank()) {
             return Optional.empty();
         }
         try {
-            return Role.of(authorization.grants(tenant, Authorization.Subject.principal(id.trim())).get(SCOPE));
+            Authorization.Subject subject = Authorization.Subject.principal(id.trim());
+            String own = authorization.grants(tenant, subject).get(SCOPE);
+            String derived = authorization.derivedGrants(tenant, subject).get(SCOPE);
+            return Role.of(own == null ? derived : derived == null ? own : own + "," + derived);
         } catch (IOException e) {
             throw new UncheckedIOException("Could not read the membership of " + id + " in " + tenant, e);
         } catch (IllegalArgumentException _) {

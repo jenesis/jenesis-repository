@@ -1025,6 +1025,28 @@ public final class Authorization {
         return Map.copyOf(scopes);
     }
 
+    /** The scope-to-rights map a principal holds in {@code tenant} through the groups it is a member of - the union a
+     *  membership or group-grant write already derived, which {@link #authorize} reads - empty when it holds none.
+     *  A surface that asks what someone may do reads this beside {@link #grants}, or a right a group confers is one
+     *  the request path honours and the surface does not see. */
+    public Map<String, String> derivedGrants(String tenant, Subject subject) throws IOException {
+        freshen();
+        if (subject.kind() != Kind.PRINCIPAL) {
+            return Map.of();
+        }
+        Properties derived = read(derivedPath(tenant, subject));
+        if (derived == null) {
+            return Map.of();
+        }
+        Map<String, String> scopes = new TreeMap<>();
+        for (String scope : derived.stringPropertyNames()) {
+            if (!scope.startsWith(EXPIRES)) {
+                scopes.put(scope, derived.getProperty(scope));
+            }
+        }
+        return Map.copyOf(scopes);
+    }
+
     /** A subject's human label - a credential's name, a person's display login - or empty when it has none.
      *  Freshens for the reason {@link #grants} does: it is read beside the grants, on the same request. */
     public Optional<String> label(String tenant, Subject subject) throws IOException {

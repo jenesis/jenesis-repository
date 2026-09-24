@@ -26,6 +26,7 @@
  */
 open module build.jenesis.repository.ui.admin {
     exports build.jenesis.repository.ui.admin to build.jenesis.repository.bundle,
+            build.jenesis.repository.auth.ldap.e2e,
             build.jenesis.repository.ui.admin.test,
             build.jenesis.repository.ui.admin.installed.test,
             build.jenesis.repository.ui.admin.browser.test,

@@ -46,6 +46,8 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.importer.maven;
     requires build.jenesis.repository.importer.nexus;
     requires build.jenesis.repository.oidc;
+    // Console sign-in against an LDAP or Active Directory server, off until jenreg.ui.ldap.url names one.
+    requires build.jenesis.repository.auth.ldap;
     requires build.jenesis.repository.proxy;
     requires build.jenesis.repository.ratelimit;
     requires build.jenesis.repository.usage;

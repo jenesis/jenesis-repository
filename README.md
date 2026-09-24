@@ -109,6 +109,7 @@ seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by 
 | `source/proxy` | The upstream fetcher behind pull-through caching, with revalidation and a negative cache. |
 | `source/walk/{spi,store}`, `source/gc/{spi,store}` | The resumable artifact walk, and mark-sweep garbage collection over it. |
 | `source/ui` | The web console (`/console`, `/browse`) and its design system. |
+| `source/auth/ldap` | Console sign-in against an LDAP or Active Directory server, with the directory's groups reconciled into the deployment's group memberships. |
 | `source/oidc`, `source/ratelimit`, `source/usage` | Sign-in, the request-rate ceiling, and credential-usage tracking. |
 | `source/observation/spi`, `source/posture/spi`, `source/icon/spi` | Observation hooks, security-posture advisories, and console iconography. |
 | `source/gate/store`, `source/gate-wiring`, `source/compliance/*` | The publish gate: the Maven and OCI inspectors that name what a publish is, the OSV, GitHub and OpenSSF feeds (off until an operator switches them on), policy-as-code and attestation admission, the scheduled rescan, signature verification, and the review queue where a hold is released. |
