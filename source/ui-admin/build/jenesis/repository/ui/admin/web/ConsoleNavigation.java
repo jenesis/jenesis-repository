@@ -19,6 +19,9 @@ final class ConsoleNavigation {
     /** The collection the repository pages live below. */
     static final String REPOSITORIES = "/repositories";
 
+    /** How many repositories the Repositories group's sidebar names before pointing at the whole list. */
+    static final int LISTED = 50;
+
     /** The names below {@link #REPOSITORIES} that are not repositories but actions on the collection. */
     private static final Set<String> COLLECTION_ACTIONS = Set.of("quota", "rate-limit");
 
@@ -27,9 +30,11 @@ final class ConsoleNavigation {
 
     /**
      * The navigation for {@code path}, given the top-level {@code entries} and the repository {@code pages} the reader
-     * may open, each in the order it is to be listed.
+     * may open, each in the order it is to be listed, and the tenant's {@code repositories} - asked for only when the
+     * reader is in the Repositories group and not inside one of them, since that is the one sidebar that names them.
      */
-    static Navigation resolve(List<NavEntry> entries, List<RepositoryPage> pages, String path) {
+    static Navigation resolve(List<NavEntry> entries, List<RepositoryPage> pages,
+                              Supplier<List<String>> repositories, String path) {
         NavEntry current = current(entries, path);
         String repository = repository(path);
         NavEntry.Group group = repository != null ? NavEntry.Group.REPOSITORIES
@@ -49,8 +54,22 @@ final class ConsoleNavigation {
                 .filter(entry -> entry.group() == group)
                 .map(entry -> new Navigation.Link(entry.label(), entry.path(), entry == current))
                 .toList();
-        return new Navigation(groups, new Navigation.Sidebar(group.label(), null,
-                List.of(new Navigation.Section("", links))));
+        List<Navigation.Section> sections = new ArrayList<>();
+        sections.add(new Navigation.Section("", links));
+        if (group == NavEntry.Group.REPOSITORIES) {
+            // The repositories themselves, the way the documentation lists its chapters. Operators create them, so
+            // there are few; past the bound the list says there are more and the collection screen has them all.
+            List<String> names = repositories.get();
+            List<Navigation.Link> named = new ArrayList<>();
+            for (String name : names.subList(0, Math.min(names.size(), LISTED))) {
+                named.add(new Navigation.Link(name, REPOSITORIES + "/" + name, false));
+            }
+            if (names.size() > LISTED) {
+                named.add(new Navigation.Link("More repositories\u2026", REPOSITORIES, false));
+            }
+            sections.add(new Navigation.Section("", named));
+        }
+        return new Navigation(groups, new Navigation.Sidebar(group.label(), null, sections));
     }
 
     /** The sidebar inside one repository: its pages under their topics, and the way back to the collection. */

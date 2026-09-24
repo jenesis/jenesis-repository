@@ -15,6 +15,7 @@ import build.jenesis.repository.ui.admin.security.Memberships;
 import build.jenesis.repository.ui.identity.UserDirectory.Role;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.PostureBadge;
+import build.jenesis.repository.ui.store.RepositoryAdmin;
 import build.jenesis.repository.ui.store.SettingsAdmin;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.env.Environment;
@@ -42,6 +43,7 @@ public class GlobalControllerAdvice {
     private final List<PrincipalNameResolver> principalNames;
     private final Environment environment;
     private final SettingsAdmin settings;
+    private final RepositoryAdmin repositories;
 
     /**
      * The resolved licence state, injected rather than read from {@code Licenses.state()} statically.
@@ -54,13 +56,14 @@ public class GlobalControllerAdvice {
      */
     public GlobalControllerAdvice(Memberships memberships, CurrentTenant current, CapabilityService capabilities,
                                   List<PrincipalNameResolver> principalNames, Environment environment,
-                                  SettingsAdmin settings) {
+                                  SettingsAdmin settings, RepositoryAdmin repositories) {
         this.memberships = memberships;
         this.current = current;
         this.capabilities = capabilities;
         this.principalNames = principalNames;
         this.environment = environment;
         this.settings = settings;
+        this.repositories = repositories;
     }
 
     /** Whether the deployment runs read-only ({@code jenreg.read-only}), so every view can show a banner
@@ -204,7 +207,7 @@ public class GlobalControllerAdvice {
         boolean admin = roleAtLeast(authentication, Role.ADMIN);
         boolean superadmin = hasSuperadmin(authentication);
         List<NavEntry> entries = new ArrayList<>();
-        entries.add(new NavEntry("Repositories", "/repositories", Group.REPOSITORIES));
+        entries.add(new NavEntry("All repositories", "/repositories", Group.REPOSITORIES));
         entries.add(new NavEntry("Projects", "/projects", Group.BUILD_CACHE));
         entries.add(new NavEntry("Credentials", "/credentials", Access.ADMIN, Group.ACCESS));
         entries.add(new NavEntry("Members", "/admin", Access.ADMIN, Group.ACCESS));
@@ -238,7 +241,19 @@ public class GlobalControllerAdvice {
                 pages.stream()
                         .filter(page -> visibleTo(page.access(), admin, superadmin) && capabilities.has(page.requires()))
                         .toList(),
+                this::listedRepositories,
                 path);
+    }
+
+    /** The tenant's repositories as the sidebar names them. A listing that fails costs the sidebar its names and
+     *  nothing else: navigation that cannot render takes every page of the console with it. */
+    private List<String> listedRepositories() {
+        try {
+            return repositories.listedRepositories();
+        } catch (IOException | RuntimeException e) {
+            LOGGER.warn("The repositories could not be listed for the console's sidebar, which names none", e);
+            return List.of();
+        }
     }
 
     /** Whether a page's access floor is cleared by the current user's role. */

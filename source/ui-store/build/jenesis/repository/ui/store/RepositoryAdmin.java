@@ -6,6 +6,7 @@ import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.store.ServableNames;
 import io.micrometer.observation.ObservationRegistry;
 
@@ -25,6 +26,25 @@ public class RepositoryAdmin extends TenantScope {
 
     public RepositoryAdmin(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations) {
         super(repositoryStore, current, observations);
+    }
+
+    /**
+     * The named repositories in the current tenant as the console's navigation lists them: from a node-local cache
+     * kept for {@code jenreg.cache.ttl}, five minutes by default, rather than from a store listing per page view.
+     *
+     * <p>The sidebar asks on every page of the Repositories group, and the set changes only when an operator
+     * defines a repository or a first publish creates one - so a new repository appears here within the ttl, and the
+     * Repositories screen, which reads the store itself, shows it at once. The console's cache-clear control drops
+     * the listing with every other cache.
+     */
+    public List<String> listedRepositories() throws IOException {
+        List<String> repositories = new ArrayList<>();
+        for (String name : StoreCache.of("console-repositories", root, StoreCache.configuredTtl()).list(tenant())) {
+            if (validRepository(name)) {
+                repositories.add(name);
+            }
+        }
+        return repositories;
     }
 
     /** The named repositories in the current tenant. */
