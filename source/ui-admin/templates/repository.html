@@ -1,336 +1,134 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments :: head('Repository')}"></head>
+<head th:replace="~{fragments :: head('Repository ' + ${repo})}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <p><a href="/repositories">&larr; Repositories</a></p>
-    <header th:replace="~{base :: pageHeader('Repository ' + ${repo})}"></header>
-    <p>
-        <a th:href="@{'/repositories/' + ${repo} + '/browse'}" role="button" class="secondary">Browse &amp; search &rarr;</a>
-        <a th:href="@{'/repositories/' + ${repo} + '/vulnerabilities'}" role="button" class="secondary"
-           th:if="${capabilities.advisories()}">Vulnerabilities &rarr;</a>
-        <a th:href="@{'/repositories/' + ${repo} + '/findings'}" role="button" class="secondary"
-           th:if="${capabilities.findings()}">Findings &rarr;</a>
-        <a th:href="@{'/repositories/' + ${repo} + '/health'}" role="button" class="secondary"
-           th:if="${capabilities.maintainerHealth()}">Maintainer health &rarr;</a>
-        <a th:href="@{'/repositories/' + ${repo} + '/licenses'}" role="button" class="secondary"
-           th:if="${capabilities.search()}">Licenses &rarr;</a>
-        <a th:href="@{'/repositories/' + ${repo} + '/dependents'}" role="button" class="secondary"
-           th:if="${capabilities.dependents()}">Who depends on &hellip; &rarr;</a>
-        <a th:href="@{'/repositories/' + ${repo} + '/blast-radius'}" role="button" class="secondary"
-           th:if="${capabilities.licensePolicy()}">License blast radius &rarr;</a>
-        <a th:href="@{'/repositories/' + ${repo} + '/import'}" role="button" class="secondary"
-           th:if="${capabilities.importAvailable()}">Import from another repository &rarr;</a>
-    </p>
+    <header th:replace="~{base :: pageHeader(${repo})}"></header>
+    <p><small>What this repository serves, how it is routed and what it published most recently. Everything else about
+        it - its contents, what the gate decided, how long it keeps what it holds - is a page of its own in the
+        sidebar.</small></p>
 
-    <!--/* T25.6 item 2: the repository's parsed shape - writable/read-only/host+proxy and its per-fallback badges,
-         straight from the one Definition the router routes on. Shown only when a runtime definition is configured;
-         an unconfigured repository is the plain writable hosted default and needs no callout. Item 4: a valid-but-risky
-         definition surfaces its warnings here too, as a non-blocking notice. */-->
-    <article th:if="${shape.configured()}">
-        <details class="app-section" th:attr="open='open'">
-            <summary><h2>Shape</h2></summary>
-            <p><small>How this repository is routed, from its <code>repositories.<span th:text="${repo}">name</span></code>
-                definition: whether it accepts uploads and its ordered fallbacks with each one's copy and screening
-                policy.</small></p>
-            <p><span th:replace="~{fragments :: shapeBadges(${shape})}"></span></p>
-            <ul th:if="${!shape.warnings().isEmpty()}" class="app-subsection-error" role="alert" aria-live="polite">
-                <li th:each="w : ${shape.warnings()}">⚑ <span th:text="${w}">warning</span></li>
-            </ul>
-        </details>
+    <article th:if="${shape.configured()}" id="shape">
+        <h2>Shape</h2>
+        <p><small>How this repository is routed, from its <code>repositories.<span th:text="${repo}">name</span></code>
+            definition: whether it accepts uploads and its ordered fallbacks with each one's copy and screening
+            policy.</small></p>
+        <p><span th:replace="~{fragments :: shapeBadges(${shape})}"></span></p>
+        <ul th:if="${!shape.warnings().isEmpty()}" class="app-subsection-error" role="alert" aria-live="polite">
+            <li th:each="w : ${shape.warnings()}">⚑ <span th:text="${w}">warning</span></li>
+        </ul>
     </article>
 
-    <article th:if="${capabilities.index()}">
-        <details class="app-section" th:attr="open=null">
-            <summary><h2>Published index</h2></summary>
-            <p><small>An incremental, content-addressed index an external consumer syncs against - fetch the descriptor,
-                diff, fetch only the unseen chunks. Read-only; the index pass publishes it on its schedule.</small></p>
-            <figure th:if="${index.published()}">
-                <table>
-                    <tbody>
-                    <tr>
-                        <th scope="row">Generation</th>
-                        <td th:text="${index.generation()}">0</td>
-                    </tr>
-                    <tr>
-                        <th scope="row">Watermark</th>
-                        <td><code th:text="${index.watermark()}">1970-01-01T00:00:00Z</code></td>
-                    </tr>
-                    <tr>
-                        <th scope="row">Chunks</th>
-                        <td th:text="${index.chunks()}">0</td>
-                    </tr>
-                    <tr>
-                        <th scope="row">Records</th>
-                        <td th:text="${index.records()}">0</td>
-                    </tr>
-                    <tr>
-                        <th scope="row">Compressed</th>
-                        <td th:text="${index.compressed()}">—</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </figure>
-            <th:block th:unless="${index.published()}">
-                <div th:replace="~{base :: empty('No index has been published yet. The index pass publishes on its schedule.')}"></div>
-            </th:block>
-        </details>
-    </article>
-
-    <article th:if="${capabilities.retention()}">
-        <details class="app-section" th:attr="open=null">
-            <summary><h2>Retention</h2></summary>
-            <p><small>A version is kept only if it satisfies every dial set below; durations are ISO-8601 (for
-                example <code>P90D</code>). A pinned version is always kept, whatever the policy says.</small></p>
-            <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
-            <form th:if="${isEditor}" method="post" th:action="@{'/repositories/' + ${repo} + '/retention'}">
-                <div class="grid">
-                    <label>keep-last
-                        <input type="number" name="keepLast" min="0" th:value="${retention.keepLast}"></label>
-                    <label>max-age
-                        <input name="maxAge" th:value="${retention.maxAge}" placeholder="P90D"></label>
-                    <label>prerelease-expiry
-                        <input name="prereleaseExpiry" th:value="${retention.prereleaseExpiry}" placeholder="P14D"></label>
-                    <label>not-downloaded-for
-                        <input name="notDownloadedFor" th:value="${retention.notDownloadedFor}" placeholder="P30D"></label>
-                </div>
-                <button type="submit">Save retention</button>
-            </form>
-        </details>
+    <article id="hardening" th:if="${hardened}">
+        <h2>Hardened proxy screening
+        <span class="app-badge" title="Hardening proxy - full upstream screening enforced">hardened</span></h2>
+        <p><small>This repository is a hardening proxy: every untrusted upstream body is spooled and fully screened
+            before a byte is released. A body that could not be screened (oversize, stalled, drifted, unparseable, or
+            one an inspector failed on) is refused, and appears on the Refused page.</small></p>
     </article>
 
     <article th:if="${unplaceable != null and !unplaceable.isEmpty()}">
-        <details class="app-section" th:attr="open='open'">
-            <summary><h2>Absent formats</h2></summary>
-            <!--/* The ecosystems this repository records that no installed format can place. Nothing is ever deleted on
-                   absence alone: retention refuses their evictions and the collector refuses the whole repository, so
-                   garbage collection stands still until the format returns - or until an operator retires the records
-                   here, explicitly. Forgetting makes the collector judge the repository again; the format's unreferenced
-                   content becomes ordinary garbage it reclaims, and the format module's orphaned pointers are purged
-                   from the Modules screen. */-->
-            <p><small>This repository records data for ecosystem(s) no installed format can place. Their artifacts are
-                unreachable but kept - nothing is deleted on absence - and garbage collection refuses this repository
-                until each is resolved: reinstall (or re-enable) the format, or retire its records here. Retiring lets
-                the collector reclaim the ecosystem's content on its next pass; purge the format module's remaining
-                pointers on the <a th:href="@{/settings/modules}">Modules</a> screen.</small></p>
-            <div th:each="eco : ${unplaceable}" class="app-actions">
-                <code th:text="${eco}">ecosystem</code>
-                <!--/* The retirement runs off the request, so the row says what its last (or current) pass did rather
-                     than leaving a button that appears to do nothing. */-->
-                <small th:if="${retirements != null and retirements.containsKey(eco) and retirements.get(eco).running()}">
-                    Retiring now&hellip;</small>
-                <small th:if="${retirements != null and retirements.containsKey(eco) and !retirements.get(eco).running()}"
-                       th:text="${retirements.get(eco).sample().isEmpty()} ? 'Retired.' : ${retirements.get(eco).sample()[0]}">
-                    retired</small>
-                <form th:if="${isEditor and (retirements == null or !retirements.containsKey(eco) or !retirements.get(eco).running())}"
-                      method="post" style="display:inline; margin:0" class="app-actions__danger"
-                      th:action="@{'/repositories/' + ${repo} + '/forget-ecosystem'}">
-                    <input type="hidden" name="ecosystem" th:value="${eco}">
-                    <button th:replace="~{base :: dangerButton('Forget ecosystem', 'Retire every record of this ecosystem in this repository? Its content is then reclaimed by the collector, and this cannot be undone.')}">Forget ecosystem</button>
-                </form>
-            </div>
-        </details>
-    </article>
-    <article th:if="${capabilities.retention()}">
-        <details class="app-section" th:attr="open=null">
-            <summary><h2>Cleanup</h2></summary>
-            <!--/* Both halves of this panel are stored results, never computed on the request: a preview and a sweep
-                   each walk every release, so they run in the background and the hub shows what they last found. */-->
-            <p th:if="${plan == null}"><small>No cleanup preview has been computed yet.</small></p>
-            <th:block th:if="${plan != null}">
-                <th:block th:if="${plan.running()}">
-                    <p th:replace="~{base :: running(|A cleanup preview is running, started ${plan.startedAt()}.|)}"></p>
-                </th:block>
-                <th:block th:unless="${plan.running()}">
-                    <p th:if="${plan.failure() != null}"><small>The last preview failed:
-                        <span th:text="${plan.failure()}">reason</span></small></p>
-                    <p th:if="${plan.failure() == null and plan.count() == 0}"><small>Nothing would be evicted under the
-                        policy and pins as of <span th:text="${plan.finishedAt()}">time</span>.</small></p>
-                    <th:block th:if="${plan.failure() == null and plan.count() > 0}">
-                        <p><small><span th:text="${plan.count()}">0</span> version(s) would be evicted as of
-                            <span th:text="${plan.finishedAt()}">time</span><span th:if="${plan.count() > plan.rows().size()}">;
-                            the first <span th:text="${plan.rows().size()}">0</span> are listed</span>.</small></p>
-                        <ul>
-                            <li th:each="p : ${plan.rows()}" th:text="${p}">coordinate:version - reason</li>
-                        </ul>
-                    </th:block>
-                </th:block>
-            </th:block>
-            <th:block th:if="${lastCleanup != null}">
-                <th:block th:if="${lastCleanup.running()}">
-                    <p th:replace="~{base :: running(|A cleanup is running, started ${lastCleanup.startedAt()}.|)}"></p>
-                </th:block>
-                <p th:unless="${lastCleanup.running()}"><small>Last cleanup finished
-                    <span th:text="${lastCleanup.finishedAt()}">time</span>:
-                    <span th:if="${lastCleanup.failure() != null}" th:text="${lastCleanup.failure()}">failed</span>
-                    <span th:if="${lastCleanup.failure() == null}"
-                          th:text="${lastCleanup.rows().isEmpty() ? 'nothing evicted' : lastCleanup.rows().get(0) + ', ' + (lastCleanup.count() - 1) + ' version(s) evicted'}">result</span>.</small></p>
-            </th:block>
-            <p th:unless="${capabilities.gc()}"><small>Garbage collection is off - no collector module is installed
-                or selected, so a cleanup evicts versions but reclaims no storage.</small></p>
-            <div th:if="${isEditor}" style="display:flex; gap:0.5em">
-                <form method="post" th:action="@{'/repositories/' + ${repo} + '/cleanup/preview'}">
-                    <button class="secondary" type="submit">Preview cleanup</button>
-                </form>
-                <form method="post" th:action="@{'/repositories/' + ${repo} + '/cleanup'}">
-                    <button type="submit">Run cleanup now</button>
-                </form>
-            </div>
-        </details>
-    </article>
-
-    <article>
-        <details class="app-section" th:attr="open=${pins.isEmpty()} ? null : 'open'">
-            <summary><h2>Pins</h2></summary>
-            <ul th:unless="${pins.isEmpty()}">
-                <li th:each="pin : ${pins}">
-                    <code th:text="${pin.ecosystem()} + ':' + ${pin.coordinate()} + ':' + ${pin.version()}">ecosystem:coordinate:version</code>
-                    <form th:if="${isEditor}" method="post" style="display:inline; margin:0"
-                          th:action="@{'/repositories/' + ${repo} + '/pins/remove'}"
-                          data-confirm="Lift this pin? The version becomes eligible for retention eviction.">
-                        <input type="hidden" name="ecosystem" th:value="${pin.ecosystem()}">
-                        <input type="hidden" name="coordinate" th:value="${pin.coordinate()}">
-                        <input type="hidden" name="version" th:value="${pin.version()}">
-                        <button class="secondary outline" type="submit">unpin</button>
-                    </form>
-                </li>
-            </ul>
-            <th:block th:if="${pins.isEmpty()}">
-                <div th:replace="~{base :: empty('No pins. A pinned version is never evicted by retention.')}"></div>
-            </th:block>
-            <form th:if="${isEditor}" method="post" th:action="@{'/repositories/' + ${repo} + '/pins'}">
-                <div class="grid">
-                    <!--/* Labelled, not merely placeheld: a placeholder disappears the moment there is a value, so a
-                         field carrying only one is unlabelled for anyone reviewing what they typed, and unlabelled
-                         outright for a screen reader (WCAG 3.3.2). */-->
-                    <label>Ecosystem
-                        <input name="ecosystem" placeholder="npm" list="ecosystems" required>
-                        <datalist id="ecosystems">
-                            <option th:each="e : ${ecosystems}" th:value="${e}"></option>
-                        </datalist>
-                    </label>
-                    <label>Coordinate <input name="coordinate" placeholder="org.acme:lib" required></label>
-                    <label>Version <input name="version" placeholder="1.4.0" required></label>
-                </div>
-                <button type="submit">Pin a version</button>
+        <h2>Absent formats</h2>
+        <!--/* The ecosystems this repository records that no installed format can place. Nothing is ever deleted on
+               absence alone: retention refuses their evictions and the collector refuses the whole repository, so
+               garbage collection stands still until the format returns - or until an operator retires the records
+               here, explicitly. Forgetting makes the collector judge the repository again; the format's unreferenced
+               content becomes ordinary garbage it reclaims, and the format module's orphaned pointers are purged
+               from the Modules screen. */-->
+        <p><small>This repository records data for ecosystem(s) no installed format can place. Their artifacts are
+            unreachable but kept - nothing is deleted on absence - and garbage collection refuses this repository
+            until each is resolved: reinstall (or re-enable) the format, or retire its records here. Retiring lets
+            the collector reclaim the ecosystem's content on its next pass; purge the format module's remaining
+            pointers on the <a th:href="@{/settings/modules}">Modules</a> screen.</small></p>
+        <div th:each="eco : ${unplaceable}" class="app-actions">
+            <code th:text="${eco}">ecosystem</code>
+            <!--/* The retirement runs off the request, so the row says what its last (or current) pass did rather
+                 than leaving a button that appears to do nothing. */-->
+            <small th:if="${retirements != null and retirements.containsKey(eco) and retirements.get(eco).running()}">
+                Retiring now&hellip;</small>
+            <small th:if="${retirements != null and retirements.containsKey(eco) and !retirements.get(eco).running()}"
+                   th:text="${retirements.get(eco).sample().isEmpty()} ? 'Retired.' : ${retirements.get(eco).sample()[0]}">
+                retired</small>
+            <form th:if="${isEditor and (retirements == null or !retirements.containsKey(eco) or !retirements.get(eco).running())}"
+                  method="post" style="display:inline; margin:0" class="app-actions__danger"
+                  th:action="@{'/repositories/' + ${repo} + '/forget-ecosystem'}">
+                <input type="hidden" name="ecosystem" th:value="${eco}">
+                <button th:replace="~{base :: dangerButton('Forget ecosystem', 'Retire every record of this ecosystem in this repository? Its content is then reclaimed by the collector, and this cannot be undone.')}">Forget ecosystem</button>
             </form>
-        </details>
+        </div>
     </article>
 
-    <article th:if="${capabilities.staging()}">
-        <details class="app-section" th:attr="open=${staging.isEmpty()} ? null : 'open'">
-            <summary><h2>Staging</h2></summary>
-            <figure th:unless="${staging.isEmpty()}">
-                <table class="app-list">
-                    <thead>
-                    <tr>
-                        <th scope="col">Id</th>
-                        <th scope="col">State</th>
-                        <th scope="col" class="app-list__num">Files</th>
-                        <th scope="col" th:if="${isEditor}"><span class="app-sr-only">Actions</span></th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <tr th:each="s : ${staging}">
-                        <td th:text="${s.id}">id</td>
-                        <td th:text="${s.state}">OPEN</td>
-                        <td class="app-list__num" th:text="${s.items >= stagedCountCap} ? ${stagedCountCap} + '+' : ${s.items}">0</td>
-                        <td th:if="${isEditor}">
-                            <form method="post" style="display:inline; margin:0"
-                                  th:action="@{'/repositories/' + ${repo} + '/staging/' + ${s.id} + '/promote'}">
-                                <button type="submit">promote</button>
-                            </form>
-                            <form method="post" style="display:inline; margin:0" class="app-actions__danger"
-                                  th:action="@{'/repositories/' + ${repo} + '/staging/' + ${s.id} + '/drop'}">
-                                <button th:replace="~{base :: dangerButton('drop', 'Drop this staging id? Everything staged under it is discarded and cannot be promoted afterwards.')}">drop</button>
-                            </form>
-                        </td>
-                    </tr>
-                    </tbody>
-                </table>
-            </figure>
-            <p th:if="${stagingMore}"><small>Showing the first <span th:text="${hubWindow}">50</span> staging
-                repositories; older ones are listed by the staging API.</small></p>
-            <th:block th:if="${staging.isEmpty()}">
-                <div th:replace="~{base :: empty('No staging repositories.')}"></div>
-            </th:block>
-        </details>
+    <article th:if="${capabilities.index()}">
+        <h2>Published index</h2>
+        <p><small>An incremental, content-addressed index an external consumer syncs against - fetch the descriptor,
+            diff, fetch only the unseen chunks. Read-only; the index pass publishes it on its schedule.</small></p>
+        <figure th:if="${index.published()}">
+            <table>
+                <tbody>
+                <tr>
+                    <th scope="row">Generation</th>
+                    <td th:text="${index.generation()}">0</td>
+                </tr>
+                <tr>
+                    <th scope="row">Watermark</th>
+                    <td><code th:text="${index.watermark()}">1970-01-01T00:00:00Z</code></td>
+                </tr>
+                <tr>
+                    <th scope="row">Chunks</th>
+                    <td th:text="${index.chunks()}">0</td>
+                </tr>
+                <tr>
+                    <th scope="row">Records</th>
+                    <td th:text="${index.records()}">0</td>
+                </tr>
+                <tr>
+                    <th scope="row">Compressed</th>
+                    <td th:text="${index.compressed()}">—</td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <th:block th:unless="${index.published()}">
+            <div th:replace="~{base :: empty('No index has been published yet. The index pass publishes on its schedule.')}"></div>
+        </th:block>
     </article>
-
-    <article id="signers">
-        <p><a th:href="@{/repositories/{repo}/signers(repo=${repo})}">Signers</a> &mdash; <small>who signed the
-            accepted versions of this repository, and everything each of them signed: what a signer-changed finding
-            names, and the reach of a key before it is revoked.</small></p>
-    </article>
-
-    <!--/* What the gate is holding for review, fetched from the module that owns the queue - so a deployment without
-         screening asks for nothing and the hub pays for nothing. */-->
-    <div th:if="${capabilities.screeningPanels()}" id="quarantine"
-         th:attr="hx-get=@{'/repositories/' + ${repo} + '/panels/quarantine'}"
-         hx-trigger="load" hx-swap="outerHTML"></div>
-
-    <!--/* What the gate refused outright. A refusal keeps no bytes and links no pointer, so the durable log row is its
-         whole record and this is an operator's only sight of a denied publish. */-->
-    <div th:if="${capabilities.screeningPanels()}" id="refusals"
-         th:attr="hx-get=@{'/repositories/' + ${repo} + '/panels/refusals'}"
-         hx-trigger="load" hx-swap="outerHTML"></div>
-
-    <!--/* EPIC 23 T23.7: the hardened proxy leg's badge and explanation, shown only for a repository that enforces
-         full-body upstream screening. Its typed structural refusals are rows of the Refused panel above rather than a
-         second list of their own. The drift alarm is a live signal of the repository server and surfaces on its
-         deployment health and verdict API. */-->
-    <article id="hardening" th:if="${hardened}">
-        <details class="app-section" th:attr="open=null">
-            <summary><h2>Hardened proxy screening
-            <span class="app-badge" title="Hardening proxy - full upstream screening enforced">hardened</span></h2></summary>
-            <p><small>This repository is a hardening proxy: every untrusted upstream body is spooled and fully screened
-                before a byte is released. A body that could not be screened (oversize, stalled, drifted, unparseable, or
-                one an inspector failed on) is refused, and appears in the Refused panel above.</small></p>
-        </details>
-    </article>
-
-    <!--/* Accepted publishes still queued for publish-through forwarding. */-->
-    <div th:if="${capabilities.forwardingPanel()}" id="forwarding"
-         th:attr="hx-get=@{'/repositories/' + ${repo} + '/panels/forwarding'}"
-         hx-trigger="load" hx-swap="outerHTML"></div>
 
     <article>
-        <details class="app-section" th:attr="open=${releases.isEmpty()} ? null : 'open'">
-            <summary><h2>Releases</h2></summary>
-            <figure th:unless="${releases.isEmpty()}">
-                <table class="app-list">
-                    <thead>
-                    <tr>
-                        <th scope="col">Coordinate</th>
-                        <th scope="col">Version</th>
-                        <th scope="col">Pinned</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <tr th:each="r : ${releases}">
-                        <!--/* Every release has a screen of its own, whichever way its format stores: the coordinate page
-                             lists the versions and the paths each is served at, for the blobs-namespace formats that have
-                             no folder in the browse tree as much as for the ones that do. */-->
-                        <td><a th:href="@{/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem()},coordinate=${r.coordinate()})}"
-                               th:text="${r.coordinate()}">group:artifact</a></td>
-                        <td th:text="${r.version}">1.0.0</td>
-                        <td th:text="${r.pinned} ? 'yes' : ''">yes</td>
-                    </tr>
-                    </tbody>
-                </table>
-                <!--/* A bounded recent slice of the published set (newest first), never the whole set - the detail hub is an
-                     overview. When more releases exist than this page shows, the count says so and links to the browse page,
-                     which pages the full list; nothing is silently dropped. */-->
-                <p th:if="${releasesMore}"><small>The <span th:text="${releases.size()}">0</span> most recent
-                    releases. <a th:href="@{/repositories/{repo}/browse(repo=${repo})}">Browse all &rarr;</a></small></p>
-            </figure>
-            <th:block th:if="${releases.isEmpty()}">
-                <div th:replace="~{base :: empty('No published releases yet.')}"></div>
-            </th:block>
-        </details>
+        <h2>Releases</h2>
+        <figure th:unless="${releases.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Coordinate</th>
+                    <th scope="col">Version</th>
+                    <th scope="col">Pinned</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="r : ${releases}">
+                    <!--/* Every release has a screen of its own, whichever way its format stores: the coordinate page
+                         lists the versions and the paths each is served at, for the blobs-namespace formats that have
+                         no folder in the browse tree as much as for the ones that do. */-->
+                    <td><a th:href="@{/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem()},coordinate=${r.coordinate()})}"
+                           th:text="${r.coordinate()}">group:artifact</a></td>
+                    <td th:text="${r.version}">1.0.0</td>
+                    <td th:text="${r.pinned} ? 'yes' : ''">yes</td>
+                </tr>
+                </tbody>
+            </table>
+            <!--/* A bounded recent slice of the published set (newest first), never the whole set - the detail hub is an
+                 overview. When more releases exist than this page shows, the count says so and links to the browse page,
+                 which pages the full list; nothing is silently dropped. */-->
+            <p th:if="${releasesMore}"><small>The <span th:text="${releases.size()}">0</span> most recent
+                releases. <a th:href="@{/repositories/{repo}/browse(repo=${repo})}">Browse all &rarr;</a></small></p>
+        </figure>
+        <th:block th:if="${releases.isEmpty()}">
+            <div th:replace="~{base :: empty('No published releases yet.')}"></div>
+        </th:block>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

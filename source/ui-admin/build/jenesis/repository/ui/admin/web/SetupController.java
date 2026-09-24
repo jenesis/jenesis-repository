@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
  *
  * <p>It never blocks and is always escapable: it renders the current state, every save posts to the settings
  * screen's own save route and comes back here, a skip is one click and remembered for the session, and the screen
- * is reachable again from the Administration menu whenever it is wanted - a first-run screen an operator cannot
+ * is reachable again as Setup, under Settings, whenever it is wanted - a first-run screen an operator cannot
  * leave is worse than no first-run screen. The starter-credential step is rendered from the deployment's
  * environment (whether the console's admin key and the API's bootstrap key are set, and whether this very session
  * is on the starter key), since those are secrets a deployment is provisioned with rather than dials in the store.

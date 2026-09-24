@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Staging')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Staging')}"></header>
+    <p><small>Uploads staged under an id rather than published: promote one to publish everything staged under it,
+    or drop it.</small></p>
+    <figure th:unless="${staging.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Id</th>
+                <th scope="col">State</th>
+                <th scope="col" class="app-list__num">Files</th>
+                <th scope="col" th:if="${isEditor}"><span class="app-sr-only">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="s : ${staging}">
+                <td th:text="${s.id}">id</td>
+                <td th:text="${s.state}">OPEN</td>
+                <td class="app-list__num" th:text="${s.items >= stagedCountCap} ? ${stagedCountCap} + '+' : ${s.items}">0</td>
+                <td th:if="${isEditor}">
+                    <form method="post" style="display:inline; margin:0"
+                          th:action="@{'/repositories/' + ${repo} + '/staging/' + ${s.id} + '/promote'}">
+                        <button type="submit">promote</button>
+                    </form>
+                    <form method="post" style="display:inline; margin:0" class="app-actions__danger"
+                          th:action="@{'/repositories/' + ${repo} + '/staging/' + ${s.id} + '/drop'}">
+                        <button th:replace="~{base :: dangerButton('drop', 'Drop this staging id? Everything staged under it is discarded and cannot be promoted afterwards.')}">drop</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </figure>
+    <p th:if="${stagingMore}"><small>Showing the first <span th:text="${hubWindow}">50</span> staging
+        repositories; older ones are listed by the staging API.</small></p>
+    <th:block th:if="${staging.isEmpty()}">
+        <div th:replace="~{base :: empty('No staging repositories.')}"></div>
+    </th:block>
+</main>
+<footer th:replace="~{base :: footer}"></footer>
+</body>
+</html>

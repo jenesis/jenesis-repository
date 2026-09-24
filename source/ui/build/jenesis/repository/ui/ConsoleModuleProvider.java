@@ -14,15 +14,17 @@ import build.jenesis.repository.icon.IconContributor;
  *
  * <h2>Contract</h2>
  * <ol>
- * <li><b>Thread-safety.</b> {@link #name()}, {@link #configuration()} and {@link #navEntries()} are pure declarations
+ * <li><b>Thread-safety.</b> {@link #name()}, {@link #configuration()}, {@link #navEntries()} and
+ *     {@link #repositoryPages()} are pure declarations
  *     the console may call from any thread, including concurrently. A provider holds no mutable state and opens
  *     nothing: it is constructed during context refresh, before any of its own beans exist.</li>
- * <li><b>Idempotency / replay.</b> All three are constant functions of what is installed, not of when they are called
+ * <li><b>Idempotency / replay.</b> All four are constant functions of what is installed, not of when they are called
  *     or of what is stored: two calls in one JVM return the same name, the same class literal and an equal nav list.
  *     The nav is discovered once at startup and rendered per request, so a list that varied by call would show a
  *     different shell to two users of one deployment.</li>
  * <li><b>Absence sentinel.</b> {@code null} is never a legal return. A module with no user-facing screen (a sign-in
- *     mechanism, the machine-facing SCIM API) returns the empty {@link #navEntries()} list, never {@code null} and
+ *     mechanism, the machine-facing SCIM API) returns the empty {@link #navEntries()} and {@link #repositoryPages()}
+ *     lists, never {@code null} and
  *     never a placeholder entry. Absence of a capability is expressed by the module being absent from the path -
  *     which is itself the capability gate the shell reads (&sect;3).</li>
  * <li><b>Selection failure (&sect;9).</b> This is an {@code ALL} SPI: every installed module contributes and there is
@@ -36,10 +38,10 @@ import build.jenesis.repository.icon.IconContributor;
  *     deployment's installed console surface, not a tenant's. Its {@link NavEntry#access()} floor is a coarse role
  *     gate the shell resolves server-side against the current tenant per request; a finer, per-tenant capability
  *     stays the screen's own concern behind the link.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing here is best-effort. An exception from any of the three methods, or
+ * <li><b>Error visibility (&sect;9).</b> Nothing here is best-effort. An exception from any of the four methods, or
  *     a {@link #configuration()} class that cannot be loaded or instantiated, fails the context refresh rather than
  *     dropping one module quietly out of a console that then renders a screen-less shell.</li>
- * <li><b>Read purity (&sect;10).</b> None of the three performs I/O. They are declarations read during context
+ * <li><b>Read purity (&sect;10).</b> None of the four performs I/O. They are declarations read during context
  *     refresh and at nav-discovery time; a provider that reached the store or the network to decide its name or its
  *     links would make the rendered shell depend on something else being up.</li>
  * <li><b>Lifecycle / ownership.</b> {@code ServiceLoader} instances are created by {@link #installed()} and
@@ -53,12 +55,13 @@ import build.jenesis.repository.icon.IconContributor;
  *     providers by name, and a module's own {@link #navEntries()} order is the render order of its links among
  *     themselves. A module must not depend on being imported before or after a peer.</li>
  * <li><b>Nav-entry shape.</b> An entry's {@link NavEntry#label()} is non-blank display text and its
- *     {@link NavEntry#path()} is an <em>application-root-relative path</em> such as {@code /scim} - never a bare
- *     screen id - and unique across installed modules so two modules never render two links to one place. That is the
- *     entry's single meaning, and the accessor is named for it: the shell resolves it as the {@code th:each} link
- *     target, and a single-page consumer would derive its own in-page id <em>from</em> the
- *     path rather than reading the path as one. Nothing sanitises a label beyond the template's own escaping, so a
- *     module is answering for its own text.</li>
+ *     {@link NavEntry#path()} is an <em>application-root-relative path</em> such as {@code /walks} - never a bare
+ *     screen id - and unique across installed modules so two modules never render two links to one place. A
+ *     {@link RepositoryPage#path()} is the same thing below {@code /repositories/<name>}, unique among the pages of a
+ *     repository. The shell links a path and matches the request against it to decide where the reader is. Nothing
+ *     sanitises a label beyond the template's own escaping, so a module is answering for its own text. A
+ *     {@code requires} names a capability the console answers; one it does not know is a packaging error, and the
+ *     module's pages are withheld with a warning rather than linked to a screen that cannot say what is missing.</li>
  * <li><b>Bounded work / cancellation.</b> Work is bounded by the number of installed modules: each provider is
  *     instantiated once and asked for its declarations once per pass. Nothing blocks and no timeout applies.</li>
  * </ol>
@@ -82,6 +85,13 @@ public interface ConsoleModuleProvider extends IconContributor {
      *  sign-in mechanism or the machine-facing SCIM API, contributes none); a module with a screen names its own link
      *  here, and it appears exactly when the module is installed. */
     default List<NavEntry> navEntries() {
+        return List.of();
+    }
+
+    /** The pages this module adds to every repository, listed beside the content whenever a reader is inside one.
+     *  Empty by default; a module with a repository-scoped screen names it here, and it appears exactly when the
+     *  module is installed and the reader's role and the page's {@code requires} allow. */
+    default List<RepositoryPage> repositoryPages() {
         return List.of();
     }
 

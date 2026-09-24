@@ -156,7 +156,7 @@ public class ComplianceScreenController {
     public String quarantine(@PathVariable("repo") String repo,
                              @RequestParam(name = "after", required = false) String after,
                              Model model) throws IOException {
-        // The review queue, one page at a time: the hub shows its head, this screen pages the rest by pointer key.
+        // The review queue, one page at a time, paged by pointer key.
         ComplianceReview.QuarantinePage page = compliance.quarantine(repo, after, QUARANTINE_PAGE);
         model.addAttribute("repo", repo);
         model.addAttribute("quarantine", page.holds());
@@ -207,7 +207,7 @@ public class ComplianceScreenController {
                                      RedirectAttributes redirect) throws IOException {
         compliance.releaseQuarantined(repo, path);
         redirect.addFlashAttribute("message", "Released " + path + " into the layout.");
-        return "redirect:/repositories/" + repo;
+        return "redirect:/repositories/" + repo + "/quarantine";
     }
 
     @PostMapping("/repositories/{repo}/quarantine/discard")
@@ -218,45 +218,24 @@ public class ComplianceScreenController {
         redirect.addFlashAttribute("message", discarded
                 ? "Discarded " + path + "."
                 : "Nothing is held at " + path + " - it was already released or discarded.");
-        return "redirect:/repositories/" + repo;
+        return "redirect:/repositories/" + repo + "/quarantine";
     }
 
 
-    /** How many rows the hub's two panels show before pointing at the screen that pages the rest. */
-    private static final int HUB_WINDOW = 50;
-
-    /** How many refusals the hub's panel shows - a bounded read of the durable ledger, never a re-screen. */
-    private static final int REFUSALS = 20;
+    /** How many refusals the Refused page shows - a bounded read of the durable ledger, never a re-screen. */
+    private static final int REFUSALS = 200;
 
     /**
-     * The hub's quarantine panel, fetched rather than rendered into the page.
+     * What the gate refused outright, most recent first.
      *
-     * <p>The hub used to compute this on every render of a repository's first screen, whether or not anything was
-     * installed to answer it - a cost that grows with what the feature holds, on exactly the screen a large
-     * deployment opens most. It is an {@code hx-get} now: asked for only when this module is installed, and paid
-     * for only then.
+     * <p>A refused body keeps no bytes and links no pointer, so it is never in the review queue and the durable log
+     * row is its only record - which makes this page an operator's only sight of a denied publish.
      */
-    @GetMapping("/repositories/{repo}/panels/quarantine")
-    public String quarantinePanel(@PathVariable("repo") String repo, Model model) throws IOException {
-        ComplianceReview.QuarantinePage page = compliance.quarantine(repo, null, HUB_WINDOW);
-        model.addAttribute("repo", repo);
-        model.addAttribute("quarantine", page.holds());
-        model.addAttribute("quarantineMore", page.next() != null);
-        model.addAttribute("hubWindow", HUB_WINDOW);
-        return QUALIFIER + "/hub-quarantine :: panel";
-    }
-
-    /**
-     * The hub's refusals panel, on the same terms.
-     *
-     * <p>A refused body keeps no bytes and links no pointer, so it is never in the hold queue and the durable log
-     * row is its only record - which makes this panel the operator's only sight of a denied publish.
-     */
-    @GetMapping("/repositories/{repo}/panels/refusals")
-    public String refusalsPanel(@PathVariable("repo") String repo, Model model) throws IOException {
+    @GetMapping("/repositories/{repo}/refusals")
+    public String refusals(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);
         model.addAttribute("refusals", compliance.refusals(repo, REFUSALS));
-        return QUALIFIER + "/hub-refusals :: panel";
+        model.addAttribute("pageSize", REFUSALS);
+        return QUALIFIER + "/refusals";
     }
-
 }

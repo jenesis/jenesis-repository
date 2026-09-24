@@ -3,13 +3,13 @@
 <head th:replace="~{fragments :: head('First-run setup')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('First-run setup')}"></header>
     <p><small>The decisions a new deployment should make, in order. Every value here is the same runtime setting the
         <a th:href="@{/settings}">settings screen</a>, the <code>/api/settings</code> endpoint and the CLI edit, shown
         with its own documentation, its default and its effective value; a save applies exactly as it would there.
-        Nothing on this screen has to be answered now - skip it and it stays reachable under Administration.</small></p>
+        Nothing on this screen has to be answered now - skip it and it stays reachable as Setup, under Settings.</small></p>
 
     <form method="post" th:action="@{/setup/skip}" class="setup-skip">
         <button class="secondary outline" type="submit">Skip for now</button>
@@ -48,5 +48,6 @@
     <p th:unless="${wizardOn}"><small>The first-run redirect is switched off for this deployment; this screen was
         opened from the menu.</small></p>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

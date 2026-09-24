@@ -36,8 +36,8 @@ public final class ConsoleSettingsContributor implements SettingsContributor {
                                 + "compliance verdicts, the advisory feeds, retention. On by default, because the "
                                 + "operator the screen is for is the one who does not know to look for it; a "
                                 + "deployment provisioned from configuration, rebuilt by CI or started for the "
-                                + "hundredth time switches it off here, once. The screen stays reachable from the "
-                                + "Administration menu either way, and this is not what says setup is finished - "
+                                + "hundredth time switches it off here, once. The screen stays reachable as Setup, "
+                                + "under Settings, either way, and this is not what says setup is finished - "
                                 + "that is whether the starter credential is still in use. Applies live.",
                         Setting.Kind.BOOLEAN, SetupWizard.ON_BY_DEFAULT, true));
     }

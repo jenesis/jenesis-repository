@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{base :: head('Metrics overview', 'jenesis-repository')}"></head>
+<head th:replace="~{base :: head('Metrics overview', ${product})}"></head>
 <body>
-<header th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository')}"></header>
-<main id="main" class="container">
+<th:block th:replace="~{base :: shell}"></th:block>
+<main id="main">
     <div th:replace="~{base :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Metrics overview')}"></header>
     <p><small>Every metric, health state and background-task status this deployment reports, in one plain overview —
@@ -117,5 +117,6 @@
         });
     })();
 </script>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head th:replace="~{fragments :: head(${project.name})}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <p><a href="/projects">&larr; All projects</a></p>
     <header th:replace="~{base :: pageHeader(${project.name})}"></header>
@@ -70,5 +70,6 @@
             project. Manage them on the <a href="/credentials">Credentials</a> page.</p>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

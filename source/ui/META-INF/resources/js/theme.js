@@ -1,65 +1,56 @@
 /*
- * theme.js — the shared light/dark theme switch for both consoles.
+ * theme.js - the light/dark switch, working the way the Jenesis documentation's does.
  *
- * Pico already themes by the `data-theme` attribute on <html> and falls back to the OS preference
- * (prefers-color-scheme) when the attribute is absent, and app.css defines its status tokens for both. This script
- * only adds the user's explicit choice on top: it applies a stored override at parse time (the shell loads it
- * without `defer`, so the first paint is already in the chosen theme - no flash), and wires any control marked
- * [data-theme-toggle] to cycle and persist it. "auto" removes the override, handing the decision back to the OS.
+ * Until a reader chooses, the page follows the system's preference: Pico themes by the `data-theme` attribute and
+ * falls back to prefers-color-scheme when it is absent. The switch flips between the two themes and remembers the
+ * choice. The shell loads this without `defer`, so a stored choice is applied before the first paint and a dark
+ * reader never sees a flash of the light page.
  *
- * The control is an icon button rather than a three-option select, and which glyph it shows is decided in CSS from
- * the `data-theme` attribute this script sets - so the button is already right at first paint and this script never
- * touches its appearance. What it does own is the button's *name*: a glyph says nothing to a reader who cannot see
- * it, so the label carries the current state and the title says what the next click does.
+ * The button's glyph never changes; its name does, because a glyph says nothing to a reader who cannot see it.
  */
 (function () {
-    var STATES = ['auto', 'light', 'dark'];
     var KEY = 'jenesis-theme';
 
     function stored() {
         try {
             var value = localStorage.getItem(KEY);
-            return value === 'light' || value === 'dark' ? value : 'auto';
+            return value === 'light' || value === 'dark' ? value : null;
         } catch (ignored) {
-            // Storage can be unavailable (privacy mode); the console then simply follows the OS preference.
-            return 'auto';
+            // Storage can be unavailable (privacy mode); the page then simply follows the system.
+            return null;
         }
     }
 
-    function apply(choice) {
-        if (choice === 'light' || choice === 'dark') {
-            document.documentElement.setAttribute('data-theme', choice);
-        } else {
-            document.documentElement.removeAttribute('data-theme');
+    function current() {
+        var chosen = document.documentElement.getAttribute('data-theme');
+        if (chosen === 'light' || chosen === 'dark') {
+            return chosen;
         }
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
 
-    function persist(choice) {
-        try {
-            if (choice === 'light' || choice === 'dark') {
-                localStorage.setItem(KEY, choice);
-            } else {
-                localStorage.removeItem(KEY);
-            }
-        } catch (ignored) {
-        }
+    function describe(button) {
+        var next = current() === 'dark' ? 'light' : 'dark';
+        button.setAttribute('aria-label', 'Switch to the ' + next + ' theme');
+        button.setAttribute('title', 'Switch to the ' + next + ' theme');
     }
 
-    function describe(button, choice) {
-        var next = STATES[(STATES.indexOf(choice) + 1) % STATES.length];
-        button.setAttribute('aria-label', 'Color theme: ' + choice);
-        button.setAttribute('title', 'Color theme: ' + choice + ' — switch to ' + next);
+    var initial = stored();
+    if (initial) {
+        document.documentElement.setAttribute('data-theme', initial);
     }
 
-    apply(stored());
     document.addEventListener('DOMContentLoaded', function () {
         Array.prototype.forEach.call(document.querySelectorAll('[data-theme-toggle]'), function (button) {
-            describe(button, stored());
+            describe(button);
             button.addEventListener('click', function () {
-                var choice = STATES[(STATES.indexOf(stored()) + 1) % STATES.length];
-                persist(choice);
-                apply(choice);
-                describe(button, choice);
+                var next = current() === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', next);
+                try {
+                    localStorage.setItem(KEY, next);
+                } catch (ignored) {
+                }
+                describe(button);
             });
         });
     });

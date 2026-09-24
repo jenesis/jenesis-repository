@@ -17,6 +17,9 @@ import org.springframework.context.annotation.Import;
  * exist had drifted: one pointed form login at a page carrying no credential form, so that console could not be
  * signed into at all.
  *
+ * <p>{@link DevSources} rides here on the same terms: inert outside the {@code dev} profile, and there it reads the
+ * console's templates and static files from a source checkout, so the look can be worked on without a build.
+ *
  * <p>{@link NoAccessController} rides here for the same reason as the sign-in page: it is the destination of every
  * console chain's access check, so a composition that imported the others and not this one would refuse a principal
  * that holds nothing and then answer {@code 404} at the screen that explains why.
@@ -27,6 +30,7 @@ import org.springframework.context.annotation.Import;
  */
 @Configuration(proxyBeanMethods = false)
 @Import({LoginController.class, NoAccessController.class, SpiCatalogScreenController.class,
-        PostureScreenController.class, ObservabilityScreenController.class, DevConsoleSecurity.class})
+        PostureScreenController.class, ObservabilityScreenController.class, DevConsoleSecurity.class,
+        DevSources.class})
 public class ConsoleScreensConfig {
 }

@@ -35,13 +35,12 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Controller
 public class RepositoryAdminController {
 
-    /** How many recent releases the detail hub renders - a bound so the overview never buffers or emits a row per
-     *  release of a repository with a very large published set; the full, paged list is the browse page. */
+    /** How many recent releases the overview renders - a bound so it never buffers or emits a row per release of a
+     *  repository with a very large published set; the full, paged list is the browse page. */
     private static final int DETAIL_RELEASES = 200;
 
 
-    /** How many rows a hub panel shows of a set that can grow without bound - staging, quarantine, forwarding -
-     *  before it points at the screen that pages the rest. */
+    /** How many staging ids the staging page shows before pointing at the staging API, which pages the rest. */
     private static final int HUB_WINDOW = 50;
 
 
@@ -155,54 +154,72 @@ public class RepositoryAdminController {
         return "redirect:/repositories";
     }
 
+    /**
+     * A repository's overview: how it is routed, whether it hardens its proxy, what stands between it and its
+     * collector, its published index and its most recent releases. Everything else about a repository is a page of
+     * its own beside this one, listed in the sidebar - it was one screen of thirteen collapsible sections, on which a
+     * healthy repository and one needing attention looked the same.
+     *
+     * <p>Every read here is a bounded window or a stored result, so the first screen of a repository renders in the
+     * same time over a million releases as over ten. Nothing walks the published set.
+     */
     @GetMapping("/repositories/{repo}")
     public String detail(@PathVariable("repo") String repo, Model model) throws IOException {
-        RetentionPolicy policy = lifecycle.retention(repo);
         model.addAttribute("repo", repo);
-        // A bounded recent slice, not the whole published set: the detail hub is an overview (the full, paged list is
-        // the browse page), so a repository with a very large published set never buffers or renders every release.
-        // Every panel of the hub is a bounded window or a stored result: the hub is the first screen of a repository
-        // and renders in the same time over a million releases as over ten. Nothing here walks the published set.
         RepositoryAdmin.Releases releases = repositories.recentReleases(repo, DETAIL_RELEASES);
         model.addAttribute("releases", releases.shown());
         model.addAttribute("releasesMore", releases.more());
-        RepositoryLifecycle.StagingWindow staging = lifecycle.stagingWindow(repo, HUB_WINDOW);
-        model.addAttribute("staging", staging.views());
-        model.addAttribute("stagingMore", staging.more());
-        model.addAttribute("stagedCountCap", RepositoryLifecycle.STAGED_COUNT_CAP);
-        // it is never in the hold queue above and the durable log row is its only record - which makes this
-        // panel the operator's only sight of a denied publish, and why it is not gated on the repository being a
-        // hardening proxy the way the hardened panel below is.
-        // The hardened proxy leg's badge and explanation: whether this repo enforces full-body upstream screening. Its
-        // typed structural refusals are rows of the refusals panel rather than a second list of their own.
+        // The hardened proxy leg: whether this repository screens every upstream body in full. Its typed structural
+        // refusals are rows of the Refused page rather than a list of their own.
         model.addAttribute("hardened", settings.hardened(repo));
-        // The parsed shape badges + the valid-but-risky warning notice on the detail hub (items 2/4).
         model.addAttribute("shape", settings.shape(repo));
-        model.addAttribute("pins", lifecycle.pins(repo));
         // The ecosystems this repository records that no installed format can place - what stands between the
-        // repository and its collector. Named here with the explicit way out, so the refusal an operator meets in
-        // the cleanup report is actionable where they read it.
+        // repository and its collector - named with the explicit way out, and what the last retirement of each did,
+        // since a retirement runs off the request and the button would otherwise look as though it did nothing.
         SortedSet<String> unplaceable = lifecycle.unplaceableEcosystems(repo);
         model.addAttribute("unplaceable", unplaceable);
-        // What the last (or running) retirement of each did. A retirement runs off the request, so without this
-        // the button would look as though it had done nothing.
         Map<String, StoredReport.Report> retirements = new LinkedHashMap<>();
         for (String ecosystem : unplaceable) {
             lifecycle.forgetOutcome(repo, ecosystem).ifPresent(report -> retirements.put(ecosystem, report));
         }
         model.addAttribute("retirements", retirements);
-        model.addAttribute("ecosystems", lifecycle.ecosystems(repo));
-        model.addAttribute("plan", lifecycle.retentionAvailable() ? lifecycle.plan(repo).orElse(null) : null);
-        model.addAttribute("lastCleanup", lifecycle.retentionAvailable() ? lifecycle.lastCleanup(repo).orElse(null)
-                : null);
-        model.addAttribute("hubWindow", HUB_WINDOW);
         model.addAttribute("index", browse.publishedIndex(repo));
-        model.addAttribute("retention", new RetentionView(policy.keepLast(),
-                text(policy.maxAge()), text(policy.prereleaseExpiry()), text(policy.notDownloadedFor())));
         return "repository";
     }
 
+    /** The repository's staging ids, a bounded window of them, each promoted or dropped from here. */
+    @GetMapping("/repositories/{repo}/staging")
+    public String staging(@PathVariable("repo") String repo, Model model) throws IOException {
+        model.addAttribute("repo", repo);
+        RepositoryLifecycle.StagingWindow staging = lifecycle.stagingWindow(repo, HUB_WINDOW);
+        model.addAttribute("staging", staging.views());
+        model.addAttribute("stagingMore", staging.more());
+        model.addAttribute("stagedCountCap", RepositoryLifecycle.STAGED_COUNT_CAP);
+        model.addAttribute("hubWindow", HUB_WINDOW);
+        return "repository-staging";
+    }
 
+    /** The versions pinned against eviction, and the form that pins another. */
+    @GetMapping("/repositories/{repo}/pins")
+    public String pins(@PathVariable("repo") String repo, Model model) throws IOException {
+        model.addAttribute("repo", repo);
+        model.addAttribute("pins", lifecycle.pins(repo));
+        model.addAttribute("ecosystems", lifecycle.ecosystems(repo));
+        return "repository-pins";
+    }
+
+    /** The retention policy, and the cleanup it drives: both stored results, the last preview and the last sweep. */
+    @GetMapping("/repositories/{repo}/retention")
+    public String retention(@PathVariable("repo") String repo, Model model) throws IOException {
+        RetentionPolicy policy = lifecycle.retention(repo);
+        model.addAttribute("repo", repo);
+        model.addAttribute("retention", new RetentionView(policy.keepLast(),
+                text(policy.maxAge()), text(policy.prereleaseExpiry()), text(policy.notDownloadedFor())));
+        model.addAttribute("plan", lifecycle.retentionAvailable() ? lifecycle.plan(repo).orElse(null) : null);
+        model.addAttribute("lastCleanup", lifecycle.retentionAvailable() ? lifecycle.lastCleanup(repo).orElse(null)
+                : null);
+        return "repository-retention";
+    }
 
     @GetMapping("/repositories/{repo}/browse")
     public String browse(@PathVariable("repo") String repo,
@@ -471,7 +488,7 @@ public class RepositoryAdminController {
                                RedirectAttributes redirect) throws IOException {
         lifecycle.setRetention(repo, RetentionPolicy.parse(keepLast, maxAge, prereleaseExpiry, notDownloadedFor));
         redirect.addFlashAttribute("message", "Retention updated.");
-        return "redirect:/repositories/" + repo;
+        return "redirect:/repositories/" + repo + "/retention";
     }
 
     @PostMapping("/repositories/{repo}/pins")
@@ -482,7 +499,7 @@ public class RepositoryAdminController {
                       RedirectAttributes redirect) throws IOException {
         lifecycle.pin(repo, ecosystem, coordinate, version);
         redirect.addFlashAttribute("message", "Pinned " + coordinate + ":" + version + ".");
-        return "redirect:/repositories/" + repo;
+        return "redirect:/repositories/" + repo + "/pins";
     }
 
     @PostMapping("/repositories/{repo}/pins/remove")
@@ -493,7 +510,7 @@ public class RepositoryAdminController {
                         RedirectAttributes redirect) throws IOException {
         lifecycle.unpin(repo, ecosystem, coordinate, version);
         redirect.addFlashAttribute("message", "Unpinned " + coordinate + ":" + version + ".");
-        return "redirect:/repositories/" + repo;
+        return "redirect:/repositories/" + repo + "/pins";
     }
 
     @PostMapping("/repositories/{repo}/staging/{id}/promote")
@@ -501,7 +518,7 @@ public class RepositoryAdminController {
                           RedirectAttributes redirect) throws IOException {
         lifecycle.promote(repo, id);
         redirect.addFlashAttribute("message", "Promoted staging " + id + ".");
-        return "redirect:/repositories/" + repo;
+        return "redirect:/repositories/" + repo + "/staging";
     }
 
     @PostMapping("/repositories/{repo}/staging/{id}/drop")
@@ -509,7 +526,7 @@ public class RepositoryAdminController {
                        RedirectAttributes redirect) throws IOException {
         lifecycle.drop(repo, id);
         redirect.addFlashAttribute("message", "Dropped staging " + id + ".");
-        return "redirect:/repositories/" + repo;
+        return "redirect:/repositories/" + repo + "/staging";
     }
 
     @PostMapping("/repositories/{repo}/cleanup")
@@ -518,7 +535,7 @@ public class RepositoryAdminController {
         redirect.addFlashAttribute("message", lifecycle.cleanup(repo)
                 ? "Cleanup started; its result appears under Cleanup when it finishes."
                 : "A cleanup is already running; its result appears under Cleanup when it finishes.");
-        return "redirect:/repositories/" + repo;
+        return "redirect:/repositories/" + repo + "/retention";
     }
 
     @PostMapping("/repositories/{repo}/cleanup/preview")
@@ -526,7 +543,7 @@ public class RepositoryAdminController {
         redirect.addFlashAttribute("message", lifecycle.previewCleanup(repo)
                 ? "Cleanup preview started; it appears under Cleanup when it finishes."
                 : "A cleanup preview is already running.");
-        return "redirect:/repositories/" + repo;
+        return "redirect:/repositories/" + repo + "/retention";
     }
 
 

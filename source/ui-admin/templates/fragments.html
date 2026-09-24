@@ -4,7 +4,7 @@
     <!--/* The shared list of what every page loads - one place, both consoles. This was a second copy until it
          proved the point: a script added to the shared shell was simply missing here. Only the admin-specific
          stylesheet below is local. */-->
-    <th:block th:replace="~{base :: headContents(${title}, 'jenesis-repository')}"></th:block>
+    <th:block th:replace="~{base :: headContents(${title}, ${product ?: 'Jenesis Repository'})}"></th:block>
     <style>
         code { word-break: break-all; }
         /* SPI-provided format icons (W4.2b): a uniform square box; the inlined SVG fills it and, being
@@ -72,7 +72,7 @@
      as a fragment rather than inlined at its thirty call sites because it is where this console's own name for the
      product is stated. */-->
 <th:block th:fragment="nav">
-    <th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository')}"></th:block>
+    <th:block th:replace="~{base :: shell}"></th:block>
 </th:block>
 <!--/* Flash messages on the shared alert treatment (base :: alert): announced as status/alert, tinted from the
      status palette in both themes - never a hard-coded colour. th:if sits on a wrapping block because fragment

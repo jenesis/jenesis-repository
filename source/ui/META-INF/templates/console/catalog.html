@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{base :: head('Installed providers', 'jenesis-repository')}"></head>
+<head th:replace="~{base :: head('Installed providers', ${product})}"></head>
 <body>
-<th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository')}"></th:block>
+<th:block th:replace="~{base :: shell}"></th:block>
 
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{base :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Installed providers')}"></header>
     <p><small>Every capability this deployment carries is a discovered <strong>SPI</strong> (a plug-in contract) with
@@ -55,5 +55,6 @@
         </div>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

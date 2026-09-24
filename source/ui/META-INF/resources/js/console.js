@@ -143,3 +143,34 @@
 
     document.addEventListener('DOMContentLoaded', schedule);
 })();
+
+/*
+ * The Menu button of a narrow screen.
+ *
+ * Below the documentation's breakpoint the header has no room for the groups, so the sidebar carries them and folds
+ * away behind this button, as the documentation's chapter list does. On a wide screen the sidebar is always shown
+ * and the button is hidden by the stylesheet. Without scripting the sidebar is simply always shown.
+ */
+(function () {
+    'use strict';
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var button = document.querySelector('[data-menu-toggle]');
+        var sidebar = document.getElementById('app-sidebar');
+        if (!button || !sidebar || !window.matchMedia) {
+            return;
+        }
+        var narrow = window.matchMedia('(max-width: 48rem)');
+
+        function sync() {
+            sidebar.hidden = narrow.matches && button.getAttribute('aria-expanded') !== 'true';
+        }
+
+        button.addEventListener('click', function () {
+            button.setAttribute('aria-expanded', String(button.getAttribute('aria-expanded') !== 'true'));
+            sync();
+        });
+        narrow.addEventListener('change', sync);
+        sync();
+    });
+})();

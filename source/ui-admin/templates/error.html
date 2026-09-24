@@ -3,7 +3,7 @@
 <head th:replace="~{fragments :: head('Error')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <article>
         <!--/* The page header is the base module's shared fragment (resolved cross-module from its
              META-INF/templates through SharedShellConfig), not a local copy. */-->
@@ -14,5 +14,6 @@
         <a href="/projects" role="button">Back to projects</a>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

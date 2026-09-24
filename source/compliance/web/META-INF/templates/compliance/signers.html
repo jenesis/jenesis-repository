@@ -8,12 +8,9 @@
 <head th:replace="~{fragments :: head('Signers')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Signers')}"></header>
-    <p>
-        <a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
-    </p>
 
     <article>
         <p><small>The identities whose trusted signatures the gate accepted on this repository's versions,
@@ -46,5 +43,6 @@
         </th:block>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

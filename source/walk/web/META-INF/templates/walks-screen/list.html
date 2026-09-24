@@ -3,7 +3,7 @@
 <head th:replace="~{fragments :: head('Walks')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Walks of the store')}"></header>
 
@@ -104,5 +104,6 @@
         <p><small>The default document, for reference: <code th:text="${defaultDocument}">[]</code></small></p>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

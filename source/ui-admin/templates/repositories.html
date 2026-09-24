@@ -3,7 +3,7 @@
 <head th:replace="~{fragments :: head('Repositories')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Repositories')}"></header>
     <p><small>Named artifact repositories in this tenant. Publishing creates them; open one to browse its
@@ -86,5 +86,6 @@
         </form>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

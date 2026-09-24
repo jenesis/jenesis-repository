@@ -17,7 +17,7 @@
 <head th:replace="~{fragments :: head('Browse')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <!--/* The browse's single navigation spine (UI.md §5): repositories list -> this repository's detail hub ->
          the browse root -> one crumb per path segment. It folds in the affordance that used to be a separate link
@@ -165,5 +165,6 @@
         </th:block>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

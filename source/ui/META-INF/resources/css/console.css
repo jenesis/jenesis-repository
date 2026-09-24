@@ -1,0 +1,985 @@
+/*
+ * console.css - the Jenesis Repository console, over the vendored Pico.
+ *
+ * The console is laid out the way the Jenesis documentation at jenesis.build is, so that somebody who reads one
+ * finds their way around the other: a sticky bar with the brand on the left and the first navigation level on the
+ * right, the second level listed beside the content, the content on one raised sheet, headings in Archivo and a
+ * one-line colophon at the foot. It is this console's own stylesheet - it takes the site's look, not its files -
+ * and like the site it leaves Pico's colours alone, so links and controls are Pico's blue in both themes.
+ *
+ * The frame is a grid on <body>. The shell emits the header and the sidebar, each page emits its own <main> and
+ * the footer line, and the grid places the four wherever they sit in the document - which is what lets a page
+ * keep owning its <main> while the shell owns everything around it.
+ */
+
+@font-face {
+    font-family: "Archivo";
+    src: url("../fonts/Archivo-ExtraBold.ttf") format("truetype");
+    font-weight: 800;
+    font-display: swap;
+}
+
+/* ---- Tokens ----------------------------------------------------------------------------------------------- */
+:root {
+    --app-font-size-xs: 0.75rem;
+    --app-font-size-sm: 0.875rem;
+    --app-font-size-base: 1rem;
+    --app-font-size-lg: 1.25rem;
+    --app-font-size-xl: 1.5rem;
+    --app-font-size-2xl: 2rem;
+
+    --app-space-1: 0.25rem;
+    --app-space-2: 0.5rem;
+    --app-space-3: 0.75rem;
+    --app-space-4: 1rem;
+    --app-space-5: 1.5rem;
+    --app-space-6: 2rem;
+
+    --app-radius-sm: 0.25rem;
+    --app-radius-md: 0.5rem;
+    --app-radius-lg: 0.75rem;
+
+    --app-icon-size: 1.25rem;
+
+    /* The frame: the page is as wide as the documentation's, and so is its sidebar. */
+    --app-header-height: 3.5rem;
+    --app-sidebar-width: 15rem;
+    --app-page-max: 80rem;
+    /* How far below the top a sticky sidebar starts: the header, and the notice strip when a page carries one. */
+    --app-sticky-top: var(--app-header-height);
+
+    /* Status: the semantic colours of a badge, a notice and an alert, chosen for WCAG AA on the card background of
+       each theme. Colour is never the only signal - the text always says it, and a badge's shape says it again. */
+    --app-status-pass-bg: #d8f3dc;
+    --app-status-pass-fg: #1b4332;
+    --app-status-warn-bg: #fff3cd;
+    --app-status-warn-fg: #664d03;
+    --app-status-danger-bg: #f8d7da;
+    --app-status-danger-fg: #842029;
+    --app-status-info-bg: #cfe2ff;
+    --app-status-info-fg: #084298;
+    --app-status-muted-bg: var(--pico-muted-border-color);
+    --app-status-muted-fg: var(--pico-muted-color);
+
+    /* The icon set, as mask sources: stroke-drawn on one 24x24 grid, painted with currentColor. */
+    --app-icon-check: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>');
+    --app-icon-warn: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 1.7 21h20.6z"/><path d="M12 9v5"/><path d="M12 17.5v.5"/></svg>');
+    --app-icon-cross: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>');
+    --app-icon-info: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 11v6"/><path d="M12 7.5v.5"/></svg>');
+    --app-icon-exit: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h3"/><path d="M15 7.5l4.5 4.5L15 16.5"/><path d="M9 12h10.5"/></svg>');
+}
+
+/* The dark status pairs, for an explicit dark choice and for the system's when no choice was made. The selectors
+   match Pico's own theme selectors, so these win where Pico's would. */
+[data-theme="dark"] {
+    --app-status-pass-bg: #14351f;
+    --app-status-pass-fg: #a8e6bf;
+    --app-status-warn-bg: #3d3210;
+    --app-status-warn-fg: #ffe08a;
+    --app-status-danger-bg: #3d1418;
+    --app-status-danger-fg: #f5a7ae;
+    --app-status-info-bg: #10243f;
+    --app-status-info-fg: #9dc3ff;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --app-status-pass-bg: #14351f;
+        --app-status-pass-fg: #a8e6bf;
+        --app-status-warn-bg: #3d3210;
+        --app-status-warn-fg: #ffe08a;
+        --app-status-danger-bg: #3d1418;
+        --app-status-danger-fg: #f5a7ae;
+        --app-status-info-bg: #10243f;
+        --app-status-info-fg: #9dc3ff;
+    }
+}
+
+/* ---- Type ------------------------------------------------------------------------------------------------- */
+h1, h2, h3, .app-brand__name {
+    font-family: "Archivo", var(--pico-font-family);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+}
+
+body {
+    --pico-line-height: 1.6;
+}
+
+/* ---- Accessibility baseline ------------------------------------------------------------------------------- */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--pico-primary);
+    outline-offset: 2px;
+    border-radius: var(--app-radius-sm);
+}
+
+/* An in-page jump lands below the sticky header rather than under it. */
+html {
+    scroll-padding-top: calc(var(--app-sticky-top) + var(--app-space-4));
+}
+
+.app-skip-link {
+    position: absolute;
+    left: -999px;
+    top: 0;
+    z-index: 1000;
+    padding: var(--app-space-2) var(--app-space-4);
+    background: var(--pico-color);
+    color: var(--pico-background-color);
+    border-radius: 0 0 var(--app-radius-md) 0;
+}
+.app-skip-link:focus {
+    left: 0;
+}
+
+/* Screen-reader-only text. In flow rather than absolutely positioned: an absolute box takes its containing block
+   from the nearest positioned ancestor, and inside a scrolling <figure> that is the document, so the span widened
+   the page to wherever its column sat - measured at a 345px viewport as a 359px scroll width. */
+.app-sr-only {
+    display: inline-block;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ---- The frame -------------------------------------------------------------------------------------------- */
+body {
+    display: grid;
+    grid-template-columns:
+        [full-start] minmax(var(--app-space-4), 1fr)
+        [page-start] var(--app-sidebar-width)
+        [content-start] minmax(0, calc(var(--app-page-max) - var(--app-sidebar-width)))
+        [page-end] minmax(var(--app-space-4), 1fr) [full-end];
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+}
+body:has(.app-notice) {
+    --app-sticky-top: calc(var(--app-header-height) + 1.75rem);
+}
+
+.app-header {
+    grid-column: full;
+    grid-row: 1;
+}
+.app-sidebar {
+    grid-column: page-start / content-start;
+    grid-row: 2;
+}
+body > main {
+    grid-column: content-start / page-end;
+    grid-row: 2;
+    align-self: start;
+    min-width: 0;
+}
+/* A page with no sidebar - a sign-in page, or one rendered for somebody with nothing to navigate - takes the
+   whole width of the page. */
+body:not(:has(.app-sidebar)) > main {
+    grid-column: page;
+}
+.app-footer {
+    grid-column: page;
+    grid-row: 3;
+}
+
+/* ---- Header ----------------------------------------------------------------------------------------------- */
+.app-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding-block: 0;
+    background: var(--pico-background-color);
+    border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.app-header__inner {
+    display: flex;
+    align-items: center;
+    gap: var(--app-space-4);
+    max-width: var(--app-page-max);
+    height: var(--app-header-height);
+    margin: 0 auto;
+    padding: 0 var(--app-space-4);
+}
+
+.app-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-2);
+    flex: none;
+    color: inherit;
+    text-decoration: none;
+}
+.app-brand:hover {
+    color: inherit;
+}
+.app-brand__mark {
+    width: 28px;
+    height: 28px;
+}
+.app-brand__name {
+    font-size: var(--app-font-size-lg);
+    white-space: nowrap;
+}
+/* The mark is a single-colour drawing, shipped once per theme so it stays legible on either background. */
+.app-brand__mark--dark { display: none; }
+[data-theme="dark"] .app-brand__mark--light { display: none; }
+[data-theme="dark"] .app-brand__mark--dark { display: inline-block; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .app-brand__mark--light { display: none; }
+    :root:not([data-theme="light"]) .app-brand__mark--dark { display: inline-block; }
+}
+
+/* The tenant a reader is working in, beside the brand - where the documentation shows its repository link. It
+   links to the screen that switches it, and is shown only when there is something to switch to. */
+.app-tenant {
+    font-size: var(--app-font-size-sm);
+    color: var(--pico-muted-color);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.app-tenant:hover {
+    color: var(--pico-primary);
+}
+
+/* The first navigation level: one link per group, muted until it is the one a reader is in. */
+.app-groups {
+    display: flex;
+    gap: var(--app-space-4);
+    margin-left: auto;
+}
+.app-groups a {
+    font-size: var(--app-font-size-sm);
+    color: var(--pico-muted-color);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.app-groups a:hover,
+.app-groups a[aria-current] {
+    color: var(--pico-primary);
+}
+
+.app-header__session {
+    display: flex;
+    align-items: center;
+    gap: var(--app-space-3);
+    flex: none;
+    margin-left: auto;
+}
+.app-groups ~ .app-header__session {
+    margin-left: var(--app-space-2);
+}
+
+/* The posture count: a warning badge rather than a link in the text, because it is a count of things to fix. */
+.app-posture {
+    text-decoration: none;
+}
+.app-posture:hover {
+    text-decoration: underline;
+}
+
+/* The two small bordered controls of the bar: the theme switch and the menu, drawn as the documentation draws
+   them. */
+.app-theme-toggle,
+.app-menu-toggle,
+.app-signout__button {
+    width: auto;
+    margin: 0;
+    padding: var(--app-space-1) var(--app-space-3);
+    background: none;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--app-radius-md);
+    color: inherit;
+    font-size: var(--app-font-size-sm);
+    line-height: 1.2;
+    cursor: pointer;
+}
+.app-theme-toggle:hover,
+.app-menu-toggle:hover,
+.app-signout__button:hover {
+    background: none;
+    border-color: var(--pico-primary);
+    color: var(--pico-primary);
+}
+.app-menu-toggle {
+    display: none;
+    margin-left: auto;
+}
+
+/* The signed-in name is the control that ends the session, and the arrow after it is what says so. */
+.app-signout {
+    margin: 0;
+}
+.app-signout__button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-1);
+    border-color: transparent;
+}
+.app-signout__button .app-icon {
+    width: 0.95em;
+    height: 0.95em;
+    margin: 0;
+    -webkit-mask-image: var(--app-icon-exit);
+    mask-image: var(--app-icon-exit);
+}
+
+/* ---- The notice strip ------------------------------------------------------------------------------------- */
+/* What an operator should know wherever they have scrolled to - an unlicensed or read-only deployment - at the
+   top of the sticky header. Tinted from the status palette, so it holds its measured contrast in both themes. */
+.app-notice {
+    font-size: var(--app-font-size-xs);
+    padding-block: var(--app-space-1);
+    background: var(--app-status-info-bg);
+    color: var(--app-status-info-fg);
+}
+.app-notice > .container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--app-space-3);
+    max-width: var(--app-page-max);
+    margin: 0 auto;
+    padding: 0 var(--app-space-4);
+}
+.app-notice--warn { background: var(--app-status-warn-bg); color: var(--app-status-warn-fg); }
+.app-notice--danger { background: var(--app-status-danger-bg); color: var(--app-status-danger-fg); }
+.app-notice a { color: inherit; }
+
+/* ---- Sidebar ---------------------------------------------------------------------------------------------- */
+/* The second navigation level: the pages of the group a reader is in, or of the repository they opened. Sticky
+   and scrolling on its own, as the documentation's chapter list is. */
+.app-sidebar {
+    position: sticky;
+    top: calc(var(--app-sticky-top) + 1px);
+    align-self: start;
+    max-height: calc(100vh - var(--app-sticky-top) - 1px);
+    overflow-y: auto;
+    padding: var(--app-space-5) var(--app-space-4) var(--app-space-5) 0;
+    scrollbar-width: none;
+}
+.app-sidebar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+.app-sidebar nav ul {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    margin: 0 0 var(--app-space-4);
+    padding: 0;
+    list-style: none;
+}
+.app-sidebar nav li {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.app-sidebar nav a {
+    display: block;
+    margin: 0;
+    padding: var(--app-space-2) var(--app-space-3);
+    border-radius: var(--app-radius-sm);
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-sm);
+    text-decoration: none;
+}
+.app-sidebar nav a:hover {
+    color: var(--pico-color);
+    background: var(--pico-card-sectioning-background-color);
+}
+.app-sidebar nav a[aria-current] {
+    color: var(--pico-primary);
+    font-weight: 600;
+}
+.app-sidebar__back {
+    margin-bottom: var(--app-space-2);
+}
+.app-sidebar__title {
+    margin: 0 0 var(--app-space-2);
+    padding: 0 var(--app-space-3);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+.app-sidebar__heading {
+    margin: 0 0 var(--app-space-1);
+    padding: 0 var(--app-space-3);
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+/* The groups again, for a narrow screen where the header has no room for them. */
+.app-sidebar__groups {
+    display: none;
+}
+
+/* ---- Content ---------------------------------------------------------------------------------------------- */
+/* The page is one raised sheet, as a chapter of the documentation is, and a section within it is a run of text
+   under a rule rather than a card of its own - a page of cards inside a card reads as a dashboard, not a page. */
+body > main {
+    margin: var(--app-space-5) 0 var(--app-space-6);
+    padding: var(--app-space-5) var(--app-space-6) var(--app-space-6);
+    background: var(--pico-card-background-color);
+    border-radius: var(--pico-border-radius);
+    box-shadow: var(--pico-card-box-shadow);
+}
+body:has(.app-sidebar) > main {
+    margin-left: var(--app-space-4);
+}
+body > main article {
+    margin: var(--app-space-6) 0 0;
+    padding: var(--app-space-4) 0 0;
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+    border-top: 1px solid var(--pico-muted-border-color);
+}
+/* The first section under the page title needs no rule to set it apart: the title already does. */
+body > main > article:first-of-type {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+body > main article > header,
+body > main article > footer {
+    margin: 0 0 var(--app-space-3);
+    padding: 0;
+    background: none;
+    border: 0;
+}
+body > main h2 {
+    font-size: var(--app-font-size-xl);
+    margin: 0 0 var(--app-space-3);
+}
+body > main h3 {
+    font-size: var(--app-font-size-lg);
+    margin: var(--app-space-4) 0 var(--app-space-2);
+}
+
+/* A sign-in page is one narrow sheet in the middle of the page. */
+body > main.app-signin {
+    width: 100%;
+    max-width: 30rem;
+    margin: var(--app-space-6) auto;
+    justify-self: center;
+}
+body > main.app-signin h1 {
+    font-size: var(--app-font-size-2xl);
+    margin-bottom: var(--app-space-2);
+}
+.app-signin__lede {
+    margin-bottom: var(--app-space-5);
+    color: var(--pico-muted-color);
+}
+.app-signin__options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--app-space-2);
+}
+.app-signin__options [role="button"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--app-space-2);
+}
+.app-signin__foot {
+    margin-top: var(--app-space-5);
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-sm);
+}
+
+/* A wide table scrolls inside its own <figure>, never the page. */
+figure {
+    overflow-x: auto;
+}
+
+/* ---- Footer ----------------------------------------------------------------------------------------------- */
+/* A colophon rather than a footer bar: one small centred line naming the product and its edition. */
+.app-footer {
+    padding: 0 0 var(--app-space-5);
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-xs);
+    text-align: center;
+}
+.app-footer ul {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: baseline;
+    gap: var(--app-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.app-footer li {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.app-footer li + li::before {
+    content: "·";
+    margin-right: var(--app-space-2);
+}
+.app-footer a {
+    color: inherit;
+}
+.app-footer a:hover {
+    color: var(--pico-primary);
+}
+.app-footer small {
+    font-size: inherit;
+}
+
+/* ---- Page header ------------------------------------------------------------------------------------------ */
+.app-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--app-space-4);
+    margin-bottom: var(--app-space-5);
+}
+.app-page-header__heading {
+    margin: 0;
+}
+.app-page-header__title {
+    margin: 0;
+    font-size: var(--app-font-size-2xl);
+}
+.app-page-header__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--app-space-2);
+}
+.app-breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--app-space-1);
+    margin: 0 0 var(--app-space-1);
+    padding: 0;
+    list-style: none;
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-sm);
+}
+.app-breadcrumb li {
+    list-style: none;
+}
+.app-breadcrumb li + li::before {
+    content: "/";
+    margin-right: var(--app-space-1);
+    color: var(--pico-muted-border-color);
+}
+
+/* ---- Lists ------------------------------------------------------------------------------------------------ */
+.app-list {
+    margin: 0;
+}
+.app-list th {
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.app-list__name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-2);
+}
+.app-list__num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.app-tree-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin: 0 var(--app-space-1) 0 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--app-radius-sm);
+    color: var(--pico-muted-color);
+    line-height: 1;
+    cursor: pointer;
+}
+.app-tree-toggle:hover {
+    background: var(--pico-muted-border-color);
+}
+.app-tree-toggle.htmx-request {
+    cursor: progress;
+    opacity: 0.5;
+}
+
+/* ---- Contributor marks ------------------------------------------------------------------------------------ */
+/* The mark a plug-in lends the console, inlined so every one is sized alike and inherits the text colour. */
+.app-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-right: var(--app-space-2);
+    vertical-align: -0.2em;
+    color: var(--pico-muted-color);
+}
+.app-mark > svg {
+    width: 100%;
+    height: 100%;
+}
+/* A generated mark carries a tint as a second axis of identity; a contributor's own drawing never does. Twelve
+   hues, skipping the bands the status palette owns so no mark reads as an error. */
+.app-mark--t00 { color: hsl(25, 42%, 32%); }
+.app-mark--t01 { color: hsl(50, 42%, 32%); }
+.app-mark--t02 { color: hsl(75, 42%, 32%); }
+.app-mark--t03 { color: hsl(95, 42%, 32%); }
+.app-mark--t04 { color: hsl(150, 42%, 32%); }
+.app-mark--t05 { color: hsl(175, 42%, 32%); }
+.app-mark--t06 { color: hsl(200, 42%, 32%); }
+.app-mark--t07 { color: hsl(225, 42%, 32%); }
+.app-mark--t08 { color: hsl(250, 42%, 32%); }
+.app-mark--t09 { color: hsl(280, 42%, 32%); }
+.app-mark--t10 { color: hsl(310, 42%, 32%); }
+.app-mark--t11 { color: hsl(340, 42%, 32%); }
+[data-theme="dark"] {
+    .app-mark--t00 { color: hsl(25, 46%, 72%); }
+    .app-mark--t01 { color: hsl(50, 46%, 72%); }
+    .app-mark--t02 { color: hsl(75, 46%, 72%); }
+    .app-mark--t03 { color: hsl(95, 46%, 72%); }
+    .app-mark--t04 { color: hsl(150, 46%, 72%); }
+    .app-mark--t05 { color: hsl(175, 46%, 72%); }
+    .app-mark--t06 { color: hsl(200, 46%, 72%); }
+    .app-mark--t07 { color: hsl(225, 46%, 72%); }
+    .app-mark--t08 { color: hsl(250, 46%, 72%); }
+    .app-mark--t09 { color: hsl(280, 46%, 72%); }
+    .app-mark--t10 { color: hsl(310, 46%, 72%); }
+    .app-mark--t11 { color: hsl(340, 46%, 72%); }
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        .app-mark--t00 { color: hsl(25, 46%, 72%); }
+        .app-mark--t01 { color: hsl(50, 46%, 72%); }
+        .app-mark--t02 { color: hsl(75, 46%, 72%); }
+        .app-mark--t03 { color: hsl(95, 46%, 72%); }
+        .app-mark--t04 { color: hsl(150, 46%, 72%); }
+        .app-mark--t05 { color: hsl(175, 46%, 72%); }
+        .app-mark--t06 { color: hsl(200, 46%, 72%); }
+        .app-mark--t07 { color: hsl(225, 46%, 72%); }
+        .app-mark--t08 { color: hsl(250, 46%, 72%); }
+        .app-mark--t09 { color: hsl(280, 46%, 72%); }
+        .app-mark--t10 { color: hsl(310, 46%, 72%); }
+        .app-mark--t11 { color: hsl(340, 46%, 72%); }
+    }
+}
+/* A mark whose contributor is no longer installed: dimmed as a second cue beside the dashed figure and the
+   words that already say so. */
+.app-mark--orphaned {
+    opacity: 0.55;
+}
+
+/* ---- Cards, fields, empty states -------------------------------------------------------------------------- */
+.app-card {
+    margin-block: 0 var(--app-space-4);
+}
+.app-card__meta {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: var(--app-space-2) var(--app-space-4);
+    margin: 0;
+}
+.app-card__meta dt {
+    color: var(--pico-muted-color);
+    font-weight: 600;
+}
+.app-card__meta dd {
+    margin: 0;
+    word-break: break-all;
+}
+
+.app-field {
+    margin-bottom: var(--app-space-4);
+}
+.app-field__help {
+    display: block;
+    margin-top: var(--app-space-1);
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-sm);
+}
+.app-field__note {
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-xs);
+}
+.app-field--invalid .app-field__help {
+    color: var(--app-status-danger-fg);
+}
+
+.app-empty {
+    padding: var(--app-space-6) var(--app-space-4);
+    border: 1px dashed var(--pico-muted-border-color);
+    border-radius: var(--app-radius-lg);
+    color: var(--pico-muted-color);
+    text-align: center;
+}
+.app-empty__icon {
+    margin-bottom: var(--app-space-2);
+    font-size: var(--app-font-size-2xl);
+    line-height: 1;
+    opacity: 0.7;
+}
+
+/* ---- Badges ----------------------------------------------------------------------------------------------- */
+.app-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-1);
+    padding: 0.1rem var(--app-space-2);
+    border-radius: 999px;
+    background: var(--app-status-muted-bg);
+    color: var(--app-status-muted-fg);
+    font-size: var(--app-font-size-xs);
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.app-badge--pass { background: var(--app-status-pass-bg); color: var(--app-status-pass-fg); }
+.app-badge--warn { background: var(--app-status-warn-bg); color: var(--app-status-warn-fg); }
+.app-badge--danger { background: var(--app-status-danger-bg); color: var(--app-status-danger-fg); }
+.app-badge--info { background: var(--app-status-info-bg); color: var(--app-status-info-fg); }
+.app-badge--muted { background: var(--app-status-muted-bg); color: var(--app-status-muted-fg); }
+
+/* ---- Icons ------------------------------------------------------------------------------------------------ */
+/* Masks painted with currentColor, attached to a badge's kind so two badges meaning one thing look alike on every
+   screen. Decorative by construction: each sits beside a label that already carries the meaning. */
+.app-icon,
+.app-badge--pass::before,
+.app-badge--warn::before,
+.app-badge--danger::before,
+.app-badge--info::before {
+    content: "";
+    display: inline-block;
+    flex: none;
+    width: 0.8em;
+    height: 0.8em;
+    margin-right: 0.35em;
+    vertical-align: -0.05em;
+    background-color: currentColor;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+}
+.app-badge--pass::before { -webkit-mask-image: var(--app-icon-check); mask-image: var(--app-icon-check); }
+.app-badge--warn::before { -webkit-mask-image: var(--app-icon-warn); mask-image: var(--app-icon-warn); }
+.app-badge--danger::before { -webkit-mask-image: var(--app-icon-cross); mask-image: var(--app-icon-cross); }
+.app-badge--info::before { -webkit-mask-image: var(--app-icon-info); mask-image: var(--app-icon-info); }
+
+/* ---- Alerts and running work ------------------------------------------------------------------------------ */
+.app-alert {
+    margin-bottom: var(--app-space-4);
+    padding: var(--app-space-3) var(--app-space-4);
+    border-left: 3px solid var(--app-status-info-fg);
+    border-radius: var(--app-radius-md);
+    background: var(--app-status-info-bg);
+    color: var(--app-status-info-fg);
+    font-size: var(--app-font-size-sm);
+}
+.app-alert--pass { background: var(--app-status-pass-bg); color: var(--app-status-pass-fg); border-color: var(--app-status-pass-fg); }
+.app-alert--warn { background: var(--app-status-warn-bg); color: var(--app-status-warn-fg); border-color: var(--app-status-warn-fg); }
+.app-alert--danger { background: var(--app-status-danger-bg); color: var(--app-status-danger-fg); border-color: var(--app-status-danger-fg); }
+.app-running {
+    margin-bottom: var(--app-space-3);
+    padding: var(--app-space-2) var(--app-space-3);
+    border-inline-start: 3px solid var(--app-status-info-fg);
+    border-radius: var(--app-radius-md);
+    background: var(--app-status-info-bg);
+    color: var(--app-status-info-fg);
+}
+.app-danger-text {
+    color: var(--app-status-danger-fg);
+}
+.app-subsection-error {
+    color: var(--app-status-warn-fg);
+}
+
+/* ---- Destructive actions ---------------------------------------------------------------------------------- */
+/* A control that destroys looks like it, and keeps its distance from the safe one beside it. */
+.app-danger,
+button.app-danger,
+[type="submit"].app-danger {
+    background: transparent;
+    border-color: var(--app-status-danger-fg);
+    color: var(--app-status-danger-fg);
+}
+.app-danger:hover,
+button.app-danger:hover,
+[type="submit"].app-danger:hover {
+    background: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-fg);
+    color: var(--app-status-danger-fg);
+}
+.app-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--app-space-4);
+}
+.app-actions__danger {
+    margin-left: auto;
+    padding-left: var(--app-space-4);
+    border-left: 1px solid var(--pico-muted-border-color);
+}
+
+/* ---- Disclosure sections ---------------------------------------------------------------------------------- */
+.app-section {
+    overflow-x: clip;
+}
+.app-section > summary {
+    cursor: pointer;
+}
+.app-section > summary > h2 {
+    display: inline;
+    margin: 0;
+    font-size: var(--app-font-size-lg);
+}
+.app-section[open] > summary {
+    margin-bottom: var(--app-space-3);
+}
+
+/* ---- Installed providers and settings rows ---------------------------------------------------------------- */
+.module-card {
+    padding: .8rem 0;
+    border-top: 1px solid var(--pico-muted-border-color);
+}
+.module-card:first-of-type {
+    border-top: 0;
+}
+.module-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+}
+.module-badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem;
+}
+.module-settings {
+    margin: .4rem 0 0;
+    font-size: .82rem;
+}
+.module-settings li {
+    margin: .1rem 0;
+}
+.setting-module {
+    color: var(--pico-muted-color);
+    font-family: var(--pico-font-family-monospace);
+    font-size: .72rem;
+}
+.setting-doc {
+    margin: .25rem 0;
+    color: var(--pico-muted-color);
+}
+/* Everything in these rows is a name somebody else chose, and any of them may be one long unbreakable token. */
+.setting, .setting-doc, .module-card {
+    overflow-wrap: anywhere;
+}
+
+/* ---- Narrow screens --------------------------------------------------------------------------------------- */
+/* Below the documentation's breakpoint the groups leave the header for the sidebar, which folds away behind the
+   Menu button, and the page takes the whole width. */
+@media (max-width: 48rem) {
+    body {
+        grid-template-columns: [full-start] var(--app-space-4) [page-start content-start] minmax(0, 1fr) [page-end] var(--app-space-4) [full-end];
+        grid-template-rows: auto auto 1fr auto;
+    }
+    .app-groups,
+    .app-tenant {
+        display: none;
+    }
+    /* A phone has no room for the brand, the menu and the session on one line, so the bar wraps onto a second
+       rather than widening the page - and a long signed-in name is cut short rather than pushing it wide. */
+    .app-header__inner {
+        flex-wrap: wrap;
+        height: auto;
+        min-height: var(--app-header-height);
+        padding-block: var(--app-space-2);
+        row-gap: var(--app-space-2);
+    }
+    .app-signout__button > span:first-child {
+        max-width: 9rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .app-menu-toggle {
+        display: inline-block;
+    }
+    .app-sidebar {
+        grid-column: page;
+        grid-row: 2;
+        position: static;
+        max-height: none;
+        padding: var(--app-space-4) 0;
+        border-bottom: 1px solid var(--pico-muted-border-color);
+    }
+    .app-sidebar[hidden] {
+        display: none;
+    }
+    .app-sidebar__groups {
+        display: block;
+    }
+    body > main,
+    body:has(.app-sidebar) > main {
+        grid-column: page;
+        grid-row: 3;
+        margin: var(--app-space-4) 0;
+        padding: var(--app-space-4);
+    }
+    .app-footer {
+        grid-row: 4;
+    }
+    .app-brand__name {
+        font-size: var(--app-font-size-base);
+    }
+}
+@media (max-width: 480px) {
+    .app-card__meta {
+        grid-template-columns: 1fr;
+        gap: var(--app-space-1);
+    }
+    .app-card__meta dt:not(:first-child) {
+        margin-top: var(--app-space-2);
+    }
+    .app-actions__danger {
+        width: 100%;
+        margin-left: 0;
+        padding-top: var(--app-space-2);
+        padding-left: 0;
+        border-top: 1px solid var(--pico-muted-border-color);
+        border-left: 0;
+    }
+}
+/* A touch device gets adequate targets for the compact controls, keyed on the pointer rather than the width. */
+@media (pointer: coarse) {
+    .app-tree-toggle {
+        width: 2.25rem;
+        height: 2.25rem;
+    }
+    .app-theme-toggle,
+    .app-menu-toggle,
+    .app-signout__button {
+        padding: var(--app-space-2) var(--app-space-3);
+    }
+}

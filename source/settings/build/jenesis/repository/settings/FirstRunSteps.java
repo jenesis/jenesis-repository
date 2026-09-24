@@ -72,8 +72,8 @@ public final class FirstRunSteps {
                     List.of("gc", "collect", "keep-last", "max-age", "walks")),
             new Step(THE_WIZARD, "This guide",
                     "Whether a super-admin signing in with the starter key is sent here first. Switch it off once for "
-                            + "a deployment provisioned from configuration; the screen stays reachable from the "
-                            + "Administration menu.",
+                            + "a deployment provisioned from configuration; the screen stays reachable as Setup, under "
+                            + "Settings.",
                     List.of("setup-wizard")));
 
     private FirstRunSteps() {

@@ -1,19 +1,15 @@
 <!DOCTYPE html>
 <!--
-  quarantine.html - the review queue of one repository, one page at a time. The repository hub shows the head of the
-  queue; this screen pages the rest by pointer key, so a backlog of any size is reviewed page by page and never
-  rendered whole. Each page is enriched from the quarantine log and the durable hold records for its own rows only.
+  quarantine.html - the review queue of one repository, one page at a time, paged by pointer key, so a backlog of any
+  size is reviewed page by page and never rendered whole. Each page is enriched from the quarantine log and the durable hold records for its own rows only.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{fragments :: head('Quarantine')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Quarantine')}"></header>
-    <p>
-        <a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
-    </p>
 
     <article>
         <p><small>Artifacts the compliance gate held back, on the publish or the proxy-fetch path, in path order,
@@ -75,5 +71,6 @@
         </th:block>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

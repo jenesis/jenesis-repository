@@ -1,56 +1,86 @@
 package build.jenesis.repository.ui;
 
+import module java.base;
+
 /**
- * One console navigation link a module contributes through {@link ConsoleModuleProvider#navEntries()}: its {@code label},
- * the {@code path} it addresses, and the minimum {@link Access} a user needs to see it. The shell renders the visible
- * entries with a {@code th:each} rather than a hardcoded {@code <li>}-per-screen list, so a removable console module adds
- * its own nav link by being installed - its provider is discovered only when the module is on the path, which is itself
- * the capability gate - and the shell names no module's screens.
+ * One console page a module contributes through {@link ConsoleModuleProvider#navEntries()}: its {@code label}, the
+ * {@code path} it addresses, the minimum {@link Access} a user needs to see it, the {@link Group} the shell files it
+ * under, and the capability it {@code requires}, if any. The shell renders the visible entries rather than a
+ * hardcoded list, so a removable console module adds its own page by being installed - its provider is discovered
+ * only when the module is on the path, which is itself the capability gate - and the shell names no module's screens.
  *
- * <p><strong>{@code path} means one thing: an application-root-relative path</strong> ({@code /scim},
- * {@code /scim/users}), unique across installed modules. The accessor is named for that meaning because the previous
- * name - {@code href} - invited a second reading, and the product's two consumers took one each: the full console shell
- * renders it as a link target. A path addresses any page and a single-page shell could still map path to tab -
- * one did, until the redundant shell was removed - while a section id can never address
- * another page, so the path reading is the one that does not run out. A consumer that toggles in-page sections derives
- * its own id from the path rather than asking a module for one.
+ * <p><strong>{@code path} means one thing: an application-root-relative path</strong> ({@code /walks},
+ * {@code /settings/modules}), unique across installed modules. The shell links it and matches the request against it
+ * to decide which page, and so which group, is current: the entry whose path is the longest prefix of the request
+ * path, on a segment boundary, is the one a reader is on.
  *
  * <p>Access is a coarse role floor, resolved server-side against the current tenant so the template carries no
  * per-entry condition: {@link Access#USER} shows to any signed-in console user, {@link Access#ADMIN} to a tenant admin
- * (or a super-admin, who is admin everywhere), {@link Access#SUPERADMIN} only to the deployment super-admin. A
- * capability finer than module presence stays a core concern the shell resolves for its own entries.
+ * (or a super-admin, who is admin everywhere), {@link Access#SUPERADMIN} only to the deployment super-admin.
+ *
+ * @param requires the capability the page needs beyond its module being installed - a name the console's capability
+ *                 service answers, such as {@code audit} - or the empty string when the module's presence is enough.
+ *                 It exists for the page whose module is present while the thing it renders is not: the audit
+ *                 trail's screen is the console's own, and whether there is a trail to show is another module's.
  */
-public record NavEntry(String label, String path, Access access, Section section) {
+public record NavEntry(String label, String path, Access access, Group group, String requires) {
 
-    /** A nav entry any signed-in console user may see, in the primary bar. */
-    public NavEntry(String label, String path) {
-        this(label, path, Access.USER, Section.PRIMARY);
+    public NavEntry {
+        Objects.requireNonNull(label, "label");
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(access, "access");
+        Objects.requireNonNull(group, "group");
+        Objects.requireNonNull(requires, "requires");
     }
 
-    /** A nav entry with an access floor, in the primary bar. */
-    public NavEntry(String label, String path, Access access) {
-        this(label, path, access, Section.PRIMARY);
+    /** A page any signed-in console user may see, needing nothing beyond its module. */
+    public NavEntry(String label, String path, Group group) {
+        this(label, path, Access.USER, group, "");
+    }
+
+    /** A page with an access floor, needing nothing beyond its module. */
+    public NavEntry(String label, String path, Access access, Group group) {
+        this(label, path, access, group, "");
     }
 
     /**
-     * Where the shell puts the entry.
+     * The first navigation level: what a page is about, which is the choice a reader makes before choosing a page.
      *
-     * <p>Grouping is the shell's business - a module says it has a screen, not where the screen belongs in
-     * someone else's navigation - but the shell cannot infer *what kind* of screen it is, and guessing from the
-     * path is the sort of rule that is wrong the first time a module picks a different prefix. So a module
-     * declares the kind and the shell decides the placement.
+     * <p>A module says which group its page belongs to and the shell decides everything else - the order of the
+     * groups, which of them a reader sees, and where each one leads. A group is shown only when it holds a page the
+     * reader may open, and it leads to the first of them, so a group can never be a link to nothing.
      *
-     * <p>The distinction that matters is how often a person needs it. A flat bar of everything is the shape that
-     * makes a tool feel like a cockpit: a super-admin saw twelve links with no grouping, of which eight were
-     * settings-shaped and reached maybe twice a year, and the four that get daily use were somewhere among them.
+     * <p>They were two sections before - a bar of daily objects and an "Administration" dropdown of everything else -
+     * and the dropdown was where most pages lived: nine of them, reached by opening a menu that closed again on every
+     * page. Five groups a reader can see at once replace it, each with its pages beside the content.
      */
-    public enum Section {
+    public enum Group {
 
-        /** The objects the product is about, reached constantly: repositories, projects, credentials. */
-        PRIMARY,
+        /** The artifacts the product serves, and everything about one repository. */
+        REPOSITORIES("Repositories"),
 
-        /** Configuration and inspection - needed rarely, and grouped so it is one thing to look past. */
-        ADMINISTRATION
+        /** The build cache's projects. */
+        BUILD_CACHE("Build cache"),
+
+        /** Who may do what: credentials, members, and the record of what they did. */
+        ACCESS("Access"),
+
+        /** What the deployment is doing: its background passes, its metrics, its posture, a manual upload. */
+        OPERATIONS("Operations"),
+
+        /** How the deployment is configured. */
+        SETTINGS("Settings");
+
+        private final String label;
+
+        Group(String label) {
+            this.label = label;
+        }
+
+        /** The name the header shows. */
+        public String label() {
+            return label;
+        }
     }
 
     /** The minimum role a nav entry is shown to. */

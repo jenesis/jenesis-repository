@@ -1,6 +1,9 @@
 package build.jenesis.repository.compliance.web;
 
+import module java.base;
 import build.jenesis.repository.ui.ConsoleModuleProvider;
+import build.jenesis.repository.ui.RepositoryPage;
+import build.jenesis.repository.ui.RepositoryPage.Topic;
 
 /**
  * The screening feature's console surface, contributed through the console's own seam rather than written into it.
@@ -23,5 +26,19 @@ public final class ComplianceConsoleModule implements ConsoleModuleProvider {
     @Override
     public Class<?> configuration() {
         return ComplianceConsoleConfig.class;
+    }
+
+    /** The screening pages of every repository. The review queue and the refusals need nothing but this module;
+     *  each of the others renders a ledger another module keeps, and is listed only where that module is present. */
+    @Override
+    public List<RepositoryPage> repositoryPages() {
+        return List.of(
+                new RepositoryPage("Quarantine", "/quarantine", Topic.SCREENING),
+                new RepositoryPage("Refused", "/refusals", Topic.SCREENING),
+                new RepositoryPage("Vulnerabilities", "/vulnerabilities", Topic.SCREENING, "advisories"),
+                new RepositoryPage("Findings", "/findings", Topic.SCREENING, "findings"),
+                new RepositoryPage("Signers", "/signers", Topic.SCREENING),
+                new RepositoryPage("Maintainer health", "/health", Topic.SCREENING, "maintainerHealth"),
+                new RepositoryPage("License blast radius", "/blast-radius", Topic.SCREENING, "licensePolicy"));
     }
 }

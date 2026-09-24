@@ -17,6 +17,7 @@ import build.jenesis.repository.server.spi.RateLimiterProvider;
 import build.jenesis.repository.staging.StagingProvider;
 import build.jenesis.repository.ui.ConsoleModuleProvider;
 import build.jenesis.repository.ui.NavEntry;
+import build.jenesis.repository.ui.RepositoryPage;
 import build.jenesis.repository.upstream.UpstreamCredentialSourceProvider;
 import build.jenesis.repository.store.Features;
 import org.springframework.core.env.Environment;
@@ -49,7 +50,11 @@ public class CapabilityService {
 
     private final Capabilities capabilities;
 
+    private final Map<String, Boolean> named;
+
     private final List<NavEntry> moduleNav;
+
+    private final List<RepositoryPage> moduleRepositoryPages;
 
     /**
      * @param environment the console's configuration chain, handed to the capability contributors so a flag they
@@ -96,23 +101,68 @@ public class CapabilityService {
             // own harden flag; this is the module-presence signal, discovered like every other (§2).
             MaintenanceTaskProvider.installed().contains("migration-rescreen"),
             enabled(consoleModules, "scim"),
-              // The hub's panels are contributed screens like any other, so the signal is the same one: did this
-              // deployment import that console module. Asking anything narrower would re-derive, beside the
-              // contributor, what the module already answers about itself - the mistake the comment above records.
-              enabled(consoleModules, "compliance"),
-              enabled(consoleModules, "forwarding"),
             ImportSourceProvider.declared().stream()
                     .map(provider -> new ImportSourceView(
                             provider.name(), provider.label(), provider.requiresFormat()))
                     .toList());
-        // The nav links the imported console modules contribute, discovered once at startup like every other
-        // capability signal (a module's providers are static for a JVM). The shell filters these by the caller's
-        // role per request; the discovery itself is not repeated on the hot path.
-        this.moduleNav = Contributions.collect("console module", consoleModules,
-                        provider -> List.copyOf(provider.navEntries()), CapabilityService::noNav)
-                .stream()
-                .flatMap(List::stream)
-                .toList();
+        this.named = named(capabilities);
+        // The pages the imported console modules contribute, discovered once at startup like every other capability
+        // signal (a module's providers are static for a JVM). The shell filters these by the caller's role and the
+        // pages' own requirements per request; the discovery itself is not repeated on the hot path.
+        List<Contributed> modulePages = Contributions.collect("console module", consoleModules, this::contributed,
+                CapabilityService::noPages);
+        this.moduleNav = modulePages.stream().flatMap(module -> module.nav().stream()).toList();
+        this.moduleRepositoryPages = modulePages.stream().flatMap(module -> module.pages().stream()).toList();
+    }
+
+    /** What one console module contributes to the two navigation levels. */
+    private record Contributed(List<NavEntry> nav, List<RepositoryPage> pages) {
+
+        static final Contributed NONE = new Contributed(List.of(), List.of());
+    }
+
+    /**
+     * One module's pages, refused whole when any names a capability this console does not answer.
+     *
+     * <p>A requirement nobody answers can never be met, so the page would be hidden on every deployment and nothing
+     * would say why - the module's author would see a page that simply never appears. Refusing it at startup with
+     * the module and the name in the log is the loud version of the same outcome.
+     */
+    private Contributed contributed(ConsoleModuleProvider provider) {
+        List<NavEntry> nav = List.copyOf(provider.navEntries());
+        List<RepositoryPage> pages = List.copyOf(provider.repositoryPages());
+        Stream.concat(nav.stream().map(NavEntry::requires), pages.stream().map(RepositoryPage::requires))
+                .filter(requires -> !requires.isEmpty() && !named.containsKey(requires))
+                .findFirst()
+                .ifPresent(unknown -> {
+                    throw new IllegalArgumentException("a page requires the capability '" + unknown
+                            + "', which this console does not know; it knows " + new TreeSet<>(named.keySet()));
+                });
+        return new Contributed(nav, pages);
+    }
+
+    /** Every capability by the name a page's {@code requires} uses. */
+    private static Map<String, Boolean> named(Capabilities capabilities) {
+        return Map.ofEntries(
+                Map.entry("advisories", capabilities.advisories()),
+                Map.entry("audit", capabilities.audit()),
+                Map.entry("staging", capabilities.staging()),
+                Map.entry("retention", capabilities.retention()),
+                Map.entry("gc", capabilities.gc()),
+                Map.entry("scan", capabilities.scan()),
+                Map.entry("provenance", capabilities.provenance()),
+                Map.entry("upstream", capabilities.upstream()),
+                Map.entry("upstreamCredentials", capabilities.upstreamCredentials()),
+                Map.entry("rateLimit", capabilities.rateLimit()),
+                Map.entry("dependents", capabilities.dependents()),
+                Map.entry("search", capabilities.search()),
+                Map.entry("index", capabilities.index()),
+                Map.entry("licensePolicy", capabilities.licensePolicy()),
+                Map.entry("findings", capabilities.findings()),
+                Map.entry("maintainerHealth", capabilities.maintainerHealth()),
+                Map.entry("hardening", capabilities.hardening()),
+                Map.entry("scim", capabilities.scim()),
+                Map.entry("import", capabilities.importAvailable()));
     }
 
     /** One contributed flag, absent-reads-false - the SPI's no-op-by-absence contract, which is how a module that
@@ -127,7 +177,7 @@ public class CapabilityService {
     }
 
     /**
-     * The nav a console module that threw contributes: none.
+     * The pages a console module that threw, or named a capability nobody answers, contributes: none.
      *
      * <p>Uncontained, this fan-out ran at construction, so one optional module's {@code navEntries()} throwing took
      * the whole shell - every other module's links with it, and the Spring context with them, which is a deployment
@@ -139,21 +189,39 @@ public class CapabilityService {
      * the base console's panel card: an exception message is uncontrolled text that may quote a configured value,
      * and the whole failure belongs in the log rather than on an operator's page.
      */
-    private static List<NavEntry> noNav(ConsoleModuleProvider provider, Exception failure) {
-        LOGGER.warn("console module {} could not contribute its nav links, so it contributes none: {}",
+    private static Contributed noPages(ConsoleModuleProvider provider, Exception failure) {
+        LOGGER.warn("console module {} could not contribute its pages, so it contributes none: {}",
                 Contributions.segment(provider), failure.getClass().getName(), failure);
-        return List.of();
+        return Contributed.NONE;
     }
 
     public Capabilities capabilities() {
         return capabilities;
     }
 
-    /** The nav links the imported console modules contribute, for the shell to render beside the core links -
-     *  imported rather than installed, because a switched-off module has no screen for its link to reach. Computed
-     *  once at startup; the shell decides per request which the current user may see. */
+    /** The pages the imported console modules contribute to the first level, for the shell to list beside the core
+     *  ones - imported rather than installed, because a switched-off module has no screen for its link to reach.
+     *  Computed once at startup; the shell decides per request which the current user may see. */
     public List<NavEntry> moduleNav() {
         return moduleNav;
+    }
+
+    /** The pages the imported console modules add to every repository, on the same terms as {@link #moduleNav()}. */
+    public List<RepositoryPage> moduleRepositoryPages() {
+        return moduleRepositoryPages;
+    }
+
+    /** Whether the capability a page {@code requires} is present; the empty requirement always is. */
+    public boolean has(String requires) {
+        if (requires.isEmpty()) {
+            return true;
+        }
+        Boolean present = named.get(requires);
+        if (present == null) {
+            throw new IllegalArgumentException("Unknown capability '" + requires + "'; known: "
+                    + new TreeSet<>(named.keySet()));
+        }
+        return present;
     }
 
     /** The installed feature modules and import sources the console gates its surface on. */
@@ -162,7 +230,6 @@ public class CapabilityService {
                                boolean provenance, boolean upstream, boolean upstreamCredentials, boolean rateLimit,
                                boolean dependents, boolean search, boolean index, boolean licensePolicy,
                                boolean findings, boolean maintainerHealth, boolean hardening, boolean scim,
-                               boolean screeningPanels, boolean forwardingPanel,
                                List<ImportSourceView> importSources) {
 
         /** An import needs both a source connector and the upstream fetcher on the module path. */

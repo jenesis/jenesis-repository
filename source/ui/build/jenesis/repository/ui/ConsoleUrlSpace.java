@@ -44,7 +44,7 @@ public final class ConsoleUrlSpace {
             "/logout",
             "/no-access",
             "/oauth2/**",
-            "/css/**", "/js/**", "/img/**", "/webjars/**",
+            "/css/**", "/js/**", "/img/**", "/fonts/**", "/webjars/**",
             "/console", "/console/**");
 
     /**
@@ -73,7 +73,7 @@ public final class ConsoleUrlSpace {
             "/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness",
             "/login", "/login/**", "/oauth2/**",
             "/error", "/favicon.ico",
-            "/css/**", "/js/**", "/img/**");
+            "/css/**", "/js/**", "/img/**", "/fonts/**");
 
     private ConsoleUrlSpace() {
     }

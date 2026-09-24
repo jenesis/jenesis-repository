@@ -30,7 +30,7 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
         // Nor is the alert: the sign-in page was the last screen here to render one itself, and that page is now
         // the shared one. This console still shows alerts - through `messages`, which renders them - but it no
         // longer reaches for the fragment, and the census is what noticed.
-        return Set.of(ConsoleLayout.HEAD_CONTENTS, ConsoleLayout.SHELL, ConsoleLayout.PAGE_HEADER,
+        return Set.of(ConsoleLayout.HEAD_CONTENTS, ConsoleLayout.SHELL, ConsoleLayout.FOOTER, ConsoleLayout.PAGE_HEADER,
                 ConsoleLayout.MESSAGES, ConsoleLayout.SUBSECTION_ERROR,
                 ConsoleLayout.EMPTY, ConsoleLayout.DANGER_BUTTON,
                 ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP,

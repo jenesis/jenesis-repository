@@ -1,45 +1,39 @@
 <!doctype html>
 <!--
-  base.html — the shared console component set, layered over Pico + app.css.
+  base.html - the console's frame and its shared component set, layered over Pico and console.css.
 
-  These Thymeleaf fragments are the documented component vocabulary every screen composes from: the shell <head>,
-  the page header (title + optional breadcrumb + a primary-action slot), the empty state, the status badge and the
-  form-field-with-help atom. They are pure presentation — no business logic lives in the shell — so both the free
-  repository console and the downstream console (once it requires this module) render one visual language by
-  th:replace-ing these fragments rather than re-vendoring a second copy that would drift.
+  The frame is drawn after the Jenesis documentation at jenesis.build, so that somebody who knows one finds their way
+  around the other: a sticky header with the brand on the left and the first navigation level - the groups - on the
+  right, the second level listed in a sidebar beside the content, the content on one sheet, and a one-line colophon
+  at the foot. A page renders `shell` above its <main> and `footer` below it; the stylesheet's grid places the four.
 
   Fragments provided:
-    headContents(title, product)    — everything every page loads; for a console adding its own <head> extras.
-    head(title, product)            — the shell <head>: viewport, Pico, app.css, htmx, theme + console scripts,
-                                      and the CSRF meta pair where the page has a token. `product` names the
-                                      edition in the tab title; both consoles render this one head.
-    pageHeader(title)               — a page header with just a title.
-    pageHeaderCrumbs(title, crumbs) — a page header with a breadcrumb (crumbs: List<Map{href,label}>, last is current).
-    empty(message)                  — the one empty-state treatment.
-    field(label, name, value, help) — a labelled text input with inline help text.
-    alert(message, kind)            — a flash/outcome banner; kind ∈ {pass,warn,danger} or null for info.
-    themeToggle                     — the light/dark/auto switch (wired by /js/theme.js, persisted per browser).
-    dangerButton(label, confirm)    — a destructive submit: the danger treatment plus its confirmation, together.
-
-  Kept in sync with app.css (the tokens/styles); each fragment documents itself below.
+    headContents(title, product)    - everything every page loads; for a console adding its own <head> extras.
+    head(title, product)            - the shell <head>: viewport, Pico, console.css, htmx, the theme and console
+                                      scripts, and the CSRF meta pair where the page has a token.
+    shell                           - the header and the sidebar, read from the published `navigation`.
+    signInShell                     - the header alone, for a page a reader sees before they are anywhere.
+    footer                          - the colophon: the product and whatever its edition publishes.
+    pageHeader(title)               - a page header with just a title.
+    pageHeaderCrumbs(title, crumbs) - a page header with a breadcrumb (crumbs: List<Map{href,label}>, last is current).
+    empty(message)                  - the one empty-state treatment.
+    field(label, name, value, help) - a labelled text input with inline help text.
+    alert(message, kind)            - a flash/outcome banner; kind in {pass,warn,danger} or null for info.
+    dangerButton(label, confirm)    - a destructive submit: the danger treatment plus its confirmation, together.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 
-<!-- The shared <head>, in two shapes for the two ways a console needs it.
-
-     `headContents` is everything every page loads; `head` is that wrapped in a <head> for a console with nothing
-     to add. A console that does need something of its own - a downstream shell has one stylesheet - writes its
-     own <head>, includes the contents, and adds its extra, so there is still exactly one list of what a page
-     loads. Keeping two whole <head>s in step by hand is what failed before: a script added to one was missing
-     from the other until something noticed. -->
+<!-- The shared <head>, in two shapes for the two ways a console needs it: `headContents` is everything every page
+     loads, and `head` is that wrapped in a <head> for a page with nothing to add. -->
 <th:block th:fragment="headContents(title, product)">
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="${title} + ' \u00b7 ' + ${product}">Jenesis</title>
+    <title th:text="${title} + ' · ' + ${product}">Jenesis Repository</title>
+    <link rel="icon" th:href="@{/img/jenesis-repository-light.svg}">
     <link rel="stylesheet" th:href="@{/css/pico.min.css}">
-    <link rel="stylesheet" th:href="@{/css/app.css}">
-    <!--/* Rendered only where a CSRF token exists, so one head serves a console that has one and a page that
-         does not. */-->
+    <link rel="stylesheet" th:href="@{/css/console.css}">
+    <!--/* Rendered only where a CSRF token exists, so one head serves a page that has one and a page that does
+         not. */-->
     <meta th:if="${_csrf != null}" name="_csrf" th:content="${_csrf.token}">
     <meta th:if="${_csrf != null}" name="_csrf_header" th:content="${_csrf.headerName}">
     <!--/* Deliberately not deferred: a stored dark/light choice must apply before the first paint. */-->
@@ -54,14 +48,120 @@
 
 <body>
 
-<!--/* Brand: the product logo + name for the top nav. `name` is the product label; `href` is where it links
-     (the console home). The logo is served from the shared ui resources, so the downstream console renders
-     the same fragment with its own name. */-->
-<a th:fragment="brand(name, href, logo)" th:href="${href}" class="app-brand">
-    <img class="app-brand__mark app-brand__mark--light" th:src="@{|/img/${logo}-light.svg|}" alt="" width="20" height="20">
-    <img class="app-brand__mark app-brand__mark--dark" th:src="@{|/img/${logo}-dark.svg|}" alt="" width="20" height="20">
-    <strong th:text="${name}">Jenesis</strong>
+<!--/* The brand: the Jenesis Repository mark and the product's name, linking home. The mark ships once per theme,
+     because it is a single-colour drawing that has to stay legible on either background. */-->
+<a th:fragment="brand" th:href="@{/}" class="app-brand">
+    <img class="app-brand__mark app-brand__mark--light" th:src="@{/img/jenesis-repository-light.svg}" alt=""
+         width="28" height="28">
+    <img class="app-brand__mark app-brand__mark--dark" th:src="@{/img/jenesis-repository-dark.svg}" alt=""
+         width="28" height="28">
+    <span class="app-brand__name" th:text="${product ?: 'Jenesis Repository'}">Jenesis Repository</span>
 </a>
+
+<!--/* The theme switch, drawn and behaving as the documentation's: one glyph, flipping between light and dark and
+     following the system until a reader chooses. The script names the button for what the next click does. */-->
+<button th:fragment="themeToggle" type="button" class="app-theme-toggle" data-theme-toggle
+        aria-label="Switch the colour theme" title="Switch the colour theme">&#9680;</button>
+
+<!--/* The console frame, and the only one: every screen renders it, so moving between screens changes the page and
+     nothing around it.
+
+     The header is the documentation's bar. The edition's notice strip sits on top of it when the edition publishes
+     one, so an unlicensed or read-only deployment says so wherever the reader has scrolled to. Then the brand and,
+     where the reader can reach more than one tenant, the tenant they are in; then the groups - the first navigation
+     level - and the session: the posture count a super-admin sees, the theme switch, and the signed-in name that
+     signs out. The sidebar is the second level: the pages of the group the reader is in, or of the repository they
+     opened.
+
+     Everything is read from the model and null-safe. `navigation` is resolved by the console that publishes it -
+     which groups a reader may see, which page they are on - so this decides nothing; an error page rendered
+     outside the console's advice publishes none, and gets the brand and no navigation rather than a failure.
+
+     The edition slots are fragment specifications an edition publishes on every model, preprocessed here, and
+     absent ones render as the empty fragment - so a console with no edition module shows neither and no page can
+     forget to pass them. */-->
+<th:block th:fragment="shell">
+    <a class="app-skip-link" href="#main">Skip to content</a>
+    <header class="app-header">
+        <th:block th:replace="~{__${editionBanner ?: ''}__}"></th:block>
+        <div class="app-header__inner">
+            <a th:replace="~{base :: brand}"></a>
+            <a th:if="${tenant != null and showTenant}" class="app-tenant" th:href="@{/instances}"
+               th:title="|Working in tenant ${tenant} - switch tenant|">
+                <span class="app-sr-only">Tenant </span><span th:text="${tenant}">default</span></a>
+            <button th:if="${navigation != null and navigation.present()}" type="button" class="app-menu-toggle"
+                    data-menu-toggle aria-expanded="false" aria-controls="app-sidebar">Menu</button>
+            <nav th:if="${navigation != null and !navigation.groups().isEmpty()}" class="app-groups"
+                 aria-label="Sections">
+                <a th:each="group : ${navigation.groups()}" th:href="${group.href()}" th:text="${group.label()}"
+                   th:attr="aria-current=${group.current()} ? 'true' : null">Group</a>
+            </nav>
+            <div class="app-header__session">
+                <a th:if="${postureBadge != null and postureBadge.visible()}" class="app-posture app-badge app-badge--warn"
+                   th:href="@{/posture}" th:title="${postureBadge.title()}" th:text="${postureBadge.label()}">posture</a>
+                <button th:replace="~{base :: themeToggle}"></button>
+                <!--/* The name is the control, and the arrow is what says so. A POST, because signing out is a
+                     state change and the CSRF token rides the form. */-->
+                <form th:if="${currentUser}" method="post" th:action="@{/logout}" class="app-signout">
+                    <button class="app-signout__button" type="submit" title="Sign out"
+                            th:attr="aria-label='Sign out ' + ${currentUser}">
+                        <span th:text="${currentUser}">user</span>
+                        <span class="app-icon" aria-hidden="true"></span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </header>
+    <aside th:if="${navigation != null and navigation.present()}" class="app-sidebar" id="app-sidebar">
+        <!--/* The groups again, shown only where the header has no room for them. */-->
+        <nav th:if="${!navigation.groups().isEmpty()}" class="app-sidebar__groups" aria-label="Sections">
+            <ul>
+                <li th:each="group : ${navigation.groups()}">
+                    <a th:href="${group.href()}" th:text="${group.label()}"
+                       th:attr="aria-current=${group.current()} ? 'true' : null">Group</a></li>
+            </ul>
+        </nav>
+        <nav th:if="${navigation.sidebar().present()}" aria-label="Pages">
+            <a th:if="${navigation.sidebar().back() != null}" class="app-sidebar__back"
+               th:href="${navigation.sidebar().back().href()}"
+               th:text="'&larr; ' + ${navigation.sidebar().back().label()}">&larr; Back</a>
+            <p th:unless="${navigation.sidebar().title().isEmpty()}" class="app-sidebar__title"
+               th:text="${navigation.sidebar().title()}">Title</p>
+            <th:block th:each="section : ${navigation.sidebar().sections()}">
+                <p th:unless="${section.heading().isEmpty()}" class="app-sidebar__heading"
+                   th:text="${section.heading()}">Heading</p>
+                <ul>
+                    <li th:each="link : ${section.links()}">
+                        <a th:href="${link.href()}" th:text="${link.label()}"
+                           th:attr="aria-current=${link.current()} ? 'page' : null">Page</a></li>
+                </ul>
+            </th:block>
+        </nav>
+    </aside>
+</th:block>
+
+<!--/* The frame of a page a reader sees before they are anywhere: the sign-in pages and the no-access screen. The
+     header carries the brand and the theme switch and nothing to navigate, because there is nothing yet. */-->
+<th:block th:fragment="signInShell">
+    <a class="app-skip-link" href="#main">Skip to content</a>
+    <header class="app-header">
+        <th:block th:replace="~{__${editionBanner ?: ''}__}"></th:block>
+        <div class="app-header__inner">
+            <a th:replace="~{base :: brand}"></a>
+            <div class="app-header__session">
+                <button th:replace="~{base :: themeToggle}"></button>
+            </div>
+        </div>
+    </header>
+</th:block>
+
+<!--/* The colophon: one small line naming the product, and whatever its edition publishes beside it. */-->
+<footer th:fragment="footer" class="app-footer">
+    <ul>
+        <li th:text="${product ?: 'Jenesis Repository'}">Jenesis Repository</li>
+        <th:block th:replace="~{__${editionBadges ?: ''}__}"></th:block>
+    </ul>
+</footer>
 
 <!--/* Page header: just a title. A page needing the primary-action slot renders the .app-page-header markup
      directly or uses pageHeaderCrumbs; this fragment stays presentation-only. */-->
@@ -87,91 +187,6 @@
 </header>
 
 <!--/* Empty / loading / error state: one consistent treatment, never a blank screen. */-->
-<!--/* The console header, and the only one: every screen and every edition renders this, so moving between
-     screens - or from one edition to the other - changes the page under it and nothing around it.
-
-     Three rows, sticky, in that order. A deployment-wide notice strip - what an operator should know wherever they
-     have scrolled to. Then the identity row: what this is (brand, theme) against what my session is (tenant,
-     posture, edition, who is signed in). Then the module links, alone on a line. It was one row carrying all of it,
-     and on a deployment with several modules installed the links wrapped around the chrome, so the bar an operator
-     navigates by had a different shape on every screen and at every width.
-
-     The brand is a parameter because that is edition identity rather than a difference to erase. The two edition
-     slots are NOT parameters: `editionBanner` and `editionBadges` are fragment specifications an edition publishes
-     on every model, preprocessed here, and absent ones render as the empty fragment. They were parameters, and
-     three shared screens that render this shell passed `~{}` for them - so the edition badge and the banner, the
-     one thing that is supposed to be on every page, were missing from exactly the pages nobody passed it on.
-     Reading the model means a screen cannot forget. Neither name is one edition's vocabulary: they say "whatever
-     this edition has", and a console with no such module publishes neither.
-
-     Everything else is model-driven and null-safe too: a console that publishes no tenant, no posture badge and no
-     signed-in user renders none of those, so the same markup serves a single-tenant console and a multi-tenant one
-     without asking which it is. */-->
-<th:block th:fragment="shell(brandName, brandHref, brandLogo)">
-    <a class="app-skip-link" href="#main">Skip to content</a>
-    <header class="app-header">
-        <th:block th:replace="~{__${editionBanner ?: ''}__}"></th:block>
-        <div class="app-header__bar container">
-            <div class="app-header__identity">
-                <a th:replace="~{base :: brand(${brandName}, ${brandHref}, ${brandLogo})}"></a>
-                <button th:replace="~{base :: themeToggle}"></button>
-            </div>
-            <ul class="app-header__meta">
-                <li th:if="${tenant != null and showTenant}">
-                    <small>Tenant <strong th:text="${tenant}">default</strong></small></li>
-                <li th:if="${postureBadge != null and postureBadge.visible()}">
-                    <a th:href="@{/posture}" class="secondary"
-                       th:title="${postureBadge.title()}" th:text="${postureBadge.label()}">posture</a></li>
-                <th:block th:replace="~{__${editionBadges ?: ''}__}"></th:block>
-                <!--/* The name is the control, and the arrow is what says so. A name rendered as text beside a
-                     separate button spent two items of this row on one thing, and the half a reader looks for was
-                     the half that looked inert. A POST, because signing out is a state change and the CSRF token
-                     rides the form. */-->
-                <li th:if="${currentUser}">
-                    <form method="post" th:action="@{/logout}" class="app-signout">
-                        <button class="app-signout__button" type="submit" title="Sign out"
-                                th:attr="aria-label='Sign out ' + ${currentUser}">
-                            <span th:text="${currentUser}">user</span>
-                            <span class="app-icon" aria-hidden="true"></span>
-                        </button>
-                    </form>
-                </li>
-            </ul>
-        </div>
-        <!--/* The links, and nothing else. Rendered only where there are some: a principal holding nothing sees the
-             no-access screen, and an empty bar above it would read as a bar that failed to load. */-->
-        <nav class="container app-nav" aria-label="Primary"
-             th:if="${(navEntries != null and !navEntries.isEmpty()) or (adminNav != null and !adminNav.isEmpty())}">
-            <ul>
-                <th:block th:insert="~{base :: navLinks(${navEntries}, ${adminNav})}"></th:block>
-            </ul>
-        </nav>
-    </header>
-</th:block>
-
-<!--/* The links every installed console module contributes, rendered identically wherever the console runs.
-     Two sections rather than one flat bar: a deployment with several modules installed puts the three or four
-     links that get daily use somewhere in the middle of the settings-shaped ones, and someone who visits
-     occasionally has to re-read the whole bar every time. The administration group is a plain <details>
-     dropdown - Pico styles it, it needs no script, and a native disclosure is keyboard- and screen-reader-
-     operable without a line of ARIA. Nothing is hidden; it is one keystroke away and grouped by what it is.
-
-     Both lists are null-safe: an error page renders this shell outside the controller advice, so every model
-     attribute is absent there. th:each tolerates a null quietly; an expression asking a list its size does not. */-->
-<th:block th:fragment="navLinks(navEntries, adminNav)">
-    <li th:each="entry : ${navEntries}" th:if="${entry.section.name() == 'PRIMARY'}">
-        <a th:href="${entry.path}" th:text="${entry.label}">Nav</a></li>
-    <li th:if="${adminNav != null and !adminNav.isEmpty()}">
-        <details class="dropdown app-nav-group">
-            <summary>Administration</summary>
-            <ul dir="rtl">
-                <li th:each="entry : ${adminNav}">
-                    <a th:href="${entry.path}" th:text="${entry.label}">Nav</a></li>
-            </ul>
-        </details>
-    </li>
-</th:block>
-
 <div th:fragment="empty(message)" class="app-empty" role="status">
     <div class="app-empty__icon" aria-hidden="true">∅</div>
     <p th:text="${message}" style="margin:0">Nothing here yet.</p>
@@ -224,19 +239,6 @@
      not already know. */-->
 <button th:fragment="dangerButton(label, confirm)" type="submit" class="secondary outline app-danger"
         th:attr="data-confirm=${confirm}" th:text="${label}">delete</button>
-
-<!--/* Theme switch: an icon button beside the brand, cycling auto -> light -> dark. /js/theme.js (loaded by the
-     head fragment, deliberately without defer) applies the stored choice before first paint and wires every
-     [data-theme-toggle]; "auto" follows the OS.
-
-     Which glyph shows is decided in CSS from the document's own data-theme - absent means auto - so the button is
-     correct at first paint rather than after a script has run. The script's only job here is to name the state for
-     a reader who cannot see the glyph, which it does by extending this label; the label in the markup is the floor,
-     so the button is never nameless even with scripting off. */-->
-<button th:fragment="themeToggle" type="button" class="app-theme-toggle" data-theme-toggle
-        aria-label="Color theme" title="Color theme">
-    <span class="app-icon" aria-hidden="true"></span>
-</button>
 
 </body>
 </html>

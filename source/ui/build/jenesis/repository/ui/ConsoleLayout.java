@@ -38,25 +38,24 @@ public final class ConsoleLayout {
     /** An inline notice, taking the message and its kind. */
     public static final String ALERT = "alert";
 
-    /** The product brand block, taking the name, its link and the logo. */
-    public static final String BRAND = "brand";
-
-    /** The theme switch: an icon button cycling auto, light and dark. */
-    public static final String THEME_TOGGLE = "themeToggle";
-
     /** The shared list of what every page loads - a console adding its own {@code <head>} extras includes this. */
     public static final String HEAD_CONTENTS = "headContents";
 
     /** A destructive submit: the danger treatment and its confirmation together, so neither can be forgotten. */
     public static final String DANGER_BUTTON = "dangerButton";
 
-    /** The links installed console modules contribute: the primary bar and the administration dropdown, rendered
-     *  the same way by every console so a module's {@code NavEntry} looks right wherever it is installed. */
-    public static final String NAV_LINKS = "navLinks";
-
-    /** The console header every screen renders: the edition's notice strip, the brand and theme switch, the
-     *  tenant, posture and signed-in identity, and the module links on a line of their own. */
+    /** The console frame every screen renders above its {@code <main>}: the edition's notice strip, the header with
+     *  the brand, the groups, the theme switch and the signed-in identity, and the sidebar listing the pages of the
+     *  group - or the repository - the reader is in. It reads the published {@link Navigation}, so a page passes
+     *  nothing. */
     public static final String SHELL = "shell";
+
+    /** The frame of a page a reader sees before they are anywhere - the sign-in pages and the no-access screen: the
+     *  header with the brand and theme switch, and no navigation, since there is nothing yet to navigate. */
+    public static final String SIGN_IN_SHELL = "signInShell";
+
+    /** The line that closes every screen, below its {@code <main>}: the product, its edition and its posture. */
+    public static final String FOOTER = "footer";
 
     /** The deployment-wide notices a screen shows above its content (read-only, anonymous access, flash messages). */
     public static final String MESSAGES = "messages";
@@ -78,8 +77,8 @@ public final class ConsoleLayout {
 
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
-            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BRAND, THEME_TOGGLE, HEAD_CONTENTS,
-            DANGER_BUTTON, NAV_LINKS, SHELL, MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP, RUNNING);
+            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, HEAD_CONTENTS, DANGER_BUTTON, SHELL, SIGN_IN_SHELL,
+            FOOTER, MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP, RUNNING);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

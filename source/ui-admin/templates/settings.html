@@ -3,7 +3,7 @@
 <head th:replace="~{fragments :: head('Settings')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Settings')}"></header>
     <p><small>Deployment-wide runtime configuration, shared by every repository node. The same values the
@@ -199,5 +199,6 @@
         })();
     </script>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

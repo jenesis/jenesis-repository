@@ -8,13 +8,10 @@
 <head th:replace="~{fragments :: head('Signer')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Signer')}"></header>
-    <p>
-        <a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a> &middot;
-        <a th:href="@{/repositories/{repo}/signers(repo=${repo})}">signers</a>
-    </p>
+    <p><a th:href="@{/repositories/{repo}/signers(repo=${repo})}">&larr; All signers</a></p>
 
     <article>
         <p><strong th:text="${abbreviated}">signer</strong><br><small><code th:text="${signer}">identity</code></small></p>
@@ -56,5 +53,6 @@
         </th:block>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

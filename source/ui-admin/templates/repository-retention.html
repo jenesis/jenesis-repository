@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Retention & cleanup')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Retention & cleanup')}"></header>
+    <h2>Policy</h2>
+    <p><small>A version is kept only if it satisfies every dial set below; durations are ISO-8601 (for
+        example <code>P90D</code>). A pinned version is always kept, whatever the policy says.</small></p>
+    <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
+    <form th:if="${isEditor}" method="post" th:action="@{'/repositories/' + ${repo} + '/retention'}">
+        <div class="grid">
+            <label>keep-last
+                <input type="number" name="keepLast" min="0" th:value="${retention.keepLast}"></label>
+            <label>max-age
+                <input name="maxAge" th:value="${retention.maxAge}" placeholder="P90D"></label>
+            <label>prerelease-expiry
+                <input name="prereleaseExpiry" th:value="${retention.prereleaseExpiry}" placeholder="P14D"></label>
+            <label>not-downloaded-for
+                <input name="notDownloadedFor" th:value="${retention.notDownloadedFor}" placeholder="P30D"></label>
+        </div>
+        <button type="submit">Save retention</button>
+    </form>
+
+    <article id="cleanup">
+        <h2>Cleanup</h2>
+        <!--/* Both halves of this panel are stored results, never computed on the request: a preview and a sweep
+               each walk every release, so they run in the background and this page shows what they last found. */-->
+        <p th:if="${plan == null}"><small>No cleanup preview has been computed yet.</small></p>
+        <th:block th:if="${plan != null}">
+            <th:block th:if="${plan.running()}">
+                <p th:replace="~{base :: running(|A cleanup preview is running, started ${plan.startedAt()}.|)}"></p>
+            </th:block>
+            <th:block th:unless="${plan.running()}">
+                <p th:if="${plan.failure() != null}"><small>The last preview failed:
+                    <span th:text="${plan.failure()}">reason</span></small></p>
+                <p th:if="${plan.failure() == null and plan.count() == 0}"><small>Nothing would be evicted under the
+                    policy and pins as of <span th:text="${plan.finishedAt()}">time</span>.</small></p>
+                <th:block th:if="${plan.failure() == null and plan.count() > 0}">
+                    <p><small><span th:text="${plan.count()}">0</span> version(s) would be evicted as of
+                        <span th:text="${plan.finishedAt()}">time</span><span th:if="${plan.count() > plan.rows().size()}">;
+                        the first <span th:text="${plan.rows().size()}">0</span> are listed</span>.</small></p>
+                    <ul>
+                        <li th:each="p : ${plan.rows()}" th:text="${p}">coordinate:version - reason</li>
+                    </ul>
+                </th:block>
+            </th:block>
+        </th:block>
+        <th:block th:if="${lastCleanup != null}">
+            <th:block th:if="${lastCleanup.running()}">
+                <p th:replace="~{base :: running(|A cleanup is running, started ${lastCleanup.startedAt()}.|)}"></p>
+            </th:block>
+            <p th:unless="${lastCleanup.running()}"><small>Last cleanup finished
+                <span th:text="${lastCleanup.finishedAt()}">time</span>:
+                <span th:if="${lastCleanup.failure() != null}" th:text="${lastCleanup.failure()}">failed</span>
+                <span th:if="${lastCleanup.failure() == null}"
+                      th:text="${lastCleanup.rows().isEmpty() ? 'nothing evicted' : lastCleanup.rows().get(0) + ', ' + (lastCleanup.count() - 1) + ' version(s) evicted'}">result</span>.</small></p>
+        </th:block>
+        <p th:unless="${capabilities.gc()}"><small>Garbage collection is off - no collector module is installed
+            or selected, so a cleanup evicts versions but reclaims no storage.</small></p>
+        <div th:if="${isEditor}" style="display:flex; gap:0.5em">
+            <form method="post" th:action="@{'/repositories/' + ${repo} + '/cleanup/preview'}">
+                <button class="secondary" type="submit">Preview cleanup</button>
+            </form>
+            <form method="post" th:action="@{'/repositories/' + ${repo} + '/cleanup'}">
+                <button type="submit">Run cleanup now</button>
+            </form>
+        </div>
+    </article>
+
+</main>
+<footer th:replace="~{base :: footer}"></footer>
+</body>
+</html>

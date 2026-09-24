@@ -7,7 +7,10 @@ import build.jenesis.repository.store.ReadOnlyException;
 import build.jenesis.repository.ui.PrincipalNameResolver;
 import build.jenesis.repository.ui.NavEntry;
 import build.jenesis.repository.ui.NavEntry.Access;
-import build.jenesis.repository.ui.NavEntry.Section;
+import build.jenesis.repository.ui.NavEntry.Group;
+import build.jenesis.repository.ui.Navigation;
+import build.jenesis.repository.ui.RepositoryPage;
+import build.jenesis.repository.ui.RepositoryPage.Topic;
 import build.jenesis.repository.ui.admin.security.Memberships;
 import build.jenesis.repository.ui.identity.UserDirectory.Role;
 import build.jenesis.repository.ui.CurrentTenant;
@@ -71,13 +74,13 @@ public class GlobalControllerAdvice {
      */
     @ModelAttribute("product")
     public String product() {
-        return "jenesis-repository";
+        return "Jenesis Repository";
     }
 
-    /** One line under the product name, saying what a visitor is signing in to. */
+    /** One line under the sign-in heading, saying what a visitor is signing in to. */
     @ModelAttribute("tagline")
     public String tagline() {
-        return "Admin console for the repository server";
+        return "The console of the repository server.";
     }
 
     @ModelAttribute("readOnly")
@@ -178,64 +181,67 @@ public class GlobalControllerAdvice {
         return memberships.accessibleTo(authentication.getName(), hasSuperadmin(authentication)).size() >= 2;
     }
 
-    /** The console shell's navigation links, resolved to just the ones this user may see, so the template renders them
-     *  with a {@code th:each} and carries no per-screen condition. The core screens (projects, repositories,
-     *  credentials, the role-gated admin/settings/modules screens, and the audit screen when the audit module is
-     *  installed) are listed here; every installed console module then contributes its own links through
-     *  {@link build.jenesis.repository.ui.ConsoleModuleProvider#navEntries()} (discovered once by {@link
-     *  CapabilityService}), gated by the module's declared access floor - so a module's link appears exactly when the
-     *  module is on the path and the user's role clears it, and the shell names no module's screens. */
-    @ModelAttribute("navEntries")
-    public List<NavEntry> navEntries(Authentication authentication) {
+    /**
+     * The console's two navigation levels for this request: the groups the header lists and the pages the sidebar
+     * lists, resolved to just what this reader may open, with the page they are on marked - so the shell renders them
+     * and decides nothing.
+     *
+     * <p>The core screens are listed here, each in the group it belongs to; every imported console module then adds
+     * its own through {@link build.jenesis.repository.ui.ConsoleModuleProvider#navEntries()} and
+     * {@link build.jenesis.repository.ui.ConsoleModuleProvider#repositoryPages()} (discovered once by
+     * {@link CapabilityService}). A page is visible when the reader's role clears its floor and the capability it
+     * requires is present, so the shell names no module's screens and a link never leads to a page that is not there.
+     *
+     * <p>It is resolved once per request. The two lists it replaces - the links and the administration subset of
+     * them - were each a model attribute, and the second recomputed the first, so every page resolved its navigation
+     * twice.
+     */
+    @ModelAttribute("navigation")
+    public Navigation navigation(Authentication authentication, HttpServletRequest request) {
+        if (authentication == null) {
+            return Navigation.NONE;
+        }
         boolean admin = roleAtLeast(authentication, Role.ADMIN);
         boolean superadmin = hasSuperadmin(authentication);
-        CapabilityService.Capabilities caps = capabilities.capabilities();
         List<NavEntry> entries = new ArrayList<>();
+        entries.add(new NavEntry("Repositories", "/repositories", Group.REPOSITORIES));
+        entries.add(new NavEntry("Projects", "/projects", Group.BUILD_CACHE));
+        entries.add(new NavEntry("Credentials", "/credentials", Access.ADMIN, Group.ACCESS));
+        entries.add(new NavEntry("Members", "/admin", Access.ADMIN, Group.ACCESS));
+        entries.add(new NavEntry("Audit trail", "/admin/audit", Access.ADMIN, Group.ACCESS, "audit"));
+        entries.add(new NavEntry("Metrics", "/observability", Access.SUPERADMIN, Group.OPERATIONS));
+        entries.add(new NavEntry("Security posture", "/posture", Access.SUPERADMIN, Group.OPERATIONS));
+        entries.add(new NavEntry("Setup", "/setup", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Settings", "/settings", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Tenant settings", "/settings/tenant", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Modules", "/settings/modules", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Installed providers", "/catalog", Access.SUPERADMIN, Group.SETTINGS));
+        // Picking a tenant is meaningful only where there is more than one to pick, and the header's tenant name
+        // links here too, so a member of several tenants reaches it without the Settings group being theirs.
         if (showInstances(authentication)) {
-            entries.add(new NavEntry("Instances", "/instances"));
+            entries.add(new NavEntry("Instances", "/instances", Group.SETTINGS));
         }
-        entries.add(new NavEntry("Projects", "/projects"));
-        entries.add(new NavEntry("Repositories", "/repositories"));
-        entries.add(new NavEntry("Credentials", "/credentials"));
-        // Everything below is administration: reached rarely, and grouped so the daily objects above are not
-        // buried among them. Two labels are renamed here as well - "Admin" said nothing about the screen (it is
-        // console members and SCIM) and "SPI catalog" is a word for whoever built the thing, not whoever runs it.
-        if (admin && caps.audit()) {
-            entries.add(new NavEntry("Audit trail", "/admin/audit", Access.ADMIN, Section.ADMINISTRATION));
-        }
-        if (admin) {
-            entries.add(new NavEntry("Members", "/admin", Access.ADMIN, Section.ADMINISTRATION));
-        }
-        if (superadmin) {
-            entries.add(new NavEntry("Setup", "/setup", Access.SUPERADMIN, Section.ADMINISTRATION));
-            entries.add(new NavEntry("Settings", "/settings", Access.SUPERADMIN, Section.ADMINISTRATION));
-            entries.add(new NavEntry("Tenant settings", "/settings/tenant",
-                    Access.SUPERADMIN, Section.ADMINISTRATION));
-            entries.add(new NavEntry("Modules", "/settings/modules", Access.SUPERADMIN, Section.ADMINISTRATION));
-            entries.add(new NavEntry("Installed providers", "/catalog",
-                    Access.SUPERADMIN, Section.ADMINISTRATION));
-            entries.add(new NavEntry("Metrics", "/observability",
-                    Access.SUPERADMIN, Section.ADMINISTRATION));
-            entries.add(new NavEntry("Security posture", "/posture",
-                    Access.SUPERADMIN, Section.ADMINISTRATION));
-        }
-        for (NavEntry entry : capabilities.moduleNav()) {
-            if (visibleTo(entry.access(), admin, superadmin)) {
-                entries.add(entry);
-            }
-        }
-        return entries;
+        entries.addAll(capabilities.moduleNav());
+        List<RepositoryPage> pages = new ArrayList<>();
+        pages.add(new RepositoryPage("Overview", "", Topic.CONTENTS));
+        pages.add(new RepositoryPage("Browse & search", "/browse", Topic.CONTENTS));
+        pages.add(new RepositoryPage("Staging", "/staging", Topic.CONTENTS, "staging"));
+        pages.add(new RepositoryPage("Import", "/import", Topic.CONTENTS, "import"));
+        pages.add(new RepositoryPage("Retention & cleanup", "/retention", Topic.LIFECYCLE, "retention"));
+        pages.add(new RepositoryPage("Pins", "/pins", Topic.LIFECYCLE));
+        pages.addAll(capabilities.moduleRepositoryPages());
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return ConsoleNavigation.resolve(
+                entries.stream()
+                        .filter(entry -> visibleTo(entry.access(), admin, superadmin) && capabilities.has(entry.requires()))
+                        .toList(),
+                pages.stream()
+                        .filter(page -> visibleTo(page.access(), admin, superadmin) && capabilities.has(page.requires()))
+                        .toList(),
+                path);
     }
 
-    /** The administration entries, split out so the shell renders one grouped disclosure rather than a flat bar. */
-    @ModelAttribute("adminNav")
-    public List<NavEntry> adminNav(Authentication authentication) {
-        return navEntries(authentication).stream()
-                .filter(entry -> entry.section() == Section.ADMINISTRATION)
-                .toList();
-    }
-
-    /** Whether a module-contributed nav entry's access floor is cleared by the current user's role. */
+    /** Whether a page's access floor is cleared by the current user's role. */
     private static boolean visibleTo(NavEntry.Access access, boolean admin, boolean superadmin) {
         return switch (access) {
             case USER -> true;

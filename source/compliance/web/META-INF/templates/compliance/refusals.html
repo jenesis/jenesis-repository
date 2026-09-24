@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<!--
+  refusals.html - what the gate refused outright in one repository, most recent first. A refusal stores nothing, so
+  there is nothing to release or discard here: this is a record, not a queue, read from the durable quarantine ledger
+  and never re-screened.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Refused')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Refused')}"></header>
+    <p><small>Uploads and upstream bodies the gate refused outright, the latest <span th:text="${pageSize}">200</span>.
+        A refusal stores nothing, so there is nothing to release or discard - unlike the quarantine queue, this is a
+        record, not a queue.</small></p>
+    <figure th:unless="${refusals.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Coordinate</th>
+                <th scope="col">Verdict</th>
+                <th scope="col">Refusal</th>
+                <th scope="col">When</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="f : ${refusals}">
+                <td>
+                    <span th:text="${f.coordinate}">group:artifact:version</span><br>
+                    <small><code th:text="${f.path}">/path/...</code></small>
+                </td>
+                <td><span class="app-badge app-badge--danger" th:text="${f.verdict}">REJECT</span></td>
+                <td><small th:text="${#strings.listJoin(f.reasons, '; ')}">reason</small></td>
+                <td><small th:text="${f.when}">when</small></td>
+            </tr>
+            </tbody>
+        </table>
+    </figure>
+    <th:block th:if="${refusals.isEmpty()}">
+        <div th:replace="~{base :: empty('Nothing refused.')}"></div>
+    </th:block>
+</main>
+<footer th:replace="~{base :: footer}"></footer>
+</body>
+</html>

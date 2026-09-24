@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Pins')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Pins')}"></header>
+    <p><small>A pinned version is never evicted, whatever the retention policy says.</small></p>
+    <ul th:unless="${pins.isEmpty()}">
+        <li th:each="pin : ${pins}">
+            <code th:text="${pin.ecosystem()} + ':' + ${pin.coordinate()} + ':' + ${pin.version()}">ecosystem:coordinate:version</code>
+            <form th:if="${isEditor}" method="post" style="display:inline; margin:0"
+                  th:action="@{'/repositories/' + ${repo} + '/pins/remove'}"
+                  data-confirm="Lift this pin? The version becomes eligible for retention eviction.">
+                <input type="hidden" name="ecosystem" th:value="${pin.ecosystem()}">
+                <input type="hidden" name="coordinate" th:value="${pin.coordinate()}">
+                <input type="hidden" name="version" th:value="${pin.version()}">
+                <button class="secondary outline" type="submit">unpin</button>
+            </form>
+        </li>
+    </ul>
+    <th:block th:if="${pins.isEmpty()}">
+        <div th:replace="~{base :: empty('No pins. A pinned version is never evicted by retention.')}"></div>
+    </th:block>
+    <form th:if="${isEditor}" method="post" th:action="@{'/repositories/' + ${repo} + '/pins'}">
+        <div class="grid">
+            <!--/* Labelled, not merely placeheld: a placeholder disappears the moment there is a value, so a
+                 field carrying only one is unlabelled for anyone reviewing what they typed, and unlabelled
+                 outright for a screen reader (WCAG 3.3.2). */-->
+            <label>Ecosystem
+                <input name="ecosystem" placeholder="npm" list="ecosystems" required>
+                <datalist id="ecosystems">
+                    <option th:each="e : ${ecosystems}" th:value="${e}"></option>
+                </datalist>
+            </label>
+            <label>Coordinate <input name="coordinate" placeholder="org.acme:lib" required></label>
+            <label>Version <input name="version" placeholder="1.4.0" required></label>
+        </div>
+        <button type="submit">Pin a version</button>
+    </form>
+</main>
+<footer th:replace="~{base :: footer}"></footer>
+</body>
+</html>

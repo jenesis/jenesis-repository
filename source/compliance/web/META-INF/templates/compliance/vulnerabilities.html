@@ -3,10 +3,9 @@
 <head th:replace="~{fragments :: head('Vulnerabilities')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Vulnerabilities · ' + ${repo})}"></header>
-    <p><a th:href="@{/repositories/{repo}(repo=${repo})}">&larr; back to repository</a></p>
 
     <p th:unless="${capabilities.advisories()}">
         No advisory feed module is installed on this deployment, so its published artifacts are not scanned.
@@ -135,5 +134,6 @@
         </figure>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

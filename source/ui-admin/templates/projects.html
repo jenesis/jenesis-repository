@@ -3,7 +3,7 @@
 <head th:replace="~{fragments :: head('Projects')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Projects')}"></header>
     <figure th:unless="${projects.isEmpty()}">
@@ -48,5 +48,6 @@
         </form>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>

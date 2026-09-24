@@ -3,7 +3,7 @@
 <head th:replace="~{fragments :: head('Instances')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
-<main id="main" class="container">
+<main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Instances')}"></header>
     <p><small>An instance is a tenant: its own projects, credentials and members, isolated from the
@@ -78,5 +78,6 @@
         </form>
     </article>
 </main>
+<footer th:replace="~{base :: footer}"></footer>
 </body>
 </html>
