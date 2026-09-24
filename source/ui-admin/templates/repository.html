@@ -117,8 +117,8 @@
                 pointers on the <a th:href="@{/settings/modules}">Modules</a> screen.</small></p>
             <div th:each="eco : ${unplaceable}" class="app-actions">
                 <code th:text="${eco}">ecosystem</code>
-                <!-- The retirement runs off the request, so the row says what its last (or current) pass did rather
-                     than leaving a button that appears to do nothing. -->
+                <!--/* The retirement runs off the request, so the row says what its last (or current) pass did rather
+                     than leaving a button that appears to do nothing. */-->
                 <small th:if="${retirements != null and retirements.containsKey(eco) and retirements.get(eco).running()}">
                     Retiring now&hellip;</small>
                 <small th:if="${retirements != null and retirements.containsKey(eco) and !retirements.get(eco).running()}"
@@ -202,9 +202,9 @@
             </th:block>
             <form th:if="${isEditor}" method="post" th:action="@{'/repositories/' + ${repo} + '/pins'}">
                 <div class="grid">
-                    <!-- Labelled, not merely placeheld: a placeholder disappears the moment there is a value, so a
+                    <!--/* Labelled, not merely placeheld: a placeholder disappears the moment there is a value, so a
                          field carrying only one is unlabelled for anyone reviewing what they typed, and unlabelled
-                         outright for a screen reader (WCAG 3.3.2). -->
+                         outright for a screen reader (WCAG 3.3.2). */-->
                     <label>Ecosystem
                         <input name="ecosystem" placeholder="npm" list="ecosystems" required>
                         <datalist id="ecosystems">
@@ -310,9 +310,9 @@
                     </thead>
                     <tbody>
                     <tr th:each="r : ${releases}">
-                        <!-- Every release has a screen of its own, whichever way its format stores: the coordinate page
+                        <!--/* Every release has a screen of its own, whichever way its format stores: the coordinate page
                              lists the versions and the paths each is served at, for the blobs-namespace formats that have
-                             no folder in the browse tree as much as for the ones that do. -->
+                             no folder in the browse tree as much as for the ones that do. */-->
                         <td><a th:href="@{/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem()},coordinate=${r.coordinate()})}"
                                th:text="${r.coordinate()}">group:artifact</a></td>
                         <td th:text="${r.version}">1.0.0</td>
@@ -320,9 +320,9 @@
                     </tr>
                     </tbody>
                 </table>
-                <!-- A bounded recent slice of the published set (newest first), never the whole set - the detail hub is an
+                <!--/* A bounded recent slice of the published set (newest first), never the whole set - the detail hub is an
                      overview. When more releases exist than this page shows, the count says so and links to the browse page,
-                     which pages the full list; nothing is silently dropped. -->
+                     which pages the full list; nothing is silently dropped. */-->
                 <p th:if="${releasesMore}"><small>The <span th:text="${releases.size()}">0</span> most recent
                     releases. <a th:href="@{/repositories/{repo}/browse(repo=${repo})}">Browse all &rarr;</a></small></p>
             </figure>

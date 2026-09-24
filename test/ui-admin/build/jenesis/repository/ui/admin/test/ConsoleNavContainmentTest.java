@@ -5,19 +5,24 @@ import module java.base;
 
 import build.jenesis.repository.ui.ConsoleModuleProvider;
 import build.jenesis.repository.ui.admin.web.CapabilityService;
+import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * One console module that cannot contribute its nav links costs its own links and nothing else.
  *
- * <p>The fan-out runs at construction, so uncontained it did not merely drop a nav entry - it threw out of
- * {@code CapabilityService}'s field initialiser, which is a Spring context that does not start and therefore a
+ * <p>The fan-out runs while {@code CapabilityService} is being constructed, so uncontained it did not merely drop a
+ * nav entry - it threw out of the constructor, which is a Spring context that does not start and therefore a
  * deployment that does not boot, because one optional module was broken. That is the §3 rule inverted: a discovered
  * optional contributor is supposed to degrade, and this one took the shell with it.
  *
  * <p>{@link HostileConsoleModule} is registered for the whole test module rather than injected, which is the point:
  * if the containment regressed, every suite here would fail at once instead of this one leg.
+ *
+ * <p>The last leg is a different claim about the same fan-out: which modules it asks. A console module that is
+ * switched off is not imported, so its screens do not exist - and the nav was built from every <em>installed</em>
+ * module, so a switched-off one still contributed a link, to a path nothing had mapped.
  */
 class ConsoleNavContainmentTest {
 
@@ -33,8 +38,8 @@ class ConsoleNavContainmentTest {
      * console that ships does the discovering.
      *
      * <p>It was asserted against the shell's own advice until that node went, which made it a claim about a
-     * console no image served. The shipped path discovers through {@link CapabilityService}, whose contributed
-     * nav is a field initialiser, so the fan-out happens when the bean is built or not at all.
+     * console no image served. The shipped path discovers through {@link CapabilityService}, which resolves its
+     * contributed nav in its constructor, so the fan-out happens when the bean is built or not at all.
      *
      * <p>Counting asks rather than timing anything is deliberate: a timing assertion on a saturated machine is
      * the flake this repository keeps having to remove, and the claim is not "it is fast" but "it happens once".
@@ -78,5 +83,29 @@ class ConsoleNavContainmentTest {
         assertThat(service.capabilities())
                 .as("and the rest of the gate is unaffected - the failure cost nav entries, not the shell")
                 .isNotNull();
+    }
+
+    /**
+     * A console module a deployment has switched off contributes no link, because it has no screen for one to reach.
+     *
+     * <p>The nav was resolved from every installed module while the Spring configurations were imported from the
+     * enabled ones, so the two disagreed by exactly the set of switched-off modules - and each of those put an entry
+     * in the bar pointing at a path nothing had mapped. It was not hypothetical: the deploy screen ships switched
+     * off, so every deployment carried an admin-only "Deploy" link answering 404, with nothing in the console able
+     * to say whether the module was missing or merely off.
+     *
+     * <p>Switching off the one module on this path that contributes links is what makes the assertion bite: resolve
+     * from installed and the four links are all still here.
+     */
+    @Test
+    void a_switched_off_console_module_contributes_no_nav_link() {
+        StandardEnvironment switchedOff = new StandardEnvironment();
+        switchedOff.getPropertySources().addFirst(new MapPropertySource("test",
+                Map.of("jenreg." + new NavigatingConsoleModule().name(), "false")));
+
+        assertThat(new CapabilityService(switchedOff).moduleNav())
+                .as("a module the deployment switched off is not imported, so a link to its screen is a link to a "
+                        + "404 - the nav has to ask the same question the imports ask")
+                .isEmpty();
     }
 }

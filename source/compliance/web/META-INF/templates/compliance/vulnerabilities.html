@@ -20,11 +20,11 @@
     </p>
 
     <article th:if="${capabilities.advisories() and report.scanned()}">
-        <!-- The reachability and applicability facets narrow the view only - every finding stays stored and the
+        <!--/* The reachability and applicability facets narrow the view only - every finding stays stored and the
              default shows all. An un-analyzed or un-judged row matches "unknown": absence of proof is unknown,
              never a clean bill. The operator chooses what the reachability facet keys on: the static verdict, the
              AI classifier's opinion (ai:), or the two labels' agreement (agreed:) - where a decisive static
-             verdict always outranks; the applicability facet keys on the AI applicability pass's opinion. -->
+             verdict always outranks; the applicability facet keys on the AI applicability pass's opinion. */-->
         <form method="get" th:action="@{'/repositories/' + ${repo} + '/vulnerabilities'}">
             <div class="grid">
                 <label>Reachability
@@ -48,10 +48,10 @@
                 <label>&nbsp;<button type="submit">Filter</button></label>
             </div>
         </form>
-        <!-- Principle 10: the render above serves the durable ledger only, so its staleness is always shown - a
+        <!--/* Principle 10: the render above serves the durable ledger only, so its staleness is always shown - a
              never-scanned repository must read as exactly that, not as clean. The rescan is the explicit write path
              (re-query every enabled feed, persist, re-render); without the write role the button is not offered,
-             but the last-scan time still is. -->
+             but the last-scan time still is. */-->
         <p><small th:if="${report.lastScanned() != null}">Last scanned against the advisory feeds:
             <span th:text="${report.lastScanned()}">-</span></small>
             <small th:if="${report.lastScanned() == null}">Never scanned against the advisory feeds - findings shown
@@ -65,9 +65,9 @@
         </form>
         <p th:if="${report.partial()}"><small>The ranking has not been built yet, so this page ranks the first
             findings it read rather than the whole repository; the scheduled index pass completes it.</small></p>
-        <!-- The same rule as the staleness line above, for the feed rather than the scan: an empty result renders
+        <!--/* The same rule as the staleness line above, for the feed rather than the scan: an empty result renders
              below as "No known vulnerabilities", and a feed that never answered produces exactly that empty result.
-             So a scan that could not refresh a feed says so, next to the answer it is qualifying. -->
+             So a scan that could not refresh a feed says so, next to the answer it is qualifying. */-->
         <p th:each="warning : ${report.feedWarnings()}"><small th:text="${warning}">-</small></p>
         <th:block th:if="${report.vulnerable().isEmpty()}">
             <div th:replace="~{base :: empty('No known vulnerabilities across this repository&rsquo;s published artifacts match this view.')}"></div>
@@ -102,8 +102,8 @@
                             <span th:if="${advisory.reachability() == 'unknown'}"
                                   class="app-badge app-badge--warn">unknown</span>
                             <span th:if="${advisory.reachability() == ''}">&mdash;</span>
-                            <!-- The AI classifier's opinion renders beside the static verdict, never instead of
-                                 it - both labels, separately attributed: "static: unknown, AI: likely-reachable". -->
+                            <!--/* The AI classifier's opinion renders beside the static verdict, never instead of
+                                 it - both labels, separately attributed: "static: unknown, AI: likely-reachable". */-->
                             <span th:if="${advisory.aiReachability() == 'likely-reachable'}"
                                   class="app-badge app-badge--danger">AI: likely reachable</span>
                             <span th:if="${advisory.aiReachability() == 'likely-not-reachable'}"
@@ -112,8 +112,8 @@
                                   class="app-badge app-badge--warn">AI: unknown</span>
                         </td>
                         <td>
-                            <!-- The applicability pass's opinion is a filter aid, separately attributed - the
-                                 finding stays present and gated exactly as before whatever it says. -->
+                            <!--/* The applicability pass's opinion is a filter aid, separately attributed - the
+                                 finding stays present and gated exactly as before whatever it says. */-->
                             <span th:if="${advisory.applicability() == 'applies'}"
                                   class="app-badge app-badge--danger">AI: applies</span>
                             <span th:if="${advisory.applicability() == 'not-applicable'}"

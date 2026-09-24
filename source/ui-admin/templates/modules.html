@@ -14,9 +14,9 @@
         scheduled re-read and a <strong>restart</strong> one only on its next boot. Whether a module is installed at all
         is an image-build decision (the image's feature set), never a runtime one — a module you do not see was not built
         into this image.</small></p>
-    <!-- Principle 10: the orphaned-data column is a deployment-wide store walk, memoised and re-walked at most once a
+    <!--/* Principle 10: the orphaned-data column is a deployment-wide store walk, memoised and re-walked at most once a
          minute rather than on every render, so its as-of instant is shown - a just-purged module may linger in the
-         counts until the next walk, which this line makes honest rather than reading a stale count as current. -->
+         counts until the next walk, which this line makes honest rather than reading a stale count as current. */-->
     <p th:if="${orphanScannedAt != null}"><small>Orphaned-data diagnostic as of
         <span th:text="${orphanScannedAt}">-</span> — a deployment-wide store walk refreshed at most once a minute,
         not re-run on every render, so a just-purged module may still be counted for up to a minute.</small></p>
@@ -41,8 +41,8 @@
                           title="This module has no enable flag; it is active whenever it is installed.">always on</span>
                     <span class="app-badge app-badge--danger" th:if="${m.orphaned()}"
                           title="This module's declared key-spaces still hold data. Nothing is deleted automatically; purge it explicitly if the removal was intentional.">orphaned data</span>
-                    <!-- A boolean enable flag renders as a one-click toggle, posting the opposite value through the
-                         existing settings write path. A numeric gate (a ceiling) or an ungated module has no switch. -->
+                    <!--/* A boolean enable flag renders as a one-click toggle, posting the opposite value through the
+                         existing settings write path. A numeric gate (a ceiling) or an ungated module has no switch. */-->
                     <form method="post" th:action="@{/settings/save}" class="module-toggle"
                           th:if="${m.installed and m.gated and m.toggleable}">
                         <input type="hidden" name="key" th:value="${m.enableKey}">

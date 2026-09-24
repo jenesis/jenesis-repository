@@ -18,7 +18,7 @@
     empty(message)                  — the one empty-state treatment.
     field(label, name, value, help) — a labelled text input with inline help text.
     alert(message, kind)            — a flash/outcome banner; kind ∈ {pass,warn,danger} or null for info.
-    themeSelect                     — the light/dark/auto switch (wired by /js/theme.js, persisted per browser).
+    themeToggle                     — the light/dark/auto switch (wired by /js/theme.js, persisted per browser).
     dangerButton(label, confirm)    — a destructive submit: the danger treatment plus its confirmation, together.
 
   Kept in sync with app.css (the tokens/styles); each fragment documents itself below.
@@ -38,10 +38,11 @@
     <title th:text="${title} + ' \u00b7 ' + ${product}">Jenesis</title>
     <link rel="stylesheet" th:href="@{/css/pico.min.css}">
     <link rel="stylesheet" th:href="@{/css/app.css}">
-    <!-- Rendered only where a CSRF token exists, so one head serves a console that has one and a page that does not. -->
+    <!--/* Rendered only where a CSRF token exists, so one head serves a console that has one and a page that
+         does not. */-->
     <meta th:if="${_csrf != null}" name="_csrf" th:content="${_csrf.token}">
     <meta th:if="${_csrf != null}" name="_csrf_header" th:content="${_csrf.headerName}">
-    <!-- Deliberately not deferred: a stored dark/light choice must apply before the first paint. -->
+    <!--/* Deliberately not deferred: a stored dark/light choice must apply before the first paint. */-->
     <script th:src="@{/js/theme.js}"></script>
     <script th:src="@{/js/htmx.min.js}" defer></script>
     <script th:src="@{/js/console.js}" defer></script>
@@ -53,17 +54,17 @@
 
 <body>
 
-<!-- Brand: the product logo + name for the top nav. `name` is the product label; `href` is where it links
+<!--/* Brand: the product logo + name for the top nav. `name` is the product label; `href` is where it links
      (the console home). The logo is served from the shared ui resources, so the downstream console renders
-     the same fragment with its own name. -->
+     the same fragment with its own name. */-->
 <a th:fragment="brand(name, href, logo)" th:href="${href}" class="app-brand">
     <img class="app-brand__mark app-brand__mark--light" th:src="@{|/img/${logo}-light.svg|}" alt="" width="20" height="20">
     <img class="app-brand__mark app-brand__mark--dark" th:src="@{|/img/${logo}-dark.svg|}" alt="" width="20" height="20">
     <strong th:text="${name}">Jenesis</strong>
 </a>
 
-<!-- Page header: just a title. A page needing the primary-action slot renders the .app-page-header markup
-     directly or uses pageHeaderCrumbs; this fragment stays presentation-only. -->
+<!--/* Page header: just a title. A page needing the primary-action slot renders the .app-page-header markup
+     directly or uses pageHeaderCrumbs; this fragment stays presentation-only. */-->
 <header th:fragment="pageHeader(title)" class="app-page-header">
     <hgroup class="app-page-header__heading">
         <h1 class="app-page-header__title" th:text="${title}">Title</h1>
@@ -85,40 +86,67 @@
     </hgroup>
 </header>
 
-<!-- Empty / loading / error state: one consistent treatment, never a blank screen. -->
+<!--/* Empty / loading / error state: one consistent treatment, never a blank screen. */-->
 <!--/* The console header, and the only one: every screen and every edition renders this, so moving between
      screens - or from one edition to the other - changes the page under it and nothing around it.
 
-     The brand is a parameter because that is edition identity rather than a difference to erase, and `extras` is a
-     slot for the items an edition has and the other does not (a licence badge belongs to whoever has licensing, and
-     naming it here would put one edition's vocabulary in the other's shell). Pass `~{}` when there are none.
+     Three rows, sticky, in that order. A deployment-wide notice strip - what an operator should know wherever they
+     have scrolled to. Then the identity row: what this is (brand, theme) against what my session is (tenant,
+     posture, edition, who is signed in). Then the module links, alone on a line. It was one row carrying all of it,
+     and on a deployment with several modules installed the links wrapped around the chrome, so the bar an operator
+     navigates by had a different shape on every screen and at every width.
 
-     Everything else is model-driven and null-safe: a console that publishes no tenant, no posture badge and no
+     The brand is a parameter because that is edition identity rather than a difference to erase. The two edition
+     slots are NOT parameters: `editionBanner` and `editionBadges` are fragment specifications an edition publishes
+     on every model, preprocessed here, and absent ones render as the empty fragment. They were parameters, and
+     three shared screens that render this shell passed `~{}` for them - so the edition badge and the banner, the
+     one thing that is supposed to be on every page, were missing from exactly the pages nobody passed it on.
+     Reading the model means a screen cannot forget. Neither name is one edition's vocabulary: they say "whatever
+     this edition has", and a console with no such module publishes neither.
+
+     Everything else is model-driven and null-safe too: a console that publishes no tenant, no posture badge and no
      signed-in user renders none of those, so the same markup serves a single-tenant console and a multi-tenant one
      without asking which it is. */-->
-<th:block th:fragment="shell(brandName, brandHref, brandLogo, extras)">
+<th:block th:fragment="shell(brandName, brandHref, brandLogo)">
     <a class="app-skip-link" href="#main">Skip to content</a>
-    <nav class="container app-nav" aria-label="Primary">
-        <ul>
-            <li th:insert="~{base :: brand(${brandName}, ${brandHref}, ${brandLogo})}"></li>
-        </ul>
-        <ul>
-            <th:block th:insert="~{base :: navLinks(${navEntries}, ${adminNav})}"></th:block>
-            <li th:if="${tenant != null and showTenant}">
-                <small>Tenant <strong th:text="${tenant}">default</strong></small></li>
-            <li th:if="${postureBadge != null and postureBadge.visible()}">
-                <a th:href="@{/posture}" class="secondary"
-                   th:title="${postureBadge.title()}" th:text="${postureBadge.label()}">posture</a></li>
-            <th:block th:replace="${extras}"></th:block>
-            <li th:if="${currentUser}"><small>Signed in as <span th:text="${currentUser}">user</span></small></li>
-            <li><select th:replace="~{base :: themeSelect}"></select></li>
-            <li th:if="${currentUser}">
-                <form method="post" th:action="@{/logout}" style="display:inline; margin:0">
-                    <button class="secondary outline" type="submit">Sign out</button>
-                </form>
-            </li>
-        </ul>
-    </nav>
+    <header class="app-header">
+        <th:block th:replace="~{__${editionBanner ?: ''}__}"></th:block>
+        <div class="app-header__bar container">
+            <div class="app-header__identity">
+                <a th:replace="~{base :: brand(${brandName}, ${brandHref}, ${brandLogo})}"></a>
+                <button th:replace="~{base :: themeToggle}"></button>
+            </div>
+            <ul class="app-header__meta">
+                <li th:if="${tenant != null and showTenant}">
+                    <small>Tenant <strong th:text="${tenant}">default</strong></small></li>
+                <li th:if="${postureBadge != null and postureBadge.visible()}">
+                    <a th:href="@{/posture}" class="secondary"
+                       th:title="${postureBadge.title()}" th:text="${postureBadge.label()}">posture</a></li>
+                <th:block th:replace="~{__${editionBadges ?: ''}__}"></th:block>
+                <!--/* The name is the control, and the arrow is what says so. A name rendered as text beside a
+                     separate button spent two items of this row on one thing, and the half a reader looks for was
+                     the half that looked inert. A POST, because signing out is a state change and the CSRF token
+                     rides the form. */-->
+                <li th:if="${currentUser}">
+                    <form method="post" th:action="@{/logout}" class="app-signout">
+                        <button class="app-signout__button" type="submit" title="Sign out"
+                                th:attr="aria-label='Sign out ' + ${currentUser}">
+                            <span th:text="${currentUser}">user</span>
+                            <span class="app-icon" aria-hidden="true"></span>
+                        </button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+        <!--/* The links, and nothing else. Rendered only where there are some: a principal holding nothing sees the
+             no-access screen, and an empty bar above it would read as a bar that failed to load. */-->
+        <nav class="container app-nav" aria-label="Primary"
+             th:if="${(navEntries != null and !navEntries.isEmpty()) or (adminNav != null and !adminNav.isEmpty())}">
+            <ul>
+                <th:block th:insert="~{base :: navLinks(${navEntries}, ${adminNav})}"></th:block>
+            </ul>
+        </nav>
+    </header>
 </th:block>
 
 <!--/* The links every installed console module contributes, rendered identically wherever the console runs.
@@ -149,15 +177,15 @@
     <p th:text="${message}" style="margin:0">Nothing here yet.</p>
 </div>
 
-<!-- There is no badge fragment. A status pill is the `.app-badge` class plus one of `--pass`, `--warn`,
+<!--/* There is no badge fragment. A status pill is the `.app-badge` class plus one of `--pass`, `--warn`,
      `--danger`, `--info` or `--muted`, written directly - which is what all sixty-nine of them already did, while
      the two-argument fragment that used to sit here was rendered by nothing at all. It could not have served them
      anyway: a badge routinely carries a `th:if`, a `title`, or composed content, none of which a fixed pair of
      parameters expresses. What actually needed to be shared was the appearance, and that lives in app.css, where
      the kind now carries its own icon - so two badges meaning the same thing look the same without any template
-     naming one. A fragment nobody renders, documented as though they did, is worse than no fragment. -->
+     naming one. A fragment nobody renders, documented as though they did, is worse than no fragment. */-->
 
-<!-- Work that is running off the request path, and the marker that keeps the page current while it does.
+<!--/* Work that is running off the request path, and the marker that keeps the page current while it does.
 
      A screen never blocks and never waits: it renders what is known and refreshes itself. This is the one place
      that says so, and the one place the interval lives - console.js finds the marker, re-fetches the page and
@@ -165,12 +193,12 @@
      stops on its own, because a finished report renders no marker for the next poll to find.
 
      A screen wanting a different cadence sets data-app-poll itself; three seconds suits every report the consoles
-     currently start, all of which are minutes rather than hours. -->
+     currently start, all of which are minutes rather than hours. */-->
 <p th:fragment="running(message)" class="app-running" role="status" data-app-poll="3000">
     <small th:text="${message}">Something is running.</small>
 </p>
 
-<!-- Form field with inline help: label, control, help text — the atom the config page composes from. -->
+<!--/* Form field with inline help: label, control, help text — the atom the config page composes from. */-->
 <div th:fragment="field(label, name, value, help)" class="app-field">
     <label th:for="${name}" th:text="${label}">Label</label>
     <input type="text" th:id="${name}" th:name="${name}" th:value="${value}"
@@ -178,13 +206,13 @@
     <small class="app-field__help" th:id="${name} + '-help'" th:text="${help}">Help text.</small>
 </div>
 
-<!-- Alert / flash message: the one outcome-banner treatment. An error is role=alert so assistive technology
-     announces it; anything else is a polite status. The text always carries the meaning, never colour alone. -->
+<!--/* Alert / flash message: the one outcome-banner treatment. An error is role=alert so assistive technology
+     announces it; anything else is a polite status. The text always carries the meaning, never colour alone. */-->
 <p th:fragment="alert(message, kind)" class="app-alert"
    th:classappend="${kind} != null ? 'app-alert--' + ${kind} : ''"
    th:attr="role=${kind == 'danger'} ? 'alert' : 'status'" th:text="${message}">message</p>
 
-<!-- Destructive submit button: the danger treatment and the confirmation in one place.
+<!--/* Destructive submit button: the danger treatment and the confirmation in one place.
 
      Both halves exist because either alone is insufficient. Styling without a prompt still lets one click destroy
      something; a prompt without styling gives no warning until after the click, and a dialog that appears
@@ -193,17 +221,22 @@
 
      `confirm` is the question, and it should name the consequence rather than the verb: "Discard this artifact?
      It cannot be recovered." tells the reader what they lose, where "Are you sure?" tells them nothing they did
-     not already know. -->
+     not already know. */-->
 <button th:fragment="dangerButton(label, confirm)" type="submit" class="secondary outline app-danger"
         th:attr="data-confirm=${confirm}" th:text="${label}">delete</button>
 
-<!-- Theme switch: a compact labelled select the shell nav carries. /js/theme.js (loaded by the head fragment)
-     applies the stored choice before first paint and wires every [data-theme-select]; "auto" follows the OS. -->
-<select th:fragment="themeSelect" class="app-theme-select" data-theme-select aria-label="Color theme">
-    <option value="auto">Auto</option>
-    <option value="light">Light</option>
-    <option value="dark">Dark</option>
-</select>
+<!--/* Theme switch: an icon button beside the brand, cycling auto -> light -> dark. /js/theme.js (loaded by the
+     head fragment, deliberately without defer) applies the stored choice before first paint and wires every
+     [data-theme-toggle]; "auto" follows the OS.
+
+     Which glyph shows is decided in CSS from the document's own data-theme - absent means auto - so the button is
+     correct at first paint rather than after a script has run. The script's only job here is to name the state for
+     a reader who cannot see the glyph, which it does by extending this label; the label in the markup is the floor,
+     so the button is never nameless even with scripting off. */-->
+<button th:fragment="themeToggle" type="button" class="app-theme-toggle" data-theme-toggle
+        aria-label="Color theme" title="Color theme">
+    <span class="app-icon" aria-hidden="true"></span>
+</button>
 
 </body>
 </html>

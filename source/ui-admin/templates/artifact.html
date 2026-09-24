@@ -96,10 +96,10 @@
         <p><a th:href="@{'/repositories/' + ${repo} + '#quarantine'}">Review the quarantine queue &rarr;</a></p>
     </article>
 
-    <!-- Quality-inspection subsection: a scoped error state, rendered on the shared subsectionError wrapper, only when
+    <!--/* Quality-inspection subsection: a scoped error state, rendered on the shared subsectionError wrapper, only when
          this coordinate carries an inspection-failed finding (the compliance screen could not parse the artifact, so it
          was screened from its path coordinate alone). It errors JUST this panel - every sibling article above and below
-         renders normally, so one subsection's derive-failure never blanks the artifact view (PRINCIPLES 5/10). -->
+         renders normally, so one subsection's derive-failure never blanks the artifact view (PRINCIPLES 5/10). */-->
     <th:block th:if="${detail.inspection != null}">
         <div th:replace="~{fragments :: subsectionError('Quality inspection',
              'This artifact could not be fully parsed by its quality inspector, so it was screened only from its path coordinate - not fully screened.',

@@ -2,7 +2,7 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{base :: head('Installed providers', 'jenesis-repository')}"></head>
 <body>
-<th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{})}"></th:block>
+<th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository')}"></th:block>
 
 <main id="main" class="container">
     <div th:replace="~{base :: messages}"></div>

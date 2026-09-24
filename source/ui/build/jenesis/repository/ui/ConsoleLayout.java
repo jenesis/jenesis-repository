@@ -41,8 +41,8 @@ public final class ConsoleLayout {
     /** The product brand block, taking the name, its link and the logo. */
     public static final String BRAND = "brand";
 
-    /** The theme picker control. */
-    public static final String THEME_SELECT = "themeSelect";
+    /** The theme switch: an icon button cycling auto, light and dark. */
+    public static final String THEME_TOGGLE = "themeToggle";
 
     /** The shared list of what every page loads - a console adding its own {@code <head>} extras includes this. */
     public static final String HEAD_CONTENTS = "headContents";
@@ -54,7 +54,8 @@ public final class ConsoleLayout {
      *  the same way by every console so a module's {@code NavEntry} looks right wherever it is installed. */
     public static final String NAV_LINKS = "navLinks";
 
-    /** The console header every screen renders: brand, links, theme switch, sign-out. */
+    /** The console header every screen renders: the edition's notice strip, the brand and theme switch, the
+     *  tenant, posture and signed-in identity, and the module links on a line of their own. */
     public static final String SHELL = "shell";
 
     /** The deployment-wide notices a screen shows above its content (read-only, anonymous access, flash messages). */
@@ -77,7 +78,7 @@ public final class ConsoleLayout {
 
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
-            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BRAND, THEME_SELECT, HEAD_CONTENTS,
+            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, BRAND, THEME_TOGGLE, HEAD_CONTENTS,
             DANGER_BUTTON, NAV_LINKS, SHELL, MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP, RUNNING);
 
     private ConsoleLayout() {

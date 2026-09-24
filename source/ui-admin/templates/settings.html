@@ -152,11 +152,11 @@
             stored settings.</small></p>
         <a class="secondary" role="button" th:href="@{/settings/export}" download="jenesis-settings.json">Download
             settings bundle</a>
-        <!-- The CSRF token rides in the action URL, not only in the body: this is the one multipart form in the
+        <!--/* The CSRF token rides in the action URL, not only in the body: this is the one multipart form in the
              console, and with Spring's multipart resolver deliberately off everywhere (it would drain an artifact
              upload body before a format read it - D-018) nothing parses the body before the CsrfFilter runs, so a
              token hidden in the body would never be seen. The body is read by the product's own bounded multipart
-             reader in SettingsController instead. -->
+             reader in SettingsController instead. */-->
         <form method="post" th:action="@{/settings/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
               onsubmit="return window.confirm('Restore settings from this bundle? It replaces the current stored settings.');">
             <input type="file" name="bundle" accept="application/json,.json" required>

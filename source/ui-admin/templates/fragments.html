@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:fragment="head(title)">
-    <!-- The shared list of what every page loads - one place, both consoles. This was a second copy until it
+    <!--/* The shared list of what every page loads - one place, both consoles. This was a second copy until it
          proved the point: a script added to the shared shell was simply missing here. Only the admin-specific
-         stylesheet below is local. -->
+         stylesheet below is local. */-->
     <th:block th:replace="~{base :: headContents(${title}, 'jenesis-repository')}"></th:block>
     <style>
         code { word-break: break-all; }
@@ -16,21 +16,16 @@
            tiles an orphan dashed where an installed contributor is tiled solid) and so do the title/aria-label, so
            this tint is an extra cue and never the only one - the state survives with colour off. */
         .format-icon--orphaned { color: var(--pico-muted-color); }
-        /* The unlicensed banner. Tinted from the SHARED status palette rather than from a colour chosen here, so
-           it inherits the light and dark values that were already picked for WCAG AA and axe-core checks it in
-           both themes without a new pair to verify. Amber for the two states an operator can act on and INFO blue
-           for plain evaluation, because "you never had a licence" is a fact about the deployment rather than a
-           problem with it.
-           Not the muted pair, which is what this used first: muted is Pico's deliberately low-contrast grey-on-grey
-           for de-emphasised text, and axe failed it at AA on eight screens. A banner nobody is meant to miss is the
-           wrong place to borrow a de-emphasis treatment - the check said so before a person could. It lives in this console's own stylesheet, not in app.css: licensing is this console's
-           concern and the shared one must not carry its vocabulary. */
-        .app-license-banner { background: var(--app-status-info-bg); color: var(--app-status-info-fg);
-                              font-size: .82rem; padding: .4rem 0; }
-        .app-license-banner .container { display: flex; gap: .6rem; align-items: baseline; flex-wrap: wrap; }
-        .app-license-banner--expired, .app-license-banner--invalid {
-                              background: var(--app-status-warn-bg); color: var(--app-status-warn-fg); }
-        .app-license-banner a { color: inherit; }
+        /* There is no banner rule here any more. The strip it styled is the shared shell's `.app-notice`, in
+           app.css, for a reason this copy could not satisfy: the banner renders inside the shared header now, and
+           three screens of the shared shell load app.css WITHOUT this stylesheet - so a strip styled only here was
+           an unstyled band of text on exactly those pages. What moved is a notice treatment, which is a shell
+           concern; what did not is the word "licence", which appears nowhere in the shared file. The reasoning that
+           was written here is worth keeping: the tint comes from the semantic status palette rather than from a
+           colour picked locally, so it inherits the light and dark values already measured for WCAG AA. It first
+           used Pico's muted pair - deliberately low-contrast grey-on-grey for de-emphasised text - and axe failed
+           it at AA on eight screens. A strip nobody is meant to miss is the wrong place to borrow a de-emphasis
+           treatment, and the check said so before a person could. */
         /* Config-page knob (W4.4a): each setting is one form-field-with-help block - label + key, doc inline,
            effective-vs-default, a live/restart badge, the typed control and a one-click revert. */
         /* Breaking inside a word is the shared app.css's rule, which names this row beside the module card:
@@ -65,27 +60,29 @@
     </style>
 </head>
 <body>
-<!-- The shell nav: the skip link is the page's first focusable element (the accessibility baseline), the nav
-     wraps on a narrow viewport (.app-nav) and carries the shared theme switch. -->
-<!-- The shared console header, with this console's own badges passed into its slot. The header itself - brand,
-     links, tenant, posture, sign-out - is the base module's, so both consoles render one shell and a screen moved
-     between them changes nothing around it. -->
+<!--/* The shell nav: the skip link is the page's first focusable element (the accessibility baseline), the nav
+     wraps on a narrow viewport (.app-nav) and carries the shared theme switch. */-->
+<!--/* The shared console header. All of it - the edition's notice strip, the brand and theme switch, the tenant,
+     the posture count, the signed-in identity and the module links - is the base module's, so both consoles render
+     one shell and a screen moved between them changes nothing around it.
+
+     This used to pass the edition badges in as an argument and render the banner beside the shell, which put the
+     strip below the header and left it out of the three shared screens that call the shell directly. Both slots are
+     read from the model inside the shell now, so this fragment is the shell, and every screen gets them. It is kept
+     as a fragment rather than inlined at its thirty call sites because it is where this console's own name for the
+     product is stated. */-->
 <th:block th:fragment="nav">
-    <th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{__${editionBadges ?: ''}__})}"></th:block>
-    <!-- The edition badges and the banner above are whatever console module names them: a fragment specification on
-         the model (the licence module's, today), preprocessed into a fragment expression, or the empty fragment
-         when no module does - so a console composed without a licence module renders nothing in their place. -->
-    <th:block th:replace="~{__${editionBanner ?: ''}__}"></th:block>
+    <th:block th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository')}"></th:block>
 </th:block>
-<!-- Flash messages on the shared alert treatment (base :: alert): announced as status/alert, tinted from the
+<!--/* Flash messages on the shared alert treatment (base :: alert): announced as status/alert, tinted from the
      status palette in both themes - never a hard-coded colour. th:if sits on a wrapping block because fragment
-     inclusion (precedence 100) would otherwise run before the conditional (300). -->
+     inclusion (precedence 100) would otherwise run before the conditional (300). */-->
 <div th:fragment="messages" th:replace="~{base :: messages}"></div>
-<!-- One runtime setting as the console renders it - its label, key and module, the live/restart, changed, pinned and
+<!--/* One runtime setting as the console renders it - its label, key and module, the live/restart, changed, pinned and
      high-impact badges, its own description, effective value against default, and the save (or revert) form - drawn
      here once for the settings screen and the first-run setup guide, which shows the same rows for the keys each step
      names. `s` is a SettingsAdmin.SettingView; `back` is the console path the save returns to (the settings screen
-     vets it). Both forms post to /settings/save, so a value applied from either screen is applied by one path. -->
+     vets it). Both forms post to /settings/save, so a value applied from either screen is applied by one path. */-->
 <div th:fragment="settingRow(s, back)" class="setting"
      th:attr="data-search=|${s.key} ${s.label} ${s.description} ${s.module}|">
     <div class="setting-head">
@@ -143,20 +140,20 @@
     </div>
 </div>
 
-<!-- subsectionError: the shared scoped-error panel for ONE derived-metadata subsection (licenses, dependencies,
+<!--/* subsectionError: the shared scoped-error panel for ONE derived-metadata subsection (licenses, dependencies,
      SBOM, maintainer-health, findings, provenance, quality-inspection). When a subsection's data could not be
      derived/parsed (distinct from genuinely empty), the caller renders THIS in that subsection's place while every
      sibling subsection and the rest of the artifact view render normally - PRINCIPLES 5 (never serve an incomplete
      view as whole) and 10 (render what you have): a failure in one panel must never 500 or blank the whole page.
      One reusable wrapper on the shared alert treatment, so the error state is uniform across subsections rather than
      a bespoke per-panel hack. `title` names the subsection, `message` the scoped explanation, `detail` an optional
-     cause line. -->
+     cause line. */-->
 <article th:fragment="subsectionError(title, message, detail)"
          th:replace="~{base :: subsectionError(${title}, ${message}, ${detail})}"></article>
-<!-- shapeBadges: the parsed repository shape as inline badges (T25.6 item 2), shared by the repositories list and the
+<!--/* shapeBadges: the parsed repository shape as inline badges (T25.6 item 2), shared by the repositories list and the
      repository detail hub so both render one repository's writable/read-only/host+proxy posture and its per-fallback
      store/no-store + screen-strength (or inner-repo reference) badges identically, straight from the one Definition the
-     router routes on. Nothing renders for an unconfigured/malformed shape (the default plain writable hosted). -->
+     router routes on. Nothing renders for an unconfigured/malformed shape (the default plain writable hosted). */-->
 <th:block th:fragment="shapeBadges(shape)">
     <th:block th:if="${shape != null and shape.configured()}">
         <span th:if="${shape.hybrid()}" class="app-badge"

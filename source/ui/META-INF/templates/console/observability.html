@@ -2,7 +2,7 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{base :: head('Metrics overview', 'jenesis-repository')}"></head>
 <body>
-<header th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{})}"></header>
+<header th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository')}"></header>
 <main id="main" class="container">
     <div th:replace="~{base :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Metrics overview')}"></header>
@@ -70,7 +70,7 @@
                         <span th:text="${metric.limit().getAsDouble()}">0</span> used —
                         <span th:text="${#numbers.formatDecimal(pct, 1, 0)} + '%'">0%</span>
                     </small>
-                    <!-- A plain bar of the fraction of the limit occupied right now, never a time-series graph. -->
+                    <!--/* A plain bar of the fraction of the limit occupied right now, never a time-series graph. */-->
                     <div><progress max="100"
                             th:value="${metric.usage().getAsDouble() >= 1.0 ? 100 : (metric.usage().getAsDouble() * 100)}"></progress></div>
                 </div>
@@ -100,8 +100,8 @@
         </th:block>
     </div>
 </main>
-<!-- A purely in-memory filter over the rendered items, matching each item's data-search (name + description + state),
-     like the settings screen's option filter - no request wiring. -->
+<!--/* A purely in-memory filter over the rendered items, matching each item's data-search (name + description + state),
+     like the settings screen's option filter - no request wiring. */-->
 <script th:inline="none">
     (function () {
         var input = document.getElementById('observability-filter');

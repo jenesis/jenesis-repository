@@ -122,8 +122,8 @@
                     <td th:text="${row.fixed() == '' ? '—' : row.fixed()}">2.17.1</td>
                     <td><small th:text="${row.firstSeen()} + ' &rarr; ' + ${row.lastSeen()}">first &rarr; last</small></td>
                     <td>
-                        <!-- Only an AI-produced row takes a decision; the decision is a label on the
-                             still-present row - reversible, never a removal. -->
+                        <!--/* Only an AI-produced row takes a decision; the decision is a label on the
+                             still-present row - reversible, never a removal. */-->
                         <th:block th:if="${row.reviewable()}">
                             <span th:if="${row.review() == 'confirmed'}"
                                   class="app-badge app-badge--danger">confirmed</span>

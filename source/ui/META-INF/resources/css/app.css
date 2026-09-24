@@ -7,8 +7,10 @@
  *
  * It is *additive* over Pico: it never overrides a Pico rule wholesale, it only defines --app-* tokens and .app-*
  * component classes that build on Pico's own --pico-* variables, so light/dark theming (Pico's data-theme) keeps
- * working with no screen hard-coding a colour. Keep this file in sync with DESIGN.md, which documents the tokens,
- * the component set and the accessibility baseline.
+ * working with no screen hard-coding a colour.
+ *
+ * Each component below documents itself, including the accessibility baseline it carries; there is no companion
+ * document to keep in step, because the one that used to be cited here was deleted and the citation outlived it.
  */
 
 /* ---- Design tokens ------------------------------------------------------------------------------------------ */
@@ -36,6 +38,12 @@
     --app-icon-warn: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 1.7 21h20.6z"/><path d="M12 9v5"/><path d="M12 17.5v.5"/></svg>');
     --app-icon-cross: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>');
     --app-icon-info: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 11v6"/><path d="M12 7.5v.5"/></svg>');
+    /* The theme switch's three states and the sign-out arrow. The first three are picked by the document's own
+       data-theme rather than by a class the script maintains, so the glyph is right before any script runs. */
+    --app-icon-sun: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.8v2.4"/><path d="M12 19.8v2.4"/><path d="M4.4 4.4l1.7 1.7"/><path d="M17.9 17.9l1.7 1.7"/><path d="M1.8 12h2.4"/><path d="M19.8 12h2.4"/><path d="M4.4 19.6l1.7-1.7"/><path d="M17.9 6.1l1.7-1.7"/></svg>');
+    --app-icon-moon: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 15.2A9 9 0 0 1 8.8 3.5a9 9 0 1 0 11.7 11.7z"/></svg>');
+    --app-icon-auto: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="black"/></svg>');
+    --app-icon-exit: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h3"/><path d="M15 7.5l4.5 4.5L15 16.5"/><path d="M9 12h10.5"/></svg>');
 
     /* Radii. */
     --app-radius-sm: 0.25rem;
@@ -130,6 +138,13 @@
     outline: 2px solid var(--pico-primary, #0172ad);
     outline-offset: 2px;
     border-radius: var(--app-radius-sm);
+}
+
+/* An in-page jump lands below the sticky header rather than under it - the skip link's own target included, which
+   is the one that matters: "Skip to content" is useless if the first line of content is behind the bar. Generous
+   rather than exact, because the header is three rows and the notice row is only sometimes there. */
+html {
+    scroll-padding-top: 8rem;
 }
 
 /* A skip link for keyboard users: hidden until focused, then pinned to the top-left. */
@@ -441,26 +456,177 @@
     opacity: 0.5;
 }
 
-/* ---- Navigation ---------------------------------------------------------------------------------------------- */
-/* The shell nav wraps on a narrow viewport instead of overflowing off-screen (Pico's nav lists are no-wrap flex). */
+/* ---- Component: the console header ---------------------------------------------------------------------------
+   Three rows in one sticky block: a deployment-wide notice strip, the identity bar (brand, theme, who is signed
+   in, which tenant, the posture count) and the module links on a line of their own.
+
+   It was one row. Everything went in it - brand, every module's link, the administration dropdown, the tenant, the
+   posture badge, the edition badges, the signed-in name, the theme control and a sign-out button - and on a
+   deployment with several modules installed the links wrapped around the chrome, so the bar an operator navigates
+   by was a different shape on every screen and at every width. Splitting the two kinds apart means the links are
+   a list of links and nothing else, which is what makes the second row scannable.
+
+   Sticky because the notice is the reason the strip exists: a deployment running unlicensed, or read-only, should
+   say so wherever the reader has scrolled to, and a strip that only says it at the top of a long page is a strip
+   that goes unread. The nav comes along for the same reason, and `padding-block: 0` is what keeps the three rows
+   from costing a fifth of a phone viewport - Pico pads `body > header` generously, which is right for a header
+   that scrolls away and wrong for one that does not. */
+.app-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding-block: 0;
+    background: var(--pico-background-color);
+    border-bottom: 1px solid var(--pico-muted-border-color);
+}
+
+/* The identity row. Two groups pushed apart, both allowed to wrap: what this is on the left, what my session is
+   on the right. */
+.app-header__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--app-space-3);
+    flex-wrap: wrap;
+    padding-block: var(--app-space-2);
+}
+.app-header__identity {
+    display: flex;
+    align-items: center;
+    gap: var(--app-space-2);
+}
+/* A list, because these are peer items and a screen reader should be able to count them - but not a bulleted one.
+   Pico's list styling is reset here rather than fought with per item. */
+.app-header__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--app-space-3);
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--app-font-size-sm);
+}
+.app-header__meta > li {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* The links row. It keeps `nav`'s own semantics and `.app-nav`'s wrapping; what it no longer keeps is company. */
 .app-nav,
 .app-nav ul {
     flex-wrap: wrap;
 }
+.app-nav {
+    padding-block: 0 var(--app-space-2);
+}
 
-/* The theme switch is a compact inline control in the nav, not a full-width Pico form field. */
-.app-theme-select {
-    width: auto;
+/* ---- Component: the notice strip -----------------------------------------------------------------------------
+   The deployment-wide statement the header's top row carries: small, unmissable, and on every screen. Tinted from
+   the semantic status palette rather than from a colour chosen here, so it inherits the light and dark values
+   already picked for WCAG AA and axe-core checks it in both themes with no new pair to verify. Info is the
+   default because most of what belongs here is a fact about the deployment rather than a problem with it. */
+.app-notice {
+    font-size: var(--app-font-size-xs);
+    padding-block: var(--app-space-1);
+    background: var(--app-status-info-bg);
+    color: var(--app-status-info-fg);
+}
+.app-notice > .container {
+    display: flex;
+    gap: var(--app-space-3);
+    align-items: baseline;
+    flex-wrap: wrap;
+}
+.app-notice--warn { background: var(--app-status-warn-bg); color: var(--app-status-warn-fg); }
+.app-notice--danger { background: var(--app-status-danger-bg); color: var(--app-status-danger-fg); }
+/* The link inherits the strip's foreground: the palette pair is what was measured for contrast, and a link
+   colour laid over it is a pair nobody checked. */
+.app-notice a { color: inherit; }
+
+/* ---- Component: the theme switch -----------------------------------------------------------------------------
+   An icon button beside the brand, cycling auto -> light -> dark, matching the documentation site's control so the
+   two halves of the product feel like one.
+
+   It was a three-option <select>, which was honest about having three states and took the width of a word to say
+   so - in a bar that had no width to spare. The three states survive; what went is the box. Which glyph shows is
+   decided by the document's own `data-theme` (absent means auto), so it is correct at first paint rather than
+   after a script has run, and the script only has to name the state for a reader who cannot see the glyph. */
+.app-theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
     margin: 0;
-    padding-top: var(--app-space-1);
-    padding-bottom: var(--app-space-1);
+    padding: 0;
+    background: none;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--app-radius-sm);
+    color: var(--pico-color);
+    cursor: pointer;
+}
+.app-theme-toggle:hover {
+    border-color: var(--pico-primary);
+    color: var(--pico-primary);
+    background: none;
+}
+.app-theme-toggle .app-icon {
+    width: 1.1rem;
+    height: 1.1rem;
+    margin: 0;
+    -webkit-mask-image: var(--app-icon-auto);
+    mask-image: var(--app-icon-auto);
+}
+[data-theme="light"] .app-theme-toggle .app-icon {
+    -webkit-mask-image: var(--app-icon-sun);
+    mask-image: var(--app-icon-sun);
+}
+[data-theme="dark"] .app-theme-toggle .app-icon {
+    -webkit-mask-image: var(--app-icon-moon);
+    mask-image: var(--app-icon-moon);
+}
+
+/* ---- Component: sign out -------------------------------------------------------------------------------------
+   The signed-in name IS the control, with an arrow leaving a doorway after it. A name rendered as text beside a
+   separate "Sign out" button spends two items of a crowded bar saying one thing, and the name - the item a reader
+   actually looks for - was the half that looked inert. The arrow is what keeps the click from being a surprise:
+   a name on its own reads as a profile link, and this ends the session. */
+.app-signout {
+    margin: 0;
+}
+.app-signout__button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-1);
+    margin: 0;
+    padding: var(--app-space-1) var(--app-space-2);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--app-radius-sm);
+    color: var(--pico-color);
     font-size: var(--app-font-size-sm);
+    line-height: 1.2;
+    cursor: pointer;
+}
+.app-signout__button:hover {
+    border-color: var(--pico-muted-border-color);
+    color: var(--pico-primary);
+    background: none;
+}
+.app-signout__button .app-icon {
+    margin: 0;
+    width: 0.95em;
+    height: 0.95em;
+    -webkit-mask-image: var(--app-icon-exit);
+    mask-image: var(--app-icon-exit);
 }
 
 /* ---- Responsive: narrow viewports and touch ------------------------------------------------------------------ */
-/* A wide table scrolls horizontally inside its own <figure>, never the page. DESIGN.md documents this as the
-   containment contract ("wide tables live in a <figure>"), which was Pico v1 behaviour - the vendored Pico v2
-   styles figure without overflow, so the shared base supplies the rule both consoles rely on. */
+/* A wide table scrolls horizontally inside its own <figure>, never the page. That is the containment contract
+   every screen here is written against, and it was Pico v1 behaviour - the vendored Pico v2 styles figure without
+   overflow, so the shared base supplies the rule both consoles rely on. */
 figure {
     overflow-x: auto;
 }
@@ -484,9 +650,12 @@ figure {
         width: 2.25rem;
         height: 2.25rem;
     }
-    .app-theme-select {
-        padding-top: var(--app-space-2);
-        padding-bottom: var(--app-space-2);
+    .app-theme-toggle {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
+    .app-signout__button {
+        padding: var(--app-space-2);
     }
 }
 

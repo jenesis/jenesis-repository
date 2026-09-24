@@ -18,17 +18,17 @@
             the project behind each is looked after (maintenance, code review, release provenance). Read from the durable
             ledger the scheduled health sweep populates; a coordinate the source scores nothing is not listed (unknown,
             not healthy).</p>
-        <!-- Principle 10: the render serves the durable ledger only, so its staleness is always shown - a repository
+        <!--/* Principle 10: the render serves the durable ledger only, so its staleness is always shown - a repository
              whose health was never scanned must read as exactly that, not as healthy. The rescan is the explicit write
              path (re-probe the live source, persist, re-stamp); without the write role the button is not offered, but
-             the last-scan time still is. -->
+             the last-scan time still is. */-->
         <p><small th:if="${report.lastScanned() != null}">Health last scanned against the maintainer-health source:
             <span th:text="${report.lastScanned()}">-</span></small>
             <small th:if="${report.lastScanned() == null}">Never scanned for maintainer-health - any health shown comes
             from publish-time screening only.</small></p>
-        <!-- Running and idle read the same way here as on the vulnerability panel: the pass is started, not
+        <!--/* Running and idle read the same way here as on the vulnerability panel: the pass is started, not
              awaited, so the screen says it is under way and the button steps aside rather than inviting a second
-             pass over the first. -->
+             pass over the first. */-->
         <th:block th:if="${report.scanning()}">
             <p th:replace="~{base :: running('A rescan against the maintainer-health source is running.')}"></p>
         </th:block>
@@ -36,11 +36,11 @@
               th:action="@{'/repositories/' + ${repo} + '/health/rescan'}">
             <button type="submit" class="secondary">Rescan maintainer-health</button>
         </form>
-        <!-- The ranking is a built artefact, so "not built yet" is a state of its own and never an empty table. An
+        <!--/* The ranking is a built artefact, so "not built yet" is a state of its own and never an empty table. An
              empty weakest-first list would tell a reviewer that no project here is worse than the ones shown, which is
              precisely the claim that cannot be made before the scheduled health-rank-index pass has committed one. The
              scan instant above stays visible either way (Principle 10), so "scored, ranking to follow" and "nothing
-             has ever run here" read differently. -->
+             has ever run here" read differently. */-->
         <th:block th:unless="${report.ranked()}">
             <div class="app-empty" role="status">
                 <div class="app-empty__icon" aria-hidden="true">∅</div>
@@ -87,9 +87,9 @@
                     </tbody>
                 </table>
             </figure>
-            <!-- Weakest-first, one bounded page served from the durable rank index (never a whole-repo in-heap sort): the
+            <!--/* Weakest-first, one bounded page served from the durable rank index (never a whole-repo in-heap sort): the
                  count states how much of the scored set this page shows, and a "next" link follows the page cursor so a
-                 repository with more scored coordinates than one page is paged through, never silently truncated. -->
+                 repository with more scored coordinates than one page is paged through, never silently truncated. */-->
             <footer th:unless="${report.entries().isEmpty()}">
                 <p><small>This page lists <span th:text="${report.entries().size()}">0</span> of
                     <span th:text="${report.total()}">0</span> scored coordinates, weakest first.</small></p>

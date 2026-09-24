@@ -2,7 +2,7 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{base :: head('Security posture', 'jenesis-repository')}"></head>
 <body>
-<header th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository', ~{})}"></header>
+<header th:replace="~{base :: shell('jenesis-repository', @{/}, 'jenesis-repository')}"></header>
 <main id="main" class="container">
     <div th:replace="~{base :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Security posture')}"></header>
@@ -27,10 +27,10 @@
         </small></span>
     </p>
 
-    <!-- Principle 10 / D-144: this collection is memoised for a few seconds, because the header badge counts exactly
+    <!--/* Principle 10 / D-144: this collection is memoised for a few seconds, because the header badge counts exactly
          these rows and therefore collects on every console view; the as-of instant keeps that honest rather than
          passing a memoised report off as a live one. A change made through this console drops the memo at once, so
-         only a change made through the API, the CLI or another node can be this stale. -->
+         only a change made through the API, the CLI or another node can be this stale. */-->
     <p th:if="${postureCollectedAt != null}"><small>Collected as of
         <span th:text="${postureCollectedAt}">-</span> — the same collection the header badge counts, refreshed at
         most once every few seconds rather than on every page, so a change made outside this console may take that
@@ -47,9 +47,9 @@
                placeholder="Filter by title, id, reason or setting">
     </label>
 
-    <!-- This tenant's own advisories: raised at Scope.TENANT against this tenant's effective configuration and
+    <!--/* This tenant's own advisories: raised at Scope.TENANT against this tenant's effective configuration and
          selected through PostureReport#forTenant. Shown only when the session carries a tenant; a single-tenant
-         deployment always does (its one tenant is selected implicitly). -->
+         deployment always does (its one tenant is selected implicitly). */-->
     <section th:if="${posture.scoped() and !posture.empty()}">
         <h2>This tenant — <span th:text="${posture.tenant()}">acme</span></h2>
         <p th:if="${posture.own().isEmpty()}"><small class="setting-nomatch">This tenant's own settings raise no
@@ -79,7 +79,7 @@
         </article>
     </section>
 
-    <!-- The deployment-wide advisories: the operator's to fix, and true for every tenant. -->
+    <!--/* The deployment-wide advisories: the operator's to fix, and true for every tenant. */-->
     <section th:unless="${posture.empty()}">
         <h2 th:if="${posture.scoped()}">Deployment-wide</h2>
         <p th:if="${posture.scoped() and posture.deployment().isEmpty()}"><small class="setting-nomatch">The
@@ -107,8 +107,8 @@
         </article>
     </section>
 </main>
-<!-- A purely in-memory filter over the rendered advisories, matching each item's data-search (id + title + why +
-     setting + severity + scope), like the metrics-overview and settings screens - no request wiring. -->
+<!--/* A purely in-memory filter over the rendered advisories, matching each item's data-search (id + title + why +
+     setting + severity + scope), like the metrics-overview and settings screens - no request wiring. */-->
 <script th:inline="none">
     (function () {
         var input = document.getElementById('posture-filter');

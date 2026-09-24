@@ -89,11 +89,11 @@
             document) — the same shape the deployment bundle carries per tenant. An import is validated first and
             refused whole if any value would not resolve, then it replaces this tenant's stored overrides, leaving the
             deployment settings and every other tenant untouched.</small></p>
-        <!-- The CSRF token rides in the action URL, not only in the body: this is the one multipart form in the
+        <!--/* The CSRF token rides in the action URL, not only in the body: this is the one multipart form in the
              console, and with Spring's multipart resolver deliberately off everywhere (it would drain an artifact
              upload body before a format read it - D-018) nothing parses the body before the CsrfFilter runs, so a
              token hidden in the body would never be seen. The body is read by the product's own bounded multipart
-             reader in SettingsController instead. -->
+             reader in SettingsController instead. */-->
         <form method="post" th:action="@{/settings/tenant/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
               onsubmit="return window.confirm('Restore this tenant from this bundle? It replaces the stored overrides for this tenant.');">
             <input type="file" name="bundle" accept="application/json,.json" required>
