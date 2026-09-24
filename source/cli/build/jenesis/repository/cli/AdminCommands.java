@@ -549,7 +549,8 @@ final class AdminCommands {
             case "set" -> {
                 if (args.length < 5) {
                     throw new IllegalArgumentException(
-                            "Usage: upstreams auth set <host> bearer [<token>] | basic <username> [<password>]");
+                            "Usage: upstreams auth set <host> bearer [<token>] | basic <username> [<password>]"
+                                    + " | header <name> [<value>] | aws");
                 }
                 String host = args[3];
                 String scheme = args[4];
@@ -572,8 +573,12 @@ final class AdminCommands {
                     String name = args[5];
                     String value = args.length > 6 ? args[6] : prompt("Header value: ");
                     client.setUpstreamCredential(host, "header", null, null, value, name);
+                } else if (scheme.equalsIgnoreCase("aws")) {
+                    // No secret to type: the server mints the token from its own AWS identity for this host.
+                    client.setUpstreamCredential(host, "aws", null, null, null, null);
                 } else {
-                    throw new IllegalArgumentException("Unknown scheme '" + scheme + "'; use bearer, basic or header");
+                    throw new IllegalArgumentException(
+                            "Unknown scheme '" + scheme + "'; use bearer, basic, header or aws");
                 }
                 System.out.println("Stored an upstream credential for " + host + ".");
             }

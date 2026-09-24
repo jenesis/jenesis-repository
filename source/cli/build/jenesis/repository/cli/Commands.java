@@ -285,7 +285,8 @@ public final class Commands {
                             act("upstreams set <format> <url>", "set a format's upstream"),
                             act("upstreams remove <format>", "remove a format's upstream"),
                             act("upstreams auth", "hosts holding a private-upstream credential"),
-                            act("upstreams auth set <host> <bearer|basic|header> ...", "store a credential"),
+                            act("upstreams auth set <host> <bearer|basic|header|aws> ...", "store a credential; aws mints "
+                                    + "ECR and CodeArtifact tokens from the server's own AWS identity"),
                             act("upstreams auth remove <host>", "remove a credential")),
                     noun("quota", "the tenant's storage quota", null, AdminCommands::quota,
                             act("quota", "the current quota"),

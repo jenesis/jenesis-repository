@@ -26,6 +26,16 @@ public interface UpstreamCredentialSource {
     /** Clear the credential for one upstream host. */
     void remove(String host) throws IOException;
 
+    /** Store {@code credential} for one upstream host: a {@link UpstreamCredential.Header} as {@link #set} stores
+     *  it, or a {@link UpstreamCredential.Issued} token, which a source that cannot mint refuses. */
+    default void set(String host, UpstreamCredential credential) throws IOException {
+        switch (credential) {
+            case UpstreamCredential.Header header -> set(host, header.name(), header.value());
+            case UpstreamCredential.Issued issued -> throw new IllegalStateException("This upstream-credential "
+                    + "source cannot mint " + issued.issuer() + " tokens for '" + host + "'.");
+        }
+    }
+
     /** The shared source standing in when no module is installed: no credential is ever attached, and a write is
      *  refused. A singleton, so a composition can tell "not installed" by identity. */
     UpstreamCredentialSource NONE = new UpstreamCredentialSource() {

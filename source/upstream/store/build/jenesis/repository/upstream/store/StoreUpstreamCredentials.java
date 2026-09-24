@@ -7,7 +7,9 @@ import build.jenesis.repository.settings.SecretCipher;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.store.Retries;
+import build.jenesis.repository.upstream.UpstreamCredential;
 import build.jenesis.repository.upstream.UpstreamCredentialSource;
+import build.jenesis.repository.upstream.UpstreamTokenIssuer;
 
 /**
  * The store-backed {@link UpstreamCredentialSource}: each credential is the ready-to-send header value, keyed by
@@ -32,11 +34,25 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
      *  module's {@link UpstreamCredentialsStorageNamespace storage manifest}. */
     static final String PATH = Scopes.space(Scopes.CONFIG) + "/upstream-auth";
 
+    /** The mark of an issued credential in the document: {@code @<issuer>}. A header name cannot begin with it, so a
+     *  stored header is never read as one. */
+    static final String ISSUED = "@";
+
+    /** How long before its expiry a minted token is renewed, so a fetch never goes out with a token that lapses
+     *  on the way. */
+    static final Duration MARGIN = Duration.ofMinutes(15);
+
     private final ArtifactStore root;
     private final long refreshNanos;
     /** The envelope cipher protecting the stored header value: a write encrypts (or is refused when no key is
      *  configured), a proxy-fetch read decrypts - so only {@code enc:v1:} ciphertext ever reaches the store. */
     private final SecretCipher cipher;
+    private final Clock clock;
+    /** The tokens this node minted for issued credentials, by host. Node-local by design: a token is issued to
+     *  the node's own cloud identity and never written to the store, so no secret is at rest for an issued host. */
+    private final ConcurrentHashMap<String, UpstreamTokenIssuer.Token> minted = new ConcurrentHashMap<>();
+    /** One lock per host, so concurrent fetches of one upstream mint its token once. */
+    private final ConcurrentHashMap<String, Object> minting = new ConcurrentHashMap<>();
     private volatile Properties snapshot;
     private volatile long freshUntil;
 
@@ -48,9 +64,16 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
      *  unconfigured cipher) through without mutating the process environment. Production takes it too, its provider
      *  building the cipher from the {@code secrets-key} configuration key ({@value SecretCipher#ENV}). */
     public StoreUpstreamCredentials(ArtifactStore root, Duration refresh, SecretCipher cipher) throws IOException {
+        this(root, refresh, cipher, Clock.systemUTC());
+    }
+
+    /** The store-backed source on an explicit clock - the seam a test crosses a token's expiry through. */
+    public StoreUpstreamCredentials(ArtifactStore root, Duration refresh, SecretCipher cipher, Clock clock)
+            throws IOException {
         this.root = root;
         this.refreshNanos = refresh.toNanos();
         this.cipher = cipher;
+        this.clock = clock;
         this.snapshot = load();
         this.freshUntil = System.nanoTime() + refreshNanos;
     }
@@ -61,6 +84,10 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
         String stored = host == null ? null : current().getProperty(host);
         if (stored == null) {
             return Map.of();
+        }
+        if (stored.startsWith(ISSUED)) {
+            UpstreamTokenIssuer.Token token = token(host, stored.substring(ISSUED.length()));
+            return Map.of(token.header(), token.value());
         }
         int tab = stored.indexOf('\t');
         String name = tab < 0 ? "Authorization" : stored.substring(0, tab);
@@ -101,8 +128,61 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
         freshUntil = System.nanoTime() + refreshNanos;
     }
 
+    /** Store an issued credential - the issuer's name, never a secret - after minting a first token, so an identity
+     *  the cloud provider refuses is reported to whoever set the credential rather than to the next fetch. A header
+     *  credential is stored as {@link #set(String, String, String)} stores it. */
+    @Override
+    public void set(String host, UpstreamCredential credential) throws IOException {
+        if (!(credential instanceof UpstreamCredential.Issued issued)) {
+            UpstreamCredentialSource.super.set(host, credential);
+            return;
+        }
+        UpstreamTokenIssuer issuer = UpstreamTokenIssuer.serving(host)
+                .filter(serving -> serving.name().equals(issued.issuer()))
+                .orElseThrow(() -> new IllegalArgumentException("No installed " + issued.issuer()
+                        + " token issuer serves '" + host + "'."));
+        minted.put(host, issuer.issue(host));
+        snapshot = mutate(properties -> properties.setProperty(host, ISSUED + issuer.name()));
+        freshUntil = System.nanoTime() + refreshNanos;
+    }
+
+    /**
+     * The token for an issued host: the one this node holds while it has more than {@link #MARGIN} left, else a
+     * fresh one from the issuer. This is the one place a fetch waits on the wire - once per token lifetime per node
+     * and host, the fetch that finds the token missing or nearly expired - and the per-host lock makes concurrent
+     * fetches of one upstream wait on a single issue rather than each asking for its own. An issuer that cannot
+     * mint fails the fetch naming the host, rather than letting it go out without its credential.
+     */
+    private UpstreamTokenIssuer.Token token(String host, String issuerName) {
+        UpstreamTokenIssuer.Token token = minted.get(host);
+        if (usable(token)) {
+            return token;
+        }
+        synchronized (minting.computeIfAbsent(host, _ -> new Object())) {
+            token = minted.get(host);
+            if (usable(token)) {
+                return token;
+            }
+            UpstreamTokenIssuer issuer = UpstreamTokenIssuer.named(issuerName).orElseThrow(() ->
+                    new IllegalStateException("The upstream credential for '" + host + "' is issued by "
+                            + issuerName + ", which is not installed on this node."));
+            try {
+                token = issuer.issue(host);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Could not issue the " + issuerName + " token for '" + host + "'", e);
+            }
+            minted.put(host, token);
+            return token;
+        }
+    }
+
+    private boolean usable(UpstreamTokenIssuer.Token token) {
+        return token != null && token.expires().isAfter(clock.instant().plus(MARGIN));
+    }
+
     @Override
     public void remove(String host) throws IOException {
+        minted.remove(host);
         snapshot = mutate(properties -> properties.remove(host));
         freshUntil = System.nanoTime() + refreshNanos;
     }

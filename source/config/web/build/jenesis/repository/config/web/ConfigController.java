@@ -15,6 +15,7 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.settings.SettingsScopes;
+import build.jenesis.repository.upstream.UpstreamCredential;
 import build.jenesis.repository.upstream.UpstreamCredentialSource;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -609,13 +610,14 @@ public class ConfigController {
             respondUpstreamAuthNotInstalled(response);
             return;
         }
-        Map.Entry<String, String> header = credentialHeader(request);
-        if (header == null) {
+        Optional<UpstreamCredential> credential = request == null ? Optional.empty() : UpstreamCredential.of(
+                request.scheme(), request.username(), request.password(), request.token(), request.header());
+        if (credential.isEmpty()) {
             response.setStatus(400);
             return;
         }
         try {
-            upstreamCredentials.set(host, header.getKey(), header.getValue());
+            upstreamCredentials.set(host, credential.get());
         } catch (IllegalStateException refused) {
             // An upstream credential write with no master key configured is refused (§9), naming the remedy; the
             // credential is encrypted at rest like a SECRET setting, so nothing was persisted.
@@ -639,28 +641,6 @@ public class ConfigController {
         response.setStatus(200);
     }
 
-    /** The header name and value for an upstream credential request: a {@code Basic} or {@code Bearer}
-     *  {@code Authorization} from a username/password or token, or an arbitrary {@code header} name and value for an
-     *  API-key upstream; {@code null} for an unusable request. */
-    private static Map.Entry<String, String> credentialHeader(UpstreamAuthRequest request) {
-        if (request == null || request.scheme() == null) {
-            return null;
-        }
-        return switch (request.scheme().toLowerCase(Locale.ROOT)) {
-            case "basic" -> request.username() == null || request.password() == null
-                    ? null
-                    : Map.entry("Authorization", "Basic " + Base64.getEncoder().encodeToString(
-                            (request.username() + ":" + request.password()).getBytes(StandardCharsets.UTF_8)));
-            case "bearer" -> request.token() == null || request.token().isBlank()
-                    ? null
-                    : Map.entry("Authorization", "Bearer " + request.token());
-            case "header" -> request.header() == null || request.header().isBlank()
-                    || request.token() == null || request.token().isBlank()
-                    ? null
-                    : Map.entry(request.header(), request.token());
-            default -> null;
-        };
-    }
 
     /** The catalogue of runtime-editable settings - the single source for what the API, console and CLI may change
      *  (the maps - repository definitions and format upstreams - have their own CRUD). The neutral core dogfoods the

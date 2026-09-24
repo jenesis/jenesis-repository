@@ -20,6 +20,7 @@ import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.settings.SettingsScopes;
 import build.jenesis.repository.settings.TenantPosture;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.upstream.UpstreamCredential;
 import build.jenesis.repository.upstream.UpstreamCredentialSource;
 import build.jenesis.repository.upstream.UpstreamCredentialSourceProvider;
 
@@ -907,13 +908,11 @@ public class SettingsAdmin {
         if (!HOST.matcher(host).matches()) {
             throw new IllegalArgumentException("Invalid upstream host '" + host + "'.");
         }
-        String stored = credentialHeader(scheme, username, password, token, headerName);
-        if (stored == null) {
-            throw new IllegalArgumentException(
-                    "Provide a username and password (basic), a token (bearer), or a header name and value (header).");
-        }
-        int tab = stored.indexOf('\t');
-        upstreamCredentials.set(host, stored.substring(0, tab), stored.substring(tab + 1));
+        UpstreamCredential credential = UpstreamCredential.of(scheme, username, password, token, headerName)
+                .orElseThrow(() -> new IllegalArgumentException("Provide a username and password (basic), a token "
+                        + "(bearer), a header name and value (header), or choose aws for a token this deployment's "
+                        + "AWS identity is issued."));
+        upstreamCredentials.set(host, credential);
         audit(AuditActions.UPSTREAM_AUTH_SET, host);
     }
 
@@ -922,22 +921,6 @@ public class SettingsAdmin {
         audit(AuditActions.UPSTREAM_AUTH_REMOVE, host);
     }
 
-    /** The stored {@code name\tvalue} header for a credential: a Basic/Bearer Authorization, or an arbitrary header
-     *  name and value for an API-key upstream; {@code null} for an unusable request. */
-    private static String credentialHeader(String scheme, String username, String password, String token,
-                                           String headerName) {
-        return switch (scheme == null ? "" : scheme.toLowerCase(Locale.ROOT)) {
-            case "basic" -> username == null || username.isBlank() || password == null
-                    ? null
-                    : "Authorization\tBasic " + Base64.getEncoder().encodeToString(
-                            (username + ":" + password).getBytes(StandardCharsets.UTF_8));
-            case "bearer" -> token == null || token.isBlank() ? null : "Authorization\tBearer " + token;
-            case "header" -> headerName == null || headerName.isBlank() || token == null || token.isBlank()
-                    ? null
-                    : headerName.trim() + "\t" + token;
-            default -> null;
-        };
-    }
 
     private void put(String key, String value) throws IOException {
         StoredConfig.put(root, key, value);
