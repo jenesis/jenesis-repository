@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance.scan;
 
 import module java.base;
+import build.jenesis.repository.compliance.KnownExploitedSource;
 import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
@@ -16,12 +17,21 @@ import build.jenesis.repository.settings.SettingsContributor;
  * back. The scan cadence is the whole scan family's dial - six more passes read the same key from their own modules -
  * and the shared constant holds those to the same default, since they cannot share the constant
  * across module boundaries.
+ *
+ * <p>The signal refresh and the two known-exploited dials are listed only where a known-exploited catalogue is
+ * installed: the refresh pass is created only for a mirroring source and the enforcement holds nothing without a
+ * catalogue, so on a composition carrying none they are settings that change nothing - and the settings screen, the
+ * generated reference and the boot check for unrecognised settings would all describe a capability the deployment
+ * does not have. The answer is held, since installation is fixed for the life of a JVM and the catalogue is asked
+ * for on every render of the settings screens.
  */
 public final class ScanSettingsContributor implements SettingsContributor {
 
+    private static final boolean KNOWN_EXPLOITED = !KnownExploitedSource.installed().isEmpty();
+
     @Override
     public List<Setting> settings() {
-        return List.of(
+        List<Setting> settings = new ArrayList<>(List.of(
                 new Setting("scheduled-scan", "Compliance", "Scheduled scan",
                         "Re-scan every repository's inventory against the advisory feeds on a schedule.",
                         Setting.Kind.BOOLEAN, "true", true).gate(),
@@ -30,11 +40,10 @@ public final class ScanSettingsContributor implements SettingsContributor {
                         Setting.Kind.LONG,
                         VulnerabilityScanTaskProvider.INTERVAL.fallbackMillis(), true),
                 new Setting(IncrementalPasses.FULL_EVERY, "Compliance", "Full pass every",
-                        "Every Nth scheduled pass of the advisory scan, the known-exploited enforcement and "
-                                + "re-analysis, the maintainer-health sweep, the reachability analysis and the AI code "
-                                + "audit re-reads every published version; the passes between read only the versions "
-                                + "published since the last full pass, and a catalogue that changed asks for a full "
-                                + "pass at once. A full pass reads one inventory document per published version, "
+                        "Every Nth scheduled pass of the advisory scan, and of every other pass that re-reads "
+                                + "what the repository holds, re-reads every published version; the passes between "
+                                + "read only the versions published since the last full pass, and a catalogue that "
+                                + "changed asks for a full pass at once. A full pass reads one inventory document per published version, "
                                 + "which over an object store is a round trip per version.",
                         Setting.Kind.LONG, String.valueOf(IncrementalPasses.DEFAULT_FULL_EVERY), true),
                 new Setting(IncrementalPasses.LOOKBACK, "Compliance", "Full pass lookback",
@@ -46,7 +55,11 @@ public final class ScanSettingsContributor implements SettingsContributor {
                                 + "It is paid on every incremental pass as publish-rate times window in extra scans, "
                                 + "so a deployment publishing fast turns it down and one with lagging publisher "
                                 + "clocks turns it up; zero switches it off and leaves the full pass to heal.",
-                        Setting.Kind.DURATION, IncrementalPasses.DEFAULT_LOOKBACK, true),
+                        Setting.Kind.DURATION, IncrementalPasses.DEFAULT_LOOKBACK, true)));
+        if (!KNOWN_EXPLOITED) {
+            return List.copyOf(settings);
+        }
+        settings.addAll(List.of(
                 new Setting(SignalRefreshTaskProvider.INTERVAL.key(), "Compliance", "Signal refresh interval",
                         "Milliseconds between passes that draw a mirroring security signal (the known-exploited "
                                 + "catalogue) into its stored snapshot, so a gate decision renders that snapshot "
@@ -67,6 +80,7 @@ public final class ScanSettingsContributor implements SettingsContributor {
                                 + "release the hold - the self-healing counterpart to KEV auto-hold. A human's release "
                                 + "is unaffected and never re-held; only this sweep's own auto-holds are walked back, "
                                 + "and a re-listing of the CVE re-holds. Applies on the next scan.",
-                        Setting.Kind.BOOLEAN, "true", false));
+                        Setting.Kind.BOOLEAN, "true", false)));
+        return List.copyOf(settings);
     }
 }

@@ -19,7 +19,7 @@ public final class PolicySettingsContributor implements SettingsContributor {
                 new Setting("policy-rules", "Compliance", "Policy rules",
                         "Expression-based gate rules, one per line (or separated by ';'), each "
                                 + "'<verdict> <expression>' where verdict is allow, quarantine or reject - e.g. "
-                                + "'reject #severityRank >= 4 and #reachable' or "
+                                + "'quarantine #ecosystem == \"npm\" and #advisoryCount > 0' or "
                                 + "'quarantine !#licenses.?[#this matches \"(?i).*agpl.*\"].empty'. Variables: "
                                 + "#ecosystem, #coordinate, #version, #licenses, #severity, #severityRank (0..5, UNKNOWN highest), "
                                 + "#reachable, #reachability, #depth, #advisories, #advisoryCount, #malicious, "

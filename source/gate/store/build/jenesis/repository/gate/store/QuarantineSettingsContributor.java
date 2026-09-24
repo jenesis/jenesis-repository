@@ -24,7 +24,7 @@ public final class QuarantineSettingsContributor implements SettingsContributor 
                 new Setting("strict-hold-mapping", "Compliance", "Strict hold-mapping",
                         "Off by default: after an accepted publish through a blobs-namespace format, the publish-time "
                                 + "hold-mapping round-trip check verifies the format's blobKeys/servedPaths resolve the "
-                                + "served path and content hash just laid out (so a retroactive KEV/license hold could "
+                                + "served path and content hash just laid out (so a hold placed after the publish could "
                                 + "retract it). A broken mapping always alarms (jenreg.publish.holdmapping.broken). "
                                 + "Turn it on to also FAIL such a publish rather than only alarm - on in every test "
                                 + "config so a wiring regression fails on the first publish; off in production so one "
