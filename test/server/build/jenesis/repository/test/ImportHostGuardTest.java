@@ -3,6 +3,7 @@ package build.jenesis.repository.test;
 import module org.junit.jupiter.api;
 import module java.base;
 import module java.net.http;
+import module tools.jackson.databind;
 
 import build.jenesis.repository.server.RepositoryApplication;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -104,6 +105,22 @@ public class ImportHostGuardTest {
         HttpResponse<String> accepted = post("{\"source\":\"nexus\",\"url\":\"" + upstream
                 + "\",\"repository\":\"releases\"}");
         assertThat(accepted.statusCode()).as("the opt-out lets the same loopback plaintext import run").isEqualTo(202);
+        // The migration runs on after the 202 and writes its job record under the store root. Waiting for it to end
+        // keeps it from writing into the temporary directory while JUnit deletes it, which failed the class as
+        // "Failed to close extension context" on a loaded runner.
+        JsonMapper json = JsonMapper.builder().build();
+        String job = json.readTree(accepted.body()).path("job").asString();
+        Instant deadline = Instant.now().plus(Duration.ofMinutes(1));
+        String state = "";
+        while (Instant.now().isBefore(deadline)) {
+            state = json.readTree(client.send(HttpRequest.newBuilder(URI.create(base + "/admin/import/" + job))
+                    .GET().build(), BodyHandlers.ofString()).body()).path("state").asString();
+            if (!"running".equals(state)) {
+                break;
+            }
+            Thread.sleep(100);
+        }
+        assertThat(state).as("the migration over an empty source finishes, and says so").isEqualTo("completed");
     }
 
     @Test

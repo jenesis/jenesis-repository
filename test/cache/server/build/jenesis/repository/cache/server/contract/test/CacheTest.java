@@ -742,11 +742,15 @@ public class CacheTest {
                 .clock(clock::get);
         credential("acme", ACME_RW, "*=cache:read,cache:write");
         put(cache, "demo", ACME_RW, "aa", "01", new byte[]{1});
+        // The entry's own time is the storing node's real clock at the put, which a loaded machine can place a second
+        // or more after this node's clock was read. The window is therefore measured from after the put: advancing
+        // from the earlier reading left the entry just under six hours old on a slow runner, correctly unstamped.
+        Instant stored = Instant.now();
         assertThat(get(other, "demo", ACME_RW, "aa", "01")).isEqualTo(200);
         assertThat(head(other, "demo", ACME_RW, "aa", "01")).isEqualTo(200);
         assertThat(stamps.reads).as("a node that did not store the entry asks once").isEqualTo(1);
         assertThat(stamps.touches).as("and trusts the entry's own time within the window - no stamp for a young entry").isZero();
-        clock.set(clock.get().plus(Duration.ofHours(6)).plusSeconds(1));
+        clock.set(stored.plus(Duration.ofHours(6)).plusSeconds(1));
         assertThat(get(other, "demo", ACME_RW, "aa", "01")).isEqualTo(200);
         assertThat(stamps.touches).as("stamped once the window of the store passed").isEqualTo(1);
         assertThat(stamps.retired).as("with no stamp to retire, since the time was the entry's own").isNull();

@@ -1,6 +1,7 @@
 /**
  * The carrier: one launchable module whose {@code requires} closure is every free SPI implementation -
- * all four layouts ({@code maven}, {@code jenesis}, {@code oci}, {@code raw}), all four store backends
+ * all twenty-five layouts, retention, staging, the scheduled walk, the settings and management APIs, the build cache
+ * for Jenesis builds, all four store backends
  * ({@code filesystem}, {@code s3}, {@code gcs}, {@code azure}), all five import connectors, the upstream HTTP
  * fetcher ({@code proxy}), the OIDC token exchange ({@code oidc}), the token-bucket rate limiter, the credential
  * usage tracker, the publish gate with its review screens (screening against OSV, the GitHub Advisory Database
@@ -46,6 +47,8 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.importer.maven;
     requires build.jenesis.repository.importer.nexus;
     requires build.jenesis.repository.oidc;
+    // Console sign-in through GitHub or any OpenID Connect issuer, off until a provider is configured.
+    requires build.jenesis.repository.auth.oidc;
     // Console sign-in against an LDAP or Active Directory server, off until jenreg.ui.ldap.url names one.
     requires build.jenesis.repository.auth.ldap;
     requires build.jenesis.repository.proxy;
@@ -83,6 +86,56 @@ open module build.jenesis.repository.bundle {
     // it as a signed, retried webhook. Nothing is sent until an operator names an endpoint.
     requires build.jenesis.repository.webhook;
     requires build.jenesis.repository.webhook.web;
+    // Every other format this tree serves, with the release signing Debian, RPM and Terraform need and the
+    // lifecycle surface over the deprecate and yank marks. The free image serves what the free tree holds.
+    requires build.jenesis.repository.format.apk;
+    requires build.jenesis.repository.format.cargo;
+    requires build.jenesis.repository.format.cocoapods;
+    requires build.jenesis.repository.format.composer;
+    requires build.jenesis.repository.format.conan;
+    requires build.jenesis.repository.format.conda;
+    requires build.jenesis.repository.format.debian;
+    requires build.jenesis.repository.format.gems;
+    requires build.jenesis.repository.format.go;
+    requires build.jenesis.repository.format.helm;
+    requires build.jenesis.repository.format.homebrew;
+    requires build.jenesis.repository.format.huggingface;
+    requires build.jenesis.repository.format.ivy;
+    requires build.jenesis.repository.format.jvm;
+    requires build.jenesis.repository.format.npm;
+    requires build.jenesis.repository.format.nuget;
+    requires build.jenesis.repository.format.pypi;
+    requires build.jenesis.repository.format.rpm;
+    requires build.jenesis.repository.format.swift;
+    requires build.jenesis.repository.format.terraform;
+    requires build.jenesis.repository.format.winget;
+    requires build.jenesis.repository.format.signing;
+    requires build.jenesis.repository.format.lifecycle.web;
+    requires build.jenesis.repository.format.terraform.web;
+    // Retention and the scheduled walk that runs it, staging and promotion, the stored metadata the passes keep,
+    // the index and the download counter: the operation of a repository, not an organisation's extra.
+    requires build.jenesis.repository.cleanup.task;
+    requires build.jenesis.repository.cleanup.web;
+    requires build.jenesis.repository.walk.store;
+    requires build.jenesis.repository.walk.task;
+    requires build.jenesis.repository.walk.web;
+    requires build.jenesis.repository.staging.store;
+    requires build.jenesis.repository.staging.web;
+    requires build.jenesis.repository.metadata.store;
+    requires build.jenesis.repository.index;
+    requires build.jenesis.repository.index.web;
+    requires build.jenesis.repository.downloads;
+    // The settings and management APIs the CLI and the first-run guide speak to, and the console's deploy screen.
+    requires build.jenesis.repository.config.web;
+    requires build.jenesis.repository.management.web;
+    requires build.jenesis.repository.console.api;
+    requires build.jenesis.repository.deploy.web;
+    // Credentials for a private upstream, and the tokens AWS registries issue in place of one.
+    requires build.jenesis.repository.upstream.store;
+    requires build.jenesis.repository.upstream.aws;
+    // The build cache for Jenesis builds, served beside the repository.
+    requires build.jenesis.repository.cache.server;
+    requires build.jenesis.repository.cache.protocol.jenesis;
     requires spring.boot;
     requires spring.context;
 }
