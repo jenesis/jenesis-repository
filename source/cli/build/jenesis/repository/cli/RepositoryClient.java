@@ -1526,6 +1526,22 @@ public final class RepositoryClient {
         require(response, 200, "waive finding " + id);
     }
 
+    /** Post a scanner's report about one stored version, the request document read from {@code file} as it is.
+     *  Returns {@code null} when the findings module is not installed on this deployment (HTTP 501). */
+    public ReportAnswer reportFindings(String repo, Path file) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("POST", "/api/findings/report?repo=" + enc(repo),
+                HttpRequest.BodyPublishers.ofFile(file), "application/json");
+        if (response.statusCode() == 501) {
+            return null;
+        }
+        require(response, 200, "report findings from " + file.getFileName() + " into " + repo);
+        return JSON.readValue(response.body(), ReportAnswer.class);
+    }
+
+    /** What a report did: findings recorded, the gate's verdict, whether the version is withheld, and why. */
+    public record ReportAnswer(int recorded, String verdict, boolean held, List<String> reasons) {
+    }
+
     /** Revoke a finding's waiver. */
     public void revokeWaiver(String repo, String coordinate, String id) throws IOException, InterruptedException {
         HttpResponse<String> response = send("POST", "/api/findings/waiver/revoke?repo=" + enc(repo),

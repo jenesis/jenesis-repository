@@ -61,6 +61,9 @@ open module build.jenesis.repository.bundle {
     // the operator-authored and attestation dimensions.
     requires build.jenesis.repository.compliance.maven;
     requires build.jenesis.repository.compliance.oci;
+    // An image is recorded in the inventory only through this layout, and a version the inventory cannot name
+    // cannot be held after the fact - by a later advisory or by a scanner's report about its layers.
+    requires build.jenesis.repository.format.oci.inventory;
     requires build.jenesis.repository.compliance.osv;
     requires build.jenesis.repository.compliance.github;
     requires build.jenesis.repository.compliance.policy;

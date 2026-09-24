@@ -58,6 +58,14 @@ public final class ComplianceGate {
                 waivers);
     }
 
+    /** This gate asking {@code advisories} instead of the feeds it was built over, every dimension and overlay
+     *  unchanged: how a finding reported from outside - a scanner run in CI, attributed to that scanner - is decided
+     *  by exactly the threshold, action, VEX and waivers a feed's advisory would be. */
+    public ComplianceGate advisories(AdvisorySource advisories) {
+        return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, policies, advisories, vex,
+                waivers);
+    }
+
     /** The discovered gate dimensions (see {@link GatePolicyProvider}), run alongside the core ones. */
     public ComplianceGate policies(List<GatePolicy> policies) {
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, List.copyOf(policies),

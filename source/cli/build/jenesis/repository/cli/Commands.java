@@ -97,7 +97,10 @@ public final class Commands {
                                     "record a human verdict on one finding"),
                             act("findings waiver <repo> <coordinate> <id> [--reason R] [--until I]",
                                     "waive a finding, with a reason and an optional expiry"),
-                            act("findings waiver revoke <repo> <coordinate> <id>", "revoke a waiver")),
+                            act("findings waiver revoke <repo> <coordinate> <id>", "revoke a waiver"),
+                            act("findings report <repo> <file>", "hand a scanner's findings about a stored version to "
+                                    + "the gate: recorded under the scanner's name, and withheld for review if the "
+                                    + "gate would not admit them")),
                     noun("licenses", "declared-license facets", "build.jenesis.repository.license",
                             ComplianceCommands::licenses,
                             act("licenses <repo>", "the per-category and per-SPDX-id counts")),

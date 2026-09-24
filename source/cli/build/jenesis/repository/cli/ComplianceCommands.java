@@ -89,6 +89,9 @@ final class ComplianceCommands {
         if (args.length > 1 && (args[1].equals("review") || args[1].equals("waiver"))) {
             return verdict(args, home);
         }
+        if (args.length > 1 && args[1].equals("report")) {
+            return report(args, home);
+        }
 
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: findings <repo> [--coordinate C] [--kind K] [--source S] "
@@ -397,6 +400,25 @@ final class ComplianceCommands {
      * the same advisory is a separate finding against every version it touches, and a review that named the id
      * alone would be ambiguous about which of them it settled.
      */
+    /** Post a scanner's report - the file is the API's own request document, sent as it is, so the CLI adds
+     *  nothing a CI job could get out of step with - and say what it did. */
+    private static int report(String[] args, Path home) throws Exception {
+        if (args.length != 4) {
+            throw new IllegalArgumentException("Usage: findings report <repo> <file>");
+        }
+        RepositoryClient.ReportAnswer answer = CliSupport.client(home).reportFindings(args[2], Path.of(args[3]));
+        if (answer == null) {
+            System.out.println("The findings store is not installed on this deployment.");
+            return 0;
+        }
+        System.out.println("Recorded " + answer.recorded() + " finding(s); the gate's verdict is " + answer.verdict()
+                + (answer.held() ? ", and the version is withheld for review." : "."));
+        for (String reason : answer.reasons()) {
+            System.out.println("  " + reason);
+        }
+        return 0;
+    }
+
     private static int verdict(String[] args, Path home) throws Exception {
         if (args[1].equals("review")) {
             if (args.length < 6) {

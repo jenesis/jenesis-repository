@@ -17,7 +17,9 @@ name - publish a modular jar once and both ecosystems resolve it. It is also a s
 registry over the same store, so `docker push` works against it too.
 
 A publish can be screened against OSV and the GitHub Advisory Database: a package at or above the configured
-severity is refused or withheld for review, and the console's review queue says why and releases it.
+severity is refused or withheld for review, and the console's review queue says why and releases it. What a
+coordinate cannot show - the packages in an image's base layer - a scanner run in CI reports through
+`POST /api/findings/report`, and the image is withheld the same way.
 
 Every format, storage backend, importer and console panel is a `ServiceLoader` plugin over one
 content-addressed store, so twenty of those formats dedupe against each other: an npm tarball and a PyPI

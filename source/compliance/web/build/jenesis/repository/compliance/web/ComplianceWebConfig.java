@@ -8,6 +8,7 @@ import build.jenesis.repository.compliance.AdvisorySignal;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.HealthSource;
 import build.jenesis.repository.compliance.ProvenanceSigner;
+import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Repositories;
@@ -70,8 +71,10 @@ public class ComplianceWebConfig {
     }
 
     @Bean
-    public FindingsController findingsController(Repositories repositories, AuditTrail audit) {
-        return new FindingsController(repositories, audit);
+    public FindingsController findingsController(Repositories repositories, AuditTrail audit, LiveConfig liveConfig) {
+        // A reported finding is decided by the gate a publish into the same tenant meets, read live, so a threshold or
+        // action changed at runtime applies to the next report exactly as it does to the next publish.
+        return new FindingsController(repositories, audit, liveConfig::publishGate);
     }
 
     @Bean

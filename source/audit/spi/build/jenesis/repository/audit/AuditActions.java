@@ -46,6 +46,9 @@ public final class AuditActions {
     /** A compliance hold released into the layout. */
     public static final String QUARANTINE_RELEASE = action("quarantine.release");
 
+    /** A finding about a stored artifact reported from outside, by a scanner the report names. */
+    public static final String FINDINGS_REPORT = action("findings.report");
+
     /** A gate policy value set. */
     public static final String POLICY_SET = action("policy.set");
 
