@@ -42,10 +42,9 @@ final class JenesisImportFixture implements ImportFixture {
         ScriptedUpstream upstream = ScriptedUpstream.incumbent()
                 .answering(PAGE_ONE, 200, page("page-two", "/maven/g/a/1.0/a-1.0.jar", "/maven/g/a/1.0/a-1.0.pom"))
                 .answering(PAGE_TWO, 200, page(null, "/maven/g/b/2.0/b-2.0.jar", "/maven/g/b/2.0/b-2.0.pom"));
-        for (String served : List.of("/maven/g/a/1.0/a-1.0.jar", "/maven/g/a/1.0/a-1.0.pom",
+        for (String path : List.of("/maven/g/a/1.0/a-1.0.jar", "/maven/g/a/1.0/a-1.0.pom",
                 "/maven/g/b/2.0/b-2.0.jar", "/maven/g/b/2.0/b-2.0.pom")) {
-            upstream.refusing(BASE + "/repository/" + REPOSITORY + served, 404);
-            upstream.answering(BASE + "/repository" + served, 200, served);
+            upstream.answering(BASE + served(path), 200, path);
         }
         return new Corpus(upstream, List.of("g/a/1.0/a-1.0.jar", "g/a/1.0/a-1.0.pom",
                 "g/b/2.0/b-2.0.jar", "g/b/2.0/b-2.0.pom"));
@@ -53,11 +52,10 @@ final class JenesisImportFixture implements ImportFixture {
 
     @Override
     public Streamed streamed(GeneratedBody body) {
-        String served = "/maven/g/a/1.0/a-1.0.jar";
+        String path = "/maven/g/a/1.0/a-1.0.jar";
         return new Streamed(ScriptedUpstream.incumbent()
-                .answering(PAGE_ONE, 200, page(null, served))
-                .refusing(BASE + "/repository/" + REPOSITORY + served, 404)
-                .generating(BASE + "/repository" + served, body), "g/a/1.0/a-1.0.jar");
+                .answering(PAGE_ONE, 200, page(null, path))
+                .generating(BASE + served(path), body), "g/a/1.0/a-1.0.jar");
     }
 
     @Override
@@ -71,16 +69,22 @@ final class JenesisImportFixture implements ImportFixture {
                 .answering(PAGE_ONE, 200, page(null,
                         "/maven/../" + NexusImportFixture.ESCAPE, "/maven/g/./" + NexusImportFixture.ESCAPE,
                         "/maven/g/a/1.0/a-1.0.jar"))
-                .refusing(BASE + "/repository/" + REPOSITORY + "/maven/g/a/1.0/a-1.0.jar", 404)
-                .answering(BASE + "/repository/maven/g/a/1.0/a-1.0.jar", 200, "ok");
+                .answering(BASE + served("/maven/g/a/1.0/a-1.0.jar"), 200, "ok");
         return Optional.of(new Corpus(upstream, List.of("g/a/1.0/a-1.0.jar")));
     }
 
-    /** One {@code /api/assets} page: the serving paths and the cursor the next page (and a resume) is reached by. */
-    private static String page(String cursor, String... served) {
+    /** The URL path a Maven repository serves an asset at: the repository's own, then the path, which keeps its
+     *  {@code /maven/} segment because a Maven repository mounts at its root. */
+    private static String served(String path) {
+        return "/repository/default/" + REPOSITORY + path;
+    }
+
+    /** One {@code /api/assets} page: each asset's path, where it is served, and the cursor the next page (and a
+     *  resume) is reached by. */
+    private static String page(String cursor, String... paths) {
         StringJoiner assets = new StringJoiner(",", "[", "]");
-        for (String path : served) {
-            assets.add("{\"path\":\"" + path + "\",\"format\":\"maven\"}");
+        for (String path : paths) {
+            assets.add("{\"path\":\"" + path + "\",\"served\":\"" + served(path) + "\",\"format\":\"maven\"}");
         }
         return "{\"assets\":" + assets + ",\"cursor\":" + (cursor == null ? "null" : "\"" + cursor + "\"") + "}";
     }

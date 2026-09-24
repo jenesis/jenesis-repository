@@ -5,6 +5,7 @@ import module java.base;
 import module java.net.http;
 import module tools.jackson.databind;
 
+import build.jenesis.repository.store.testkit.TypedRepositories;
 import build.jenesis.repository.server.RepositoryApplication;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -49,6 +50,8 @@ public class ImportHostGuardTest {
     @BeforeAll
     public void setUp() throws IOException {
         System.setProperty("jenreg.filesystem.root", root.toString());
+        // The repository the migration lands in: an import is refused into one that holds no format.
+        TypedRepositories.create(root, "releases", "maven");
         System.setProperty("jenreg.auth", "false");
 
         nexus = new WireMockServer(WireMockConfiguration.options().bindAddress("localhost").dynamicPort());
@@ -61,7 +64,7 @@ public class ImportHostGuardTest {
 
         running = RepositoryApplication.start(0);
         client = HttpClient.newHttpClient();
-        base = "http://localhost:" + running.port() + "/repository";
+        base = "http://localhost:" + running.port() + "/repository/default";
     }
 
     @AfterAll
@@ -113,7 +116,7 @@ public class ImportHostGuardTest {
         Instant deadline = Instant.now().plus(Duration.ofMinutes(1));
         String state = "";
         while (Instant.now().isBefore(deadline)) {
-            state = json.readTree(client.send(HttpRequest.newBuilder(URI.create(base + "/admin/import/" + job))
+            state = json.readTree(client.send(HttpRequest.newBuilder(URI.create(base + "/releases/admin/import/" + job))
                     .GET().build(), BodyHandlers.ofString()).body()).path("state").asString();
             if (!"running".equals(state)) {
                 break;
@@ -135,7 +138,7 @@ public class ImportHostGuardTest {
     }
 
     private HttpResponse<String> post(String body) throws Exception {
-        return client.send(HttpRequest.newBuilder(URI.create(base + "/admin/import"))
+        return client.send(HttpRequest.newBuilder(URI.create(base + "/releases/admin/import"))
                 .POST(BodyPublishers.ofString(body)).build(), BodyHandlers.ofString());
     }
 }

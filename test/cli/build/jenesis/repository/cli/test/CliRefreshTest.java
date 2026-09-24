@@ -48,7 +48,7 @@ public class CliRefreshTest {
                 .withHeader("Content-Type", "application/json").withBody("[]")));
         // The job is running the first two times it is asked and finished the third, so a watch that stops only
         // because the first answer said so would pass nothing here.
-        String path = "/repository/releases/admin/import/job-1";
+        String path = "/repository/default/releases/admin/import/job-1";
         server.stubFor(get(urlPathEqualTo(path)).inScenario("import")
                 .whenScenarioStateIs(com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED)
                 .willSetStateTo("second")

@@ -371,7 +371,7 @@ public class CliDispatcherTest {
             if (matches(path, "/api/provenance/key")) {
                 return respond(provKeyStatus, "-----BEGIN PUBLIC KEY-----\n-----END PUBLIC KEY-----\n");
             }
-            if (matches(path, "/repository/releases/admin/import")) {
+            if (matches(path, "/repository/default/releases/admin/import")) {
                 return respond(importStatusStatus, "{\"state\":\"done\",\"imported\":0,\"skipped\":0,"
                         + "\"skippedFormats\":[],\"cursor\":null,\"asset\":null,\"error\":\"\"}");
             }

@@ -25,11 +25,10 @@ import org.springframework.web.util.UriUtils;
 public class RepositoryAuthorizationManager implements AuthorizationManager<RequestAuthorizationContext> {
 
     private final Authorization authorization;
-    private final RepositoryRouting routing;
     private final KeyUsageTracker usage;
 
-    public RepositoryAuthorizationManager(Authorization authorization, RepositoryRouting routing) {
-        this(authorization, routing, KeyUsageTracker.NONE);
+    public RepositoryAuthorizationManager(Authorization authorization) {
+        this(authorization, KeyUsageTracker.NONE);
     }
 
     /**
@@ -39,10 +38,8 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
      * where a use is recorded. The tracker batches: a busy key costs one store write a day rather than one per
      * request, and with no tracker installed nothing is recorded at all.
      */
-    public RepositoryAuthorizationManager(Authorization authorization, RepositoryRouting routing,
-                                          KeyUsageTracker usage) {
+    public RepositoryAuthorizationManager(Authorization authorization, KeyUsageTracker usage) {
         this.authorization = authorization;
-        this.routing = routing;
         this.usage = usage;
     }
 
@@ -72,19 +69,20 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         String scope = request.getHeader("Jenesis-Repository-Name");
         // An artifact request names its repository in the URL, and that is the repository its right is checked
         // against - never a header the caller chose, which would let a key scoped to one repository write another
-        // by naming its own. The path is the router's own resolution, so a path-scoped grant (<repo>:<prefix>)
-        // authorizes exactly the subtree it grants. A request that names no repository is the OCI registry's
-        // version probe, which asks only whether the credential is accepted.
-        RepositoryRouting.Route route = routing.route(request);
+        // by naming its own. The URL is read the way every routing reads it, so a path-scoped grant (<repo>:<prefix>)
+        // authorizes exactly the subtree it grants; which tenants a request may address is the routing's to refuse,
+        // at the controller. The bare /v2/ names no tenant and no repository: it is the OCI registry's version probe,
+        // which asks only whether the credential is accepted.
         boolean artifact = uri.startsWith("/repository/") || uri.equals("/v2") || uri.startsWith("/v2/");
-        boolean probe = artifact && route.repository().isEmpty();
+        boolean probe = uri.equals("/v2") || uri.equals("/v2/");
+        RepositoryRouting.Target target = artifact ? RepositoryRouting.target(uri) : null;
         if (artifact) {
-            scope = route.repository();
+            scope = target.repository();
         }
-        // PUT /repository/<name> - the bare repository, no path within it - creates the repository, which is
+        // PUT /repository/<tenant>/<name> - the bare repository, no path within it - creates the repository, which is
         // administration rather than a publish: a key that may deploy into a repository may not thereby create
         // repositories, and an administrator's key may create one without holding a deploy right on it.
-        if (artifact && !probe && "PUT".equals(method) && route.path().equals("/") && !uri.endsWith("/")) {
+        if (artifact && !probe && "PUT".equals(method) && target.path().equals("/") && !uri.endsWith("/")) {
             required = Authorization.MANAGE_WRITE;
         }
         // The asset enumeration scopes the store it reads by the ?repo= parameter, not the routed name, so authorize
@@ -137,7 +135,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         }
         String key = PresentedKey.from(request);
         boolean keyless = key == null || key.isBlank();
-        String path = route.path();
+        String path = artifact ? target.path() : null;
         Authorization.Decision decision;
         try {
             // A key may carry a source-IP allowlist (set-allowed-addresses): a request from an address outside it is

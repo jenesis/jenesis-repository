@@ -2,6 +2,7 @@ package build.jenesis.repository.cleanup.web;
 
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import io.micrometer.observation.ObservationRegistry;
@@ -20,9 +21,9 @@ import org.springframework.context.annotation.Configuration;
 public class MaintenanceWebConfig {
 
     @Bean
-    public MaintenanceController maintenanceController(Repositories repositories, LiveConfig live,
-                                                       ObservationRegistry observations, AuditTrail audit,
-                                                       MaintenanceScheduler maintenance) {
-        return new MaintenanceController(repositories, live, observations, audit, maintenance);
+    public MaintenanceController maintenanceController(Repositories repositories, RepositoryRouting routing,
+                                                       LiveConfig live, ObservationRegistry observations,
+                                                       AuditTrail audit, MaintenanceScheduler maintenance) {
+        return new MaintenanceController(repositories, routing, live, observations, audit, maintenance);
     }
 }

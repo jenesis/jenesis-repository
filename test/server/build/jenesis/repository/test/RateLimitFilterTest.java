@@ -91,7 +91,7 @@ public class RateLimitFilterTest {
         RateLimitFilter filter = new RateLimitFilter(deny, Authorization.anonymous(), DEFAULT_CEILING);
 
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn("/repository/maven/org/x/y/1/y-1.jar");
+        when(request.getRequestURI()).thenReturn("/repository/default/maven/org/x/y/1/y-1.jar");
         when(request.getDispatcherType()).thenReturn(DispatcherType.REQUEST);
 
         int[] status = {-1};
@@ -123,7 +123,7 @@ public class RateLimitFilterTest {
         // its cap; the reused request mock answers the current tenant's key through a holder the loop advances.
         String[] key = new String[1];
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn("/repository/maven/org/x/y/1/y-1.jar");
+        when(request.getRequestURI()).thenReturn("/repository/default/maven/org/x/y/1/y-1.jar");
         when(request.getDispatcherType()).thenReturn(DispatcherType.REQUEST);
         when(request.getHeader("Jenesis-Repository-Key")).thenAnswer(invocation -> key[0]);
         HttpServletResponse response = mock(HttpServletResponse.class);
@@ -161,7 +161,7 @@ public class RateLimitFilterTest {
 
         String[] key = {Authorization.mint("evil-corp")};
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn("/repository/maven/org/x/y/1/y-1.jar");
+        when(request.getRequestURI()).thenReturn("/repository/default/maven/org/x/y/1/y-1.jar");
         when(request.getDispatcherType()).thenReturn(DispatcherType.REQUEST);
         when(request.getHeader("Jenesis-Repository-Key")).thenAnswer(invocation -> key[0]);
         HttpServletResponse response = mock(HttpServletResponse.class);
@@ -180,7 +180,7 @@ public class RateLimitFilterTest {
         Capturing limiter = new Capturing();
         RateLimitFilter filter = new RateLimitFilter(limiter, Authorization.anonymous(), () -> configured[0]);
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn("/repository/maven/org/x/y/1/y-1.jar");
+        when(request.getRequestURI()).thenReturn("/repository/default/maven/org/x/y/1/y-1.jar");
         when(request.getDispatcherType()).thenReturn(DispatcherType.REQUEST);
         HttpServletResponse response = mock(HttpServletResponse.class);
         FilterChain chain = mock(FilterChain.class);

@@ -15,25 +15,50 @@ import jakarta.servlet.http.HttpServletRequest;
  * deployment between fixed- and multi-tenant routing is a configuration change that finds the data where it was
  * left. Which routing a deployment runs on is <strong>discovered</strong>, through
  * {@link RepositoryRoutingProvider}: {@code jenreg.tenancy} names one of the installed providers, and naming none
- * binds the {@link FixedTenantRouting}, where every request resolves to the configured
- * {@code jenreg.default-tenant}. Every routing takes the repository from the URL the same way ({@link #target}), so
- * they differ only in where the tenant comes from. A multi-tenant deployment installs a provider; it does not
- * override a bean.
+ * binds the {@link FixedTenantRouting}, which serves the one configured tenant, {@code jenreg.default-tenant}.
+ * A multi-tenant deployment installs a provider; it does not override a bean.
  *
- * <p><strong>Where the tenant comes from is the implementation's business, not this seam's.</strong> A downstream
- * routing may read it from the {@code Jenesis-Repository-Key} header (taking the repository from the first path
- * segment), from the first path segment itself (the repository then being the second), or from the request's
- * {@code Host}. The last two matter because they let a request <em>name</em> a tenant without carrying a
- * credential, which is what separates addressing a tenant from authenticating as one - a keyless request names the
- * tenant and the deployment's anonymous rights decide what it may do, while a request that carries both a key and
- * a routing path is confined to the key's tenant. This interface deliberately says none of that: it hands back a
- * {@link Route} and every caller above it is blind to how the tenant was resolved, which is what lets one
- * {@code RepositoryController} serve all of those deployments.
+ * <p><strong>The URL always names the tenant, and a routing decides only which tenants a request may
+ * address.</strong> Every routing reads the same URL ({@link #target}), so switching a deployment's tenancy never
+ * moves a URL a client already has. The fixed routing answers its one tenant and nothing else; a downstream routing
+ * may let the URL choose, confine a request to the tenant its {@code Jenesis-Repository-Key} names, or to the tenant
+ * its {@code Host} maps to. This interface deliberately says none of that: it hands back a {@link Route} and every
+ * caller above it is blind to how the tenant was decided, which is what lets one {@code RepositoryController} serve
+ * all of those deployments.
  */
 public interface RepositoryRouting {
 
-    /** Resolve the request to a {@link Route}; never {@code null}. */
+    /**
+     * Resolve the request to a {@link Route}; never {@code null}. A request the routing refuses - a name that is not
+     * routable ({@code 400}), a tenant the request may not address ({@code 404}, or {@code 403} for a credential
+     * naming another) - throws the refusal as a {@code ResponseStatusException}.
+     */
     Route route(HttpServletRequest request);
+
+    /**
+     * The tenant a request that addresses none answers for - an {@code /api} call, which names its repository in a
+     * parameter rather than in the URL. It is the tenant an addressed request naming no tenant would route to: the
+     * fixed routing's one tenant, the key's under a key-confined routing, the host's under a host routing. The default
+     * asks {@link #route}, which is right for a routing that ignores the URL; a routing that reads the tenant from the
+     * URL answers without it.
+     */
+    default String tenant(HttpServletRequest request) {
+        return route(request).tenant();
+    }
+
+    /**
+     * The route for a request, or empty when the routing refuses it - for a caller ahead of the dispatcher, a servlet
+     * filter or the security chain, where a {@code ResponseStatusException} would surface as a {@code 500} rather
+     * than its status. Such a caller lets the request through untouched, and the controller, which routes it again,
+     * answers the refusal with its own status.
+     */
+    default Optional<Route> resolve(HttpServletRequest request) {
+        try {
+            return Optional.of(route(request));
+        } catch (RuntimeException refused) {
+            return Optional.empty();
+        }
+    }
 
     /**
      * Resolve a route for a caller that has no request: a publish issued <em>in process</em>, naming its target
@@ -52,7 +77,7 @@ public interface RepositoryRouting {
      *
      * @param tenant     the tenant to publish into.
      * @param repository the repository within it.
-     * @param path       the format-facing path, as {@link Route#path} would carry it.
+     * @param path       the path within the repository, as {@link Route#path} would carry it.
      * @return the route, or empty when this routing cannot resolve one without a request.
      */
     default Optional<Route> route(String tenant, String repository, String path) {
@@ -69,40 +94,49 @@ public interface RepositoryRouting {
     }
 
     /**
-     * The repository a request URI names, and the path within it. Every routing answers from the same shape, and
-     * differs only in where it finds the tenant:
+     * The tenant and repository a request URI names, and the path within the repository. Every routing reads the URL
+     * the same way, whatever its tenancy: the tenant is always the URL's first segment, so a deployment switched from
+     * one tenancy to another answers every URL it answered before, and the routing decides only which tenants a
+     * request may address.
      * <ul>
-     * <li>{@code /repository/<repository>/<path>} - a repository holds one format, so the URL carries no format
-     *     segment, and the path within the repository is what follows its name;</li>
-     * <li>{@code /v2/<repository>/<image>/...} - the OCI registry API, which every OCI client addresses at the host's
-     *     root. The repository is the image name's first segment, and the path keeps it: an image is named
-     *     {@code <repository>/<image>} inside its repository, so every {@code Location} the format answers with
-     *     names it the way the client does;</li>
-     * <li>{@code /v2} and {@code /v2/} - the registry's version probe, which names no repository: the target's
-     *     repository is empty.</li>
+     * <li>{@code /repository/<tenant>/<repository>/<path>} - a repository holds one format, so the URL carries no
+     *     format segment, and the path within the repository is what follows its name;</li>
+     * <li>{@code /v2/<tenant>/<repository>/<image>/...} - the OCI registry API, which every OCI client addresses at
+     *     the host's root. The tenant and repository are the image name's first two segments and the path within the
+     *     repository is the rest, so an image is named inside its repository without either - an image imported as
+     *     {@code acme/app} serves at {@code /v2/<tenant>/<repository>/acme/app} - and every {@code Location} the
+     *     format answers with goes back through the exchange, which puts both back;</li>
+     * <li>{@code /v2} and {@code /v2/} - the registry's version probe, which names neither: the target's tenant and
+     *     repository are empty.</li>
      * </ul>
-     * The path is what follows the format's {@link build.jenesis.repository.format.RepositoryFormat#mount mount}:
-     * the dispatcher puts the mount back once it knows the repository's format.
-     *
-     * @param uri the request URI, after whatever prefix a routing reads its tenant from.
+     * A URL that names a tenant and no repository has an empty repository. The path is what follows the format's
+     * {@link build.jenesis.repository.format.RepositoryFormat#mount mount}: the dispatcher puts the mount back once it
+     * knows the repository's format.
      */
     static Target target(String uri) {
+        String rest;
         if (uri.equals("/v2") || uri.equals("/v2/")) {
-            return new Target("", "/");
+            return new Target("", "", "/");
+        } else if (uri.startsWith("/v2/")) {
+            rest = uri.substring("/v2/".length());
+        } else if (uri.startsWith("/repository/")) {
+            rest = uri.substring("/repository/".length());
+        } else {
+            rest = uri.equals("/repository") ? "" : uri.startsWith("/") ? uri.substring(1) : uri;
         }
-        if (uri.startsWith("/v2/")) {
-            String name = uri.substring("/v2/".length());
-            int slash = name.indexOf('/');
-            return new Target(slash < 0 ? name : name.substring(0, slash), "/" + name);
-        }
-        String rest = uri.startsWith("/repository/") ? uri.substring("/repository/".length())
-                : uri.equals("/repository") ? "" : uri.startsWith("/") ? uri.substring(1) : uri;
         int slash = rest.indexOf('/');
-        return new Target(slash < 0 ? rest : rest.substring(0, slash), slash < 0 ? "/" : rest.substring(slash));
+        String tenant = slash < 0 ? rest : rest.substring(0, slash);
+        String within = slash < 0 ? "" : rest.substring(slash + 1);
+        slash = within.indexOf('/');
+        return new Target(tenant, slash < 0 ? within : within.substring(0, slash),
+                slash < 0 ? "/" : within.substring(slash));
     }
 
-    /** A repository a request names and the path within it; an empty repository is the OCI registry's root. */
-    record Target(String repository, String path) {
+    /**
+     * The tenant and repository a request names and the path within the repository. An empty tenant is the OCI
+     * registry's version probe; an empty repository names none, which only that probe answers.
+     */
+    record Target(String tenant, String repository, String path) {
     }
 
     /**

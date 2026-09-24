@@ -4,7 +4,6 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.server.RepositoryAuthorizationManager;
-import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -36,15 +35,6 @@ public class RepositoryAuthorizationManagerFailClosedTest {
 
     @TempDir
     Path root;
-
-    /** A routing double that resolves every request to one fixed route, exactly as {@code RouteWritableTest} does; the
-     *  manager only reads {@link RepositoryRouting.Route#path()} off it. */
-    private record FixedRoute(RepositoryRouting.Route route) implements RepositoryRouting {
-        @Override
-        public Route route(HttpServletRequest request) {
-            return route;
-        }
-    }
 
     /** A store whose {@code readVersioned} always fails with an {@link IOException}, standing in for a store outage or
      *  a transient read error on the authorization lookup; every other operation is unreachable in this path. */
@@ -118,7 +108,7 @@ public class RepositoryAuthorizationManagerFailClosedTest {
     private static HttpServletRequest request(String key, Map<String, Object> attributes) {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getMethod()).thenReturn("GET");
-        when(request.getRequestURI()).thenReturn("/repository/maven/org/x/y/1/y-1.jar");
+        when(request.getRequestURI()).thenReturn("/repository/acme/default/maven/org/x/y/1/y-1.jar");
         when(request.getHeader("Jenesis-Repository-Key")).thenReturn(key);
         when(request.getRemoteAddr()).thenReturn("127.0.0.1");
         doAnswer(invocation -> attributes.put(invocation.getArgument(0), invocation.getArgument(1)))
@@ -194,10 +184,7 @@ public class RepositoryAuthorizationManagerFailClosedTest {
 
     private RepositoryAuthorizationManager manager(Authorization authorization,
                                                    build.jenesis.repository.server.spi.KeyUsageTracker usage) {
-        ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
-        RepositoryRouting.Route route = new RepositoryRouting.Route("acme", "default", store, "maven/org/x/y/1/y-1.jar");
-        return new RepositoryAuthorizationManager(authorization, new FixedRoute(route), usage);
+        return new RepositoryAuthorizationManager(authorization, usage);
     }
 
     @Test

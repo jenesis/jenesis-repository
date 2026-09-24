@@ -5,7 +5,7 @@ import build.jenesis.repository.cleanup.RetentionPolicy;
 import build.jenesis.repository.inventory.DownloadTracker;
 import org.springframework.beans.factory.ObjectProvider;
 import build.jenesis.repository.format.FormatMarks;
-import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.icon.Mark;
 import build.jenesis.repository.icon.Marks;
 import build.jenesis.repository.ui.store.RepositoryAdmin;
@@ -80,8 +80,9 @@ public class RepositoryAdminController {
             String definition = definitions.get(name);
             SettingsAdmin.RepositoryShape shape = settings.shape(name, definition);
             String format = repositories.format(name).orElse(null);
+            // A combined type has no mark of its own, so it draws the marks of what it holds, as an untyped one does.
             List<Mark> held = format == null ? repositoryMarks(name)
-                    : marks.forFormat(format).map(List::of).orElse(List.of());
+                    : marks.forFormat(format).map(List::of).orElseGet(() -> repositoryMarks(name));
             rows.add(new RepositoryRow(name, format, held, SettingsAdmin.hardenedDefinition(definition), shape));
             for (String warning : shape.warnings()) {
                 warnings.add(new RepositoryWarning(name, warning));
@@ -142,30 +143,38 @@ public class RepositoryAdminController {
         return marks.forEcosystem(ecosystem).orElseGet(() -> Marks.orphaned(ecosystem));
     }
 
-    /** Create a repository to hold one format - the only way a repository comes into being - or give one that holds
-     *  content but no format the format it holds. */
+    /** Create a repository to hold one type - the only way a repository comes into being - give one that holds content
+     *  but no format the type it holds, or move one to a type that holds everything its old one did. */
     @PostMapping("/repositories/create")
     public String create(@RequestParam("name") String name, @RequestParam("format") String format,
                          RedirectAttributes redirect) throws IOException {
         String repository = name.trim();
-        boolean created;
+        RepositoryType.Creation creation;
         try {
-            created = lifecycle.create(repository, format);
+            creation = lifecycle.create(repository, format);
         } catch (IllegalArgumentException refused) {
             redirect.addFlashAttribute("error", refused.getMessage());
             return "redirect:/repositories";
         }
-        if (!created) {
-            redirect.addFlashAttribute("message", "Repository '" + repository + "' already holds a format.");
-            return "redirect:/repositories";
+        switch (creation) {
+            case CREATED -> redirect.addFlashAttribute("message",
+                    "Created " + format + " repository '" + repository + "'.");
+            case RETYPED -> redirect.addFlashAttribute("message",
+                    "Repository '" + repository + "' now holds " + format + "; everything it served answers as before.");
+            case UNCHANGED -> redirect.addFlashAttribute("message",
+                    "Repository '" + repository + "' already holds " + format + ".");
+            case CONFLICT -> {
+                redirect.addFlashAttribute("error", "Repository '" + repository + "' holds a type " + format
+                        + " does not hold everything of, so what is stored there would stop answering.");
+                return "redirect:/repositories";
+            }
         }
-        redirect.addFlashAttribute("message", "Created " + format + " repository '" + repository + "'.");
         return "redirect:/repositories/" + repository;
     }
 
-    /** The names of the formats a repository can be created to hold. */
+    /** The types a repository can be created as - a format, or a combined type of several. */
     private static List<String> offered() {
-        return RepositoryFormat.offerable().stream().map(RepositoryFormat::name).toList();
+        return RepositoryType.offerable();
     }
 
     @PostMapping("/repositories/quota")
@@ -472,9 +481,15 @@ public class RepositoryAdminController {
                               @RequestParam(name = "password", defaultValue = "") String password,
                               @RequestParam(name = "resume", defaultValue = "") String resume,
                               RedirectAttributes redirect) throws IOException {
-        String job = migrations.startImport(repo, source, url, repository,
-                format.isBlank() ? null : format, username.isBlank() ? null : username,
-                password.isBlank() ? null : password, resume.isBlank() ? null : resume);
+        String job;
+        try {
+            job = migrations.startImport(repo, source, url, repository,
+                    format.isBlank() ? null : format, username.isBlank() ? null : username,
+                    password.isBlank() ? null : password, resume.isBlank() ? null : resume);
+        } catch (IllegalArgumentException refused) {
+            redirect.addFlashAttribute("error", refused.getMessage());
+            return "redirect:/repositories/" + repo + "/import";
+        }
         redirect.addFlashAttribute("message",
                 (resume.isBlank() ? "Started migration " : "Resumed migration ") + job + ".");
         return "redirect:/repositories/" + repo + "/import";

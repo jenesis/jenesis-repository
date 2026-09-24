@@ -12,11 +12,13 @@ import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.server.Observations;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import io.micrometer.observation.ObservationRegistry;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,16 +40,18 @@ import org.springframework.web.bind.annotation.RestController;
  * capability with the pointer roots the inventory derives from the installed formats; its dry run rides
  * {@link GarbageCollector#plan} beside retention's. With no collector resolved nothing is ever reclaimed and the
  * report's {@code gc} view says garbage collection is off - the SPI's no-op-by-absence default. The pin operations run through the repository's {@link StoreRepositoryInventory} and stand
- * on their own. Every mapping is the same {@code /repository/{repo}/admin/...} route it carried in the monolith and is
+ * on their own. Every mapping is a repository's {@code /repository/<tenant>/<repository>/admin/...} route and is
  * gated {@code repository:read}/{@code repository:write} by the security chain before the request is reached; the more
  * specific admin routes still outrank the {@code deploy()} write catch-all because Spring picks the most specific
- * mapping across controllers. The tenant comes from the key, so two tenants never sweep or pin into each other's space,
- * and a traversal-unsafe repository or tenant name is a {@code 400}.
+ * mapping across controllers. The tenant is the one the deployment's routing decides for the URL, exactly as for the
+ * repository's artifacts, so two tenants never sweep or pin into each other's space, and a name that is not routable
+ * is the routing's {@code 400}.
  */
 @RestController
 public class MaintenanceController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final LiveConfig live;
     private final ObservationRegistry observations;
     private final AuditTrail audit;
@@ -58,9 +62,10 @@ public class MaintenanceController {
      *  effective configuration. */
     private final List<GarbageCollectorProvider> collectors = GarbageCollectorProvider.providers();
 
-    public MaintenanceController(Repositories repositories, LiveConfig live, ObservationRegistry observations,
-                                 AuditTrail audit, MaintenanceScheduler maintenance) {
+    public MaintenanceController(Repositories repositories, RepositoryRouting routing, LiveConfig live,
+                                 ObservationRegistry observations, AuditTrail audit, MaintenanceScheduler maintenance) {
         this.repositories = repositories;
+        this.routing = routing;
         this.live = live;
         this.observations = observations;
         this.audit = audit;
@@ -73,15 +78,12 @@ public class MaintenanceController {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, detail);
     }
 
-    @PostMapping("/repository/{repo}/admin/cleanup")
+    @PostMapping("/repository/{tenant}/{repo}/admin/cleanup")
     @ResponseBody
     public CleanupReport cleanup(@PathVariable("repo") String repo,
                                  @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                 HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return null;
-        }
+                                 HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.route(request).tenant();
         Optional<RetentionSweeper> sweeper = repositories.retentionSweeper();
         if (sweeper.isEmpty()) {
             respondRetentionNotInstalled(response);
@@ -140,16 +142,13 @@ public class MaintenanceController {
      * itself, and the format module's manifest purge ({@code POST /api/admin/purge}) reaps the stray pointers and
      * listings that remain.
      */
-    @PostMapping("/repository/{repo}/admin/forget-ecosystem")
+    @PostMapping("/repository/{tenant}/{repo}/admin/forget-ecosystem")
     @ResponseBody
     public Map<String, Object> forgetEcosystem(@PathVariable("repo") String repo,
                                                @RequestParam("ecosystem") String ecosystem,
                                                @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                               HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return null;
-        }
+                                               HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.route(request).tenant();
         long removed;
         try {
             removed = new StoreRepositoryInventory(repositories.store(tenant, repo)).forgetEcosystem(ecosystem);
@@ -163,15 +162,12 @@ public class MaintenanceController {
         return Map.of("ecosystem", ecosystem, "removed", removed);
     }
 
-    @GetMapping("/repository/{repo}/admin/cleanup/plan")
+    @GetMapping("/repository/{tenant}/{repo}/admin/cleanup/plan")
     @ResponseBody
     public CleanupReport cleanupPlan(@PathVariable("repo") String repo,
                                      @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                     HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return null;
-        }
+                                     HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.route(request).tenant();
         Optional<RetentionSweeper> sweeper = repositories.retentionSweeper();
         if (sweeper.isEmpty()) {
             respondRetentionNotInstalled(response);
@@ -196,15 +192,12 @@ public class MaintenanceController {
         return new CleanupReport(0, evicted(inventory, plan), plan.evictions().size(), gc);
     }
 
-    @GetMapping("/repository/{repo}/admin/retention")
+    @GetMapping("/repository/{tenant}/{repo}/admin/retention")
     @ResponseBody
     public RetentionView retention(@PathVariable("repo") String repo,
                                    @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                   HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return null;
-        }
+                                   HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.route(request).tenant();
         if (repositories.retentionSweeper().isEmpty()) {
             respondRetentionNotInstalled(response);
             return null;
@@ -216,18 +209,15 @@ public class MaintenanceController {
                 policy.notDownloadedFor() == null ? "" : policy.notDownloadedFor().toString());
     }
 
-    @PutMapping("/repository/{repo}/admin/retention")
+    @PutMapping("/repository/{tenant}/{repo}/admin/retention")
     public void setRetention(@PathVariable("repo") String repo,
                              @RequestParam(value = "keepLast", defaultValue = "0") int keepLast,
                              @RequestParam(value = "maxAge", defaultValue = "") String maxAge,
                              @RequestParam(value = "prereleaseExpiry", defaultValue = "") String prereleaseExpiry,
                              @RequestParam(value = "notDownloadedFor", defaultValue = "") String notDownloadedFor,
                              @RequestHeader(value = Repositories.KEY, required = false) String key,
-                             HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return;
-        }
+                             HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.route(request).tenant();
         if (repositories.retentionSweeper().isEmpty()) {
             respondRetentionNotInstalled(response);
             return;
@@ -251,17 +241,14 @@ public class MaintenanceController {
         response.setStatus(200);
     }
 
-    @PostMapping("/repository/{repo}/admin/pin")
+    @PostMapping("/repository/{tenant}/{repo}/admin/pin")
     public void pin(@PathVariable("repo") String repo,
                     @RequestParam("ecosystem") String ecosystem,
                     @RequestParam("coordinate") String coordinate,
                     @RequestParam("version") String version,
                     @RequestHeader(value = Repositories.KEY, required = false) String key,
-                    HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return;
-        }
+                    HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.route(request).tenant();
         try {
             new StoreRepositoryInventory(repositories.store(tenant, repo)).pin(ecosystem, coordinate, version);
         } catch (IllegalArgumentException e) {
@@ -272,17 +259,14 @@ public class MaintenanceController {
         response.setStatus(200);
     }
 
-    @DeleteMapping("/repository/{repo}/admin/pin")
+    @DeleteMapping("/repository/{tenant}/{repo}/admin/pin")
     public void unpin(@PathVariable("repo") String repo,
                       @RequestParam("ecosystem") String ecosystem,
                       @RequestParam("coordinate") String coordinate,
                       @RequestParam("version") String version,
                       @RequestHeader(value = Repositories.KEY, required = false) String key,
-                      HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return;
-        }
+                      HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.route(request).tenant();
         try {
             new StoreRepositoryInventory(repositories.store(tenant, repo)).unpin(ecosystem, coordinate, version);
         } catch (IllegalArgumentException e) {
@@ -299,15 +283,12 @@ public class MaintenanceController {
         response.getWriter().write(e.getMessage() == null ? "invalid coordinate segment" : e.getMessage());
     }
 
-    @GetMapping("/repository/{repo}/admin/pins")
+    @GetMapping("/repository/{tenant}/{repo}/admin/pins")
     @ResponseBody
     public PinsView pins(@PathVariable("repo") String repo,
                          @RequestHeader(value = Repositories.KEY, required = false) String key,
-                         HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return null;
-        }
+                         HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.route(request).tenant();
         return new PinsView(new StoreRepositoryInventory(repositories.store(tenant, repo)).pins());
     }
 
@@ -344,25 +325,6 @@ public class MaintenanceController {
         response.setStatus(501);
         response.setContentType("text/plain;charset=UTF-8");
         response.getWriter().write("retention is not installed on this deployment");
-    }
-
-    /**
-     * Validates the named repository and resolves the request's tenant from the {@code Jenesis-Repository-Key} header,
-     * answering {@code 400} for a traversal-unsafe repository or tenant name and {@code null} so the caller returns at
-     * once. Rights are enforced by Spring Security before the request reaches the controller, so this makes no
-     * authorization decision - the same guard the monolith carried, unchanged by the move.
-     */
-    private String access(String repo, String key, HttpServletResponse response) {
-        if (!Repositories.valid(repo)) {
-            response.setStatus(400);
-            return null;
-        }
-        String tenant = repositories.tenant(key);
-        if (!Repositories.valid(tenant)) {
-            response.setStatus(400);
-            return null;
-        }
-        return tenant;
     }
 
     /** The sweep's outcome: {@code blobsReclaimed} keeps its historical meaning (what this run deleted - the

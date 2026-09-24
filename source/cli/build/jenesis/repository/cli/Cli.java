@@ -304,6 +304,10 @@ public final class Cli {
                   The noun is the subject (a repository, the credentials, the findings). With no action a noun
                   reads: 'pins <repo>' lists the pins, 'pins pin <repo> ...' adds one. Reads never change anything.
 
+                  A <repo> is a repository of the tenant your key belongs to; name another tenant's as
+                  <tenant>/<repo>. A repository is served at /repository/<tenant>/<repo>/, container images at
+                  /v2/<tenant>/<repo>/<image>.
+
                 EXIT CODES
                   0  it worked
                   1  the server refused, or could not be reached - the message says which

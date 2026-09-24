@@ -14,7 +14,7 @@ import tools.jackson.databind.json.JsonMapper;
  * SHA-256 and size (metadata only, straight from the publication pointer - the source opens no blob to answer);
  * the walk reports each asset with its format and the layout-relative path the matching {@code RepositoryImporter}
  * expects (the source's {@code /<format>/} serving prefix stripped, which that importer re-applies), streams the
- * bytes lazily from the source's {@code /repository} serving path, and resumes from the opaque {@code cursor} the
+ * bytes lazily from the URL path the listing says each asset is served at, and resumes from the opaque {@code cursor} the
  * response carries - checkpointing it after each page and a terminal {@code null}, exactly as the Nexus walk
  * checkpoints its continuation token. The optional jenesis API key travels in the {@code Jenesis-Repository-Key}
  * header on both the listing and the downloads, since a source that enforces auth gates its reads.
@@ -28,13 +28,6 @@ public final class JenesisSource implements ImportSource {
     private final ProxyFormat.Fetcher fetcher;
     private final String key;
     private final String cursor;
-
-    /** Whether the source addresses artifacts with the repository segment ({@code /repository/<repo><path>}, the
-     *  multi-tenant edition) or without ({@code /repository<path>}, the fixed-tenant server, whose one artifact
-     *  space needs no name in the path). The walk cannot know which edition it faces, so the first download decides:
-     *  the repository-qualified shape is tried first - the walk names the repository explicitly - and a {@code 404}
-     *  falls back once to the bare shape; whichever answered is remembered for the rest of the walk. */
-    private volatile Boolean repositorySegment;
 
     public JenesisSource(URI base, String repository, ProxyFormat.Fetcher fetcher) {
         this(base, repository, fetcher, null, null);
@@ -86,7 +79,14 @@ public final class JenesisSource implements ImportSource {
                     consumer.dropped(layout, ImportSource.Reason.UNSAFE_PATH);
                     continue;   // a traversal-laced listing path no store write should see
                 }
-                consumer.accept(format, layout, () -> open(prefix, path));
+                // Where the source serves the asset, as a URL path on the source's own host - checked as one, since a
+                // value that did not start at the host's root could move the download to another host.
+                String served = asset.path("served").asString("");
+                if (!served.startsWith("/repository/") || !ImportSource.safePath(served.substring(1))) {
+                    consumer.dropped(layout, ImportSource.Reason.UNSAFE_PATH);
+                    continue;
+                }
+                consumer.accept(format, layout, () -> open(prefix, served));
             }
             token = body.path("cursor").asString(null);
             checkpoint.reached(token);
@@ -106,40 +106,16 @@ public final class JenesisSource implements ImportSource {
         return path.startsWith("/") ? path.substring(1) : path;
     }
 
-    private InputStream open(String prefix, String path) throws IOException {
-        Boolean qualified = repositorySegment;
-        URI first = downloadUrl(prefix, path, qualified == null || qualified);
-        ProxyFormat.Download download = fetcher.download(first, headers())
-                .orElseThrow(() -> ImportFailure.unreachable(first));
-        if (qualified == null && download.status() == 404) {
-            // The first download decides the edition: a 404 on the repository-qualified shape is retried once on the
-            // fixed-tenant shape, and the shape that answers is kept for the rest of the walk.
-            download.close();
-            URI second = downloadUrl(prefix, path, false);
-            download = fetcher.download(second, headers()).orElseThrow(() -> ImportFailure.unreachable(second));
-            if (download.status() != 200) {
-                download.close();
-                throw ImportFailure.status(download.status(), second, "Download");
-            }
-            repositorySegment = false;
-            return download.body();
-        }
+    /** The asset's bytes, from the URL path the listing reported the source serves it at. */
+    private InputStream open(String prefix, String served) throws IOException {
+        URI url = URI.create(prefix + served);
+        ProxyFormat.Download download = fetcher.download(url, headers())
+                .orElseThrow(() -> ImportFailure.unreachable(url));
         if (download.status() != 200) {
             download.close();
-            throw ImportFailure.status(download.status(), first, "Download");
-        }
-        if (qualified == null) {
-            repositorySegment = true;
+            throw ImportFailure.status(download.status(), url, "Download");
         }
         return download.body();
-    }
-
-    private String encodedRepository() {
-        return URLEncoder.encode(repository, StandardCharsets.UTF_8);
-    }
-
-    private URI downloadUrl(String prefix, String path, boolean withRepository) {
-        return URI.create(prefix + "/repository" + (withRepository ? "/" + encodedRepository() : "") + path);
     }
 
     private ProxyFormat.Fetched get(URI url) throws IOException {

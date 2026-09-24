@@ -48,18 +48,13 @@ public final class PublishTenantFilter extends OncePerRequestFilter {
         // free edge's screen and the DeployEdgeHooks bean resolve that tenant's own gate policy. Under path/host tenancy
         // the tenant comes from the path/host (a keyless CDN write names a non-default tenant), which the key header
         // alone could not see; the key-must-agree precedence in those routings still confines a keyed request.
-        String tenant;
-        try {
-            tenant = routing.route(request).tenant();
-        } catch (RuntimeException rejected) {
-            // A routing rejection (a traversal-suspect segment -> 400, a key that disagrees with the path/host tenant
-            // -> 403) is the controller's to translate into an HTTP status: a ResponseStatusException thrown here, in a
-            // servlet Filter ahead of the DispatcherServlet, would surface as a 500 instead. Leave the tenant unbound
-            // and let the request proceed - the controller re-runs the same routing and raises the proper status.
+        // A routing refusal is the controller's to answer: leave the tenant unbound and let the request proceed.
+        Optional<RepositoryRouting.Route> route = routing.resolve(request);
+        if (route.isEmpty()) {
             chain.doFilter(request, response);
             return;
         }
-        try (PublishTenant.Scope _ = PublishTenant.open(tenant)) {
+        try (PublishTenant.Scope _ = PublishTenant.open(route.get().tenant())) {
             chain.doFilter(request, response);
         }
     }

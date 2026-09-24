@@ -25,6 +25,8 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Features;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.core.env.Environment;
+import build.jenesis.repository.server.RepositoryRouting;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,6 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ImportController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final RepositoryRouter router;
     private final RepositoryProperties properties;
     private final Settings settings;
@@ -52,10 +55,12 @@ public class ImportController {
     private final Environment environment;
     private final AuditTrail audit;
 
-    public ImportController(Repositories repositories, RepositoryRouter router, RepositoryProperties properties,
+    public ImportController(Repositories repositories, RepositoryRouting routing, RepositoryRouter router,
+                            RepositoryProperties properties,
                             Settings settings, ProxyFormat.Fetcher upstreamFetcher, ObservationRegistry observations,
                             Environment environment, AuditTrail audit) {
         this.repositories = repositories;
+        this.routing = routing;
         this.router = router;
         this.properties = properties;
         this.settings = settings;
@@ -80,16 +85,23 @@ public class ImportController {
      * counted {@code held} (its replay context recorded beside the hold so a review release materialises it), and a
      * rejected one is counted {@code rejected} and skipped.
      */
-    @PostMapping("/repository/{repo}/admin/import")
+    @PostMapping("/repository/{tenant}/{repo}/admin/import")
     @ResponseBody
     public ImportJob importRepository(@PathVariable("repo") String repo,
                                       @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                      @RequestBody ImportRequestBody request,
-                                      HttpServletResponse response) throws IOException {
-        String tenant = RepositoryRequests.access(repositories, repo, key, response);
-        if (tenant == null) {
+                                      @RequestBody(required = false) ImportRequestBody request,
+                                      HttpServletRequest servlet, HttpServletResponse response) throws IOException {
+        // Whether a migration can run at all is answered before what was asked for is read, so a deployment with no
+        // fetcher says so to any request rather than to a well-formed one only.
+        if (upstreamFetcher == ProxyFormat.Fetcher.NONE) {
+            response.setStatus(501);
             return null;
         }
+        if (request == null) {
+            response.setStatus(400);
+            return null;
+        }
+        String tenant = routing.route(servlet).tenant();
         ArtifactStore store = importStore(repo, tenant, response);
         if (store == null) {
             return null;
@@ -99,10 +111,6 @@ public class ImportController {
         // the handler below) rather than let it aim a store key outside the imports/ subtree - the peer id guards.
         if (request.resume() != null) {
             RepositoryRequests.rejectTraversal(request.resume());
-        }
-        if (upstreamFetcher == ProxyFormat.Fetcher.NONE) {
-            response.setStatus(501);
-            return null;
         }
         return Observations.observe(observations, "jenreg.import", repo, tenant, observation -> {
             observation.lowCardinalityKeyValue("source",
@@ -161,15 +169,13 @@ public class ImportController {
         });
     }
 
-    @GetMapping("/repository/{repo}/admin/import/{job}")
+    @GetMapping("/repository/{tenant}/{repo}/admin/import/{job}")
     @ResponseBody
     public ImportJobs.Snapshot importStatus(@PathVariable("repo") String repo, @PathVariable("job") String job,
                                             @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                            HttpServletResponse response) throws IOException {
-        String tenant = RepositoryRequests.access(repositories, repo, key, response);
-        if (tenant == null) {
-            return null;
-        }
+                                            HttpServletRequest servlet, HttpServletResponse response)
+            throws IOException {
+        String tenant = routing.route(servlet).tenant();
         ArtifactStore store = importStore(repo, tenant, response);
         if (store == null) {
             return null;

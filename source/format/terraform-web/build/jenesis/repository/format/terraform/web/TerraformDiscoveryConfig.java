@@ -18,11 +18,12 @@ public class TerraformDiscoveryConfig {
      *
      * <p>It has to be configured rather than derived: the discovery document is fetched from the host root, so the
      * request that asks for it carries no repository segment to infer one from. The default is the single-repository
-     * shape a deployment has out of the box.
+     * shape a deployment has out of the box: a repository named {@code terraform} in the
+     * {@code default} tenant.
      */
     @Bean
     public TerraformDiscoveryController terraformDiscoveryController(
-            @Value("${jenreg.terraform.prefix:/repository/terraform/registry}") String prefix) {
+            @Value("${jenreg.terraform.prefix:/repository/default/terraform/registry}") String prefix) {
         return new TerraformDiscoveryController(prefix);
     }
 }

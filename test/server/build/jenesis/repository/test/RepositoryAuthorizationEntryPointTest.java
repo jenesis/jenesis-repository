@@ -42,7 +42,7 @@ class RepositoryAuthorizationEntryPointTest {
 
     @Test
     void a_keyless_artifact_read_is_challenged_with_basic() {
-        HttpServletRequest request = request("/repository/maven/org/x/y/1/y-1.jar", null);
+        HttpServletRequest request = request("/repository/default/maven/org/x/y/1/y-1.jar", null);
         HttpServletResponse response = mock(HttpServletResponse.class);
 
         new RepositoryAuthorizationEntryPoint(failures).commence(request, response,
@@ -54,7 +54,7 @@ class RepositoryAuthorizationEntryPointTest {
 
     @Test
     void a_keyless_cargo_index_request_is_also_challenged_with_cargo() {
-        HttpServletRequest request = request("/repository/releases/cargo/config.json", null);
+        HttpServletRequest request = request("/repository/default/releases/cargo/config.json", null);
         HttpServletResponse response = mock(HttpServletResponse.class);
 
         new RepositoryAuthorizationEntryPoint(failures).commence(request, response,

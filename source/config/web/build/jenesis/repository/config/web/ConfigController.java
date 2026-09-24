@@ -2,7 +2,7 @@ package build.jenesis.repository.config.web;
 
 import module java.base;
 import build.jenesis.repository.definitions.RepositoryDefinition;
-import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.audit.AuditActions;
@@ -81,7 +81,10 @@ public class ConfigController {
     }
 
     private void audit(String key, String action, String target) {
-        String tenant = repositories.tenant(key);
+        audit(repositories.tenant(key), key, action, target);
+    }
+
+    private void audit(String tenant, String key, String action, String target) {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, target);
     }
 
@@ -498,19 +501,20 @@ public class ConfigController {
     }
 
     /**
-     * Create a repository to hold one format - {@code PUT /repository/<name>} with {@code {"value":"<format>"}} - in
-     * the tenant the request routes to, through the one creation every surface makes
-     * ({@link RepositoryDocument#create}). A repository that holds content but no format is given this one. Answers
-     * {@code 201} when created, {@code 200} when the repository already holds that format, {@code 409} when it holds
-     * another, and {@code 400} for a format no repository can hold here.
+     * Create a repository to hold one format - {@code PUT /repository/<tenant>/<name>} with
+     * {@code {"value":"<format>"}} - in the tenant the deployment's routing decides for the URL, through the one creation every surface makes
+     * ({@link RepositoryType#create}). A repository that holds content but no format is given this one, and one whose
+     * type the requested one holds everything of - {@code maven} asked to be {@code java} - is given the requested
+     * one. Answers {@code 201} when created, {@code 200} when it already held that type or was given it, {@code 409}
+     * when it holds a type the requested one does not cover, and {@code 400} for a type no repository can hold here.
      */
-    @PutMapping("/repository/{name}")
+    @PutMapping("/repository/{tenant}/{name}")
     public void createRepository(@PathVariable("name") String name,
                                  @RequestHeader(value = Repositories.KEY, required = false) String key,
                                  @RequestBody NamedValueRequest request,
                                  HttpServletRequest servlet, HttpServletResponse response) throws IOException {
         String format = request == null ? null : request.value();
-        List<String> offered = RepositoryFormat.offerable().stream().map(RepositoryFormat::name).toList();
+        List<String> offered = RepositoryType.offerable();
         if (format == null || !offered.contains(format)) {
             text(response, 400, "'" + format + "' is not a format a repository can hold here; one of " + offered
                     + ".");
@@ -521,18 +525,21 @@ public class ConfigController {
             text(response, 400, "The request names no repository.");
             return;
         }
-        if (new RepositoryDocument(format, Instant.now()).create(route.store())) {
-            audit(key, AuditActions.REPOSITORY_CREATE, route.repository());
-            response.setStatus(201);
-            return;
+        switch (RepositoryType.create(route.store(), format)) {
+            case CREATED -> {
+                audit(route.tenant(), key, AuditActions.REPOSITORY_CREATE, route.repository());
+                response.setStatus(201);
+            }
+            case RETYPED -> {
+                audit(route.tenant(), key, AuditActions.REPOSITORY_RETYPE, route.repository() + " to " + format);
+                response.setStatus(200);
+            }
+            case UNCHANGED -> response.setStatus(200);
+            case CONFLICT -> text(response, 409, "Repository '" + route.repository() + "' already holds "
+                    + RepositoryDocument.read(route.store()).map(RepositoryDocument::format).orElse("another format")
+                    + ", which '" + format + "' does not hold everything of - what is stored there would stop "
+                    + "answering.");
         }
-        Optional<RepositoryDocument> held = RepositoryDocument.read(route.store());
-        if (held.isPresent() && held.get().format().equals(format)) {
-            response.setStatus(200);
-            return;
-        }
-        text(response, 409, "Repository '" + route.repository() + "' already holds "
-                + held.map(RepositoryDocument::format).orElse("another format") + ".");
     }
 
     private static void text(HttpServletResponse response, int status, String message) throws IOException {

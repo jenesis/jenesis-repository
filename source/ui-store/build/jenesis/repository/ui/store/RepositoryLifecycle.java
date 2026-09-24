@@ -18,8 +18,7 @@ import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.staging.Staging;
 import build.jenesis.repository.staging.StagingProvider;
-import build.jenesis.repository.format.RepositoryFormat;
-import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.store.ArtifactStore;
 import io.micrometer.observation.ObservationRegistry;
 
@@ -38,23 +37,27 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     /**
-     * Create a repository in the signed-in tenant to hold {@code format}, through the one creation every surface
-     * makes ({@link RepositoryDocument#create}): the repository answers from then on, for that format alone. A
-     * repository that holds content but no format is given this one.
+     * Make a repository in the signed-in tenant hold the type {@code format}, through the one creation every surface
+     * makes ({@link RepositoryType#create}): a repository that holds none - or content but no format - is given it,
+     * and one whose type the requested one holds everything of ({@code maven} asked to be {@code java}) is given the
+     * requested one.
      *
-     * @return {@code false} when the repository already holds a format, which is left as it is.
-     * @throws IllegalArgumentException when the name is not a repository name or no installed format of that name
-     *                                  can be held by a repository.
+     * @return what the creation did; {@link RepositoryType.Creation#CONFLICT} leaves the repository as it was.
+     * @throws IllegalArgumentException when the name is not a repository name or the type is not one a repository
+     *                                  can hold here.
      */
-    public boolean create(String repository, String format) throws IOException {
-        if (RepositoryFormat.offerable().stream().noneMatch(offered -> offered.name().equals(format))) {
+    public RepositoryType.Creation create(String repository, String format) throws IOException {
+        if (!RepositoryType.offerable().contains(format)) {
             throw new IllegalArgumentException("'" + format + "' is not a format this deployment serves.");
         }
-        if (!new RepositoryDocument(format, Instant.now()).create(scope(repository))) {
-            return false;
+        RepositoryType.Creation creation = RepositoryType.create(scope(repository), format);
+        switch (creation) {
+            case CREATED -> audit(AuditActions.REPOSITORY_CREATE, repository);
+            case RETYPED -> audit(AuditActions.REPOSITORY_RETYPE, repository + " to " + format);
+            default -> {
+            }
         }
-        audit(AuditActions.REPOSITORY_CREATE, repository);
-        return true;
+        return creation;
     }
 
     /** Whether a staging module is installed on this deployment - the console hides the staging surface without one. */

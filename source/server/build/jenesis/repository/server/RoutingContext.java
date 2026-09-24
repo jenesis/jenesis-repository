@@ -68,8 +68,20 @@ public interface RoutingContext {
     }
 
     /**
-     * The route for a tenant a routing has resolved and the {@link RepositoryRouting.Target target} its URL names -
-     * the one resolution every routing shares, so they differ only in where the tenant comes from. Both names are
+     * The route for a request a routing has confined to {@code tenant}: the tenant it answers for, whatever else the
+     * URL names. A URL naming another tenant is a {@code 404}, which says no more about that tenant than an absent
+     * repository would; a URL naming none - the OCI registry's version probe - routes to {@code tenant}.
+     */
+    default RepositoryRouting.Route confined(String tenant, RepositoryRouting.Target target) {
+        if (!target.tenant().isEmpty() && !target.tenant().equals(tenant)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No such tenant");
+        }
+        return route(tenant, target);
+    }
+
+    /**
+     * The route for a tenant a routing has decided and the {@link RepositoryRouting.Target target} its URL names -
+     * the one resolution every routing shares, so they differ only in which tenants they answer. Both names are
      * checked as scope names before they scope the store, so a traversal is a {@code 400} and never an escape; an
      * empty repository (the OCI registry's version probe) routes to the tenant's own scope.
      */

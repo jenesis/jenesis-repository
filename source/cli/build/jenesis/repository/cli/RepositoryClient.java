@@ -25,14 +25,26 @@ public final class RepositoryClient {
 
     private final URI base;
     private final String key;
+    private final String tenant;
     private final HttpClient client;
 
+    /** A client addressing the repositories of the tenant {@code key} belongs to. */
     public RepositoryClient(URI base, String key, HttpClient client) {
+        this(base, key, null, client);
+    }
+
+    /**
+     * A client addressing the repositories of {@code tenant} - for a deployment whose URLs name a tenant other than
+     * the key's, such as a single-tenant one serving its configured tenant to an operator key minted elsewhere.
+     * {@code null} is the key's tenant.
+     */
+    public RepositoryClient(URI base, String key, String tenant, HttpClient client) {
         if (base == null) {
             throw new IllegalArgumentException("A repository URL is required");
         }
         this.base = base;
         this.key = key;
+        this.tenant = tenant;
         this.client = client;
     }
 
@@ -203,13 +215,13 @@ public final class RepositoryClient {
     /** Promote a staged id into the release layout, returning the HTTP status (200 promoted, 409 already sealed,
      *  501 staging not installed). */
     public int promoteStaging(String repo, String id) throws IOException, InterruptedException {
-        return send("POST", "/repository/" + repo + "/staging/" + id + "/promote", null, null).statusCode();
+        return send("POST", repository(repo) + "/staging/" + id + "/promote", null, null).statusCode();
     }
 
     /** Drop a staged id and its held blobs, returning the HTTP status (200 dropped, 409 already sealed, 501 staging
      *  not installed). */
     public int dropStaging(String repo, String id) throws IOException, InterruptedException {
-        return send("POST", "/repository/" + repo + "/staging/" + id + "/drop", null, null).statusCode();
+        return send("POST", repository(repo) + "/staging/" + id + "/drop", null, null).statusCode();
     }
 
     /** The published-index descriptor for a repository - the generation, watermark and the chain of immutable chunks
@@ -470,11 +482,11 @@ public final class RepositoryClient {
         return response.body();
     }
 
-    /** Deploy bytes to a repository at the given layout path (e.g. {@code /maven/...}, {@code /npm/...}) through the
-     *  compliance gate, returning the HTTP status the gate's verdict maps to (201 published, 202 quarantined,
-     *  422 rejected, 405 not writable). The path carries the format segment, so the client assumes no layout. */
+    /** Deploy bytes to a repository at the given path within it (a Maven repository's {@code /maven/...}, an npm
+     *  one's {@code /<package>/...}) through the compliance gate, returning the HTTP status the gate's verdict maps to
+     *  (201 published, 202 quarantined, 422 rejected, 405 not writable). The client assumes no layout. */
     public int deploy(String repo, String path, byte[] bytes) throws IOException, InterruptedException {
-        return send("PUT", "/repository/" + repo + path,
+        return send("PUT", repository(repo) + path,
                 HttpRequest.BodyPublishers.ofByteArray(bytes), "application/octet-stream").statusCode();
     }
 
@@ -482,7 +494,7 @@ public final class RepositoryClient {
      *  the whole artifact into heap - the streaming twin of {@link #deploy(String, String, byte[])} for the CLI's
      *  upload path, where the file may be artifact-sized (stream, never buffer). */
     public int deploy(String repo, String path, Path file) throws IOException, InterruptedException {
-        return send("PUT", "/repository/" + repo + path,
+        return send("PUT", repository(repo) + path,
                 HttpRequest.BodyPublishers.ofFile(file), "application/octet-stream").statusCode();
     }
 
@@ -494,7 +506,7 @@ public final class RepositoryClient {
      *  verdict. */
     public ExplodeResult deployExplode(String repo, String path, byte[] archive)
             throws IOException, InterruptedException {
-        return explode(send("PUT", "/repository/" + repo + path,
+        return explode(send("PUT", repository(repo) + path,
                 HttpRequest.BodyPublishers.ofByteArray(archive), "application/zip",
                 Map.of(EXPLODE_HEADER, "zip")));
     }
@@ -503,7 +515,7 @@ public final class RepositoryClient {
      *  buffering it into heap, for the CLI's {@code --explode} upload path. */
     public ExplodeResult deployExplode(String repo, String path, Path archive)
             throws IOException, InterruptedException {
-        return explode(send("PUT", "/repository/" + repo + path,
+        return explode(send("PUT", repository(repo) + path,
                 HttpRequest.BodyPublishers.ofFile(archive), "application/zip",
                 Map.of(EXPLODE_HEADER, "zip")));
     }
@@ -799,7 +811,7 @@ public final class RepositoryClient {
     /** Run the retention sweep over a repository, returning what it evicted and how many blobs it reclaimed, or
      *  {@code null} when retention is not installed on this deployment (HTTP 501). */
     public CleanupReport cleanup(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("POST", "/repository/" + repo + "/admin/cleanup", null, null);
+        HttpResponse<String> response = send("POST", repository(repo) + "/admin/cleanup", null, null);
         if (response.statusCode() == 501) {
             return null;
         }
@@ -810,7 +822,7 @@ public final class RepositoryClient {
     /** The dry-run cleanup plan: what the sweep would evict, without deleting anything ({@code blobsReclaimed} is
      *  always 0), or {@code null} when retention is not installed (HTTP 501). */
     public CleanupReport cleanupPlan(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/repository/" + repo + "/admin/cleanup/plan", null, null);
+        HttpResponse<String> response = send("GET", repository(repo) + "/admin/cleanup/plan", null, null);
         if (response.statusCode() == 501) {
             return null;
         }
@@ -840,7 +852,7 @@ public final class RepositoryClient {
 
     /** A repository's retention policy, or {@code null} when retention is not installed (HTTP 501). */
     public RetentionView retention(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/repository/" + repo + "/admin/retention", null, null);
+        HttpResponse<String> response = send("GET", repository(repo) + "/admin/retention", null, null);
         if (response.statusCode() == 501) {
             return null;
         }
@@ -856,7 +868,7 @@ public final class RepositoryClient {
                 + "&maxAge=" + enc(blankIfNull(maxAge))
                 + "&prereleaseExpiry=" + enc(blankIfNull(prereleaseExpiry))
                 + "&notDownloadedFor=" + enc(blankIfNull(notDownloadedFor));
-        HttpResponse<String> response = send("PUT", "/repository/" + repo + "/admin/retention" + query, null, null);
+        HttpResponse<String> response = send("PUT", repository(repo) + "/admin/retention" + query, null, null);
         if (response.statusCode() == 501) {
             return false;
         }
@@ -866,20 +878,20 @@ public final class RepositoryClient {
 
     /** A repository's pinned coordinates ({@code ecosystem:coordinate:version}), which the sweep never reclaims. */
     public List<String> pins(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/repository/" + repo + "/admin/pins", null, null);
+        HttpResponse<String> response = send("GET", repository(repo) + "/admin/pins", null, null);
         require(response, 200, "read the pins of " + repo);
         return JSON.readValue(response.body(), PinsView.class).pinned();
     }
 
     public void pin(String repo, String ecosystem, String coordinate, String version)
             throws IOException, InterruptedException {
-        require(send("POST", "/repository/" + repo + "/admin/pin?ecosystem=" + enc(ecosystem)
+        require(send("POST", repository(repo) + "/admin/pin?ecosystem=" + enc(ecosystem)
                 + "&coordinate=" + enc(coordinate) + "&version=" + enc(version), null, null), 200, "pin " + coordinate);
     }
 
     public void unpin(String repo, String ecosystem, String coordinate, String version)
             throws IOException, InterruptedException {
-        require(send("DELETE", "/repository/" + repo + "/admin/pin?ecosystem=" + enc(ecosystem)
+        require(send("DELETE", repository(repo) + "/admin/pin?ecosystem=" + enc(ecosystem)
                 + "&coordinate=" + enc(coordinate) + "&version=" + enc(version), null, null), 200, "unpin " + coordinate);
     }
 
@@ -905,7 +917,7 @@ public final class RepositoryClient {
         if (resume != null) {
             fields.put("resume", resume);
         }
-        HttpResponse<String> response = send("POST", "/repository/" + repo + "/admin/import",
+        HttpResponse<String> response = send("POST", repository(repo) + "/admin/import",
                 body(fields), "application/json");
         if (response.statusCode() == 202) {
             return new ImportResult(202, JSON.readValue(response.body(), ImportJob.class).job());
@@ -916,7 +928,7 @@ public final class RepositoryClient {
     /** The state and counts of an import job, or {@code null} when no such job exists (HTTP 404). */
     public ImportStatus importStatus(String repo, String job) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET",
-                "/repository/" + repo + "/admin/import/" + enc(job), null, null);
+                repository(repo) + "/admin/import/" + enc(job), null, null);
         if (response.statusCode() == 404) {
             return null;
         }
@@ -976,7 +988,7 @@ public final class RepositoryClient {
      * server's own sentence.
      */
     public boolean createRepository(String name, String format) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("PUT", "/repository/" + name, body(Map.of("value", format)),
+        HttpResponse<String> response = send("PUT", repository(name), body(Map.of("value", format)),
                 "application/json");
         if (response.statusCode() == 201 || response.statusCode() == 200) {
             return response.statusCode() == 201;
@@ -1561,7 +1573,7 @@ public final class RepositoryClient {
     /** Forget every record of one ecosystem in a repository. */
     public void forgetEcosystem(String repo, String ecosystem) throws IOException, InterruptedException {
         HttpResponse<String> response = send("POST",
-                "/repository/" + enc(repo) + "/admin/forget-ecosystem?ecosystem=" + enc(ecosystem),
+                repository(repo) + "/admin/forget-ecosystem?ecosystem=" + enc(ecosystem),
                 HttpRequest.BodyPublishers.noBody(), null);
         require(response, 200, "forget the " + ecosystem + " records in " + repo);
     }
@@ -1574,6 +1586,28 @@ public final class RepositoryClient {
 
     private static HttpRequest.BodyPublisher body(Map<String, ?> fields) {
         return HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(fields));
+    }
+
+    /**
+     * The URL path of a repository the CLI names: {@code <tenant>/<name>} is that tenant's repository, and a bare
+     * {@code <name>} one of this client's {@link #tenant}.
+     */
+    private String repository(String name) {
+        return "/repository/" + (name.contains("/") ? name : tenant() + "/" + name);
+    }
+
+    /**
+     * The tenant a bare repository name addresses: the one this client was given, else the one its key belongs to - a
+     * key reads {@code jenk_<tenant>.<secret>} - else {@code default}, the tenant a deployment configuring none serves.
+     */
+    public String tenant() {
+        if (tenant != null) {
+            return tenant;
+        }
+        if (key != null && key.startsWith("jenk_") && key.indexOf('.') > "jenk_".length()) {
+            return key.substring("jenk_".length(), key.indexOf('.'));
+        }
+        return "default";
     }
 
     private HttpResponse<String> send(String method, String path, HttpRequest.BodyPublisher body, String contentType)

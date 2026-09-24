@@ -1,9 +1,12 @@
 package build.jenesis.repository.server;
 
 import module java.base;
+import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.RepositoryDocument;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -42,14 +45,32 @@ public final class ImportJobs {
      *  {@code listener} is notified in addition to it. */
     public void submit(ArtifactStore store, ImportSource source, String jobId, int baseImported, int baseSkipped,
                        RepositoryImport.Listener listener, UnaryOperator<Runnable> jobScope) throws IOException {
+        List<RepositoryFormat> formats = formats(store);
         write(store, jobId, "running", baseImported, baseSkipped, 0, 0, new LinkedHashSet<>(), Map.of(),
                 null, null, null);
-        Runnable body = () -> run(store, source, jobId, baseImported, baseSkipped, listener);
+        Runnable body = () -> run(store, source, jobId, baseImported, baseSkipped, listener, formats);
         Thread.ofVirtual().name("import-" + jobId).start(jobScope.apply(body));
     }
 
+    /**
+     * The formats an import into {@code store} may lay out: the ones its repository holds. A migration source may
+     * carry several formats, and a repository holds one - or one combined type - so the assets of any other format
+     * are skipped and reported as such, rather than laid out where no request will ever reach them. An import into a
+     * repository that holds no format is refused before it starts, for the same reason.
+     *
+     * @throws IllegalArgumentException when the repository holds no format this deployment serves.
+     */
+    static List<RepositoryFormat> formats(ArtifactStore store) throws IOException {
+        return RepositoryDocument.read(store)
+                .flatMap(document -> RepositoryType.installed(document.format()))
+                .map(RepositoryType::formats)
+                .orElseThrow(() -> new IllegalArgumentException("The repository holds no format this deployment "
+                        + "serves, so nothing imported into it would answer. Create it with the format it holds "
+                        + "first."));
+    }
+
     private void run(ArtifactStore store, ImportSource source, String jobId, int baseImported, int baseSkipped,
-                     RepositoryImport.Listener delegate) {
+                     RepositoryImport.Listener delegate, List<RepositoryFormat> formats) {
         AtomicInteger imported = new AtomicInteger(baseImported);
         AtomicInteger skipped = new AtomicInteger(baseSkipped);
         AtomicInteger held = new AtomicInteger();
@@ -59,7 +80,7 @@ public final class ImportJobs {
         String[] cursor = {null};
         AtomicReference<String> asset = new AtomicReference<>();
         try {
-            new RepositoryImport().run(source, store, new RepositoryImport.Listener() {
+            new RepositoryImport(formats).run(source, store, new RepositoryImport.Listener() {
                 @Override
                 public void imported(String path) {
                     imported.incrementAndGet();

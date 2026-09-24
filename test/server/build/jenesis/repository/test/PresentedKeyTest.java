@@ -5,7 +5,6 @@ import module java.base;
 
 import build.jenesis.repository.server.PresentedKey;
 import build.jenesis.repository.server.RepositoryAuthorizationManager;
-import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -70,8 +69,7 @@ class PresentedKeyTest {
         Authorization authorization = Authorization.enforcing(store);
         authorization.provision("acme", Authorization.hash(KEY), "k", null);
         authorization.grant(KEY, "*", Authorization.REPOSITORY_READ);
-        RepositoryRouting.Route route = new RepositoryRouting.Route("acme", "default", store, "maven/org/x/y/1/y-1.jar");
-        RepositoryAuthorizationManager manager = new RepositoryAuthorizationManager(authorization, request -> route);
+        RepositoryAuthorizationManager manager = new RepositoryAuthorizationManager(authorization);
 
         Map<String, Object> bearer = new HashMap<>();
         assertThat(manager.authorize(() -> null, new RequestAuthorizationContext(request(null, "Bearer " + KEY, bearer)))
@@ -123,7 +121,7 @@ class PresentedKeyTest {
     private static HttpServletRequest request(String key, String authorization, Map<String, Object> attributes) {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getMethod()).thenReturn("GET");
-        when(request.getRequestURI()).thenReturn("/repository/maven/org/x/y/1/y-1.jar");
+        when(request.getRequestURI()).thenReturn("/repository/acme/default/maven/org/x/y/1/y-1.jar");
         when(request.getHeader("Jenesis-Repository-Key")).thenReturn(key);
         when(request.getHeader("Authorization")).thenReturn(authorization);
         when(request.getRemoteAddr()).thenReturn("127.0.0.1");

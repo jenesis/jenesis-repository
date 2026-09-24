@@ -7,9 +7,12 @@ import build.jenesis.repository.server.spi.CapabilityContributor;
 import build.jenesis.repository.server.spi.ImportEdgeProvider;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.importer.ImportSourceProvider;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.QuotaExceededException;
 import build.jenesis.repository.store.ReadOnlyException;
 import tools.jackson.databind.json.JsonMapper;
@@ -24,11 +27,12 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The HTTP surface of the repository, mirroring {@link RepositoryApplication}'s framework-neutral
  * dispatch but over Spring MVC. A catch-all resolves the request to its repository through {@link RepositoryRouting}
- * (fixed-tenant by default), reads the one format that repository holds ({@link HeldFormat}), and
- * offers the request to that format alone over the repository's doubly-scoped store through the shared
- * {@link FormatDispatcher}, with the format's {@link RepositoryFormat#mount mount} restored in front of the path; a
- * repository that holds no format, or one this deployment does not install, does not answer, and a path its format
- * does not claim is a {@code 404}. When an upstream is configured for the
+ * (fixed-tenant by default), reads what that repository holds ({@link HeldFormat}) - one format, or a combined type of
+ * several - and offers the request to those formats alone over the repository's doubly-scoped store through the
+ * shared {@link FormatDispatcher}, with the type's mount restored in front of the path (a single format's
+ * {@link RepositoryFormat#mount mount}, none for a combined type, whose URLs keep each format's segment); a
+ * repository that holds no format, or one this deployment does not install, does not answer, and a path its formats
+ * do not claim is a {@code 404}. When an upstream is configured for the
  * matched format and the format is a {@link ProxyFormat}, a local miss is served through the {@link PullThroughCache}
  * from that upstream and cached, so a later read is a local hit. The single-tenant import edge
  * ({@code POST /repository/admin/import} and {@code GET /repository/admin/import/<id>}) is served by the separate
@@ -66,8 +70,8 @@ public class RepositoryController {
     private final RoutedServing routed;
     private final EdgeHooks hooks;
 
-    /** The screened edge restricted to one format, per format: a repository's request is offered to its own format
-     *  and to no other, so a path another format would claim is not served out of it. */
+    /** The screened edge restricted to one repository type's formats, per type: a repository's request is offered to
+     *  the formats it holds and to no other, so a path another format would claim is not served out of it. */
     private final Map<String, ScreenedDispatch> restricted = new ConcurrentHashMap<>();
 
     /** The capability-merge report last written to the log, so a collision is logged when it appears or changes rather
@@ -153,7 +157,7 @@ public class RepositoryController {
         // before repositories held a format - does not answer at all: a write would otherwise lay out a format the
         // repository was never meant to hold, and a read through a pull-through upstream would fill it the same way.
         Optional<HeldFormat> held = route.repository().isEmpty()
-                ? probe(request).map(oci -> new HeldFormat(oci, oci.mount() + route.path()))
+                ? probe(request).map(registry -> new HeldFormat(registry, registry.formatPath(route.path())))
                 : HeldFormat.of(routing, route, dispatcher.formats());
         if (held.isEmpty()) {
             response.setStatus(404);
@@ -163,16 +167,16 @@ public class RepositoryController {
             }
             return;
         }
-        RepositoryFormat format = held.get().format();
+        RepositoryType type = held.get().type();
         ServletFormatExchange exchange = new ServletFormatExchange(request, response, held.get().path(), settings,
-                format.mount());
+                type.mount());
         // A write (PUT/POST/PATCH/DELETE) to a route that is not a valid write target is a 405 before any layout - the
         // seam a routing uses to reject a write to a read-only repository.
         if (write && !route.writable()) {
             response.setStatus(405);
             return;
         }
-        ScreenedDispatch screened = screened(format);
+        ScreenedDispatch screened = screened(type);
         if (batch != null && batch.claims(exchange)) {
             // Each exploded entry is screened at the same ingress edge a single deploy uses (the shared
             // ScreenedDispatch, carrying this controller's EdgeHooks), so a batch upload is screened exactly like a
@@ -187,8 +191,9 @@ public class RepositoryController {
         // dispatches over its own store, keeping the deployment-wide format-level pull-through. Writes are never
         // routed here: a routed group deploy lands in its push-target member on the write path.
         if (isRead(request.getMethod()) && routed.routes(route.repository())) {
-            if (format.handles(exchange.path())) {
-                routed.serve(route.tenant(), route.repository(), format, exchange);
+            Optional<RepositoryFormat> claiming = held.get().claiming();
+            if (claiming.isPresent()) {
+                routed.serve(route.tenant(), route.repository(), claiming.get(), exchange);
             } else {
                 response.setStatus(404);
             }
@@ -241,20 +246,26 @@ public class RepositoryController {
             return 404;
         }
         CapturingExchange exchange = new CapturingExchange(held.get().path(), body);
-        if (!screened(held.get().format()).dispatch(exchange, route.store())) {
+        if (!screened(held.get().type()).dispatch(exchange, route.store())) {
             return 404;
         }
         return exchange.status();
     }
 
-    /** The OCI registry's version probe, which names no repository: the registry answers it if one is installed. */
-    private Optional<RepositoryFormat> probe(HttpServletRequest request) {
+    /**
+     * The OCI registry's version probe, which names no tenant and no repository: the registry answers it if one is
+     * installed. A URL naming a tenant and no repository is not the probe, and answers nothing.
+     */
+    private Optional<RepositoryType> probe(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        return uri.equals("/v2") || uri.startsWith("/v2/") ? dispatcher.format("oci") : Optional.empty();
+        return uri.equals("/v2") || uri.equals("/v2/")
+                ? RepositoryType.of("oci", dispatcher.formats())
+                : Optional.empty();
     }
 
-    private ScreenedDispatch screened(RepositoryFormat format) {
-        return restricted.computeIfAbsent(format.name(), _ -> new ScreenedDispatch(dispatcher.only(format), hooks));
+    private ScreenedDispatch screened(RepositoryType type) {
+        return restricted.computeIfAbsent(type.name(),
+                _ -> new ScreenedDispatch(dispatcher.only(type.formats()), hooks));
     }
 
     /** What a publish into a repository that holds no format is told. */
@@ -279,21 +290,20 @@ public class RepositoryController {
      * flat, stably-ordered slice of the repository's published assets: each entry's {@code path}, {@code size} and
      * {@code sha256} come straight from the {@link build.jenesis.repository.store.Publication publication pointer}
      * (no blob is ever opened - read-first) and its {@code format}/{@code ecosystem}/{@code coordinate}/
-     * {@code version} from the owning format's layout. The opaque {@code cursor} in the response fetches the next
-     * page and is {@code null} once the walk is exhausted. {@code repo} defaults to the request's routed repository
-     * and is validated as a traversal-free segment before it scopes the store; the wire is key-auth'd like every
+     * {@code version} from the owning format's layout, and {@code served} is the URL path it is served at -
+     * {@code /repository/<tenant>/<repository>} and the path within the repository. The opaque {@code cursor} in the
+     * response fetches the next page and is {@code null} once the walk is exhausted. {@code repo} names a repository
+     * of the tenant the request answers for ({@link RepositoryRouting#tenant}) and is validated as a traversal-free
+     * segment before it scopes the store; the wire is key-auth'd like every
      * other read ({@code repository:read}) by {@link RepositorySecurityAutoConfiguration}, which authorizes the
      * <em>effective</em> {@code repo} the store is scoped to (not merely the routed name) so this enumeration cannot
      * read a repository the key is not scoped for.
      */
     @GetMapping("/api/assets")
     public void assets(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        RepositoryRouting.Route route = routing.route(request);
+        String tenant = routing.tenant(request);
         String repository = request.getParameter("repo");
-        if (repository == null || repository.isBlank()) {
-            repository = route.repository();
-        }
-        if (!REPOSITORY.matcher(repository).matches()) {
+        if (repository == null || !REPOSITORY.matcher(repository).matches() || !Scopes.valid(tenant)) {
             respond(response, 400, "repo must be a routable name matching " + REPOSITORY.pattern());
             return;
         }
@@ -309,12 +319,28 @@ public class RepositoryController {
                 return;
             }
         }
-        ArtifactStore store = root == null ? route.store() : root.scope(route.tenant()).scope(repository);
+        Optional<ArtifactStore> scoped = root == null
+                ? routing.route(tenant, repository, "/").map(RepositoryRouting.Route::store)
+                : Optional.of(root.scope(tenant).scope(repository));
+        if (scoped.isEmpty()) {
+            respond(response, 404, "no such repository");
+            return;
+        }
+        ArtifactStore store = scoped.get();
+        // Where each asset is served: the repository's URL and the path within it - the asset's path with the
+        // repository type's mount taken off - so a client, another instance migrating out of this one say, fetches
+        // it without knowing how this deployment addresses tenants or formats.
+        String url = "/repository/" + tenant + "/" + repository;
+        String mount = RepositoryDocument.read(store)
+                .flatMap(document -> RepositoryType.of(document.format(), dispatcher.formats()))
+                .map(RepositoryType::mount).orElse("");
         AssetCatalog.Page page = new AssetCatalog(store, dispatcher::owner).page(after, pageSize(request.getParameter("limit")));
         List<Map<String, Object>> assets = new ArrayList<>();
         for (AssetCatalog.Asset asset : page.assets()) {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("path", asset.path());
+            entry.put("served", url + (asset.path().startsWith(mount)
+                    ? asset.path().substring(mount.length()) : asset.path()));
             entry.put("size", asset.size());
             entry.put("sha256", asset.sha256());
             entry.put("format", asset.format());

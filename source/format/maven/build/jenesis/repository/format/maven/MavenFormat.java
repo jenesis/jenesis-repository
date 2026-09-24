@@ -46,6 +46,16 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return "maven";
     }
 
+    /**
+     * Maven's paths keep their {@code /maven/} segment inside a repository - {@code /repository/<name>/maven/...} -
+     * where most formats drop theirs. That is what lets a Maven repository become a {@code java} one, which serves the
+     * Jenesis module layout beside it from the same blobs, with every URL a client already has unchanged.
+     */
+    @Override
+    public String mount() {
+        return "";
+    }
+
     @Override
     public boolean handles(String path) {
         return path.startsWith("/maven/");

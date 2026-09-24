@@ -61,7 +61,7 @@ public class RepositorySecurityAutoConfiguration {
             Environment environment) {
         return AuthorizationManagerProvider
                 .resolve(authorization, keyUsageTracker, routing, Features.namespaced(environment::getProperty))
-                .orElseGet(() -> new RepositoryAuthorizationManager(authorization, routing, keyUsageTracker));
+                .orElseGet(() -> new RepositoryAuthorizationManager(authorization, keyUsageTracker));
     }
 
     @Bean

@@ -128,7 +128,7 @@ public final class DemoSeeder {
             }
             ran = true;
             suggested += suggestions.size();
-            FormatDispatcher only = dispatcher.only(format);
+            FormatDispatcher only = dispatcher.only(List.of(format));
             for (String path : suggestions) {
                 try {
                     SeedExchange exchange = new SeedExchange(path);

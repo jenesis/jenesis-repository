@@ -88,11 +88,12 @@ public final class FormatDispatcher {
         return Optional.empty();
     }
 
-    /** A dispatcher that offers a request to {@code format} alone: a repository holds one format, and a path another
-     *  format would claim is not that repository's to serve. Built once per format and held. */
-    public FormatDispatcher only(RepositoryFormat format) {
-        return restricted.computeIfAbsent(format.name(),
-                _ -> new FormatDispatcher(List.of(format), upstreams, fetcher, observations, hooks));
+    /** A dispatcher that offers a request to {@code formats} alone - the formats a repository holds, since a path
+     *  another format would claim is not that repository's to serve. Built once per set and held. */
+    public FormatDispatcher only(List<RepositoryFormat> formats) {
+        String key = String.join(",", formats.stream().map(RepositoryFormat::name).toList());
+        return restricted.computeIfAbsent(key,
+                _ -> new FormatDispatcher(formats, upstreams, fetcher, observations, hooks));
     }
 
     /**

@@ -9,8 +9,9 @@ import build.jenesis.repository.scope.Scopes;
  * answered, and neither is a request to a repository whose format this deployment does not carry - and only its
  * format is offered in it.
  *
- * <p>It is written once, when the repository is created ({@link #create}), and never rewritten: a repository's format
- * is fixed for its life, since what is stored in it was laid out by that format.
+ * <p>It is written when the repository is created ({@link #create}) and rewritten only to give the repository a type
+ * that holds everything its old one did ({@link #retype}) - which of those are compatible is the formats' to say, so
+ * the decision lives with them; nothing stored ever stops answering.
  */
 public record RepositoryDocument(String format, Instant created) {
 
@@ -53,8 +54,31 @@ public record RepositoryDocument(String format, Instant created) {
      * @return {@code false} when the repository already has a document, which is left as it is.
      */
     public boolean create(ArtifactStore repository) throws IOException {
+        return repository.writeVersioned(Scopes.REPOSITORY, content(), null);
+    }
+
+    /**
+     * Rewrite the document of the repository whose scope this is to record {@code format}, keeping when it was
+     * created. Only for a type that holds every format the old one did, which the caller has decided; compare-and-set,
+     * so a concurrent rewrite loses rather than interleaves.
+     *
+     * @return {@code false} when the repository has no document, or another write moved it since it was read.
+     */
+    public static boolean retype(ArtifactStore repository, String format) throws IOException {
+        Optional<ArtifactStore.Versioned> stored = repository.readVersioned(Scopes.REPOSITORY);
+        if (stored.isEmpty()) {
+            return false;
+        }
+        Optional<RepositoryDocument> current = parse(stored.get().content());
+        if (current.isEmpty()) {
+            return false;
+        }
         return repository.writeVersioned(Scopes.REPOSITORY,
-                ("format=" + format + "\ncreated=" + created + "\n").getBytes(StandardCharsets.UTF_8), null);
+                new RepositoryDocument(format, current.get().created()).content(), stored.get().token());
+    }
+
+    private byte[] content() {
+        return ("format=" + format + "\ncreated=" + created + "\n").getBytes(StandardCharsets.UTF_8);
     }
 
     private static Optional<RepositoryDocument> parse(byte[] content) throws IOException {

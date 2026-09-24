@@ -3,8 +3,9 @@ package build.jenesis.repository.staging.web;
 import module java.base;
 
 import build.jenesis.repository.audit.AuditTrail;
-import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.spi.Authorization;
@@ -26,32 +27,32 @@ import org.springframework.web.bind.annotation.RestController;
  * The staging HTTP surface, peeled out of the {@code RepositoryController} monolith into its own thin
  * {@code web} adapter and contributed through the {@code ServerModuleProvider} seam: a deploy lands under a staging
  * id (held, not resolvable), the ids are listed for review, and an id is promoted into the release layout or dropped.
- * Every mapping is the same one it carried in the monolith, so the more-specific {@code /repository/{repo}/staging/**}
- * routes still outrank the server's write catch-all. The lifecycle itself is the framework-free
+ * The more-specific {@code /repository/<tenant>/<repository>/staging/**} routes outrank the server's write catch-all,
+ * and their tenant is the one the deployment's routing decides for the URL, exactly as for the repository's artifacts. The lifecycle itself is the framework-free
  * {@link Staging} implementation resolved per tenant-and-repository through {@link Repositories}; this adapter is the
  * only Spring-facing piece. With no staging module installed the endpoints answer {@code 501}, after Spring Security's
  * authorization check so a {@code 401}/{@code 403} still precedes. A repository name or tenant that is not
- * traversal-safe is a {@code 400}; a promote or drop of an already-sealed id is a {@code 409}.
+ * routable is the routing's {@code 400}; a promote or drop of an already-sealed id is a {@code 409}.
  */
 @RestController
 public class StagingController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final AuditTrail audit;
 
-    public StagingController(Repositories repositories, AuditTrail audit) {
+    public StagingController(Repositories repositories, RepositoryRouting routing, AuditTrail audit) {
         this.repositories = repositories;
+        this.routing = routing;
         this.audit = audit;
     }
 
-    @PutMapping("/repository/{repo}/staging/{id}/**")
+    @PutMapping("/repository/{tenant}/{repo}/staging/{id}/**")
     public void stage(@PathVariable("repo") String repo, @PathVariable("id") String id,
                       @RequestHeader(value = Repositories.KEY, required = false) String key,
                       HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return;
-        }
+        RepositoryRouting.Route route = routing.route(request);
+        String tenant = route.tenant();
         Optional<Staging> staging = repositories.staging(tenant, repo);
         if (staging.isEmpty()) {
             respondStagingNotInstalled(response);
@@ -59,14 +60,14 @@ public class StagingController {
         }
         // The staged path is the one a client would publish to within the repository; it is staged as the
         // repository's format sees it, so the promotion lays it out as a publish into the repository would.
-        Optional<RepositoryFormat> format = RepositoryDocument.read(repositories.store(tenant, repo))
-                .flatMap(held -> RepositoryFormat.installed(held.format()));
-        if (format.isEmpty()) {
+        Optional<RepositoryType> type = RepositoryDocument.read(repositories.store(tenant, repo))
+                .flatMap(held -> RepositoryType.installed(held.format()));
+        if (type.isEmpty()) {
             response.setStatus(404);
             return;
         }
-        String releasePath = format.get().mount()
-                + request.getRequestURI().substring(("/repository/" + repo + "/staging/" + id).length());
+        String releasePath = type.get().formatPath(
+                route.path().substring(("/staging/" + id).length()));
         RepositoryRequests.rejectRawTraversal(id);
         RepositoryRequests.rejectRawTraversal(releasePath);
         // Stream the staged deploy straight into the content-addressed store rather than buffering the body in heap.
@@ -74,14 +75,11 @@ public class StagingController {
         response.setStatus(201);
     }
 
-    @PostMapping("/repository/{repo}/staging/{id}/promote")
+    @PostMapping("/repository/{tenant}/{repo}/staging/{id}/promote")
     public void promote(@PathVariable("repo") String repo, @PathVariable("id") String id,
                         @RequestHeader(value = Repositories.KEY, required = false) String key,
-                        HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return;
-        }
+                        HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.route(request).tenant();
         Optional<Staging> staging = repositories.staging(tenant, repo);
         if (staging.isEmpty()) {
             respondStagingNotInstalled(response);
@@ -95,14 +93,11 @@ public class StagingController {
         response.setStatus(200);
     }
 
-    @PostMapping("/repository/{repo}/staging/{id}/drop")
+    @PostMapping("/repository/{tenant}/{repo}/staging/{id}/drop")
     public void drop(@PathVariable("repo") String repo, @PathVariable("id") String id,
                      @RequestHeader(value = Repositories.KEY, required = false) String key,
-                     HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
-        if (tenant == null) {
-            return;
-        }
+                     HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.route(request).tenant();
         Optional<Staging> staging = repositories.staging(tenant, repo);
         if (staging.isEmpty()) {
             respondStagingNotInstalled(response);
@@ -120,7 +115,7 @@ public class StagingController {
     public StagingList stagingList(@RequestParam("repo") String repo,
                                    @RequestHeader(value = Repositories.KEY, required = false) String key,
                                    HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+        String tenant = RepositoryRequests.access(repositories, repo, key, response);
         if (tenant == null) {
             return null;
         }
@@ -140,26 +135,6 @@ public class StagingController {
                     staging.get().stagedAtMost(id, ITEM_CAP)));
         }
         return new StagingList(entries, window.more());
-    }
-
-    /**
-     * Validates the named repository and resolves the request's tenant from the {@code Jenesis-Repository-Key} header.
-     * Rights are enforced by Spring Security before the request reaches the controller, so this makes no authorization
-     * decision - only a {@code 400} for a traversal-unsafe repository or tenant name, returning {@code null} so the
-     * caller stops at once. The staging {@code web} adapter keeps the same URL patterns the monolith carried, so the
-     * security chain is unchanged by the move.
-     */
-    private String access(String repo, String key, HttpServletResponse response) {
-        if (!Repositories.valid(repo)) {
-            response.setStatus(400);
-            return null;
-        }
-        String tenant = repositories.tenant(key);
-        if (!Repositories.valid(tenant)) {
-            response.setStatus(400);
-            return null;
-        }
-        return tenant;
     }
 
     /** Record a privileged staging mutation on the acting tenant, attributing it to the key's credential hash (or

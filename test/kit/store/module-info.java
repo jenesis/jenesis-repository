@@ -37,6 +37,8 @@
  */
 module build.jenesis.repository.store.testkit {
     requires transitive build.jenesis.repository.store;
+    // TypedRepositories arranges a suite's repositories over the filesystem store the node under test runs on.
+    requires build.jenesis.repository.store.filesystem;
     // Permitted since the kit moved under test/: the JUnit rule is a direction now, not a ban on the kits.
     requires org.assertj.core;
     requires java.net.http;

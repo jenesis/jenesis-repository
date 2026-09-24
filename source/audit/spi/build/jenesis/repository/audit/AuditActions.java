@@ -64,6 +64,9 @@ public final class AuditActions {
     /** A repository created before anything was published into it. */
     public static final String REPOSITORY_CREATE = action("repository.create");
 
+    /** A repository given a type that holds every format its old one did - {@code maven} made {@code java}, say. */
+    public static final String REPOSITORY_RETYPE = action("repository.retype");
+
     /** A repository definition written. */
     public static final String REPOSITORY_SET = action("repository.set");
 

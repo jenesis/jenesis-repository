@@ -27,11 +27,11 @@
                 is served from its backings and takes no direct write.</small>
 
             <label>Path
-                <input type="text" name="path" required placeholder="/com/example/demo/1.0/demo-1.0.jar"
+                <input type="text" name="path" required placeholder="/maven/com/example/demo/1.0/demo-1.0.jar"
                        th:attr="aria-describedby='deploy-path-help'">
             </label>
             <small id="deploy-path-help">Where the artifact lands within the repository - the same path a client
-                would publish to after <code>/repository/&lt;name&gt;</code>. A path the repository's format does not
+                would publish to after <code>/repository/&lt;tenant&gt;/&lt;name&gt;</code>. A path the repository's format does not
                 claim publishes nothing.</small>
 
             <label>File

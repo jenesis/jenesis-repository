@@ -7,6 +7,7 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.store.RepositoryAdmin;
 import build.jenesis.repository.ui.store.RepositoryLifecycle;
@@ -36,7 +37,7 @@ class CreateRepositoryTest {
                 () -> "operator");
         RepositoryAdmin admin = new RepositoryAdmin(store, tenant(), ObservationRegistry.NOOP);
 
-        assertThat(lifecycle.create("files", "raw")).isTrue();
+        assertThat(lifecycle.create("files", "raw")).isEqualTo(RepositoryType.Creation.CREATED);
         assertThat(admin.repositories()).containsExactly("files");
         assertThat(RepositoryDocument.read(store.scope("acme").scope("files")).map(RepositoryDocument::format))
                 .contains("raw");
@@ -50,10 +51,10 @@ class CreateRepositoryTest {
         ArtifactStore store = store();
         RepositoryLifecycle lifecycle = new RepositoryLifecycle(store, tenant(), ObservationRegistry.NOOP, audit(),
                 () -> "operator");
-        assertThat(lifecycle.create("files", "raw")).isTrue();
+        assertThat(lifecycle.create("files", "raw")).isEqualTo(RepositoryType.Creation.CREATED);
         recorded.clear();
 
-        assertThat(lifecycle.create("files", "raw")).isFalse();
+        assertThat(lifecycle.create("files", "raw")).isEqualTo(RepositoryType.Creation.UNCHANGED);
         assertThat(recorded).isEmpty();
     }
 
@@ -64,9 +65,29 @@ class CreateRepositoryTest {
         RepositoryLifecycle lifecycle = new RepositoryLifecycle(store, tenant(), ObservationRegistry.NOOP, audit(),
                 () -> "operator");
 
-        assertThat(lifecycle.create("files", "raw")).isTrue();
+        assertThat(lifecycle.create("files", "raw")).isEqualTo(RepositoryType.Creation.CREATED);
         assertThat(RepositoryDocument.read(store.scope("acme").scope("files")).map(RepositoryDocument::format))
                 .contains("raw");
+    }
+
+    @Test
+    void a_repository_moves_only_to_a_type_that_holds_everything_it_did() throws IOException {
+        ArtifactStore store = store();
+        RepositoryLifecycle lifecycle = new RepositoryLifecycle(store, tenant(), ObservationRegistry.NOOP, audit(),
+                () -> "operator");
+        assertThat(lifecycle.create("libs", "maven")).isEqualTo(RepositoryType.Creation.CREATED);
+
+        assertThat(lifecycle.create("libs", "java")).as("java holds Maven at the same URLs, and the module layout")
+                .isEqualTo(RepositoryType.Creation.RETYPED);
+        assertThat(RepositoryDocument.read(store.scope("acme").scope("libs")).map(RepositoryDocument::format))
+                .contains("java");
+        assertThat(lifecycle.create("libs", "maven")).as("maven does not hold the module layout java served")
+                .isEqualTo(RepositoryType.Creation.CONFLICT);
+        assertThat(lifecycle.create("libs", "raw")).as("raw holds nothing java did")
+                .isEqualTo(RepositoryType.Creation.CONFLICT);
+        assertThat(recorded).containsExactly(
+                "acme operator " + AuditActions.REPOSITORY_CREATE + " libs",
+                "acme operator " + AuditActions.REPOSITORY_RETYPE + " libs to java");
     }
 
     @Test

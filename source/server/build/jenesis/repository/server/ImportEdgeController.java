@@ -22,13 +22,12 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The single-tenant import edge: the repo-less {@code /repository/admin/import} migration trigger and its status
- * read, peeled out of {@link RepositoryController} into its own controller bean so a richer distribution can OWN the
+ * The free import edge: the {@code /repository/<repository>/admin/import} migration trigger and its status read, peeled out of {@link RepositoryController} into its own controller bean so a richer distribution can OWN the
  * import edge without a cross-layer mapping override. It triggers an asynchronous migration through the first
  * {@link ImportSourceProvider} that handles the requested source - discovered with {@code ServiceLoader} like the
  * formats, so the server knows no incumbent by name - run as a background {@link ImportJobs} writing into the request's
- * routed artifact space (so an import lands exactly where serving reads), and {@code GET /repository/admin/import/<id>}
- * returns its state.
+ * routed artifact space (so an import lands exactly where serving reads, and lays out only the formats that repository
+ * holds), and {@code GET /repository/<repository>/admin/import/<id>} returns its state.
  *
  * <p>This edge is registered <em>only when no {@link ImportEdgeProvider} is installed</em> (see
  * {@link RepositoryAutoConfiguration}). When a distribution ships an {@code ImportEdgeProvider} - the downstream
@@ -69,7 +68,7 @@ public class ImportEdgeController {
      * without a job id, say) is a {@code 405}, matching the headless dispatch. The more specific route wins over the
      * format catch-all, so a stray method is rejected here rather than falling through to a {@code 404}.
      */
-    @RequestMapping(value = "/repository/admin/import", method = {RequestMethod.GET, RequestMethod.HEAD,
+    @RequestMapping(value = "/repository/{tenant}/{repository}/admin/import", method = {RequestMethod.GET, RequestMethod.HEAD,
             RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE})
     public void importMethodNotAllowed(HttpServletResponse response) {
         response.setStatus(405);
@@ -83,7 +82,7 @@ public class ImportEdgeController {
      * optional for the others. A {@code resume} naming a prior job continues its walk from the recorded continuation
      * token and counts.
      */
-    @PostMapping("/repository/admin/import")
+    @PostMapping("/repository/{tenant}/{repository}/admin/import")
     public void submitImport(@RequestBody(required = false) String body,
                              HttpServletRequest request,
                              HttpServletResponse response)
@@ -153,13 +152,18 @@ public class ImportEdgeController {
             return;
         }
         String jobId = prior == null ? ImportJobs.newId() : resume;
-        jobs.submit(store, source, jobId, prior == null ? 0 : prior.imported(), prior == null ? 0 : prior.skipped());
+        try {
+            jobs.submit(store, source, jobId, prior == null ? 0 : prior.imported(), prior == null ? 0 : prior.skipped());
+        } catch (IllegalArgumentException refused) {
+            respond(response, 400, refused.getMessage());
+            return;
+        }
         response.setHeader("Content-Type", "application/json");
         respond(response, 202, JSON.writeValueAsString(Map.of("job", jobId, "state", "running")));
     }
 
     /** Return a job's persisted state as raw JSON ({@code 404} if there is no such job). */
-    @GetMapping("/repository/admin/import/{id}")
+    @GetMapping("/repository/{tenant}/{repository}/admin/import/{id}")
     public void importStatus(@PathVariable("id") String id,
                              HttpServletRequest request,
                              HttpServletResponse response) throws IOException {

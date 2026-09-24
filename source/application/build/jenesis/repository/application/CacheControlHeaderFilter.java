@@ -2,6 +2,7 @@ package build.jenesis.repository.application;
 
 import module java.base;
 import build.jenesis.repository.gateway.HardenedScreen;
+import build.jenesis.repository.server.RepositoryRouting;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletOutputStream;
@@ -58,11 +59,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
  */
 public final class CacheControlHeaderFilter extends OncePerRequestFilter {
 
-    /** Artifact reads live under this prefix; the fixed tenant rides the key header, never the URL (§4.2 v1). */
+    /** Artifact reads live under this prefix, {@code /repository/<tenant>/<repository>/...}. */
     private static final String ARTIFACT_PREFIX = "/repository/";
 
-    /** The admin import surface under the artifact prefix - a mutating control route, never given relaxed caching. */
-    private static final String ADMIN_PREFIX = "/repository/admin/";
+    /** A repository's admin routes - {@code /repository/<tenant>/<repo>/admin/...}, control routes that are never given relaxed
+     *  caching. */
+    private static final String ADMIN_SEGMENT = "/admin/";
 
     static final String IMMUTABLE = "public, max-age=31536000, immutable";
     static final String REVALIDATE = "no-cache";
@@ -95,10 +97,15 @@ public final class CacheControlHeaderFilter extends OncePerRequestFilter {
             return null;
         }
         String uri = request.getRequestURI();
-        if (uri == null || !uri.startsWith(ARTIFACT_PREFIX) || uri.startsWith(ADMIN_PREFIX)) {
+        if (uri == null || !uri.startsWith(ARTIFACT_PREFIX) || admin(uri)) {
             return null;
         }
         return immutableArtifact(uri) ? IMMUTABLE : REVALIDATE;
+    }
+
+    /** Whether {@code uri} is one of a repository's admin routes: {@code /admin/} right after the repository's name. */
+    private static boolean admin(String uri) {
+        return RepositoryRouting.target(uri).path().startsWith(ADMIN_SEGMENT);
     }
 
     /**

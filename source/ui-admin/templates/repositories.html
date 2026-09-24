@@ -82,8 +82,8 @@
     <div class="app-panels">
     <article th:if="${isEditor}">
         <h2>New repository</h2>
-        <p><small>A repository holds one format, chosen here, and answers at <code>/repository/&lt;name&gt;/</code>
-            - or <code>/v2/&lt;name&gt;/</code> for container images. Create it before publishing into it.</small></p>
+        <p><small>A repository holds one format, chosen here, and answers at <code>/repository/&lt;tenant&gt;/&lt;name&gt;/</code>
+            - or <code>/v2/&lt;tenant&gt;/&lt;name&gt;/</code> for container images. Create it before publishing into it.</small></p>
         <form method="post" th:action="@{/repositories/create}">
             <label>Name
                 <input name="name" required pattern="[A-Za-z0-9_\-]+" placeholder="maven"

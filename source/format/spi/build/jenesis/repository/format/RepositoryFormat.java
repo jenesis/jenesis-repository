@@ -327,13 +327,6 @@ public interface RepositoryFormat extends IconContributor {
     }
 
 
-    /** The installed formats a repository can be created to hold ({@link #offered()}), by name - what every surface
-     *  that creates a repository offers and accepts. */
-    static List<RepositoryFormat> offerable() {
-        return installed().stream().filter(RepositoryFormat::offered)
-                .sorted(Comparator.comparing(RepositoryFormat::name)).toList();
-    }
-
     /** The installed format of the given {@link #name() name} - the lookup for a neutral consumer (an importer
      *  walking a format's upstream index, say) that must find one format by name. Empty when no module on the path
      *  provides it, or when the format is configured off - a disabled format degrades exactly like a missing

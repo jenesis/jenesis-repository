@@ -220,7 +220,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             String id = UUID.randomUUID().toString();
             // Record when the session opened so the reaper can age it out if it is streamed into but never finalized.
             writeSession(store, id, clock.millis(), 0L, 0L);
-            exchange.setResponseHeader("Location", "/v2/" + name + "/blobs/uploads/" + id);
+            exchange.setResponseHeader("Location", exchange.external("/v2/" + name + "/blobs/uploads/" + id));
             exchange.setResponseHeader("Docker-Upload-UUID", id);
             exchange.setResponseHeader("Range", "0-0");
             exchange.respond(202);
@@ -233,7 +233,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         if (method.equals("PATCH")) {
             long uploaded = append(store, id, exchange.requestStream());
-            exchange.setResponseHeader("Location", "/v2/" + name + "/blobs/uploads/" + id);
+            exchange.setResponseHeader("Location", exchange.external("/v2/" + name + "/blobs/uploads/" + id));
             exchange.setResponseHeader("Docker-Upload-UUID", id);
             exchange.setResponseHeader("Range", "0-" + (uploaded - 1));
             exchange.respond(202);
@@ -559,7 +559,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             exchange.respond(400);
             return;
         }
-        exchange.setResponseHeader("Location", "/v2/" + name + "/blobs/sha256:" + hex);
+        exchange.setResponseHeader("Location", exchange.external("/v2/" + name + "/blobs/sha256:" + hex));
         exchange.setResponseHeader("Docker-Content-Digest", "sha256:" + hex);
         exchange.respond(201);
     }
@@ -618,7 +618,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             switch (ingested.disposition()) {
                 case ACCEPT -> {
                     exchange.setResponseHeader("Docker-Content-Digest", "sha256:" + hex);
-                    exchange.setResponseHeader("Location", "/v2/" + name + "/manifests/sha256:" + hex);
+                    exchange.setResponseHeader("Location", exchange.external("/v2/" + name + "/manifests/sha256:" + hex));
                     exchange.respond(201);
                 }
                 case QUARANTINE -> {
@@ -724,15 +724,26 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             }
         }
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("name", name);
+        body.put("name", addressed(exchange, name));
         body.put("tags", tags);
         if (more[0]) {
             String size = exchange.queryParameter("n") == null ? "" : "n=" + limit + "&";
-            exchange.setResponseHeader("Link", "</v2/" + name + "/tags/list?" + size + "last="
-                    + URLEncoder.encode(tags.getLast(), StandardCharsets.UTF_8) + ">; rel=\"next\"");
+            exchange.setResponseHeader("Link", "<" + exchange.external("/v2/" + name + "/tags/list") + "?" + size
+                    + "last=" + URLEncoder.encode(tags.getLast(), StandardCharsets.UTF_8) + ">; rel=\"next\"");
         }
         exchange.setResponseHeader("Content-Type", "application/json");
         exchange.respond(200, JSON.writeValueAsString(body).getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * The image's name as the client addressed it. A repository's images are named within it, and the client names
+     * the repository in front - {@code /v2/<repository>/<image>} - so the name a tag list reports is the one the
+     * request carried, put back together by the exchange exactly as a {@code Location} is.
+     */
+    private static String addressed(FormatExchange exchange, String name) {
+        String external = exchange.external("/v2/" + name);
+        int at = external.indexOf("/v2/");
+        return at < 0 ? name : external.substring(at + "/v2/".length());
     }
 
     /**
@@ -756,7 +767,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             // validator from the bytes, exactly as it did before any of this streamed.
             Map<String, Object> body = new LinkedHashMap<>();
             if (name != null) {
-                body.put("name", name);
+                body.put("name", addressed(exchange, name));
             }
             body.put(member, List.of());
             exchange.setResponseHeader("Content-Type", "application/json");
@@ -771,7 +782,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 try (JsonGenerator json = JSON.createGenerator(out)) {
                     json.writeStartObject();
                     if (name != null) {
-                        json.writeStringProperty("name", name);
+                        json.writeStringProperty("name", addressed(exchange, name));
                     }
                     json.writeArrayPropertyStart(member);
                     OciListings.names(document.body(), member, entry -> {
@@ -843,7 +854,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             }
         }
         if (more[0]) {
-            exchange.setResponseHeader("Link", "</v2/_catalog?n=" + limit + "&last="
+            exchange.setResponseHeader("Link", "<" + exchange.external("/v2/_catalog") + "?n=" + limit + "&last="
                     + URLEncoder.encode(repositories.getLast(), StandardCharsets.UTF_8) + ">; rel=\"next\"");
         }
         exchange.setResponseHeader("Content-Type", "application/json");
@@ -1040,16 +1051,27 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * an evicted digest is re-emitted, which costs an idempotent content-addressed re-store, where running out of heap
      * costs the import.
      */
+    /**
+     * The registry root an enumeration's requests go under: {@code <source>/v2/} for a registry named by its host,
+     * and the source itself when it already names one - {@code https://host/v2/<repository>/}, a Jenesis repository's
+     * own registry, whose catalog, tag lists and manifests all sit under it and whose images are named within it.
+     */
+    private static String registry(URI base) {
+        String root = base.toString();
+        return root.contains("/v2/") ? root : root + "v2/";
+    }
+
     @Override
     public Stream<Coordinate> enumerate(ProxyFormat.Fetcher fetcher, URI upstream) throws IOException {
         String root = upstream.toString();
         URI base = URI.create(root.endsWith("/") ? root : root + "/");
-        Iterator<String> repositories = paged(base, URI.create(base + "v2/_catalog"), "repositories", fetcher);
+        Iterator<String> repositories = paged(base, URI.create(registry(base) + "_catalog"), "repositories", fetcher);
         BoundedDigests emitted = new BoundedDigests();
         return StreamSupport.stream(Spliterators.spliteratorUnknownSize(repositories, Spliterator.ORDERED), false)
                 .flatMap(name -> {
                     try {
-                        Iterator<String> tags = paged(base, URI.create(base + "v2/" + name + "/tags/list"), "tags", fetcher);
+                        Iterator<String> tags = paged(base, URI.create(registry(base) + name + "/tags/list"), "tags",
+                                fetcher);
                         return StreamSupport.stream(Spliterators.spliteratorUnknownSize(tags, Spliterator.ORDERED), false)
                                 .map(tag -> Map.entry(name, tag));
                     } catch (IOException e) {
@@ -1062,7 +1084,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                         expand(base, tagged.getKey(), manifest(base, tagged.getKey(), tagged.getValue(), fetcher),
                                 coordinates, emitted, fetcher);
                         coordinates.add(new Coordinate("v2/" + tagged.getKey() + "/manifests/" + tagged.getValue(),
-                                URI.create(base + "v2/" + tagged.getKey() + "/manifests/" + tagged.getValue()),
+                                URI.create(registry(base) + tagged.getKey() + "/manifests/" + tagged.getValue()),
                                 Map.of("Accept", MANIFEST_ACCEPT)));
                         return coordinates.stream();
                     } catch (IOException e) {
@@ -1105,7 +1127,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                         continue;
                     }
                     pending.push(new Step(null, null, new Coordinate("v2/" + name + "/manifests/" + digest,
-                            URI.create(base + "v2/" + name + "/manifests/" + digest),
+                            URI.create(registry(base) + name + "/manifests/" + digest),
                             Map.of("Accept", MANIFEST_ACCEPT))));
                     pending.push(new Step(null, digest, null));
                 }
@@ -1168,13 +1190,14 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     private static Coordinate blob(URI base, String name, String digest) {
-        return new Coordinate("v2/" + name + "/blobs/" + digest, URI.create(base + "v2/" + name + "/blobs/" + digest));
+        return new Coordinate("v2/" + name + "/blobs/" + digest,
+                URI.create(registry(base) + name + "/blobs/" + digest));
     }
 
     /** One manifest, by tag or digest, negotiated with the manifest media types and fetched buffered (a manifest is
      *  small metadata) through the bearer-challenge flow. */
     private byte[] manifest(URI base, String name, String reference, ProxyFormat.Fetcher fetcher) throws IOException {
-        URI url = URI.create(base + "v2/" + name + "/manifests/" + reference);
+        URI url = URI.create(registry(base) + name + "/manifests/" + reference);
         Optional<ProxyFormat.Fetched> fetched = fetch(url, MANIFEST_ACCEPT, fetcher);
         if (fetched.isEmpty()) {
             throw new IOException("No response from " + url);

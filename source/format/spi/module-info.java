@@ -28,4 +28,5 @@ module build.jenesis.repository.format {
     exports build.jenesis.repository.format;
     uses build.jenesis.repository.format.FetcherProvider;
     uses build.jenesis.repository.format.RepositoryFormat;
+    uses build.jenesis.repository.format.CombinedFormat;
 }

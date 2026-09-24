@@ -21,8 +21,8 @@ class JenesisSourceTest {
     private final String repository = "libs";
     private final String listUrl = "https://src.example/api/assets?repo=libs";
     private final String page2Url = listUrl + "&cursor=tok1";
-    private final String jarDownload = "https://src.example/repository/maven/org/example/lib/1.0/lib-1.0.jar";
-    private final String rawDownload = "https://src.example/repository/raw/tools/installer.bin";
+    private final String jarDownload = "https://src.example/repository/default/libs/maven/org/example/lib/1.0/lib-1.0.jar";
+    private final String rawDownload = "https://src.example/repository/default/files/tools/installer.bin";
 
     private static ProxyFormat.Fetched ok(String body) {
         return new ProxyFormat.Fetched(200, body.getBytes(StandardCharsets.UTF_8), Map.of());
@@ -31,9 +31,11 @@ class JenesisSourceTest {
     @Test
     void it_pages_assets_and_reports_each_with_its_format_and_a_layout_path() throws IOException {
         byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
-        String page1 = "{\"assets\":[{\"path\":\"/maven/org/example/lib/1.0/lib-1.0.jar\",\"format\":\"maven\","
+        String page1 = "{\"assets\":[{\"path\":\"/maven/org/example/lib/1.0/lib-1.0.jar\","
+                + "\"served\":\"/repository/default/libs/maven/org/example/lib/1.0/lib-1.0.jar\",\"format\":\"maven\","
                 + "\"size\":9,\"sha256\":\"abc\"}],\"cursor\":\"tok1\"}";
-        String page2 = "{\"assets\":[{\"path\":\"/raw/tools/installer.bin\",\"format\":\"raw\","
+        String page2 = "{\"assets\":[{\"path\":\"/raw/tools/installer.bin\","
+                + "\"served\":\"/repository/default/files/tools/installer.bin\",\"format\":\"raw\","
                 + "\"size\":3,\"sha256\":\"def\"}],\"cursor\":null}";
         FakeFetcher fetcher = new FakeFetcher(Map.of(
                 listUrl, ok(page1),
@@ -64,7 +66,8 @@ class JenesisSourceTest {
 
     @Test
     void it_resumes_from_a_checkpointed_cursor() throws IOException {
-        String page2 = "{\"assets\":[{\"path\":\"/raw/tools/installer.bin\",\"format\":\"raw\","
+        String page2 = "{\"assets\":[{\"path\":\"/raw/tools/installer.bin\","
+                + "\"served\":\"/repository/default/files/tools/installer.bin\",\"format\":\"raw\","
                 + "\"size\":3,\"sha256\":\"def\"}],\"cursor\":null}";
         FakeFetcher fetcher = new FakeFetcher(Map.of(page2Url, ok(page2)));
 
@@ -79,7 +82,8 @@ class JenesisSourceTest {
     @Test
     void the_api_key_is_sent_on_the_listing_and_the_download() throws IOException {
         byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
-        String page1 = "{\"assets\":[{\"path\":\"/maven/org/example/lib/1.0/lib-1.0.jar\",\"format\":\"maven\","
+        String page1 = "{\"assets\":[{\"path\":\"/maven/org/example/lib/1.0/lib-1.0.jar\","
+                + "\"served\":\"/repository/default/libs/maven/org/example/lib/1.0/lib-1.0.jar\",\"format\":\"maven\","
                 + "\"size\":9,\"sha256\":\"abc\"}],\"cursor\":null}";
         FakeFetcher fetcher = new FakeFetcher(Map.of(
                 listUrl, ok(page1),
@@ -92,20 +96,35 @@ class JenesisSourceTest {
                     }
                 }, cursor -> { });
 
-        // Three requests, key on every one: the listing, the repository-qualified shape probe the fixed-tenant
-        // source answers 404, and the bare-shape download that serves - the probe must carry the key too, since an
-        // enforcing source would otherwise answer it 401 and the fallback would misread the edition.
-        assertThat(fetcher.requests).hasSize(3).allSatisfy(headers ->
+        // Two requests, key on both: the listing, and the download from where the listing said the asset is served.
+        assertThat(fetcher.requests).hasSize(2).allSatisfy(headers ->
                 assertThat(headers.get("Jenesis-Repository-Key")).isEqualTo("jenk_acme.secret"));
+    }
+
+    @Test
+    void a_served_path_that_does_not_start_at_the_hosts_root_is_skipped() throws IOException {
+        // Concatenated to the source's base, ".evil.example/x" would move the download to another host.
+        String page = "{\"assets\":[{\"path\":\"/maven/org/example/evil.jar\",\"served\":\".evil.example/x\","
+                + "\"format\":\"maven\"},{\"path\":\"/maven/org/example/ok.jar\","
+                + "\"served\":\"/repository/default/libs/maven/org/example/ok.jar\",\"format\":\"maven\"}],"
+                + "\"cursor\":null}";
+        FakeFetcher fetcher = new FakeFetcher(Map.of(listUrl, ok(page)));
+
+        List<String> paths = new ArrayList<>();
+        new JenesisSource(base, repository, fetcher)
+                .forEach((format, path, content) -> paths.add(path), cursor -> { });
+
+        assertThat(paths).as("only the asset served from the source's own root").containsExactly("org/example/ok.jar");
     }
 
     @Test
     void a_traversal_laced_asset_path_is_skipped() throws IOException {
         String page = "{\"assets\":[{\"path\":\"/maven/../../auth/keys\",\"format\":\"maven\"},"
-                + "{\"path\":\"/maven/org/example/ok.jar\",\"format\":\"maven\"}],\"cursor\":null}";
+                + "{\"path\":\"/maven/org/example/ok.jar\",\"served\":\"/repository/default/libs/maven/org/example/ok.jar\",\"format\":\"maven\"}],"
+                + "\"cursor\":null}";
         FakeFetcher fetcher = new FakeFetcher(Map.of(
                 listUrl, ok(page),
-                "https://src.example/repository/maven/org/example/ok.jar",
+                "https://src.example/repository/default/libs/maven/org/example/ok.jar",
                 new ProxyFormat.Fetched(200, new byte[]{1}, Map.of())));
 
         List<String> paths = new ArrayList<>();
