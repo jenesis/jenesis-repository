@@ -44,6 +44,11 @@ public final class FirstRunSteps {
                             + "as they are set. Grant a real administrator and issue a real credential, then unset "
                             + "both; removing an id from jenreg.ui.admins does not revoke the grant it seeded.",
                     List.of()),
+            new Step("feeds", "Advisory feeds",
+                    "Which public advisory sources this deployment consults. Every one is off until it is switched "
+                            + "on, because a lookup is an outbound call; with all of them off the gate is armed and "
+                            + "asks nobody, so a package with a published vulnerability is admitted without a word.",
+                    List.of("osv", "github", "openssf", "kev", "epss", "scorecard")),
             new Step("vulnerabilities", "Vulnerability handling",
                     "What happens to an artifact whose advisories reach the threshold - decided before the first "
                             + "publish, because the default refuses and stores nothing.",
@@ -51,6 +56,10 @@ public final class FirstRunSteps {
             new Step("malware", "Malware handling",
                     "What happens to a package a curated malicious-package record names.",
                     List.of("malware-action")),
+            new Step("notifications", "Being told",
+                    "Where this deployment reports what the gate decided. Without an endpoint an operator learns of "
+                            + "a hold only by opening the review queue, or from the publisher whose build failed.",
+                    List.of("webhook", "webhook-endpoints", "webhook-secrets")),
             new Step("licences", "Licence handling",
                     "Which licences this deployment admits, and what an undeclared or unlisted one means.",
                     List.of("license-allowed", "license-denied", "license-unknown", "license-disallowed")),
@@ -58,10 +67,6 @@ public final class FirstRunSteps {
                     "How long a version an upstream has only just published is held before this deployment serves "
                             + "it on.",
                     List.of("immaturity-hold-days")),
-            new Step("feeds", "Advisory feeds",
-                    "Which public advisory sources this deployment consults. Every one is off until it is switched "
-                            + "on, and the ones that gate fail closed.",
-                    List.of("osv", "kev", "openssf", "epss", "scorecard")),
             new Step("retention", "Retention and collection cadence",
                     "What is kept, what is reclaimed, and how often the store is walked to find out.",
                     List.of("gc", "collect", "keep-last", "max-age", "walks")),

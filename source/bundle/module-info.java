@@ -3,8 +3,9 @@
  * all four layouts ({@code maven}, {@code jenesis}, {@code oci}, {@code raw}), all four store backends
  * ({@code filesystem}, {@code s3}, {@code gcs}, {@code azure}), all five import connectors, the upstream HTTP
  * fetcher ({@code proxy}), the OIDC token exchange ({@code oidc}), the token-bucket rate limiter, the credential
- * usage tracker, the publish gate with its review screens (screening against OSV and the GitHub Advisory Database
- * once an operator names them) and the web console ({@code ui}) - so the packaging {@code bundle} step emits a {@code bundle.zip}
+ * usage tracker, the publish gate with its review screens (screening against OSV, the GitHub Advisory Database
+ * and the OpenSSF malicious-packages records once an operator names them), signed webhooks for what the gate
+ * decided, and the web console ({@code ui}) - so the packaging {@code bundle} step emits a {@code bundle.zip}
  * carrying the complete free product, and the {@code Dockerfile} turns that one zip into the image.
  * Nothing here names a plugin: the server keeps discovering everything through {@code ServiceLoader}, and the image
  * is trimmed by configuration instead of rebuilt - {@code jenreg.<feature>=false} (settable as
@@ -66,6 +67,9 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.format.oci.inventory;
     requires build.jenesis.repository.compliance.osv;
     requires build.jenesis.repository.compliance.github;
+    // The curated OpenSSF malicious-packages records: a typosquat is what actually reaches most users, and no
+    // advisory database lists one as a vulnerability. Off until an operator names it, like the two above.
+    requires build.jenesis.repository.compliance.openssf;
     requires build.jenesis.repository.compliance.policy;
     requires build.jenesis.repository.compliance.admission;
     // Where a verdict is kept, and the screens an operator reviews a hold on and releases it from. A hold nobody
@@ -73,6 +77,10 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.findings.store;
     requires build.jenesis.repository.health.store;
     requires build.jenesis.repository.compliance.web;
+    // Being told without looking: every hold, refusal and release is an event, and a configured endpoint receives
+    // it as a signed, retried webhook. Nothing is sent until an operator names an endpoint.
+    requires build.jenesis.repository.webhook;
+    requires build.jenesis.repository.webhook.web;
     requires spring.boot;
     requires spring.context;
 }

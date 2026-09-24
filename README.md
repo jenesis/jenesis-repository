@@ -16,8 +16,10 @@ Jenesis build finds them, and under the Jenesis module layout, so a modular buil
 name - publish a modular jar once and both ecosystems resolve it. It is also a standards-compliant OCI
 registry over the same store, so `docker push` works against it too.
 
-A publish can be screened against OSV and the GitHub Advisory Database: a package at or above the configured
-severity is refused or withheld for review, and the console's review queue says why and releases it. What a
+A publish can be screened against OSV, the GitHub Advisory Database and the OpenSSF malicious-packages records -
+each switched on in the first-run guide, since none reaches out unasked: a package at or above the configured
+severity, or one a malicious-package record names, is refused or withheld for review, the console's review queue
+says why and releases it, and a configured endpoint hears of it as a signed webhook. What a
 coordinate cannot show - the packages in an image's base layer - a scanner run in CI reports through
 `POST /api/findings/report`, and the image is withheld the same way.
 
@@ -109,7 +111,8 @@ seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by 
 | `source/ui` | The web console (`/console`, `/browse`) and its design system. |
 | `source/oidc`, `source/ratelimit`, `source/usage` | Sign-in, the request-rate ceiling, and credential-usage tracking. |
 | `source/observation/spi`, `source/posture/spi`, `source/icon/spi` | Observation hooks, security-posture advisories, and console iconography. |
-| `source/gate/store`, `source/gate-wiring`, `source/compliance/*` | The publish gate: the Maven and OCI inspectors that name what a publish is, the OSV and GitHub advisory feeds (off until an operator switches them on), policy-as-code and attestation admission, the scheduled rescan, signature verification, and the review queue where a hold is released. |
+| `source/gate/store`, `source/gate-wiring`, `source/compliance/*` | The publish gate: the Maven and OCI inspectors that name what a publish is, the OSV, GitHub and OpenSSF feeds (off until an operator switches them on), policy-as-code and attestation admission, the scheduled rescan, signature verification, and the review queue where a hold is released. |
+| `source/webhook`, `source/webhook-web`, `source/outbox` | Signed, retried webhooks for what was published, held, released or refused, and the surface that retries a parked delivery. |
 | `source/findings/store`, `source/health/store` | The findings and maintainer-health ledgers the gate and its screens read. |
 | `source/feed`, `source/bundle`, `source/contract/testkit` | The advisory feed, the launchable module, and the shared contract test kit. |
 

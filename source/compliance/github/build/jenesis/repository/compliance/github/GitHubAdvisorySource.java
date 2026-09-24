@@ -44,7 +44,7 @@ import build.jenesis.repository.feed.FeedTransport;
  * answers while the live query stays the default - and a recorded answer travels through the very same client, caps
  * and pagination the live one does. A failed query throws rather than passing, so the gate fails closed.
  *
- * <p>A lookup sits behind the same {@link FeedCache#failClosed fail-closed} {@link FeedCache} every advisory feed uses:
+ * <p>A lookup sits behind a {@link FeedCache#failClosed fail-closed} {@link FeedCache}:
  * the same version screened again inside the window answers without a network call, a cold burst on one coordinate
  * collapses into a single query, and past the window a failed refresh raises rather than re-serving the list already
  * drawn. GitHub rate-limits the unauthenticated form of this API, so the window also keeps a busy repository inside
