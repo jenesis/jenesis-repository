@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Findings')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Findings · ' + ${repo})}"></header>
+    <p><a th:href="@{/repositories/{repo}(repo=${repo})}">&larr; back to repository</a></p>
+
+    <p th:unless="${panel.available()}">
+        No findings module is installed on this deployment, so nothing durable holds what the scans and the gate
+        found. The vulnerability report still recomputes live from the advisory feeds.
+    </p>
+
+    <article th:if="${panel.available()}">
+        <p><small>The durable findings ledger: what the advisory feeds, the compliance gate and the AI analyses
+            recorded against this repository's artifacts, attributed to the module or feed that produced each row.
+            A superseded finding stays listed with its mark - categorized, never discarded. An AI-produced row is
+            a candidate for human review, never an authoritative verdict: confirm or dismiss it here - the
+            <a th:href="@{'/repositories/' + ${repo} + '/findings'(kind='ai-candidate')}">AI review queue</a>
+            lists the code-audit candidates awaiting that decision.</small></p>
+        <p><small th:if="${panel.lastScanned() != null}">Last scanned against the advisory feeds:
+            <span th:text="${panel.lastScanned()}">-</span></small>
+            <small th:if="${panel.lastScanned() == null}">Never scanned against the advisory feeds - rows shown come
+            from publish-time screening and reviews only.</small></p>
+
+        <form method="get" th:action="@{'/repositories/' + ${repo} + '/findings'}">
+            <div class="grid">
+                <label>Coordinate
+                    <input type="text" name="coordinate" th:value="${coordinate}"
+                           placeholder="group:artifact or group:artifact:version">
+                </label>
+                <label>Kind
+                    <select name="kind">
+                        <option value="" th:selected="${kind == ''}">any</option>
+                        <option th:each="entry : ${panel.kinds()}" th:value="${entry}" th:text="${entry}"
+                                th:selected="${entry == kind}">vulnerability</option>
+                    </select>
+                </label>
+                <label>Source
+                    <select name="source">
+                        <option value="" th:selected="${source == ''}">any</option>
+                        <option th:each="entry : ${panel.sources()}" th:value="${entry}" th:text="${entry}"
+                                th:selected="${entry == source}">osv</option>
+                    </select>
+                </label>
+                <label>Category
+                    <select name="category">
+                        <option value="" th:selected="${category == ''}">any</option>
+                        <option th:each="entry : ${panel.categories()}" th:value="${entry}" th:text="${entry}"
+                                th:selected="${entry == category}">advisory</option>
+                    </select>
+                </label>
+                <label>Severity
+                    <select name="severity">
+                        <option value="" th:selected="${severity == ''}">any</option>
+                        <option th:each="entry : ${ {'CRITICAL','HIGH','MEDIUM','LOW','NONE'} }" th:value="${entry}"
+                                th:text="${entry}" th:selected="${entry == severity}">CRITICAL</option>
+                    </select>
+                </label>
+                <label>&nbsp;<button type="submit">Filter</button></label>
+            </div>
+        </form>
+
+        <th:block th:if="${panel.rows().isEmpty()}">
+            <div th:replace="~{base :: empty('No recorded findings match. A never-scanned repository has no rows until the scan sweep, the gate or the vulnerability report writes some.')}"></div>
+        </th:block>
+        <figure th:unless="${panel.rows().isEmpty()}">
+            <p th:if="${panel.truncated()}"><small>Showing the first <span th:text="${panel.rows().size()}">500</span>
+                matching findings; more match. Narrow the filter, or use the paged <code>/api/findings</code>
+                endpoint, to reach the rest.</small></p>
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Coordinate</th>
+                    <th scope="col">Finding</th>
+                    <th scope="col">Kind</th>
+                    <th scope="col">Source</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Severity</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Fix</th>
+                    <th scope="col">Seen</th>
+                    <th scope="col">Review</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="row : ${panel.rows()}">
+                    <td><code th:text="${row.coordinate()}">coordinate:version</code></td>
+                    <td>
+                        <code th:text="${row.id()}">FINDING-1</code>
+                        <span th:if="${row.supersededBy() != null}" class="app-badge"
+                              th:title="'superseded by ' + ${row.supersededBy()}">superseded</span>
+                    </td>
+                    <td th:text="${row.kind()}">vulnerability</td>
+                    <!--/* Who reported this, and whether that plug-in is still here. The mark is the shared
+                         resolution's answer for the recorded source: the contributor's own mark, its generated
+                         figure, or - when nothing installed answers to that name any more - the SAME figure inside
+                         a dashed tile, so a removed feed's rows stay recognisable as that feed's instead of
+                         becoming anonymous. Never a reason to hide or delete the row: the finding is what the
+                         plug-in said, and it stands whether or not the plug-in does. The SVG is built from module
+                         constants and from geometry, never from the recorded name, so th:utext is safe even though
+                         the name itself is free-form; the name is escaped normally beside it. */-->
+                    <td>
+                        <span th:class="${row.mark().installed()} ? 'format-icon' : 'format-icon format-icon--orphaned'"
+                              th:title="${row.mark().title()}" role="img" th:attr="aria-label=${row.mark().title()}"
+                              th:utext="${row.mark().svg()}"></span>
+                        <span th:text="${row.source()}">osv</span>
+                        <small th:unless="${row.mark().installed()}">&mdash; not installed</small>
+                    </td>
+                    <td th:text="${row.category()}">advisory</td>
+                    <td>
+                        <span th:text="${row.severity()}">CRITICAL</span>
+                        <span th:if="${row.kind() == 'malware'}" class="app-badge app-badge--danger">malicious</span>
+                    </td>
+                    <td>
+                        <span th:text="${row.description()}">summary</span>
+                        <small th:if="${!row.references().isEmpty()}" th:text="${row.references()}">CVE-&hellip;</small>
+                        <small th:each="label : ${row.labels()}" th:text="${label}">ai/applicability: n/a</small>
+                    </td>
+                    <td th:text="${row.fixed() == '' ? '—' : row.fixed()}">2.17.1</td>
+                    <td><small th:text="${row.firstSeen()} + ' &rarr; ' + ${row.lastSeen()}">first &rarr; last</small></td>
+                    <td>
+                        <!-- Only an AI-produced row takes a decision; the decision is a label on the
+                             still-present row - reversible, never a removal. -->
+                        <th:block th:if="${row.reviewable()}">
+                            <span th:if="${row.review() == 'confirmed'}"
+                                  class="app-badge app-badge--danger">confirmed</span>
+                            <span th:if="${row.review() == 'dismissed'}"
+                                  class="app-badge app-badge--muted">dismissed</span>
+                            <span th:if="${row.review() == ''}" class="app-badge app-badge--warn">pending</span>
+                            <form method="post" style="display:inline"
+                                  th:action="@{'/repositories/' + ${repo} + '/findings/review'}">
+                                <input type="hidden" name="ecosystem" th:value="${row.ecosystem()}">
+                                <input type="hidden" name="coordinate" th:value="${row.bareCoordinate()}">
+                                <input type="hidden" name="version" th:value="${row.version()}">
+                                <input type="hidden" name="source" th:value="${row.source()}">
+                                <input type="hidden" name="id" th:value="${row.id()}">
+                                <button type="submit" name="decision" value="confirmed"
+                                        th:if="${row.review() != 'confirmed'}">Confirm</button>
+                                <button type="submit" name="decision" value="dismissed" class="secondary"
+                                        th:if="${row.review() != 'dismissed'}">Dismiss</button>
+                            </form>
+                        </th:block>
+                        <span th:unless="${row.reviewable()}">&mdash;</span>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+    </article>
+</main>
+</body>
+</html>

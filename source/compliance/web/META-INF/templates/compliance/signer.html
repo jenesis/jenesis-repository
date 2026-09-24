@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!--
+  signer.html - everything one signer signed in one repository, one page at a time: the coordinates, how many of
+  their versions this identity signed, since when, and the last one counted. This is the blast radius of a key an
+  operator is about to revoke, read from the signer index rather than by walking anything.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Signer')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Signer')}"></header>
+    <p>
+        <a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a> &middot;
+        <a th:href="@{/repositories/{repo}/signers(repo=${repo})}">signers</a>
+    </p>
+
+    <article>
+        <p><strong th:text="${abbreviated}">signer</strong><br><small><code th:text="${signer}">identity</code></small></p>
+        <dl th:if="${issuer != null}">
+            <dt>Issuer</dt>
+            <dd th:text="${issuer}">issuer</dd>
+            <dt>Subject</dt>
+            <dd><a th:if="${link != null}" th:href="${link}" th:text="${subject}" rel="noopener">subject</a>
+                <span th:if="${link == null}" th:text="${subject}">subject</span></dd>
+        </dl>
+        <p><small>The coordinates whose accepted versions this identity signed, <span th:text="${pageSize}">200</span>
+            at a time. A version is counted once, however many times it was published or re-derived.</small></p>
+        <figure th:unless="${coordinates.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Ecosystem</th>
+                    <th scope="col">Coordinate</th>
+                    <th scope="col">Versions</th>
+                    <th scope="col">Since</th>
+                    <th scope="col">Last</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="c : ${coordinates}">
+                    <td th:text="${c.ecosystem}">Maven</td>
+                    <td><code th:text="${c.coordinate}">org.acme:lib</code></td>
+                    <td th:text="${c.versions}">1</td>
+                    <td><small th:text="${c.since}">2026-09-14T00:00:00Z</small></td>
+                    <td th:text="${c.last}">1.0</td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <p th:if="${next != null}"><small>
+            <a th:href="@{/repositories/{repo}/signers/signed(repo=${repo},signer=${signer},after=${next})}">Next page &rarr;</a></small></p>
+        <th:block th:if="${coordinates.isEmpty()}">
+            <div th:replace="~{base :: empty('This signer signed nothing that was accepted here.')}"></div>
+        </th:block>
+    </article>
+</main>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<!--
+  signers.html - who signed one repository's accepted versions, one page at a time. Each row opens everything that
+  signer signed here. Read from the signer index the gate writes as it admits signed versions; nothing is verified or
+  walked to render this.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Signers')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Signers')}"></header>
+    <p>
+        <a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
+    </p>
+
+    <article>
+        <p><small>The identities whose trusted signatures the gate accepted on this repository's versions,
+            <span th:text="${pageSize}">200</span> at a time. Open one to see everything it signed - what a
+            signer-changed finding names, and the reach of a key before it is revoked.</small></p>
+        <figure th:unless="${signers.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Signer</th>
+                    <th scope="col">Identity</th>
+                    <th scope="col">Issuer</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="s : ${signers}">
+                    <td><a th:href="@{/repositories/{repo}/signers/signed(repo=${repo},signer=${s.signer})}"
+                           th:text="${s.abbreviated}">signer</a></td>
+                    <td><small><code th:text="${s.signer}">identity</code></small></td>
+                    <td><small th:if="${s.issuer != null}" th:text="${s.issuer}">issuer</small>
+                        <small th:if="${s.issuer == null}">&mdash;</small></td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <p th:if="${next != null}"><small>
+            <a th:href="@{/repositories/{repo}/signers(repo=${repo},after=${next})}">Next page &rarr;</a></small></p>
+        <th:block th:if="${signers.isEmpty()}">
+            <div th:replace="~{base :: empty('No signed version has been accepted yet.')}"></div>
+        </th:block>
+    </article>
+</main>
+</body>
+</html>

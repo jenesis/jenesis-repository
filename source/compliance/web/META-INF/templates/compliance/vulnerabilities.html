@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Vulnerabilities')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Vulnerabilities · ' + ${repo})}"></header>
+    <p><a th:href="@{/repositories/{repo}(repo=${repo})}">&larr; back to repository</a></p>
+
+    <p th:unless="${capabilities.advisories()}">
+        No advisory feed module is installed on this deployment, so its published artifacts are not scanned.
+    </p>
+
+    <p th:if="${capabilities.advisories() and !report.scanned()}">
+        Vulnerability scanning is off. No advisory feed is enabled in the runtime
+        <a th:href="@{/settings}">settings</a>; enable an installed feed there to scan this repository's published
+        artifacts against it. This panel reads the runtime settings; a feed enabled only through the deployment's
+        environment is used by the server's scan but is not reflected here.
+    </p>
+
+    <article th:if="${capabilities.advisories() and report.scanned()}">
+        <!-- The reachability and applicability facets narrow the view only - every finding stays stored and the
+             default shows all. An un-analyzed or un-judged row matches "unknown": absence of proof is unknown,
+             never a clean bill. The operator chooses what the reachability facet keys on: the static verdict, the
+             AI classifier's opinion (ai:), or the two labels' agreement (agreed:) - where a decisive static
+             verdict always outranks; the applicability facet keys on the AI applicability pass's opinion. -->
+        <form method="get" th:action="@{'/repositories/' + ${repo} + '/vulnerabilities'}">
+            <div class="grid">
+                <label>Reachability
+                    <select name="reachability">
+                        <option value="" th:selected="${reachability == ''}">any</option>
+                        <option th:each="entry : ${ {'reachable','not-reachable','unknown',
+                                    'ai:likely-reachable','ai:likely-not-reachable','ai:unknown',
+                                    'agreed:reachable','agreed:not-reachable','agreed:unknown'} }"
+                                th:value="${entry}"
+                                th:text="${entry}" th:selected="${entry == reachability}">reachable</option>
+                    </select>
+                </label>
+                <label>Applicability
+                    <select name="applicability">
+                        <option value="" th:selected="${applicability == ''}">any</option>
+                        <option th:each="entry : ${ {'applies','not-applicable','unknown'} }"
+                                th:value="${entry}"
+                                th:text="${entry}" th:selected="${entry == applicability}">applies</option>
+                    </select>
+                </label>
+                <label>&nbsp;<button type="submit">Filter</button></label>
+            </div>
+        </form>
+        <!-- Principle 10: the render above serves the durable ledger only, so its staleness is always shown - a
+             never-scanned repository must read as exactly that, not as clean. The rescan is the explicit write path
+             (re-query every enabled feed, persist, re-render); without the write role the button is not offered,
+             but the last-scan time still is. -->
+        <p><small th:if="${report.lastScanned() != null}">Last scanned against the advisory feeds:
+            <span th:text="${report.lastScanned()}">-</span></small>
+            <small th:if="${report.lastScanned() == null}">Never scanned against the advisory feeds - findings shown
+            come from publish-time screening only.</small></p>
+        <th:block th:if="${report.scanning()}">
+            <p th:replace="~{base :: running('A rescan against the advisory feeds is running.')}"></p>
+        </th:block>
+        <form th:if="${isAdmin and !report.scanning()}" method="post"
+              th:action="@{'/repositories/' + ${repo} + '/vulnerabilities/rescan'}">
+            <button type="submit" class="secondary">Rescan against the advisory feeds</button>
+        </form>
+        <p th:if="${report.partial()}"><small>The ranking has not been built yet, so this page ranks the first
+            findings it read rather than the whole repository; the scheduled index pass completes it.</small></p>
+        <!-- The same rule as the staleness line above, for the feed rather than the scan: an empty result renders
+             below as "No known vulnerabilities", and a feed that never answered produces exactly that empty result.
+             So a scan that could not refresh a feed says so, next to the answer it is qualifying. -->
+        <p th:each="warning : ${report.feedWarnings()}"><small th:text="${warning}">-</small></p>
+        <th:block th:if="${report.vulnerable().isEmpty()}">
+            <div th:replace="~{base :: empty('No known vulnerabilities across this repository&rsquo;s published artifacts match this view.')}"></div>
+        </th:block>
+        <figure th:unless="${report.vulnerable().isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Coordinate</th>
+                    <th scope="col">Advisory</th>
+                    <th scope="col">Severity</th>
+                    <th scope="col">Reachability</th>
+                    <th scope="col">Applicability</th>
+                    <th scope="col" th:each="column : ${report.signals()}" th:text="${column.label()}">Signal</th>
+                    <th scope="col">Fix</th>
+                </tr>
+                </thead>
+                <tbody>
+                <th:block th:each="artifact : ${report.vulnerable()}">
+                    <tr th:each="advisory : ${artifact.advisories()}">
+                        <td><code th:text="${artifact.coordinate()}">coordinate:version</code></td>
+                        <td><code th:text="${advisory.id()}">ADVISORY-1</code></td>
+                        <td>
+                            <span th:text="${advisory.severity()}">CRITICAL</span>
+                            <span th:if="${advisory.malicious()}" class="app-badge app-badge--danger">malicious</span>
+                        </td>
+                        <td>
+                            <span th:if="${advisory.reachability() == 'reachable'}"
+                                  class="app-badge app-badge--danger">reachable</span>
+                            <span th:if="${advisory.reachability() == 'not-reachable'}"
+                                  class="app-badge app-badge--muted">not reachable</span>
+                            <span th:if="${advisory.reachability() == 'unknown'}"
+                                  class="app-badge app-badge--warn">unknown</span>
+                            <span th:if="${advisory.reachability() == ''}">&mdash;</span>
+                            <!-- The AI classifier's opinion renders beside the static verdict, never instead of
+                                 it - both labels, separately attributed: "static: unknown, AI: likely-reachable". -->
+                            <span th:if="${advisory.aiReachability() == 'likely-reachable'}"
+                                  class="app-badge app-badge--danger">AI: likely reachable</span>
+                            <span th:if="${advisory.aiReachability() == 'likely-not-reachable'}"
+                                  class="app-badge app-badge--muted">AI: likely not reachable</span>
+                            <span th:if="${advisory.aiReachability() == 'unknown'}"
+                                  class="app-badge app-badge--warn">AI: unknown</span>
+                        </td>
+                        <td>
+                            <!-- The applicability pass's opinion is a filter aid, separately attributed - the
+                                 finding stays present and gated exactly as before whatever it says. -->
+                            <span th:if="${advisory.applicability() == 'applies'}"
+                                  class="app-badge app-badge--danger">AI: applies</span>
+                            <span th:if="${advisory.applicability() == 'not-applicable'}"
+                                  class="app-badge app-badge--muted">AI: not applicable</span>
+                            <span th:if="${advisory.applicability() == 'unknown'}"
+                                  class="app-badge app-badge--warn">AI: unknown</span>
+                            <span th:if="${advisory.applicability() == ''}">&mdash;</span>
+                        </td>
+                        <td th:each="cell : ${advisory.signals()}" th:text="${cell.value()}"></td>
+                        <td th:text="${advisory.fixed()} ?: 'no fix'">2.17.1</td>
+                    </tr>
+                </th:block>
+                </tbody>
+            </table>
+            <p th:if="${report.nextCursor() != null}">
+                <a th:href="@{/repositories/{repo}/vulnerabilities(repo=${repo}, reachability=${reachability},
+                        applicability=${applicability}, after=${report.nextCursor()})}">next worst &rarr;</a>
+            </p>
+        </figure>
+    </article>
+</main>
+</body>
+</html>

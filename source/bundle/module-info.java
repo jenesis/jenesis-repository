@@ -3,7 +3,8 @@
  * all four layouts ({@code maven}, {@code jenesis}, {@code oci}, {@code raw}), all four store backends
  * ({@code filesystem}, {@code s3}, {@code gcs}, {@code azure}), all five import connectors, the upstream HTTP
  * fetcher ({@code proxy}), the OIDC token exchange ({@code oidc}), the token-bucket rate limiter, the credential
- * usage tracker and the web console ({@code ui}) - so the packaging {@code bundle} step emits a {@code bundle.zip}
+ * usage tracker, the publish gate with its review screens (screening against OSV and the GitHub Advisory Database
+ * once an operator names them) and the web console ({@code ui}) - so the packaging {@code bundle} step emits a {@code bundle.zip}
  * carrying the complete free product, and the {@code Dockerfile} turns that one zip into the image.
  * Nothing here names a plugin: the server keeps discovering everything through {@code ServiceLoader}, and the image
  * is trimmed by configuration instead of rebuilt - {@code jenreg.<feature>=false} (settable as
@@ -52,6 +53,23 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.gc.store;
     requires build.jenesis.repository.gc.walk;
+    // The publish gate. The wiring is the arming, not the gate: without it on the graph the server imports no
+    // screen and every publish is admitted as clean, so a composition that carries the gate carries this too.
+    requires build.jenesis.repository.gate.wiring;
+    // What the gate decides from: the package a Maven or OCI publish names, the two advisory databases every
+    // ecosystem is covered by (both switched off until an operator names them - nothing is fetched unasked), and
+    // the operator-authored and attestation dimensions.
+    requires build.jenesis.repository.compliance.maven;
+    requires build.jenesis.repository.compliance.oci;
+    requires build.jenesis.repository.compliance.osv;
+    requires build.jenesis.repository.compliance.github;
+    requires build.jenesis.repository.compliance.policy;
+    requires build.jenesis.repository.compliance.admission;
+    // Where a verdict is kept, and the screens an operator reviews a hold on and releases it from. A hold nobody
+    // can see or release is worse than none, so the review surface ships with the gate.
+    requires build.jenesis.repository.findings.store;
+    requires build.jenesis.repository.health.store;
+    requires build.jenesis.repository.compliance.web;
     requires spring.boot;
     requires spring.context;
 }

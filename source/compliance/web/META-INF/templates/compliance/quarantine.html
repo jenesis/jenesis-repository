@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<!--
+  quarantine.html - the review queue of one repository, one page at a time. The repository hub shows the head of the
+  queue; this screen pages the rest by pointer key, so a backlog of any size is reviewed page by page and never
+  rendered whole. Each page is enriched from the quarantine log and the durable hold records for its own rows only.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Quarantine')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main" class="container">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Quarantine')}"></header>
+    <p>
+        <a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
+    </p>
+
+    <article>
+        <p><small>Artifacts the compliance gate held back, on the publish or the proxy-fetch path, in path order,
+            <span th:text="${pageSize}">200</span> at a time. Review the verdict and reasons, then release into the
+            layout or discard.</small></p>
+        <figure th:unless="${quarantine.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Coordinate</th>
+                    <th scope="col">Verdict</th>
+                    <th scope="col">Held by</th>
+                    <th scope="col">Reasons</th>
+                    <th scope="col" th:if="${isEditor}"><span class="app-sr-only">Actions</span></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="q : ${quarantine}">
+                    <td>
+                        <span th:text="${q.coordinate}">group:artifact:version</span><br>
+                        <small><code th:text="${q.path}">/path/...</code></small>
+                    </td>
+                    <td><span class="app-badge app-badge--warn" th:text="${q.verdict}">QUARANTINE</span></td>
+                    <!--/* D-095: the retroactive hold kinds standing on this coordinate, read from the durable
+                           holds/ records rather than from the installed providers. A kind whose module has been
+                           uninstalled still holds, and is drawn here exactly as an orphaned finding source is - the
+                           same dashed tile and the same words - so an operator releasing it knows no installed module
+                           can re-evaluate that hold. A plain publish-time gate hold writes no record and shows none. */-->
+                    <td>
+                        <th:block th:each="mark : ${q.holds}">
+                            <span th:class="${mark.installed()} ? 'format-icon' : 'format-icon format-icon--orphaned'"
+                                  th:title="${mark.title()}" role="img" th:attr="aria-label=${mark.title()}"
+                                  th:utext="${mark.svg()}"></span><small th:text="${mark.name()}">kev</small><small
+                                    th:unless="${mark.installed()}">&mdash; not installed</small><br>
+                        </th:block>
+                        <small th:if="${q.holds.isEmpty()}">&mdash;</small>
+                    </td>
+                    <td><small th:text="${#strings.listJoin(q.reasons, '; ')}">reason</small></td>
+                    <td th:if="${isEditor}">
+                        <form method="post" style="display:inline; margin:0"
+                              th:action="@{'/repositories/' + ${repo} + '/quarantine/release'}">
+                            <input type="hidden" name="path" th:value="${q.path}">
+                            <button type="submit">release</button>
+                        </form>
+                        <form method="post" style="display:inline; margin:0" class="app-actions__danger"
+                              th:action="@{'/repositories/' + ${repo} + '/quarantine/discard'}">
+                            <input type="hidden" name="path" th:value="${q.path}">
+                            <button th:replace="~{base :: dangerButton('discard', 'Discard this held artifact? Its bytes are dropped and it cannot be released afterwards.')}">discard</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <p th:if="${next != null}"><small>
+            <a th:href="@{/repositories/{repo}/quarantine(repo=${repo},after=${next})}">Next page &rarr;</a></small></p>
+        <th:block th:if="${quarantine.isEmpty()}">
+            <div th:replace="~{base :: empty('Nothing in quarantine.')}"></div>
+        </th:block>
+    </article>
+</main>
+</body>
+</html>

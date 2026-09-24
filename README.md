@@ -16,6 +16,9 @@ Jenesis build finds them, and under the Jenesis module layout, so a modular buil
 name - publish a modular jar once and both ecosystems resolve it. It is also a standards-compliant OCI
 registry over the same store, so `docker push` works against it too.
 
+A publish can be screened against OSV and the GitHub Advisory Database: a package at or above the configured
+severity is refused or withheld for review, and the console's review queue says why and releases it.
+
 Every format, storage backend, importer and console panel is a `ServiceLoader` plugin over one
 content-addressed store, so twenty of those formats dedupe against each other: an npm tarball and a PyPI
 wheel of identical bytes are stored once, and one reference scan answers for all of them.
@@ -104,6 +107,8 @@ seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by 
 | `source/ui` | The web console (`/console`, `/browse`) and its design system. |
 | `source/oidc`, `source/ratelimit`, `source/usage` | Sign-in, the request-rate ceiling, and credential-usage tracking. |
 | `source/observation/spi`, `source/posture/spi`, `source/icon/spi` | Observation hooks, security-posture advisories, and console iconography. |
+| `source/gate/store`, `source/gate-wiring`, `source/compliance/*` | The publish gate: the Maven and OCI inspectors that name what a publish is, the OSV and GitHub advisory feeds (off until an operator switches them on), policy-as-code and attestation admission, the scheduled rescan, signature verification, and the review queue where a hold is released. |
+| `source/findings/store`, `source/health/store` | The findings and maintainer-health ledgers the gate and its screens read. |
 | `source/feed`, `source/bundle`, `source/contract/testkit` | The advisory feed, the launchable module, and the shared contract test kit. |
 
 Each family's `testkit` module carries the contract tests an implementation must pass, so a new backend or
@@ -117,8 +122,9 @@ A plugin is a module that `provides` one of the SPIs above. Two rules make the s
   behaves like the ones already shipping - a store backend that passes the store contract is one the server
   can drive without knowing which it got.
 - **A publish screen is a `PublishInterceptor`.** It sees the artifact once it is stored content-addressed but
-  before any pointer is linked, returns a verdict, and can withhold an already-linked path on read. No
-  provider ships by default, so the chain is empty and every upload is accepted.
+  before any pointer is linked, returns a verdict, and can withhold an already-linked path on read. The
+  publish gate (`source/gate/store`) is one, armed by `source/gate-wiring`; a composition without the wiring
+  screens nothing and accepts every upload.
 
 `AGENTS.md` carries the working conventions for this repository, and `docs/` holds the design notes that
 outlive a single change.

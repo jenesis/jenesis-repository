@@ -1,0 +1,5 @@
+build.jenesis.repository.compliance.scan.VulnerabilityScanTaskProvider
+build.jenesis.repository.compliance.scan.KevEnforceTaskProvider
+build.jenesis.repository.compliance.scan.ReanalysisTaskProvider
+build.jenesis.repository.compliance.scan.VulnerabilityRankIndexTaskProvider
+build.jenesis.repository.compliance.scan.SignalRefreshTaskProvider
