@@ -202,7 +202,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
             exchange.respond(405);
         } else if (sub.equals(VERSION_FILE)) {
             exchange.setResponseHeader("Content-Type", "text/yaml");
-            respondBody(exchange, VERSION_YML);
+            exchange.answer(VERSION_YML);
         } else if (sub.startsWith(ALL_PODS) && sub.endsWith(TXT)) {
             allPodsVersions(repo, sub.substring(ALL_PODS.length(), sub.length() - TXT.length()),
                     new Blobs(store), exchange);
@@ -355,7 +355,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
                 .filter(flag -> flag.state() == Lifecycle.State.DEPRECATED)
                 .ifPresent(flag -> podspec.put("deprecated", true));
         exchange.setResponseHeader("Content-Type", "application/json");
-        respondBody(exchange, MAPPER.writeValueAsBytes(podspec));
+        exchange.answer(MAPPER.writeValueAsBytes(podspec));
     }
 
     /** Serve a pod archive from the CAS. The path is {@code <name>/<version>/<file>.zip}. */
@@ -489,7 +489,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
             podspec.set("source", source);
         }
         exchange.setResponseHeader("Content-Type", "application/json");
-        respondBody(exchange, MAPPER.writeValueAsBytes(podspec));
+        exchange.answer(MAPPER.writeValueAsBytes(podspec));
         return true;
     }
 
@@ -770,7 +770,6 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return depth;
     }
 
-
     /** The CDN shard for a pod: the first three hex characters of {@code MD5(name)} (the default {@code [1, 1, 1]}
      *  prefix lengths), which is the CDN's own bucketing so a client computing the same shard finds the pod. */
     static String[] shard(String name) {
@@ -834,15 +833,6 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
 
     static String blobKey(String repo, String name, String version) {
         return "cocoapods/" + repo + "/blob/" + name + "/" + version;
-    }
-
-    private static void respondBody(FormatExchange exchange, byte[] body) throws IOException {
-        if (exchange.method().equals("HEAD")) {
-            exchange.setResponseHeader("Content-Length", Integer.toString(body.length));
-            exchange.respond(200, -1L).close();
-        } else {
-            exchange.respond(200, body);
-        }
     }
 
     /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link CocoaPodsImporter} - the format IS the

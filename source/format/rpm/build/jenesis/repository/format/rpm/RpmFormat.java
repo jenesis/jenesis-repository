@@ -307,7 +307,7 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
             return;
         }
         exchange.setResponseHeader("Content-Type", "application/pgp-keys");
-        respondBody(exchange, buffer.toByteArray());
+        exchange.answer(buffer.toByteArray());
     }
 
     /** The current signer, or {@code null} when no key is provisioned (the repository serves unsigned metadata and no
@@ -878,7 +878,6 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         blobs.write(stanzaKey, primaryPackage(pkg, hash, size, location).getBytes(StandardCharsets.UTF_8));
     }
 
-
     static String indexPrefix(String repo) {
         return "rpm/" + repo + REPODATA + "primary.d";
     }
@@ -890,15 +889,6 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         // primary.d index. URL-encoding is injective, and the location is carried inside the stanza body, so the key
         // never needs decoding back.
         return indexPrefix(repo) + "/" + URLEncoder.encode(location, StandardCharsets.UTF_8);
-    }
-
-    private static void respondBody(FormatExchange exchange, byte[] body) throws IOException {
-        if (exchange.method().equals("HEAD")) {
-            exchange.setResponseHeader("Content-Length", Integer.toString(body.length));
-            exchange.respond(200, -1L).close();
-        } else {
-            exchange.respond(200, body);
-        }
     }
 
     static byte[] gzip(byte[] content) throws IOException {

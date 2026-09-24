@@ -327,7 +327,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         // named here but computed only when that endpoint is actually fetched - not on this resolve-path read.
         root.put("list", repoPath(repo, exchange) + "/" + LIST);
         exchange.setResponseHeader("Content-Type", "application/json");
-        respondBody(exchange, MAPPER.writeValueAsBytes(root));
+        exchange.answer(MAPPER.writeValueAsBytes(root));
     }
 
     /** The Composer-v2 {@code list} endpoint: {@code {"packageNames": [...]}}, every {@code <vendor>/<package>} this
@@ -578,7 +578,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
             }
         }
         exchange.setResponseHeader("Content-Type", "application/json");
-        respondBody(exchange, MAPPER.writeValueAsBytes(document));
+        exchange.answer(MAPPER.writeValueAsBytes(document));
         return true;
     }
 
@@ -798,7 +798,6 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         return depth;
     }
 
-
     /** Whether a Composer version string denotes a dev version (a branch alias {@code dev-<branch>} or an {@code -dev}
      *  suffix), which Composer serves from the {@code ~dev} metadata file rather than the release one. */
     static boolean isDev(String version) {
@@ -808,7 +807,6 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
     private static String text(JsonNode node, String field) {
         return node == null ? null : node.path(field).asString(null);
     }
-
 
     /** The external base URL of this registry ({@code <scheme>://<host><prefix>/composer/<repo>}), for the dist URLs. */
     private static String repoBase(String repo, FormatExchange exchange) {
@@ -860,15 +858,6 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
 
     static String indexKey(String repo, String vendor, String pkg, String version) {
         return indexPrefix(repo, vendor, pkg) + "/" + version;
-    }
-
-    private static void respondBody(FormatExchange exchange, byte[] body) throws IOException {
-        if (exchange.method().equals("HEAD")) {
-            exchange.setResponseHeader("Content-Length", Integer.toString(body.length));
-            exchange.respond(200, -1L).close();
-        } else {
-            exchange.respond(200, body);
-        }
     }
 
     /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link ComposerImporter} - the format IS the

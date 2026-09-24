@@ -1,12 +1,11 @@
 package build.jenesis.repository.format.nuget;
 
 import module java.base;
-import module org.slf4j;
 
 import build.jenesis.repository.blobs.Blobs;
+import build.jenesis.repository.blobs.BlobsListingObserver;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
@@ -15,38 +14,20 @@ import build.jenesis.repository.store.StoredListing;
  * the one version's entries. A transition whose subject names neither a package path nor a coordinate is mapped to
  * no entry, so every document is rebuilt in place.
  */
-public final class NuGetListingObserver implements ListingObserver {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(NuGetListingObserver.class);
-
-    private final NuGetFormat format = new NuGetFormat();
+public final class NuGetListingObserver extends BlobsListingObserver {
 
     public NuGetListingObserver() {
+        super(new NuGetFormat(), "nuget", "NuGet documents");
     }
 
     @Override
-    public void transition(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
-        if (subject.ecosystem() != null && !subject.ecosystem().equals(format.ecosystem())) {
-            return;
+    protected void refresh(Blobs blobs, ArtifactStore store, ArtifactDescriptor subject, ArtifactDescriptor named)
+            throws IOException {
+        String id = named.coordinate().toLowerCase(Locale.ROOT);
+        if (!blobs.isEmpty("nuget/" + id + "/" + named.version())
+                || StoredListing.present(store, NuGetListings.versions(id))) {
+            new NuGetListings(blobs).refresh(id, named.version());
         }
-        Blobs blobs = new Blobs(store);
-        ArtifactDescriptor named = subject;
-        if (named.coordinate() == null && named.path() != null) {
-            named = format.describe(named.path()).orElse(named);
-        }
-        if (named.coordinate() != null && named.version() != null) {
-            String id = named.coordinate().toLowerCase(Locale.ROOT);
-            if (!blobs.isEmpty("nuget/" + id + "/" + named.version())
-                    || StoredListing.present(store, NuGetListings.versions(id))) {
-                new NuGetListings(blobs).refresh(id, named.version());
-            }
-            return;
-        }
-        if (named.path() != null || blobs.isEmpty("nuget")) {
-            return;
-        }
-        LOGGER.info("NuGet documents regenerated in place: a hold transition named only a content hash");
-        StoredListing.rebuildUnder(store, "nuget/", this);
     }
 
     @Override

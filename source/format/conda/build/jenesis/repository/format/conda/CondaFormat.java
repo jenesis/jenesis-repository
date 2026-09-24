@@ -428,7 +428,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         root.set("packages", MAPPER.createObjectNode());
         root.set("subdirs", listed);
         exchange.setResponseHeader("Content-Type", "application/json");
-        respondBody(exchange, MAPPER.writeValueAsBytes(root));
+        exchange.answer(MAPPER.writeValueAsBytes(root));
     }
 
     /** Whether {@code channeldata.json} may announce this subdir - it carries at least one package a client can
@@ -819,15 +819,6 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     /** Whether a channel/subdir/filename segment must not be spliced into a {@code conda/...} store key - empty, a dot
      *  segment, or carrying a path separator or control character. Mirrors the guard the sibling formats (rpm/cargo/…)
      *  apply to their coordinates, so a body- or path-supplied {@code ..} cannot escape the channel's namespace. */
-
-    private static void respondBody(FormatExchange exchange, byte[] body) throws IOException {
-        if (exchange.method().equals("HEAD")) {
-            exchange.setResponseHeader("Content-Length", Integer.toString(body.length));
-            exchange.respond(200, -1L).close();
-        } else {
-            exchange.respond(200, body);
-        }
-    }
 
     /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link CondaImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */

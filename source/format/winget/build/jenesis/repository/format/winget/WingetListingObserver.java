@@ -1,13 +1,11 @@
 package build.jenesis.repository.format.winget;
 
 import module java.base;
-import module org.slf4j;
 
 import build.jenesis.repository.blobs.Blobs;
+import build.jenesis.repository.blobs.BlobsListingObserver;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.ListingObserver;
-import build.jenesis.repository.store.StoredListing;
 
 /**
  * Keeps the winget {@linkplain WingetListings stored documents} in step with the transitions that happen off the
@@ -16,38 +14,20 @@ import build.jenesis.repository.store.StoredListing;
  * repository index. A transition that names only a content hash maps to no version, so the documents are regenerated
  * in place rather than left describing a package the read will refuse to serve.
  */
-public final class WingetListingObserver implements ListingObserver {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(WingetListingObserver.class);
-
-    private final WingetFormat format = new WingetFormat();
+public final class WingetListingObserver extends BlobsListingObserver {
 
     public WingetListingObserver() {
+        super(new WingetFormat(), "winget", "winget listings");
     }
 
     @Override
-    public void transition(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
-        if (subject.ecosystem() != null && !subject.ecosystem().equals(format.ecosystem())) {
-            return;
-        }
-        Blobs blobs = new Blobs(store);
-        ArtifactDescriptor named = subject;
-        if (named.coordinate() == null && named.path() != null) {
-            named = format.describe(named.path()).orElse(named);
-        }
-        if (named.coordinate() != null && named.version() != null) {
-            for (String repo : blobs.list("winget")) {
-                if (blobs.exists(WingetFormat.manifestKey(repo, named.coordinate(), named.version()))) {
-                    new WingetListings(blobs).refresh(repo, named.coordinate(), named.version());
-                }
+    protected void refresh(Blobs blobs, ArtifactStore store, ArtifactDescriptor subject, ArtifactDescriptor named)
+            throws IOException {
+        for (String repo : blobs.list("winget")) {
+            if (blobs.exists(WingetFormat.manifestKey(repo, named.coordinate(), named.version()))) {
+                new WingetListings(blobs).refresh(repo, named.coordinate(), named.version());
             }
-            return;
         }
-        if (named.path() != null || blobs.isEmpty("winget")) {
-            return;
-        }
-        LOGGER.info("winget listings regenerated in place: a hold transition named only a content hash");
-        StoredListing.rebuildUnder(store, "winget/", this);
     }
 
     @Override

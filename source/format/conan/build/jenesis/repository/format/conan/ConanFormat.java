@@ -253,13 +253,13 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
             // repository key), and every later request carries that key. Without a Basic login the handshake still
             // completes, with a placeholder the security layer treats as no credential.
             exchange.setResponseHeader("Content-Type", "text/plain");
-            respondBody(exchange, basicPassword(exchange.requestHeader("Authorization"))
+            exchange.answer(basicPassword(exchange.requestHeader("Authorization"))
                     .orElse("jenesis").getBytes(StandardCharsets.UTF_8));
             return;
         }
         if (sub.equals("v2/users/check_credentials") || sub.equals("v1/users/check_credentials")) {
             exchange.setResponseHeader("Content-Type", "text/plain");
-            respondBody(exchange, "anonymous".getBytes(StandardCharsets.UTF_8));
+            exchange.answer("anonymous".getBytes(StandardCharsets.UTF_8));
             return;
         }
         if (sub.startsWith(CONANS)) {
@@ -889,16 +889,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
 
     private static void respondJson(FormatExchange exchange, JsonNode node) throws IOException {
         exchange.setResponseHeader("Content-Type", "application/json");
-        respondBody(exchange, MAPPER.writeValueAsBytes(node));
-    }
-
-    private static void respondBody(FormatExchange exchange, byte[] body) throws IOException {
-        if (exchange.method().equals("HEAD")) {
-            exchange.setResponseHeader("Content-Length", Integer.toString(body.length));
-            exchange.respond(200, -1L).close();
-        } else {
-            exchange.respond(200, body);
-        }
+        exchange.answer(MAPPER.writeValueAsBytes(node));
     }
 
     /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link ConanImporter} - the format IS the

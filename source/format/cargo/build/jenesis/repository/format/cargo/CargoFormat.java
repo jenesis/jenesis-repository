@@ -343,7 +343,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         String json = MAPPER.writeValueAsString(config);
         exchange.setResponseHeader("Content-Type", "application/json");
-        respondBody(exchange, json.getBytes(StandardCharsets.UTF_8));
+        exchange.answer(json.getBytes(StandardCharsets.UTF_8));
     }
 
     /** Whether a read needs a credential: authorization is enforced (the default) and no anonymous rights are granted. */
@@ -866,15 +866,6 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
 
     static String indexKey(String repo, String crate, String version) {
         return indexPrefix(repo, crate) + "/" + version;
-    }
-
-    private static void respondBody(FormatExchange exchange, byte[] body) throws IOException {
-        if (exchange.method().equals("HEAD")) {
-            exchange.setResponseHeader("Content-Length", Integer.toString(body.length));
-            exchange.respond(200, -1L).close();
-        } else {
-            exchange.respond(200, body);
-        }
     }
 
     /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link CargoImporter} - the format IS the

@@ -83,4 +83,15 @@ public interface FormatExchange {
     default void respond(int status) throws IOException {
         respond(status, -1L).close();
     }
+
+    /** A {@code 200} carrying {@code body}; for a {@code HEAD}, its length and no body, which is what a client probing
+     *  a document before fetching it reads. */
+    default void answer(byte[] body) throws IOException {
+        if (method().equals("HEAD")) {
+            setResponseHeader("Content-Length", Integer.toString(body.length));
+            respond(200, -1L).close();
+        } else {
+            respond(200, body);
+        }
+    }
 }

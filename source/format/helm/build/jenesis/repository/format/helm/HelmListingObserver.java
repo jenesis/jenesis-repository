@@ -1,13 +1,11 @@
 package build.jenesis.repository.format.helm;
 
 import module java.base;
-import module org.slf4j;
 
 import build.jenesis.repository.blobs.Blobs;
+import build.jenesis.repository.blobs.BlobsListingObserver;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.ListingObserver;
-import build.jenesis.repository.store.StoredListing;
 
 /**
  * Keeps {@code index.yaml} in step with the transitions that happen off the publish path - a hold on a published
@@ -15,38 +13,26 @@ import build.jenesis.repository.store.StoredListing;
  * block. The block is the unit because that is how the index is keyed; re-deciding it costs the chart's own versions
  * and never the repository's other charts.
  */
-public final class HelmListingObserver implements ListingObserver {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(HelmListingObserver.class);
-
-    private final HelmFormat format = new HelmFormat();
+public final class HelmListingObserver extends BlobsListingObserver {
 
     public HelmListingObserver() {
+        super(new HelmFormat(), "helm", "Helm index");
+    }
+
+    /** A Helm index lists a chart's every version in one entry, so a coordinate alone names one. */
+    @Override
+    protected boolean names(ArtifactDescriptor named) {
+        return named.coordinate() != null;
     }
 
     @Override
-    public void transition(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
-        if (subject.ecosystem() != null && !subject.ecosystem().equals(format.ecosystem())) {
-            return;
-        }
-        Blobs blobs = new Blobs(store);
-        ArtifactDescriptor named = subject;
-        if (named.coordinate() == null && named.path() != null) {
-            named = format.describe(named.path()).orElse(named);
-        }
-        if (named.coordinate() != null) {
-            for (String repo : blobs.list("helm")) {
-                if (!blobs.isEmpty(HelmFormat.entryPrefix(repo) + "/" + named.coordinate())) {
-                    new HelmListings(blobs).refresh(repo, named.coordinate());
-                }
+    protected void refresh(Blobs blobs, ArtifactStore store, ArtifactDescriptor subject, ArtifactDescriptor named)
+            throws IOException {
+        for (String repo : blobs.list("helm")) {
+            if (!blobs.isEmpty(HelmFormat.entryPrefix(repo) + "/" + named.coordinate())) {
+                new HelmListings(blobs).refresh(repo, named.coordinate());
             }
-            return;
         }
-        if (named.path() != null || blobs.isEmpty("helm")) {
-            return;
-        }
-        LOGGER.info("Helm index regenerated in place: a hold transition named only a content hash");
-        StoredListing.rebuildUnder(store, "helm/", this);
     }
 
     @Override
