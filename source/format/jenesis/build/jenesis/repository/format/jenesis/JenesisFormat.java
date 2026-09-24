@@ -41,6 +41,12 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
         return path.startsWith(JavaLayout.MODULE_ROUTE) || path.startsWith("/artifact/");
     }
 
+    /** Its routes - {@code /module/...} and {@code /artifact/...} - sit at the root of the repository. */
+    @Override
+    public String mount() {
+        return "";
+    }
+
     @Override
     public String ecosystem() {
         return ECOSYSTEM;

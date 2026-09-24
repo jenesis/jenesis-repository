@@ -816,11 +816,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
     /** The host-relative path to this registry ({@code <external-prefix>/composer/<repo>}), for the {@code metadata-url}
      *  Composer resolves against the host. */
     private static String repoPath(String repo, FormatExchange exchange) {
-        String uri = exchange.requestUri();
-        String path = exchange.path();
-        String external = uri.length() >= path.length() && uri.endsWith(path)
-                ? uri.substring(0, uri.length() - path.length()) : "";
-        return external + PREFIX.substring(0, PREFIX.length() - 1) + "/" + repo;
+        return exchange.external(PREFIX + repo);
     }
 
     /**

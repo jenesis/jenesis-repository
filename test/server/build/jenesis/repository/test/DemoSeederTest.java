@@ -11,6 +11,7 @@ import build.jenesis.repository.server.DemoSeeder;
 import build.jenesis.repository.server.DemoSeeding;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.RepositoryDocument;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -33,13 +34,17 @@ class DemoSeederTest {
     @TempDir
     Path root;
 
+    /** The tenant the seed is handed, and the repository it seeds the Maven suggestions into - named after the
+     *  format, since a repository holds one. */
+    private ArtifactStore tenant;
     private ArtifactStore store;
 
     @BeforeEach
     void setUp() throws Exception {
-        store = ArtifactStoreProvider.resolve("filesystem",
+        tenant = ArtifactStoreProvider.resolve("filesystem",
                         key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
-                .scope("default").scope("default");
+                .scope("default");
+        store = tenant.scope("maven");
     }
 
     @Test
@@ -53,7 +58,7 @@ class DemoSeederTest {
     void pullsSuggestionsThroughTheDispatcher() throws IOException {
         StubFetcher fetcher = new StubFetcher(centralArtifacts());
 
-        DemoSeeder.Result result = new DemoSeeder(List.of(new MavenFormat()), fetcher).seed(store);
+        DemoSeeder.Result result = new DemoSeeder(List.of(new MavenFormat()), fetcher).seed(tenant);
 
         assertThat(result.ran()).isTrue();
         assertThat(result.seeded()).isEqualTo(3);
@@ -63,6 +68,8 @@ class DemoSeederTest {
         assertThat(store.readVersioned("publish" + LOG4J_POM)).isPresent();
         assertThat(store.readVersioned("publish" + COMMONS_COLLECTIONS_JAR)).isPresent();
         assertThat(DemoSeeder.empty(store)).isFalse();
+        assertThat(RepositoryDocument.read(store).map(RepositoryDocument::format))
+                .as("the repository the seed created holds the format it seeded").contains("maven");
         assertThat(fetcher.fetches()).isPositive();
     }
 
@@ -73,9 +80,9 @@ class DemoSeederTest {
                 "0".repeat(64).getBytes(StandardCharsets.UTF_8), null);
         StubFetcher fetcher = new StubFetcher(Map.of());
 
-        DemoSeeder.Result result = new DemoSeeder(List.of(new MavenFormat()), fetcher).seed(store);
+        DemoSeeder.Result result = new DemoSeeder(List.of(new MavenFormat()), fetcher).seed(tenant);
 
-        assertThat(result.ran()).as("a non-empty store is never seeded").isFalse();
+        assertThat(result.ran()).as("a non-empty repository is never seeded").isFalse();
         assertThat(result.seeded()).isZero();
         assertThat(fetcher.fetches()).as("nothing is fetched when the guard refuses").isZero();
     }
@@ -85,7 +92,7 @@ class DemoSeederTest {
         StubFetcher fetcher = new StubFetcher(Map.of());
         AtomicInteger beforeSeed = new AtomicInteger();
         DemoSeeding seeding = new DemoSeeding(false, new DemoSeeder(List.of(new MavenFormat()), fetcher),
-                store, beforeSeed::incrementAndGet);
+                tenant, beforeSeed::incrementAndGet);
 
         seeding.start();
 
@@ -99,7 +106,7 @@ class DemoSeederTest {
         StubFetcher fetcher = new StubFetcher(centralArtifacts());
         AtomicInteger beforeSeed = new AtomicInteger();
         DemoSeeding seeding = new DemoSeeding(true, new DemoSeeder(List.of(new MavenFormat()), fetcher),
-                store, beforeSeed::incrementAndGet);
+                tenant, beforeSeed::incrementAndGet);
 
         // The seed runs on a background virtual thread so boot is never blocked; join it so every write has landed
         // before the assertions and the @TempDir teardown - otherwise the thread races the temp-dir deletion.

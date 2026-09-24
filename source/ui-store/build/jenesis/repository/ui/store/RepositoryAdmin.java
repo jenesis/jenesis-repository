@@ -7,6 +7,7 @@ import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.store.ServableNames;
 import io.micrometer.observation.ObservationRegistry;
@@ -65,7 +66,14 @@ public class RepositoryAdmin extends TenantScope {
      *  under {@code blobs/...}), so the console maps a namespace a format claims to that format's icon and leaves
      *  the bookkeeping namespaces unmarked. A single prefix listing, never a tree scan. */
     public List<String> namespaces(String repository) {
-        return scope(repository).list("").stream().filter(name -> !name.equals(Scopes.CREATED)).toList();
+        return scope(repository).list("").stream().filter(name -> !name.equals(Scopes.REPOSITORY)).toList();
+    }
+
+    /** The format a repository holds, or empty for one created before repositories held a format - which answers
+     *  no request until it is given one. Read through the node's cache, so a listing of every repository costs no
+     *  store read in the steady state. */
+    public Optional<String> format(String repository) throws IOException {
+        return RepositoryDocument.cached(root, tenant(), repository).map(RepositoryDocument::format);
     }
 
     /**

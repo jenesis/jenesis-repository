@@ -27,6 +27,23 @@ public interface FormatExchange {
     }
 
     /**
+     * The request path a client reaches a format-facing path at - what a format writes into a document that points
+     * back at itself, a download URL or an index base. It is {@link #requestUri()} with this request's own format
+     * path swapped for {@code formatPath}, so it keeps whatever the routing put in front of the path a format sees; an
+     * exchange whose routing also restored a mount a client never sends ({@code /cargo} in front of a repository's
+     * own paths) takes that mount off again, since the client never sent it.
+     *
+     * @param formatPath a format-facing path, as {@link #path()} carries one.
+     */
+    default String external(String formatPath) {
+        String uri = requestUri();
+        String path = path();
+        String prefix = uri.length() >= path.length() && uri.endsWith(path)
+                ? uri.substring(0, uri.length() - path.length()) : "";
+        return prefix + formatPath;
+    }
+
+    /**
      * The scheme the request arrived on - {@code https} when the server terminated TLS for it, {@code http}
      * otherwise - so a format that writes absolute self-referential URLs into a generated index (a packument, a
      * service index, a sparse-index config) tells the client to come back the way it came, and a credential the

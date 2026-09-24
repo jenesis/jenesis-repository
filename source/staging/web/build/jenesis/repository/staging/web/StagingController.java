@@ -3,6 +3,8 @@ package build.jenesis.repository.staging.web;
 import module java.base;
 
 import build.jenesis.repository.audit.AuditTrail;
+import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.spi.Authorization;
@@ -55,7 +57,16 @@ public class StagingController {
             respondStagingNotInstalled(response);
             return;
         }
-        String releasePath = request.getRequestURI().substring(("/repository/" + repo + "/staging/" + id).length());
+        // The staged path is the one a client would publish to within the repository; it is staged as the
+        // repository's format sees it, so the promotion lays it out as a publish into the repository would.
+        Optional<RepositoryFormat> format = RepositoryDocument.read(repositories.store(tenant, repo))
+                .flatMap(held -> RepositoryFormat.installed(held.format()));
+        if (format.isEmpty()) {
+            response.setStatus(404);
+            return;
+        }
+        String releasePath = format.get().mount()
+                + request.getRequestURI().substring(("/repository/" + repo + "/staging/" + id).length());
         RepositoryRequests.rejectRawTraversal(id);
         RepositoryRequests.rejectRawTraversal(releasePath);
         // Stream the staged deploy straight into the content-addressed store rather than buffering the body in heap.

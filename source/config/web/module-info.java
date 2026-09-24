@@ -21,6 +21,8 @@ open module build.jenesis.repository.config.web {
     exports build.jenesis.repository.config.web to build.jenesis.repository.server.kernel.test;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
+    requires build.jenesis.repository.format;
+    requires build.jenesis.repository.store;
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.definitions;

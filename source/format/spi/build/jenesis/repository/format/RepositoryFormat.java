@@ -211,6 +211,26 @@ public interface RepositoryFormat extends IconContributor {
     boolean handles(String path);
 
     /**
+     * Where this format's paths start, as {@link #handles} sees them: {@code /<name>} for a format whose every path
+     * begins with its own name, which is almost every format. A repository holds exactly one format and its URLs
+     * carry no format segment, so the path within a repository - {@code /com/acme/app/1.0/app-1.0.jar} - is handed to
+     * the format with this in front of it. A format whose paths start elsewhere says where; one whose routes sit at
+     * the root of a repository answers the empty string.
+     */
+    default String mount() {
+        return "/" + name();
+    }
+
+    /**
+     * Whether a repository can be created to hold this format. Every format that serves requests can; a provider
+     * that rides this seam for a capability alone and never serves one answers {@code false}, so no surface offers it
+     * as a repository's format.
+     */
+    default boolean offered() {
+        return true;
+    }
+
+    /**
      * The request entry point every caller uses. It screens the path for traversal and then delegates to
      * {@link #serve}; a format implements {@code serve} and never this.
      *
@@ -306,6 +326,13 @@ public interface RepositoryFormat extends IconContributor {
         return FormatDiscovery.installed(config);
     }
 
+
+    /** The installed formats a repository can be created to hold ({@link #offered()}), by name - what every surface
+     *  that creates a repository offers and accepts. */
+    static List<RepositoryFormat> offerable() {
+        return installed().stream().filter(RepositoryFormat::offered)
+                .sorted(Comparator.comparing(RepositoryFormat::name)).toList();
+    }
 
     /** The installed format of the given {@link #name() name} - the lookup for a neutral consumer (an importer
      *  walking a format's upstream index, say) that must find one format by name. Empty when no module on the path

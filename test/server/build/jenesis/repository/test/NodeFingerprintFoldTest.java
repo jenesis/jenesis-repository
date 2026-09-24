@@ -35,7 +35,6 @@ class NodeFingerprintFoldTest {
         config.put("jenreg.store", "filesystem");
         config.put("jenreg.operator-tenant", "operator");
         config.put("jenreg.default-tenant", "acme");
-        config.put("jenreg.default-repository", "main");
         config.put("jenreg.auth", "false");
         config.put("jenreg.read-only", "false");
         return config;
@@ -70,7 +69,6 @@ class NodeFingerprintFoldTest {
         differing.put("jenreg.store", "s3");
         differing.put("jenreg.operator-tenant", "other-operator");
         differing.put("jenreg.default-tenant", "globex");
-        differing.put("jenreg.default-repository", "other-main");
         differing.put("jenreg.auth", "true");
         differing.put("jenreg.read-only", "true");
         AtomicInteger cell = new AtomicInteger();

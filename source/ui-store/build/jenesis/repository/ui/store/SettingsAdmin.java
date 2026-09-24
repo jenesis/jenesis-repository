@@ -72,12 +72,6 @@ public class SettingsAdmin {
      *  Past the cap it is cleared outright - it is only a cache, and a cleared entry merely re-collects. */
     private static final int POSTURE_TENANTS = 64;
 
-    /** Given a repository name, what an operator should be told about reaching it - that no URL on this
-     *  deployment's routing names it - or {@code null} when there is nothing to say. A function rather than the
-     *  routing itself so this module keeps its closure: the console's Spring layer holds the
-     *  {@code RepositoryRouting} bean and hands the answer over, and a fixture that has no routing says nothing. */
-    private final UnaryOperator<String> unroutable;
-
     private final ArtifactStore root;
     private final UpstreamCredentialSource upstreamCredentials;
     private final Function<String, Optional<Pin>> pins;
@@ -136,7 +130,7 @@ public class SettingsAdmin {
      *  emits, so the console and the API audit settings changes identically. */
     public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<Pin>> pins,
                          Supplier<List<String>> tenants, AuditTrail audit, CurrentTenant current, ConsoleActor actor) {
-        this(repositoryStore, pins, tenants, audit, current, actor, _ -> null, _ -> null);
+        this(repositoryStore, pins, tenants, audit, current, actor, _ -> null);
     }
 
     /** The console-bound constructor, additionally given the {@code credentialConfig} the upstream-credential source
@@ -148,16 +142,6 @@ public class SettingsAdmin {
     public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<Pin>> pins,
                          Supplier<List<String>> tenants, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
                          UnaryOperator<String> credentialConfig) {
-        this(repositoryStore, pins, tenants, audit, current, actor, credentialConfig, _ -> null);
-    }
-
-    /** The console-bound constructor, additionally given {@code unroutable}: what to tell an operator about
-     *  reaching a repository they have just defined. The console's Spring layer answers it from the deployment's
-     *  routing; a fixture that has no routing says nothing. */
-    public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<Pin>> pins,
-                         Supplier<List<String>> tenants, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
-                         UnaryOperator<String> credentialConfig, UnaryOperator<String> unroutable) {
-        this.unroutable = unroutable;
         this.root = repositoryStore;
         // The console manages upstream credentials through the same discovered source as the server; NONE when
         // the module is absent, and the card is hidden through the capability flag.
@@ -817,11 +801,8 @@ public class SettingsAdmin {
     public record FallbackBadge(boolean upstream, String source, boolean store, String screening, String repository) {
     }
 
-    /**
-     * Store a repository definition, and answer what an operator should be told about it beyond "saved" - today,
-     * that the installed routing has no URL for this name. {@code null} when there is nothing to add.
-     */
-    public String setRepository(String name, String specification) throws IOException {
+    /** Store a repository definition, validated as the boot sweep validates it. */
+    public void setRepository(String name, String specification) throws IOException {
         if (!NAME.matcher(name).matches()) {
             throw new IllegalArgumentException("Invalid repository name '" + name + "'.");
         }
@@ -849,18 +830,6 @@ public class SettingsAdmin {
         }
         put(SettingsScopes.repositoryKey(name), specification);
         audit(AuditActions.REPOSITORY_SET, name);
-        // Stored, then the one thing "saved" does not say: whether any URL will reach this name. It is a warning
-        // rather than a refusal because unaddressable is not useless - a group member and a fallback are resolved
-        // by name against the definition graph rather than through a URL, so a fixed-tenant deployment's
-        // `default = group central,internal` needs `central` and `internal` and neither will ever answer as one.
-        // The wording lives on the routing seam so this surface and the API say the same thing.
-        return unroutable.apply(name);
-    }
-
-    /** What the routing says about a repository no URL can reach, or {@code null} when some URL reaches it - the one
-     *  wording a definition's save gives, for a surface that creates a repository without defining it. */
-    public String unaddressable(String name) {
-        return unroutable.apply(name);
     }
 
     public void removeRepository(String name) throws IOException {

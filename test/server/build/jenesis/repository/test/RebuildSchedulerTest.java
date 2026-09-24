@@ -4,8 +4,6 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.server.RebuildScheduler;
-import build.jenesis.repository.server.RepositoryAutoConfiguration;
-import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -15,14 +13,12 @@ import build.jenesis.repository.store.RunningMarker;
 import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkProvider;
-import org.springframework.core.env.StandardEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * This composition drives the shared rebuild pass itself: the auto-configuration schedules {@link RebuildScheduler}
- * over the deployment's one repository, daily unless {@code jenreg.rebuild.interval} says otherwise, inert without a
- * walk or a consumer, and a driven pass streams every retained pointer to every consumer - so a consumer's view
+ * The shared rebuild pass has a driver of its own: {@link RebuildScheduler} runs it over a repository weekly unless
+ * {@code jenreg.rebuild.interval} says otherwise, inert without a walk or a consumer, and a driven pass streams every retained pointer to every consumer - so a consumer's view
  * converges without an embedder and without a republish. Before this, {@code RebuildPass} shipped here
  * with nothing to run it.
  */
@@ -40,10 +36,9 @@ class RebuildSchedulerTest {
     }
 
     @Test
-    void the_auto_configuration_schedules_the_pass_weekly_over_the_deployments_repository() throws Exception {
-        RepositoryProperties properties = new RepositoryProperties();
-        try (RebuildScheduler scheduler = new RepositoryAutoConfiguration(new StandardEnvironment())
-                .rebuildScheduler(store, properties, new StandardEnvironment())) {
+    void the_pass_runs_weekly_unless_configured() throws Exception {
+        try (RebuildScheduler scheduler = new RebuildScheduler(store, store.scope("default").scope("maven"),
+                key -> null)) {
             assertThat(scheduler.interval()).as("a week between passes unless configured - the safety cadence; a "
                     + "crash asks for its walk").isEqualTo(Duration.ofDays(7));
             scheduler.start();

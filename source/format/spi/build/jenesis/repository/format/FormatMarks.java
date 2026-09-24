@@ -40,6 +40,7 @@ public final class FormatMarks {
     // format claims is a legitimate, cacheable answer, and a ConcurrentHashMap cannot hold a null.
     private final Map<String, Optional<Mark>> namespaces = new ConcurrentHashMap<>();
     private final Map<String, Optional<Mark>> ecosystems = new ConcurrentHashMap<>();
+    private final Map<String, Optional<Mark>> named = new ConcurrentHashMap<>();
 
     /** For a caller that supplies the formats directly (a test, or a component that already holds the resolved set)
      *  rather than through discovery. The list is copied, so the lookup cannot change under a reader mid-page. */
@@ -61,6 +62,15 @@ public final class FormatMarks {
      */
     public Optional<Mark> forNamespace(String namespace) {
         return namespaces.computeIfAbsent(namespace, this::resolveNamespace);
+    }
+
+    /** The mark of the installed format of this {@link RepositoryFormat#name() name} - the format a repository holds -
+     *  or empty when none is installed. */
+    public Optional<Mark> forFormat(String name) {
+        return named.computeIfAbsent(name, key -> formats.stream()
+                .filter(format -> format.name().equals(key))
+                .findFirst()
+                .map(Marks::of));
     }
 
     private Optional<Mark> resolveNamespace(String namespace) {

@@ -117,6 +117,12 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return path.equals("/v2") || path.equals("/v2/") || path.startsWith("/v2/");
     }
 
+    /** The registry API's root, which every OCI client addresses. */
+    @Override
+    public String mount() {
+        return "/v2";
+    }
+
     /**
      * The OCI protocol pushes one image across many requests - a session of blob uploads (a {@code POST} then chunked
      * {@code PATCH}es and a finalising {@code PUT}), then a manifest {@code PUT} that references them by digest - so no

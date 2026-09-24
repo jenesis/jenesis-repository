@@ -2,7 +2,11 @@ package build.jenesis.repository.server;
 
 import module java.base;
 
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.RepositoryDocument;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * What a {@link RepositoryRoutingProvider} is handed to build its routing with: the deployment's store, its
@@ -33,9 +37,6 @@ public interface RoutingContext {
     /** The tenant a request resolves to when nothing names one. */
     String defaultTenant();
 
-    /** The repository a request resolves to when nothing names one. */
-    String defaultRepository();
-
     /**
      * The tenant a credential names, for a routing that takes the tenant from the key rather than from the URI.
      *
@@ -60,4 +61,34 @@ public interface RoutingContext {
      * not name.
      */
     boolean writable(String repository);
+
+    /** The document of {@code tenant}'s {@code repository}, read through the node's cache over {@link #root()}. */
+    default Optional<RepositoryDocument> document(String tenant, String repository) throws IOException {
+        return RepositoryDocument.cached(root(), tenant, repository);
+    }
+
+    /**
+     * The route for a tenant a routing has resolved and the {@link RepositoryRouting.Target target} its URL names -
+     * the one resolution every routing shares, so they differ only in where the tenant comes from. Both names are
+     * checked as scope names before they scope the store, so a traversal is a {@code 400} and never an escape; an
+     * empty repository (the OCI registry's version probe) routes to the tenant's own scope.
+     */
+    default RepositoryRouting.Route route(String tenant, RepositoryRouting.Target target) {
+        if (!Scopes.valid(tenant)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a routable tenant name");
+        }
+        String repository = target.repository();
+        if (repository.isEmpty()) {
+            return new RepositoryRouting.Route(tenant, "", root().scope(tenant), target.path());
+        }
+        if (!Scopes.valid(repository)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a routable repository name");
+        }
+        try {
+            return new RepositoryRouting.Route(tenant, repository, store(tenant, repository), target.path(),
+                    writable(repository));
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
 }

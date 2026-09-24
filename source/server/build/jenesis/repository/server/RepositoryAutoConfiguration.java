@@ -45,8 +45,8 @@ import io.micrometer.observation.ObservationRegistry;
  * jenreg.auth=false}), the {@link RepositoryFormat} plugins discovered with {@link ServiceLoader}, the pull-through
  * {@code upstreams} (format name to upstream URI, from {@code jenreg.proxy.*}) and upstream
  * {@link ProxyFormat.Fetcher}, the framework-neutral {@link FormatDispatcher}, the {@link RepositoryRouting} (the
- * {@link FixedTenantRouting} default, resolving every request to the configured
- * {@code jenreg.default-tenant}/{@code jenreg.default-repository} artifact space), the {@link Tenants}
+ * {@link FixedTenantRouting} default, resolving every request to a repository of the configured
+ * {@code jenreg.default-tenant}), the {@link Tenants}
  * directory (resolved through {@code TenantsProvider}; the fixed single tenant unless a tenants module is
  * discovered), and the {@link RepositoryController} itself. Because an auto-configuration is applied after
  * user configuration, a bean an embedder contributes - an audited or replicating {@link ArtifactStore} decorator, a
@@ -375,11 +375,6 @@ public class RepositoryAutoConfiguration {
                     }
 
                     @Override
-                    public String defaultRepository() {
-                        return properties.getDefaultRepository();
-                    }
-
-                    @Override
                     public String tenantOf(String key) {
                         return properties.getDefaultTenant();   // one tenant here; a key names no other
                     }
@@ -427,12 +422,10 @@ public class RepositoryAutoConfiguration {
                                    ProxyFormat.Fetcher fetcher,
                                    ArtifactStore store,
                                    RepositoryProperties properties) {
-        // Demo mode seeds a fresh, empty repository with real artifacts through the formats' own pull-through paths -
-        // a background walk after boot, never blocking it, and only against a completely empty artifact space; off by
-        // default. It targets the configured fixed-tenant space (root.scope(tenant).scope(repository)), the same
-        // space FixedTenantRouting resolves reads to.
-        ArtifactStore scoped = store.scope(properties.getDefaultTenant())
-                .scope(properties.getDefaultRepository());
+        // Demo mode seeds empty repositories with real artifacts through the formats' own pull-through paths - a
+        // background walk after boot, never blocking it, one repository per format in the default tenant; off by
+        // default.
+        ArtifactStore scoped = store.scope(properties.getDefaultTenant());
         // A read-only deployment runs no background job that mutates the store - the seed writes, so it is disabled
         // here rather than left to fail against the read-only store choke point on its worker thread.
         return new DemoSeeding(properties.isDemo() && !properties.isReadOnly(),
@@ -511,19 +504,6 @@ public class RepositoryAutoConfiguration {
         return new StoredCounter.Settling();
     }
 
-    /** This composition's scheduled driver of the shared rebuild pass (see {@link RebuildScheduler}): a daemon cadence
-     *  over the deployment's one repository feeding every discovered walk consumer, inert when there is no walk or no
-     *  consumer, {@code jenreg.rebuild.interval=off} to switch it off. A distribution with its own maintenance
-     *  scheduler declares a bean of this type to take its place. */
-    @Bean(initMethod = "start", destroyMethod = "close")
-    @ConditionalOnMissingBean
-    public RebuildScheduler rebuildScheduler(ArtifactStore store, RepositoryProperties properties,
-                                             Environment environment) {
-        return new RebuildScheduler(store,
-                store.scope(properties.getDefaultTenant()).scope(properties.getDefaultRepository()),
-                environment::getProperty);
-    }
-
     /** The multi-node consistency read - {@code GET /api/consistency}, the per-node fingerprints and any
      *  divergence between them, read-authorised like the rest of the wire; the downstream edition mirrors it as an
      *  operator-gated {@code /api/admin/consistency}. */
@@ -553,7 +533,6 @@ public class RepositoryAutoConfiguration {
                                                      BatchIngestion batch,
                                                      ArtifactStore store,
                                                      RoutedServing routed,
-                                                     RepositoryPresence presence,
                                                      Environment environment) {
         // A format reads a runtime toggle off the exchange (the Maven metadata computation opt-in); resolve the bare
         // setting key against the environment under the shared jenreg.* prefix, into which a stored
@@ -561,18 +540,7 @@ public class RepositoryAutoConfiguration {
         // the /api/assets enumeration can scope to an explicitly named repo within the request's tenant. The routed
         // serving seam (NONE here, a router in a multi-repository distribution) drives a read of a proxy/group repo.
         return new RepositoryController(routing, dispatcher, importSources, fetcher, batch,
-                key -> environment.getProperty(Features.key(key)), store, routed, EdgeHooks.NONE, presence);
-    }
-
-    /**
-     * Whether a request may reach the repository it names, read from the environment as it stood at boot and knowing
-     * no definitions - the shape of a composition without the live configuration. A composition that has it replaces
-     * this with one that reads the stored setting and the definitions live.
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    public RepositoryPresence repositoryPresence(ArtifactStore store, Environment environment) {
-        return new RepositoryPresence(store, key -> environment.getProperty(Features.key(key)), _ -> false);
+                key -> environment.getProperty(Features.key(key)), store, routed, EdgeHooks.NONE);
     }
 
     /**

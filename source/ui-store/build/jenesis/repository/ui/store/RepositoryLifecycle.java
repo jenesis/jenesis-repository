@@ -18,7 +18,8 @@ import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.staging.Staging;
 import build.jenesis.repository.staging.StagingProvider;
-import build.jenesis.repository.scope.Scopes;
+import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.ArtifactStore;
 import io.micrometer.observation.ObservationRegistry;
 
@@ -37,20 +38,21 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     /**
-     * Create a repository in the signed-in tenant before anything is published into it: its scope gets the
-     * {@link Scopes#CREATED} marker, which lists it and lets it answer where a publish may not create the repository
-     * it names. The marker holds the instant it was written.
+     * Create a repository in the signed-in tenant to hold {@code format}, through the one creation every surface
+     * makes ({@link RepositoryDocument#create}): the repository answers from then on, for that format alone. A
+     * repository that holds content but no format is given this one.
      *
-     * @return {@code false} when the repository already exists, which is left as it is.
+     * @return {@code false} when the repository already holds a format, which is left as it is.
+     * @throws IllegalArgumentException when the name is not a repository name or no installed format of that name
+     *                                  can be held by a repository.
      */
-    public boolean create(String repository) throws IOException {
-        ArtifactStore scope = scope(repository);
-        boolean[] exists = {false};
-        scope.page("", "", 1, _ -> exists[0] = true);
-        if (exists[0]) {
+    public boolean create(String repository, String format) throws IOException {
+        if (RepositoryFormat.offerable().stream().noneMatch(offered -> offered.name().equals(format))) {
+            throw new IllegalArgumentException("'" + format + "' is not a format this deployment serves.");
+        }
+        if (!new RepositoryDocument(format, Instant.now()).create(scope(repository))) {
             return false;
         }
-        scope.write(Scopes.CREATED, new ByteArrayInputStream(Instant.now().toString().getBytes(StandardCharsets.UTF_8)));
         audit(AuditActions.REPOSITORY_CREATE, repository);
         return true;
     }

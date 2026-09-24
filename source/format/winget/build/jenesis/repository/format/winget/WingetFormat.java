@@ -730,11 +730,7 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
 
     /** The external base URL of this registry, generated from the serving request so a download routes back to it. */
     private static String repoBase(String repo, FormatExchange exchange) {
-        String uri = exchange.requestUri();
-        String path = exchange.path();
-        String external = uri.length() >= path.length() && uri.endsWith(path)
-                ? uri.substring(0, uri.length() - path.length()) : "";
-        return RequestBase.of(exchange) + external + PREFIX.substring(0, PREFIX.length() - 1) + "/" + repo;
+        return RequestBase.of(exchange) + exchange.external(PREFIX + repo);
     }
 
     /** A winget version is a dotted numeric string; a pre-release carries a hyphenated tail, as semver does. */

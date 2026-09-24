@@ -1,6 +1,5 @@
 package build.jenesis.repository.application;
 
-import build.jenesis.repository.server.RepositoryPresence;
 import module java.base;
 import module org.slf4j;
 
@@ -243,7 +242,7 @@ public class ServingConfig {
                                                RepositoryProperties properties, Environment environment) {
         return RepositoryRoutingProvider.resolve(properties.getTenancy(),
                 new RepositoriesRoutingContext(store, repositories, properties.getDefaultTenant(),
-                        properties.getDefaultRepository(), Features.namespaced(environment::getProperty)));
+                        Features.namespaced(environment::getProperty)));
     }
 
     /** Every discovered format that the {@link Features} convention leaves enabled - one image carries every
@@ -293,7 +292,6 @@ public class ServingConfig {
                                                                                   BatchIngestion batchIngestion,
                                                                                   RoutedServing routedServing,
                                                                                   DeployEdgeHooks deployEdgeHooks,
-                                                                                  RepositoryPresence presence,
                                                                                   Environment environment) {
         // The controller is the one serving AND writing surface now: reads and writes both dispatch
         // through the routing seam and the free ScreenedDispatch edge. Registered under the bean name
@@ -315,7 +313,7 @@ public class ServingConfig {
         // handler, and the format-claim/verdict/batch loop ScreenedDispatch + BatchIngestion - so no fork remains.
         return new build.jenesis.repository.server.RepositoryController(routing, dispatcher, importSources,
                 upstreamFetcher, batchIngestion, Features.namespaced(environment::getProperty), null,
-                routedServing, deployEdgeHooks, presence);
+                routedServing, deployEdgeHooks);
     }
 
     @Bean

@@ -89,8 +89,8 @@ public class DeployController {
         return switch (status) {
             case 202 -> "Held for review: " + path + " was stored and screened into quarantine rather than "
                     + "published. It appears on the quarantine screen for a reviewer to release or refuse.";
-            case 404 -> "Nothing published: no repository '" + target + "' this tenant can write to, or no "
-                    + "installed format claims the path " + path + ".";
+            case 404 -> "Nothing published: no repository '" + target + "' holding a format this tenant can write "
+                    + "to, or its format does not claim the path " + path + ".";
             case 405 -> "Nothing published: '" + target + "' does not accept direct writes. A proxy or a group "
                     + "view is served from its backings, so an artifact is published into a hosted repository.";
             case 409 -> "Nothing published: " + path + " already holds different bytes and this repository does "

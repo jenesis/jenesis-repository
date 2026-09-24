@@ -237,13 +237,8 @@ public class SettingsController {
     public String setRepository(@RequestParam("name") String name,
                                 @RequestParam("definition") String definition,
                                 RedirectAttributes redirect) throws IOException {
-        // The save answers what "saved" does not say - whether any URL on this deployment's routing reaches the
-        // name - and it rides the same banner rather than a channel of its own, because it is information about
-        // the save an operator has just made rather than a condition of the screen.
-        String reach = settings.setRepository(name, definition);
-        redirect.addFlashAttribute("message", reach == null
-                ? "Saved repository '" + name + "'."
-                : "Saved repository '" + name + "'. " + reach);
+        settings.setRepository(name, definition);
+        redirect.addFlashAttribute("message", "Saved repository '" + name + "'.");
         return "redirect:/settings";
     }
 

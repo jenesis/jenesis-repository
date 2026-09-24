@@ -85,8 +85,7 @@ open module build.jenesis.repository.server {
             with build.jenesis.repository.server.NodeDivergenceAdvisor;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.server.ConsistencySettingsContributor,
-                 build.jenesis.repository.server.LogsSettingsContributor,
-                 build.jenesis.repository.server.RepositoryPresenceSettingsContributor;
+                 build.jenesis.repository.server.LogsSettingsContributor;
     provides build.jenesis.repository.observation.ObservabilitySource
             with build.jenesis.repository.server.NodeConsistencyObservability,
                  build.jenesis.repository.server.RebuildScheduler.Observability;

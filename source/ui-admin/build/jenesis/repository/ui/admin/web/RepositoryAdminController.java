@@ -5,6 +5,7 @@ import build.jenesis.repository.cleanup.RetentionPolicy;
 import build.jenesis.repository.inventory.DownloadTracker;
 import org.springframework.beans.factory.ObjectProvider;
 import build.jenesis.repository.format.FormatMarks;
+import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.icon.Mark;
 import build.jenesis.repository.icon.Marks;
 import build.jenesis.repository.ui.store.RepositoryAdmin;
@@ -78,12 +79,16 @@ public class RepositoryAdminController {
             // warnings (mixed strength, unscreened, plaintext) feed the non-blocking console banner (item 4).
             String definition = definitions.get(name);
             SettingsAdmin.RepositoryShape shape = settings.shape(name, definition);
-            rows.add(new RepositoryRow(name, repositoryMarks(name), SettingsAdmin.hardenedDefinition(definition), shape));
+            String format = repositories.format(name).orElse(null);
+            List<Mark> held = format == null ? repositoryMarks(name)
+                    : marks.forFormat(format).map(List::of).orElse(List.of());
+            rows.add(new RepositoryRow(name, format, held, SettingsAdmin.hardenedDefinition(definition), shape));
             for (String warning : shape.warnings()) {
                 warnings.add(new RepositoryWarning(name, warning));
             }
         }
         model.addAttribute("repositories", rows);
+        model.addAttribute("formats", offered());
         // The one document that stands for nobody, rendered for a row whose namespaces no format marks at all (see
         // repositoryMarks) - held once for the page rather than copied into every row, because it attributes nothing
         // and so carries no per-row identity.
@@ -137,19 +142,30 @@ public class RepositoryAdminController {
         return marks.forEcosystem(ecosystem).orElseGet(() -> Marks.orphaned(ecosystem));
     }
 
-    /** Create a repository before anything is published into it - the way a repository comes into being wherever a
-     *  publish may not create the one it names, and open to an editor whatever that setting says. */
+    /** Create a repository to hold one format - the only way a repository comes into being - or give one that holds
+     *  content but no format the format it holds. */
     @PostMapping("/repositories/create")
-    public String create(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
+    public String create(@RequestParam("name") String name, @RequestParam("format") String format,
+                         RedirectAttributes redirect) throws IOException {
         String repository = name.trim();
-        if (!lifecycle.create(repository)) {
-            redirect.addFlashAttribute("message", "Repository '" + repository + "' already exists.");
+        boolean created;
+        try {
+            created = lifecycle.create(repository, format);
+        } catch (IllegalArgumentException refused) {
+            redirect.addFlashAttribute("error", refused.getMessage());
             return "redirect:/repositories";
         }
-        String warning = settings.unaddressable(repository);
-        redirect.addFlashAttribute("message", "Created repository '" + repository + "'."
-                + (warning == null ? "" : " " + warning));
+        if (!created) {
+            redirect.addFlashAttribute("message", "Repository '" + repository + "' already holds a format.");
+            return "redirect:/repositories";
+        }
+        redirect.addFlashAttribute("message", "Created " + format + " repository '" + repository + "'.");
         return "redirect:/repositories/" + repository;
+    }
+
+    /** The names of the formats a repository can be created to hold. */
+    private static List<String> offered() {
+        return RepositoryFormat.offerable().stream().map(RepositoryFormat::name).toList();
     }
 
     @PostMapping("/repositories/quota")
@@ -567,11 +583,13 @@ public class RepositoryAdminController {
 
 
 
-    /** A repository as the list renders it: its name, the marks of the formats it holds - one per format namespace,
-     *  empty when it holds none the console can mark (the view then draws the neutral mark) - and whether it is a
+    /** A repository as the list renders it: its name, the format it holds ({@code null} for one created before
+     *  repositories held a format, which answers nothing until it is given one), the marks of what it holds - the
+     *  format's own, else one per format namespace, empty when the console can mark none (the view then draws the
+     *  neutral mark) - and whether it is a
      *  hardened proxy (EPIC 23), which the list badges so an operator sees at a glance which repositories enforce
      *  full-body upstream screening. */
-    public record RepositoryRow(String name, List<Mark> marks, boolean hardened,
+    public record RepositoryRow(String name, String format, List<Mark> marks, boolean hardened,
                                 SettingsAdmin.RepositoryShape shape) {
     }
 

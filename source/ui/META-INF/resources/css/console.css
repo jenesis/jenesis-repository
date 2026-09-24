@@ -835,6 +835,12 @@ button.app-danger:hover,
     align-items: center;
     gap: var(--app-space-4);
 }
+/* A form laid out as one row of controls, inside a table cell say: the controls keep their own width. */
+form.app-actions > select,
+form.app-actions > button {
+    width: auto;
+    margin-bottom: 0;
+}
 .app-actions__danger {
     margin-left: auto;
     padding-left: var(--app-space-4);

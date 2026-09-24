@@ -19,20 +19,20 @@
              settings-bundle import carries its token the same way and for the same reason. */-->
         <form method="post" th:action="@{/deploy(_csrf=${_csrf.token})}" enctype="multipart/form-data">
             <label>Repository
-                <input type="text" name="repository" required placeholder="releases"
+                <input type="text" name="repository" required placeholder="maven"
                        th:attr="aria-describedby='deploy-repository-help'">
             </label>
             <small id="deploy-repository-help">A hosted repository in
-                <strong th:text="${tenant}">tenant</strong>. A proxy or a group view is served from its backings and
-                takes no direct write.</small>
+                <strong th:text="${tenant}">tenant</strong>; its format lays the artifact out. A proxy or a group view
+                is served from its backings and takes no direct write.</small>
 
             <label>Path
-                <input type="text" name="path" required placeholder="/maven/com/example/demo/1.0/demo-1.0.jar"
+                <input type="text" name="path" required placeholder="/com/example/demo/1.0/demo-1.0.jar"
                        th:attr="aria-describedby='deploy-path-help'">
             </label>
-            <small id="deploy-path-help">Where the artifact lands, as its format lays it out - the same path a
-                client would publish to, without the repository prefix. The format that claims the path is the one
-                that stores it; a path no installed format claims publishes nothing.</small>
+            <small id="deploy-path-help">Where the artifact lands within the repository - the same path a client
+                would publish to after <code>/repository/&lt;name&gt;</code>. A path the repository's format does not
+                claim publishes nothing.</small>
 
             <label>File
                 <input type="file" name="artifact" required>

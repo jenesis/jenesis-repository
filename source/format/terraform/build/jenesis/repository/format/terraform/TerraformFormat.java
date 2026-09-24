@@ -425,11 +425,7 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
 
     /** This registry's external base for the URLs the protocol documents carry. */
     private static String base(FormatExchange exchange, String repo) {
-        String uri = exchange.requestUri();
-        String path = exchange.path();
-        String external = uri.length() >= path.length() && uri.endsWith(path)
-                ? uri.substring(0, uri.length() - path.length()) : "";
-        return RequestBase.of(exchange) + external + PREFIX + repo;
+        return RequestBase.of(exchange) + exchange.external(PREFIX + repo);
     }
 
     // ---- layout ----

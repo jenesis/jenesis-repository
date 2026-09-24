@@ -8,7 +8,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * The post-boot trigger for {@link DemoSeeder}: a shell wires one of these and calls {@link #start()} once the beans
  * are assembled. When demo mode is off it is inert; when on it runs the seeder on a background virtual thread and
  * returns at once, so seeding - a best-effort walk over the public registries - never blocks boot (the
- * {@code ImportJobs.submit} pattern). The seed only proceeds against a completely empty artifact space; a
+ * {@code ImportJobs.submit} pattern). The seed only proceeds into an empty repository; a
  * {@code beforeSeed} hook (a deployment's demo gate config, say) runs first but only when a seed is actually about to
  * happen, so turning the flag on in a used deployment stays a harmless no-op that touches nothing.
  */
@@ -22,7 +22,7 @@ public final class DemoSeeding {
     private final Runnable beforeSeed;
 
     /** @param enabled whether the {@code demo} flag is on, {@code seeder} the collector/pull-through, {@code store}
-     *  the already tenant-and-repository-scoped target space, and {@code beforeSeed} a hook run once, only when the
+     *  the tenant's store, whose repositories are seeded one per format, and {@code beforeSeed} a hook run once, only when the
      *  space is empty and a seed is about to run (an edition layers its demo gate config here); pass a no-op when
      *  there is nothing to do first. */
     public DemoSeeding(boolean enabled, DemoSeeder seeder, ArtifactStore store, Runnable beforeSeed) {
@@ -44,8 +44,8 @@ public final class DemoSeeding {
 
     private void run() {
         try {
-            if (!DemoSeeder.empty(store)) {
-                LOGGER.info("Demo mode is on but the artifact space is not empty; nothing is seeded");
+            if (!seeder.pending(store)) {
+                LOGGER.info("Demo mode is on but every repository it would seed is in use; nothing is seeded");
                 return;
             }
             beforeSeed.run();

@@ -971,17 +971,26 @@ public final class RepositoryClient {
     }
 
     /**
-     * Store a repository definition, and answer what the server said beyond {@code 200} - today, that no URL on
-     * its routing reaches this name - or {@code null} when it said nothing. A fixed-tenancy deployment addresses
-     * one repository, and a definition under any other name serves only when another names it as a member or a
-     * fallback; printing that is the difference between the CLI telling an operator what happened and telling
-     * them it saved something.
+     * Create a repository to hold one format; {@code true} when it was created, {@code false} when it already held
+     * that format. A refusal - a format no repository can hold, or a repository holding another - carries the
+     * server's own sentence.
      */
-    public String setRepository(String name, String specification) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("PUT", "/api/repositories/" + name,
-                body(Map.of("value", specification)), "application/json");
-        require(response, 200, "set repository " + name);
-        return response.headers().firstValue("Jenesis-Repository-Warning").orElse(null);
+    public boolean createRepository(String name, String format) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("PUT", "/repository/" + name, body(Map.of("value", format)),
+                "application/json");
+        if (response.statusCode() == 201 || response.statusCode() == 200) {
+            return response.statusCode() == 201;
+        }
+        if (response.statusCode() == 400 || response.statusCode() == 409) {
+            throw new IOException(response.body());
+        }
+        require(response, 201, "create repository " + name);
+        return false;
+    }
+
+    public void setRepository(String name, String specification) throws IOException, InterruptedException {
+        require(send("PUT", "/api/repositories/" + name, body(Map.of("value", specification)), "application/json"),
+                200, "set repository " + name);
     }
 
     public void removeRepository(String name) throws IOException, InterruptedException {

@@ -16,6 +16,6 @@ public final class FixedTenantRoutingProvider implements RepositoryRoutingProvid
 
     @Override
     public RepositoryRouting create(RoutingContext context) {
-        return new FixedTenantRouting(context.root(), context.defaultTenant(), context.defaultRepository());
+        return new FixedTenantRouting(context, context.defaultTenant());
     }
 }

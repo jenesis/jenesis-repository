@@ -89,9 +89,6 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "or plaintext mirror - the one dial, covering both, so neither can be opted out of "
                                 + "alone.",
                         Setting.Kind.BOOLEAN, "true", false),
-                new Setting("default-repository", "Defaults", "Default repository",
-                        "Repository the console browses by default.",
-                        Setting.Kind.STRING, "releases", false),
                 new Setting("trusted-proxies", "Defaults", "Trusted proxies",
                         "Comma-separated CIDRs of reverse proxies whose X-Forwarded-For, X-Forwarded-Proto and "
                                 + "X-Forwarded-Host are believed.",

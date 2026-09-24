@@ -14,8 +14,8 @@ import org.springframework.web.util.UriUtils;
 /**
  * Authorizes a request against the {@link Authorization} credential model. An anonymous deployment (the
  * {@code jenreg.auth=false} opt-out) allows everything; an enforcing one reads the presented key
- * ({@link PresentedKey}) and the optional {@code Jenesis-Repository-Name} header and requires
- * {@code repository:read} for a GET/HEAD and {@code repository:write} for any other method, on the router-resolved
+ * ({@link PresentedKey}) and requires {@code repository:read} for a GET/HEAD and
+ * {@code repository:write} for any other method on the repository the URL names, on the router-resolved
  * in-repository path so a path-scoped grant ({@code <repo>:<prefix>}) authorizes exactly its subtree. The computed
  * {@link Authorization.Decision} is recorded on the request so {@link RepositoryAuthorizationEntryPoint} can answer
  * {@code 401} for an unauthorized request (no key, a malformed or expired key) and {@code 403} for a forbidden one
@@ -70,6 +70,17 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
             return new AuthorizationDecision(false);
         }
         String scope = request.getHeader("Jenesis-Repository-Name");
+        // An artifact request names its repository in the URL, and that is the repository its right is checked
+        // against - never a header the caller chose, which would let a key scoped to one repository write another
+        // by naming its own. The path is the router's own resolution, so a path-scoped grant (<repo>:<prefix>)
+        // authorizes exactly the subtree it grants. A request that names no repository is the OCI registry's
+        // version probe, which asks only whether the credential is accepted.
+        RepositoryRouting.Route route = routing.route(request);
+        boolean artifact = uri.startsWith("/repository/") || uri.equals("/v2") || uri.startsWith("/v2/");
+        boolean probe = artifact && route.repository().isEmpty();
+        if (artifact) {
+            scope = route.repository();
+        }
         // The asset enumeration scopes the store it reads by the ?repo= parameter, not the routed name, so authorize
         // the repository that is actually enumerated - otherwise a key scoped to repository A could satisfy the header
         // check for A and then read repository B by passing repo=B. Read the parameter only for that GET route (never
@@ -120,12 +131,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         }
         String key = PresentedKey.from(request);
         boolean keyless = key == null || key.isBlank();
-        // Reuse the router's own resolution of the in-repository path (the request URI with the /repository prefix
-        // stripped, exactly as the format dispatcher matches on) rather than re-deriving it here, so a path-scoped
-        // grant (<repo>:<prefix>) authorizes exactly the subtree it grants. A repository-wide grant carries no prefix
-        // and covers every path, so threading the path changes nothing for it - it only makes a prefix grant, which
-        // is otherwise dead against the pathless 3-arg check, actually evaluated.
-        String path = routing.route(request).path();
+        String path = route.path();
         Authorization.Decision decision;
         try {
             // A key may carry a source-IP allowlist (set-allowed-addresses): a request from an address outside it is
@@ -137,7 +143,9 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
             if (!authorization.addressAllowed(key, clientAddress(request))) {
                 decision = Authorization.Decision.FORBIDDEN;
             } else {
-                decision = authorization.authorize(key, scope, path, required);
+                decision = probe
+                        ? authorization.authenticated(key)
+                        : authorization.authorize(key, scope, path, required);
             }
         } catch (IOException e) {
             decision = Authorization.Decision.FORBIDDEN;

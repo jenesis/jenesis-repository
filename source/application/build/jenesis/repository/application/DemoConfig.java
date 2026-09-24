@@ -46,12 +46,12 @@ public class DemoConfig {
                                    List<PublishPathWiring> publishPathWiring, Environment environment) {
         // Demo mode seeds a fresh, empty repository with real artifacts through the formats' own pull-through paths,
         // on a background thread after boot (never blocking it) and only against a completely empty artifact space;
-        // off by default. It targets the deployment's default tenant/repository, and - only when it is about to seed
+        // off by default. It seeds the default tenant's repositories, one per format, and - only when it is about to seed
         // - applies a small demo gate config (a version floor that quarantines the old log4j-core, a deny-list that
         // rejects commons-collections) so the QUARANTINE/REJECT surfaces carry examples. Depending on the compliance
         // publish-path wiring keeps whatever screens a publish armed before the seed publishes through it. The list
         // is never read - asking for it is the whole point, because the container builds it first.
-        ArtifactStore store = repositories.store(properties.getDefaultTenant(), properties.getDefaultRepository());
+        ArtifactStore store = repositories.tenantScope(properties.getDefaultTenant());
         // #79: the demo proxy leg is dispatcher-direct - it does NOT pass through the routed gateway's own
         // screening() decoration - so since EPIC 26 demoted the embedded per-format publish screen it pulled through
         // unscreened. Hand the free DemoSeeder a PullThroughHooks whose screenFetch is the SAME DEFAULT-strength

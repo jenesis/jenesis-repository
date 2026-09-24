@@ -9,9 +9,6 @@ import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.format.FormatMarks;
-import build.jenesis.repository.server.RepositoryProperties;
-import build.jenesis.repository.scope.Scopes;
-import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.ui.store.CacheService;
@@ -30,7 +27,6 @@ import build.jenesis.repository.ui.store.TenantService;
 import build.jenesis.repository.ui.store.VolumeReclaim;
 import org.slf4j.LoggerFactory;
 import io.micrometer.observation.ObservationRegistry;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -114,14 +110,11 @@ public class DomainConfig {
      * console therefore listed none, and an operator signing in for the first time was sent to the instances screen
      * to create the one tenant the deployment already serves, before any other screen would open. Creating it here
      * makes a fresh deployment's console usable on first sign-in. A deployment of several tenants names its own,
-     * and a read-only one writes nothing, so both are left alone.
-     *
-     * <p>The one repository it serves is created beside it, for the same reason: it exists whether or not anything
-     * was published into it, and writing its creation marker is what lists it on the Repositories screen from the
-     * first sign-in rather than from the first publish.
+     * and a read-only one writes nothing, so both are left alone. Its repositories are created by an operator, each
+     * with the format it holds.
      */
     @Bean
-    public FixedTenant fixedTenant(TenantService tenants, Tenancy tenancy, ArtifactStore repositoryStore,
+    public FixedTenant fixedTenant(TenantService tenants, Tenancy tenancy,
                                    ConfigurableEnvironment environment) {
         if (!tenancy.fixed() || environment.getProperty("jenreg.read-only", Boolean.class, false)) {
             return new FixedTenant(null);
@@ -131,20 +124,11 @@ public class DomainConfig {
             if (!tenants.exists(tenant)) {
                 tenants.create(tenant);
             }
-            String repository = environment.getProperty("jenreg.default-repository",
-                    new RepositoryProperties().getDefaultRepository());
-            ArtifactStore served = repositoryStore.scope(tenant).scope(repository);
-            boolean[] held = {false};
-            served.page("", "", 1, _ -> held[0] = true);
-            if (!held[0]) {
-                served.write(Scopes.CREATED, new ByteArrayInputStream(
-                        Instant.now().toString().getBytes(StandardCharsets.UTF_8)));
-            }
         } catch (IllegalArgumentException raced) {
             // Another node created it between the check and the write - which is the outcome wanted.
         } catch (IOException | RuntimeException e) {
-            LoggerFactory.getLogger(DomainConfig.class).warn("The deployment's tenant '{}' or its repository could "
-                    + "not be created; the console lists them once anything is written under them", tenant, e);
+            LoggerFactory.getLogger(DomainConfig.class).warn("The deployment's tenant '{}' could not be created; the "
+                    + "console lists it once anything is written under it", tenant, e);
         }
         return new FixedTenant(tenant);
     }
@@ -181,7 +165,7 @@ public class DomainConfig {
     @Bean
     public SettingsAdmin settingsAdmin(ArtifactStore repositoryStore, ConfigurableEnvironment environment,
                                        TenantService tenantService, AuditTrail audit, CurrentTenant currentTenant,
-                                       ConsoleActor actor, ObjectProvider<RepositoryRouting> routing) {
+                                       ConsoleActor actor) {
         // The console shares the store with the repository and reads the settings directly. The pin state, however,
         // comes from the operator's launch configuration (env vars, -D, the command line, external config files),
         // which the console's own environment carries too (identically in the recommended combined deployment). The
@@ -193,16 +177,8 @@ public class DomainConfig {
         // (JENREG_SECRETS_KEY), the master key that envelope-encrypts a stored credential at rest - from the
         // console's own environment, exactly as the /api ConfigController path does, so a credential set through the
         // console is encrypted under the same key (and refused the same way when none is configured, §9).
-        // Whether any URL reaches a repository name is the routing's own property, so the console asks the routing
-        // rather than reading jenreg.tenancy itself - and asks it through an ObjectProvider because the console also
-        // runs as its own development entry point, over a graph that installs no routing at all. Absent, it says
-        // nothing: a console that cannot see the routing must not warn on a guess.
-        RepositoryRouting installed = routing.getIfAvailable();
         return new SettingsAdmin(repositoryStore, pins::pinned, tenantService::all, audit, currentTenant, actor,
-                Features.namespaced(environment::getProperty),
-                name -> installed == null || installed.addresses(name)
-                        ? null
-                        : RepositoryRouting.unaddressableWarning(name));
+                Features.namespaced(environment::getProperty));
     }
 
     @Bean

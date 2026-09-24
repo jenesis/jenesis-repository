@@ -25,6 +25,7 @@ public final class FormatDispatcher {
     private final ProxyFormat.Fetcher fetcher;
     private final ObservationRegistry observations;
     private final PullThroughHooks hooks;
+    private final Map<String, FormatDispatcher> restricted = new ConcurrentHashMap<>();
 
     public FormatDispatcher(List<RepositoryFormat> formats, Map<String, URI> upstreams, ProxyFormat.Fetcher fetcher) {
         this(formats, upstreams, fetcher, ObservationRegistry.NOOP);
@@ -69,6 +70,29 @@ public final class FormatDispatcher {
             }
         }
         return false;
+    }
+
+    /** The installed format of this name, or empty when this deployment carries none - what a repository's document
+     *  names is looked up here before anything is offered to it. */
+    /** The formats this dispatcher offers a request to. */
+    public List<RepositoryFormat> formats() {
+        return formats;
+    }
+
+    public Optional<RepositoryFormat> format(String name) {
+        for (RepositoryFormat format : formats) {
+            if (format.name().equals(name)) {
+                return Optional.of(format);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** A dispatcher that offers a request to {@code format} alone: a repository holds one format, and a path another
+     *  format would claim is not that repository's to serve. Built once per format and held. */
+    public FormatDispatcher only(RepositoryFormat format) {
+        return restricted.computeIfAbsent(format.name(),
+                _ -> new FormatDispatcher(List.of(format), upstreams, fetcher, observations, hooks));
     }
 
     /**

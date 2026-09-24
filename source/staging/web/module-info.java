@@ -17,6 +17,8 @@ open module build.jenesis.repository.staging.web {
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.staging;
+    requires build.jenesis.repository.format;
+    requires build.jenesis.repository.store;
     requires jakarta.servlet;
     requires spring.beans;
     requires spring.context;

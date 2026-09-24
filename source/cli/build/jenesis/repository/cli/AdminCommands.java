@@ -478,15 +478,20 @@ final class AdminCommands {
             return 0;
         }
         switch (args[1]) {
+            case "create" -> {
+                if (args.length < 4) {
+                    throw new IllegalArgumentException("Usage: repos create <name> <format>");
+                }
+                System.out.println(client.createRepository(args[2], args[3])
+                        ? "Created " + args[3] + " repository " + args[2] + "."
+                        : "Repository " + args[2] + " already holds " + args[3] + ".");
+            }
             case "set" -> {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: repos set <name> <definition>");
                 }
-                String reach = client.setRepository(args[2], args[3]);
+                client.setRepository(args[2], args[3]);
                 System.out.println("Saved repository " + args[2] + ".");
-                if (reach != null) {
-                    System.out.println(reach);
-                }
             }
             case "remove" -> {
                 if (args.length < 3) {

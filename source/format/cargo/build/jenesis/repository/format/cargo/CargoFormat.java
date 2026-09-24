@@ -742,11 +742,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
 
     /** The external base URL of this registry ({@code <scheme>://<host><prefix>/cargo/<repo>}), for the config URLs. */
     private static String repoBase(String repo, FormatExchange exchange) {
-        String uri = exchange.requestUri();
-        String path = exchange.path();
-        String external = uri.length() >= path.length() && uri.endsWith(path)
-                ? uri.substring(0, uri.length() - path.length()) : "";
-        return RequestBase.of(exchange) + external + PREFIX + repo;
+        return RequestBase.of(exchange) + exchange.external(PREFIX + repo);
     }
 
     /** Read Cargo's little-endian {@code u32} length prefix as an unsigned value. */

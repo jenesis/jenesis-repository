@@ -690,6 +690,34 @@ public final class Authorization {
         return Decision.FORBIDDEN;
     }
 
+    /**
+     * Whether {@code key} is a credential this deployment accepts, whatever it grants - the question a request that
+     * names no repository asks, which is the OCI registry's version probe ({@code GET /v2/}). A client asks it to learn
+     * whether its credential is accepted before it names any image, so answering it by a repository's grants would
+     * refuse every credential scoped to a repository. A keyless request is {@code ALLOWED} when the deployment grants
+     * anonymous access to anything; an expired or malformed key is {@code UNAUTHORIZED}, an unprovisioned one
+     * {@code FORBIDDEN}, exactly as {@link #authorize(String, String, String, String)} answers them.
+     */
+    public Decision authenticated(String key) throws IOException {
+        if (store == null) {
+            return Decision.ALLOWED;
+        }
+        freshen();
+        if (key == null || key.isBlank()) {
+            return anonymousGrants.isEmpty() ? Decision.UNAUTHORIZED : Decision.ALLOWED;
+        }
+        if (!wellFormed(key)) {
+            return Decision.UNAUTHORIZED;
+        }
+        String tenant = tenantOf(key);
+        String hash = hash(key);
+        Instant expires = instant(read(metadataPath(tenant, hash)), "expires");
+        if (expires != null && Instant.now().isAfter(expires)) {
+            return Decision.UNAUTHORIZED;
+        }
+        return read(grantsPath(tenant, hash)) == null ? Decision.FORBIDDEN : Decision.ALLOWED;
+    }
+
     /** The verdict for a keyless (no-credential) request under an enforcing deployment (WANON.1): {@code ALLOWED} iff
      *  the strictly-opt-in anonymous grant set covers the required {@code <surface>:<verb>} for {@code repository} on
      *  {@code path}, reusing the same {@link #covers}/{@link #grantedBy} logic a minted credential is matched by; else

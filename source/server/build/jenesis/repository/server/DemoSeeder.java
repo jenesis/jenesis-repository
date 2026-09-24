@@ -8,21 +8,25 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.RepositoryDocument;
 import io.micrometer.observation.ObservationRegistry;
 
 /**
  * Demo mode: flag-guarded seeding of a fresh, empty repository with real artifacts so an evaluator has data to look
  * at - browse rows, proxied artifacts, and (deliberately, for old benign-but-vulnerable coordinates) a lit-up
  * vulnerability and quarantine surface. It is framework-neutral - a shell wires the trigger and passes the
- * already-scoped store - and carries no fetch machinery of its own: it collects every installed
+ * tenant's store - and carries no fetch machinery of its own: it collects every installed
  * {@link RepositoryFormat#demoArtifacts() format's suggestions} and pulls each one through that format's own
  * pull-through path (the normal {@link FormatDispatcher} loop over the format's {@link ProxyFormat#defaultUpstream()
  * declared upstream}), so every artifact streams through the normal pipeline, the inspectors screen the proxy leg,
  * and the compliance gate populates itself. No blob is embedded here and no actual malicious bytes are ever fetched -
  * the suggestions are ordinary, harmless releases whose only sin is being old enough to have a known advisory.
  *
- * <p><strong>The hard guard: only a completely empty artifact space is seeded.</strong> {@link #seed} refuses a
- * non-empty store with a log line and fetches nothing, which makes re-seeding structurally impossible (a seeded
+ * <p>A repository holds one format, so each format's suggestions are seeded into a repository of its own, named
+ * after the format and created with it when the tenant does not hold one by that name yet.
+ *
+ * <p><strong>The hard guard: only a completely empty repository is seeded.</strong> {@link #seed} passes over a
+ * non-empty one with a log line and fetches nothing into it, which makes re-seeding structurally impossible (a seeded
  * repository is no longer empty) and turns the flag on in a used deployment into a harmless no-op. Seeding is
  * best-effort over the public registries: a per-artifact fetch or gate failure is logged and tolerated so one
  * unavailable suggestion never stops the rest. A shell runs this on a background thread after boot (never blocking
@@ -75,18 +79,23 @@ public final class DemoSeeder {
         return store.isEmpty("blobs") && store.isEmpty("publish");
     }
 
-    /**
-     * Seed the scoped store with every installed format's demo suggestions, each pulled through its format's own
-     * upstream so the normal gate/inspector pipeline runs on the proxy leg. Refuses (and fetches nothing) unless the
-     * artifact space is completely empty. Best-effort per artifact: a failure is logged and tolerated. Returns a
-     * small summary of what ran.
-     */
-    public Result seed(ArtifactStore store) throws IOException {
-        if (!empty(store)) {
-            LOGGER.info("Demo seeding refused: the artifact space is not empty "
-                    + "(a seeded or in-use repository is never re-seeded)");
-            return new Result(false, 0, 0);
+    /** Whether any format's repository in this tenant is still empty, so a seed would fetch anything at all. */
+    public boolean pending(ArtifactStore tenant) throws IOException {
+        for (RepositoryFormat format : formats) {
+            if (!format.demoArtifacts().isEmpty() && empty(tenant.scope(format.name()))) {
+                return true;
+            }
         }
+        return false;
+    }
+
+    /**
+     * Seed the tenant with every installed format's demo suggestions, each into the repository named after its
+     * format and pulled through that format's own upstream so the normal gate/inspector pipeline runs on the proxy
+     * leg. A repository that holds anything already, or that holds another format, is passed over and fetched
+     * nothing. Best-effort per artifact: a failure is logged and tolerated. Returns a small summary of what ran.
+     */
+    public Result seed(ArtifactStore tenant) throws IOException {
         // Pull each suggestion through the format's own declared upstream, so demo mode works even when the
         // deployment configured no proxy upstreams: defaultUpstream() where a format names one, nothing where it does
         // not (a hosted-only format simply seeds nothing).
@@ -98,32 +107,52 @@ public final class DemoSeeder {
         }
         FormatDispatcher dispatcher =
                 new FormatDispatcher(formats, upstreams, fetcher, ObservationRegistry.NOOP, hooks);
-        List<String> suggestions = suggestions();
+        boolean ran = false;
         int seeded = 0;
         int unavailable = 0;
-        for (String path : suggestions) {
-            try {
-                SeedExchange exchange = new SeedExchange(path);
-                boolean claimed = dispatcher.dispatch(exchange, store);
-                if (!claimed) {
+        int suggested = 0;
+        for (RepositoryFormat format : formats) {
+            List<String> suggestions = format.demoArtifacts();
+            if (suggestions.isEmpty()) {
+                continue;
+            }
+            ArtifactStore store = tenant.scope(format.name());
+            Optional<RepositoryDocument> document = RepositoryDocument.read(store);
+            if (!empty(store) || document.filter(held -> !held.format().equals(format.name())).isPresent()) {
+                LOGGER.info("Demo seeding passes over repository '{}': it is in use or holds another format",
+                        format.name());
+                continue;
+            }
+            if (document.isEmpty()) {
+                new RepositoryDocument(format.name(), Instant.now()).create(store);
+            }
+            ran = true;
+            suggested += suggestions.size();
+            FormatDispatcher only = dispatcher.only(format);
+            for (String path : suggestions) {
+                try {
+                    SeedExchange exchange = new SeedExchange(path);
+                    boolean claimed = only.dispatch(exchange, store);
+                    if (!claimed) {
+                        unavailable++;
+                        LOGGER.info("Demo suggestion claimed by no installed format: {}", path);
+                    } else if (served(exchange.status()) || quarantined(store, path)) {
+                        // Served (a 2xx pulled the artifact through) or gate-withheld (the gate quarantined it, so a
+                        // read is a 404 yet the quarantine surface is populated) - both are a successful demo outcome.
+                        seeded++;
+                    } else {
+                        unavailable++;
+                        LOGGER.info("Demo artifact not available upstream ({}): {}", exchange.status(), path);
+                    }
+                } catch (IOException | RuntimeException exception) {
                     unavailable++;
-                    LOGGER.info("Demo suggestion claimed by no installed format: {}", path);
-                } else if (served(exchange.status()) || quarantined(store, path)) {
-                    // Served (a 2xx pulled the artifact through) or gate-withheld (the gate quarantined it, so a read
-                    // is a 404 yet the quarantine surface is populated) - both are a successful demo outcome.
-                    seeded++;
-                } else {
-                    unavailable++;
-                    LOGGER.info("Demo artifact not available upstream ({}): {}", exchange.status(), path);
+                    LOGGER.info("Demo artifact fetch failed for {}: {}", path, exception.getMessage());
                 }
-            } catch (IOException | RuntimeException exception) {
-                unavailable++;
-                LOGGER.info("Demo artifact fetch failed for {}: {}", path, exception.getMessage());
             }
         }
         LOGGER.info("Demo seeding complete: {} of {} suggestions seeded ({} unavailable)",
-                seeded, suggestions.size(), unavailable);
-        return new Result(true, seeded, unavailable);
+                seeded, suggested, unavailable);
+        return new Result(ran, seeded, unavailable);
     }
 
     private static boolean served(int status) {
@@ -136,7 +165,7 @@ public final class DemoSeeder {
         return store.readVersioned(Publication.quarantineKey(path)).isPresent();
     }
 
-    /** The outcome of a seed pass: whether it {@code ran} at all (the store was empty), and how many suggestions were
+    /** The outcome of a seed pass: whether it {@code ran} at all (some repository was empty), and how many were
      *  {@code seeded} versus {@code unavailable} upstream. */
     public record Result(boolean ran, int seeded, int unavailable) {
     }

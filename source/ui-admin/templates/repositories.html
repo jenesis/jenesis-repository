@@ -6,8 +6,8 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Repositories')}"></header>
-    <p><small>Named artifact repositories in this tenant. Publishing creates them; open one to browse its
-        releases and manage staging, retention and pins.</small></p>
+    <p><small>Named artifact repositories in this tenant, each holding one format. Open one to browse its releases
+        and manage staging, retention and pins.</small></p>
 
     <!--/* T25.6 item 4: a non-blocking notice for every VALID-but-risky repository definition - a mixed screening
          strength (a hardened upstream beside a weaker one, T23.5b), an unscreened upstream, or a plaintext upstream.
@@ -28,6 +28,7 @@
             <thead>
             <tr>
                 <th scope="col">Repository</th>
+                <th scope="col">Format</th>
             </tr>
             </thead>
             <tbody>
@@ -54,6 +55,22 @@
                          for an upstream; an inner-repo reference for a repository fallback). */-->
                     <span th:replace="~{fragments :: shapeBadges(${r.shape})}"></span>
                 </td>
+                <td>
+                    <code th:if="${r.format != null}" th:text="${r.format}">maven</code>
+                    <!--/* A repository created before repositories held a format answers no request until it is given
+                         one; an editor gives it one here, choosing the format its content was published in. */-->
+                    <th:block th:if="${r.format == null}">
+                        <span class="app-badge" title="Answers no request until it is given a format">no format</span>
+                        <form th:if="${isEditor}" class="app-actions" method="post"
+                              th:action="@{/repositories/create}">
+                            <input type="hidden" name="name" th:value="${r.name}">
+                            <select name="format" required th:attr="aria-label=|Format for ${r.name}|">
+                                <option th:each="f : ${formats}" th:value="${f}" th:text="${f}">maven</option>
+                            </select>
+                            <button type="submit">Give format</button>
+                        </form>
+                    </th:block>
+                </td>
             </tr>
             </tbody>
         </table>
@@ -65,12 +82,16 @@
     <div class="app-panels">
     <article th:if="${isEditor}">
         <h2>New repository</h2>
-        <p><small>A repository is created here before anything is published into it; a publish creates one only where
-            <code>create-repository-on-publish</code> is switched on under Settings.</small></p>
+        <p><small>A repository holds one format, chosen here, and answers at <code>/repository/&lt;name&gt;/</code>
+            - or <code>/v2/&lt;name&gt;/</code> for container images. Create it before publishing into it.</small></p>
         <form method="post" th:action="@{/repositories/create}">
             <label>Name
-                <input name="name" required pattern="[A-Za-z0-9_\-]+" placeholder="releases"
+                <input name="name" required pattern="[A-Za-z0-9_\-]+" placeholder="maven"
                        title="Letters, digits, hyphens and underscores"></label>
+            <label>Format
+                <select name="format" required>
+                    <option th:each="f : ${formats}" th:value="${f}" th:text="${f}">maven</option>
+                </select></label>
             <button type="submit">Create repository</button>
         </form>
     </article>

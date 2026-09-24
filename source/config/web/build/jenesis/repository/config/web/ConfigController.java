@@ -2,9 +2,11 @@ package build.jenesis.repository.config.web;
 
 import module java.base;
 import build.jenesis.repository.definitions.RepositoryDefinition;
+import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.server.RepositoryRouting;
+import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
-import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Repositories;
@@ -17,6 +19,7 @@ import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.settings.SettingsScopes;
 import build.jenesis.repository.upstream.UpstreamCredential;
 import build.jenesis.repository.upstream.UpstreamCredentialSource;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -54,12 +57,6 @@ public class ConfigController {
     private final UpstreamCredentialSource upstreamCredentials;
     private final AuditTrail audit;
     private final RepositoryRouting routing;
-
-    /** The response header carrying what a create could not say in its status: that no URL on this deployment's
-     *  routing reaches the repository just stored. Read by the CLI, which prints it beside "Saved". */
-    public static final String UNADDRESSABLE = "Jenesis-Repository-Warning";
-
-    private static final System.Logger LOGGER = System.getLogger(ConfigController.class.getName());
     // The set of settings a deployment's installed modules contribute is static for the JVM, so the catalogue is
     // discovered once rather than re-running the ServiceLoader scan (and re-sorting) on every /api/settings read/write;
     // a setting's live effective value and override state are resolved per request against this fixed template below.
@@ -497,23 +494,51 @@ public class ConfigController {
         }
         settings.set(SettingsScopes.repositoryKey(name), request.value());
         audit(key, AuditActions.REPOSITORY_SET, name);
-        // Stored, and the caller told what it will and will not do. A name the installed routing cannot address is
-        // NOT refused, because unaddressable is not useless: a group member and a fallback are resolved by name
-        // against the definition graph rather than through a URL, so on a fixed-tenant deployment
-        // `repositories.default = group central,internal` needs `central` and `internal` to exist and neither will
-        // ever answer as a URL. Creation order rules out a narrower refusal too - the members are written before
-        // the group that names them. What was actually wrong was the silence: a create answering 200 while every
-        // publish to that name 404s. So the answer says so, in the response header a script can read and in the
-        // log an operator reads afterwards.
-        if (!routing.addresses(name)) {
-            String warning = RepositoryRouting.unaddressableWarning(name);
-            // A header of the product's own rather than HTTP's `Warning`, which RFC 9111 obsoleted: an obsolete
-            // field is one an intermediary may drop, and a repository commonly sits behind a CDN or a proxy. A
-            // dropped operator warning is a silent failure of exactly the thing this is here to end.
-            response.setHeader(UNADDRESSABLE, warning);
-            LOGGER.log(System.Logger.Level.WARNING, warning);
-        }
         response.setStatus(200);
+    }
+
+    /**
+     * Create a repository to hold one format - {@code PUT /repository/<name>} with {@code {"value":"<format>"}} - in
+     * the tenant the request routes to, through the one creation every surface makes
+     * ({@link RepositoryDocument#create}). A repository that holds content but no format is given this one. Answers
+     * {@code 201} when created, {@code 200} when the repository already holds that format, {@code 409} when it holds
+     * another, and {@code 400} for a format no repository can hold here.
+     */
+    @PutMapping("/repository/{name}")
+    public void createRepository(@PathVariable("name") String name,
+                                 @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                 @RequestBody NamedValueRequest request,
+                                 HttpServletRequest servlet, HttpServletResponse response) throws IOException {
+        String format = request == null ? null : request.value();
+        List<String> offered = RepositoryFormat.offerable().stream().map(RepositoryFormat::name).toList();
+        if (format == null || !offered.contains(format)) {
+            text(response, 400, "'" + format + "' is not a format a repository can hold here; one of " + offered
+                    + ".");
+            return;
+        }
+        RepositoryRouting.Route route = routing.route(servlet);
+        if (route.repository().isEmpty()) {
+            text(response, 400, "The request names no repository.");
+            return;
+        }
+        if (new RepositoryDocument(format, Instant.now()).create(route.store())) {
+            audit(key, AuditActions.REPOSITORY_CREATE, route.repository());
+            response.setStatus(201);
+            return;
+        }
+        Optional<RepositoryDocument> held = RepositoryDocument.read(route.store());
+        if (held.isPresent() && held.get().format().equals(format)) {
+            response.setStatus(200);
+            return;
+        }
+        text(response, 409, "Repository '" + route.repository() + "' already holds "
+                + held.map(RepositoryDocument::format).orElse("another format") + ".");
+    }
+
+    private static void text(HttpServletResponse response, int status, String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType("text/plain;charset=UTF-8");
+        response.getWriter().write(message);
     }
 
     @DeleteMapping("/api/repositories/{name}")

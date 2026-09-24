@@ -7,6 +7,7 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.gate.QuarantineDispatch;
 import build.jenesis.repository.server.EdgeHooks;
 import build.jenesis.repository.server.Observations;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
@@ -101,16 +102,13 @@ public final class DeployEdgeHooks implements EdgeHooks {
                 });
     }
 
-    /** The repository a {@code /repository/<repo>/...} write addressed - the first path segment, matching the fork's
-     *  {@code target} tag - or {@code null} when the request carries no repository segment (a host-rooted OCI path, or
-     *  the repo-less fixed-tenant shape), which {@link Observations} tags as {@code none}. */
+    /** The repository a write addressed, read the way every routing reads it - or {@code null} when the request
+     *  names none, which {@link Observations} tags as {@code none}. */
     private static String repositoryOf(String requestUri) {
-        String prefix = "/repository/";
-        if (requestUri == null || !requestUri.startsWith(prefix)) {
+        if (requestUri == null) {
             return null;
         }
-        String rest = requestUri.substring(prefix.length());
-        int slash = rest.indexOf('/');
-        return slash < 0 ? (rest.isEmpty() ? null : rest) : rest.substring(0, slash);
+        String repository = RepositoryRouting.target(requestUri).repository();
+        return repository.isEmpty() ? null : repository;
     }
 }

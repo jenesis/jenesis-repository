@@ -21,15 +21,13 @@ public final class RepositoriesRoutingContext implements RoutingContext {
     private final ArtifactStore root;
     private final Repositories repositories;
     private final String defaultTenant;
-    private final String defaultRepository;
     private final UnaryOperator<String> config;
 
     public RepositoriesRoutingContext(ArtifactStore root, Repositories repositories, String defaultTenant,
-                                      String defaultRepository, UnaryOperator<String> config) {
+                                      UnaryOperator<String> config) {
         this.root = root;
         this.repositories = repositories;
         this.defaultTenant = defaultTenant;
-        this.defaultRepository = defaultRepository;
         this.config = config;
     }
 
@@ -46,11 +44,6 @@ public final class RepositoriesRoutingContext implements RoutingContext {
     @Override
     public String defaultTenant() {
         return defaultTenant;
-    }
-
-    @Override
-    public String defaultRepository() {
-        return defaultRepository;
     }
 
     @Override

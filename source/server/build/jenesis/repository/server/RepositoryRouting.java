@@ -1,9 +1,9 @@
 package build.jenesis.repository.server;
 
 import module java.base;
-import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.RepositoryDocument;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
@@ -16,8 +16,9 @@ import jakarta.servlet.http.HttpServletRequest;
  * left. Which routing a deployment runs on is <strong>discovered</strong>, through
  * {@link RepositoryRoutingProvider}: {@code jenreg.tenancy} names one of the installed providers, and naming none
  * binds the {@link FixedTenantRouting}, where every request resolves to the configured
- * {@code jenreg.default-tenant} / {@code jenreg.default-repository} space with the request path unchanged beyond the
- * {@code /repository} prefix strip. A multi-tenant deployment installs a provider; it does not override a bean.
+ * {@code jenreg.default-tenant}. Every routing takes the repository from the URL the same way ({@link #target}), so
+ * they differ only in where the tenant comes from. A multi-tenant deployment installs a provider; it does not
+ * override a bean.
  *
  * <p><strong>Where the tenant comes from is the implementation's business, not this seam's.</strong> A downstream
  * routing may read it from the {@code Jenesis-Repository-Key} header (taking the repository from the first path
@@ -59,90 +60,62 @@ public interface RepositoryRouting {
     }
 
     /**
-     * Whether a repository of this name could ever be addressed on this routing.
-     *
-     * <p>It is not "does it exist" and not "may this caller write to it". It is the question a surface that
-     * <em>creates</em> a repository has to ask before it tells an operator what will happen: whether the installed
-     * routing has any URL at all that reaches a repository by this name. On the {@link FixedTenantRouting} exactly
-     * one name does - every request resolves to the configured {@code jenreg.default-tenant} /
-     * {@code jenreg.default-repository} space - while a routing that takes the repository from the request
-     * addresses all of them.
-     *
-     * <p><b>A name this rules out is not thereby useless</b>, which is why the answer feeds a warning rather than a
-     * refusal: see {@link #unaddressableWarning}.
-     *
-     * <p><b>The default answers {@code true}, and that is the honest answer rather than a lax one.</b> This asks a
-     * routing to rule a name <em>out</em>, and a routing that resolves its target from a request has nothing to
-     * rule out - every valid name is reachable through some request. Defaulting to {@code false} would refuse
-     * creation on exactly the deployments where creating a repository is the normal thing to do, which is the
-     * opposite of the failure this exists to prevent. So a caller reads {@code false} as "this routing knows the
-     * name is unreachable" and {@code true} as "it is not ruled out", never as "it exists".
-     *
-     * @param repository the repository name a caller proposes to create or address.
-     * @return {@code false} only when this routing can never reach a repository of that name.
+     * The document of a route's repository - the format it holds - or empty when it has none. A routing built over
+     * a {@link RoutingContext} reads it through the node's cache ({@link RoutingContext#document}), so the request
+     * path pays no store read for it in the steady state; the default reads it from the route's own store.
      */
-    default boolean addresses(String repository) {
-        return true;
+    default Optional<RepositoryDocument> document(Route route) throws IOException {
+        return route.repository().isEmpty() ? Optional.empty() : RepositoryDocument.read(route.store());
     }
 
     /**
-     * Whether this routing serves a repository of this name in this tenant without anybody having created it - the
-     * one repository a request resolves to when it names none. A deployment that creates repositories deliberately
-     * ({@link RepositoryPresence}) refuses to answer for one that was never created, and this is the exception: the
-     * repository a fixed deployment serves, and the default repository every tenant has, which the OCI registry's
-     * root resolves to and a client probes before it sends anything else.
+     * The repository a request URI names, and the path within it. Every routing answers from the same shape, and
+     * differs only in where it finds the tenant:
+     * <ul>
+     * <li>{@code /repository/<repository>/<path>} - a repository holds one format, so the URL carries no format
+     *     segment, and the path within the repository is what follows its name;</li>
+     * <li>{@code /v2/<repository>/<image>/...} - the OCI registry API, which every OCI client addresses at the host's
+     *     root. The repository is the image name's first segment, and the path keeps it: an image is named
+     *     {@code <repository>/<image>} inside its repository, so every {@code Location} the format answers with
+     *     names it the way the client does;</li>
+     * <li>{@code /v2} and {@code /v2/} - the registry's version probe, which names no repository: the target's
+     *     repository is empty.</li>
+     * </ul>
+     * The path is what follows the format's {@link build.jenesis.repository.format.RepositoryFormat#mount mount}:
+     * the dispatcher puts the mount back once it knows the repository's format.
      *
-     * <p><b>The default answers {@code false}</b>: a routing that names no default serves no repository nobody
-     * created.
-     *
-     * @param tenant     the tenant.
-     * @param repository the repository within it.
-     * @return whether the repository exists on this routing whether or not it was created.
+     * @param uri the request URI, after whatever prefix a routing reads its tenant from.
      */
-    default boolean serves(String tenant, String repository) {
-        return false;
+    static Target target(String uri) {
+        if (uri.equals("/v2") || uri.equals("/v2/")) {
+            return new Target("", "/");
+        }
+        if (uri.startsWith("/v2/")) {
+            String name = uri.substring("/v2/".length());
+            int slash = name.indexOf('/');
+            return new Target(slash < 0 ? name : name.substring(0, slash), "/" + name);
+        }
+        String rest = uri.startsWith("/repository/") ? uri.substring("/repository/".length())
+                : uri.equals("/repository") ? "" : uri.startsWith("/") ? uri.substring(1) : uri;
+        int slash = rest.indexOf('/');
+        return new Target(slash < 0 ? rest : rest.substring(0, slash), slash < 0 ? "/" : rest.substring(slash));
     }
 
-    /**
-     * What a surface that creates repositories must say about a name {@link #addresses} ruled out - written once
-     * here because every such surface must say the same thing.
-     *
-     * <p><b>It is a warning and not a refusal, and the difference was measured rather than reasoned.</b> A name no
-     * URL reaches is not thereby useless: where a deployment composes repositories - a grouped view over members, a
-     * fallback from one repository to another - the composed name is resolved <em>by name</em> against the stored
-     * definitions and never through this routing. So a fixed-tenant deployment whose one served repository is a
-     * group over two others is an ordinary configuration in which those two are load-bearing and unaddressable at
-     * once, and refusing to create them would refuse the shape a single-repository deployment uses to put a proxy
-     * behind what it serves. Creation order rules out a narrower refusal too, since the members are created before
-     * the composition that names them.
-     *
-     * <p>What is left to say is therefore exactly what is true: this name will not answer as a URL, and it takes
-     * effect only if something else names it.
-     *
-     * @param repository the name this routing cannot address.
-     * @return the warning, for a log line and for whatever a surface shows its operator.
-     */
-    static String unaddressableWarning(String repository) {
-        return "Repository '" + repository + "' is not addressable on this deployment's routing: every request "
-                + "resolves to the one configured artifact space, so no URL names it and '/repository/"
-                + repository + "/...' will answer 404. It still takes effect if another definition names it - a "
-                + "group member or a fallback is resolved by name, not by URL. To address it directly, set "
-                + "'jenreg.tenancy' to a routing that names repositories in the request - multi, path or host.";
+    /** A repository a request names and the path within it; an empty repository is the OCI registry's root. */
+    record Target(String repository, String path) {
     }
 
     /**
      * The resolved artifact space for a request: the {@code tenant} and {@code repository} it addresses (never
-     * {@code null} - the fixed-tenant deployment resolves its configured defaults), the doubly-scoped
-     * {@code root.scope(tenant).scope(repository)} {@link ArtifactStore} the format reads and writes, the
-     * {@code path} the format matches on (the request URI with the {@code /repository} prefix stripped on the
-     * fixed-tenant deployment, the repository-prefix-stripped path under multi-tenant routing), and whether the route
-     * is a valid write target ({@link #writable}).
+     * {@code null}; the repository is empty only for the OCI registry's version probe, which names none), the
+     * doubly-scoped {@code root.scope(tenant).scope(repository)} {@link ArtifactStore} the format reads and writes,
+     * the {@code path} within the repository ({@link Target#path}), and whether the route is a valid write target
+     * ({@link #writable}).
      *
      * <p>A {@code writable} route accepts a write (a mutating verb lays out or deletes); a non-writable one answers a
      * {@code 405} at the controller's write branch before any layout - the seam a multi-tenant routing uses to reject a
      * write to a read-only repository (a proxy or group view, or one whose router resolved no write target) without a
-     * fork. The fixed-tenant deployment always resolves a writable route, so the core is unchanged; the
-     * four-argument convenience constructor keeps that always-writable default for every existing call site.
+     * fork. The four-argument convenience constructor builds a writable route.
      */
     record Route(String tenant, String repository, ArtifactStore store, String path, boolean writable) {
 
@@ -153,8 +126,7 @@ public interface RepositoryRouting {
             Objects.requireNonNull(path, "path");
         }
 
-        /** A writable route - the always-writable default the fixed-tenant deployment resolves, and the shape every
-         *  existing call site builds. A read-only route is built with the canonical five-argument constructor. */
+        /** A writable route. A read-only one is built with the canonical five-argument constructor. */
         public Route(String tenant, String repository, ArtifactStore store, String path) {
             this(tenant, repository, store, path, true);
         }

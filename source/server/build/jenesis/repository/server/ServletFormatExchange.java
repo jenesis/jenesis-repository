@@ -12,7 +12,9 @@ import jakarta.servlet.http.HttpServletResponse;
  * build.jenesis.repository.format.RepositoryFormat} speaks, so a Spring MVC controller dispatches to the format
  * plugins through the same contract every dispatcher uses. The path a format sees is supplied to the constructor and
  * returned from {@link #path()} unchanged, so a caller passes either the full request path or one with a routing
- * prefix already stripped.
+ * prefix already stripped - and, for a repository that holds one format, with that format's
+ * {@link build.jenesis.repository.format.RepositoryFormat#mount mount} put back in front of it, the mount a client
+ * never sends and {@link #external} takes off again.
  */
 public final class ServletFormatExchange implements FormatExchange {
 
@@ -20,6 +22,7 @@ public final class ServletFormatExchange implements FormatExchange {
     private final HttpServletResponse response;
     private final String path;
     private final UnaryOperator<String> settings;
+    private final String mount;
 
     public ServletFormatExchange(HttpServletRequest request, HttpServletResponse response, String path) {
         this(request, response, path, key -> null);
@@ -33,10 +36,20 @@ public final class ServletFormatExchange implements FormatExchange {
      */
     public ServletFormatExchange(HttpServletRequest request, HttpServletResponse response, String path,
                                  UnaryOperator<String> settings) {
+        this(request, response, path, settings, "");
+    }
+
+    /**
+     * As above, for a {@code path} that starts with a {@code mount} the routing put in front of the path the client
+     * sent: {@link #external} answers the URL the client reaches a format path at, without the mount.
+     */
+    public ServletFormatExchange(HttpServletRequest request, HttpServletResponse response, String path,
+                                 UnaryOperator<String> settings, String mount) {
         this.request = request;
         this.response = response;
         this.path = path;
         this.settings = settings;
+        this.mount = mount;
     }
 
     @Override
@@ -52,6 +65,17 @@ public final class ServletFormatExchange implements FormatExchange {
     @Override
     public String requestUri() {
         return request.getRequestURI();
+    }
+
+    @Override
+    public String external(String formatPath) {
+        if (mount.isEmpty() || !path.startsWith(mount) || !formatPath.startsWith(mount)) {
+            return FormatExchange.super.external(formatPath);
+        }
+        String sent = path.substring(mount.length());
+        String uri = request.getRequestURI();
+        String prefix = uri.endsWith(sent) ? uri.substring(0, uri.length() - sent.length()) : "";
+        return prefix + formatPath.substring(mount.length());
     }
 
     @Override

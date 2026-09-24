@@ -23,10 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The HTTP surface of the repository, mirroring {@link RepositoryApplication}'s framework-neutral
- * dispatch but over Spring MVC. A catch-all resolves the request to its artifact space through {@link RepositoryRouting}
- * (fixed-tenant by default) and offers it the {@link RepositoryFormat} plugins over that doubly-scoped store through the
- * shared {@link FormatDispatcher}: the first format whose {@code handles(path)} is true serves or accepts the request
- * through a {@link ServletFormatExchange}; an unclaimed path is a {@code 404}. When an upstream is configured for the
+ * dispatch but over Spring MVC. A catch-all resolves the request to its repository through {@link RepositoryRouting}
+ * (fixed-tenant by default), reads the one format that repository holds ({@link HeldFormat}), and
+ * offers the request to that format alone over the repository's doubly-scoped store through the shared
+ * {@link FormatDispatcher}, with the format's {@link RepositoryFormat#mount mount} restored in front of the path; a
+ * repository that holds no format, or one this deployment does not install, does not answer, and a path its format
+ * does not claim is a {@code 404}. When an upstream is configured for the
  * matched format and the format is a {@link ProxyFormat}, a local miss is served through the {@link PullThroughCache}
  * from that upstream and cached, so a later read is a local hit. The single-tenant import edge
  * ({@code POST /repository/admin/import} and {@code GET /repository/admin/import/<id>}) is served by the separate
@@ -62,7 +64,11 @@ public class RepositoryController {
     private final UnaryOperator<String> settings;
     private final ArtifactStore root;
     private final RoutedServing routed;
-    private final RepositoryPresence presence;
+    private final EdgeHooks hooks;
+
+    /** The screened edge restricted to one format, per format: a repository's request is offered to its own format
+     *  and to no other, so a path another format would claim is not served out of it. */
+    private final Map<String, ScreenedDispatch> restricted = new ConcurrentHashMap<>();
 
     /** The capability-merge report last written to the log, so a collision is logged when it appears or changes rather
      *  than on every hit of a polled endpoint - which contributions collide is a property of the installed module set,
@@ -80,8 +86,7 @@ public class RepositoryController {
                                 FormatDispatcher dispatcher,
                                 List<ImportSourceProvider> importSources,
                                 ProxyFormat.Fetcher fetcher) {
-        this(routing, dispatcher, importSources, fetcher, null, key -> null, null, RoutedServing.NONE, EdgeHooks.NONE,
-                RepositoryPresence.ANY);
+        this(routing, dispatcher, importSources, fetcher, null, key -> null, null, RoutedServing.NONE, EdgeHooks.NONE);
     }
 
     /**
@@ -106,8 +111,6 @@ public class RepositoryController {
      * @param hooks     an edition's ingress concerns - tenant binding, release-immutability, quarantine dispatch,
      *                  deploy observation - threaded into the one shared screening edge rather than forked into a
      *                  second deploy controller; {@link EdgeHooks#NONE} is the no-op.
-     * @param presence  whether a request may reach the repository it names - one that exists, or any where a publish
-     *                  may create it; {@link RepositoryPresence#ANY} answers every repository.
      */
     public RepositoryController(RepositoryRouting routing,
                                 FormatDispatcher dispatcher,
@@ -117,8 +120,7 @@ public class RepositoryController {
                                 UnaryOperator<String> settings,
                                 ArtifactStore root,
                                 RoutedServing routed,
-                                EdgeHooks hooks,
-                                RepositoryPresence presence) {
+                                EdgeHooks hooks) {
         this.routing = routing;
         this.dispatcher = dispatcher;
         this.screened = new ScreenedDispatch(dispatcher, hooks);
@@ -128,7 +130,7 @@ public class RepositoryController {
         this.settings = settings;
         this.root = root;
         this.routed = routed;
-        this.presence = presence;
+        this.hooks = hooks;
     }
 
     /**
@@ -146,24 +148,31 @@ public class RepositoryController {
             RequestMethod.PUT, RequestMethod.POST, RequestMethod.PATCH, RequestMethod.DELETE})
     public void handle(HttpServletRequest request, HttpServletResponse response) throws IOException {
         RepositoryRouting.Route route = routing.route(request);
-        ServletFormatExchange exchange = new ServletFormatExchange(request, response, route.path(), settings);
-        // A write (PUT/POST/PATCH/DELETE) to a route that is not a valid write target is a 405 before any layout - the
-        // seam a multi-tenant routing uses to reject a write to a read-only repository. The fixed-tenant deployment
-        // always resolves a writable route, so the core never takes this branch.
-        if (isWrite(request.getMethod()) && !route.writable()) {
-            response.setStatus(405);
-            return;
-        }
-        // A repository nobody created does not answer, unless a publish may create it: a write would create it, and a
-        // read through a pull-through upstream would fill it, so both are refused before either can.
-        if (!answers(route)) {
+        boolean write = isWrite(request.getMethod());
+        // A repository answers only for the one format it holds. One that holds none - never created, or created
+        // before repositories held a format - does not answer at all: a write would otherwise lay out a format the
+        // repository was never meant to hold, and a read through a pull-through upstream would fill it the same way.
+        Optional<HeldFormat> held = route.repository().isEmpty()
+                ? probe(request).map(oci -> new HeldFormat(oci, oci.mount() + route.path()))
+                : HeldFormat.of(routing, route, dispatcher.formats());
+        if (held.isEmpty()) {
             response.setStatus(404);
-            if (isWrite(request.getMethod())) {
+            if (write && !route.repository().isEmpty()) {
                 response.setContentType("text/plain;charset=UTF-8");
                 response.getWriter().write(absent(route.repository()));
             }
             return;
         }
+        RepositoryFormat format = held.get().format();
+        ServletFormatExchange exchange = new ServletFormatExchange(request, response, held.get().path(), settings,
+                format.mount());
+        // A write (PUT/POST/PATCH/DELETE) to a route that is not a valid write target is a 405 before any layout - the
+        // seam a routing uses to reject a write to a read-only repository.
+        if (write && !route.writable()) {
+            response.setStatus(405);
+            return;
+        }
+        ScreenedDispatch screened = screened(format);
         if (batch != null && batch.claims(exchange)) {
             // Each exploded entry is screened at the same ingress edge a single deploy uses (the shared
             // ScreenedDispatch, carrying this controller's EdgeHooks), so a batch upload is screened exactly like a
@@ -178,9 +187,8 @@ public class RepositoryController {
         // dispatches over its own store, keeping the deployment-wide format-level pull-through. Writes are never
         // routed here: a routed group deploy lands in its push-target member on the write path.
         if (isRead(request.getMethod()) && routed.routes(route.repository())) {
-            Optional<RepositoryFormat> owner = dispatcher.owner(exchange.path());
-            if (owner.isPresent()) {
-                routed.serve(route.tenant(), route.repository(), owner.get(), exchange);
+            if (format.handles(exchange.path())) {
+                routed.serve(route.tenant(), route.repository(), format, exchange);
             } else {
                 response.setStatus(404);
             }
@@ -201,11 +209,11 @@ public class RepositoryController {
      *
      * <p>It exists so that a surface with no request behind it - the admin console's deploy screen - publishes the
      * way a client does rather than around it. Everything a {@code PUT} to {@code /repository/**} passes through is
-     * passed through here: the routing decides the store and whether the target accepts a write, the discovered
-     * interceptor chain screens the body exactly once, an accepted blob is restreamed into the claiming format for
-     * layout, and a held or refused body answers as it would on the wire. The alternative - a screen that scopes a
-     * store and writes blobs - is a hole in the gate rather than a feature, which is why there is no way to do that
-     * from here.
+     * passed through here: the routing decides the store and whether the target accepts a write, the repository's
+     * format is the only one offered the body, the discovered interceptor chain screens it exactly once, an accepted
+     * blob is restreamed into the format for layout, and a held or refused body answers as it would on the wire. The
+     * alternative - a screen that scopes a store and writes blobs - is a hole in the gate rather than a feature,
+     * which is why there is no way to do that from here.
      *
      * <p>The routing is asked for a route it can resolve without a request, and <b>a routing that cannot say refuses
      * the publish</b>: the answer is a {@code 404} rather than a guess, because a guessed route is one whose
@@ -213,7 +221,8 @@ public class RepositoryController {
      *
      * @param tenant     the tenant to publish into.
      * @param repository the repository within it.
-     * @param path       the format-facing path the artifact lands at, as a request would carry it after routing.
+     * @param path       the path within the repository the artifact lands at, as a client names it after
+     *                   {@code /repository/<repository>}.
      * @param body       the artifact's bytes; streamed, never buffered, and not closed here.
      * @return the status the edge answered: {@code 2xx} laid out, {@code 202} held for review, {@code 422} refused
      *         by the gate, {@code 404} claimed by no format or no route, {@code 405} a target that takes no write.
@@ -227,25 +236,31 @@ public class RepositoryController {
         if (!route.writable()) {
             return 405;
         }
-        if (!answers(route)) {
+        Optional<HeldFormat> held = HeldFormat.of(routing, route, dispatcher.formats());
+        if (held.isEmpty()) {
             return 404;
         }
-        CapturingExchange exchange = new CapturingExchange(route.path(), body);
-        if (!screened.dispatch(exchange, route.store())) {
+        CapturingExchange exchange = new CapturingExchange(held.get().path(), body);
+        if (!screened(held.get().format()).dispatch(exchange, route.store())) {
             return 404;
         }
         return exchange.status();
     }
 
-    /** Whether the route's repository answers: the routing serves it, or it exists, or a publish may create it. */
-    private boolean answers(RepositoryRouting.Route route) throws IOException {
-        return routing.serves(route.tenant(), route.repository()) || presence.answers(route.tenant(), route.repository());
+    /** The OCI registry's version probe, which names no repository: the registry answers it if one is installed. */
+    private Optional<RepositoryFormat> probe(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return uri.equals("/v2") || uri.startsWith("/v2/") ? dispatcher.format("oci") : Optional.empty();
     }
 
-    /** What a publish into a repository that does not exist is told. */
+    private ScreenedDispatch screened(RepositoryFormat format) {
+        return restricted.computeIfAbsent(format.name(), _ -> new ScreenedDispatch(dispatcher.only(format), hooks));
+    }
+
+    /** What a publish into a repository that holds no format is told. */
     static String absent(String repository) {
-        return "Repository '" + repository + "' does not exist. Create it in the console under Repositories, or "
-                + "set '" + RepositoryPresence.SETTING + "' to let a publish create the repository it names.";
+        return "Repository '" + repository + "' does not exist or holds no format this deployment serves. Create it "
+                + "in the console under Repositories, choosing the format it holds.";
     }
 
     private static boolean isRead(String method) {

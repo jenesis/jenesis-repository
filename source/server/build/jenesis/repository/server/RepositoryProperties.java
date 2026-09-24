@@ -26,17 +26,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * apart that way once, which is why its default carries the account above. Holding copies equal is not a fix, so
  * there is one class.
  *
- * <p><b>One pair names the artifact space</b>: {@link #getDefaultTenant() default-tenant} /
- * {@link #getDefaultRepository() default-repository}, which the routing, the browse, the walk and the
- * maintenance surfaces all resolve against, and which two nodes over one store must agree on.
- *
- * <p>There were two, and they did not even default alike - {@code default} against {@code releases}. The second
- * pair, {@code jenreg.tenant} / {@code jenreg.repository}, was read only by this module's own
- * {@code @ConditionalOnMissingBean} fallbacks - the routing, tenant directory, demo seeding and rebuild
- * scheduler a bare server gets - so a composition that supplies its own replaced every one of them and the pair
- * then decided nothing, while still being a value two nodes had to agree on. The fallbacks read the surviving
- * pair now, which is what a composition would have given them anyway; the difference is that a bare server and a
- * composed one no longer disagree about where the artifacts are.
+ * <p><b>One key names the fixed deployment's tenant</b>: {@link #getDefaultTenant() default-tenant}, which the
+ * routing, the browse and the maintenance surfaces resolve against, and which two nodes over one store must agree
+ * on. A repository is always named by the request.
  */
 @ConfigurationProperties(prefix = "jenreg")
 public class RepositoryProperties {
@@ -147,8 +139,8 @@ public class RepositoryProperties {
 
     /** Request routing over the shared {@code <tenant>/<repository>/...} store layout. {@code fixed} (the default,
      *  and the default of every image this product ships) binds <em>every</em> request to the one
-     *  {@code default-tenant} / {@code default-repository} space through {@code FixedTenantRouting}, the key
-     *  no longer routing anywhere - the single-tenant deployment, which is the shape most deployments are and the
+     *  {@code default-tenant} through {@code FixedTenantRouting}, the repository named by the path and the key
+     *  routing nowhere - the single-tenant deployment, which is the shape most deployments are and the
      *  the one a plain composition ships, carrying every installed feature.
      *
      *  <p>Multi-tenancy is opted into rather than inherited. {@code multi} resolves the tenant from the key the
@@ -190,9 +182,6 @@ public class RepositoryProperties {
      *  this env-field over the fail-closed default), which folds it into the {@link ImportHostGuard} both import legs
      *  share, never the raw field. */
     private Boolean blockPrivateImportHosts;
-
-    /** Repository the console browses by default; requests always name their repository in the path. */
-    private String defaultRepository = "releases";
 
     // The three licence dials (license-allowed, license-denied, license-unknown) used to be fields here, with their
     // defaults written out a second time beside the ones the dimension actually applies. They are gone. Licence is a
@@ -527,14 +516,6 @@ public class RepositoryProperties {
      *  {@code fixed} edition open. */
     public boolean importHostsGuarded(Boolean storedSetting) {
         return ImportHostGuard.blockPrivateHosts(storedSetting, blockPrivateImportHosts);
-    }
-
-    public String getDefaultRepository() {
-        return defaultRepository;
-    }
-
-    public void setDefaultRepository(String defaultRepository) {
-        this.defaultRepository = defaultRepository;
     }
 
     public String getVulnerabilityThreshold() {

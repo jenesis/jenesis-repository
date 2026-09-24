@@ -773,6 +773,11 @@ public final class RepositoryRouter {
         }
 
         @Override
+        public String external(String formatPath) {
+            return delegate.external(formatPath);
+        }
+
+        @Override
         public String scheme() {
             return delegate.scheme();
         }

@@ -106,6 +106,11 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
     }
 
     @Override
+    public boolean offered() {
+        return false;
+    }
+
+    @Override
     public boolean handles(String path) {
         // ALWAYS false - never wins format dispatch, never proxies, never imports (see the class javadoc). A future
         // change to claim /v2/ here re-opens the first-match dispatch race with the real OciFormat; OciBlobLayoutTest

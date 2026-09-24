@@ -104,7 +104,7 @@ public class DeploymentInfoController {
         // a write (§10). The same FirstRunHardening.assess the boot log uses, so both surfaces agree.
         FirstRunHardening.Advice hardening = FirstRunHardening.assess(
                 FirstRunHardening.firstRun(settings), DECLARED, effective);
-        return new ConfigView(properties.getStore(), properties.getDefaultRepository(), proxy,
+        return new ConfigView(properties.getStore(), proxy,
                 properties.isAuth(), licenseAllowed, licenseUnknown,
                 threshold, advisories != AdvisorySource.none(), hardening);
     }
@@ -204,7 +204,7 @@ public class DeploymentInfoController {
                 properties.isReadOnly()));
     }
 
-    public record ConfigView(String store, String defaultRepository, boolean proxy, boolean auth,
+    public record ConfigView(String store, boolean proxy, boolean auth,
                              String licenseAllowed, String licenseUnknown, String vulnerabilityThreshold,
                              boolean advisories, FirstRunHardening.Advice firstRunHardening) {
     }
