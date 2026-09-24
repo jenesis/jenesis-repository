@@ -81,6 +81,12 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         if (artifact) {
             scope = route.repository();
         }
+        // PUT /repository/<name> - the bare repository, no path within it - creates the repository, which is
+        // administration rather than a publish: a key that may deploy into a repository may not thereby create
+        // repositories, and an administrator's key may create one without holding a deploy right on it.
+        if (artifact && !probe && "PUT".equals(method) && route.path().equals("/") && !uri.endsWith("/")) {
+            required = Authorization.MANAGE_WRITE;
+        }
         // The asset enumeration scopes the store it reads by the ?repo= parameter, not the routed name, so authorize
         // the repository that is actually enumerated - otherwise a key scoped to repository A could satisfy the header
         // check for A and then read repository B by passing repo=B. Read the parameter only for that GET route (never
