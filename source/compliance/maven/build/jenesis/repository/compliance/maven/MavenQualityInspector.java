@@ -4,7 +4,10 @@ import module java.base;
 import module org.slf4j;
 import module java.xml;
 import module tools.jackson.databind;
+import build.jenesis.Environment;
+import build.jenesis.Make;
 import build.jenesis.maven.MavenDefaultRepository;
+import build.jenesis.maven.MavenRepository;
 import build.jenesis.maven.MavenDependencyKey;
 import build.jenesis.maven.MavenDependencyScope;
 import build.jenesis.maven.MavenPomResolver;
@@ -499,6 +502,14 @@ public final class MavenQualityInspector implements QualityInspector {
         return subjects;
     }
 
+    /** The build tool's default repository with this JVM's {@code jenesis.maven.*} properties laid over it; the tool
+     *  reads settings from the environment it is handed, never from system properties. */
+    private static MavenRepository repository() {
+        Map<String, String> properties = new HashMap<>();
+        System.getProperties().forEach((name, value) -> properties.put(name.toString(), value.toString()));
+        return MavenDefaultRepository.ofEnvironment(new Environment(Make.keys(properties)));
+    }
+
     /** The identifier the root POM is resolved under, so the closure names it among its roots. */
     private static final String ROOT = "root";
 
@@ -517,9 +528,9 @@ public final class MavenQualityInspector implements QualityInspector {
     private static List<ComplianceGate.Subject> transitive(byte[] pom) {
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             MavenResolver.Closure closure = new MavenPomResolver().dependencies(
-                    executor, MavenDefaultRepository.of(),
+                    executor, repository(),
                     List.of(new MavenResolver.RootPom(new ByteArrayInputStream(pom), null, ROOT, false, null)),
-                    List.of(), Map.of(), MavenDependencyScope.COMPILE, PREFIX);
+                    Map.of(), MavenDependencyScope.COMPILE, PREFIX);
             Map<MavenDependencyKey, ComplianceGate.Reachability> reachability =
                     BuildGraphReachability.of(closure, PREFIX);
             Set<MavenDependencyKey> roots = new HashSet<>(closure.roots().values());

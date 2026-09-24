@@ -15,6 +15,7 @@
  * compliance module is precisely the copied mechanism the thin-core rule forbids.
  *
  * @jenesis.release 25
+ * @jenesis.alias build.jenesis build.jenesis/build.jenesis
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
