@@ -7,6 +7,7 @@
     <div th:replace="~{fragments :: messages}"></div>
     <p><a th:href="@{'/repositories/' + ${repo}}">&larr; Repository <span th:text="${repo}">name</span></a></p>
     <header th:replace="~{base :: pageHeader('Migrate into ' + ${repo})}"></header>
+    <p th:replace="~{fragments :: repositoryIdentity(${identity})}"></p>
 
     <article>
         <h2>Start a migration</h2>

@@ -428,7 +428,7 @@ public final class RepositoryClient {
                             String admittedBy, Map<String, String> details) {
     }
 
-    /** The signature recorded for the artifact at a layout path, or {@code null} when none was - a version
+    /** The signature recorded for the artifact at a path within the repository, or {@code null} when none was - a version
      *  published before signatures were checked, which is not one checked and found wanting. */
     public Signature signature(String repo, String path) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET",
@@ -440,7 +440,7 @@ public final class RepositoryClient {
         return JSON.readValue(response.body(), Signature.class);
     }
 
-    /** The signed provenance attestation (a DSSE envelope) for a published artifact at a layout path. */
+    /** The signed provenance attestation (a DSSE envelope) for a published artifact at a path within the repository. */
     public String provenance(String repo, String path) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET",
                 "/api/provenance?repo=" + enc(repo) + "&path=" + enc(path), null, null);
@@ -490,7 +490,7 @@ public final class RepositoryClient {
                 HttpRequest.BodyPublishers.ofByteArray(bytes), "application/octet-stream").statusCode();
     }
 
-    /** Deploy a file on disk at the given layout path, streaming it straight from the filesystem rather than buffering
+    /** Deploy a file on disk at the given path within the repository, streaming it straight from the filesystem rather than buffering
      *  the whole artifact into heap - the streaming twin of {@link #deploy(String, String, byte[])} for the CLI's
      *  upload path, where the file may be artifact-sized (stream, never buffer). */
     public int deploy(String repo, String path, Path file) throws IOException, InterruptedException {
@@ -498,7 +498,7 @@ public final class RepositoryClient {
                 HttpRequest.BodyPublishers.ofFile(file), "application/octet-stream").statusCode();
     }
 
-    /** Deploy an archive at a layout path with the batch-explode header set, so the server walks the archive and
+    /** Deploy an archive at a path within the repository with the batch-explode header set, so the server walks the archive and
      *  publishes each entry through the compliance gate on the entry's own format path; returns the HTTP status and,
      *  on a batch response (200 or a 400 malformed archive), the per-entry manifest ({@code path -> stored |
      *  quarantined | rejected | unclaimed}). When batch upload is off on the deployment the header is inert and the
@@ -1815,7 +1815,7 @@ public final class RepositoryClient {
     public record LicenseCount(String value, long count) {
     }
 
-    /** One quarantine hold: when it was recorded, the layout path and coordinate, the gate verdict and the reasons. */
+    /** One quarantine hold: when it was recorded, the path within the repository and coordinate, the gate verdict and the reasons. */
     public record QuarantineEvent(String when, String path, String coordinate, String verdict, List<String> reasons) {
     }
 

@@ -42,13 +42,15 @@ public class OriginController {
     public List<RepositoryBrowse.OriginRow> origin(@RequestParam("repo") String repo,
                                                    @RequestParam(value = "path", defaultValue = "") String path,
                                                    @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                                   HttpServletResponse response) {
+                                                   HttpServletResponse response) throws IOException {
         String tenant = RepositoryRequests.access(repositories, repo, key, response);
         if (tenant == null) {
             return null;
         }
         // The read is confined to the tenant's named repository store and traversal-guarded exactly as the console
         // origin panel is (RepositoryBrowse.safePrefix), so a crafted path cannot escape the repository subtree.
-        return RepositoryBrowse.originOf(repositories.store(tenant, repo), RepositoryBrowse.safePrefix(path));
+        // The path is the one a client names within the repository, laid out as the format stores it.
+        return RepositoryBrowse.originOf(repositories.store(tenant, repo),
+                RepositoryBrowse.safePrefix(repositories.formatPath(tenant, repo, RepositoryBrowse.safePrefix(path))));
     }
 }

@@ -19,6 +19,7 @@ import build.jenesis.repository.ui.BrowseRow;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -203,6 +204,18 @@ public class RepositoryAdminController {
      * <p>Every read here is a bounded window or a stored result, so the first screen of a repository renders in the
      * same time over a million releases as over ten. Nothing walks the published set.
      */
+    /**
+     * The identity every one of a repository's pages opens with - the format it holds and where a client reaches
+     * it - so a page about the repository's staging or retention says which repository it is about in the same terms
+     * a client uses. Absent on the pages that name no repository.
+     */
+    @ModelAttribute
+    public void identity(@PathVariable(value = "repo", required = false) String repo, Model model) throws IOException {
+        if (repo != null) {
+            model.addAttribute("identity", repositories.identity(repo).orElse(null));
+        }
+    }
+
     @GetMapping("/repositories/{repo}")
     public String detail(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);

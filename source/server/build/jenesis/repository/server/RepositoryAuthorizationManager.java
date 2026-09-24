@@ -77,7 +77,9 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         boolean probe = uri.equals("/v2") || uri.equals("/v2/");
         RepositoryRouting.Target target = artifact ? RepositoryRouting.target(uri) : null;
         if (artifact) {
-            scope = target.repository();
+            // A URL naming no repository - the registry's own catalog - reads across the tenant's repositories, so it
+            // takes a right over all of them.
+            scope = target.repository().isEmpty() ? "*" : target.repository();
         }
         // PUT /repository/<tenant>/<name> - the bare repository, no path within it - creates the repository, which is
         // administration rather than a publish: a key that may deploy into a repository may not thereby create

@@ -103,7 +103,9 @@ public class ProvenanceController {
         }
         RepositoryRequests.rejectTraversal(path);
         ArtifactStore store = repositories.store(tenant, repo);
-        Optional<String> located = new Publication(store).located(path);
+        // The path is the one a client names within the repository; the publication records it as the format lays it
+        // out. The attestation names the artifact by the former, which is how anybody holding it refers to it.
+        Optional<String> located = new Publication(store).located(repositories.formatPath(tenant, repo, path));
         if (located.isEmpty()) {
             response.setStatus(404);
             return null;

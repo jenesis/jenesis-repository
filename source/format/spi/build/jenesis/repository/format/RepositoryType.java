@@ -120,6 +120,18 @@ public record RepositoryType(String name, List<RepositoryFormat> formats, String
         return mount + path;
     }
 
+    /**
+     * The inverse of {@link #formatPath}: the path a client names within the repository for a path a format lays out,
+     * its mount taken off. A path outside the mount is not one this type serves, and is answered unchanged.
+     */
+    public String servedPath(String formatPath) {
+        if (mount.isEmpty()) {
+            return formatPath;
+        }
+        return formatPath.equals(mount) ? "" : formatPath.startsWith(mount + "/")
+                ? formatPath.substring(mount.length()) : formatPath;
+    }
+
     /** The format of this type that claims {@code formatPath}, or empty when none does. */
     public Optional<RepositoryFormat> claiming(String formatPath) {
         return formats.stream().filter(format -> format.handles(formatPath)).findFirst();

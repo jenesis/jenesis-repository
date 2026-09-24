@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.cleanup.Release;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
@@ -74,6 +75,25 @@ public class RepositoryAdmin extends TenantScope {
      *  store read in the steady state. */
     public Optional<String> format(String repository) throws IOException {
         return RepositoryDocument.cached(root, tenant(), repository).map(RepositoryDocument::format);
+    }
+
+    /**
+     * What a repository's pages say about it first: the format it holds and the URL a client reaches it at -
+     * {@code /repository/<tenant>/<repository>/}, or {@code /v2/<tenant>/<repository>/} for a type the OCI registry
+     * mounts. Empty for a repository that holds no format, which answers no URL.
+     */
+    public Optional<Identity> identity(String repository) throws IOException {
+        Optional<String> format = format(repository);
+        if (format.isEmpty()) {
+            return Optional.empty();
+        }
+        String root = RepositoryType.installed(format.get()).map(RepositoryType::mount)
+                .filter("/v2"::equals).orElse("/repository");
+        return Optional.of(new Identity(format.get(), root + "/" + tenant() + "/" + repository + "/"));
+    }
+
+    /** The format a repository holds and the URL a client reaches it at. */
+    public record Identity(String format, String url) {
     }
 
     /**

@@ -11,6 +11,8 @@ import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.staging.Staging;
 import build.jenesis.repository.staging.StagingProvider;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.store.Listings;
 import build.jenesis.repository.store.QuotaArtifactStore;
 
@@ -207,6 +209,30 @@ public final class Repositories {
     }
 
 
+
+    /**
+     * The type {@code tenant}'s {@code repository} holds, read through the node's cache, or empty when it holds none
+     * this deployment installs.
+     */
+    public Optional<RepositoryType> type(String tenant, String repository) throws IOException {
+        return RepositoryDocument.cached(root, tenant, repository)
+                .flatMap(document -> RepositoryType.installed(document.format()));
+    }
+
+    /**
+     * A path the API names an artifact by - the path within the repository, what a client appends to the
+     * repository's URL - as the repository's format lays it out, with its mount put back. Every surface that names an
+     * artifact takes the path a client uses; this is where that path meets what the store records. A repository that
+     * holds no installed format leaves it as it is.
+     */
+    public String formatPath(String tenant, String repository, String path) throws IOException {
+        return type(tenant, repository).map(type -> type.formatPath(path)).orElse(path);
+    }
+
+    /** The inverse of {@link #formatPath}: what the API reports for a path the store records. */
+    public String servedPath(String tenant, String repository, String formatPath) throws IOException {
+        return type(tenant, repository).map(type -> type.servedPath(formatPath)).orElse(formatPath);
+    }
 
     /** The artifact space confined to a tenant's named repository, for a format plugin to read and write. */
     public ArtifactStore store(String tenant, String repository) {

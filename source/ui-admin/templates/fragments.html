@@ -150,6 +150,19 @@
      cause line. */-->
 <article th:fragment="subsectionError(title, message, detail)"
          th:replace="~{base :: subsectionError(${title}, ${message}, ${detail})}"></article>
+<!--/* repositoryIdentity: the line every page about one repository opens with - the format it holds and the URL a
+     client reaches it at - read from the identity the controller puts on each of those pages. A repository holding no
+     format answers no URL, and says so. */-->
+<p th:fragment="repositoryIdentity(identity)" class="app-repository-identity">
+    <th:block th:if="${identity != null}">
+        <span class="app-badge" title="The format this repository holds" th:text="${identity.format()}">maven</span>
+        <small>served at <code th:text="${identity.url()}">/repository/default/releases/</code></small>
+    </th:block>
+    <th:block th:if="${identity == null}">
+        <span class="app-badge app-badge--warn">no format</span>
+        <small>This repository holds no format, so no URL answers for it; give it one on the Repositories page.</small>
+    </th:block>
+</p>
 <!--/* shapeBadges: the parsed repository shape as inline badges (T25.6 item 2), shared by the repositories list and the
      repository detail hub so both render one repository's writable/read-only/host+proxy posture and its per-fallback
      store/no-store + screen-strength (or inner-repo reference) badges identically, straight from the one Definition the

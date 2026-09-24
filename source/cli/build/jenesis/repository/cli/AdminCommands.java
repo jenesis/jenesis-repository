@@ -256,24 +256,15 @@ final class AdminCommands {
             }
         }
         if (rest.size() < 3) {
-            throw new IllegalArgumentException("Usage: deploy <repo> <layout-path> <file> [--explode zip]");
+            throw new IllegalArgumentException("Usage: deploy <repo> <path> <file> [--explode zip]");
         }
         String repo = rest.get(0);
         String path = rest.get(1);
         String file = rest.get(2);
         if (!path.startsWith("/")) {
-            StringBuilder message = new StringBuilder(
-                    "The layout path must be explicit and start with its format segment, e.g. /<format>/...");
-            try {
-                RepositoryClient.Capabilities capabilities = CliSupport.client(home).capabilities();
-                if (capabilities != null && !capabilities.formats().isEmpty()) {
-                    message.append(" Installed formats: ").append(String.join(", ",
-                            capabilities.formats().stream().map(RepositoryClient.Format::name).toList())).append('.');
-                }
-            } catch (IOException | InterruptedException _) {
-                // the hint is best-effort; the error stands on its own
-            }
-            throw new IllegalArgumentException(message.toString());
+            throw new IllegalArgumentException("The path must start with '/': it is the path within the repository, "
+                    + "what a client appends to the repository's URL - a Maven repository's /maven/..., an npm "
+                    + "repository's /<package>/-/<file>.");
         }
         // Stream the file straight from disk into the request body (never Files.readAllBytes it into heap - the
         // artifact may be large, and the streaming principle forbids buffering a whole artifact on an upload path).

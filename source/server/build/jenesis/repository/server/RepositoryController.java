@@ -151,6 +151,12 @@ public class RepositoryController {
     @RequestMapping(value = {"/repository/**", "/v2", "/v2/**"}, method = {RequestMethod.GET, RequestMethod.HEAD,
             RequestMethod.PUT, RequestMethod.POST, RequestMethod.PATCH, RequestMethod.DELETE})
     public void handle(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        // The registry's own catalog names no tenant and no repository: it lists every image of the tenant the request
+        // answers for, across that tenant's container-image repositories.
+        if (root != null && isRead(request.getMethod()) && RegistryCatalog.addresses(request.getRequestURI())) {
+            new RegistryCatalog(root, dispatcher).answer(routing.tenant(request), request, response);
+            return;
+        }
         RepositoryRouting.Route route = routing.route(request);
         boolean write = isWrite(request.getMethod());
         // A repository answers only for the one format it holds. One that holds none - never created, or created

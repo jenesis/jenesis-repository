@@ -189,7 +189,7 @@ public final class Commands {
 
             new Section("Publishing", List.of(
                     noun("deploy", "publish a file into a repository", null, AdminCommands::deploy,
-                            act("deploy <repo> <layout-path> <file> [--explode zip]",
+                            act("deploy <repo> <path> <file> [--explode zip]",
                                     "deploy a file, or explode an archive entry by entry")),
                     noun("import", "import from another repository manager", null, AdminCommands::importRepo,
                             act("import <repo> --source S --url U --source-repo R [--format F]"

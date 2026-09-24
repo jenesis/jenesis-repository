@@ -6,6 +6,7 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Retention & cleanup')}"></header>
+    <p th:replace="~{fragments :: repositoryIdentity(${identity})}"></p>
     <h2>Policy</h2>
     <p><small>A version is kept only if it satisfies every dial set below; durations are ISO-8601 (for
         example <code>P90D</code>). A pinned version is always kept, whatever the policy says.</small></p>

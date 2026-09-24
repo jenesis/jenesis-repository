@@ -55,8 +55,9 @@ public class HardeningVerdictController {
         HardeningVerdicts.View view = (path == null || path.isBlank())
                 ? new HardeningVerdicts.View(null, null, verdicts.refusals(REFUSAL_LIMIT),
                         new HardeningVerdicts.Drift(build.jenesis.repository.gateway.HardenedScreen.driftEvents()))
-                : verdicts.view(path, REFUSAL_LIMIT);
-        return new HardeningView(repo, hardened, view.path(), view.screened(), view.screenedAt(), view.verdict(),
+                : verdicts.view(repositories.formatPath(tenant, repo, path), REFUSAL_LIMIT);
+        String viewed = view.path() == null ? null : repositories.servedPath(tenant, repo, view.path());
+        return new HardeningView(repo, hardened, viewed, view.screened(), view.screenedAt(), view.verdict(),
                 view.refusals(), view.drift());
     }
 

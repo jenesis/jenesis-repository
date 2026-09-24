@@ -66,7 +66,10 @@ public class QuarantineController {
         // by the gate's ReviewQueue - the same rows the console renders - so the two surfaces cannot drift.
         ReviewQueue.Page page = ReviewQueue.page(repositories.store(tenant, repo),
                 after == null || after.isBlank() ? null : after, Math.clamp(limit, 1, MAX_PAGE));
-        List<ReviewQueue.Row> events = page.rows();
+        List<ReviewQueue.Row> events = new ArrayList<>();
+        for (ReviewQueue.Row row : page.rows()) {
+            events.add(served(tenant, repo, row));
+        }
         // A REFUSED artifact keeps no bytes and links no pointer, so it is in the queue above at no point in its life -
         // the durable QuarantineLog row is its entire record. Surface every recent REJECT row from that same
         // ledger, a bounded read of the recent page (no re-screen, no fetch): the licence the publish gate denied
@@ -76,10 +79,17 @@ public class QuarantineController {
         List<ReviewQueue.Row> refusals = new ArrayList<>();
         for (QuarantineLog.Event refusal : log.refusals(REFUSAL_LIMIT)) {
             // A refusal holds no bytes and therefore no hold record: it carries no kinds by construction.
-            refusals.add(new ReviewQueue.Row(refusal.when().toString(), refusal.path(), refusal.coordinate(),
-                    refusal.verdict().name(), refusal.reasons(), List.of()));
+            refusals.add(served(tenant, repo, new ReviewQueue.Row(refusal.when().toString(), refusal.path(),
+                    refusal.coordinate(), refusal.verdict().name(), refusal.reasons(), List.of())));
         }
         return new QuarantineView(events, refusals, page.next());
+    }
+
+    /** A row as the API reports it: its path the one a client names within the repository, which is also the path
+     *  a release or a discard of it takes. */
+    private ReviewQueue.Row served(String tenant, String repo, ReviewQueue.Row row) throws IOException {
+        return new ReviewQueue.Row(row.when(), repositories.servedPath(tenant, repo, row.path()), row.coordinate(),
+                row.verdict(), row.reasons(), row.holds());
     }
 
     /** The largest review-queue page served; a caller past it follows {@code next}. */
@@ -99,7 +109,8 @@ public class QuarantineController {
         // privileged mutation unrecorded. The audit trail is best-effort (a failed write never fails the release), so
         // recording first cannot block the release either - it only guarantees the release is never silently unaudited.
         audit(key, AuditActions.QUARANTINE_RELEASE, repo + request.path());
-        new GatedRepository(repositories.writable(tenant, repo)).release(request.path());
+        new GatedRepository(repositories.writable(tenant, repo))
+                .release(repositories.formatPath(tenant, repo, request.path()));
         response.setStatus(200);
     }
 
@@ -120,7 +131,8 @@ public class QuarantineController {
         // Audit before the mutation for the same reason as release above: never let a crash end a privileged discard
         // unrecorded; the best-effort trail cannot block the discard.
         audit(key, AuditActions.QUARANTINE_DISCARD, repo + request.path());
-        boolean discarded = new GatedRepository(repositories.writable(tenant, repo)).discard(request.path());
+        boolean discarded = new GatedRepository(repositories.writable(tenant, repo))
+                .discard(repositories.formatPath(tenant, repo, request.path()));
         response.setStatus(200);
         return new Discarded(request.path(), discarded);
     }

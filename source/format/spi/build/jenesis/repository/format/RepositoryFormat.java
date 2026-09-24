@@ -305,6 +305,23 @@ public interface RepositoryFormat extends IconContributor {
         return FormatDiscovery.DECLARED;
     }
 
+    /**
+     * The path a client names within a repository for a path a format lays out: the mount of the declared format the
+     * path falls under taken off, and the path unchanged when it falls under none - a format mounted at the
+     * repository's root, such as Maven, lays out the path a client names. For a caller that holds a format path but
+     * not the repository it was published in, such as a forward replaying a publish onto another instance's
+     * repository URL; a caller that knows the repository asks its {@link RepositoryType#servedPath}.
+     */
+    static String servedPath(String formatPath) {
+        for (RepositoryFormat format : declared()) {
+            String mount = format.mount();
+            if (!mount.isEmpty() && formatPath.startsWith(mount + "/")) {
+                return formatPath.substring(mount.length());
+            }
+        }
+        return formatPath;
+    }
+
     /** Every {@link Features#active switched-on, fully configured} format in the deployment's one configuration
      *  ({@link Features#configure}) - the set that serves, dispatches, imports, promotes and screens, so a format
      *  configured off ({@code jenreg.<name>=false}) or with required config unset is absent exactly as a missing

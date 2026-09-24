@@ -64,8 +64,13 @@ public class SignatureController {
             response.setStatus(400);
             return null;
         }
-        Optional<SignatureSection.Summary> summary =
-                SignatureSummaries.of(repositories.store(tenant, repo), path);
+        Optional<SignatureSection.Summary> summary;
+        try {
+            summary = SignatureSummaries.of(repositories.store(tenant, repo),
+                    repositories.formatPath(tenant, repo, path));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
         if (summary.isEmpty()) {
             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
             return null;
