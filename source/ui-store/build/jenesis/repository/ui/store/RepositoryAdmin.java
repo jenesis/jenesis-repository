@@ -39,7 +39,7 @@ public class RepositoryAdmin extends TenantScope {
      */
     public List<String> listedRepositories() throws IOException {
         List<String> repositories = new ArrayList<>();
-        for (String name : StoreCache.of("console-repositories", root, StoreCache.configuredTtl()).list(tenant())) {
+        for (String name : StoreCache.of("repositories", root, StoreCache.configuredTtl()).list(tenant())) {
             if (validRepository(name)) {
                 repositories.add(name);
             }

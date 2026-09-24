@@ -17,6 +17,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.gc.walk {
+    requires build.jenesis.repository.settings;
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.format;
@@ -26,4 +27,6 @@ module build.jenesis.repository.gc.walk {
     uses build.jenesis.repository.gc.walk.GcRoots;
     provides build.jenesis.repository.walk.WalkConsumer
             with build.jenesis.repository.gc.walk.GcConsumer;
+    provides build.jenesis.repository.settings.SettingsContributor
+            with build.jenesis.repository.gc.walk.CollectionSettingsContributor;
 }

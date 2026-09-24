@@ -121,10 +121,24 @@ final class SecurityPostureTest {
                 "jenreg.block-private-import-hosts", "false",
                 "spring.profiles.active", "prod,dev",
                 "jenreg.demo", "true",
-                "jenreg.read-only", "false");
+                "jenreg.read-only", "false",
+                "jenreg.rate-limit", "0");
         List<String> ids = new SecurityPosture().advise(config).stream().map(SecurityAdvisory::id).toList();
         assertThat(ids).contains("jenreg.auth.open", "jenreg.importer.ssrf", "jenreg.ratelimit.unset",
                 "jenreg.profile.dev", "jenreg.demo.writable");
+    }
+
+    @Test
+    void anUnsetRateLimitIsTheDefaultCeilingAndRaisesNothing() {
+        // Unset is not unlimited: the server applies its default ceiling, so a fresh deployment is throttled and a
+        // warning here would be a false one on every first boot. Only an explicit 0 switches the limiter off.
+        assertThat(new SecurityPosture().advise(config("jenreg.auth", "true")))
+                .extracting(SecurityAdvisory::id).doesNotContain("jenreg.ratelimit.unset");
+        assertThat(new SecurityPosture().advise(config("jenreg.auth", "true", "jenreg.rate-limit", "plenty")))
+                .as("an unparseable value falls back to the default ceiling, as the limiter reads it")
+                .extracting(SecurityAdvisory::id).doesNotContain("jenreg.ratelimit.unset");
+        assertThat(new SecurityPosture().advise(config("jenreg.auth", "true", "jenreg.rate-limit", "0")))
+                .extracting(SecurityAdvisory::id).contains("jenreg.ratelimit.unset");
     }
 
     @Test

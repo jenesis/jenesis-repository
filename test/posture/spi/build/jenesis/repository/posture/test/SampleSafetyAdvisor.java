@@ -37,6 +37,6 @@ public final class SampleSafetyAdvisor implements SafetyAdvisor {
                 "The sample feature is in its unsafe demo mode",
                 "The sample feature is running in a demonstration mode that is not meant for production.",
                 "Turn the sample feature's unsafe mode off.",
-                KEY, "false", "https://jenesis.build/repository/observability/#jenreg.sample.unsafe"));
+                KEY, "false", "https://jenesis.build/repository/operations/#jenreg.sample.unsafe"));
     }
 }

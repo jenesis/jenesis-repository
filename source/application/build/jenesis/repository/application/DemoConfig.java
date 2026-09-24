@@ -3,6 +3,7 @@ package build.jenesis.repository.application;
 import module java.base;
 import module org.slf4j;
 
+import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.server.kernel.FirstRunHardening;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.PinnedSettings;
@@ -126,11 +127,11 @@ public class DemoConfig {
     @Bean
     public UnrecognisedSettings.Report unrecognisedSettings(ConfigurableEnvironment environment,
                                                            ApplicationContext context) {
-        Map<String, Object> bound = new LinkedHashMap<>();
+        List<UnrecognisedSettings.Bound> bound = new ArrayList<>();
         ConfigurationPropertiesBean.getAll(context).values().forEach(each -> {
             String prefix = each.getAnnotation().prefix();
             if (prefix.startsWith("jenreg") && each.getInstance() != null) {
-                bound.put(prefix, each.getInstance());
+                bound.add(new UnrecognisedSettings.Bound(prefix, each.getInstance()));
             }
         });
         Set<String> configured = new TreeSet<>();
@@ -143,8 +144,10 @@ public class DemoConfig {
                 }
             }
         }
+        Set<String> declared = new HashSet<>(ArtifactStoreProvider.declaredConfig());
+        declared.addAll(SettingsContributor.allStartupKeys());
         UnrecognisedSettings.Report report = UnrecognisedSettings.assess(configured,
-                UnrecognisedSettings.known(SettingsContributor.all(), bound));
+                UnrecognisedSettings.known(SettingsContributor.all(), bound, declared));
         if (!report.isEmpty()) {
             StringBuilder message = new StringBuilder("UNRECOGNISED SETTINGS: this deployment sets "
                     + report.findings().size() + " jenreg.* propert"

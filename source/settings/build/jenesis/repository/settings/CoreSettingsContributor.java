@@ -111,4 +111,11 @@ public final class CoreSettingsContributor implements SettingsContributor {
     public boolean neutral() {
         return true;
     }
+
+    /** The per-format upstreams the console's Format upstreams panel stores, one key per format under a prefix the
+     *  operator's choice of format opens - {@code format-upstream.maven}, {@code format-upstream.npm}. */
+    @Override
+    public Set<String> startupKeys() {
+        return Set.of("jenreg.format-upstream.*");
+    }
 }

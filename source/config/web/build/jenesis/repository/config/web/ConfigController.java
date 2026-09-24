@@ -123,7 +123,8 @@ public class ConfigController {
      * The first-run setup guide - the decisions a new deployment should make, in order, each with the settings
      * rows it is about: the one list the console's {@code /setup} screen and the CLI's {@code setup} verb render
      * ({@link FirstRunSteps}), so a step is a capability on all three surfaces and not a screen. A key the catalogue
-     * does not carry is left out of its step. Writes go through {@code PUT /api/settings/<key>} like any other.
+     * does not carry is left out of its step, and a step left with none is left out of the guide, as on the
+     * console's Setup screen. Writes go through {@code PUT /api/settings/<key>} like any other.
      * Its one store read is the settings document {@code GET /api/settings} reads - one object per module under a
      * constant prefix, narrow by construction.
      */
@@ -142,6 +143,9 @@ public class ConfigController {
                 if (row != null) {
                     carried.add(row);
                 }
+            }
+            if (carried.isEmpty() && !step.id().equals(FirstRunSteps.STARTER_CREDENTIAL)) {
+                continue;
             }
             steps.add(new StepView(step.id(), step.title(), step.why(), carried));
         }

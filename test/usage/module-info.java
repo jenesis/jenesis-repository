@@ -6,7 +6,8 @@
  * jenreg.usage.worker} health check that is DOWN when the worker died with tracking on, and a {@code
  * jenreg.usage.flush} task status stamped with the last drain - while a <em>disabled</em> tracker reports nothing at
  * all, all collected into the single {@link build.jenesis.repository.observation.ObservabilityReport} view without the
- * server, Micrometer or a network. The tracker's flush/accumulation behaviour itself is covered by the server test
+ * server, Micrometer or a network - and that the tracker's one setting reaches the catalogue through its discovered
+ * contributor. The tracker's flush/accumulation behaviour itself is covered by the server test
  * module; a real filesystem store backs the authorization the drain flushes through.
  *
  * @jenesis.release 25
@@ -20,6 +21,8 @@ open module build.jenesis.repository.usage.test {
     requires build.jenesis.repository.observation;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
+    requires build.jenesis.repository.settings;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    uses build.jenesis.repository.settings.SettingsContributor;
 }

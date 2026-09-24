@@ -16,7 +16,7 @@ import module java.base;
 public final class SecurityPosture implements SafetyAdvisor {
 
     /** Where the reference documents each advisory's condition and fix; each advisory anchors on its id. */
-    static final String DOCS = "https://jenesis.build/repository/observability/";
+    static final String DOCS = "https://jenesis.build/repository/operations/";
 
     @Override
     public List<SecurityAdvisory> advise(Configuration config) {
@@ -51,11 +51,13 @@ public final class SecurityPosture implements SafetyAdvisor {
         }
 
         // 3. No rate limit: a public instance with no throttle is trivially exhausted by a single abusive client.
-        if (config.number("jenreg.rate-limit", 0) <= 0) {
+        //    Only an explicit 0 switches the limiter off - unset is the server's default ceiling, and an unparseable
+        //    value falls back to it too - so the advisory reads the value as set and never invents one for absence.
+        if (config.optional("jenreg.rate-limit").isPresent() && config.number("jenreg.rate-limit", 1) <= 0) {
             advisories.add(SecurityAdvisory.deployment("jenreg.ratelimit.unset", Severity.WARN,
-                    "No request rate limit is configured",
-                    "jenreg.rate-limit is unset (0 = unlimited), so a public instance has no per-credential "
-                            + "throttle and a single client can saturate it (a brute-force or denial-of-service vector).",
+                    "The request rate limit is switched off",
+                    "jenreg.rate-limit is 0 (unlimited), so a public instance has no per-credential throttle and a "
+                            + "single client can saturate it (a brute-force or denial-of-service vector).",
                     "Set a sensible per-credential requests-per-minute ceiling; a small limit stops abuse while leaving "
                             + "normal build traffic untouched.",
                     "jenreg.rate-limit", "600", DOCS + "#jenreg.ratelimit.unset"));

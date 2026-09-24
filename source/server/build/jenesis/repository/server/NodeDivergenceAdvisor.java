@@ -26,7 +26,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
  */
 public final class NodeDivergenceAdvisor implements SafetyAdvisor {
 
-    static final String DOCS = "https://jenesis.build/repository/observability/";
+    static final String DOCS = "https://jenesis.build/repository/operations/";
 
     @Override
     public List<SecurityAdvisory> advise(Configuration config) {

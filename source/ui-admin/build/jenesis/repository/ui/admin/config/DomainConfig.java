@@ -26,6 +26,7 @@ import build.jenesis.repository.ui.store.TenantLimits;
 import build.jenesis.repository.ui.store.TenantPurge;
 import build.jenesis.repository.ui.store.TenantService;
 import build.jenesis.repository.ui.store.VolumeReclaim;
+import org.slf4j.LoggerFactory;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -101,6 +102,40 @@ public class DomainConfig {
         // Reclaims cached build output across every tenant, so it spans the CACHE's root rather than the
         // deployment's - it must never be able to walk the repositories looking for things to delete.
         return new VolumeReclaim(cacheRootStorage, audit, actor, operatorTenant(environment));
+    }
+
+    /**
+     * A fixed deployment's one tenant, created at boot when the store does not hold it yet.
+     *
+     * <p>A fixed deployment serves exactly one tenant, named by {@code jenreg.default-tenant}, and the console lists
+     * tenants from the store - where a tenant appears only once something is written under it. On a fresh store the
+     * console therefore listed none, and an operator signing in for the first time was sent to the instances screen
+     * to create the one tenant the deployment already serves, before any other screen would open. Creating it here
+     * makes a fresh deployment's console usable on first sign-in. A deployment of several tenants names its own,
+     * and a read-only one writes nothing, so both are left alone.
+     */
+    @Bean
+    public FixedTenant fixedTenant(TenantService tenants, ConfigurableEnvironment environment) {
+        boolean fixed = environment.getProperty("jenreg.tenancy", "fixed").equals("fixed");
+        if (!fixed || environment.getProperty("jenreg.read-only", Boolean.class, false)) {
+            return new FixedTenant(null);
+        }
+        String tenant = environment.getProperty("jenreg.default-tenant", "default");
+        try {
+            if (!tenants.exists(tenant)) {
+                tenants.create(tenant);
+            }
+        } catch (IllegalArgumentException raced) {
+            // Another node created it between the check and the write - which is the outcome wanted.
+        } catch (IOException | RuntimeException e) {
+            LoggerFactory.getLogger(DomainConfig.class).warn("The deployment's tenant '{}' could not be created; "
+                    + "the console lists it once anything is written under it", tenant, e);
+        }
+        return new FixedTenant(tenant);
+    }
+
+    /** The tenant a fixed deployment serves, or {@code null} where the deployment names its own tenants. */
+    public record FixedTenant(String name) {
     }
 
     /** The deployment-wide operator tenant (operator-tenant, else default-tenant, else {@code default}): the scope

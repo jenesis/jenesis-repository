@@ -75,6 +75,13 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
     }
 
     @Override
+    public Set<String> config() {
+        return Set.of(BUCKET_KEY, ENDPOINT_KEY, ALLOW_INSECURE_KEY, PROBE_KEY, STREAMING_WRITES_KEY,
+                Features.key("s3.region"), Features.key("s3.sse-kms-key-id"), Features.key("s3.access-key-id"),
+                Features.key("s3.secret-access-key"));
+    }
+
+    @Override
     public Set<String> requiredConfig() {
         // The credentials may come from the ambient AWS chain (environment, profile, instance role), so only the
         // bucket is required configuration.

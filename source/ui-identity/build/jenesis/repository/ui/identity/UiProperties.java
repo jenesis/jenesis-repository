@@ -28,6 +28,8 @@ public class UiProperties {
     private int minFreePercent = 0;
     /** Bearer token an identity provider presents to the SCIM provisioning API; blank disables SCIM. */
     private String scimToken = "";
+    /** The full-access administrator key key sign-in accepts ({@code JENREG_UI_ADMIN_KEY}); blank accepts none. */
+    private String adminKey = "";
 
 
     public String getAdmins() {
@@ -60,5 +62,13 @@ public class UiProperties {
 
     public void setScimToken(String scimToken) {
         this.scimToken = scimToken;
+    }
+
+    public String getAdminKey() {
+        return adminKey;
+    }
+
+    public void setAdminKey(String adminKey) {
+        this.adminKey = adminKey;
     }
 }

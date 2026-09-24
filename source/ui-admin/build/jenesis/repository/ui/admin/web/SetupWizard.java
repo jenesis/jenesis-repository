@@ -80,11 +80,17 @@ public class SetupWizard {
     }
 
     /** The guide's steps with their settings rendered from the catalogue and the store - the rows the settings
-     *  screen shows, for the keys each step names and the catalogue carries. */
+     *  screen shows, for the keys each step names and the catalogue carries. A step none of whose settings this
+     *  deployment carries is left out: it asks about a capability the image does not have, and a decision nobody
+     *  can make is not a step. The starter-credential step names no setting and is always kept. */
     public List<Step> steps() throws IOException {
         List<Step> steps = new ArrayList<>();
         for (FirstRunSteps.Step step : FirstRunSteps.ALL) {
-            steps.add(new Step(step.id(), step.title(), step.why(), settings.views(step.keys())));
+            List<SettingsAdmin.SettingView> views = settings.views(step.keys());
+            if (views.isEmpty() && !step.id().equals(FirstRunSteps.STARTER_CREDENTIAL)) {
+                continue;
+            }
+            steps.add(new Step(step.id(), step.title(), step.why(), views));
         }
         return steps;
     }

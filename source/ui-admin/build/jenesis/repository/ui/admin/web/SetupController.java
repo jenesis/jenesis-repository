@@ -49,7 +49,7 @@ public class SetupController {
     @PostMapping("/setup/skip")
     public String skip(HttpSession session) {
         SetupWizard.skip(session);
-        return "redirect:/instances";
+        return "redirect:/console";
     }
 
     private boolean set(String key) {

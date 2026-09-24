@@ -73,7 +73,7 @@ is not a deployment".
 The image is built by the build rather than by a hand-written `Dockerfile`: `source/bundle` requires every
 implementation, its `bundle=true` packaging emits the resolved runtime closure, and its `docker=` packaging
 line makes `stage` write a ready-to-build context - `java -Djenesis.test.skip=true build/jenesis/Make.java stage`,
-then `docker build -t jenesis-repository:free 'target/stage/docker/output/module-source%2Fbundle'` is the image.
+then `docker build -t jenesis-repository:free 'target/stage/docker/output/module-source+bundle'` is the image.
 There was a `Dockerfile` here that re-ran the whole build inside Docker - a second mechanism for a job the
 shared one does - and the deployment settings it carried (`JENREG_FILESYSTEM_ROOT=/data`, a `VOLUME`) belong
 to a deployment's own descriptor, which can make them conditional on the storage backend where an image cannot:

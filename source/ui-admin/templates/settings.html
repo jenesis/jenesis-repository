@@ -82,7 +82,7 @@
                 <td>
                     <form method="post" th:action="@{/settings/upstreams/remove}" style="margin:0">
                         <input type="hidden" name="format" th:value="${e.key}">
-                        <button th:replace="~{base :: dangerButton('Remove', 'Remove this format''s proxy upstream? Misses stop being pulled through until it is set again.')}">Remove</button>
+                        <button th:replace="~{base :: dangerButton('Remove', 'Remove the proxy upstream of this format? Misses stop being pulled through until it is set again.')}">Remove</button>
                     </form>
                 </td>
             </tr>

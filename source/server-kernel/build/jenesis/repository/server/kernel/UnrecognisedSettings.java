@@ -25,6 +25,10 @@ import build.jenesis.repository.store.Features;
  *     deliberately absent from the catalogue because they are not runtime-editable ({@code auth},
  *     {@code bootstrap-key}, {@code read-only}, {@code anonymous-rights}, ...). Judging against the catalogue alone
  *     would have flagged those as unknown, which is most of a real deployment's configuration.</li>
+ * <li><b>The keys an installed module reads straight from its configuration</b> - a store backend's bucket, its
+ *     root, its endpoint; a node's own id; a licence key - which neither of the two above can see, since the reader
+ *     binds nothing. A store backend declares them on its provider, any other module as its settings contributor's
+ *     startup keys. The module declares them, and a key it declares is recognised whichever backend is selected.</li>
  * <li><b>Open prefixes</b> for a property bound as a {@link Map} or a collection, where the sub-key is chosen by the
  *     operator rather than declared - {@code jenreg.proxy.<format>} being the one that matters. A prefix is not a
  *     special case written down here; it is what a {@code Map}-typed property <em>means</em>.</li>
@@ -73,6 +77,14 @@ public final class UnrecognisedSettings {
         }
     }
 
+    /**
+     * One bound {@code @ConfigurationProperties} object and the prefix it binds under. A list of these rather than a
+     * map keyed by prefix, because two objects may bind one prefix with disjoint keys - the console's shell and its
+     * identity layer both bind {@code jenreg.ui} - and a map kept one of them, so the other's keys read as unknown.
+     */
+    public record Bound(String prefix, Object properties) {
+    }
+
     /** One configured key nothing reads, with the closest recognised key where one is close enough to suggest. */
     public record Finding(String key, String nearest) {
     }
@@ -93,16 +105,25 @@ public final class UnrecognisedSettings {
      * The recognised set, from the catalogue and from the property objects the deployment binds.
      *
      * @param catalogue the runtime-editable dials, {@code SettingsContributor.all()}
-     * @param bound     each {@code @ConfigurationProperties} object under its own prefix (with or without the
+     * @param bound     each {@code @ConfigurationProperties} object and its prefix (with or without the
      *                  {@code jenreg.} namespace); a {@code Map} or collection property contributes an open prefix
+     * @param declared  the full keys installed modules declare they read, such as a store backend's; one ending in
+     *                  {@code .*} opens that prefix, as a {@code Map} property does
      */
-    public static Known known(List<Setting> catalogue, Map<String, Object> bound) {
+    public static Known known(List<Setting> catalogue, List<Bound> bound, Set<String> declared) {
         Set<String> keys = new HashSet<>();
         Set<String> prefixes = new HashSet<>();
         for (Setting setting : catalogue) {
             keys.add(flatten(setting.key()));
         }
-        bound.forEach((prefix, object) -> walk(object, root(prefix), keys, prefixes, 0));
+        for (String key : declared) {
+            if (key.endsWith(".*")) {
+                prefixes.add(flatten(key.substring(0, key.length() - 2)));
+            } else {
+                keys.add(flatten(key));
+            }
+        }
+        bound.forEach(each -> walk(each.properties(), root(each.prefix()), keys, prefixes, 0));
         return new Known(keys, prefixes);
     }
 

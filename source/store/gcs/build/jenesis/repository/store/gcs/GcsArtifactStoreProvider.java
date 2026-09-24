@@ -94,6 +94,12 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
     }
 
     @Override
+    public Set<String> config() {
+        return Set.of(BUCKET_KEY, CREDENTIALS_KEY, PROJECT_KEY, STREAMING_WRITES_KEY, ENDPOINT_KEY, PROBE_KEY,
+                ALLOW_INSECURE_KEY);
+    }
+
+    @Override
     public Set<String> requiredConfig() {
         // The credential may come from the ambient Application Default Credentials, so only the bucket is required.
         return Set.of(BUCKET_KEY);

@@ -39,6 +39,13 @@ public class HomeController {
         if (!authenticated(authentication)) {
             return "redirect:/login";
         }
+        // Where there is one tenant to be in, the reader is in it - a super-admin of a single-tenant deployment as
+        // much as a member of one tenant - and it is chosen before anything else, so no screen the reader opens next
+        // sends them back here for a choice with one answer.
+        List<String> accessible = memberships.accessibleTo(authentication.getName(), hasSuperadmin(authentication));
+        if (accessible.size() == 1) {
+            current.select(accessible.get(0));
+        }
         // A super-admin on the starter credential is guided first, once per session and while the dial is on -
         // decided here, on the landing, so nothing else in the console is ever gated by it (SetupWizard says why).
         // The dial is read last, so only a starter session pays it, and it is the settings document - one object
@@ -46,15 +53,7 @@ public class HomeController {
         if (setup.redirects(authentication, session)) {
             return "redirect:/setup";
         }
-        if (hasSuperadmin(authentication)) {
-            return "redirect:/instances";
-        }
-        List<String> accessible = memberships.accessibleTo(authentication.getName(), false);
-        if (accessible.size() == 1) {
-            current.select(accessible.get(0));
-            return "redirect:/projects";
-        }
-        return "redirect:/instances";
+        return accessible.size() == 1 ? "redirect:/repositories" : "redirect:/instances";
     }
 
 

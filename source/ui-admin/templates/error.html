@@ -7,11 +7,15 @@
     <article>
         <!--/* The page header is the base module's shared fragment (resolved cross-module from its
              META-INF/templates through SharedShellConfig), not a local copy. */-->
-        <header th:replace="~{base :: pageHeader('Something went wrong')}"></header>
-        <p class="app-alert app-alert--danger" role="alert"
+        <!--/* A 404 is the common case - an address typed or bookmarked, or a page whose module this deployment
+             does not carry or has switched off - and it is not an error in the server, so it says so. */-->
+        <header th:replace="~{base :: pageHeader(${status == 404} ? 'Page not found' : 'Something went wrong')}"></header>
+        <p th:if="${status == 404}">There is no page at this address, or its feature is switched off on this
+            deployment - <strong>Settings → Modules</strong> lists what is installed and on.</p>
+        <p th:unless="${status == 404}" class="app-alert app-alert--danger" role="alert"
            th:text="${error} ?: (${message} ?: 'Unexpected error.')">Unexpected error.</p>
         <p th:if="${status}"><small>Status <span th:text="${status}">500</span></small></p>
-        <a href="/projects" role="button">Back to projects</a>
+        <a th:href="@{/console}" role="button">Back to the console</a>
     </article>
 </main>
 <footer th:replace="~{base :: footer}"></footer>

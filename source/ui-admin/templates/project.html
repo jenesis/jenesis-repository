@@ -64,10 +64,9 @@
 
     <article>
         <h2>Access</h2>
-        <p>Access is granted per credential, not per project. A credential is a hashed key under
-            <code>.users/&lt;hash&gt;/projects.properties</code> mapping this project to a role
-            (<code>read</code>, <code>write</code>, or <code>read,write</code>); <code>*</code> grants every
-            project. Manage them on the <a href="/credentials">Credentials</a> page.</p>
+        <p>A build reaches this project with a key granted it: on the key's page under
+            <a href="/credentials">Access &rarr; Credentials</a>, grant this project - or <code>*</code> for every
+            project - the role <strong>deploy</strong> to read and store, or <strong>read-only</strong> to read.</p>
     </article>
 </main>
 <footer th:replace="~{base :: footer}"></footer>

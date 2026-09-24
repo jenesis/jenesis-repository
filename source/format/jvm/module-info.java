@@ -1,7 +1,7 @@
 /**
  * Describes the JVM layouts' one runtime dial to the settings catalogue: the Maven format's
  * metadata-computation opt-in, contributed through a {@link build.jenesis.repository.settings.SettingsContributor} so
- * it surfaces exactly when an image ships this module beside the layouts (the {@code ratelimit/bundle} pattern).
+ * it surfaces exactly when an image ships this module beside the layouts.
  *
  * <p>It deliberately {@code requires} <em>neither</em> layout implementation. The layouts themselves -
  * the Maven layout ({@code build.jenesis.repository.format.maven}) and the Jenesis module layout

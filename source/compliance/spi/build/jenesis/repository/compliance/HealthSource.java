@@ -211,10 +211,9 @@ public interface HealthSource extends SignalSource {
 
     /** The source names installed on this deployment, regardless of enablement.
      *
-     *  <p><b>No production surface reads this</b>, and this javadoc asserted that a console and an API gated their
-     *  surfaces on it for as long as neither did -. The console gates the maintainer-health panel on
-     *  {@code HealthLedgerProvider} - the durable ledger the sweep writes, which is what a read must render (&sect;10)
-     *  - never on which upstream sources are installed. Its reader is the signal-consolidation suite. */
+     *  <p>The console lists the maintainer-health page only where one is installed: the page renders the durable
+     *  ledger the sweep writes, which is what a read must render (&sect;10), and a ledger nothing fills would only
+     *  ever say that nothing had scored it. */
     static Set<String> installed() {
         return SignalSourceProvider.installed(HealthSource.class);
     }

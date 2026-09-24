@@ -65,11 +65,10 @@ public final class TenantPosture implements SafetyAdvisor {
     /** The prefix the runtime settings live under; a core dial is {@code jenreg.<bare key>}. */
     private static final String PREFIX = "jenreg.";
 
-    /** Where the reference documents each advisory's condition and fix; each advisory anchors on its id. These four
-     *  are the gate's own dials, so they anchor in the chapter that explains the gate rather than beside the free
-     *  core's deployment-wide rows, which {@code SecurityPosture} points at the observability chapter for. It used to
-     *  name a path no page has ever been served at, so every one of these rows linked an operator to a 404. */
-    static final String DOCS = "https://jenesis.build/depot/compliance-gate/";
+    /** Where the reference documents each advisory's condition and fix; each advisory anchors on its id. The
+     *  chapter that explains the Security posture screen lists every advisory the screen can show, the gate's own
+     *  dials among them, so an operator following a row's link lands on its entry. */
+    static final String DOCS = "https://jenesis.build/repository/operations/";
 
     /** The CVSS-band dial, and the one band that <em>disables</em> the check rather than relaxing it. Every other
      *  band (LOW..CRITICAL) refuses at or above itself, so only this one leaves nothing refused. */

@@ -10,6 +10,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.ratelimit {
+    requires build.jenesis.repository.settings;
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.observation;
     exports build.jenesis.repository.ratelimit to build.jenesis.repository.test,
@@ -18,4 +19,6 @@ module build.jenesis.repository.ratelimit {
             with build.jenesis.repository.ratelimit.TokenBucketRateLimiterProvider;
     provides build.jenesis.repository.observation.ObservabilitySource
             with build.jenesis.repository.ratelimit.RateLimiterObservability;
+    provides build.jenesis.repository.settings.SettingsContributor
+            with build.jenesis.repository.ratelimit.RateLimitSettingsContributor;
 }

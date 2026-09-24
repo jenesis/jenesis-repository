@@ -53,10 +53,21 @@ class UnrecognisedSettingsTest {
         }
     }
 
+    /** A second object binding a prefix the first already covers, with keys of its own - as the console's identity
+     *  layer binds {@code jenreg.ui} beside its shell. */
+    public static final class Console {
+
+        public String getAdminKey() {
+            return "";
+        }
+    }
+
     private static UnrecognisedSettings.Known known() {
         return UnrecognisedSettings.known(
                 List.of(setting("outbox-parked-retention"), setting("listing-rebuild"), setting("walks")),
-                Map.of("jenreg", new Properties()));
+                List.of(new UnrecognisedSettings.Bound("jenreg", new Properties()),
+                        new UnrecognisedSettings.Bound("jenreg.ui", new Console())),
+                Set.of("jenreg.filesystem.root", "jenreg.format-upstream.*"));
     }
 
     private static Setting setting(String key) {
@@ -79,6 +90,32 @@ class UnrecognisedSettingsTest {
                 .as("these are bound at boot and are deliberately not in the runtime-editable catalogue; judging "
                         + "against the catalogue alone would report a normal deployment's own configuration")
                 .isEmpty();
+    }
+
+    @Test
+    void two_objects_binding_one_prefix_are_both_recognised() {
+        assertThat(reported("jenreg.ui.title", "JENREG_UI_ADMIN_KEY"))
+                .as("the console's shell and its identity layer both bind jenreg.ui with disjoint keys; keeping one "
+                        + "object per prefix reported the other's keys as unknown")
+                .isEmpty();
+    }
+
+    @Test
+    void a_key_an_installed_module_declares_is_recognised() {
+        assertThat(reported("JENREG_FILESYSTEM_ROOT"))
+                .as("a store backend binds nothing, so only its own declaration can say it reads its root - and "
+                        + "the filesystem root is the one key every default deployment must set")
+                .isEmpty();
+    }
+
+    @Test
+    void a_declared_prefix_opens_like_a_map_property() {
+        assertThat(reported("jenreg.format-upstream.maven", "JENREG_FORMAT_UPSTREAM_NPM"))
+                .as("the per-format upstreams the console stores are named by the operator's choice of format")
+                .isEmpty();
+        assertThat(reported("jenreg.format-upstream"))
+                .as("the prefix alone names nothing, as with a Map property")
+                .hasSize(1);
     }
 
     @Test

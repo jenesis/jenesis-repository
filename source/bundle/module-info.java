@@ -48,6 +48,7 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.importer.nexus;
     requires build.jenesis.repository.oidc;
     // Console sign-in through GitHub or any OpenID Connect issuer, off until a provider is configured.
+    requires build.jenesis.repository.auth.keylogin;
     requires build.jenesis.repository.auth.oidc;
     // Console sign-in against an LDAP or Active Directory server, off until jenreg.ui.ldap.url names one.
     requires build.jenesis.repository.auth.ldap;

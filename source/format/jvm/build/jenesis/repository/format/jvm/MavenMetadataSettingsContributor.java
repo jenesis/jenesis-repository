@@ -14,7 +14,7 @@ import build.jenesis.repository.settings.SettingsContributor;
  * restart-bound ({@code live=false}) and this module describes it without the format depending on the settings
  * layer.
  *
- * <p>The key is named as the wire string the two sides already agree on (the {@code ratelimit/bundle} sibling does the
+ * <p>The key is named as the wire string the two sides already agree on (the rate limiter's contributor does the
  * same for {@code rate-limit}) rather than read off {@code MavenMetadata.COMPUTE_SETTING}: a describing module must not
  * take a compile-time edge to a format implementation just to spell a settings key, or every touch of that format
  * rebuilds every image. The two spellings are held together where the coupling belongs - a test - by

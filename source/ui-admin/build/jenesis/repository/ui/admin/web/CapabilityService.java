@@ -5,6 +5,7 @@ import module org.slf4j;
 import build.jenesis.repository.observation.Contributions;
 import build.jenesis.repository.cleanup.RetentionProvider;
 import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.HealthSource;
 import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.health.HealthLedgerProvider;
 import build.jenesis.repository.format.FetcherProvider;
@@ -92,15 +93,17 @@ public class CapabilityService {
             MaintenanceTaskProvider.installed().contains("index"),
             MaintenanceTaskProvider.installed().contains("license-retro-enforce"),
             FindingsProvider.installed().isPresent(),
-            // The durable maintainer-health module: present, the health panel renders the ledger the sweep populates;
-            // absent, the panel surface is hidden rather than broken (like every other capability signal).
-            HealthLedgerProvider.installed().isPresent(),
+            // The durable maintainer-health ledger, and a source that fills it: the page renders the ledger the sweep
+            // populates, and a ledger with no source installed stays empty for ever, so the page is listed only where
+            // something can score what the repository holds.
+            HealthLedgerProvider.installed().isPresent() && !HealthSource.installed().isEmpty(),
             // The hardening proxy leg (EPIC 23): present when the gateway's migration-rescreen maintenance task is
             // installed, so the console shows the hardened badge/verdict panel for a hardened repository and hides the
             // surface entirely on a deployment that carries no hardening leg. The per-repository gate stays the repo's
             // own harden flag; this is the module-presence signal, discovered like every other (§2).
             MaintenanceTaskProvider.installed().contains("migration-rescreen"),
             enabled(consoleModules, "scim"),
+            flag(contributed, "leak-webhook"),
             ImportSourceProvider.declared().stream()
                     .map(provider -> new ImportSourceView(
                             provider.name(), provider.label(), provider.requiresFormat()))
@@ -162,6 +165,7 @@ public class CapabilityService {
                 Map.entry("maintainerHealth", capabilities.maintainerHealth()),
                 Map.entry("hardening", capabilities.hardening()),
                 Map.entry("scim", capabilities.scim()),
+                Map.entry("leakWebhook", capabilities.leakWebhook()),
                 Map.entry("import", capabilities.importAvailable()));
     }
 
@@ -230,7 +234,7 @@ public class CapabilityService {
                                boolean provenance, boolean upstream, boolean upstreamCredentials, boolean rateLimit,
                                boolean dependents, boolean search, boolean index, boolean licensePolicy,
                                boolean findings, boolean maintainerHealth, boolean hardening, boolean scim,
-                               List<ImportSourceView> importSources) {
+                               boolean leakWebhook, List<ImportSourceView> importSources) {
 
         /** An import needs both a source connector and the upstream fetcher on the module path. */
         public boolean importAvailable() {

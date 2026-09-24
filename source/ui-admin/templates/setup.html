@@ -41,8 +41,6 @@
         <th:block th:each="s : ${step.settings}">
             <div th:replace="~{fragments :: settingRow(${s}, '/setup')}"></div>
         </th:block>
-        <p th:if="${step.settings.isEmpty() and step.id != 'starter-credential'}"><small>None of this step's settings
-            is carried by this deployment's image.</small></p>
     </article>
 
     <p th:unless="${wizardOn}"><small>The first-run redirect is switched off for this deployment; this screen was

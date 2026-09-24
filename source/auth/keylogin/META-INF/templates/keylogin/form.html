@@ -1,0 +1,30 @@
+<!doctype html>
+<!--
+  keylogin/form.html - the login-key sign-in form, drawn in the same frame as every other sign-in page.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{base :: head('Sign in with a key', ${product})}">
+    <meta charset="utf-8">
+    <title>Sign in</title>
+</head>
+<body>
+<th:block th:replace="~{base :: signInShell}"></th:block>
+<main id="main" class="app-signin">
+    <h1>Sign in</h1>
+    <p class="app-signin__lede">With a login key.</p>
+    <th:block th:if="${param.error}">
+        <p th:replace="~{base :: alert('Sign-in failed, or your account belongs to no tenant.', 'danger')}"></p>
+    </th:block>
+    <form method="post" th:action="@{/login/key}">
+        <label for="key">Login key</label>
+        <input type="password" id="key" name="key" autocomplete="off" autofocus required
+               placeholder="Paste your login key"/>
+        <button type="submit">Sign in</button>
+    </form>
+    <p class="app-signin__foot">Key-based sign-in is for <strong>demos and simple deployments</strong> without
+        single sign-on. For production, prefer OIDC or LDAP, and switch this off once real credentials exist.</p>
+    <p class="app-signin__foot"><a th:href="@{/login}">&larr; Back to sign-in options</a></p>
+</main>
+<footer th:replace="~{base :: footer}"></footer>
+</body>
+</html>

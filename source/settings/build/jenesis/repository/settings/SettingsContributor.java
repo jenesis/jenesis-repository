@@ -65,6 +65,27 @@ public interface SettingsContributor {
     /** The settings this module contributes, in the order they should render within their groups. */
     List<Setting> settings();
 
+    /**
+     * The keys this module reads that the catalogue deliberately leaves out, each as its full property name
+     * ({@code jenreg.<key>}): a node's own identity, a switch the context settles as it starts, a credential that must
+     * never be stored, or - ending in {@code .*} - a prefix under which the operator names the keys, such as one
+     * entry per format. No surface lists them as settings; they are named here only so the boot check for
+     * unrecognised settings knows that something reads them. Empty by default.
+     */
+    default Set<String> startupKeys() {
+        return Set.of();
+    }
+
+    /** Every installed contributor's {@link #startupKeys()}, unioned. Read through the unvalidated discovery, since a
+     *  key a module reads at startup is no one's catalogue entry and so no collision to refuse. */
+    static Set<String> allStartupKeys() {
+        Set<String> keys = new TreeSet<>();
+        for (SettingsContributor contributor : declared()) {
+            keys.addAll(contributor.startupKeys());
+        }
+        return Set.copyOf(keys);
+    }
+
     /** Whether this is the neutral core's own contributor rather than a plugin module's. The core dogfoods this SPI so
      *  its catalogue is authored once ({@link CoreSettingsContributor}), but its dials are not a removable module: they
      *  belong to the {@link SettingsDocuments#NEUTRAL neutral} document and their scope is classified by
@@ -203,7 +224,8 @@ public interface SettingsContributor {
                 continue;
             }
             Module module = provider.type().getModule();
-            if (!module.isNamed()) {
+            if (!module.isNamed() || contributor.settings().isEmpty()) {
+                // A contributor that only names startup keys has nothing for a modules-console row to show.
                 continue;
             }
             byModule.computeIfAbsent(module.getName(), _ -> new ArrayList<>()).addAll(contributor.settings());

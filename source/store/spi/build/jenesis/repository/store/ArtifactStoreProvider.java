@@ -78,6 +78,21 @@ public interface ArtifactStoreProvider extends IconContributor {
         return Set.of();
     }
 
+    /** Every config key this backend reads, required or optional - what a deployment may set for it and have read.
+     *  The required keys by default; a backend with optional keys lists them too, so the boot check that warns about
+     *  a setting nothing reads never warns about one this backend does. */
+    default Set<String> config() {
+        return requiredConfig();
+    }
+
+    /** Every config key an installed backend reads, whichever one is selected - the store's share of what a
+     *  deployment recognises. */
+    static Set<String> declaredConfig() {
+        Set<String> keys = new TreeSet<>();
+        ServiceLoader.load(ArtifactStoreProvider.class).forEach(provider -> keys.addAll(provider.config()));
+        return Set.copyOf(keys);
+    }
+
     /** Resolve the named backend through the shared {@link Providers#exclusiveWithDefault} policy: the bundled
      *  {@code filesystem} backend answers an <em>unselected</em> deployment, an explicitly named backend no provider
      *  answers to fails loudly rather than silently serving and persisting against the local disk, and the chosen
