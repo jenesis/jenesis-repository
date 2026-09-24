@@ -1,5 +1,6 @@
 /**
- * The cache protocol this build tool speaks, as its own module: {@code /cache/<step>/<inputs>} with the project
+ * The cache protocol this build tool speaks, as its own module: {@code /<step>/<inputs>} within a tenant's cache,
+ * with the project
  * and the credential in headers. It is the protocol a node must carry to serve its own builds, and the one an
  * edition shipping no foreign layout still has.
  *

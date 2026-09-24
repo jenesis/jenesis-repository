@@ -24,9 +24,9 @@ import build.jenesis.repository.store.Providers;
  *       {@code true}, so it decides on the shape of the path and nothing else.</li>
  *   <li><b>Path ownership does not overlap, and {@link #RESERVED} is how.</b> A path at most one protocol claims
  *       is what makes dispatch order irrelevant - no protocol is asked to be more specific than another, and
- *       nothing has to be tried in sequence. The shared {@code /cache/} space makes that a real constraint rather
- *       than a hope: a foreign tool's layout is rooted at {@code /cache/<its name>/}, and one of them - Gradle's
- *       {@code /cache/gradle/<key>} - is shape-identical to the native {@code /cache/<step>/<inputs>}. So the
+ *       nothing has to be tried in sequence. A tenant's cache is one shared space, which makes that a real
+ *       constraint rather than a hope: a foreign tool's layout is rooted at {@code /<its name>/}, and one of them -
+ *       Gradle's {@code /gradle/<key>} - is shape-identical to the native {@code /<step>/<inputs>}. So the
  *       first segment of a native address may not be a reserved one, every foreign protocol's name is listed
  *       here, and a protocol claiming a path another owns is a composition error rather than a question of who
  *       wins.</li>
@@ -84,7 +84,7 @@ public interface CacheProtocol {
     String KEY_HEADER = "Jenesis-Cache-Key";
 
     /**
-     * The first segments under {@code /cache/} that root a foreign tool's own layout rather than naming a build
+     * The first segments of a tenant's cache that root a foreign tool's own layout rather than naming a build
      * step, so the native protocol declines them and the claims stay disjoint (clause 3).
      *
      * <p>A constant rather than a question put to the installed set, because {@link #handles} is a pure function
@@ -125,7 +125,8 @@ public interface CacheProtocol {
      */
     interface Request {
 
-        /** The request path, from the leading slash. */
+        /** The request path within the tenant's cache - what follows {@code /build/<tenant>} - from the leading
+         *  slash. */
         String path();
 
         /** The HTTP method, upper case. */

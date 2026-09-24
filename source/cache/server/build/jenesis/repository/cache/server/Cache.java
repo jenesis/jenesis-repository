@@ -196,8 +196,19 @@ public class Cache {
         return max;
     }
 
-    /** Authorise a request and resolve its entry, recording the rejection metric for a denial. */
+    /** Authorise a request and resolve its entry in the tenant its key belongs to, recording the rejection metric for
+     *  a denial. */
     public Resolution resolve(String project, String key, String step, String inputs, boolean write) {
+        return resolve(null, project, key, step, inputs, write);
+    }
+
+    /**
+     * Authorise a request addressed to {@code named}'s cache - {@code /build/<tenant>/...} - and resolve its entry.
+     * The URL names the tenant and the key decides whether it may be addressed: a key reaches its own tenant's cache
+     * and no other, and the bootstrap key the default tenant's. A key naming another tenant is a {@code 403}, never
+     * a crossing; {@code null} addresses the key's own.
+     */
+    public Resolution resolve(String named, String project, String key, String step, String inputs, boolean write) {
         String name = project;
         if (name == null || name.isBlank()) {
             if (projectRequired) {
@@ -225,6 +236,10 @@ public class Cache {
                 count("", Outcome.UNAUTHORIZED);
                 return new Rejected(401);
             }
+        }
+        if (named != null && !named.equals(tenant)) {
+            count("", Outcome.FORBIDDEN);
+            return new Rejected(403);
         }
         String metric = tenant + "/" + name;
         if (!bootstrap) {

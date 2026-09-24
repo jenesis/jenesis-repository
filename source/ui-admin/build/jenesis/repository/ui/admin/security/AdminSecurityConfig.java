@@ -36,7 +36,7 @@ public class AdminSecurityConfig {
      * The console's chain, scoped to the console's own paths.
      *
      * <p>Named, ordered and matched, which is what {@code scimSecurityFilterChain} already does over
-     * {@code /scim/**} and the cache's does over {@code /cache/**}. It used to be an unnamed catch-all, and that had
+     * {@code /scim/**} and the cache's does over {@code /build/**}. It used to be an unnamed catch-all, and that had
      * two consequences worth stating because neither announced itself. It suppressed the repository chain by
      * type, so on a node carrying both - which this one is, since {@code ui.admin} requires the repository server
      * module and auto-configuration registers its controller here - an artifact request to {@code /repository/**}

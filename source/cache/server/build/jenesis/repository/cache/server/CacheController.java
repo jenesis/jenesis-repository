@@ -33,15 +33,19 @@ public class CacheController {
 
     static final String KEY = CacheProtocol.KEY_HEADER;
 
+    /** Where every tenant's cache is addressed: {@code /build/<tenant>/...}. */
+    static final String ROOT = "/build/";
+
     private final Cache cache;
 
     public CacheController(Cache cache) {
         this.cache = cache;
     }
 
-    private void read(CacheProtocol.Address address, HttpServletRequest request, HttpServletResponse response)
+    private void read(String tenant, CacheProtocol.Address address, HttpServletRequest request,
+                      HttpServletResponse response)
             throws IOException {
-        Cache.Resolution resolution = cache.resolve(address.project(), address.key(),
+        Cache.Resolution resolution = cache.resolve(tenant, address.project(), address.key(),
                 address.step(), address.inputs(), false);
         if (resolution instanceof Cache.Rejected rejected) {
             challenge(rejected, response);
@@ -92,8 +96,9 @@ public class CacheController {
      *
      * <p>One mapping rather than eight: the protocols are discovered, so which wire formats a node speaks is
      * which modules it carries, and an edition ships a subset by shipping fewer of them. Order is irrelevant
-     * because claims are disjoint by contract - {@code CacheProtocol.RESERVED} is what makes that true of the
-     * shared {@code /cache/} space, where Gradle's layout is otherwise shape-identical to the native one.
+     * because claims are disjoint by contract - {@code CacheProtocol.RESERVED} is what makes that true of a
+     * tenant's shared cache, where Gradle's layout is otherwise shape-identical to the native one. The tenant is the
+     * URL's, {@code /build/<tenant>/...}, and the key presented decides whether it may be addressed.
      *
      * <p><b>The path is decoded segment by segment</b>, because that is what the {@code @PathVariable} handlers
      * this replaces did and a raw request URI is not. Re-joining the decoded segments differs from per-variable
@@ -101,9 +106,13 @@ public class CacheController {
      * servlet container refuses an encoded slash in a path by default, and every address these protocols read is
      * hex or an opaque key.
      */
-    @RequestMapping(value = "/cache/**", method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.PUT})
+    @RequestMapping(value = "/build/{tenant}/**", method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.PUT})
     public void dispatch(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String path = decoded(request);
+        // /build/<tenant>/<path>: the tenant whose cache is addressed, and the path within it the protocols read.
+        String decoded = decoded(request).substring(ROOT.length());
+        int slash = decoded.indexOf('/');
+        String tenant = slash < 0 ? decoded : decoded.substring(0, slash);
+        String path = slash < 0 ? "/" : decoded.substring(slash);
         CacheProtocol protocol = null;
         for (CacheProtocol candidate : CacheProtocol.installed()) {
             if (candidate.handles(path)) {
@@ -124,9 +133,9 @@ public class CacheController {
             return;
         }
         if ("PUT".equalsIgnoreCase(request.getMethod())) {
-            store(address.get(), request, response);
+            store(tenant, address.get(), request, response);
         } else {
-            read(address.get(), request, response);
+            read(tenant, address.get(), request, response);
         }
     }
 
@@ -168,9 +177,10 @@ public class CacheController {
         }
     }
 
-    private void store(CacheProtocol.Address address, HttpServletRequest request, HttpServletResponse response)
+    private void store(String tenant, CacheProtocol.Address address, HttpServletRequest request,
+                       HttpServletResponse response)
             throws IOException {
-        Cache.Resolution resolution = cache.resolve(address.project(), address.key(),
+        Cache.Resolution resolution = cache.resolve(tenant, address.project(), address.key(),
                 address.step(), address.inputs(), true);
         if (resolution instanceof Cache.Rejected rejected) {
             challenge(rejected, response);

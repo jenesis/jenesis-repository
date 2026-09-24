@@ -5,14 +5,16 @@ import module java.base;
 import build.jenesis.repository.cache.protocol.CacheProtocol;
 
 /**
- * The cache protocol this build tool speaks: {@code /cache/<step>/<inputs>}, with the project and the credential
- * in headers of their own.
+ * The cache protocol this build tool speaks: {@code /<step>/<inputs>} within a tenant's cache, with the project and
+ * the credential
+ * in headers of their own - so a build tool's {@code cache.uri} is the tenant's cache,
+ * {@code https://<host>/build/<tenant>}, and the tool appends the address.
  *
  * <p>Headers rather than the path, so that neither is written to an intermediary's access log - which is the one
  * respect in which this protocol is better placed than the foreign layouts beside it, since a tool whose wire
  * format this product does not define has to present its credential the way that format already says.
  *
- * <p><b>A step may not be a reserved segment.</b> Gradle's {@code /cache/gradle/<key>} has the same shape as this
+ * <p><b>A step may not be a reserved segment.</b> Gradle's {@code /gradle/<key>} has the same shape as this
  * protocol's two segments, so without that rule both would claim it and the dispatch would need a precedence the
  * contract deliberately does not have. {@link CacheProtocol#RESERVED} is the list, and it costs a build step the
  * three names a foreign tool roots its layout at.
@@ -24,7 +26,7 @@ import build.jenesis.repository.cache.protocol.CacheProtocol;
  */
 public final class JenesisCacheProtocol implements CacheProtocol {
 
-    private static final String PREFIX = "/cache/";
+    private static final String PREFIX = "/";
 
     @Override
     public String name() {
@@ -33,7 +35,7 @@ public final class JenesisCacheProtocol implements CacheProtocol {
 
     @Override
     public boolean handles(String path) {
-        // Exactly two segments under the prefix, which is what keeps this off /cache/gradle/<key> and the other
+        // Exactly two segments under the prefix, which is what keeps this off /gradle/<key> and the other
         // foreign layouts: they are claimed by their own protocols, and an overlap would be a composition error
         // rather than a precedence question.
         if (!path.startsWith(PREFIX)) {
@@ -45,7 +47,7 @@ public final class JenesisCacheProtocol implements CacheProtocol {
             return false;
         }
         // Gradle's layout is shape-identical to this one - two segments under the prefix - so the step may not be
-        // a name that roots a foreign tool's space, or the two protocols would both claim /cache/gradle/<key>.
+        // a name that roots a foreign tool's space, or the two protocols would both claim /gradle/<key>.
         return !RESERVED.contains(path.substring(PREFIX.length(), separator));
     }
 

@@ -47,7 +47,7 @@ public class CacheServer {
      * <p>This composition used to serve {@code /actuator/prometheus} to anyone, and its own suite asserted so -
      * with {@code jenreg_cache_requests_total} labelled by {@code tenant} and {@code project}, that hands every
      * tenant and project name to whoever can reach the port. It happened because the only chain here claims
-     * {@code /cache/**} and this launcher excludes the repository's security auto-configuration by name, so
+     * {@code /build/**} and this launcher excludes the repository's security auto-configuration by name, so
      * everything under {@code /actuator} was matched by no chain at all and passed with no security filters. A
      * request nothing matches is not a request nothing governs; it is a request governed by nothing.
      *

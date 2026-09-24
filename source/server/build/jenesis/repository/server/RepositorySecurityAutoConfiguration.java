@@ -88,7 +88,7 @@ public class RepositorySecurityAutoConfiguration {
      * matches the method's return type, so ANY {@link SecurityFilterChain} in the context suppressed this one -
      * including the ordered, path-matched chains that plainly exist to sit BESIDE it. SCIM's
      * {@code scimSecurityFilterChain} is {@code @Order(1)} over {@code /scim/**} and the cache's is the same shape
-     * over {@code /cache/**}: neither is a replacement for the artifact chain, and both silently were one.
+     * over {@code /build/**}: neither is a replacement for the artifact chain, and both silently were one.
      *
      * <p>What that cost is a node that maps {@code /repository/**} and answers it from a browser-session chain.
      * The admin console requires this module, so auto-configuration registers the repository's controller into its

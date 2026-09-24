@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class CacheProtocolContractTest {
 
-    /** A protocol of the native shape: {@code /cache/<step>/<inputs>}, project and credential in headers. */
+    /** A protocol of the native shape: {@code /<step>/<inputs>}, project and credential in headers. */
     private static final CacheProtocol NATIVE = new CacheProtocol() {
 
         @Override
@@ -24,16 +24,16 @@ class CacheProtocolContractTest {
 
         @Override
         public boolean handles(String path) {
-            return path.startsWith("/cache/") && path.chars().filter(c -> c == '/').count() == 3;
+            return path.startsWith("/") && path.chars().filter(c -> c == '/').count() == 2;
         }
 
         @Override
         public Optional<Address> address(Request request) {
             String[] segments = request.path().split("/");
-            if (segments.length != 4 || segments[2].isEmpty() || segments[3].isEmpty()) {
+            if (segments.length != 3 || segments[1].isEmpty() || segments[2].isEmpty()) {
                 return Optional.empty();
             }
-            return Optional.of(new Address(segments[2], segments[3],
+            return Optional.of(new Address(segments[1], segments[2],
                     request.header("Jenesis-Cache-Project"), request.header("Jenesis-Repository-Key"),
                     Existing.DEDUPE));
         }
@@ -41,7 +41,7 @@ class CacheProtocolContractTest {
 
     @Test
     void reads_an_address_off_a_path_it_owns() {
-        Optional<CacheProtocol.Address> address = NATIVE.address(request("/cache/compile/abc123", Map.of(
+        Optional<CacheProtocol.Address> address = NATIVE.address(request("/compile/abc123", Map.of(
                 "Jenesis-Cache-Project", "checkout", "Jenesis-Repository-Key", "jenk_x")));
 
         assertThat(address).hasValueSatisfying(value -> {
@@ -57,14 +57,14 @@ class CacheProtocolContractTest {
     void a_path_it_cannot_read_is_an_empty_answer_rather_than_a_throw() {
         // Clause 4: a client's bad request is an answer. A protocol that threw here would turn a malformed path
         // into a 500 on a path it had already claimed.
-        assertThat(NATIVE.address(request("/cache//abc123", Map.of()))).isEmpty();
+        assertThat(NATIVE.address(request("//abc123", Map.of()))).isEmpty();
     }
 
     @Test
     void an_unpresented_project_or_credential_is_a_complete_address_with_nulls() {
         // Clause 5: "I could not read this request" and "this request presented no credential" are different
         // answers, and the caller refuses them differently - a 400 against a 401.
-        assertThat(NATIVE.address(request("/cache/compile/abc123", Map.of())))
+        assertThat(NATIVE.address(request("/compile/abc123", Map.of())))
                 .hasValueSatisfying(value -> {
                     assertThat(value.project()).isNull();
                     assertThat(value.key()).isNull();
@@ -74,8 +74,8 @@ class CacheProtocolContractTest {
 
     @Test
     void handles_decides_on_the_path_alone() {
-        assertThat(NATIVE.handles("/cache/compile/abc123")).isTrue();
-        assertThat(NATIVE.handles("/cache/gradle/abc123/extra")).isFalse();
+        assertThat(NATIVE.handles("/compile/abc123")).isTrue();
+        assertThat(NATIVE.handles("/gradle/abc123/extra")).isFalse();
         assertThat(NATIVE.handles("/repository/maven/x")).isFalse();
     }
 
