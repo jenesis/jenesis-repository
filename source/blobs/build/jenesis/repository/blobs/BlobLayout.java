@@ -3,6 +3,7 @@ package build.jenesis.repository.blobs;
 import module java.base;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
@@ -210,6 +211,22 @@ public interface BlobLayout extends BlobRoots {
     }
 
     Optional<ArtifactDescriptor> describe(String path);
+
+    /**
+     * The coordinate version a served request path names, asked of the format that claims it through whichever layout
+     * role it has - an {@link ArtifactLayout}'s or a blobs-namespace one's - and store-free either way. Empty for a
+     * format with neither, or a path that names no version.
+     *
+     * <p>One answer for every caller on the serving edge. The download recorders asked the {@code ArtifactLayout}
+     * alone, so every blobs-namespace format - npm, PyPI, NuGet and the rest - recorded no download at all, and a
+     * not-downloaded-for retention evicted the versions its clients were downloading.
+     */
+    static Optional<ArtifactDescriptor> served(RepositoryFormat format, String path) {
+        Optional<ArtifactDescriptor> described = format instanceof ArtifactLayout layout ? layout.describe(path)
+                : format instanceof BlobLayout layout ? layout.describe(path)
+                : Optional.empty();
+        return described.filter(artifact -> artifact.coordinate() != null && artifact.version() != null);
+    }
 
     /** The served request paths one coordinate version currently occupies in this format's blobs namespace - the
      *  inverse of {@link #describe}, so a retroactive hold can retract a whole blobs-namespace release from serving
