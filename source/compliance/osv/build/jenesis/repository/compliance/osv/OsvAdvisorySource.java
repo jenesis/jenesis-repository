@@ -14,6 +14,7 @@ import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.feed.Osv;
+import build.jenesis.repository.compliance.Ecosystems;
 
 /**
  * An {@link AdvisorySource} backed by OSV (osv.dev). For each coordinate it posts {@code /v1/query} for the package in
@@ -126,11 +127,19 @@ public final class OsvAdvisorySource implements AdvisorySource {
         return cache.freshness();
     }
 
+    /**
+     * The product's ecosystem names OSV spells otherwise. OSV answers only the ecosystems its schema defines, and a
+     * query in another spelling is answered with nothing - which reads as "no advisory" rather than as a question
+     * nobody could answer. Conan's recipes are OSV's {@code ConanCenter}; every other name the formats declare is
+     * OSV's own already, or one OSV does not publish at all.
+     */
+    private static final Map<String, String> OSV_NAMES = Map.of(Ecosystems.CONAN, "ConanCenter");
+
     /** One page's request: the vendor's query URL and body, with the cursor token echoed back from the second page on. */
     private FeedRequest request(String ecosystem, String coordinate, String version, String pageToken) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("version", version);
-        body.put("package", Map.of("ecosystem", ecosystem, "name", coordinate));
+        body.put("package", Map.of("ecosystem", OSV_NAMES.getOrDefault(ecosystem, ecosystem), "name", coordinate));
         if (pageToken != null) {
             body.put("page_token", pageToken);
         }

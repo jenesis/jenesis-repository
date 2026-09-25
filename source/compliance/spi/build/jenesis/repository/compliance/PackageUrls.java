@@ -10,23 +10,27 @@ import module java.base;
  * rather than once per feed.
  *
  * <p>The Linux distribution ecosystems are left out of the purl mapping deliberately - their purls carry distro
- * namespaces and release qualifiers this product's coordinates do not record - and an ecosystem absent from a scheme
- * yields {@code null} there, which every feed reads as "no identifier exists, do not query".
+ * namespaces and release qualifiers this product's coordinates do not record - and so are two whose purl names a
+ * thing the coordinate is not: an OCI purl is keyed by the manifest digest where the coordinate carries a tag, and a
+ * Swift purl by the source repository's URL where the coordinate is the registry's {@code scope.name}. An ecosystem
+ * absent from a scheme yields {@code null} there, which every feed reads as "no identifier exists, do not query".
  */
 public final class PackageUrls {
 
     /** Canonical ecosystem name to purl type; an absent one has no purl and is not queried. */
-    private static final Ecosystems.Vocabulary TYPES = Ecosystems.vocabulary(Map.of(
-            Ecosystems.MAVEN, "maven",
-            Ecosystems.NPM, "npm",
-            Ecosystems.PYPI, "pypi",
-            Ecosystems.GO, "golang",
-            Ecosystems.NUGET, "nuget",
-            Ecosystems.RUBYGEMS, "gem",
-            Ecosystems.CRATES_IO, "cargo",
-            Ecosystems.PACKAGIST, "composer",
-            Ecosystems.COCOAPODS, "cocoapods",
-            Ecosystems.CONAN, "conan"));
+    private static final Ecosystems.Vocabulary TYPES = Ecosystems.vocabulary(Map.ofEntries(
+            Map.entry(Ecosystems.MAVEN, "maven"),
+            Map.entry(Ecosystems.NPM, "npm"),
+            Map.entry(Ecosystems.PYPI, "pypi"),
+            Map.entry(Ecosystems.GO, "golang"),
+            Map.entry(Ecosystems.NUGET, "nuget"),
+            Map.entry(Ecosystems.RUBYGEMS, "gem"),
+            Map.entry(Ecosystems.CRATES_IO, "cargo"),
+            Map.entry(Ecosystems.PACKAGIST, "composer"),
+            Map.entry(Ecosystems.COCOAPODS, "cocoapods"),
+            Map.entry(Ecosystems.CONAN, "conan"),
+            Map.entry(Ecosystems.CONDA, "conda"),
+            Map.entry(Ecosystems.HUGGING_FACE, "huggingface")));
 
     /** The reverse-domain lead-ins a Maven group starts with; the segment after one names the organization the CPE
      *  vendor field wants ({@code org.apache.logging.log4j} - {@code apache}). */
