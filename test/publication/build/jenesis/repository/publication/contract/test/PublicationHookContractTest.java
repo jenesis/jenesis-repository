@@ -9,13 +9,17 @@ import build.jenesis.repository.store.testkit.Falsification;
 import build.jenesis.repository.store.testkit.Mutant;
 import build.jenesis.repository.store.testkit.PublicationHookContract;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
+import org.junit.jupiter.params.Parameter;
+import org.junit.jupiter.params.ParameterizedClass;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * The JUnit driver for one hook's leg of the shared publication-hook contract. Everything hook-specific lives in the
- * {@link PublicationHookFixture} a subclass supplies; the checks come from the testkit, so a new hook is covered by a
- * fixture and a four-line subclass rather than by another hand-written suite.
+ * The JUnit driver of the shared publication-hook contract, run once over every fixture in
+ * {@link PublicationHookFixtures} - the list the census reads, so a hook it counts is a hook this runs. Everything
+ * hook-specific lives in the {@link PublicationHookFixture}; the checks come from the testkit, so a new hook is covered
+ * by a fixture and a line in that list rather than by another hand-written suite.
  *
- * <p>Which checks a subclass gets is not its choice: {@link PublicationHookContract#checks(PublicationHookFixture)}
+ * <p>Which checks a fixture gets is not its choice: {@link PublicationHookContract#checks(PublicationHookFixture)}
  * derives the role from the fixture's own instance and hands out only that role's contract. A screen therefore cannot
  * be driven through the contained observer legs by mistake, and an observer cannot be held to the fail-closed ones.
  *
@@ -30,18 +34,23 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
  * because a mutated check usually fails on its first assertion rather than running to the end - so a kit that has
  * stopped measuring anything cannot stay green anywhere the ordinary kit is green.
  */
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-abstract class PublicationHookContractSuite {
+@ParameterizedClass(name = "{0}")
+@MethodSource("fixtures")
+class PublicationHookContractTest {
+
+    /** Every fixture, named for the hook it drives. */
+    static List<Named<PublicationHookFixture>> fixtures() {
+        return PublicationHookFixtures.all().stream().map(fixture -> Named.of(fixture.hook(), fixture)).toList();
+    }
+
+    @Parameter
+    PublicationHookFixture fixture;
 
     @TempDir
     Path root;
 
-    /** The hook under test. */
-    abstract PublicationHookFixture fixture();
-
     @TestFactory
     Stream<DynamicTest> the_publication_hook_contract() {
-        PublicationHookFixture fixture = fixture();
         List<PublicationHookContract.Check> checks = PublicationHookContract.checks(fixture);
         if (checks.isEmpty()) {
             throw new AssertionError("the '" + fixture.hook() + "' fixture runs no checks at all, so its role "
@@ -59,7 +68,6 @@ abstract class PublicationHookContractSuite {
      */
     @TestFactory
     Stream<DynamicTest> every_contract_check_is_falsifiable() {
-        PublicationHookFixture fixture = fixture();
         return PublicationHookContract.checks(fixture).stream()
                 .flatMap(check -> PublicationHookContract.mutations(fixture, check.property()).stream()
                         .map(mutation -> DynamicTest.dynamicTest(

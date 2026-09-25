@@ -32,9 +32,37 @@
  */
 open module build.jenesis.repository.publication.contract.test {
     requires build.jenesis.repository.store;
+    // Every format module that ships a stored-listing observer, so the census's shipped leg reads all of them.
+    requires build.jenesis.repository.format.apk;
+    requires build.jenesis.repository.format.cargo;
+    requires build.jenesis.repository.format.cocoapods;
+    requires build.jenesis.repository.format.composer;
+    requires build.jenesis.repository.format.conan;
+    requires build.jenesis.repository.format.conda;
+    requires build.jenesis.repository.format.debian;
+    requires build.jenesis.repository.format.gems;
+    requires build.jenesis.repository.format.go;
+    requires build.jenesis.repository.format.helm;
+    requires build.jenesis.repository.format.huggingface;
+    requires build.jenesis.repository.format.ivy;
     requires build.jenesis.repository.format.maven;
+    requires build.jenesis.repository.format.npm;
+    requires build.jenesis.repository.format.nuget;
     requires build.jenesis.repository.format.oci;
+    requires build.jenesis.repository.format.pypi;
     requires build.jenesis.repository.format.raw;
+    requires build.jenesis.repository.format.rpm;
+    requires build.jenesis.repository.format.swift;
+    requires build.jenesis.repository.format.terraform;
+    requires build.jenesis.repository.format.winget;
+    // Every other core module providing a publication hook, so the census's two legs read them too.
+    requires build.jenesis.repository.compliance.signatures;
+    requires build.jenesis.repository.compliance.web;
+    requires build.jenesis.repository.events;
+    requires build.jenesis.repository.gate;
+    requires build.jenesis.repository.index;
+    requires build.jenesis.repository.inventory;
+    requires build.jenesis.repository.staging.store;
     requires build.jenesis.repository.store.testkit;
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.contract.testkit;

@@ -18,11 +18,31 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
  * writes nothing at all - which is what the properties below are held to, and why the recording-shaped properties
  * are excluded with the format contract's held-version leg named as where the surface is proven.
  */
-abstract class ListingObserverFixture implements PublicationHookFixture.Observer {
+final class ListingObserverFixture implements PublicationHookFixture.Observer {
 
     private static final String PROVEN = "this observer records nothing on a publish - the format's own publish writes "
             + "its listing - and re-decides one entry on a withhold, release, mark or removal; the format contract's "
             + "held-version leg proves that surface over the format's own paths";
+
+    private final String hook;
+
+    private final String providerClass;
+
+    /** The observer {@code providerClass}, reported as {@code hook}. */
+    ListingObserverFixture(String hook, String providerClass) {
+        this.hook = hook;
+        this.providerClass = providerClass;
+    }
+
+    @Override
+    public String hook() {
+        return hook;
+    }
+
+    @Override
+    public String providerClass() {
+        return providerClass;
+    }
 
     @Override
     public PublicationObserver create() {

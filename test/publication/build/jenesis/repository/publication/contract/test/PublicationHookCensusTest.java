@@ -40,25 +40,37 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * fails open. So the role is derived from the source declaration, derived again from the runtime instance, compared,
  * and then confirmed against what {@code Publication} actually did with the discovered list.
  *
- * <p><b>The finding this census records.</b> The static leg over {@code source/} is <em>empty</em>: the core
- * ships no {@code PublicationObserver} and no {@code PublishInterceptor}, exactly as the SPI's own contract says, so
- * the shipped chain is empty and every upload is accepted and served. The kit's fixtures are therefore the role and
- * delivery archetypes the SPI documents, which is what makes the checks assert the stated contract rather than one
- * implementation's habits - and this test is the ratchet that turns the first shipped hook into a demand for a
- * fixture rather than a silent gap.
+ * <p><b>What it covers.</b> The kit's own role and delivery archetypes, which assert the contract the SPI states
+ * rather than one implementation's habits, and every hook the core ships: each format's stored-listing observer, and
+ * the screens and observers of the gate, staging, signatures, index, inventory and events modules - the last group on
+ * a burn-down list until each has a fixture. It once read that the core shipped no hook at all, while its graph
+ * carried three formats and none of those modules; the matrix-reach inspection rule is what now keeps this module
+ * requiring every core provider.
  */
 class PublicationHookCensusTest {
 
-    /** Every fixture the kit registers - one per role, and one per delivery class the seam supports. */
-    private static final List<PublicationHookFixture> FIXTURES = List.of(
-            new IndexObserverFixture(), new FeedSplittingObserverFixture(), new OutboxObserverFixture(),
-            new RecordingScreenFixture(),
-            new WithholdingScreenFixture(), new AuditingScreenFixture(), new OverrideHookFixture(),
-            new MavenMetadataObserverFixture(), new OciListingObserverFixture(), new RawListingObserverFixture());
+    /** Every fixture the kit registers - one per role, one per delivery class, and one per shipped listing observer. */
+    private static final List<PublicationHookFixture> FIXTURES = PublicationHookFixtures.all();
 
-    /** No hook in this graph is exempt. The argument stays wired so an exemption is a visible, reason-bearing edit
-     *  rather than a new mechanism. */
-    private static final List<Exemption> EXEMPTIONS = List.of();
+    /**
+     * The core hooks with no fixture yet - a burn-down list, which only shrinks. Each moved into the core after the kit
+     * was written, and nothing required its module here, so neither census leg saw it until the matrix-reach inspection
+     * rule named the module; each is on the worklist to be given a fixture of its role.
+     */
+    private static final List<Exemption> EXEMPTIONS = Stream.of(
+                    "build.jenesis.repository.compliance.signatures.SignatureCompletionObserver",
+                    "build.jenesis.repository.compliance.signatures.AttestationLookupObserver",
+                    "build.jenesis.repository.compliance.web.ProvenanceAttestationReaper",
+                    "build.jenesis.repository.events.EventPublicationObserver",
+                    "build.jenesis.repository.gate.store.ComplianceScreen",
+                    "build.jenesis.repository.gate.store.OciHoldRecorder",
+                    "build.jenesis.repository.index.IndexRetractionObserver",
+                    "build.jenesis.repository.index.IndexPublicationObserver",
+                    "build.jenesis.repository.inventory.SubtreeSizePublicationObserver",
+                    "build.jenesis.repository.staging.store.StagingWithholdInterceptor")
+            .map(hook -> new Exemption(hook, "no fixture yet: a core hook the census's graph did not carry until "
+                    + "2026-09-25; the worklist carries its fixture"))
+            .toList();
 
     /**
      * The publication hooks that exist but that this module's graph cannot reach, each with the reason and the ticket
@@ -68,30 +80,20 @@ class PublicationHookCensusTest {
      * the role its downstream source declares, is the honest alternative to widening the helper until it stops
      * asserting anything.
      *
-     * <p>All fourteen are <b>the earlier</b> to fixture. The split matters: the three interceptors and the four
-     * hold-release hooks are pre-commit and fail-closed, and running any of them through the after-commit legs would
-     * assert the opposite of their contract.
+     * <p>Only the enterprise edition's hooks are here: a core module may not require an enterprise one. The list once
+     * held fourteen, most of them hooks that had since moved into the core and were reachable after all, under
+     * package names they no longer had - which is why the guard below, that no entry names a reachable hook, never
+     * tripped. The split matters: the hold-release hook is pre-commit and fail-closed, and running it through the
+     * after-commit legs would assert the opposite of its contract.
      */
     private static final Map<String, Role> OUT_OF_GRAPH = Map.ofEntries(
-            // ENT after-commit observers - contained, best-effort, repaired by the walk (the earlier migration candidates)
+            // Enterprise after-commit observers - contained, best-effort, repaired by the walk
             Map.entry("build.jenesis.repository.forwarding.ForwardingObserver", Role.AFTER_COMMIT_OBSERVER),
-            Map.entry("build.jenesis.repository.webhook.WebhookPublicationObserver", Role.AFTER_COMMIT_OBSERVER),
-            Map.entry("build.jenesis.repository.index.IndexRetractionObserver", Role.AFTER_COMMIT_OBSERVER),
             Map.entry("build.jenesis.repository.search.lucene.SearchPublicationObserver", Role.AFTER_COMMIT_OBSERVER),
             Map.entry("build.jenesis.repository.dependents.DependentsPublicationObserver", Role.AFTER_COMMIT_OBSERVER),
-            Map.entry("build.jenesis.repository.inventory.SubtreeSizePublicationObserver", Role.AFTER_COMMIT_OBSERVER),
-            Map.entry("build.jenesis.repository.compliance.web.ProvenanceAttestationReaper",
-                    Role.AFTER_COMMIT_OBSERVER),
-            // ENT pre-commit screens - the verdict legs propagate, riding the same `uses PublicationObserver` clause
-            Map.entry("build.jenesis.repository.gate.ComplianceScreen", Role.PUBLISH_INTERCEPTOR),
-            Map.entry("build.jenesis.repository.staging.store.StagingWithholdInterceptor", Role.PUBLISH_INTERCEPTOR),
-            Map.entry("build.jenesis.repository.gate.OciHoldRecorder", Role.PUBLISH_INTERCEPTOR),
-            // ENT hold-release hooks - pre-commit, fail-closed, and NOT PublicationObservers despite the name
-            Map.entry("build.jenesis.repository.gate.KevHoldReleaseObserver", Role.PRE_COMMIT_RELEASE_HOOK),
-            Map.entry("build.jenesis.repository.gate.LicenseHoldReleaseObserver", Role.PRE_COMMIT_RELEASE_HOOK),
+            Map.entry("build.jenesis.repository.attribution.AttributionListingRebuilder", Role.AFTER_COMMIT_OBSERVER),
+            // An enterprise hold-release hook - pre-commit, fail-closed, and NOT a PublicationObserver despite the name
             Map.entry("build.jenesis.repository.security.reachability.ReachabilityHoldReleaseObserver",
-                    Role.PRE_COMMIT_RELEASE_HOOK),
-            Map.entry("build.jenesis.repository.findings.store.DiscardedHoldFindingsObserver",
                     Role.PRE_COMMIT_RELEASE_HOOK));
 
     @TempDir
@@ -132,13 +134,14 @@ class PublicationHookCensusTest {
 
     @Test
     void every_shipped_hook_has_a_fixture() throws IOException {
-        // The shipped inventory: the three stored-listing observers of the free formats (Maven's computed
-        // maven-metadata.xml, the OCI tag lists and catalog, the raw directory pages). A source module that provides a
-        // further PublicationObserver must bring a PublicationHookFixture - an Observer one with its delivery class
-        // and repair leg, or an Interceptor one with its verdicts and the keys its verdict reads - require its module
-        // here, and join FIXTURES.
+        // The shipped inventory: every format's stored-listing observer, which this module requires every format
+        // module to see. A source module that provides a further PublicationObserver must bring a
+        // PublicationHookFixture - an Observer one with its delivery class and repair leg, or an Interceptor one with
+        // its verdicts and the keys its verdict reads - require its module here, and join PublicationHookFixtures.
+        Set<String> exempt = EXEMPTIONS.stream().map(Exemption::implementation).collect(Collectors.toSet());
         assertThat(shipped()).extracting(Provider::implementation)
-                .as("every shipped hook is keyed to a fixture")
+                .filteredOn(implementation -> !exempt.contains(implementation))
+                .as("every shipped hook is keyed to a fixture, or on the burn-down list with its reason")
                 .allSatisfy(implementation -> assertThat(FIXTURES).extracting(PublicationHookFixture::providerClass)
                         .contains(implementation));
     }
@@ -350,7 +353,7 @@ class PublicationHookCensusTest {
             + "contract's held-version and revalidation legs over the format's own paths (FormatContract), where a "
             + "listing that failed to retract or to converge fails visibly.";
 
-    private static final Map<String, String> NOT_THIS_HOOKS_TO_FALSIFY = Map.ofEntries(
+    private static final Map<String, String> NOT_THIS_HOOKS_TO_FALSIFY = merged(Map.ofEntries(
             Map.entry("kit-recording-screen / A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
                     "this screen votes at publish time and has no read side, so the check drives the kit's own withholding "
                     + "probe and the fixture's screen is a bystander in the retraction. WithholdingScreen is the "
@@ -366,25 +369,30 @@ class PublicationHookCensusTest {
                     + "remembered - there is nothing for a concurrent publish to be confused with. RecordingScreen "
                     + "reaches all three and is falsified on it."),
             Map.entry("kit-auditing-screen / ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS",
-                    "the same one-verdict shape."),
-            Map.entry("maven-metadata-listing / A_DUPLICATE_DELIVERY_CONVERGES",
-                    LISTING_HOOK),
-            Map.entry("maven-metadata-listing / A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED",
-                    LISTING_HOOK),
-            Map.entry("maven-metadata-listing / THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE",
-                    LISTING_HOOK),
-            Map.entry("oci-listing / A_DUPLICATE_DELIVERY_CONVERGES",
-                    LISTING_HOOK),
-            Map.entry("oci-listing / A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED",
-                    LISTING_HOOK),
-            Map.entry("oci-listing / THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE",
-                    LISTING_HOOK),
-            Map.entry("raw-listing / A_DUPLICATE_DELIVERY_CONVERGES",
-                    LISTING_HOOK),
-            Map.entry("raw-listing / A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED",
-                    LISTING_HOOK),
-            Map.entry("raw-listing / THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE",
-                    LISTING_HOOK));
+                    "the same one-verdict shape.")),
+            listingPairs());
+
+    /** The recording clauses of every stored-listing observer, each argued by {@link #LISTING_HOOK}: the argument
+     *  is about the shape of the hook, so it is stated once and applied to every fixture of that shape. */
+    private static Map<String, String> listingPairs() {
+        Map<String, String> pairs = new TreeMap<>();
+        for (PublicationHookFixture fixture : PublicationHookFixtures.all()) {
+            if (fixture instanceof ListingObserverFixture) {
+                for (String property : List.of("A_DUPLICATE_DELIVERY_CONVERGES",
+                        "A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED",
+                        "THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE")) {
+                    pairs.put(fixture.hook() + " / " + property, LISTING_HOOK);
+                }
+            }
+        }
+        return pairs;
+    }
+
+    private static Map<String, String> merged(Map<String, String> first, Map<String, String> second) {
+        Map<String, String> merged = new TreeMap<>(first);
+        merged.putAll(second);
+        return Collections.unmodifiableMap(merged);
+    }
 
     @Test
     void every_property_a_hook_owns_declares_the_mutation_that_must_break_it() {
@@ -694,13 +702,11 @@ class PublicationHookCensusTest {
         assertThat(OUT_OF_GRAPH)
                 .as("every hook this graph cannot reach is named WITH the role its downstream source declares, "
                         + "because that role is what decides which legs the earlier fixture must run")
-                .hasSize(14);
-        assertThat(OUT_OF_GRAPH.values().stream().filter(Role.PUBLISH_INTERCEPTOR::equals).count())
-                .as("the three pre-commit screens riding the one `uses PublicationObserver` clause").isEqualTo(3);
+                .hasSize(5);
         assertThat(OUT_OF_GRAPH.values().stream().filter(Role.PRE_COMMIT_RELEASE_HOOK::equals).count())
-                .as("the four hold-release hooks, which are not PublicationObservers at all").isEqualTo(4);
+                .as("the hold-release hook, which is not a PublicationObserver at all").isEqualTo(1);
         assertThat(OUT_OF_GRAPH.values().stream().filter(Role.AFTER_COMMIT_OBSERVER::equals).count())
-                .as("and the seven contained after-commit observers").isEqualTo(7);
+                .as("and the four contained after-commit observers").isEqualTo(4);
         assertThat(OUT_OF_GRAPH.keySet())
                 .as("no out-of-graph entry may name a hook this graph CAN reach - that would be a fixture dodge")
                 .doesNotContainAnyElementsOf(discovered().stream().map(Provider::implementation).toList());
