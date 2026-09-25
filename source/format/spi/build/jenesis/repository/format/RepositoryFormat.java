@@ -300,6 +300,17 @@ public interface RepositoryFormat extends IconContributor {
         return List.of();
     }
 
+    /**
+     * Whether a lifecycle mark - deprecated, yanked - on a version of this format surfaces in the metadata its clients
+     * read: npm's {@code deprecated}, a yanked flag in a Cargo index line, a PyPI {@code data-yanked}. A format that
+     * shows one declares it; one that has nowhere a client would see a mark leaves this {@code false}, and a mark on
+     * a repository of that format is refused rather than stored, since an accepted mark nobody sees reads as done.
+     * Off by default, so a new format refuses marks until it shows them.
+     */
+    default boolean surfacesLifecycleMarks() {
+        return false;
+    }
+
     /** The config keys this format cannot run without; empty (the default) for every self-contained format. A
      *  format whose required keys are unset {@link Features#active self-disables} at discovery. */
     default Set<String> requiredConfig() {

@@ -72,6 +72,12 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return "debian";
     }
 
+    /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */
+    @Override
+    public boolean surfacesLifecycleMarks() {
+        return true;
+    }
+
     @Override
     public String ecosystem() {
         return "Debian";

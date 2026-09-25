@@ -86,6 +86,12 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return "cargo";
     }
 
+    /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */
+    @Override
+    public boolean surfacesLifecycleMarks() {
+        return true;
+    }
+
     /** Cargo retries its sparse index with the token only when a {@code 401} names Cargo's own scheme. */
     @Override
     public List<String> challenges() {

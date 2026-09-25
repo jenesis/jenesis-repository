@@ -159,6 +159,12 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
         return "helm";
     }
 
+    /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */
+    @Override
+    public boolean surfacesLifecycleMarks() {
+        return true;
+    }
+
     @Override
     public String ecosystem() {
         return ECOSYSTEM;

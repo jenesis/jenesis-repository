@@ -56,6 +56,12 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return "nuget";
     }
 
+    /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */
+    @Override
+    public boolean surfacesLifecycleMarks() {
+        return true;
+    }
+
     @Override
     public String ecosystem() {
         return "NuGet";

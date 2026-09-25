@@ -3,6 +3,8 @@ package build.jenesis.repository.format.lifecycle.web;
 import module java.base;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
@@ -130,6 +132,17 @@ public class LifecycleController {
         Lifecycle.State parsed = Lifecycle.State.parse(state).orElse(null);
         if (parsed == null) {
             response.setStatus(400);
+            return;
+        }
+        // A mark is refused on a repository whose format shows it to no client: stored, it would read as done while
+        // every client went on offering the version exactly as before.
+        Optional<RepositoryType> type = repositories.type(tenant, repository);
+        if (type.isPresent() && type.get().formats().stream().noneMatch(RepositoryFormat::surfacesLifecycleMarks)) {
+            response.setStatus(422);
+            response.setContentType("text/plain;charset=UTF-8");
+            response.getWriter().write("A " + type.get().name() + " repository shows a lifecycle mark to no client: "
+                    + "its format has no metadata a client reads a deprecation or a yank from, so the mark is "
+                    + "refused rather than stored where nobody would see it.");
             return;
         }
         Lifecycle.mark(repositories.store(tenant, repository), coordinate, version,

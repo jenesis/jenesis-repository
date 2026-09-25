@@ -102,6 +102,12 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
         return "go";
     }
 
+    /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */
+    @Override
+    public boolean surfacesLifecycleMarks() {
+        return true;
+    }
+
     @Override
     public String ecosystem() {
         return "Go";

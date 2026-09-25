@@ -27,6 +27,11 @@ open module build.jenesis.repository.format.lifecycle.web {
     requires spring.context;
     requires spring.core;
     requires spring.web;
+    requires build.jenesis.repository.format;
+    requires build.jenesis.repository.server.spi;
     provides build.jenesis.repository.server.kernel.ServerModuleProvider
             with build.jenesis.repository.format.lifecycle.web.LifecycleWebModule;
+    // Which formats a mark may be placed on, so a surface offers the action only where it will be seen.
+    provides build.jenesis.repository.server.spi.CapabilityContributor
+            with build.jenesis.repository.format.lifecycle.web.LifecycleCapabilityContributor;
 }

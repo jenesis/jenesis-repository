@@ -49,6 +49,12 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return "maven";
     }
 
+    /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */
+    @Override
+    public boolean surfacesLifecycleMarks() {
+        return true;
+    }
+
     /**
      * Maven's paths keep their {@code /maven/} segment inside a repository - {@code /repository/<name>/maven/...} -
      * where most formats drop theirs. That is what lets a Maven repository become a {@code java} one, which serves the

@@ -60,6 +60,12 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return "pypi";
     }
 
+    /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */
+    @Override
+    public boolean surfacesLifecycleMarks() {
+        return true;
+    }
+
     @Override
     public String ecosystem() {
         return "PyPI";
