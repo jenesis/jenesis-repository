@@ -187,9 +187,14 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
             String hash = publication.storeBlob(exchange.requestStream());
             publication.link(path, hash);
             // The revision joins its module's listing on the write, which is what makes a dynamic revision resolve
-            // without anything having to walk the store on the read.
-            new IvyListings(store).published(coordinate.get().organisation(),
-                    coordinate.get().module(), coordinate.get().revision());
+            // without anything having to walk the store on the read - on the write of one of its own files, not of a
+            // checksum or a signature beside one. A client uploads those after each file whatever the gate did with
+            // it, so a sidecar joining the listing put a revision whose files were all held straight back into the
+            // document a resolver selects from.
+            if (!sidecar(coordinate.get().file())) {
+                new IvyListings(store).published(coordinate.get().organisation(),
+                        coordinate.get().module(), coordinate.get().revision());
+            }
             exchange.respond(201);
             return;
         }
@@ -353,6 +358,13 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
      * name is the coordinate and the revision, so an eviction's prefix contains that version and nothing else -
      * clause 7, and the first of the two properties an accepted pattern must have.
      */
+    /** Whether a file is a checksum or a signature beside one of the revision's files rather than one of them. */
+    private static boolean sidecar(String file) {
+        return SIDECARS.stream().anyMatch(file::endsWith);
+    }
+
+    private static final List<String> SIDECARS = List.of(".md5", ".sha1", ".sha256", ".sha512", ".asc", ".sig");
+
     private record Coordinate(String organisation, String module, String revision, String file) {
 
         static Optional<Coordinate> of(String path) {
