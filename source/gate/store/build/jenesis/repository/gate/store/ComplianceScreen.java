@@ -1153,20 +1153,31 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  neither yields a coordinate (a checksum, generated metadata). */
     private static Optional<StoreRepositoryInventory.Coordinate> publishedCoordinate(
             ArtifactStore store, ArtifactDescriptor artifact, List<ComplianceGate.Subject> inspected) {
-        Optional<ArtifactDescriptor> described = new StoreRepositoryInventory(store).describe(artifact.path());
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        Optional<ArtifactDescriptor> described = inventory.describe(artifact.path());
         if (described.isPresent() && described.get().coordinate() != null && described.get().version() != null) {
             return Optional.of(new StoreRepositoryInventory.Coordinate(
                     described.get().ecosystem(), described.get().coordinate(), described.get().version()));
         }
-        if (inspected != null && !inspected.isEmpty()) {
-            ComplianceGate.Subject subject = inspected.getFirst();
-            if (subject.coordinate() != null && !subject.coordinate().isEmpty()
-                    && subject.version() != null && !subject.version().isEmpty()) {
-                return Optional.of(new StoreRepositoryInventory.Coordinate(
-                        subject.ecosystem(), subject.coordinate(), subject.version()));
-            }
+        return subjectCoordinate(inventory, inspected == null || inspected.isEmpty() ? null : inspected.getFirst());
+    }
+
+    /**
+     * The coordinate an inspected subject names, spelled as the layout owning its ecosystem keys it. The subject reads
+     * it out of the artifact as the artifact writes it - a NuGet id in its declared case - and the layout serves the
+     * version under its own normal form, so a record keyed by the subject's spelling was a record no read resolved
+     * to: a pushed package's signature, licences and hold records all landed in a document beside the one its reads
+     * found. The subject's own spelling stands only where no installed layout places the ecosystem.
+     */
+    private static Optional<StoreRepositoryInventory.Coordinate> subjectCoordinate(
+            StoreRepositoryInventory inventory, ComplianceGate.Subject subject) {
+        if (subject == null || subject.coordinate() == null || subject.coordinate().isEmpty()
+                || subject.version() == null || subject.version().isEmpty()) {
+            return Optional.empty();
         }
-        return Optional.empty();
+        return inventory.canonical(subject.ecosystem(), subject.coordinate(), subject.version())
+                .or(() -> Optional.of(new StoreRepositoryInventory.Coordinate(
+                        subject.ecosystem(), subject.coordinate(), subject.version())));
     }
 
     /** Whether ANY retroactive enforcement sweep owns a hold on this path's coordinate - a {@code holds/} record of
@@ -1216,11 +1227,12 @@ public final class ComplianceScreen implements PublishInterceptor {
         Instant now = Clocks.now();
         Recording recording = inventory.recording(artifact.path(), now).orElse(null);
         if (recording == null) {
-            if (subject == null || subject.coordinate() == null || subject.coordinate().isEmpty()
-                    || subject.version() == null || subject.version().isEmpty()) {
+            Optional<StoreRepositoryInventory.Coordinate> named = subjectCoordinate(inventory, subject);
+            if (named.isEmpty()) {
                 return;
             }
-            recording = inventory.recording(subject.ecosystem(), subject.coordinate(), subject.version(), false, now);
+            recording = inventory.recording(named.get().ecosystem(), named.get().coordinate(), named.get().version(),
+                    false, now);
         }
         recording.origin(artifact.hash());
         if (subject != null) {

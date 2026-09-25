@@ -3,7 +3,9 @@ package build.jenesis.repository.signing.testkit;
 import module java.base;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.BasicConstraints;
+import org.bouncycastle.asn1.x509.ExtendedKeyUsage;
 import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.KeyPurposeId;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.cert.jcajce.JcaCertStore;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
@@ -65,6 +67,36 @@ public final class Pkcs7Fixtures {
                         .addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature))
                         .build(signer("SHA256withRSA", authority.key())));
         return new Signer(certificate, pair.getPrivate(), List.of(certificate, authority.certificate()));
+    }
+
+    /** A code-signing certificate issued by the authority: what a package signing tool demands of an author's
+     *  certificate, where {@link #signer} makes one any CMS signature accepts. */
+    public static Signer codeSigner(Authority authority, String commonName, int bits)
+            throws GeneralSecurityException, IOException {
+        KeyPair pair = rsa(bits);
+        Instant now = Instant.now();
+        X509Certificate certificate = new JcaX509CertificateConverter().getCertificate(
+                new JcaX509v3CertificateBuilder(authority.certificate(), BigInteger.valueOf(SERIAL.getAndIncrement()),
+                        Date.from(now.minus(Duration.ofDays(1))), Date.from(now.plus(Duration.ofDays(365))),
+                        new X500Name("CN=" + commonName), pair.getPublic())
+                        .addExtension(Extension.basicConstraints, true, new BasicConstraints(false))
+                        .addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature))
+                        .addExtension(Extension.extendedKeyUsage, false,
+                                new ExtendedKeyUsage(KeyPurposeId.id_kp_codeSigning))
+                        .build(signer("SHA256withRSA", authority.key())));
+        return new Signer(certificate, pair.getPrivate(), List.of(certificate, authority.certificate()));
+    }
+
+    /** The signer's key and chain as a PKCS#12 file under {@code password} - the shape a signing tool takes a
+     *  certificate in. */
+    public static byte[] pkcs12(Signer signer, String password) throws GeneralSecurityException, IOException {
+        KeyStore store = KeyStore.getInstance("PKCS12");
+        store.load(null, null);
+        store.setKeyEntry("signer", signer.key(), password.toCharArray(),
+                signer.chain().toArray(X509Certificate[]::new));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        store.store(out, password.toCharArray());
+        return out.toByteArray();
     }
 
     /** The certificates as a PEM bundle, the shape the {@code signature-trusted-certificates} setting holds. */

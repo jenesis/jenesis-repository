@@ -395,6 +395,33 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /**
+     * A coordinate version as the layout owning its ecosystem keys it, or empty when no installed layout can place it.
+     *
+     * <p>An inspector reads a coordinate out of an artifact as the artifact spells it - a {@code .nuspec}'s
+     * {@code <id>Demo</id>}, a wheel's {@code Name: Demo_Pkg} - while the layout serves and keys the same version by
+     * its own normal form, lower-cased or otherwise normalised. A fact recorded under the first spelling lands in a
+     * version document no read ever resolves to, since every read goes through the layout. So the spelling is asked of
+     * the layout: the path it would serve the version at, described back. Store-free on both halves, which is what lets
+     * it run inside a screen, before the publish it is screening has linked anything.
+     */
+    public Optional<Coordinate> canonical(String ecosystem, String coordinate, String version) {
+        for (RepositoryFormat format : formats()) {
+            if (!(format instanceof BlobLayout layout) || !layout.ecosystem().equals(ecosystem)) {
+                continue;
+            }
+            for (String path : layout.servedPaths(coordinate, version)) {
+                Optional<ArtifactDescriptor> described = layout.describe(path);
+                if (described.isPresent() && described.get().coordinate() != null
+                        && described.get().version() != null) {
+                    return Optional.of(new Coordinate(described.get().ecosystem(), described.get().coordinate(),
+                            described.get().version()));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Whether this served path is <em>path-addressed</em>: the format serving it has no coordinate concept at all,
      * so nothing will ever describe it to a coordinate and the path is the only name it has.
      *
