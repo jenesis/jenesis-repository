@@ -62,6 +62,9 @@ open module build.jenesis.repository.publication.contract.test {
     requires build.jenesis.repository.gate;
     requires build.jenesis.repository.index;
     requires build.jenesis.repository.index.keys;
+    requires build.jenesis.repository.metadata;
+    requires build.jenesis.repository.blobs;
+    requires build.jenesis.repository.format;
     // The index fixture reads the chain's record lines back.
     requires tools.jackson.databind;
     requires build.jenesis.repository.inventory;

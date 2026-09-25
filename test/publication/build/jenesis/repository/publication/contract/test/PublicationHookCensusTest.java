@@ -58,8 +58,6 @@ class PublicationHookCensusTest {
      * rule named the module; each is on the worklist to be given a fixture of its role.
      */
     private static final List<Exemption> EXEMPTIONS = Stream.of(
-                    "build.jenesis.repository.compliance.signatures.SignatureCompletionObserver",
-                    "build.jenesis.repository.compliance.signatures.AttestationLookupObserver",
                     "build.jenesis.repository.gate.store.ComplianceScreen",
                     "build.jenesis.repository.gate.store.OciHoldRecorder",
                     "build.jenesis.repository.staging.store.StagingWithholdInterceptor")

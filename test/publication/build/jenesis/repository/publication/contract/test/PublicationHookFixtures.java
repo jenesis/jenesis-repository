@@ -34,7 +34,8 @@ final class PublicationHookFixtures {
                 // The core's own hooks beyond the formats' listing observers.
                 new SubtreeSizeObserverFixture(), new IndexPublicationObserverFixture(),
                 new IndexRetractionObserverFixture(), new EventPublicationObserverFixture(),
-                new ProvenanceAttestationReaperFixture()));
+                new ProvenanceAttestationReaperFixture(), new AttestationLookupObserverFixture(),
+                new SignatureCompletionObserverFixture()));
         for (String observer : LISTING_OBSERVERS) {
             String format = observer.substring(0, observer.indexOf('.'));
             fixtures.add(new ListingObserverFixture(format + "-listing",
