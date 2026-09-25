@@ -15,7 +15,7 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
  * restores a cleared one). A publish raises nothing - the pass indexes publishes incrementally - so the projection is
  * the flag alone, raised exactly when something was withheld.
  */
-final class IndexRetractionObserverFixture implements PublicationHookFixture.Observer {
+final class IndexRetractionObserverFixture implements PublicationHookFixture.Observer, RecordsNothingOnPublish {
 
     @Override
     public String hook() {
@@ -66,11 +66,16 @@ final class IndexRetractionObserverFixture implements PublicationHookFixture.Obs
     }
 
     @Override
-    public Map<PublicationHookContract.Property, String> unsupported() {
-        String reason = "it records nothing on a publish - its one surface is the flag a withhold raises, which the "
-                + "withheld leg drives and asserts - so the properties about a publish it dropped have nothing to "
-                + "see; the rebuild the flag forces, and the periodic rebase that retracts without it, are "
+    public String whyNothingOnPublish() {
+        return "it records nothing on a publish - its one surface is the flag a withhold raises, which the withheld "
+                + "leg drives and asserts - so the clauses about what it records for a publish have nothing to act "
+                + "on; the rebuild the flag forces, and the periodic rebase that retracts without it, are "
                 + "PublishedIndexHardeningTest's";
+    }
+
+    @Override
+    public Map<PublicationHookContract.Property, String> unsupported() {
+        String reason = whyNothingOnPublish();
         return Map.of(
                 PublicationHookContract.Property.A_THROWING_OBSERVER_IS_CONTAINED_AFTER_THE_OBSERVED_MUTATION, reason,
                 PublicationHookContract.Property.THE_COMMIT_TO_CALLBACK_WINDOW_LOSES_THE_CALL, reason,

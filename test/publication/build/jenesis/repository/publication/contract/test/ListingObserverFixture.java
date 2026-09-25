@@ -18,7 +18,7 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
  * writes nothing at all - which is what the properties below are held to, and why the recording-shaped properties
  * are excluded with the format contract's held-version leg named as where the surface is proven.
  */
-final class ListingObserverFixture implements PublicationHookFixture.Observer {
+final class ListingObserverFixture implements PublicationHookFixture.Observer, RecordsNothingOnPublish {
 
     private static final String PROVEN = "this observer records nothing on a publish - the format's own publish writes "
             + "its listing - and re-decides one entry on a withhold, release, mark or removal; the format contract's "
@@ -78,6 +78,15 @@ final class ListingObserverFixture implements PublicationHookFixture.Observer {
     public void repair(ArtifactStore store) {
         // The repair is the rebuild pass regenerating every stored listing (StoredListing.rebuildAll) - nothing to
         // regenerate for kit publishes, which no listing names.
+    }
+
+    @Override
+    public String whyNothingOnPublish() {
+        return "a stored-listing observer records nothing on a publish - the format's own publish writes the listing "
+                + "- and under this kit, whose 'kit' artifacts belong to no format, it writes nothing on any leg; the "
+                + "clauses about what it records are proven by the format contract's held-version and revalidation "
+                + "legs over the format's own paths (FormatContract), where a listing that failed to retract or to "
+                + "converge fails visibly.";
     }
 
     @Override
