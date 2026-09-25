@@ -2,7 +2,6 @@ package build.jenesis.repository.application;
 
 import module java.base;
 import build.jenesis.repository.gateway.HardenedScreen;
-import build.jenesis.repository.server.RepositoryRouting;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletOutputStream;
@@ -23,12 +22,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * response already carries a {@code Cache-Control}), and it runs at response commit. So this filter, run after the
  * authorization layer and wrapping the response the format writes to, sets {@code Cache-Control} at the format's
  * commit point - before the default writer runs - and the writer then defers to it. Every route this filter does not
- * touch (API, console, auth, actuator, admin) keeps the default {@code no-store}: the scoping is the filter's own
+ * touch (API, console, auth, actuator) keeps the default {@code no-store}: the scoping is the filter's own
  * path/method/status guard, not a global disable of the writer, so relaxed caching can never leak onto a non-artifact
  * route (proven in {@code CacheControlHeaderFilterTest}).
  *
- * <p><b>The policy (design §4, §5).</b> For a {@code GET}/{@code HEAD} under {@code /repository/} (never the
- * {@code /repository/admin/} routes) that answers a cacheable success ({@code 200}/{@code 206}/{@code 304}):
+ * <p><b>The policy (design §4, §5).</b> For a {@code GET}/{@code HEAD} under {@code /repository/} that answers a cacheable success ({@code 200}/{@code 206}/{@code 304}):
  * <ul>
  *   <li>a released, frozen coordinate ({@link HardenedScreen#immutableCoordinate(String)} true, and a concrete
  *       versioned artifact file rather than a metadata/index/packument/dist-tag document) -&gt;
@@ -62,10 +60,6 @@ public final class CacheControlHeaderFilter extends OncePerRequestFilter {
     /** Artifact reads live under this prefix, {@code /repository/<tenant>/<repository>/...}. */
     private static final String ARTIFACT_PREFIX = "/repository/";
 
-    /** A repository's admin routes - {@code /repository/<tenant>/<repo>/admin/...}, control routes that are never given relaxed
-     *  caching. */
-    private static final String ADMIN_SEGMENT = "/admin/";
-
     static final String IMMUTABLE = "public, max-age=31536000, immutable";
     static final String REVALIDATE = "no-cache";
 
@@ -74,7 +68,7 @@ public final class CacheControlHeaderFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String policy = policyFor(request);
         if (policy == null) {
-            // Not an artifact serve read (a non-GET/HEAD, a non-repository route, or an admin route): leave the chain
+            // Not an artifact serve read (a non-GET/HEAD, or a non-repository route): leave the chain
             // and its default no-store entirely alone.
             chain.doFilter(request, response);
             return;
@@ -97,15 +91,10 @@ public final class CacheControlHeaderFilter extends OncePerRequestFilter {
             return null;
         }
         String uri = request.getRequestURI();
-        if (uri == null || !uri.startsWith(ARTIFACT_PREFIX) || admin(uri)) {
+        if (uri == null || !uri.startsWith(ARTIFACT_PREFIX)) {
             return null;
         }
         return immutableArtifact(uri) ? IMMUTABLE : REVALIDATE;
-    }
-
-    /** Whether {@code uri} is one of a repository's admin routes: {@code /admin/} right after the repository's name. */
-    private static boolean admin(String uri) {
-        return RepositoryRouting.target(uri).path().startsWith(ADMIN_SEGMENT);
     }
 
     /**

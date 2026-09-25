@@ -6,13 +6,13 @@ import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Providers;
 
 /**
- * A core signal SPI through which a richer distribution claims ownership of the import edge - the repo-less
- * {@code POST /repository/admin/import} / {@code GET /repository/admin/import/<id>} surface the free
+ * A core signal SPI through which a richer distribution claims ownership of the import edge - the
+ * {@code POST /api/repository/import} / {@code GET /api/repository/import/<id>} surface the free
  * {@code ImportEdgeController} serves - discovered at runtime with {@link ServiceLoader}, exactly like the
  * {@link CapabilityContributor} SPI and the format / import-source plugins. When any provider is {@link #installed()
  * installed}, the {@code ImportEdgeController} bean is simply not registered (see
  * {@code RepositoryAutoConfiguration}), so its mapping never joins the handler mapping and the distribution's own
- * import controller - the downstream edition's tenant-scoped {@code /repository/<repo>/admin/import} with its audited,
+ * import controller - a composition's tenant-scoped {@code /api/repository/import} with its audited,
  * SSRF-screened choreography - is the <em>only</em> import edge at boot.
  *
  * <p>This retires the cross-layer stopgap exists to remove: the downstream edition previously dropped the free

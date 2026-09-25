@@ -204,7 +204,7 @@ public final class RepositoryClient {
     /** The staging ids of a repository with their state and item count, or {@code null} when staging is not installed
      *  on this deployment (HTTP 501). */
     public List<StagingEntry> staging(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/staging?repo=" + enc(repo), null, null);
+        HttpResponse<String> response = send("GET", "/api/repository/staging?repo=" + enc(repo), null, null);
         if (response.statusCode() == 501) {
             return null;
         }
@@ -215,13 +215,14 @@ public final class RepositoryClient {
     /** Promote a staged id into the release layout, returning the HTTP status (200 promoted, 409 already sealed,
      *  501 staging not installed). */
     public int promoteStaging(String repo, String id) throws IOException, InterruptedException {
-        return send("POST", repository(repo) + "/staging/" + id + "/promote", null, null).statusCode();
+        return send("POST", "/api/repository/staging/" + enc(id) + "/promote?repo=" + enc(repo), null, null)
+                .statusCode();
     }
 
     /** Drop a staged id and its held blobs, returning the HTTP status (200 dropped, 409 already sealed, 501 staging
      *  not installed). */
     public int dropStaging(String repo, String id) throws IOException, InterruptedException {
-        return send("POST", repository(repo) + "/staging/" + id + "/drop", null, null).statusCode();
+        return send("POST", "/api/repository/staging/" + enc(id) + "/drop?repo=" + enc(repo), null, null).statusCode();
     }
 
     /** The published-index descriptor for a repository - the generation, watermark and the chain of immutable chunks
@@ -811,7 +812,7 @@ public final class RepositoryClient {
     /** Run the retention sweep over a repository, returning what it evicted and how many blobs it reclaimed, or
      *  {@code null} when retention is not installed on this deployment (HTTP 501). */
     public CleanupReport cleanup(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("POST", repository(repo) + "/admin/cleanup", null, null);
+        HttpResponse<String> response = send("POST", "/api/repository/cleanup?repo=" + enc(repo), null, null);
         if (response.statusCode() == 501) {
             return null;
         }
@@ -822,7 +823,7 @@ public final class RepositoryClient {
     /** The dry-run cleanup plan: what the sweep would evict, without deleting anything ({@code blobsReclaimed} is
      *  always 0), or {@code null} when retention is not installed (HTTP 501). */
     public CleanupReport cleanupPlan(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", repository(repo) + "/admin/cleanup/plan", null, null);
+        HttpResponse<String> response = send("GET", "/api/repository/cleanup/plan?repo=" + enc(repo), null, null);
         if (response.statusCode() == 501) {
             return null;
         }
@@ -852,7 +853,7 @@ public final class RepositoryClient {
 
     /** A repository's retention policy, or {@code null} when retention is not installed (HTTP 501). */
     public RetentionView retention(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", repository(repo) + "/admin/retention", null, null);
+        HttpResponse<String> response = send("GET", "/api/repository/retention?repo=" + enc(repo), null, null);
         if (response.statusCode() == 501) {
             return null;
         }
@@ -864,11 +865,11 @@ public final class RepositoryClient {
      *  installed (HTTP 501). The durations are ISO-8601 (e.g. {@code P30D}). */
     public boolean setRetention(String repo, int keepLast, String maxAge, String prereleaseExpiry,
                                 String notDownloadedFor) throws IOException, InterruptedException {
-        String query = "?keepLast=" + keepLast
+        String query = "&keepLast=" + keepLast
                 + "&maxAge=" + enc(blankIfNull(maxAge))
                 + "&prereleaseExpiry=" + enc(blankIfNull(prereleaseExpiry))
                 + "&notDownloadedFor=" + enc(blankIfNull(notDownloadedFor));
-        HttpResponse<String> response = send("PUT", repository(repo) + "/admin/retention" + query, null, null);
+        HttpResponse<String> response = send("PUT", "/api/repository/retention?repo=" + enc(repo) + query, null, null);
         if (response.statusCode() == 501) {
             return false;
         }
@@ -878,20 +879,20 @@ public final class RepositoryClient {
 
     /** A repository's pinned coordinates ({@code ecosystem:coordinate:version}), which the sweep never reclaims. */
     public List<String> pins(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", repository(repo) + "/admin/pins", null, null);
+        HttpResponse<String> response = send("GET", "/api/repository/pins?repo=" + enc(repo), null, null);
         require(response, 200, "read the pins of " + repo);
         return JSON.readValue(response.body(), PinsView.class).pinned();
     }
 
     public void pin(String repo, String ecosystem, String coordinate, String version)
             throws IOException, InterruptedException {
-        require(send("POST", repository(repo) + "/admin/pin?ecosystem=" + enc(ecosystem)
+        require(send("POST", "/api/repository/pin?repo=" + enc(repo) + "&ecosystem=" + enc(ecosystem)
                 + "&coordinate=" + enc(coordinate) + "&version=" + enc(version), null, null), 200, "pin " + coordinate);
     }
 
     public void unpin(String repo, String ecosystem, String coordinate, String version)
             throws IOException, InterruptedException {
-        require(send("DELETE", repository(repo) + "/admin/pin?ecosystem=" + enc(ecosystem)
+        require(send("DELETE", "/api/repository/pin?repo=" + enc(repo) + "&ecosystem=" + enc(ecosystem)
                 + "&coordinate=" + enc(coordinate) + "&version=" + enc(version), null, null), 200, "unpin " + coordinate);
     }
 
@@ -917,7 +918,7 @@ public final class RepositoryClient {
         if (resume != null) {
             fields.put("resume", resume);
         }
-        HttpResponse<String> response = send("POST", repository(repo) + "/admin/import",
+        HttpResponse<String> response = send("POST", "/api/repository/import?repo=" + enc(repo),
                 body(fields), "application/json");
         if (response.statusCode() == 202) {
             return new ImportResult(202, JSON.readValue(response.body(), ImportJob.class).job());
@@ -928,7 +929,7 @@ public final class RepositoryClient {
     /** The state and counts of an import job, or {@code null} when no such job exists (HTTP 404). */
     public ImportStatus importStatus(String repo, String job) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET",
-                repository(repo) + "/admin/import/" + enc(job), null, null);
+                "/api/repository/import/" + enc(job) + "?repo=" + enc(repo), null, null);
         if (response.statusCode() == 404) {
             return null;
         }
@@ -1573,7 +1574,7 @@ public final class RepositoryClient {
     /** Forget every record of one ecosystem in a repository. */
     public void forgetEcosystem(String repo, String ecosystem) throws IOException, InterruptedException {
         HttpResponse<String> response = send("POST",
-                repository(repo) + "/admin/forget-ecosystem?ecosystem=" + enc(ecosystem),
+                "/api/repository/forget-ecosystem?repo=" + enc(repo) + "&ecosystem=" + enc(ecosystem),
                 HttpRequest.BodyPublishers.noBody(), null);
         require(response, 200, "forget the " + ecosystem + " records in " + repo);
     }

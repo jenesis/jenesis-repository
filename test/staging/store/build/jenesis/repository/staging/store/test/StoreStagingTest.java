@@ -178,7 +178,7 @@ class StoreStagingTest {
     @Test
     void staged_content_is_withheld_from_serving_before_promotion() throws IOException {
         // The staged pointer lives at publish/staging/<id><releasePath>; without the withhold screen a GET at
-        // /repository/<repo>/staging/<id>/... resolved it and served the un-gated staged bytes. It must be withheld
+        // /repository/<tenant>/<repo>/staging/<id>/... in a Maven repository resolved it and served the un-gated staged bytes. It must be withheld
         // from every read until promotion re-publishes it into its real (served) release path.
         staging.stage("s7", "/maven/org/example/held/1.0/held-1.0.jar", "held".getBytes(StandardCharsets.UTF_8));
         assertThat(serve("/staging/s7/maven/org/example/held/1.0/held-1.0.jar"))

@@ -64,7 +64,7 @@ public class ImportHostGuardTest {
 
         running = RepositoryApplication.start(0);
         client = HttpClient.newHttpClient();
-        base = "http://localhost:" + running.port() + "/repository/default";
+        base = "http://localhost:" + running.port();
     }
 
     @AfterAll
@@ -116,7 +116,7 @@ public class ImportHostGuardTest {
         Instant deadline = Instant.now().plus(Duration.ofMinutes(1));
         String state = "";
         while (Instant.now().isBefore(deadline)) {
-            state = json.readTree(client.send(HttpRequest.newBuilder(URI.create(base + "/releases/admin/import/" + job))
+            state = json.readTree(client.send(HttpRequest.newBuilder(URI.create(base + "/api/repository/import/" + job + "?repo=releases"))
                     .GET().build(), BodyHandlers.ofString()).body()).path("state").asString();
             if (!"running".equals(state)) {
                 break;
@@ -138,7 +138,7 @@ public class ImportHostGuardTest {
     }
 
     private HttpResponse<String> post(String body) throws Exception {
-        return client.send(HttpRequest.newBuilder(URI.create(base + "/releases/admin/import"))
+        return client.send(HttpRequest.newBuilder(URI.create(base + "/api/repository/import?repo=releases"))
                 .POST(BodyPublishers.ofString(body)).build(), BodyHandlers.ofString());
     }
 }

@@ -8,30 +8,32 @@ import build.jenesis.repository.importer.ImportRequest;
 import build.jenesis.repository.importer.ImportScreen;
 import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.importer.ImportSourceProvider;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
- * The free import edge: the {@code /repository/<repository>/admin/import} migration trigger and its status read, peeled out of {@link RepositoryController} into its own controller bean so a richer distribution can OWN the
+ * The free import edge: the {@code /api/repository/import?repo=<repository>} migration trigger and its status read, peeled out of {@link RepositoryController} into its own controller bean so a richer distribution can OWN the
  * import edge without a cross-layer mapping override. It triggers an asynchronous migration through the first
  * {@link ImportSourceProvider} that handles the requested source - discovered with {@code ServiceLoader} like the
  * formats, so the server knows no incumbent by name - run as a background {@link ImportJobs} writing into the request's
  * routed artifact space (so an import lands exactly where serving reads, and lays out only the formats that repository
- * holds), and {@code GET /repository/<repository>/admin/import/<id>} returns its state.
+ * holds), and {@code GET /api/repository/import/<id>?repo=<repository>} returns its state.
  *
  * <p>This edge is registered <em>only when no {@link ImportEdgeProvider} is installed</em> (see
  * {@link RepositoryAutoConfiguration}). When a distribution ships an {@code ImportEdgeProvider} - the downstream
- * edition's tenant-scoped {@code /repository/<repo>/admin/import} with its audited, SSRF-screened choreography - this
+ * edition's tenant-scoped {@code /api/repository/import} with its audited, SSRF-screened choreography - this
  * free controller is simply not created, so its mapping never joins the handler mapping and the distribution's
  * controller is the only import edge: the downstream edition no longer needs a {@code WebMvcRegistrations} bean to
  * suppress the mapping. With no provider installed (the product) the edge is served exactly as before,
@@ -64,17 +66,6 @@ public class ImportEdgeController {
     }
 
     /**
-     * The migration trigger only accepts {@code POST}; any other method on {@code /admin/import} (a {@code GET}
-     * without a job id, say) is a {@code 405}, matching the headless dispatch. The more specific route wins over the
-     * format catch-all, so a stray method is rejected here rather than falling through to a {@code 404}.
-     */
-    @RequestMapping(value = "/repository/{tenant}/{repository}/admin/import", method = {RequestMethod.GET, RequestMethod.HEAD,
-            RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE})
-    public void importMethodNotAllowed(HttpServletResponse response) {
-        response.setStatus(405);
-    }
-
-    /**
      * The admin trigger for a migration, asynchronous so the call returns at once: a small JSON body
      * ({@code {"source":"nexus|artifactory|maven|jenesis","url":...,"repository":...,"format":...,"username":...,
      * "password":...,"resume":...}}) starts a background job (see {@link ImportJobs}) and answers {@code 202} with
@@ -82,8 +73,9 @@ public class ImportEdgeController {
      * optional for the others. A {@code resume} naming a prior job continues its walk from the recorded continuation
      * token and counts.
      */
-    @PostMapping("/repository/{tenant}/{repository}/admin/import")
-    public void submitImport(@RequestBody(required = false) String body,
+    @PostMapping("/api/repository/import")
+    public void submitImport(@RequestParam("repo") String repo,
+                             @RequestBody(required = false) String body,
                              HttpServletRequest request,
                              HttpServletResponse response)
             throws IOException {
@@ -97,7 +89,12 @@ public class ImportEdgeController {
         }
         // The import writes into the same routed artifact space serving reads from, so a migrated artifact is
         // found where a later request looks for it; the job state rides along under that space's imports/ keys.
-        ArtifactStore store = routing.route(request).store();
+        Optional<ArtifactStore> routed = store(repo, request);
+        if (routed.isEmpty()) {
+            respond(response, 404, "no such repository");
+            return;
+        }
+        ArtifactStore store = routed.get();
         ImportJobs jobs = new ImportJobs();
         JsonNode spec = JSON.readTree(body == null || body.isBlank() ? "{}" : body);
         String url = spec.path("url").asString(null);
@@ -162,12 +159,27 @@ public class ImportEdgeController {
         respond(response, 202, JSON.writeValueAsString(Map.of("job", jobId, "state", "running")));
     }
 
+    /** The routed artifact space of {@code repo} in the tenant the request answers for, or empty when the routing
+     *  cannot resolve one; a name that is not routable is a {@code 400}. */
+    private Optional<ArtifactStore> store(String repo, HttpServletRequest request) {
+        if (!Scopes.valid(repo)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a routable repository name");
+        }
+        return routing.route(routing.tenant(request), repo, "/").map(RepositoryRouting.Route::store);
+    }
+
     /** Return a job's persisted state as raw JSON ({@code 404} if there is no such job). */
-    @GetMapping("/repository/{tenant}/{repository}/admin/import/{id}")
-    public void importStatus(@PathVariable("id") String id,
+    @GetMapping("/api/repository/import/{id}")
+    public void importStatus(@RequestParam("repo") String repo,
+                             @PathVariable("id") String id,
                              HttpServletRequest request,
                              HttpServletResponse response) throws IOException {
-        Optional<byte[]> state = new ImportJobs().status(routing.route(request).store(), id);
+        Optional<ArtifactStore> store = store(repo, request);
+        if (store.isEmpty()) {
+            respond(response, 404, "no such repository");
+            return;
+        }
+        Optional<byte[]> state = new ImportJobs().status(store.get(), id);
         if (state.isEmpty()) {
             response.setStatus(404);
             return;

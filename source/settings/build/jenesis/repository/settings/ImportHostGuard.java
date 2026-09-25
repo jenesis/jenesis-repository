@@ -63,7 +63,7 @@ public final class ImportHostGuard {
 
     /**
      * The reason an import URL must be refused under the current dial, or {@code null} when the migration may proceed.
-     * This is the ONE screen both import legs (the {@code /<repo>/admin/import} API controller and the
+     * This is the ONE screen both import legs (the {@code /api/repository/import} API controller and the
      * console migration panel) call, and it is <em>both</em> halves of "may this deployment fetch from this URL":
      *
      * <ol>

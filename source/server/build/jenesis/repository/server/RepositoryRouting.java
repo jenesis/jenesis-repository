@@ -107,7 +107,10 @@ public interface RepositoryRouting {
      *     {@code acme/app} serves at {@code /v2/<tenant>/<repository>/acme/app} - and every {@code Location} the
      *     format answers with goes back through the exchange, which puts both back;</li>
      * <li>{@code /v2} and {@code /v2/} - the registry's version probe, which names neither: the target's tenant and
-     *     repository are empty.</li>
+     *     repository are empty;</li>
+     * <li>{@code /staging/<tenant>/<repository>/<id>/<path>} - an upload into one of a repository's staged releases,
+     *     beside the repository rather than inside its URL space, so no artifact path of any format can collide with
+     *     it. The path is the release's id followed by the path within the repository.</li>
      * </ul>
      * A URL that names a tenant and no repository has an empty repository. The path is what follows the format's
      * {@link build.jenesis.repository.format.RepositoryFormat#mount mount}: the dispatcher puts the mount back once it
@@ -121,6 +124,8 @@ public interface RepositoryRouting {
             rest = uri.substring("/v2/".length());
         } else if (uri.startsWith("/repository/")) {
             rest = uri.substring("/repository/".length());
+        } else if (uri.startsWith(STAGING)) {
+            rest = uri.substring(STAGING.length());
         } else {
             rest = uri.equals("/repository") ? "" : uri.startsWith("/") ? uri.substring(1) : uri;
         }
@@ -130,6 +135,43 @@ public interface RepositoryRouting {
         slash = within.indexOf('/');
         return new Target(tenant, slash < 0 ? within : within.substring(0, slash),
                 slash < 0 ? "/" : within.substring(slash));
+    }
+
+    /** The root staged uploads answer under: {@code /staging/<tenant>/<repository>/<id>/...}. */
+    String STAGING = "/staging/";
+
+    /** The root a repository's operations answer under - its cleanup, retention, pins, imports and the promotion of
+     *  its staged releases - each naming the repository in {@code ?repo=}. */
+    String OPERATIONS = "/api/repository/";
+
+    /**
+     * The repository an operation on one repository names: the {@code repo} parameter of a request under
+     * {@link #OPERATIONS}, or empty for any other request. It is what such a request is authorized against, with the
+     * repository rights its artifacts take, so a key scoped to one repository may clean it up, pin in it or promote
+     * its releases and may do none of it to another.
+     *
+     * <p>Read from the raw query string, never through {@code getParameter}, which may read a form-encoded body. A
+     * parameter given more than once names nothing: the handler would read a different value than was authorized.
+     *
+     * @param uri   the decoded request URI.
+     * @param query the raw query string, or {@code null}.
+     */
+    static Optional<String> operated(String uri, String query) {
+        if (!uri.startsWith(OPERATIONS) || query == null) {
+            return Optional.empty();
+        }
+        String named = null;
+        for (String pair : query.split("&")) {
+            int equals = pair.indexOf('=');
+            String name = URLDecoder.decode(equals < 0 ? pair : pair.substring(0, equals), StandardCharsets.UTF_8);
+            if (name.equals("repo")) {
+                if (named != null) {
+                    return Optional.empty();
+                }
+                named = equals < 0 ? "" : URLDecoder.decode(pair.substring(equals + 1), StandardCharsets.UTF_8);
+            }
+        }
+        return named == null || named.isBlank() ? Optional.empty() : Optional.of(named);
     }
 
     /**

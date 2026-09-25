@@ -7,7 +7,7 @@ import build.jenesis.repository.server.spi.ImportEdgeProvider;
 /**
  * A test {@link ImportEdgeProvider} registered through this test module's {@code module-info} {@code provides} clause,
  * so the running free server discovers it via {@link java.util.ServiceLoader} exactly as a richer distribution would -
- * proving the free import edge ({@code /repository/admin/import}) yields when a distribution owns the edge, without a
+ * proving the free import edge ({@code /api/repository/import}) yields when a distribution owns the edge, without a
  * {@code WebMvcRegistrations} mapping-suppression.
  *
  * <p>It is <em>inert by default</em>: it declares a required-config key ({@link #ACTIVATION_KEY}) that no other test

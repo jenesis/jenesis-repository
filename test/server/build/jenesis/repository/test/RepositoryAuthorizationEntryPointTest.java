@@ -32,7 +32,7 @@ class RepositoryAuthorizationEntryPointTest {
         HttpServletRequest request = request("/v2/", null);
         HttpServletResponse response = mock(HttpServletResponse.class);
 
-        new RepositoryAuthorizationEntryPoint(failures).commence(request, response,
+        new RepositoryAuthorizationEntryPoint(failures, _ -> List.of()).commence(request, response,
                 new InsufficientAuthenticationException("no key"));
 
         verify(response).setStatus(401);
@@ -45,7 +45,7 @@ class RepositoryAuthorizationEntryPointTest {
         HttpServletRequest request = request("/repository/default/maven/org/x/y/1/y-1.jar", null);
         HttpServletResponse response = mock(HttpServletResponse.class);
 
-        new RepositoryAuthorizationEntryPoint(failures).commence(request, response,
+        new RepositoryAuthorizationEntryPoint(failures, _ -> List.of()).commence(request, response,
                 new InsufficientAuthenticationException("no key"));
 
         verify(response).setStatus(401);
@@ -53,11 +53,13 @@ class RepositoryAuthorizationEntryPointTest {
     }
 
     @Test
-    void a_keyless_cargo_index_request_is_also_challenged_with_cargo() {
-        HttpServletRequest request = request("/repository/default/releases/cargo/config.json", null);
+    void a_keyless_request_is_also_challenged_with_what_the_repository_s_format_declares() {
+        // A Cargo repository named anything at all: the scheme comes from the format the repository holds, never from
+        // what its URL happens to contain.
+        HttpServletRequest request = request("/repository/default/crates/config.json", null);
         HttpServletResponse response = mock(HttpServletResponse.class);
 
-        new RepositoryAuthorizationEntryPoint(failures).commence(request, response,
+        new RepositoryAuthorizationEntryPoint(failures, _ -> List.of("Cargo")).commence(request, response,
                 new InsufficientAuthenticationException("no key"));
 
         verify(response).setStatus(401);
@@ -70,7 +72,7 @@ class RepositoryAuthorizationEntryPointTest {
         HttpServletRequest request = request("/api/credentials", null);
         HttpServletResponse response = mock(HttpServletResponse.class);
 
-        new RepositoryAuthorizationEntryPoint(failures).commence(request, response,
+        new RepositoryAuthorizationEntryPoint(failures, _ -> List.of()).commence(request, response,
                 new InsufficientAuthenticationException("no key"));
 
         verify(response).setStatus(401);
@@ -82,7 +84,7 @@ class RepositoryAuthorizationEntryPointTest {
         HttpServletRequest request = request("/v2/library/app/blobs/uploads/", Authorization.Decision.FORBIDDEN);
         HttpServletResponse response = mock(HttpServletResponse.class);
 
-        new RepositoryAuthorizationEntryPoint(failures).commence(request, response,
+        new RepositoryAuthorizationEntryPoint(failures, _ -> List.of()).commence(request, response,
                 new InsufficientAuthenticationException("read-only key"));
 
         verify(response).setStatus(403);

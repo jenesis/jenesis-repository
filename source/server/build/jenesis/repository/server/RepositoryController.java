@@ -35,7 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
  * do not claim is a {@code 404}. When an upstream is configured for the
  * matched format and the format is a {@link ProxyFormat}, a local miss is served through the {@link PullThroughCache}
  * from that upstream and cached, so a later read is a local hit. The single-tenant import edge
- * ({@code POST /repository/admin/import} and {@code GET /repository/admin/import/<id>}) is served by the separate
+ * ({@code POST /api/repository/import} and {@code GET /api/repository/import/<id>}) is served by the separate
  * {@link ImportEdgeController} bean - peeled out so a richer distribution can OWN the import edge through the
  * {@link ImportEdgeProvider} SPI without a cross-layer mapping override. Authorization is not done here:
  * {@link RepositorySecurityAutoConfiguration} gates the wire through the {@link Authorization} credential model.
@@ -141,8 +141,9 @@ public class RepositoryController {
      * The format catch-all: an artifact request under {@code /repository/**} (its prefix stripped by
      * {@link RepositoryRouting} before dispatch) or the OCI {@code /v2/**} registry the Docker protocol pins at the host
      * root, resolved to its artifact space and offered to the {@link RepositoryFormat} plugins over that store by the
-     * {@link FormatDispatcher}. More specific routes ({@code /repository/admin/import}) and the Actuator endpoints win in
-     * Spring, so this only sees a format's own paths; an unclaimed one is a {@code 404}. A format with a configured
+     * {@link FormatDispatcher}. A repository's operations and staged uploads answer outside its URL space
+     * ({@code /api/repository/...}, {@code /staging/...}), so this sees nothing but a format's own paths; an unclaimed
+     * one is a {@code 404}. A format with a configured
      * upstream that is a {@link ProxyFormat} serves a local miss through the {@link PullThroughCache}. A write
      * carrying the batch explode header is walked entry by entry by {@link BatchIngestion} - each member screened at
      * the same {@link ScreenedDispatch} ingress edge a single deploy uses - when the feature is enabled; otherwise the

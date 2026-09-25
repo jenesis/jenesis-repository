@@ -211,6 +211,17 @@ public interface RepositoryFormat extends IconContributor {
     boolean handles(String path);
 
     /**
+     * The authentication schemes a {@code 401} on this format's paths names beside {@code Basic}. A client that sends
+     * its credential only in answer to a challenge it recognises needs its own named: cargo asks for its sparse
+     * index's {@code config.json} without a token and retries with one only when the answer names {@code Cargo}. The
+     * server asks the format of the repository a denied request addresses, so it holds no list of formats that need
+     * one. None by default.
+     */
+    default List<String> challenges() {
+        return List.of();
+    }
+
+    /**
      * Where this format's paths start, as {@link #handles} sees them: {@code /<name>} for a format whose every path
      * begins with its own name, which is almost every format. A repository holds exactly one format and its URLs
      * carry no format segment, so the path within a repository - {@code /com/acme/app/1.0/app-1.0.jar} - is handed to

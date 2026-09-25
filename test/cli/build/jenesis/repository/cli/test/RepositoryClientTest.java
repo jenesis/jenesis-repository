@@ -182,7 +182,7 @@ public class RepositoryClientTest {
         gets.put("/api/licenses", LICENSES);
         gets.put("/api/quarantine", QUARANTINE);
         gets.put("/api/forwarding", FORWARDING);
-        gets.put("/api/staging", STAGING);
+        gets.put("/api/repository/staging", STAGING);
         gets.put("/api/index", INDEX);
         gets.put("/api/capabilities", CAPABILITIES);
         gets.put("/api/quota", QUOTA);
@@ -193,10 +193,10 @@ public class RepositoryClientTest {
         gets.put("/api/audit", AUDIT);
         gets.put("/api/licenses/retro/plan", RETRO);
         gets.put("/api/admin/orphans", ORPHANS);
-        gets.put("/repository/acme/releases/admin/retention", RETENTION);
-        gets.put("/repository/acme/releases/admin/pins", PINS);
-        gets.put("/repository/acme/releases/admin/cleanup/plan", CLEANUP);
-        gets.put("/repository/acme/releases/admin/import/job-123", IMPORT_STATUS);
+        gets.put("/api/repository/retention", RETENTION);
+        gets.put("/api/repository/pins", PINS);
+        gets.put("/api/repository/cleanup/plan", CLEANUP);
+        gets.put("/api/repository/import/job-123", IMPORT_STATUS);
         gets.forEach((path, payload) -> server.stubFor(get(urlPathEqualTo(path))
                 .willReturn(aResponse().withStatus(200).withBody(payload))));
         // The two query-dependent GET reads: a token-bearing query outranks its plain sibling.
@@ -216,14 +216,14 @@ public class RepositoryClientTest {
                 .willReturn(aResponse().withStatus(201).withBody(MINTED)));
         server.stubFor(post(urlPathMatching(".*/rotate"))
                 .willReturn(aResponse().withStatus(201).withBody(ROTATED)));
-        server.stubFor(post(urlPathEqualTo("/repository/acme/releases/admin/cleanup"))
+        server.stubFor(post(urlPathEqualTo("/api/repository/cleanup"))
                 .willReturn(aResponse().withStatus(200).withBody(CLEANUP)));
         server.stubFor(post(urlPathEqualTo("/api/admin/purge")).atPriority(1)
                 .withQueryParam("namespace", equalTo("build.jenesis.repository.phantom"))
                 .willReturn(aResponse().withStatus(200).withBody(PURGE)));
         server.stubFor(post(urlPathEqualTo("/api/admin/purge")).atPriority(5)
                 .willReturn(aResponse().withStatus(404)));
-        server.stubFor(post(urlPathEqualTo("/repository/acme/releases/admin/import"))
+        server.stubFor(post(urlPathEqualTo("/api/repository/import"))
                 .willReturn(aResponse().withStatus(202).withBody(IMPORT_JOB)));
         // A framework-rendered JSON error body: it starts with '{' but is not a batch manifest.
         server.stubFor(put(urlPathMatching(".*/errorbody/.*")).atPriority(1)
@@ -504,7 +504,7 @@ public class RepositoryClientTest {
     @Test
     void staging_ids_are_listed_promoted_and_dropped() throws IOException, InterruptedException {
         List<RepositoryClient.StagingEntry> entries = client.staging("releases");
-        assertThat(lastPath).isEqualTo("/api/staging");
+        assertThat(lastPath).isEqualTo("/api/repository/staging");
         assertThat(entries).singleElement().satisfies(entry -> {
             assertThat(entry.id()).isEqualTo("stg-abc");
             assertThat(entry.state()).isEqualTo("OPEN");
@@ -513,11 +513,12 @@ public class RepositoryClientTest {
 
         assertThat(client.promoteStaging("releases", "stg-abc")).isEqualTo(200);
         assertThat(lastMethod).isEqualTo("POST");
-        assertThat(lastPath).isEqualTo("/repository/acme/releases/staging/stg-abc/promote");
+        assertThat(lastPath).isEqualTo("/api/repository/staging/stg-abc/promote");
+        assertThat(lastQuery).isEqualTo("repo=releases");
         assertThat(lastKey).isEqualTo("jenk_acme.secret");
 
         assertThat(client.dropStaging("releases", "stg-abc")).isEqualTo(200);
-        assertThat(lastPath).isEqualTo("/repository/acme/releases/staging/stg-abc/drop");
+        assertThat(lastPath).isEqualTo("/api/repository/staging/stg-abc/drop");
     }
 
     @Test
@@ -672,7 +673,7 @@ public class RepositoryClientTest {
     void cleanup_retention_and_pins_are_driven() throws IOException, InterruptedException {
         RepositoryClient.CleanupReport report = client.cleanup("releases");
         assertThat(lastMethod).isEqualTo("POST");
-        assertThat(lastPath).isEqualTo("/repository/acme/releases/admin/cleanup");
+        assertThat(lastPath).isEqualTo("/api/repository/cleanup");
         assertThat(report.blobsReclaimed()).isEqualTo(3);
         assertThat(report.evicted()).containsExactly("org.acme:lib:0.9 - superseded");
 
@@ -682,19 +683,19 @@ public class RepositoryClientTest {
 
         assertThat(client.setRetention("releases", 3, "P30D", null, null)).isTrue();
         assertThat(lastMethod).isEqualTo("PUT");
-        assertThat(lastPath).isEqualTo("/repository/acme/releases/admin/retention");
-        assertThat(lastQuery).contains("keepLast=3").contains("maxAge=P30D");
+        assertThat(lastPath).isEqualTo("/api/repository/retention");
+        assertThat(lastQuery).contains("repo=releases").contains("keepLast=3").contains("maxAge=P30D");
 
         assertThat(client.pins("releases")).containsExactly("Maven:org.acme:lib:1.0");
 
         client.pin("releases", "Maven", "org.acme:lib", "1.0");
         assertThat(lastMethod).isEqualTo("POST");
-        assertThat(lastPath).isEqualTo("/repository/acme/releases/admin/pin");
+        assertThat(lastPath).isEqualTo("/api/repository/pin");
         assertThat(lastQuery).contains("ecosystem=Maven").contains("coordinate=org.acme").contains("version=1.0");
 
         client.unpin("releases", "Maven", "org.acme:lib", "1.0");
         assertThat(lastMethod).isEqualTo("DELETE");
-        assertThat(lastPath).isEqualTo("/repository/acme/releases/admin/pin");
+        assertThat(lastPath).isEqualTo("/api/repository/pin");
     }
 
     @Test
@@ -781,7 +782,7 @@ public class RepositoryClientTest {
         RepositoryClient.ImportResult result = client.startImport("releases", "nexus",
                 "https://nexus.internal/", "maven-releases", "maven", null, null, null);
         assertThat(lastMethod).isEqualTo("POST");
-        assertThat(lastPath).isEqualTo("/repository/acme/releases/admin/import");
+        assertThat(lastPath).isEqualTo("/api/repository/import");
         assertThat(lastBody).as("the source, url, source repository and format are posted")
                 .contains("\"source\":\"nexus\"").contains("\"url\":\"https://nexus.internal/\"")
                 .contains("\"repository\":\"maven-releases\"").contains("\"format\":\"maven\"");
@@ -789,7 +790,7 @@ public class RepositoryClientTest {
         assertThat(result.job()).isEqualTo("job-123");
 
         RepositoryClient.ImportStatus status = client.importStatus("releases", "job-123");
-        assertThat(lastPath).isEqualTo("/repository/acme/releases/admin/import/job-123");
+        assertThat(lastPath).isEqualTo("/api/repository/import/job-123");
         assertThat(status.imported()).isEqualTo(10);
         assertThat(status.skipped()).isEqualTo(2);
         assertThat(status.skippedFormats()).containsExactly("cocoapods");

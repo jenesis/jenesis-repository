@@ -1,4 +1,7 @@
 package build.jenesis.repository.server;
+
+import module java.base;
+
 import build.jenesis.repository.server.spi.Authorization;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,16 +24,25 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  * on an artifact path ({@code /repository/**}, {@code /v2/**}) additionally carries a {@code WWW-Authenticate: Basic}
  * challenge, because several ecosystem clients present their credentials only in answer to one - Maven on a read,
  * a Distribution client on everything - and without it they report the repository as unauthorized and never send
- * the key they hold. A Cargo registry path additionally carries Cargo's own challenge scheme, because cargo asks for
- * the sparse index's {@code config.json} without a token and retries with one only when the 401 names that scheme.
+ * the key they hold. It also names whatever schemes the addressed repository's format declares
+ * ({@link build.jenesis.repository.format.RepositoryFormat#challenges}) - Cargo's own, because cargo asks for the
+ * sparse index's {@code config.json} without a token and retries with one only when the 401 names that scheme.
  * The API and actuator paths stay bare, so a browser calling them is never shown a Basic dialog.
  */
 public final class RepositoryAuthorizationEntryPoint implements AuthenticationEntryPoint, AccessDeniedHandler {
 
     private final AuthFailures failures;
+    private final Function<HttpServletRequest, List<String>> challenges;
 
-    public RepositoryAuthorizationEntryPoint(AuthFailures failures) {
+    /**
+     * @param failures   where every denial is recorded.
+     * @param challenges the schemes the format of the repository a request addresses declares, asked only for a
+     *                   {@code 401} on an artifact path; it answers none for a request it cannot resolve.
+     */
+    public RepositoryAuthorizationEntryPoint(AuthFailures failures,
+                                             Function<HttpServletRequest, List<String>> challenges) {
         this.failures = failures;
+        this.challenges = challenges;
     }
 
     @Override
@@ -44,7 +56,7 @@ public final class RepositoryAuthorizationEntryPoint implements AuthenticationEn
     }
 
     private static boolean artifact(String uri) {
-        return uri.startsWith("/repository/") || uri.startsWith("/v2/");
+        return uri.startsWith("/repository/") || uri.startsWith(RepositoryRouting.STAGING) || uri.startsWith("/v2/");
     }
 
     private void respond(HttpServletRequest request, HttpServletResponse response) {
@@ -53,8 +65,8 @@ public final class RepositoryAuthorizationEntryPoint implements AuthenticationEn
         response.setStatus(status);
         if (status == 401 && artifact(request.getRequestURI())) {
             response.setHeader("WWW-Authenticate", "Basic realm=\"Jenesis Repository\"");
-            if (request.getRequestURI().contains("/cargo/")) {
-                response.addHeader("WWW-Authenticate", "Cargo");
+            for (String scheme : challenges.apply(request)) {
+                response.addHeader("WWW-Authenticate", scheme);
             }
         }
         failures.record("key", status);

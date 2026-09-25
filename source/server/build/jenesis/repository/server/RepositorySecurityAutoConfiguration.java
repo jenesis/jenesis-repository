@@ -1,8 +1,13 @@
 package build.jenesis.repository.server;
+
+import module java.base;
+
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.store.Features;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.env.Environment;
 
 import org.springframework.beans.factory.ObjectProvider;
@@ -107,9 +112,12 @@ public class RepositorySecurityAutoConfiguration {
                                                    AuthorizationManager<RequestAuthorizationContext> authorizationManager,
                                                    RateLimitFilter rateLimitFilter,
                                                    AuthFailures authFailures,
-                                                   ObjectProvider<SecurityChainCustomizer> customizers)
+                                                   ObjectProvider<SecurityChainCustomizer> customizers,
+                                                   ObjectProvider<RepositoryRouting> routing,
+                                                   ObjectProvider<FormatDispatcher> dispatcher)
             throws Exception {
-        RepositoryAuthorizationEntryPoint entryPoint = new RepositoryAuthorizationEntryPoint(authFailures);
+        RepositoryAuthorizationEntryPoint entryPoint = new RepositoryAuthorizationEntryPoint(authFailures,
+                request -> challenges(request, routing.getIfAvailable(), dispatcher.getIfAvailable()));
         http
                 .csrf(csrf -> csrf.disable())
                 .httpBasic(basic -> basic.disable())
@@ -147,5 +155,25 @@ public class RepositorySecurityAutoConfiguration {
         });
         http.authorizeHttpRequests(authorize -> authorize.anyRequest().access(authorizationManager));
         return http.build();
+    }
+
+    /** The schemes the format of the repository {@code request} addresses declares for a {@code 401}, or none when
+     *  the request cannot be resolved to a repository holding a type - a denial is never made to fail by the lookup
+     *  that decorates it. */
+    private static List<String> challenges(HttpServletRequest request, RepositoryRouting routing,
+                                           FormatDispatcher dispatcher) {
+        if (routing == null || dispatcher == null) {
+            return List.of();
+        }
+        return routing.resolve(request).flatMap(route -> {
+                    try {
+                        return routing.document(route);
+                    } catch (IOException unreadable) {
+                        return Optional.empty();
+                    }
+                })
+                .flatMap(document -> RepositoryType.of(document.format(), dispatcher.formats()))
+                .map(type -> type.formats().stream().flatMap(format -> format.challenges().stream()).distinct().toList())
+                .orElse(List.of());
     }
 }

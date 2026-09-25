@@ -18,9 +18,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * so it moves to this servlet filter, which wraps the whole dispatch on the one request thread the screening and the
  * publish run on.
  *
- * <p>The filter matches the two surfaces a write can land on: {@code /repository/**} (every format's own path under the
- * multi-tenant repo-segmented shape and the fixed-tenant repo-less one) AND the host-rooted OCI registry {@code /v2/**}
- * (whose manifest choke point publishes too, so it needs the tenant bound as well). The tenant is resolved through the
+ * <p>The filter matches the surfaces a write can land on: {@code /repository/**}, the host-rooted OCI registry
+ * {@code /v2/**} (whose manifest choke point publishes too), a staged upload under {@code /staging/**}, and a
+ * repository's operations under {@code /api/repository/**}, where an import and a staged release's promotion publish
+ * through the gate. An operation names no tenant in its URL, so it binds the tenant the routing answers for a request
+ * that addresses none. The tenant is resolved through the
  * active {@link RepositoryRouting} - exactly the tenant that scopes the request's store - not the
  * {@code Jenesis-Repository-Key} header alone. That distinction is load-bearing under path- and host-tenancy: there the
  * tenant rides in the URL path or the request Host, not the key, so a keyless write to {@code /repository/acme/...}
@@ -49,21 +51,31 @@ public final class PublishTenantFilter extends OncePerRequestFilter {
         // the tenant comes from the path/host (a keyless CDN write names a non-default tenant), which the key header
         // alone could not see; the key-must-agree precedence in those routings still confines a keyed request.
         // A routing refusal is the controller's to answer: leave the tenant unbound and let the request proceed.
-        Optional<RepositoryRouting.Route> route = routing.resolve(request);
-        if (route.isEmpty()) {
+        Optional<String> tenant;
+        if (request.getRequestURI().startsWith(RepositoryRouting.OPERATIONS)) {
+            try {
+                tenant = Optional.of(routing.tenant(request));
+            } catch (RuntimeException refused) {
+                tenant = Optional.empty();
+            }
+        } else {
+            tenant = routing.resolve(request).map(RepositoryRouting.Route::tenant);
+        }
+        if (tenant.isEmpty()) {
             chain.doFilter(request, response);
             return;
         }
-        try (PublishTenant.Scope _ = PublishTenant.open(route.get().tenant())) {
+        try (PublishTenant.Scope _ = PublishTenant.open(tenant.get())) {
             chain.doFilter(request, response);
         }
     }
 
-    /** The two artifact surfaces a write can reach: the {@code /repository} tree and the host-rooted OCI {@code /v2}
-     *  registry. Everything else (the console, the {@code /api} management surfaces) publishes no artifact and needs no
-     *  tenant bound. */
+    /** The surfaces a write can reach: the {@code /repository} tree, the host-rooted OCI {@code /v2} registry, staged
+     *  uploads and a repository's operations. Everything else (the console, the other {@code /api} management
+     *  surfaces) publishes no artifact and needs no tenant bound. */
     private static boolean binds(String uri) {
         return uri.equals("/repository") || uri.startsWith("/repository/")
-                || uri.equals("/v2") || uri.startsWith("/v2/");
+                || uri.equals("/v2") || uri.startsWith("/v2/")
+                || uri.startsWith(RepositoryRouting.STAGING) || uri.startsWith(RepositoryRouting.OPERATIONS);
     }
 }

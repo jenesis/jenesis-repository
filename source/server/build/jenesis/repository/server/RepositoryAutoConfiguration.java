@@ -544,7 +544,7 @@ public class RepositoryAutoConfiguration {
     }
 
     /**
-     * The single-tenant import edge ({@code POST /repository/admin/import}, {@code GET /repository/admin/import/<id>}),
+     * The single-tenant import edge ({@code POST /api/repository/import}, {@code GET /api/repository/import/<id>}),
      * registered as its own controller bean so a richer distribution can OWN the import edge without a cross-layer
      * mapping override. It is registered only when {@link FreeImportEdgeCondition no ImportEdgeProvider is
      * installed}: when a distribution ships an {@link ImportEdgeProvider} - the downstream edition's tenant-scoped,

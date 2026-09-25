@@ -86,6 +86,12 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return "cargo";
     }
 
+    /** Cargo retries its sparse index with the token only when a {@code 401} names Cargo's own scheme. */
+    @Override
+    public List<String> challenges() {
+        return List.of("Cargo");
+    }
+
     @Override
     public String ecosystem() {
         return ECOSYSTEM;

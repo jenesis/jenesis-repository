@@ -74,8 +74,10 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         // against. The URL is read the way every routing reads it, so a path-scoped grant (<repo>:<prefix>)
         // authorizes exactly the subtree it grants; which tenants a request may address is the routing's to refuse,
         // at the controller. The bare /v2/ names no tenant and no repository: it is the OCI registry's version probe,
-        // which asks only whether the credential is accepted.
-        boolean artifact = uri.startsWith("/repository/") || uri.equals("/v2") || uri.startsWith("/v2/");
+        // which asks only whether the credential is accepted. A staged upload names its repository the same way, under
+        // its own root.
+        boolean artifact = uri.startsWith("/repository/") || uri.startsWith(RepositoryRouting.STAGING)
+                || uri.equals("/v2") || uri.startsWith("/v2/");
         boolean probe = uri.equals("/v2") || uri.equals("/v2/");
         RepositoryRouting.Target target = artifact ? RepositoryRouting.target(uri) : null;
         if (artifact) {
@@ -86,13 +88,19 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         // PUT /repository/<tenant>/<name> - the bare repository, no path within it - creates the repository, which is
         // administration rather than a publish: a key that may deploy into a repository may not thereby create
         // repositories, and an administrator's key may create one without holding a deploy right on it.
-        if (artifact && !probe && "PUT".equals(method) && target.path().equals("/") && !uri.endsWith("/")) {
+        if (uri.startsWith("/repository/") && "PUT".equals(method) && target.path().equals("/") && !uri.endsWith("/")) {
             required = Authorization.MANAGE_WRITE;
         }
         // The asset enumeration scopes the store it reads by its ?repo= parameter, so the repository authorized is the
         // one actually enumerated. Read the parameter only for that GET route (never on an upload path, where touching
         // getParameter could drain a form-encoded body). The controller refuses a request without it; the scope is then
         // "*", which only a deployment-wide key holds.
+        // An operation on one repository - its cleanup, retention, pins, an import into it, a staged release's
+        // promotion - names that repository in its ?repo= parameter and takes its rights, exactly as its artifacts do.
+        Optional<String> operated = RepositoryRouting.operated(uri, request.getQueryString());
+        if (operated.isPresent()) {
+            scope = operated.get();
+        }
         if ("/api/assets".equals(uri)) {
             String repo = request.getParameter("repo");
             if (repo != null && !repo.isBlank()) {

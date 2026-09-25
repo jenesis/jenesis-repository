@@ -20,15 +20,16 @@ import build.jenesis.repository.server.kernel.LiveConfig;
 import io.micrometer.observation.ObservationRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * The repository-maintenance surface - retention policy, the cleanup sweep and pins - peeled out of the
@@ -40,12 +41,12 @@ import org.springframework.web.bind.annotation.RestController;
  * capability with the pointer roots the inventory derives from the installed formats; its dry run rides
  * {@link GarbageCollector#plan} beside retention's. With no collector resolved nothing is ever reclaimed and the
  * report's {@code gc} view says garbage collection is off - the SPI's no-op-by-absence default. The pin operations run through the repository's {@link StoreRepositoryInventory} and stand
- * on their own. Every mapping is a repository's {@code /repository/<tenant>/<repository>/admin/...} route and is
- * gated {@code repository:read}/{@code repository:write} by the security chain before the request is reached; the more
- * specific admin routes still outrank the {@code deploy()} write catch-all because Spring picks the most specific
- * mapping across controllers. The tenant is the one the deployment's routing decides for the URL, exactly as for the
- * repository's artifacts, so two tenants never sweep or pin into each other's space, and a name that is not routable
- * is the routing's {@code 400}.
+ * on their own. Every mapping is an operation on one repository, {@code /api/repository/...?repo=<repository>}, and
+ * is gated {@code repository:read}/{@code repository:write} on that repository by the security chain before the
+ * request is reached, exactly as its artifacts are ({@link RepositoryRouting#operated}). It answers beside the
+ * repository rather than inside its URL space, so no artifact path of any format can collide with it. The tenant is
+ * the one the deployment's routing answers for a request that names none, so two tenants never sweep or pin into each
+ * other's space, and a repository name that is not routable is a {@code 400}.
  */
 @RestController
 public class MaintenanceController {
@@ -72,18 +73,27 @@ public class MaintenanceController {
         this.maintenance = maintenance;
     }
 
+    /** The tenant an operation answers for - the routing's, for a request that names none in its URL - once the
+     *  repository it names has been checked as a routable name, since it is about to scope the store. */
+    private String tenant(String repo, HttpServletRequest request) {
+        if (!Repositories.valid(repo)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a routable repository name");
+        }
+        return routing.tenant(request);
+    }
+
     /** Record a privileged maintenance mutation on the audit trail - a cleanup sweep, a retention-policy change and
      *  a pin toggle are as destructive (or deletion-shaping) as a storage purge, which already records one. */
     private void audited(String tenant, String key, String action, String detail) throws IOException {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, detail);
     }
 
-    @PostMapping("/repository/{tenant}/{repo}/admin/cleanup")
+    @PostMapping("/api/repository/cleanup")
     @ResponseBody
-    public CleanupReport cleanup(@PathVariable("repo") String repo,
+    public CleanupReport cleanup(@RequestParam("repo") String repo,
                                  @RequestHeader(value = Repositories.KEY, required = false) String key,
                                  HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = routing.route(request).tenant();
+        String tenant = tenant(repo, request);
         Optional<RetentionSweeper> sweeper = repositories.retentionSweeper();
         if (sweeper.isEmpty()) {
             respondRetentionNotInstalled(response);
@@ -142,13 +152,13 @@ public class MaintenanceController {
      * itself, and the format module's manifest purge ({@code POST /api/admin/purge}) reaps the stray pointers and
      * listings that remain.
      */
-    @PostMapping("/repository/{tenant}/{repo}/admin/forget-ecosystem")
+    @PostMapping("/api/repository/forget-ecosystem")
     @ResponseBody
-    public Map<String, Object> forgetEcosystem(@PathVariable("repo") String repo,
+    public Map<String, Object> forgetEcosystem(@RequestParam("repo") String repo,
                                                @RequestParam("ecosystem") String ecosystem,
                                                @RequestHeader(value = Repositories.KEY, required = false) String key,
                                                HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = routing.route(request).tenant();
+        String tenant = tenant(repo, request);
         long removed;
         try {
             removed = new StoreRepositoryInventory(repositories.store(tenant, repo)).forgetEcosystem(ecosystem);
@@ -162,12 +172,12 @@ public class MaintenanceController {
         return Map.of("ecosystem", ecosystem, "removed", removed);
     }
 
-    @GetMapping("/repository/{tenant}/{repo}/admin/cleanup/plan")
+    @GetMapping("/api/repository/cleanup/plan")
     @ResponseBody
-    public CleanupReport cleanupPlan(@PathVariable("repo") String repo,
+    public CleanupReport cleanupPlan(@RequestParam("repo") String repo,
                                      @RequestHeader(value = Repositories.KEY, required = false) String key,
                                      HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = routing.route(request).tenant();
+        String tenant = tenant(repo, request);
         Optional<RetentionSweeper> sweeper = repositories.retentionSweeper();
         if (sweeper.isEmpty()) {
             respondRetentionNotInstalled(response);
@@ -192,12 +202,12 @@ public class MaintenanceController {
         return new CleanupReport(0, evicted(inventory, plan), plan.evictions().size(), gc);
     }
 
-    @GetMapping("/repository/{tenant}/{repo}/admin/retention")
+    @GetMapping("/api/repository/retention")
     @ResponseBody
-    public RetentionView retention(@PathVariable("repo") String repo,
+    public RetentionView retention(@RequestParam("repo") String repo,
                                    @RequestHeader(value = Repositories.KEY, required = false) String key,
                                    HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = routing.route(request).tenant();
+        String tenant = tenant(repo, request);
         if (repositories.retentionSweeper().isEmpty()) {
             respondRetentionNotInstalled(response);
             return null;
@@ -209,15 +219,15 @@ public class MaintenanceController {
                 policy.notDownloadedFor() == null ? "" : policy.notDownloadedFor().toString());
     }
 
-    @PutMapping("/repository/{tenant}/{repo}/admin/retention")
-    public void setRetention(@PathVariable("repo") String repo,
+    @PutMapping("/api/repository/retention")
+    public void setRetention(@RequestParam("repo") String repo,
                              @RequestParam(value = "keepLast", defaultValue = "0") int keepLast,
                              @RequestParam(value = "maxAge", defaultValue = "") String maxAge,
                              @RequestParam(value = "prereleaseExpiry", defaultValue = "") String prereleaseExpiry,
                              @RequestParam(value = "notDownloadedFor", defaultValue = "") String notDownloadedFor,
                              @RequestHeader(value = Repositories.KEY, required = false) String key,
                              HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = routing.route(request).tenant();
+        String tenant = tenant(repo, request);
         if (repositories.retentionSweeper().isEmpty()) {
             respondRetentionNotInstalled(response);
             return;
@@ -241,14 +251,14 @@ public class MaintenanceController {
         response.setStatus(200);
     }
 
-    @PostMapping("/repository/{tenant}/{repo}/admin/pin")
-    public void pin(@PathVariable("repo") String repo,
+    @PostMapping("/api/repository/pin")
+    public void pin(@RequestParam("repo") String repo,
                     @RequestParam("ecosystem") String ecosystem,
                     @RequestParam("coordinate") String coordinate,
                     @RequestParam("version") String version,
                     @RequestHeader(value = Repositories.KEY, required = false) String key,
                     HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = routing.route(request).tenant();
+        String tenant = tenant(repo, request);
         try {
             new StoreRepositoryInventory(repositories.store(tenant, repo)).pin(ecosystem, coordinate, version);
         } catch (IllegalArgumentException e) {
@@ -259,14 +269,14 @@ public class MaintenanceController {
         response.setStatus(200);
     }
 
-    @DeleteMapping("/repository/{tenant}/{repo}/admin/pin")
-    public void unpin(@PathVariable("repo") String repo,
+    @DeleteMapping("/api/repository/pin")
+    public void unpin(@RequestParam("repo") String repo,
                       @RequestParam("ecosystem") String ecosystem,
                       @RequestParam("coordinate") String coordinate,
                       @RequestParam("version") String version,
                       @RequestHeader(value = Repositories.KEY, required = false) String key,
                       HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = routing.route(request).tenant();
+        String tenant = tenant(repo, request);
         try {
             new StoreRepositoryInventory(repositories.store(tenant, repo)).unpin(ecosystem, coordinate, version);
         } catch (IllegalArgumentException e) {
@@ -283,19 +293,19 @@ public class MaintenanceController {
         response.getWriter().write(e.getMessage() == null ? "invalid coordinate segment" : e.getMessage());
     }
 
-    @GetMapping("/repository/{tenant}/{repo}/admin/pins")
+    @GetMapping("/api/repository/pins")
     @ResponseBody
-    public PinsView pins(@PathVariable("repo") String repo,
+    public PinsView pins(@RequestParam("repo") String repo,
                          @RequestHeader(value = Repositories.KEY, required = false) String key,
                          HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = routing.route(request).tenant();
+        String tenant = tenant(repo, request);
         return new PinsView(new StoreRepositoryInventory(repositories.store(tenant, repo)).pins());
     }
 
     /** The eviction rows for the report/dry-run, each screened for served-view parity (Audit-28 A2-F2). Retention
      *  operates over EVERY published release - a withheld version still ages past the policy and enters the plan - so a
      *  withheld eviction candidate's {@code coordinate:version} would otherwise be disclosed here, and the dry-run
-     *  ({@code GET .../admin/cleanup/plan}) is served at {@code repository:read}, a normal-consumer scope. Each row's
+     *  ({@code GET /api/repository/cleanup/plan}) is served at {@code repository:read}, a normal-consumer scope. Each row's
      *  coordinate is routed through the membership seam under {@code HIDE_WITHHELD} (reads only the tiny quarantine
      *  pointers / {@code withheld/<hash>} markers, stats no blob): a held member's name is replaced with a neutral
      *  {@code <withheld>} marker while the reason survives, so the operator still sees a candidate and why without the

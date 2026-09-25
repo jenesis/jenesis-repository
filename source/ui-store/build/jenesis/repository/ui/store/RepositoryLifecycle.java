@@ -117,7 +117,7 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     /** Forget one unplaceable ecosystem's records - the hub's explicit retirement of an absent format's data, the
-     *  same primitive and audit event the {@code /repository/<repo>/admin/forget-ecosystem} API verb drives. */
+     *  same primitive and audit event the {@code /api/repository/forget-ecosystem} API verb drives. */
     public boolean forgetEcosystem(String repository, String ecosystem) throws IOException {
         // Off the request thread. The primitive deletes in pages of 500 across five key-space roots until each is
         // empty, so its cost is however much that ecosystem published - unbounded from here, and paid a round trip

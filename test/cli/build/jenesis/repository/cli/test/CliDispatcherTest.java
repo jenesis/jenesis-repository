@@ -371,7 +371,7 @@ public class CliDispatcherTest {
             if (matches(path, "/api/provenance/key")) {
                 return respond(provKeyStatus, "-----BEGIN PUBLIC KEY-----\n-----END PUBLIC KEY-----\n");
             }
-            if (matches(path, "/repository/default/releases/admin/import")) {
+            if (matches(path, "/api/repository/import")) {
                 return respond(importStatusStatus, "{\"state\":\"done\",\"imported\":0,\"skipped\":0,"
                         + "\"skippedFormats\":[],\"cursor\":null,\"asset\":null,\"error\":\"\"}");
             }
@@ -392,7 +392,8 @@ public class CliDispatcherTest {
             if (matches(path, "/api/quarantine")) {
                 return respond(200, quarantineBody);
             }
-            if (matches(path, "/api/staging")) {
+            // The list alone: a promote or drop sits beneath it and answers through the catch-all's deploy status.
+            if (path.equals("/api/repository/staging")) {
                 return respond(stagingListStatus, stagingListBody);
             }
             // A more specific route than the "/" catch-all, so a retry's status is controllable on its own; it answers

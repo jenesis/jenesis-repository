@@ -25,6 +25,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Features;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpStatus;
 import build.jenesis.repository.server.RepositoryRouting;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -34,11 +35,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
- * The admin trigger for a migration off an incumbent manager, asynchronous so the call returns at once. One of the
+ * The trigger for a migration off an incumbent manager, asynchronous so the call returns at once. One of the
  * focused controllers the {@code RepositoryController} monolith split into: the import surface is
  * core to the app (it routes writes into the repository's hosted store), not a removable feature.
  */
@@ -71,10 +74,10 @@ public class ImportController {
     }
 
     /**
-     * {@code POST /<repo>/admin/import} with a JSON body ({@link ImportRequestBody}) starts a background job (see
+     * {@code POST /api/repository/import?repo=<repo>} with a JSON body ({@link ImportRequestBody}) starts a background job (see
      * {@link ImportJobs}) walking the named source repository (whichever incumbents the installed import-source
      * modules connect to) into this repository's store, and answers {@code 202} with the job id;
-     * {@code GET /<repo>/admin/import/<id>} returns its state and counts. It needs {@code repository:write} (a status
+     * {@code GET /api/repository/import/<id>?repo=<repo>} returns its state and counts. It needs {@code repository:write} (a status
      * read needs {@code repository:read}) and routes the write into the repository's hosted target (a proxy
      * repository is read-only - {@code 405}). The importers on this edition's module path decide coverage: every
      * installed format carrying the importer capability; an asset whose format has no importer is reported
@@ -85,9 +88,9 @@ public class ImportController {
      * counted {@code held} (its replay context recorded beside the hold so a review release materialises it), and a
      * rejected one is counted {@code rejected} and skipped.
      */
-    @PostMapping("/repository/{tenant}/{repo}/admin/import")
+    @PostMapping("/api/repository/import")
     @ResponseBody
-    public ImportJob importRepository(@PathVariable("repo") String repo,
+    public ImportJob importRepository(@RequestParam("repo") String repo,
                                       @RequestHeader(value = Repositories.KEY, required = false) String key,
                                       @RequestBody(required = false) ImportRequestBody request,
                                       HttpServletRequest servlet, HttpServletResponse response) throws IOException {
@@ -101,7 +104,7 @@ public class ImportController {
             response.setStatus(400);
             return null;
         }
-        String tenant = routing.route(servlet).tenant();
+        String tenant = tenant(repo, servlet);
         ArtifactStore store = importStore(repo, tenant, response);
         if (store == null) {
             return null;
@@ -159,7 +162,7 @@ public class ImportController {
             };
             jobs.submit(store, source, jobId, prior == null ? 0 : prior.imported(),
                     prior == null ? 0 : prior.skipped(), listener, jobScope);
-            // A bulk migration is a privileged /admin mutation that routes writes into the hosted store; audit the
+            // A bulk migration is a privileged mutation that routes writes into the hosted store; audit the
             // trigger as its /api peers audit theirs (best-effort, so it never fails the started job). Recorded only
             // once the job is actually submitted, and naming the source and target the way the console leg does.
             audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), AuditActions.REPOSITORY_IMPORT,
@@ -169,13 +172,13 @@ public class ImportController {
         });
     }
 
-    @GetMapping("/repository/{tenant}/{repo}/admin/import/{job}")
+    @GetMapping("/api/repository/import/{job}")
     @ResponseBody
-    public ImportJobs.Snapshot importStatus(@PathVariable("repo") String repo, @PathVariable("job") String job,
+    public ImportJobs.Snapshot importStatus(@RequestParam("repo") String repo, @PathVariable("job") String job,
                                             @RequestHeader(value = Repositories.KEY, required = false) String key,
                                             HttpServletRequest servlet, HttpServletResponse response)
             throws IOException {
-        String tenant = routing.route(servlet).tenant();
+        String tenant = tenant(repo, servlet);
         ArtifactStore store = importStore(repo, tenant, response);
         if (store == null) {
             return null;
@@ -185,6 +188,15 @@ public class ImportController {
             response.setStatus(404);
         }
         return snapshot;
+    }
+
+    /** The tenant an import answers for - the routing's, for a request that names none in its URL - once the
+     *  repository it names has been checked as a routable name, since it is about to scope the store. */
+    private String tenant(String repo, HttpServletRequest request) {
+        if (!Repositories.valid(repo)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a routable repository name");
+        }
+        return routing.tenant(request);
     }
 
     /** The store a migration into {@code repo} writes to and reads its jobs from: the repository's OWN store when it is

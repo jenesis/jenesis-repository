@@ -12,6 +12,7 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.staging.Staging;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,14 +22,19 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 
 /**
  * The staging HTTP surface, peeled out of the {@code RepositoryController} monolith into its own thin
  * {@code web} adapter and contributed through the {@code ServerModuleProvider} seam: a deploy lands under a staging
  * id (held, not resolvable), the ids are listed for review, and an id is promoted into the release layout or dropped.
- * The more-specific {@code /repository/<tenant>/<repository>/staging/**} routes outrank the server's write catch-all,
- * and their tenant is the one the deployment's routing decides for the URL, exactly as for the repository's artifacts. The lifecycle itself is the framework-free
+ * A staged upload is {@code PUT /staging/<tenant>/<repository>/<id>/<path>} - the path a publish into the repository
+ * would take, under the release's id - and its tenant is the one the deployment's routing decides for the URL, exactly
+ * as for the repository's artifacts. Listing, promoting and dropping are operations on the repository,
+ * {@code /api/repository/staging...?repo=<repository>}, whose tenant is the one the routing answers for a request that
+ * names none. Both answer beside the repository rather than inside its URL space, so no artifact path of any format
+ * can collide with them. The lifecycle itself is the framework-free
  * {@link Staging} implementation resolved per tenant-and-repository through {@link Repositories}; this adapter is the
  * only Spring-facing piece. With no staging module installed the endpoints answer {@code 501}, after Spring Security's
  * authorization check so a {@code 401}/{@code 403} still precedes. A repository name or tenant that is not
@@ -47,7 +53,7 @@ public class StagingController {
         this.audit = audit;
     }
 
-    @PutMapping("/repository/{tenant}/{repo}/staging/{id}/**")
+    @PutMapping("/staging/{tenant}/{repo}/{id}/**")
     public void stage(@PathVariable("repo") String repo, @PathVariable("id") String id,
                       @RequestHeader(value = Repositories.KEY, required = false) String key,
                       HttpServletRequest request, HttpServletResponse response) throws IOException {
@@ -66,8 +72,7 @@ public class StagingController {
             response.setStatus(404);
             return;
         }
-        String releasePath = type.get().formatPath(
-                route.path().substring(("/staging/" + id).length()));
+        String releasePath = type.get().formatPath(route.path().substring(("/" + id).length()));
         RepositoryRequests.rejectRawTraversal(id);
         RepositoryRequests.rejectRawTraversal(releasePath);
         // Stream the staged deploy straight into the content-addressed store rather than buffering the body in heap.
@@ -75,11 +80,11 @@ public class StagingController {
         response.setStatus(201);
     }
 
-    @PostMapping("/repository/{tenant}/{repo}/staging/{id}/promote")
-    public void promote(@PathVariable("repo") String repo, @PathVariable("id") String id,
+    @PostMapping("/api/repository/staging/{id}/promote")
+    public void promote(@RequestParam("repo") String repo, @PathVariable("id") String id,
                         @RequestHeader(value = Repositories.KEY, required = false) String key,
                         HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = routing.route(request).tenant();
+        String tenant = tenant(repo, request);
         Optional<Staging> staging = repositories.staging(tenant, repo);
         if (staging.isEmpty()) {
             respondStagingNotInstalled(response);
@@ -93,11 +98,11 @@ public class StagingController {
         response.setStatus(200);
     }
 
-    @PostMapping("/repository/{tenant}/{repo}/staging/{id}/drop")
-    public void drop(@PathVariable("repo") String repo, @PathVariable("id") String id,
+    @PostMapping("/api/repository/staging/{id}/drop")
+    public void drop(@RequestParam("repo") String repo, @PathVariable("id") String id,
                      @RequestHeader(value = Repositories.KEY, required = false) String key,
                      HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String tenant = routing.route(request).tenant();
+        String tenant = tenant(repo, request);
         Optional<Staging> staging = repositories.staging(tenant, repo);
         if (staging.isEmpty()) {
             respondStagingNotInstalled(response);
@@ -110,15 +115,11 @@ public class StagingController {
         response.setStatus(200);
     }
 
-    @GetMapping("/api/staging")
+    @GetMapping("/api/repository/staging")
     @ResponseBody
     public StagingList stagingList(@RequestParam("repo") String repo,
-                                   @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                   HttpServletResponse response) throws IOException {
-        String tenant = RepositoryRequests.access(repositories, repo, key, response);
-        if (tenant == null) {
-            return null;
-        }
+                                   HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = tenant(repo, request);
         Optional<Staging> staging = repositories.staging(tenant, repo);
         if (staging.isEmpty()) {
             respondStagingNotInstalled(response);
@@ -135,6 +136,15 @@ public class StagingController {
                     staging.get().stagedAtMost(id, ITEM_CAP)));
         }
         return new StagingList(entries, window.more());
+    }
+
+    /** The tenant an operation on the repository answers for - the routing's, for a request that names none in its
+     *  URL - once the repository has been checked as a routable name, since it is about to scope the store. */
+    private String tenant(String repo, HttpServletRequest request) {
+        if (!Repositories.valid(repo)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a routable repository name");
+        }
+        return routing.tenant(request);
     }
 
     /** Record a privileged staging mutation on the acting tenant, attributing it to the key's credential hash (or

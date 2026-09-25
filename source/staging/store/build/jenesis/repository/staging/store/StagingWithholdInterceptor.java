@@ -9,7 +9,8 @@ import build.jenesis.repository.store.PublishInterceptor;
  * release layout exactly as a quarantine pointer is. {@link StoreStaging#stage} links each staged blob at a
  * {@code publish/staging/&lt;id&gt;&lt;releasePath&gt;} pointer so the lifecycle can hold, list and later re-publish it,
  * but that pointer is otherwise a live serving pointer: without this screen a {@code GET
- * /repository/&lt;repo&gt;/staging/&lt;id&gt;/...} resolves through {@link build.jenesis.repository.store.Publication#located}
+ * /repository/&lt;tenant&gt;/&lt;repo&gt;/staging/&lt;id&gt;/...} of a repository whose format puts no mount in front
+ * of the path - a Maven one, say - resolves through {@link build.jenesis.repository.store.Publication#located}
  * and serves the un-gated staged bytes before any promotion ran the compliance gate. This is the quarantine read side
  * (a discovered {@link PublishInterceptor} whose only say is {@link #withheld}): it never changes a verdict, it simply
  * reports every {@code /staging/} request path as withheld, so staged content is invisible to serving until promotion

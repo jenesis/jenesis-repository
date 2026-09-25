@@ -93,7 +93,7 @@ public record EventReconciliation(String ledger, String route, String caveat) {
                             + "surface that re-derives into this ledger.");
             case PROMOTION -> new EventReconciliation(
                     "the staging id markers, each carrying its terminal state",
-                    "GET /api/staging?repo=",
+                    "GET /api/repository/staging?repo=",
                     "a sealed marker is reaped once past its TTL, so a promotion older than that no longer appears "
                             + "here; beyond it the promoted artifacts themselves are the record. The audit trail's "
                             + "staging.promote entry is what names the operator and the instant.");

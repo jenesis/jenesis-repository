@@ -410,7 +410,7 @@ class StagingReapTest {
                 "WAT 2026-07-01T00:00:00Z".getBytes(StandardCharsets.UTF_8), null);
         assertThat(staging.state("garbled")).as("an unreadable marker reads as OPEN, never throws")
                 .isEqualTo(StagingState.OPEN);
-        // GET /api/staging walks every id calling state(); one bad marker must not throw out of the whole listing.
+        // GET /api/repository/staging walks every id calling state(); one bad marker must not throw out of the whole listing.
         assertThat(staging.ids(100).ids()).contains("good", "garbled");
         for (String id : staging.ids(100).ids()) {
             assertThat(staging.state(id)).as("every id resolves a state across the walk").isNotNull();

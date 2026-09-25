@@ -57,9 +57,9 @@ import org.springframework.core.env.Environment;
  * {@code FreeImportEdgeCondition} only when no {@code ImportEdgeProvider} is installed. This composition installs
  * {@link RoutedImportEdge} through that SPI (a hook, not a cross-layer bean override), so the server's own
  * import edge is never created and {@link ImportController} - the tenant-scoped
- * {@code /repository/<repo>/admin/import} with its {@code AuditTrail}, tenant-routed store and screening/SSRF
- * choreography - is the sole import edge, with no {@code /repository/admin/import} free literal left to shadow it
- * and no mapping override.
+ * {@code /api/repository/import} with its {@code AuditTrail}, tenant-routed store and screening/SSRF
+ * choreography - is the sole import edge, with no second mapping of the route left to shadow it and no mapping
+ * override.
  */
 @Configuration(proxyBeanMethods = false)
 public class ServingConfig {
