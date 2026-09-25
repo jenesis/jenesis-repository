@@ -5,8 +5,8 @@ import build.jenesis.repository.settings.Setting;
 
 /**
  * The first-run guided-hardening step (audit P4). A fresh deploy already boots with a non-empty secure
- * floor - per-credential authorization on, the CVSS gate at {@code CRITICAL}, the public advisory feeds on, a sane
- * rate ceiling and a short immaturity hold - but the dials that need a <em>deployment-specific</em> answer stay at
+ * floor - per-credential authorization on, the CVSS gate at {@code CRITICAL}, a sane rate ceiling and a short
+ * immaturity hold, with the advisory feeds off until an operator names them, since each is an outbound call - but the dials that need a <em>deployment-specific</em> answer stay at
  * their open default, because there is no universal secure value for them: which coordinates carry a version floor,
  * which policy-as-code rules apply, which namespaces the tenant reserves privately, what health floor to gate on.
  * These cannot be floored; they must be <em>guided</em>. On a genuinely fresh deploy (no runtime configuration

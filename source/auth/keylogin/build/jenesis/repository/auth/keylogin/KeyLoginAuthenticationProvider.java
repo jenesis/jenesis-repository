@@ -19,10 +19,11 @@ import org.springframework.security.web.authentication.WebAuthenticationDetails;
  * Authenticates a pasted console login key into the same Spring Security session an OIDC or LDAP sign-in yields - a real
  * {@link UsernamePasswordAuthenticationToken} carrying the principal's authorities - so every per-tenant rule
  * ({@code TenantAuthorization} over {@code Memberships}) applies to
- * it unchanged, with no parallel authorization path. Two key sources: the env bootstrap admin key
- * ({@code JENREG_UI_ADMIN_KEY}, full super-admin over every tenant) and the admin-issued {@link KeyLoginKeys} (a
- * principal signed in at {@code ROLE_USER}, its tenant role resolved per request from the membership file the key was
- * bound to). Keys are matched only by their one-way hash - the admin key in constant time, an issued key by hash lookup
+ * it unchanged, with no parallel authorization path. Three key sources: the env bootstrap admin key
+ * ({@code JENREG_UI_ADMIN_KEY}, full super-admin over every tenant), the {@link FirstRunKey} a deployment nobody can
+ * sign in to yet prints at start (the same session, for its hour and until an administrator exists), and the
+ * admin-issued {@link KeyLoginKeys} (a principal signed in at {@code ROLE_USER}, its tenant role resolved per request
+ * from the membership file the key was bound to). Keys are matched only by their one-way hash - the admin key in constant time, an issued key by hash lookup
  * - never compared in the clear and never logged. Every attempt is first rate-limited by client address through the
  * shared {@link RateLimiter} (brute-force protection; nothing is limited when no rate-limit module is installed) and
  * every outcome is audited.
@@ -33,6 +34,7 @@ public final class KeyLoginAuthenticationProvider implements AuthenticationProvi
     static final String ADMIN_PRINCIPAL = "admin";
 
     private final KeyLoginKeys keys;
+    private final FirstRunKey firstRun;
     private final String adminKeyHash;
     private final RateLimiter rateLimiter;
     private final double permitsPerMinute;
@@ -40,10 +42,11 @@ public final class KeyLoginAuthenticationProvider implements AuthenticationProvi
     private final String auditTenant;
     private final Predicate<String> superadmin;
 
-    public KeyLoginAuthenticationProvider(KeyLoginKeys keys, String adminKey, RateLimiter rateLimiter,
-                                          double permitsPerMinute, AuditTrail audit, String auditTenant,
-                                          Predicate<String> superadmin) {
+    public KeyLoginAuthenticationProvider(KeyLoginKeys keys, FirstRunKey firstRun, String adminKey,
+                                          RateLimiter rateLimiter, double permitsPerMinute, AuditTrail audit,
+                                          String auditTenant, Predicate<String> superadmin) {
         this.keys = keys;
+        this.firstRun = firstRun;
         this.adminKeyHash = adminKey == null || adminKey.isBlank() ? null : Authorization.hash(adminKey.trim());
         this.rateLimiter = rateLimiter;
         this.permitsPerMinute = permitsPerMinute;
@@ -65,6 +68,10 @@ public final class KeyLoginAuthenticationProvider implements AuthenticationProvi
                 audit.record(auditTenant, ADMIN_PRINCIPAL, "login", "keylogin:admin");
                 return token(ADMIN_PRINCIPAL, true, true);
             }
+            if (firstRun.accepts(key)) {
+                audit.record(auditTenant, ADMIN_PRINCIPAL, "login", "keylogin:first-run");
+                return token(ADMIN_PRINCIPAL, true, true);
+            }
             Optional<KeyLoginKeys.Resolved> resolved = keys.resolve(key);
             if (resolved.isPresent()) {
                 String principal = resolved.get().principal();
@@ -82,9 +89,9 @@ public final class KeyLoginAuthenticationProvider implements AuthenticationProvi
                 adminKeyHash.getBytes(StandardCharsets.UTF_8));
     }
 
-    /** The session token: its roles, and for the environment's admin key the {@link StarterCredential#AUTHORITY
-     *  starter-credential mark} the console's first-run guide keys on - a scoped login key is a real identity
-     *  somebody issued, so it never carries it. */
+    /** The session token: its roles, and for the environment's admin key and the first-run key the
+     *  {@link StarterCredential#AUTHORITY starter-credential mark} the console's first-run guide keys on - a scoped
+     *  login key is a real identity somebody issued, so it never carries it. */
     private static UsernamePasswordAuthenticationToken token(String principal, boolean superadmin, boolean starter) {
         Set<GrantedAuthority> authorities = new LinkedHashSet<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_USER"));

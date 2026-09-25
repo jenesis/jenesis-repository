@@ -88,19 +88,15 @@ public class DemoConfig {
         FirstRunHardening.Advice advice = FirstRunHardening.assess(
                 FirstRunHardening.firstRun(settings), SettingsContributor.all(), effective);
         if (advice.hasGuidance()) {
-            StringBuilder message = new StringBuilder("FIRST-RUN HARDENING: this deployment has no runtime "
-                    + "configuration yet. The secure floor is active (authorization on, CVSS gate CRITICAL, public "
-                    + "advisory feeds on, a rate ceiling and a short immaturity hold); tighten the deployment-specific "
-                    + "dials below over /api/settings, the console or the CLI. This notice stops once you configure "
-                    + "anything.");
-            for (FirstRunHardening.Step step : advice.dimensions()) {
-                message.append(System.lineSeparator()).append("  - ").append(step.key())
-                        .append(" (").append(step.label()).append("): ").append(step.detail());
-            }
-            for (String next : advice.nextSteps()) {
-                message.append(System.lineSeparator()).append("  - ").append(next);
-            }
-            LOGGER.info(message.toString());
+            // One line naming the dials rather than a paragraph per dial: their descriptions are what the console's
+            // setup guide and settings screen render, and a first start's log is read for the sign-in key, not for
+            // documentation. The advice itself stays whole on /api/config for a program to act on.
+            LOGGER.info("FIRST-RUN HARDENING: this deployment has no runtime configuration yet. Authorization is on "
+                    + "and the gate refuses CRITICAL findings; the advisory feeds are off until switched on. The "
+                    + "console's setup guide (/ui/setup) walks through the settings that still need a "
+                    + "deployment-specific answer: {}. This notice stops once you configure anything.",
+                    advice.dimensions().stream().map(FirstRunHardening.Step::key)
+                            .collect(Collectors.joining(", ")));
         }
         return advice;
     }

@@ -131,9 +131,10 @@ public interface ConsoleModuleProvider extends IconContributor {
      * This module's posture when its key is <em>unset</em> - on for all but a few.
      *
      * <p>A module states its own default rather than the reader assuming one, because the reader governs every
-     * console module and the exceptions are per module: key-based sign-in is a demo on-ramp whose catalogue entry
-     * says "disabled by default", and reading it through the ordinary on-unless-off rule made the code answer
-     * ENABLED on a deployment that had never stored the key while the console rendered it off. Declaring
+     * console module and the exceptions are per module: the manual upload screen writes into repositories and
+     * ships off, and key-based sign-in once shipped off too - reading such a module through the ordinary
+     * on-unless-off rule made the code answer ENABLED on a deployment that had never stored the key while the
+     * console rendered it off. Declaring
      * it here keeps the code's answer and the catalogue's {@code defaultValue} in one place per module instead of
      * two places that can disagree silently.
      */

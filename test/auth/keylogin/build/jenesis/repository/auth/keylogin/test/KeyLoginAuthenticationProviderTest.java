@@ -4,6 +4,7 @@ import build.jenesis.repository.store.Documents;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.ui.identity.StarterCredential;
+import build.jenesis.repository.auth.keylogin.FirstRunKey;
 import build.jenesis.repository.auth.keylogin.KeyLoginAuthenticationProvider;
 import build.jenesis.repository.auth.keylogin.KeyLoginKeys;
 import build.jenesis.repository.cache.storage.testkit.CacheStorages;
@@ -40,7 +41,13 @@ public class KeyLoginAuthenticationProviderTest {
     }
 
     private KeyLoginAuthenticationProvider provider(RateLimiter limiter, Predicate<String> superadmin) {
-        return new KeyLoginAuthenticationProvider(keys, ADMIN_KEY, limiter, 30.0, audit, "default", superadmin);
+        return new KeyLoginAuthenticationProvider(keys, noFirstRunKey(), ADMIN_KEY, limiter, 30.0, audit, "default",
+                superadmin);
+    }
+
+    /** A first-run key over the same store on a deployment that has an admin key, so it never accepts one. */
+    private FirstRunKey noFirstRunKey() {
+        return new FirstRunKey(CacheStorages.documents(root), keys, true, () -> false, Clock.systemUTC());
     }
 
     private static Set<String> roles(Authentication authentication) {

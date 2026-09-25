@@ -1,11 +1,11 @@
 /**
  * Key-based console sign-in as a removable module: it provides {@link build.jenesis.repository.ui.ConsoleModuleProvider},
  * so the console imports its configuration through {@code ServiceLoader} discovery and names no mechanism. It adds a
- * "Sign in with a key" option to {@code /login} - a demo / simple-deployment on-ramp usable without SSO, disabled by
- * default ({@code jenreg.key-login=true} to enable). Two key sources: the env bootstrap admin key
- * ({@code JENREG_UI_ADMIN_KEY}, full super-admin) and admin-issued login keys bound to a principal's tenant role,
- * stored hashed through the store. A valid key yields the same Spring Security session an OIDC or LDAP login does, so every
- * per-tenant authorization rule applies to it unchanged. With the module absent or the flag off, only the other mechanisms are
+ * "Sign in with a key" option to {@code /login} - the way in before single sign-on is set up, on unless
+ * {@code jenreg.key-login=false}. Three key sources: the env bootstrap admin key ({@code JENREG_UI_ADMIN_KEY}, full
+ * super-admin), the one-time key a deployment nobody can sign in to yet prints at start, and admin-issued login keys
+ * bound to a principal's tenant role, the last two stored hashed through the store. A valid key yields the same Spring Security session an OIDC or LDAP login does, so every
+ * per-tenant authorization rule applies to it unchanged. With the module absent or the switch off, only the other mechanisms are
  * offered and the production chain is untouched. A {@code ConsoleModuleProvider} sibling to {@code auth/oidc} and
  * {@code auth/ldap}, and the way into a deployment's console before either is configured.
  *

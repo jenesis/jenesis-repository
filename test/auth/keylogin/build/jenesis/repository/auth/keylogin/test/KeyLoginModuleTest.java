@@ -46,21 +46,23 @@ public class KeyLoginModuleTest {
         assertThat(contributed).singleElement().satisfies(setting -> {
             assertThat(setting.kind()).isEqualTo(Setting.Kind.BOOLEAN);
             assertThat(setting.enablement()).isTrue();
-            assertThat(setting.defaultValue()).isEqualTo("false");
+            assertThat(setting.defaultValue()).isEqualTo("true");
             assertThat(setting.description()).isNotBlank();
         });
     }
 
     @Test
-    void registersTheIssuedKeyIndexAsAStorageNamespaceUnderTheSharedAuthRoot() {
+    void registersTheIssuedKeysAndTheFirstRunKeysAsAStorageNamespaceUnderTheSharedAuthRoot() {
         StorageNamespace namespace = ServiceLoader.load(StorageNamespace.class).stream()
                 .map(ServiceLoader.Provider::get)
                 .filter(KeyLoginStorageNamespace.class::isInstance)
                 .findFirst()
                 .orElseThrow();
         assertThat(namespace.sharedPrefixes())
-                .as("the key index is a deployment-global space under the sanctioned shared auth/ root")
-                .containsExactly(Scopes.space(Scopes.AUTH) + "/keylogin/keys.properties");
+                .as("the key index and the first-run keys are deployment-global spaces under the sanctioned shared "
+                        + "auth/ root")
+                .containsExactlyInAnyOrder(Scopes.space(Scopes.AUTH) + "/keylogin/keys.properties",
+                        Scopes.space(Scopes.AUTH) + "/keylogin/first-run");
         assertThat(namespace.repositoryPrefixes()).as("nothing per-repository").isEmpty();
         assertThat(namespace.tenantPrefixes()).as("nothing per-tenant").isEmpty();
     }
@@ -71,21 +73,23 @@ public class KeyLoginModuleTest {
                 .as("the key index registers as a module-attributed manifest entry, not an unowned space")
                 .anySatisfy(entry -> {
                     assertThat(entry.module()).isEqualTo("build.jenesis.repository.auth.keylogin");
-                    assertThat(entry.sharedPrefixes()).containsExactly(Scopes.space(Scopes.AUTH) + "/keylogin/keys.properties");
+                    assertThat(entry.sharedPrefixes()).containsExactlyInAnyOrder(
+                            Scopes.space(Scopes.AUTH) + "/keylogin/keys.properties",
+                            Scopes.space(Scopes.AUTH) + "/keylogin/first-run");
                 });
     }
 
     /**
-     * The module's unset-key posture must be the posture its catalogue entry publishes.
+     * The module's unset-key posture must be the posture its catalogue entry publishes - and that posture is on.
      *
-     * <p>{@code ConsoleModuleProvider.enabled} reads every console module through the ordinary on-unless-off rule,
-     * which is right for all but a few. Key-based sign-in is one of the few: its catalogue entry defaults to
-     * {@code "false"} and says "disabled by default", so a deployment that had never stored the key answered
-     * ENABLED in code while the console rendered it off. The module now declares its own default, and this asserts
-     * the declaration against the catalogue rather than restating either.
+     * <p>Key-based sign-in used to ship off, and its catalogue entry once said "disabled by default" while the code
+     * answered ENABLED; the module declares its own default for that reason. It ships on now, because a deployment
+     * that has configured nothing is signed in to with the one-time key its start prints, and with the mechanism off
+     * nobody could use it. This asserts the shipped default itself, from both places that state it, so reverting it
+     * is a red test rather than a deployment nobody can enter.
      */
     @Test
-    void an_unset_key_leaves_key_login_off_exactly_as_its_catalogue_entry_says() {
+    void an_unset_key_leaves_key_login_on_exactly_as_its_catalogue_entry_says() {
         Setting gate = new KeyLoginSettingsContributor().settings().stream()
                 .filter(Setting::enablement)
                 .findFirst()
@@ -93,11 +97,11 @@ public class KeyLoginModuleTest {
 
         assertThat(gate.key()).isEqualTo(KeyLoginMechanism.NAME);
         assertThat(gate.defaultValue())
-                .as("the premise: the catalogue publishes this gate as off by default")
-                .isEqualTo("false");
+                .as("the catalogue publishes this gate as on by default")
+                .isEqualTo("true");
         assertThat(new KeyLoginMechanism().enabledByDefault())
-                .as("so the module must declare the same, or the code and the console disagree about whether a "
+                .as("and the module declares the same, or the code and the console disagree about whether a "
                         + "sign-in method is available on a deployment that has configured nothing")
-                .isFalse();
+                .isTrue();
     }
 }
