@@ -4,6 +4,8 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.server.RepositoryAuthorizationManager;
+import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -32,7 +34,10 @@ class TenantsRouteAuthorizationTest {
         ArtifactStore store = ArtifactStoreProvider.resolve(
                 "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         Authorization authorization = Authorization.enforcing(store);
-        RepositoryAuthorizationManager manager = new RepositoryAuthorizationManager(authorization);
+        RepositoryProperties properties = new RepositoryProperties();
+        properties.setOperatorTenant("operator");
+        RepositoryAuthorizationManager manager = new RepositoryAuthorizationManager(authorization,
+                KeyUsageTracker.NONE, properties);
 
         String publisher = Authorization.mint("operator");
         authorization.provision("operator", Authorization.hash(publisher), "ci", null);

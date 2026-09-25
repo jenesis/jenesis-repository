@@ -25,10 +25,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * <p><b>The authorization manager is no longer declared here.</b> It used to be, under a name the chain's
  * {@code @ConditionalOnMissingBean(name = ...)} backs off from - a coupling that was a string matched in two
  * modules, where nothing failed when it stopped matching and what failed instead was that every access decision
- * was taken by the weaker manager. The tenancy module offers its manager through
- * {@code AuthorizationManagerProvider} now, which the declaration resolves as it builds the bean, so the
- * replacement happens in every composition carrying that module rather than only in whichever one is the
- * composition root.
+ * was taken by the weaker manager. There is one manager now, the server's own, and a richer policy is offered
+ * through {@code AuthorizationManagerProvider}, which the declaration resolves as it builds the bean, so a
+ * replacement happens in every composition carrying it rather than only in whichever one is the composition root.
  *
  * <p>The {@link RateLimitFilter} is declared here rather than reused from the free
  * {@code RepositorySecurityAutoConfiguration}: this wiring resolves the default ceiling through the pin-aware

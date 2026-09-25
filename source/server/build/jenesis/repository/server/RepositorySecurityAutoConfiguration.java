@@ -63,10 +63,10 @@ public class RepositorySecurityAutoConfiguration {
     @ConditionalOnMissingBean(name = "repositoryAuthorizationManager")
     public AuthorizationManager<RequestAuthorizationContext> repositoryAuthorizationManager(
             Authorization authorization, RepositoryRouting routing, KeyUsageTracker keyUsageTracker,
-            Environment environment) {
+            Environment environment, RepositoryProperties properties) {
         return AuthorizationManagerProvider
                 .resolve(authorization, keyUsageTracker, routing, Features.namespaced(environment::getProperty))
-                .orElseGet(() -> new RepositoryAuthorizationManager(authorization, keyUsageTracker));
+                .orElseGet(() -> new RepositoryAuthorizationManager(authorization, keyUsageTracker, properties));
     }
 
     @Bean

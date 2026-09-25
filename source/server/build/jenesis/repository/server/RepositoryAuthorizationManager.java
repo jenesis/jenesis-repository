@@ -1,6 +1,6 @@
 package build.jenesis.repository.server;
-import module java.base;
 
+import module java.base;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import jakarta.servlet.http.HttpServletRequest;
@@ -9,38 +9,80 @@ import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.authorization.AuthorizationResult;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
 import org.springframework.web.util.UriUtils;
 
 /**
  * Authorizes a request against the {@link Authorization} credential model. An anonymous deployment (the
  * {@code jenreg.auth=false} opt-out) allows everything; an enforcing one reads the presented key
- * ({@link PresentedKey}) and requires {@code repository:read} for a GET/HEAD and
- * {@code repository:write} for any other method on the repository the URL names, on the router-resolved
- * in-repository path so a path-scoped grant ({@code <repo>:<prefix>}) authorizes exactly its subtree. The computed
- * {@link Authorization.Decision} is recorded on the request so {@link RepositoryAuthorizationEntryPoint} can answer
- * {@code 401} for an unauthorized request (no key, a malformed or expired key) and {@code 403} for a forbidden one
- * (a key that lacks the right), regardless of which Spring Security failure path the denial takes. It is contributed
- * as a bean by {@link RepositorySecurityAutoConfiguration}.
+ * ({@link PresentedKey}) and requires a right chosen by what the request addresses and its method:
+ *
+ * <ul>
+ *   <li><b>An artifact</b> - {@code /repository/<tenant>/<repository>/...}, the registry's {@code /v2/...}, a staged
+ *       upload - takes {@code repository:read} for a GET or HEAD and {@code repository:write} otherwise, on the
+ *       repository the URL names and the path within it, so a path-scoped grant ({@code <repo>:<prefix>})
+ *       authorizes exactly its subtree.</li>
+ *   <li><b>An operation on one repository</b> - {@code /api/repository/...?repo=<repository>}, its cleanup,
+ *       retention, pins, an import into it, a staged release's promotion - takes that repository's rights, exactly as
+ *       its artifacts do.</li>
+ *   <li><b>The repository itself</b> - {@code /repository/<tenant>/<name>}, nothing within it, which a {@code PUT}
+ *       creates and a {@code DELETE} deletes - takes {@code manage:read} or {@code manage:write} on it.</li>
+ *   <li><b>Two reads</b>: the asset enumeration of one repository ({@code /api/assets?repo=}) is that repository's
+ *       read, and the installed capabilities ({@code /api/capabilities}) a read at {@code *}.</li>
+ *   <li><b>Everything else under {@code /api/}</b>, and the actuator, is administration over the whole deployment:
+ *       {@code manage:read} or {@code manage:write} at {@code *}. A key that may publish into every repository - a
+ *       CI key - may not thereby change a setting, issue a key, grant a group, purge a module's data or run a walk.
+ *       The routes that read or write the deployment rather than a tenant - its settings, repository definitions,
+ *       upstreams, the {@code /api/admin/} verbs, the logs, the fleet's consistency and the actuator - further
+ *       require a key of the operator tenant ({@code jenreg.operator-tenant}, else {@code default-tenant}): a
+ *       tenant administering its own keys cannot repoint an upstream, relax the policy or read every tenant's logs.</li>
+ * </ul>
+ *
+ * <p><b>There was a weaker twin, and this is no longer it.</b> This manager used to take the repository rights on
+ * every {@code /api/} route, so on the image that shipped it a key with a wildcard publish right administered the
+ * deployment, while a second manager beside it in the other edition's tenancy module held the rules above. The two
+ * are one now: the rules are this class's, every composition decides with it, and a richer policy still plugs in
+ * through {@link AuthorizationManagerProvider}.
+ *
+ * <p>The computed {@link Authorization.Decision} is recorded on the request so
+ * {@link RepositoryAuthorizationEntryPoint} can answer {@code 401} for an unauthorized request (no key, a malformed
+ * or expired key) and {@code 403} for a forbidden one (a key that lacks the right, or whose source address lies
+ * outside the credential's allowlist). The source address is the connection peer unless that peer is a configured
+ * {@code jenreg.trusted-proxies} hop, in which case it is taken from {@code X-Forwarded-For}, so a client cannot
+ * spoof the allowlist by setting the header itself. It is contributed as a bean by
+ * {@link RepositorySecurityAutoConfiguration}.
  */
 public class RepositoryAuthorizationManager implements AuthorizationManager<RequestAuthorizationContext> {
 
     private final Authorization authorization;
     private final KeyUsageTracker usage;
+    private final List<String> trustedProxies;
+    private final String operatorTenant;
 
     public RepositoryAuthorizationManager(Authorization authorization) {
         this(authorization, KeyUsageTracker.NONE);
     }
 
+    public RepositoryAuthorizationManager(Authorization authorization, KeyUsageTracker usage) {
+        this(authorization, usage, new RepositoryProperties());
+    }
+
     /**
-     * The authorizing manager, recording each accepted credential's use through {@code usage}.
+     * The authorizing manager, recording each accepted credential's use through {@code usage}, with the operator
+     * tenant and the trusted proxies {@code properties} name.
      *
      * <p>This is the only place that knows a request was accepted <em>and</em> which credential accepted it, so it is
      * where a use is recorded. The tracker batches: a busy key costs one store write a day rather than one per
      * request, and with no tracker installed nothing is recorded at all.
      */
-    public RepositoryAuthorizationManager(Authorization authorization, KeyUsageTracker usage) {
+    public RepositoryAuthorizationManager(Authorization authorization, KeyUsageTracker usage,
+                                          RepositoryProperties properties) {
         this.authorization = authorization;
         this.usage = usage;
+        this.trustedProxies = parseTrustedProxies(properties.getTrustedProxies());
+        this.operatorTenant = properties.getOperatorTenant().isBlank()
+                ? properties.getDefaultTenant()
+                : properties.getOperatorTenant();
     }
 
     @Override
@@ -50,162 +92,153 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
             return new AuthorizationDecision(true);
         }
         HttpServletRequest request = context.getRequest();
-        String method = request.getMethod();
-        String required = method.equals("GET") || method.equals("HEAD")
-                ? Authorization.REPOSITORY_READ
-                : Authorization.REPOSITORY_WRITE;
-        // Classify on the percent-DECODED, normalized path Spring actually routes on, not the raw request URI. Spring
-        // matches the mapping against the decoded path, so a percent-encoded route (e.g. GET /api/%6cogs, /api/%61ssets)
-        // reaches RecentLogsController / the asset enumeration while a raw-URI equals() below would miss it - letting a
-        // repository-scoped key evade the deployment-wide "*" rebind (/api/logs, /api/consistency, /api/posture) or the
-        // /api/assets ?repo re-scope and read another scope's content. Decode, then reject an un-normalized URI (an empty
-        // "//" or dot "/./"/"/.." segment, incl. a %2f/%2e that decodes into one) outright - never a legitimate artifact,
-        // /api or /actuator route - so it cannot slip a deployment-wide read past these equals() checks either.
-        String uri = UriUtils.decode(request.getRequestURI(), StandardCharsets.UTF_8);
-        if (!normalized(uri)) {
+        boolean read = request.getMethod().equals("GET") || request.getMethod().equals("HEAD");
+        // Classify on the percent-DECODED, normalized path Spring actually routes on, not the raw request URI: a
+        // percent-encoded route (/api/%73ettings) must not slip a deployment-global path past the checks below, and an
+        // un-normalized one (an empty "//" or dot segment, incl. a %2f/%2e decoding into one) reaches a controller
+        // while a prefix check misreads it. Such a URI is never a legitimate artifact, /api or /actuator route.
+        String path = UriUtils.decode(request.getRequestURI(), StandardCharsets.UTF_8);
+        if (!normalized(path)) {
             request.setAttribute("jenreg.decision", Authorization.Decision.FORBIDDEN);
             return new AuthorizationDecision(false);
         }
-        // No scope, unless the request names one below, is the deployment-wide "*": a route that says nothing about
-        // which repository it reads takes a right over all of them. The scope is never a header the caller chose,
-        // which would let a key scoped to one repository reach a route that reads another by naming its own.
-        String scope = null;
-        // An artifact request names its repository in the URL, and that is the repository its right is checked
-        // against. The URL is read the way every routing reads it, so a path-scoped grant (<repo>:<prefix>)
-        // authorizes exactly the subtree it grants; which tenants a request may address is the routing's to refuse,
-        // at the controller. The bare /v2/ names no tenant and no repository: it is the OCI registry's version probe,
-        // which asks only whether the credential is accepted. A staged upload names its repository the same way, under
-        // its own root.
-        boolean artifact = uri.startsWith("/repository/") || uri.startsWith(RepositoryRouting.STAGING)
-                || uri.equals("/v2") || uri.startsWith("/v2/");
-        boolean probe = uri.equals("/v2") || uri.equals("/v2/");
-        RepositoryRouting.Target target = artifact ? RepositoryRouting.target(uri) : null;
-        if (artifact) {
-            // A URL naming no repository - the registry's own catalog - reads across the tenant's repositories, so it
-            // takes a right over all of them.
-            scope = target.repository().isEmpty() ? "*" : target.repository();
-        }
-        // PUT /repository/<tenant>/<name> - the bare repository, no path within it - creates the repository, and DELETE
-        // on it deletes the repository with everything it holds. Both are administration rather than a publish: a key
-        // that may deploy into a repository may neither create repositories nor delete one, and an administrator's key
-        // may do both without holding a deploy right on it.
-        if (uri.startsWith("/repository/") && ("PUT".equals(method) || "DELETE".equals(method))
-                && target.path().equals("/") && !uri.endsWith("/")) {
-            required = Authorization.MANAGE_WRITE;
-        }
-        // The asset enumeration scopes the store it reads by its ?repo= parameter, so the repository authorized is the
-        // one actually enumerated. Read the parameter only for that GET route (never on an upload path, where touching
-        // getParameter could drain a form-encoded body). The controller refuses a request without it; the scope is then
-        // "*", which only a deployment-wide key holds.
-        // An operation on one repository - its cleanup, retention, pins, an import into it, a staged release's
-        // promotion - names that repository in its ?repo= parameter and takes its rights, exactly as its artifacts do.
-        Optional<String> operated = RepositoryRouting.operated(uri, request.getQueryString());
-        if (operated.isPresent()) {
-            scope = operated.get();
-        }
-        if ("/api/assets".equals(uri)) {
-            String repo = request.getParameter("repo");
-            if (repo != null && !repo.isBlank()) {
-                scope = repo;
-            }
-        }
-        // GET /api/logs, GET /api/consistency, GET /api/posture and the /actuator endpoints serve DEPLOYMENT-WIDE
-        // content - every repository's / every tenant's log lines (logger names + messages carrying other scopes'
-        // coordinates, paths, errors), the whole fleet's per-node consistency state, every tenant's unsafe-setting
-        // advisories (each posture row names the tenant, scope and the exact jenreg.* key/value that is unsafe - the
-        // deployment's whole security-weakness enumeration, though never a resolved secret value), and the actuator's
-        // deployment-wide Micrometer metrics (request counts/URIs/statuses across all repositories, JVM internals) and
-        // build info. They are bound to the deployment-wide scope "*", so only a key holding a wildcard grant may read
-        // them - a repository-scoped key is refused, since each of them reads every other scope's content. A "*" grant
-        // reads the whole view, which is the deployment-observability feature they exist for. The binding is named
-        // here rather than left to the default scope because the anonymous rule below keys on the same routes.
-        // (The three probe paths - /actuator/health and the liveness/readiness groups - are permit-all in the security
-        // chain, so they never reach this manager. Everything else under /actuator does, this binding included: the
-        // per-component health paths, the /actuator/health/full group that carries the whole breakdown,
-        // /actuator/metrics, /actuator/info and any other exposed actuator endpoint.)
-        // The deployment-wide OPERATOR-observability routes: GET/HEAD /api/logs, /api/consistency and the /actuator
-        // subtree. /api/posture is deployment-wide too and is bound to "*" alongside them, but it is INTENTIONALLY
-        // anonymous-readable (a public advisory, already tested), so it is deliberately kept OUT of this operator set.
-        boolean operatorObservability = ("GET".equals(method) || "HEAD".equals(method))
-                && ("/api/logs".equals(uri) || "/api/consistency".equals(uri)
-                        || "/actuator".equals(uri) || uri.startsWith("/actuator/"));
-        // The credential surface administers the TENANT's keys, not one repository's content, so it is bound
-        // deployment-wide for the same reason the observability routes are: a repository-scoped key must not mint
-        // itself a credential for every other scope.
-        // It also takes the manage: rights rather than the repository: ones - issuing a key is administration, and
-        // a key that may publish an artifact must not thereby be able to issue more keys.
-        // The deployment's tenants are administered the same way: creating or deleting one is administration over
-        // every repository, never a publish right, and the controller further holds it to the operator tenant's keys.
-        boolean credentials = "/api/credentials".equals(uri) || uri.startsWith("/api/credentials/")
-                || "/api/admin/tenants".equals(uri) || uri.startsWith("/api/admin/tenants/");
-        if (credentials) {
-            scope = "*";
-            required = "GET".equals(method) || "HEAD".equals(method)
-                    ? Authorization.MANAGE_READ
-                    : Authorization.MANAGE_WRITE;
-        }
-        if (operatorObservability
-                || (("GET".equals(method) || "HEAD".equals(method)) && "/api/posture".equals(uri))) {
-            scope = "*";
-        }
+        Target target = classify(path, request.getQueryString());
+        String required = target.manage()
+                ? (read ? Authorization.MANAGE_READ : Authorization.MANAGE_WRITE)
+                : (read ? Authorization.REPOSITORY_READ : Authorization.REPOSITORY_WRITE);
         String key = PresentedKey.from(request);
-        boolean keyless = key == null || key.isBlank();
-        String path = artifact ? target.path() : null;
+        String client = Authorization.clientAddress(
+                request.getRemoteAddr(), request.getHeader("X-Forwarded-For"), trustedProxies);
         Authorization.Decision decision;
         try {
-            // A key may carry a source-IP allowlist (set-allowed-addresses): a request from an address outside it is
-            // forbidden even with an otherwise-valid key, so a stolen key is useless off its network. Enforce it on the
-            // request path here - authorize() alone never consults it - deriving the client address the way
-            // Authorization.clientAddress documents (the TCP peer, honouring a forwarded header only from a trusted
-            // proxy; with no trusted proxies configured a client-set X-Forwarded-For is ignored, so the allowlist
-            // cannot be spoofed). A key with no allowlist admits every address, so this is a no-op for the common case.
-            if (!authorization.addressAllowed(key, clientAddress(request))) {
+            // A key may carry a source-IP allowlist: a request from outside it is forbidden even with an otherwise
+            // valid key, so a stolen key is useless off its network. A key with no allowlist admits every address.
+            decision = target.probe()
+                    ? authorization.authenticated(key)
+                    : authorization.authorize(key, target.scope(), target.subPath(), required);
+            if (decision == Authorization.Decision.ALLOWED && !authorization.addressAllowed(key, client)) {
                 decision = Authorization.Decision.FORBIDDEN;
-            } else {
-                decision = probe
-                        ? authorization.authenticated(key)
-                        : authorization.authorize(key, scope, path, required);
             }
-        } catch (IOException e) {
+        } catch (IOException _) {
+            // An unreadable store is no proof of authority: fail closed.
             decision = Authorization.Decision.FORBIDDEN;
         }
-        // Close an anonymous-grant cross-scope disclosure on the deployment-wide operator-observability routes. When an
-        // operator enables the public-mirror opt-in jenreg.anonymous-rights=repository:read, the anonymous
-        // grant parses to the WILDCARD scope "*" - exactly what these routes are rebound to above - so a completely
-        // KEYLESS caller would satisfy covers("*","*",path) + grantedBy("repository:read") and authorize() ALLOWS it,
-        // reading the deployment-wide operator view (the fleet log ring, the whole fleet's consistency state, the
-        // actuator metrics) with no key at all. That contradicts the intent stated above: only a key holding a wildcard
-        // grant may read them. Refuse the keyless caller here - downgrade that anonymous-grant ALLOWED to FORBIDDEN, so
-        // the anonymous wildcard grant can no longer satisfy an operator route. Scoped to keyless + ALLOWED, so every
-        // other outcome is untouched: a keyless request on an enforcing deployment WITHOUT the anonymous role is already
-        // UNAUTHORIZED (a 401, not ALLOWED) and is left exactly as-is; a present wildcard KEY still reads them; a
-        // repository-scoped key is still refused via covers; and the anonymous artifact GET and the intentionally-
-        // anonymous /api/posture advisory (outside operatorObservability) are unchanged.
-        if (operatorObservability && keyless && decision == Authorization.Decision.ALLOWED) {
+        // The operator tenant, for a route that reads or writes the whole deployment. This also refuses a keyless
+        // caller there when the public-mirror opt-in grants anonymous rights at "*": no key names the operator tenant.
+        if (decision == Authorization.Decision.ALLOWED && global(path)
+                && !operatorTenant.equals(Authorization.tenantOf(key))) {
             decision = Authorization.Decision.FORBIDDEN;
         }
         request.setAttribute("jenreg.decision", decision);
         String tenant = Authorization.tenantOf(key);
         if (decision == Authorization.Decision.ALLOWED && usage.enabled() && tenant != null) {
-            usage.record(tenant, Authorization.hash(key), clientAddress(request));
+            usage.record(tenant, Authorization.hash(key), client);
         }
         return new AuthorizationDecision(decision == Authorization.Decision.ALLOWED);
     }
 
-    /** The client's source address for the allowlist check: the TCP peer, with a forwarded header honoured only from a
-     *  trusted proxy. No trusted proxies are configured on the single-token server, so the peer is always the
-     *  client and a client-supplied {@code X-Forwarded-For} is ignored (it cannot spoof the allowlist). A deployment
-     *  that terminates behind a real proxy contributes a richer manager that passes its trusted-proxy CIDRs here. */
-    private static String clientAddress(HttpServletRequest request) {
-        return Authorization.clientAddress(
-                request.getRemoteAddr(), request.getHeader("X-Forwarded-For"), List.of());
+    /** Whether a path reads or writes the whole deployment rather than a tenant's own space, so that a manage right
+     *  is not enough and the caller must also be the operator tenant. */
+    private static boolean global(String path) {
+        return path.startsWith("/api/settings") || path.startsWith("/api/repositories")
+                || path.startsWith("/api/upstreams") || path.startsWith("/api/admin/")
+                || path.equals("/api/logs") || path.startsWith("/api/logs/")
+                || path.equals("/api/consistency") || path.startsWith("/api/consistency/")
+                || path.equals("/actuator") || path.startsWith("/actuator/");
+    }
+
+    /** The authorization target a request path resolves to: the {@code scope} the right is checked against ({@code *}
+     *  for administration, else a repository name), the in-repository {@code subPath} a path-prefix grant narrows on
+     *  ({@code null} at the repository root), whether it takes the manage rights, and whether the request is the
+     *  registry's version probe, which names no repository and asks only whether a credential is accepted. */
+    public record Target(String scope, String subPath, boolean manage, boolean probe) {
+
+        public Target(String scope, String subPath, boolean manage) {
+            this(scope, subPath, manage, false);
+        }
+    }
+
+    /** {@link #classify(String, String)} for a request with no query. */
+    public static Target classify(String path) {
+        return classify(path, null);
+    }
+
+    /**
+     * Classify a normalized request path, with its {@code query}, into the {@link Target} it authorizes against. An
+     * artifact path names its tenant and repository the way every routing reads it ({@link RepositoryRouting#target});
+     * the tenant does not enter the scope, because a request's tenant is confined by the routing and the decision runs
+     * in the key's own tenant's credential space. Public for a direct unit test of the classification.
+     */
+    public static Target classify(String path, String query) {
+        Optional<String> operated = RepositoryRouting.operated(path, query);
+        if (operated.isPresent()) {
+            return new Target(operated.get(), null, false);
+        }
+        // Two reads that are not administration. The asset enumeration of one repository is that repository's read:
+        // it is what another instance's importer walks to move a repository out, with a key that may only read it.
+        // And the capabilities - which modules are installed, what an anonymous caller may do - are a read at *, since
+        // a client asks them to tell "not installed" from "not found" and they name nothing a tenant owns.
+        Optional<String> enumerated = path.equals("/api/assets") ? parameter(query, "repo") : Optional.empty();
+        if (enumerated.isPresent()) {
+            return new Target(enumerated.get(), null, false);
+        }
+        if (path.equals("/api/capabilities")) {
+            return new Target("*", null, false);
+        }
+        if (path.startsWith("/api/") || path.equals("/actuator") || path.startsWith("/actuator/")) {
+            return new Target("*", null, true);
+        }
+        RepositoryRouting.Target target = RepositoryRouting.target(path);
+        if (target.repository().isEmpty()) {
+            return new Target("*", null, false, target.tenant().isEmpty() && path.startsWith("/v2"));
+        }
+        String within = target.path().substring(1);
+        boolean itself = within.isEmpty() && !path.endsWith("/") && path.startsWith("/repository/");
+        return new Target(target.repository(), within.isEmpty() ? null : within, itself);
+    }
+
+    /** The one value of {@code name} in {@code query}, when it carries exactly one non-blank value. */
+    private static Optional<String> parameter(String query, String name) {
+        if (query == null) {
+            return Optional.empty();
+        }
+        String found = null;
+        for (String pair : query.split("&")) {
+            int equals = pair.indexOf('=');
+            if (URLDecoder.decode(equals < 0 ? pair : pair.substring(0, equals), StandardCharsets.UTF_8).equals(name)) {
+                if (found != null) {
+                    return Optional.empty();
+                }
+                found = equals < 0 ? "" : URLDecoder.decode(pair.substring(equals + 1), StandardCharsets.UTF_8);
+            }
+        }
+        return found == null || found.isBlank() ? Optional.empty() : Optional.of(found);
+    }
+
+    /** Parse the comma-separated {@code jenreg.trusted-proxies} value into the reverse-proxy CIDRs a forwarded header
+     *  is believed from. A malformed entry fails the start naming it rather than being dropped: a swallowed CIDR would
+     *  leave the real proxy untrusted and every request appearing to come from it, silently disabling the source-IP
+     *  allowlist. Empty is the secure default - no forwarded header is believed. */
+    private static List<String> parseTrustedProxies(String configured) {
+        List<String> parsed = new ArrayList<>();
+        for (String entry : configured.split(",")) {
+            String cidr = entry.trim();
+            if (cidr.isEmpty()) {
+                continue;
+            }
+            try {
+                new IpAddressMatcher(cidr);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Malformed jenreg.trusted-proxies entry '" + cidr
+                        + "': expected an IP address or CIDR such as 10.0.0.0/8 or 2001:db8::/32", e);
+            }
+            parsed.add(cidr);
+        }
+        return List.copyOf(parsed);
     }
 
     /** Whether the (already percent-decoded) request path is normalized - carries no empty ({@code //}) or dot
-     *  ({@code /.}, {@code /..}) segment. Spring routes on the normalized path, so an un-normalized URI would reach a
-     *  controller while the equals()-based scope rebinds above misread it; a legitimate artifact, {@code /api} or
-     *  {@code /actuator} route never carries such a segment, so a request that does is rejected rather than classified.
-     *  A trailing single slash is left alone - it does not shift an equals() match. Public for a direct unit test. */
+     *  ({@code /.}, {@code /..}) segment. A trailing single slash is left alone. Public for a direct unit test. */
     public static boolean normalized(String path) {
         return !path.contains("//")
                 && !path.contains("/./") && !path.contains("/../")
