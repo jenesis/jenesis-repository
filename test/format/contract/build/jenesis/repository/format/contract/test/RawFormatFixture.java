@@ -1,7 +1,6 @@
 package build.jenesis.repository.format.contract.test;
 
 import module java.base;
-import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
@@ -32,7 +31,9 @@ final class RawFormatFixture implements FormatFixture {
 
     @Override
     public Signatures signatures() {
-        return Signatures.of(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE);
+        return Signatures.none("a raw repository stores files by path with no packaging, so there is no signature "
+                + "convention for the repository to own: a signature is one more file, and a repository's users keep "
+                + "whatever convention they choose");
     }
 
     @Override

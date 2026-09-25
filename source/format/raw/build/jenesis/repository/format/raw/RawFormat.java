@@ -4,7 +4,6 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
-import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -23,65 +22,7 @@ import build.jenesis.repository.format.PublishedExport;
  * and a {@code DELETE} removes the pointer. No metadata, no protocol - just the content-addressed store behind a
  * file API, so it is a thin plugin over the same primitives every other layout uses.
  */
-public final class RawFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, ArtifactSignatures,
-        RepositoryExporter {
-
-    /** The ecosystem name a raw file's subject reports: a layout with no packaging is its own vocabulary. */
-    public static final String ECOSYSTEM = "raw";
-
-    /** The sidecar family a raw file's signature never covers, and whose members are never asked for one. */
-    private static final List<String> SIDECARS =
-            List.of(".md5", ".sha1", ".sha256", ".sha512", ".asc", ".sig", ".sigstore.json", ".attestations.json");
-
-    /**
-     * The raw layout's inbound signature story: a Sigstore bundle at {@code <file>.sigstore.json}, the file
-     * {@code cosign sign-blob --bundle} writes and the one convention a layout with no packaging can offer. Optional,
-     * since nothing in the ecosystem requires it, and read on both legs - a bundle published beside a file, or fetched
-     * beside a proxied one as its {@linkplain #companions companion}. The bundle is keyless, so one that verifies is
-     * VALID only under an operator's pin for its identity, and UNTRUSTED otherwise.
-     */
-    private static final ArtifactSignatures SIGNATURES = ArtifactSignatures.detachedSidecar(ECOSYSTEM,
-            ".sigstore.json", ArtifactSignatures.Scheme.SIGSTORE_BUNDLE, RawFormat::signable,
-            ArtifactSignatures.Coverage.OPTIONAL);
-
-    /** Whether a request path names a file a signature would cover: any raw file that is not itself a sidecar. */
-    private static boolean signable(String path) {
-        return path.startsWith("/raw/") && !path.endsWith("/") && SIDECARS.stream().noneMatch(path::endsWith);
-    }
-
-    @Override
-    public String ecosystem() {
-        return ECOSYSTEM;
-    }
-
-    @Override
-    public List<ArtifactSignatures.Expectation> expects(String path) {
-        return SIGNATURES.expects(path);
-    }
-
-    @Override
-    public Optional<String> covers(String path) {
-        return SIGNATURES.covers(path);
-    }
-
-    @Override
-    public List<ArtifactSignatures.Evidence> evidence(String path, ArtifactSignatures.Material material)
-            throws IOException {
-        return SIGNATURES.evidence(path, material);
-    }
-
-    /** A proxied file's bundle, fetched beside it from the same upstream folder: a mirror that publishes none
-     *  answers 404, which is absence. */
-    @Override
-    public List<ProxyFormat.Companion> companions(FormatExchange exchange, URI upstream) {
-        String path = exchange.path();
-        if (!signable(path) || !ArtifactStore.traversalFree(path)) {
-            return List.of();
-        }
-        String root = upstream.toString();
-        String target = (root.endsWith("/") ? root : root + "/") + path.substring("/raw/".length());
-        return List.of(new ProxyFormat.Companion(path + ".sigstore.json", URI.create(target + ".sigstore.json")));
-    }
+public final class RawFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, RepositoryExporter {
 
     // Reused across listings rather than rebuilt per request: newInstance() runs the full JAXP provider lookup, and the
     // factory is safe to share for creating writers once configured.
