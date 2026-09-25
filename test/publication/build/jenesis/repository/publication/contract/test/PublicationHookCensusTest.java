@@ -64,7 +64,6 @@ class PublicationHookCensusTest {
                     "build.jenesis.repository.events.EventPublicationObserver",
                     "build.jenesis.repository.gate.store.ComplianceScreen",
                     "build.jenesis.repository.gate.store.OciHoldRecorder",
-                    "build.jenesis.repository.index.IndexRetractionObserver",
                     "build.jenesis.repository.staging.store.StagingWithholdInterceptor")
             .map(hook -> new Exemption(hook, "no fixture yet: a core hook the census's graph did not carry until "
                     + "2026-09-25; the worklist carries its fixture"))
@@ -351,6 +350,11 @@ class PublicationHookCensusTest {
             + "contract's held-version and revalidation legs over the format's own paths (FormatContract), where a "
             + "listing that failed to retract or to converge fails visibly.";
 
+    /** Why a hook that answers only the withhold feed is not falsified on the recording clauses. */
+    private static final String WITHHOLD_ONLY_HOOK = "this hook records nothing on a publish - it answers the withhold "
+            + "feed alone, whose flag the withheld leg drives and asserts - so the clauses about what it records for a "
+            + "publish have nothing to act on; what the flag forces is the index pass's, PublishedIndexHardeningTest's.";
+
     private static final Map<String, String> NOT_THIS_HOOKS_TO_FALSIFY = merged(Map.ofEntries(
             Map.entry("kit-recording-screen / A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
                     "this screen votes at publish time and has no read side, so the check drives the kit's own withholding "
@@ -370,16 +374,18 @@ class PublicationHookCensusTest {
                     "the same one-verdict shape.")),
             listingPairs());
 
-    /** The recording clauses of every stored-listing observer, each argued by {@link #LISTING_HOOK}: the argument
-     *  is about the shape of the hook, so it is stated once and applied to every fixture of that shape. */
+    /** The recording clauses of every observer that records nothing on a publish - a stored-listing observer, argued
+     *  by {@link #LISTING_HOOK}, or a withhold-only one, by {@link #WITHHOLD_ONLY_HOOK}: the argument is about the
+     *  shape of the hook, so it is stated once and applied to every fixture of that shape. */
     private static Map<String, String> listingPairs() {
         Map<String, String> pairs = new TreeMap<>();
         for (PublicationHookFixture fixture : PublicationHookFixtures.all()) {
-            if (fixture instanceof ListingObserverFixture) {
+            if (fixture instanceof PublicationHookFixture.Observer && !fixture.recordsWhatTheKitPublishes()) {
+                String reason = fixture instanceof ListingObserverFixture ? LISTING_HOOK : WITHHOLD_ONLY_HOOK;
                 for (String property : List.of("A_DUPLICATE_DELIVERY_CONVERGES",
                         "A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED",
                         "THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE")) {
-                    pairs.put(fixture.hook() + " / " + property, LISTING_HOOK);
+                    pairs.put(fixture.hook() + " / " + property, reason);
                 }
             }
         }

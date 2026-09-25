@@ -32,7 +32,8 @@ final class PublicationHookFixtures {
                 new RecordingScreenFixture(), new WithholdingScreenFixture(), new AuditingScreenFixture(),
                 new OverrideHookFixture(),
                 // The core's own hooks beyond the formats' listing observers.
-                new SubtreeSizeObserverFixture(), new IndexPublicationObserverFixture()));
+                new SubtreeSizeObserverFixture(), new IndexPublicationObserverFixture(),
+                new IndexRetractionObserverFixture()));
         for (String observer : LISTING_OBSERVERS) {
             String format = observer.substring(0, observer.indexOf('.'));
             fixtures.add(new ListingObserverFixture(format + "-listing",
