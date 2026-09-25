@@ -6,7 +6,7 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Repositories')}"></header>
-    <p><small>Named artifact repositories in this tenant, each holding one format. Open one to browse its releases
+    <p><small>Named artifact repositories, each holding one format. Open one to browse its releases
         and manage staging, retention and pins.</small></p>
 
     <!--/* T25.6 item 4: a non-blocking notice for every VALID-but-risky repository definition - a mixed screening
@@ -100,7 +100,7 @@
         <h2>New repository</h2>
         <form method="post" th:action="@{/ui/repositories/create}">
             <label>Name
-                <input name="name" required pattern="[A-Za-z0-9_\-]+" placeholder="maven"
+                <input name="name" required pattern="[A-Za-z0-9_\-]+" placeholder="releases"
                        title="Letters, digits, hyphens and underscores"></label>
             <label>Format
                 <select name="format" required>
@@ -113,14 +113,14 @@
     </article>
     </div>
 
-    <!--/* What applies to the tenant as a whole rather than to one repository, set apart under a rule of its own. */-->
+    <!--/* What applies to all repositories together rather than to one, set apart under a rule of its own. */-->
     <section class="app-divide" aria-labelledby="limits">
         <h2 id="limits">Limits</h2>
-        <p><small>Tenant-wide: each applies to every repository in this tenant together.</small></p>
+        <p><small>Each applies to all repositories together.</small></p>
         <div class="app-panels">
             <article>
                 <h2>Storage quota</h2>
-                <p><small>A tenant-wide cap on stored content across every repository; a publish that would exceed it is
+                <p><small>A cap on what all repositories store together; a publish that would exceed it is
                     refused. Currently storing <strong th:text="${quota.usedBytes}">0</strong> bytes<span
                             th:if="${quota.maxBytes > 0}"> of <strong th:text="${quota.maxBytes}">0</strong></span><span
                             th:if="${quota.maxBytes == 0}"> (no limit set)</span>.</small></p>
@@ -132,7 +132,7 @@
             </article>
             <article th:if="${capabilities.rateLimit()}">
                 <h2>Rate limit</h2>
-                <p><small>A ceiling on this tenant's request rate; excess requests are answered <code>429 Too Many
+                <p><small>A ceiling on the request rate across all repositories; excess requests are answered <code>429 Too Many
                     Requests</code>. <span th:if="${rateLimit > 0}">Currently <strong th:text="${rateLimit}">0</strong>
                     permits per minute.</span><span th:if="${rateLimit == 0}">Currently using the deployment
                     default.</span></small></p>
