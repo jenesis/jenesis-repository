@@ -181,6 +181,9 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
      * chain and observers - so the chain assesses the tarball's own bytes, under the tarball's own request path. The package root {@code PUT} is the only way a tarball is hosted-published here, so declaring
      * {@code false} does not leave the format unscreened.
      */
+    /** The encoded slash of a scoped package name, {@code @scope%2Fname}: after a scope, and nowhere else. */
+    private static final Pattern SCOPED_SEPARATOR = Pattern.compile("(@[A-Za-z0-9._~-]+)%2[Ff]");
+
     @Override
     public boolean screened() {
         return false;
@@ -190,8 +193,9 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         Blobs blobs = new Blobs(store);
         // npm sends a scoped package's name with its slash encoded (@scope%2Fname), on a publish, a packument read and
-        // the tarball URL a packument read completes; no name or tarball file carries a literal "%2F" otherwise.
-        String rest = exchange.path().substring("/npm/".length()).replace("%2F", "/").replace("%2f", "/");
+        // the tarball URL a packument read completes. Only that separator is decoded: an encoded slash anywhere else -
+        // "..%2f" among them - stays the literal name it is, so no decoding here can compose a traversal.
+        String rest = SCOPED_SEPARATOR.matcher(exchange.path().substring("/npm/".length())).replaceAll("$1/");
         String method = exchange.method();
         if (rest.startsWith(DIST_TAGS_API)) {
             distTags(rest.substring(DIST_TAGS_API.length()), exchange, blobs, store);
