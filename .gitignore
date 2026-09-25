@@ -37,3 +37,6 @@ target/
 # alone is 125 MB, which GitHub refuses outright). The lock file beside them IS committed: it pins the
 # provider versions a template was validated against.
 .terraform/
+
+# Terraform provider binaries, downloaded by `terraform init` under deploy/; the lock files beside them are committed.
+.terraform/

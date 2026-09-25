@@ -86,6 +86,10 @@ a baked-in `VOLUME` cannot be un-declared by a consumer, so an object-store depl
 volume on every run that it never writes to. So the image declares no store root: name one with
 `JENREG_FILESYSTEM_ROOT` and mount a volume there, or select an object store.
 
+`deploy/` carries the rest of what a deployment needs besides the image: the Helm chart, and a template for each of
+Google Cloud, AWS, Azure and Scaleway that provisions that cloud's object store and runs the published image over
+it. `deploy/README.md` says what each one takes.
+
 ### Dependency versions, and the ones held back
 
 Every dependency's version and checksum is an entry in `build.jenesis/pin-repository.properties`, which every

@@ -1,0 +1,272 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Jenesis Repository on ECS Fargate, backed by S3 (the cloud's native object store). Provisions an S3
+  bucket, an ECS service running the image with JENREG_STORE=s3, and an internet-facing ALB. The store
+  credential is the task role (no static keys). The API's bootstrap key and the console's starter key
+  are parameters kept in Secrets Manager; every further setting comes from an optional environment file
+  in S3, one JENREG_* line per setting.
+  NOTE: authored from the documented resource shapes and checked with cfn-lint, not deploy-validated;
+  review before relying on it.
+
+Parameters:
+  Image:
+    Type: String
+    Default: docker.io/jenesisbuild/jenesis-repository:latest
+    Description: >-
+      The repository image. The default is the published one on Docker Hub, which Fargate pulls directly;
+      pin a release (docker.io/jenesisbuild/jenesis-repository:1.2.3) for a deployment that should not move
+      on its own, or name a copy in ECR.
+  BootstrapKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: >-
+      JENREG_BOOTSTRAP_KEY: the API key the server provisions at boot, a jenk_<tenant>.<secret><checksum>
+      key. Authentication is on by default, so a deployment without it has no credential to issue its
+      first keys with. Kept in Secrets Manager.
+  AdminKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: >-
+      JENREG_UI_ADMIN_KEY: the key that signs into the console's first-run setup. Kept in Secrets Manager.
+  EnvironmentFile:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional S3 object ARN (arn:aws:s3:::bucket/jenesis.env) of an environment file holding further
+      settings, one JENREG_*=value line each - any jenreg.* key under Spring's relaxed binding. The store
+      selection is the template's and wins over a line here.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Two or more subnets (public, for the ALB and Fargate tasks).
+  BucketName:
+    Type: String
+    Default: ''
+    Description: Existing bucket name, or leave blank to create one.
+  DesiredCount:
+    Type: Number
+    Default: 1
+  Cpu:
+    Type: String
+    Default: '512'
+  Memory:
+    Type: String
+    Default: '2048'
+    Description: Task memory in MiB. The image sets no -Xmx, so about a quarter of this becomes heap.
+
+Conditions:
+  CreateBucket: !Equals [!Ref BucketName, '']
+  HasBootstrapKey: !Not [!Equals [!Ref BootstrapKey, '']]
+  HasAdminKey: !Not [!Equals [!Ref AdminKey, '']]
+  HasEnvironmentFile: !Not [!Equals [!Ref EnvironmentFile, '']]
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateBucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  BootstrapKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: HasBootstrapKey
+    Properties:
+      Description: Jenesis Repository API bootstrap key (JENREG_BOOTSTRAP_KEY)
+      SecretString: !Ref BootstrapKey
+
+  AdminKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: HasAdminKey
+    Properties:
+      Description: Jenesis Repository console starter key (JENREG_UI_ADMIN_KEY)
+      SecretString: !Ref AdminKey
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      # The execution role is what reads a task's secrets and environment files before the container starts, so
+      # it is granted exactly the ones this stack was given.
+      Policies:
+        - !If
+          - HasBootstrapKey
+          - PolicyName: bootstrap-key
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - { Effect: Allow, Action: secretsmanager:GetSecretValue, Resource: !Ref BootstrapKeySecret }
+          - !Ref AWS::NoValue
+        - !If
+          - HasAdminKey
+          - PolicyName: admin-key
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - { Effect: Allow, Action: secretsmanager:GetSecretValue, Resource: !Ref AdminKeySecret }
+          - !Ref AWS::NoValue
+        - !If
+          - HasEnvironmentFile
+          - PolicyName: environment-file
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - { Effect: Allow, Action: s3:GetObject, Resource: !Ref EnvironmentFile }
+                - Effect: Allow
+                  Action: s3:GetBucketLocation
+                  Resource: !Select [0, !Split ['/', !Ref EnvironmentFile]]
+          - !Ref AWS::NoValue
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: s3-store-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketLocation, s3:CreateBucket]
+                Resource: !Sub
+                  - arn:aws:s3:::${B}
+                  - B: !If [CreateBucket, !Ref Bucket, !Ref BucketName]
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub
+                  - arn:aws:s3:::${B}/*
+                  - B: !If [CreateBucket, !Ref Bucket, !Ref BucketName]
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: !Ref Cpu
+      Memory: !Ref Memory
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: jenesis-repository
+          Image: !Ref Image
+          PortMappings: [{ ContainerPort: 8080 }]
+          # The store selection is AWS's native object store; the s3 backend picks up the task role through
+          # the standard AWS credential chain, so no key is set anywhere. A variable set here wins over the
+          # same one in the environment file.
+          Environment:
+            - { Name: JENREG_STORE, Value: s3 }
+            - { Name: JENREG_S3_REGION, Value: !Ref AWS::Region }
+            - Name: JENREG_S3_BUCKET
+              Value: !If [CreateBucket, !Ref Bucket, !Ref BucketName]
+          EnvironmentFiles:
+            - !If
+              - HasEnvironmentFile
+              - { Type: s3, Value: !Ref EnvironmentFile }
+              - !Ref AWS::NoValue
+          Secrets:
+            - !If
+              - HasBootstrapKey
+              - { Name: JENREG_BOOTSTRAP_KEY, ValueFrom: !Ref BootstrapKeySecret }
+              - !Ref AWS::NoValue
+            - !If
+              - HasAdminKey
+              - { Name: JENREG_UI_ADMIN_KEY, ValueFrom: !Ref AdminKeySecret }
+              - !Ref AWS::NoValue
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: jenesis-repository
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: jenesis-repository ALB
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
+
+  ServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: jenesis-repository tasks
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 8080, ToPort: 8080, SourceSecurityGroupId: !Ref AlbSecurityGroup }
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Subnets: !Ref SubnetIds
+      SecurityGroups: [!Ref AlbSecurityGroup]
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Port: 8080
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckPath: /actuator/health
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions: [{ Type: forward, TargetGroupArn: !Ref TargetGroup }]
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: Listener
+    Properties:
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      DesiredCount: !Ref DesiredCount
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref SubnetIds
+          SecurityGroups: [!Ref ServiceSecurityGroup]
+      LoadBalancers:
+        - ContainerName: jenesis-repository
+          ContainerPort: 8080
+          TargetGroupArn: !Ref TargetGroup
+
+Outputs:
+  Endpoint:
+    Description: Repository server URL (check /actuator/health; the console is at /ui/)
+    Value: !Sub http://${LoadBalancer.DNSName}
