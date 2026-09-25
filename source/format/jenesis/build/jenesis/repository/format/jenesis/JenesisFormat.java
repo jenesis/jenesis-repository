@@ -8,6 +8,9 @@ import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.format.RepositoryExporter;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.PublishedExport;
 
 /**
  * The Jenesis module layout ({@code /module/...} and {@code /artifact/...}): a {@code PUT} stores the blob
@@ -24,7 +27,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * the version, the version-less latest pointer {@code /module/<name>/<name>.jar} carries none - the two link shapes
  * {@link ModuleViewPublisher} publishes.
  */
-public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
+public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, RepositoryExporter {
 
     /** The package-ecosystem name the neutral descriptor carries - distinct from {@link #name()} "jenesis", the format
      *  id that routes the {@code /module/} and {@code /artifact/} paths. Any consumer of a Jenesis module reports the
@@ -167,5 +170,22 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout {
         try (in; OutputStream out = exchange.respond(200, size)) {
             in.transferTo(out);
         }
+    }
+
+    /** A module version's folder, and the version-less latest pointer when it names this version, each put at its
+     *  path under the repository URL a Jenesis build is pointed at. Versions arrive in the order they were published,
+     *  so the pointer ends on the latest, as it does here. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        List<String> paths = new ArrayList<>();
+        for (String folder : paths(coordinate, version, repository)) {
+            if (folder.endsWith(".jar")) {
+                paths.add(folder);
+            } else {
+                paths.addAll(PublishedExport.published(repository, folder));
+            }
+        }
+        return PublishedExport.put(repository, paths, "/", target);
     }
 }

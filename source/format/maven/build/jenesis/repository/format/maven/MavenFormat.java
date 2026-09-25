@@ -13,6 +13,9 @@ import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.format.java.bridge.ModuleView;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.format.RepositoryExporter;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.PublishedExport;
 
 
 /**
@@ -28,7 +31,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * public SPI. Discovered like any other format; the core knows nothing of it.
  */
 public final class MavenFormat implements RepositoryFormat, ProxyFormat, ArtifactLayout, ArtifactSignatures,
-        RepositoryImporter {
+        RepositoryImporter, RepositoryExporter {
 
     private static final List<ModuleView> MODULE_VIEWS = ModuleView.installed();
 
@@ -674,5 +677,32 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /** A version's folder, each file put at its path under the client's {@code .../maven/} URL - the primary folder
+     *  only: the {@code /module/} view is this product's cross-publish of a modular jar, which a target that offers one
+     *  derives from the jar itself. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        return PublishedExport.putAll(repository, paths(coordinate, version), "/maven/", target);
+    }
+
+    /** The coordinate's {@code maven-metadata.xml} and its checksums, after its last version, as {@code mvn deploy}
+     *  sends them after the version it adds. */
+    @Override
+    public void exported(ArtifactStore repository, String coordinate, ExportTarget target) throws IOException {
+        int colon = coordinate.indexOf(':');
+        if (colon < 0) {
+            return;
+        }
+        String[] group = coordinate.substring(0, colon).split("\\.", -1);
+        String artifact = coordinate.substring(colon + 1);
+        if (!ArtifactLayout.addressable(group) || !ArtifactLayout.addressable(artifact)) {
+            return;
+        }
+        String metadata = "/maven/" + String.join("/", group) + "/" + artifact + "/maven-metadata.xml";
+        PublishedExport.put(repository, List.of(metadata, metadata + ".sha1", metadata + ".md5",
+                metadata + ".sha256", metadata + ".sha512"), "/maven/", target);
     }
 }

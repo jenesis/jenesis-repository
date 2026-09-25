@@ -10,6 +10,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.format.RepositoryExporter;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.PublishedExport;
 
 /**
  * An Ivy repository, as Gradle publishes to and resolves from one.
@@ -62,7 +65,7 @@ import build.jenesis.repository.store.StoredListing;
  * {@link ArtifactLayout#paths(String, String, ArtifactStore)} and the reason this format needs no configuration
  * document of its own.
  */
-public final class IvyFormat implements RepositoryFormat, ArtifactLayout, ArtifactSignatures {
+public final class IvyFormat implements RepositoryFormat, ArtifactLayout, ArtifactSignatures, RepositoryExporter {
 
     /**
      * The coordinate space these artifacts belong to.
@@ -371,5 +374,12 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
         String coordinate() {
             return organisation + ":" + module;
         }
+    }
+
+    /** A revision's folder, each file put at its path under the client's {@code .../ivy/} URL. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        return PublishedExport.putAll(repository, paths(coordinate, version), PREFIX, target);
     }
 }

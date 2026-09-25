@@ -11,6 +11,9 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.format.RepositoryExporter;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.PublishedExport;
 
 /**
  * The generic (raw) format: a plain HTTP file store under {@code /raw/...}, for the artifacts that fit no package
@@ -20,7 +23,8 @@ import build.jenesis.repository.store.StoredListing;
  * and a {@code DELETE} removes the pointer. No metadata, no protocol - just the content-addressed store behind a
  * file API, so it is a thin plugin over the same primitives every other layout uses.
  */
-public final class RawFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, ArtifactSignatures {
+public final class RawFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, ArtifactSignatures,
+        RepositoryExporter {
 
     /** The ecosystem name a raw file's subject reports: a layout with no packaging is its own vocabulary. */
     public static final String ECOSYSTEM = "raw";
@@ -259,5 +263,18 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /** Raw files record no coordinates, so each published file is a unit of its own, put at its path under the
+     *  client's {@code .../raw/} URL. */
+    @Override
+    public Exported export(ArtifactStore repository, String path, String version, ExportTarget target)
+            throws IOException {
+        return PublishedExport.put(repository, List.of(path), "/raw/", target);
+    }
+
+    @Override
+    public Units units() {
+        return Units.PUBLISHED_PATHS;
     }
 }

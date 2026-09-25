@@ -24,7 +24,7 @@ import org.springframework.web.util.UriUtils;
  *       authorizes exactly its subtree.</li>
  *   <li><b>An operation on one repository</b> - {@code /api/repository/...?repo=<repository>}, its cleanup,
  *       retention, pins, an import into it, a staged release's promotion - takes that repository's rights, exactly as
- *       its artifacts do.</li>
+ *       its artifacts do; an export of it, which sends its contents elsewhere, the manage rights on it.</li>
  *   <li><b>The repository itself</b> - {@code /repository/<tenant>/<name>}, nothing within it, which a {@code PUT}
  *       creates and a {@code DELETE} deletes - takes {@code manage:read} or {@code manage:write} on it.</li>
  *   <li><b>Two reads</b>: the asset enumeration of one repository ({@code /api/assets?repo=}) is that repository's
@@ -172,7 +172,9 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
     public static Target classify(String path, String query) {
         Optional<String> operated = RepositoryRouting.operated(path, query);
         if (operated.isPresent()) {
-            return new Target(operated.get(), null, false);
+            // An export sends the repository's contents and a credential wherever it is told to, so it is
+            // administration of that repository rather than a use of it.
+            return new Target(operated.get(), null, path.startsWith("/api/repository/export"));
         }
         // Two reads that are not administration. The asset enumeration of one repository is that repository's read:
         // it is what another instance's importer walks to move a repository out, with a key that may only read it.

@@ -81,14 +81,14 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "traffic has already moved.",
                         Setting.Kind.STRING, Scopes.DEFAULT_TENANT, false),
                 new Setting("block-private-import-hosts", "Defaults", "Block private import hosts",
-                        "Reject a migration URL that is plaintext http, or that resolves to a loopback, link-local or "
-                                + "private address. A migration is fetched server-side with the upstream credentials "
-                                + "attached, so a plaintext source hands those credentials to any observer on the "
-                                + "path and a private one turns the import into a request against this deployment's "
-                                + "own network (SSRF). On by default for every edition, enforced identically on the "
-                                + "API and console import legs; an operator sets it false to migrate from an internal "
-                                + "or plaintext mirror - the one dial, covering both, so neither can be opted out of "
-                                + "alone.",
+                        "Reject a migration URL - an import's source or an export's target - that is plaintext http, "
+                                + "or that resolves to a loopback, link-local or private address. A migration runs "
+                                + "server-side with a credential attached, so a plaintext URL hands it to any "
+                                + "observer on the path and a private one turns the migration into a request against "
+                                + "this deployment's own network (SSRF). On by default for every edition, enforced "
+                                + "identically on the API and console legs; an operator sets it false to migrate from "
+                                + "or to an internal or plaintext repository - the one dial, covering both, so "
+                                + "neither can be opted out of alone.",
                         Setting.Kind.BOOLEAN, "true", false),
                 new Setting("trusted-proxies", "Defaults", "Trusted proxies",
                         "Comma-separated CIDRs of reverse proxies whose X-Forwarded-For, X-Forwarded-Proto and "
