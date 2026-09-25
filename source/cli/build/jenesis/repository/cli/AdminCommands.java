@@ -471,11 +471,44 @@ final class AdminCommands {
         switch (args[1]) {
             case "create" -> {
                 if (args.length < 4) {
-                    throw new IllegalArgumentException("Usage: repos create <name> <format>");
+                    throw new IllegalArgumentException("Usage: repos create <name> <format> [description]");
                 }
-                System.out.println(client.createRepository(args[2], args[3])
+                String description = args.length > 4
+                        ? String.join(" ", Arrays.copyOfRange(args, 4, args.length)) : null;
+                System.out.println(client.createRepository(args[2], args[3], description)
                         ? "Created " + args[3] + " repository " + args[2] + "."
                         : "Repository " + args[2] + " already holds " + args[3] + ".");
+            }
+            case "describe" -> {
+                if (args.length < 3) {
+                    throw new IllegalArgumentException("Usage: repos describe <name> <description>");
+                }
+                client.describeRepository(args[2], String.join(" ", Arrays.copyOfRange(args, 3, args.length)));
+                System.out.println("Described repository " + args[2] + ".");
+            }
+            case "delete" -> {
+                if (args.length < 3) {
+                    throw new IllegalArgumentException("Usage: repos delete <name> [--yes]");
+                }
+                String name = args[2];
+                boolean yes = Arrays.asList(args).subList(3, args.length).contains("--yes");
+                if (!yes) {
+                    // The same guard the console's dialog is: what is lost, that it cannot be undone, and the name
+                    // typed out - a script that means it says --yes instead.
+                    Console console = System.console();
+                    if (console == null) {
+                        throw new IllegalArgumentException("Deleting " + name + " removes everything it holds and "
+                                + "cannot be undone; with no terminal to confirm on, pass --yes.");
+                    }
+                    console.printf("Deleting repository %s removes everything it holds: every artifact, index, "
+                            + "staged upload and pin, and what it is defined as. This cannot be undone.%n", name);
+                    String typed = console.readLine("Type 'delete %s' to confirm: ", name);
+                    if (typed == null || !typed.trim().equals("delete " + name)) {
+                        System.out.println("Nothing was deleted.");
+                        return 1;
+                    }
+                }
+                System.out.println(client.deleteRepository(name));
             }
             case "set" -> {
                 if (args.length < 4) {

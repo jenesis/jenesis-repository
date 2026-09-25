@@ -55,9 +55,9 @@
             <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/ttl'}">
                 <button type="submit" th:disabled="${!isEditor}">Expire stale (ttl) now</button>
             </form>
-            <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/clear'}"
-                  onsubmit="return confirm('Delete ALL cached entries for this project?');">
-                <button type="submit" class="secondary" th:disabled="${!isEditor}">Clear all entries</button>
+            <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/clear'}">
+                <button type="submit" class="secondary outline app-danger" th:disabled="${!isEditor}"
+                        th:attr="data-delete=${project.name},data-delete-warning='Every cached entry of this project is deleted; the next builds run without them.'">Clear all entries</button>
             </form>
         </div>
     </article>

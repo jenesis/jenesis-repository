@@ -243,6 +243,11 @@ public final class Repositories {
      *  space among them. Kept free of the {@code VexStore} type so the neutral server names no VEX plugin: the VEX web
      *  surface (which owns the vex module) applies the reserved {@code .vex} sub-scope and wraps it. The tenant is
      *  validated by the caller as a traversal-safe segment before it scopes the store. */
+    /** The store every tenant's scope is taken from - what a node-wide cache over repository documents is keyed on. */
+    public ArtifactStore root() {
+        return root;
+    }
+
     public ArtifactStore tenantScope(String tenant) {
         return root.scope(tenant);
     }

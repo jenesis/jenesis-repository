@@ -115,7 +115,11 @@
         <span>effective: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
         <span>default: <span th:text="${s.defaultDisplay()}">default</span></span>
     </p>
-    <form method="post" th:action="@{/ui/settings/save}" class="setting-edit" th:unless="${s.pinned}"
+    <th:block th:if="${s.toggle()}">
+        <div th:replace="~{fragments :: settingSwitch(${s}, '/ui/settings/save', ${back},
+                'Apply this high-impact policy change?')}"></div>
+    </th:block>
+    <form method="post" th:action="@{/ui/settings/save}" class="setting-edit" th:unless="${s.pinned or s.toggle()}"
           th:attr="data-confirm=${s.highImpact} ? 'Apply this high-impact policy change?' : null">
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}">
@@ -128,7 +132,7 @@
                th:placeholder="${s.editPlaceholder()}">
         <button type="submit">Save</button>
     </form>
-    <div class="setting-edit setting-pinned" th:if="${s.pinned}">
+    <div class="setting-edit setting-pinned" th:if="${s.pinned and !s.toggle()}">
         <select th:if="${s.dropdown()}" disabled th:attr="aria-label=${s.label}">
             <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
                     th:selected="${o == s.value}">option</option>
@@ -138,6 +142,33 @@
         <p class="setting-pinned-note" th:text="|Pinned by ${s.pinnedBy} — not editable here.|">
             Pinned — not editable here.</p>
     </div>
+</div>
+
+<!--/* settingSwitch: a boolean setting as a switch showing its effective value. Pressing it posts the opposite value
+     to `action` - the same save route the other kinds use, so a switch saves through one path - and a pinned one is
+     shown disabled with what pins it. `back` is the return path, or null where the route takes none; `confirm` is the
+     prompt a high-impact setting asks before it changes. */-->
+<div th:fragment="settingSwitch(s, action, back, confirm)" class="setting-edit setting-switch">
+    <form method="post" th:action="@{${action}}" th:unless="${s.pinned}"
+          th:attr="data-confirm=${s.highImpact} ? ${confirm} : null">
+        <input type="hidden" name="key" th:value="${s.key}">
+        <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
+        <input type="hidden" name="value" th:value="${s.flipped()}">
+        <button type="submit" role="switch" class="app-switch"
+                th:attr="aria-checked=${s.on()},aria-label=${s.label}">
+            <span class="app-switch__track" aria-hidden="true"></span>
+            <span class="app-switch__state" th:text="${s.on()} ? 'On' : 'Off'">On</span>
+        </button>
+    </form>
+    <th:block th:if="${s.pinned}">
+        <button type="button" role="switch" class="app-switch" disabled
+                th:attr="aria-checked=${s.on()},aria-label=${s.label}">
+            <span class="app-switch__track" aria-hidden="true"></span>
+            <span class="app-switch__state" th:text="${s.on()} ? 'On' : 'Off'">On</span>
+        </button>
+        <p class="setting-pinned-note" th:text="|Pinned by ${s.pinnedBy} — not editable here.|">
+            Pinned — not editable here.</p>
+    </th:block>
 </div>
 
 <!--/* subsectionError: the shared scoped-error panel for ONE derived-metadata subsection (licenses, dependencies,

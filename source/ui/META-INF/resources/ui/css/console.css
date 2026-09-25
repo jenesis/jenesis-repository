@@ -527,6 +527,27 @@ figure {
     align-items: stretch;
     margin-block: var(--app-space-4);
 }
+/* A list beside the form that adds to it: the list takes the wider share. Alone - for a reader who may not add - it
+   takes the whole row. */
+.app-panels--lead {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+.app-panels--lead:has(> article:only-child) {
+    grid-template-columns: minmax(0, 1fr);
+}
+.app-panels--lead > article > figure {
+    margin-bottom: 0;
+}
+/* A section set apart from what is above it by a rule and space: what a page governs as a whole, below what it
+   lists one by one. */
+.app-divide {
+    margin-top: var(--app-space-6);
+    padding-top: var(--app-space-5);
+    border-top: 1px solid var(--pico-muted-border-color);
+}
+.app-divide > h2 {
+    margin-bottom: var(--app-space-2);
+}
 .app-panels > article {
     display: flex;
     flex-direction: column;
@@ -587,10 +608,28 @@ figure {
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
-.app-list__name {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--app-space-2);
+/* A name cell stays a table cell - a flex cell stops being one, and its border then ends short of the row's - and lines
+   its mark, link and badges up with a gap of its own. */
+.app-list__name > * {
+    vertical-align: middle;
+}
+.app-list__name > * + * {
+    margin-left: var(--app-space-2);
+}
+/* A repository's description, on its own line under the name. */
+.app-list__name > .app-list__description {
+    display: block;
+    margin-left: 0;
+    margin-top: var(--app-space-1);
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-xs);
+}
+.app-list__date {
+    white-space: nowrap;
+}
+.app-list__action {
+    text-align: right;
+    white-space: nowrap;
 }
 .app-list__num {
     text-align: right;
@@ -845,6 +884,181 @@ form.app-actions > button {
     margin-left: auto;
     padding-left: var(--app-space-4);
     border-left: 1px solid var(--pico-muted-border-color);
+}
+
+/* ---- Controls --------------------------------------------------------------------------------------------- */
+/* Pico scales the root font with the viewport - 125% from 1280px, 131% from 1536px - which suits a reading page and
+   inflates a working one: at a desktop width every field and button came out 64px tall. The console keeps the root
+   at 100% on every width, so a control is the size of its text wherever it is viewed. */
+:root {
+    --pico-font-size: 100%;
+    --pico-form-element-spacing-vertical: 0.4rem;
+    --pico-form-element-spacing-horizontal: 0.75rem;
+    --pico-border-radius: var(--app-radius-sm);
+}
+/* One corner for every control. Pico rounds a search field into a pill through its own variable, which left the one
+   round field on a screen of square ones. */
+main :is([type=search], [role=search]) {
+    --pico-border-radius: var(--app-radius-sm);
+}
+main :is(input:not([type=checkbox], [type=radio], [type=range], [type=file]), select, textarea, button,
+        [role=button]) {
+    font-size: var(--app-font-size-sm);
+}
+main :is(label, legend) {
+    font-size: var(--app-font-size-sm);
+}
+main :is(input:not([type=checkbox], [type=radio]), select, textarea) {
+    margin-bottom: var(--app-space-3);
+}
+/* One height for every single-line control, so a field, a choice and the button beside them line up. */
+main :is(input:not([type=checkbox], [type=radio], [type=range], [type=file]), select, button, [type=submit],
+        [type=button], [type=reset], [role=button]) {
+    height: 2.375rem;
+    padding-block: 0;
+    line-height: 1.2;
+}
+/* A link styled as a button centres its label in that height the way a button does by itself. */
+main [role=button] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+/* A button is as wide as what it says. Pico stretches a submit button across its form, which made every Save the
+   widest thing on the screen. */
+main :is(button, [type=submit], [type=button], [type=reset], [role=button]) {
+    width: auto;
+    --pico-form-element-spacing-horizontal: 1rem;
+}
+/* A setting's edit is one line: the field, then its Save. */
+.setting-edit {
+    display: flex;
+    gap: var(--app-space-2);
+    align-items: center;
+    max-width: 40rem;
+}
+main .setting-edit > :is(input, select, button) {
+    margin: 0;
+}
+main .setting-edit > :is(input, select) {
+    flex: 1;
+}
+/* The switch's colours are taken here, outside the button: Pico redefines its own colour variables inside every
+   button, which painted the label white on white and the knob in the button's blue. */
+.setting-switch {
+    flex-wrap: wrap;
+    --app-switch-label: var(--pico-color);
+    /* The off track is the secondary grey rather than a border colour, so it stands out from the page in both
+       themes; the knob is white in both, since the page colour vanishes on a dark track. */
+    --app-switch-off: var(--pico-secondary-background);
+    --app-switch-on: var(--pico-primary-background);
+    --app-switch-knob: #fff;
+}
+.setting-switch > form {
+    margin: 0;
+}
+
+/* A switch: a boolean setting's effective value, which one press changes. It is a button carrying role=switch and
+   aria-checked, so it is announced as a switch and needs no script - pressing it submits the opposite value. */
+main .app-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-2);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--app-switch-label);
+    box-shadow: none;
+    cursor: pointer;
+}
+.app-switch__track {
+    position: relative;
+    flex: none;
+    width: 2.5rem;
+    height: 1.375rem;
+    border-radius: 999px;
+    background: var(--app-switch-off);
+    transition: background-color var(--pico-transition);
+}
+.app-switch__track::after {
+    content: "";
+    position: absolute;
+    top: 0.1875rem;
+    left: 0.1875rem;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background: var(--app-switch-knob);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    transition: transform var(--pico-transition);
+}
+.app-switch[aria-checked="true"] .app-switch__track {
+    background: var(--app-switch-on);
+}
+.app-switch[aria-checked="true"] .app-switch__track::after {
+    transform: translateX(1.125rem);
+}
+.app-switch:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.app-switch__state {
+    min-width: 2rem;
+    text-align: left;
+    font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+    .app-switch__track, .app-switch__track::after {
+        transition: none;
+    }
+}
+
+/* The deletion dialog (console.js): what is lost, that it cannot be undone, and the phrase to type. Its confirm
+   button is the one filled danger button in the console - by the time it is enabled the reader has typed the name. */
+.app-delete-dialog > article {
+    max-width: 32rem;
+}
+.app-delete-dialog h2 {
+    margin-bottom: var(--app-space-3);
+    font-size: var(--app-font-size-lg);
+    overflow-wrap: anywhere;
+}
+.app-delete-dialog__warning {
+    color: var(--app-status-danger-fg);
+    background: var(--app-status-danger-bg);
+    padding: var(--app-space-3);
+    border-radius: var(--app-radius-sm);
+    font-size: var(--app-font-size-sm);
+}
+.app-delete-dialog label {
+    font-size: var(--app-font-size-sm);
+}
+.app-delete-dialog input {
+    margin-top: var(--app-space-2);
+    height: 2.375rem;
+    font-size: var(--app-font-size-sm);
+}
+.app-delete-dialog footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--app-space-2);
+}
+.app-delete-dialog footer button {
+    width: auto;
+    height: 2.375rem;
+    margin: 0;
+    padding-block: 0;
+    font-size: var(--app-font-size-sm);
+}
+.app-delete-dialog footer button.app-danger,
+.app-delete-dialog footer button.app-danger:hover {
+    background: var(--app-status-danger-fg);
+    border-color: var(--app-status-danger-fg);
+    color: var(--app-status-danger-bg);
+}
+.app-delete-dialog footer button.app-danger:disabled {
+    opacity: 0.45;
 }
 
 /* ---- Disclosure sections ---------------------------------------------------------------------------------- */

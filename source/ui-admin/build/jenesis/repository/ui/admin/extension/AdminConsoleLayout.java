@@ -32,7 +32,7 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
         // longer reaches for the fragment, and the census is what noticed.
         return Set.of(ConsoleLayout.HEAD_CONTENTS, ConsoleLayout.SHELL, ConsoleLayout.PAGE_HEADER,
                 ConsoleLayout.MESSAGES, ConsoleLayout.SUBSECTION_ERROR,
-                ConsoleLayout.EMPTY, ConsoleLayout.DANGER_BUTTON,
+                ConsoleLayout.EMPTY, ConsoleLayout.DELETE_BUTTON,
                 ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP,
                 // Every screen that starts work off the request path renders this instead of telling the reader to
                 // reload: the rescans, the blast radius, the project count, both cleanup notices and the migration.

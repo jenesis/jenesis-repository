@@ -277,7 +277,11 @@ public final class Commands {
                             act("settings import <file> [--tenant N]", "restore a bundle, validated first")),
                     noun("repos", "the repositories and their runtime definitions", null, AdminCommands::repos,
                             act("repos", "list the definitions"),
-                            act("repos create <name> <format>", "create a repository holding one format"),
+                            act("repos create <name> <format> [description]",
+                                    "create a repository holding one format, optionally described"),
+                            act("repos describe <name> <description>", "describe a repository; an empty one clears it"),
+                            act("repos delete <name> [--yes]", "delete a repository and everything it holds, after "
+                                    + "typing 'delete <name>' - or --yes, for a script"),
                             act("repos set <name> <definition>",
                                     "define a repository (hosted | proxy <url> [nocache] [harden] | group a,b)"),
                             act("repos remove <name>", "remove a definition")),

@@ -5,6 +5,7 @@ import build.jenesis.repository.definitions.RepositoryDefinition;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.store.RepositoryRemoval;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.LiveConfig;
@@ -506,26 +507,58 @@ public class ConfigController {
      * ({@link RepositoryType#create}). A repository that holds content but no format is given this one, and one whose
      * type the requested one holds everything of - {@code maven} asked to be {@code java} - is given the requested
      * one. Answers {@code 201} when created, {@code 200} when it already held that type or was given it, {@code 409}
-     * when it holds a type the requested one does not cover, and {@code 400} for a type no repository can hold here.
+     * when it holds a type the requested one does not cover or is being deleted, and {@code 400} for a type no
+     * repository can hold here.
+     *
+     * <p>A {@code "description"} beside the format gives the repository that description - empty clears it - and a
+     * description alone, with no format, describes a repository that exists: {@code 200}, or {@code 404} when there is
+     * none.
      */
     @PutMapping("/repository/{tenant}/{name}")
     public void createRepository(@PathVariable("name") String name,
                                  @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                 @RequestBody NamedValueRequest request,
+                                 @RequestBody RepositoryRequest request,
                                  HttpServletRequest servlet, HttpServletResponse response) throws IOException {
         String format = request == null ? null : request.value();
+        String description = request == null ? null : request.description();
+        if (description != null) {
+            try {
+                description = RepositoryDocument.description(description);
+            } catch (IllegalArgumentException refused) {
+                text(response, 400, refused.getMessage());
+                return;
+            }
+        }
+        RepositoryRouting.Route described = routing.route(servlet);
+        if (format == null && description != null && !described.repository().isEmpty()) {
+            if (!describe(described, key, description)) {
+                text(response, 404, "There is no repository '" + described.repository() + "'.");
+                return;
+            }
+            response.setStatus(200);
+            return;
+        }
         List<String> offered = RepositoryType.offerable();
         if (format == null || !offered.contains(format)) {
             text(response, 400, "'" + format + "' is not a format a repository can hold here; one of " + offered
                     + ".");
             return;
         }
-        RepositoryRouting.Route route = routing.route(servlet);
+        RepositoryRouting.Route route = described;
         if (route.repository().isEmpty()) {
             text(response, 400, "The request names no repository.");
             return;
         }
-        switch (RepositoryType.create(route.store(), format)) {
+        if (RepositoryRemoval.removing(route.store())) {
+            text(response, 409, "Repository '" + route.repository() + "' is still being deleted; create it again "
+                    + "once it is gone.");
+            return;
+        }
+        RepositoryType.Creation creation = RepositoryType.create(route.store(), format);
+        if (creation != RepositoryType.Creation.CONFLICT && description != null) {
+            describe(route, key, description);
+        }
+        switch (creation) {
             case CREATED -> {
                 audit(route.tenant(), key, AuditActions.REPOSITORY_CREATE, route.repository());
                 response.setStatus(201);
@@ -540,6 +573,52 @@ public class ConfigController {
                     + ", which '" + format + "' does not hold everything of - what is stored there would stop "
                     + "answering.");
         }
+    }
+
+    /** Give the routed repository {@code description}; {@code false} when it has no document to describe. */
+    private boolean describe(RepositoryRouting.Route route, String key, String description) throws IOException {
+        if (!RepositoryDocument.describe(route.store(), description)) {
+            return false;
+        }
+        RepositoryDocument.forget(repositories.root(), route.tenant(), route.repository());
+        audit(route.tenant(), key, AuditActions.REPOSITORY_DESCRIBE, route.repository());
+        return true;
+    }
+
+    /**
+     * Delete a repository and everything it holds - {@code DELETE /repository/<tenant>/<name>} - and forget what it
+     * was defined as, through the one removal every surface makes ({@link RepositoryRemoval}). The repository stops
+     * answering before this returns; its objects are removed off the request path, so the answer is {@code 202}, and a
+     * repository already being deleted - one a node stopped part way - is resumed. {@code 404} when there is none.
+     *
+     * <p>Forgetting the definition reads the settings document - one object per module under a constant prefix, the
+     * read {@code DELETE /api/repositories/{name}} makes - and nothing on the request path reads the repository's
+     * objects: the purge pages its scan on a thread of its own.
+     */
+    @DeleteMapping("/repository/{tenant}/{name}")
+    public void deleteRepository(@PathVariable("name") String name,
+                                 @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                 HttpServletRequest servlet, HttpServletResponse response) throws IOException {
+        RepositoryRouting.Route route = routing.route(servlet);
+        if (route.repository().isEmpty()) {
+            text(response, 400, "The request names no repository.");
+            return;
+        }
+        String repository = route.repository();
+        RepositoryRemoval.Begun begun = RepositoryRemoval.begin(route.store());
+        if (begun == RepositoryRemoval.Begun.ABSENT) {
+            text(response, 404, "There is no repository '" + repository + "'.");
+            return;
+        }
+        settings.set(SettingsScopes.repositoryKey(repository), null);
+        RepositoryDocument.forget(repositories.root(), route.tenant(), repository);
+        audit(route.tenant(), key, AuditActions.REPOSITORY_DELETE, repository);
+        RepositoryRemoval.purgeInBackground(repositories.tenantScope(route.tenant()), repository,
+                route.tenant() + "/" + repository);
+        text(response, 202, begun == RepositoryRemoval.Begun.RESUMED
+                ? "Resumed deleting repository '" + repository + "'."
+                : "Deleting repository '" + repository + "'; it no longer answers, and everything it held is being "
+                        + "removed.");
     }
 
     private static void text(HttpServletResponse response, int status, String message) throws IOException {
@@ -726,6 +805,10 @@ public class ConfigController {
     }
 
     public record NamedValueRequest(String value) {
+    }
+
+    /** A repository's creation: the format it holds, and an optional description. */
+    public record RepositoryRequest(String value, String description) {
     }
 
     public record UpstreamAuthRequest(String scheme, String username, String password, String token, String header) {

@@ -29,10 +29,9 @@
                     <td th:text="${#strings.isEmpty(u.login)} ? '-' : ${u.login}">-</td>
                     <td th:text="${u.role.label()}">viewer</td>
                     <td th:if="${isAdmin}">
-                        <form method="post" th:action="@{/ui/admin/users/remove}"
-                              onsubmit="return confirm('Remove this user?');" style="margin:0">
+                        <form method="post" th:action="@{/ui/admin/users/remove}" style="margin:0">
                             <input type="hidden" name="id" th:value="${u.id}">
-                            <button class="secondary outline" type="submit">Remove</button>
+                            <button th:replace="~{base :: deleteButton('Remove', ${u.id}, 'The user loses their membership of this tenant and everything it granted.')}">Remove</button>
                         </form>
                     </td>
                 </tr>
@@ -101,7 +100,7 @@
                                   style="display:inline">
                                 <input type="hidden" name="name" th:value="${g.name()}">
                                 <input type="hidden" name="scope" th:value="${grant.key}">
-                                <button type="submit" class="secondary">Revoke</button>
+                                <button th:replace="~{base :: deleteButton('Revoke', ${grant.key}, 'The group loses this grant, and so does every member who held it through the group.')}">Revoke</button>
                             </form>
                         </span>
                     </td>
@@ -113,7 +112,7 @@
                                   style="display:inline">
                                 <input type="hidden" name="name" th:value="${g.name()}">
                                 <input type="hidden" name="id" th:value="${member}">
-                                <button type="submit" class="secondary">Remove</button>
+                                <button th:replace="~{base :: deleteButton('Remove', ${member}, 'The member leaves the group and loses what the group grants.')}">Remove</button>
                             </form>
                         </span>
                         <!--/* The preview is capped so this screen costs the same on a group of eight and one of
@@ -123,7 +122,7 @@
                     <td th:if="${isAdmin}">
                         <form method="post" th:action="@{/ui/admin/groups/remove}">
                             <input type="hidden" name="name" th:value="${g.name()}">
-                            <button type="submit" class="secondary">Delete group</button>
+                            <button th:replace="~{base :: deleteButton('Delete group', ${g.name()}, 'The group is deleted with its grants; its members lose what it granted.')}">Delete group</button>
                         </form>
                     </td>
                 </tr>

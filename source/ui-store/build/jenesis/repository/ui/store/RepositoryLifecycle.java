@@ -20,6 +20,8 @@ import build.jenesis.repository.staging.Staging;
 import build.jenesis.repository.staging.StagingProvider;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.store.RepositoryRemoval;
 import io.micrometer.observation.ObservationRegistry;
 
 /**
@@ -47,10 +49,29 @@ public class RepositoryLifecycle extends TenantScope {
      *                                  can hold here.
      */
     public RepositoryType.Creation create(String repository, String format) throws IOException {
+        return create(repository, format, "");
+    }
+
+    /**
+     * {@link #create(String, String)}, and give a repository that now holds the type {@code description} when one is
+     * given. A repository being deleted is refused: creating it again would bring back a name whose objects are still
+     * going.
+     *
+     * @throws IllegalArgumentException when the name, the type or the description is refused.
+     */
+    public RepositoryType.Creation create(String repository, String format, String description) throws IOException {
         if (!RepositoryType.offerable().contains(format)) {
             throw new IllegalArgumentException("'" + format + "' is not a format this deployment serves.");
         }
+        String line = RepositoryDocument.description(description);
+        if (RepositoryRemoval.removing(scope(repository))) {
+            throw new IllegalArgumentException("Repository '" + repository + "' is still being deleted; create it "
+                    + "again once it is gone.");
+        }
         RepositoryType.Creation creation = RepositoryType.create(scope(repository), format);
+        if (creation != RepositoryType.Creation.CONFLICT && !line.isEmpty()) {
+            describe(repository, line);
+        }
         switch (creation) {
             case CREATED -> audit(AuditActions.REPOSITORY_CREATE, repository);
             case RETYPED -> audit(AuditActions.REPOSITORY_RETYPE, repository + " to " + format);
@@ -58,6 +79,40 @@ public class RepositoryLifecycle extends TenantScope {
             }
         }
         return creation;
+    }
+
+    /**
+     * Give a repository {@code description}, empty to clear it.
+     *
+     * @return {@code false} when there is no repository by that name.
+     * @throws IllegalArgumentException when the description is longer than a repository takes.
+     */
+    public boolean describe(String repository, String description) throws IOException {
+        boolean described = RepositoryDocument.describe(scope(repository), description);
+        if (described) {
+            RepositoryDocument.forget(root, tenant(), repository);
+            audit(AuditActions.REPOSITORY_DESCRIBE, repository);
+        }
+        return described;
+    }
+
+    /**
+     * Delete a repository and everything it holds: it stops answering at once ({@link RepositoryRemoval#begin}) and
+     * its objects are removed on a thread of their own, so the request returns before a large repository is gone. A
+     * repository already being deleted - one a node stopped part way - is resumed.
+     *
+     * @return what beginning the removal found; {@link RepositoryRemoval.Begun#ABSENT} deletes nothing.
+     */
+    public RepositoryRemoval.Begun delete(String repository) throws IOException {
+        ArtifactStore scope = scope(repository);
+        RepositoryRemoval.Begun begun = RepositoryRemoval.begin(scope);
+        if (begun == RepositoryRemoval.Begun.ABSENT) {
+            return begun;
+        }
+        RepositoryDocument.forget(root, tenant(), repository);
+        audit(AuditActions.REPOSITORY_DELETE, repository);
+        RepositoryRemoval.purgeInBackground(root.scope(tenant()), repository, tenant() + "/" + repository);
+        return begun;
     }
 
     /** Whether a staging module is installed on this deployment - the console hides the staging surface without one. */

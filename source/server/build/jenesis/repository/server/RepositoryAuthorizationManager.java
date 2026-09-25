@@ -85,10 +85,12 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
             // takes a right over all of them.
             scope = target.repository().isEmpty() ? "*" : target.repository();
         }
-        // PUT /repository/<tenant>/<name> - the bare repository, no path within it - creates the repository, which is
-        // administration rather than a publish: a key that may deploy into a repository may not thereby create
-        // repositories, and an administrator's key may create one without holding a deploy right on it.
-        if (uri.startsWith("/repository/") && "PUT".equals(method) && target.path().equals("/") && !uri.endsWith("/")) {
+        // PUT /repository/<tenant>/<name> - the bare repository, no path within it - creates the repository, and DELETE
+        // on it deletes the repository with everything it holds. Both are administration rather than a publish: a key
+        // that may deploy into a repository may neither create repositories nor delete one, and an administrator's key
+        // may do both without holding a deploy right on it.
+        if (uri.startsWith("/repository/") && ("PUT".equals(method) || "DELETE".equals(method))
+                && target.path().equals("/") && !uri.endsWith("/")) {
             required = Authorization.MANAGE_WRITE;
         }
         // The asset enumeration scopes the store it reads by its ?repo= parameter, so the repository authorized is the

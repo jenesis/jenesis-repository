@@ -31,7 +31,7 @@
                     </form>
                     <form method="post" style="display:inline; margin:0" class="app-actions__danger"
                           th:action="@{'/ui/repositories/' + ${repo} + '/staging/' + ${s.id} + '/drop'}">
-                        <button th:replace="~{base :: dangerButton('drop', 'Drop this staging id? Everything staged under it is discarded and cannot be promoted afterwards.')}">drop</button>
+                        <button th:replace="~{base :: deleteButton('drop', ${s.id}, 'Everything staged under this id is discarded and can no longer be promoted.')}">drop</button>
                     </form>
                 </td>
             </tr>

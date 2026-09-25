@@ -74,6 +74,9 @@ final class ConsoleAuthorization {
                 .requestMatchers("/ui/deploy").access(tenants.require(UserDirectory.Role.ADMIN))
                 .requestMatchers(HttpMethod.POST, "/ui/repositories/quota", "/ui/repositories/rate-limit")
                         .access(tenants.require(UserDirectory.Role.ADMIN))
+                // Deleting a repository removes everything it holds, for everyone - admin-grade, like the limits.
+                .requestMatchers(HttpMethod.POST, "/ui/repositories/*/delete")
+                        .access(tenants.require(UserDirectory.Role.ADMIN))
                 // Cache eviction (enforce the size cap, expire stale entries, or clear a project entirely) is
                 // admin-grade: clearing a project wipes its cache for everyone, which an EDITOR must not do.
                 .requestMatchers(HttpMethod.POST, "/ui/projects/*/evict/**")

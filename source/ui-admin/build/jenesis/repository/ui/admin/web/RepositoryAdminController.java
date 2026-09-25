@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.cleanup.RetentionPolicy;
 import build.jenesis.repository.inventory.DownloadTracker;
 import org.springframework.beans.factory.ObjectProvider;
@@ -80,11 +81,19 @@ public class RepositoryAdminController {
             // warnings (mixed strength, unscreened, plaintext) feed the non-blocking console banner (item 4).
             String definition = definitions.get(name);
             SettingsAdmin.RepositoryShape shape = settings.shape(name, definition);
-            String format = repositories.format(name).orElse(null);
+            Optional<RepositoryDocument> document = repositories.document(name);
+            String format = document.map(RepositoryDocument::format).orElse(null);
+            // Only a repository with no document can be being deleted - deleting takes the document first - so only
+            // such a row pays the probe for the marker, and the list costs what it did.
+            boolean removing = document.isEmpty() && repositories.removing(name);
             // A combined type has no mark of its own, so it draws the marks of what it holds, as an untyped one does.
             List<Mark> held = format == null ? repositoryMarks(name)
                     : marks.forFormat(format).map(List::of).orElseGet(() -> repositoryMarks(name));
-            rows.add(new RepositoryRow(name, format, held, SettingsAdmin.hardenedDefinition(definition), shape));
+            rows.add(new RepositoryRow(name, format, held, SettingsAdmin.hardenedDefinition(definition), shape,
+                    document.map(RepositoryDocument::description).orElse(""),
+                    document.map(stored -> DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneOffset.UTC)
+                            .format(stored.created())).orElse(""),
+                    removing));
             for (String warning : shape.warnings()) {
                 warnings.add(new RepositoryWarning(name, warning));
             }
@@ -148,11 +157,12 @@ public class RepositoryAdminController {
      *  but no format the type it holds, or move one to a type that holds everything its old one did. */
     @PostMapping("/ui/repositories/create")
     public String create(@RequestParam("name") String name, @RequestParam("format") String format,
+                         @RequestParam(name = "description", defaultValue = "") String description,
                          RedirectAttributes redirect) throws IOException {
         String repository = name.trim();
         RepositoryType.Creation creation;
         try {
-            creation = lifecycle.create(repository, format);
+            creation = lifecycle.create(repository, format, description);
         } catch (IllegalArgumentException refused) {
             redirect.addFlashAttribute("error", refused.getMessage());
             return "redirect:/ui/repositories";
@@ -171,6 +181,53 @@ public class RepositoryAdminController {
             }
         }
         return "redirect:/ui/repositories/" + repository;
+    }
+
+    /** Give a repository a description, or clear it with an empty one. */
+    @PostMapping("/ui/repositories/{repo}/describe")
+    public String describe(@PathVariable("repo") String name,
+                           @RequestParam(name = "description", defaultValue = "") String description,
+                           RedirectAttributes redirect) throws IOException {
+        try {
+            if (lifecycle.describe(name, description)) {
+                redirect.addFlashAttribute("message", "Updated the description of '" + name + "'.");
+            } else {
+                redirect.addFlashAttribute("error", "There is no repository '" + name + "'.");
+                return "redirect:/ui/repositories";
+            }
+        } catch (IllegalArgumentException refused) {
+            redirect.addFlashAttribute("error", refused.getMessage());
+        }
+        return "redirect:/ui/repositories/" + name;
+    }
+
+    /**
+     * Delete a repository and everything it holds, and forget what it was defined as. Only through the deletion
+     * dialog: the request must carry the phrase the dialog has the reader type, {@code delete <name>}, so a form
+     * posted without it - or for another name - deletes nothing. The objects go off the request path; the list shows
+     * the repository as being deleted until they are gone.
+     *
+     * <p>Forgetting the definition reads the settings document - one object per module under a constant prefix, as
+     * every settings handler does - and nothing on the request path reads the repository's objects.
+     */
+    @PostMapping("/ui/repositories/{repo}/delete")
+    public String delete(@PathVariable("repo") String name,
+                         @RequestParam(name = "confirm", defaultValue = "") String confirm,
+                         RedirectAttributes redirect) throws IOException {
+        if (!confirm.trim().equals("delete " + name)) {
+            redirect.addFlashAttribute("error", "Nothing was deleted: type \"delete " + name + "\" to confirm.");
+            return "redirect:/ui/repositories";
+        }
+        if (settings.repositories().containsKey(name)) {
+            settings.removeRepository(name);
+        }
+        switch (lifecycle.delete(name)) {
+            case ABSENT -> redirect.addFlashAttribute("error", "There is no repository '" + name + "'.");
+            case STARTED -> redirect.addFlashAttribute("message", "Deleting repository '" + name
+                    + "'. It no longer answers, and it is removed from the list once everything it held is gone.");
+            case RESUMED -> redirect.addFlashAttribute("message", "Resumed deleting repository '" + name + "'.");
+        }
+        return "redirect:/ui/repositories";
     }
 
     /** The types a repository can be created as - a format, or a combined type of several. */
@@ -219,6 +276,8 @@ public class RepositoryAdminController {
     @GetMapping("/ui/repositories/{repo}")
     public String detail(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);
+        model.addAttribute("description",
+                repositories.document(repo).map(RepositoryDocument::description).orElse(""));
         RepositoryAdmin.Releases releases = repositories.recentReleases(repo, DETAIL_RELEASES);
         model.addAttribute("releases", releases.shown());
         model.addAttribute("releasesMore", releases.more());
@@ -620,7 +679,8 @@ public class RepositoryAdminController {
      *  hardened proxy (EPIC 23), which the list badges so an operator sees at a glance which repositories enforce
      *  full-body upstream screening. */
     public record RepositoryRow(String name, String format, List<Mark> marks, boolean hardened,
-                                SettingsAdmin.RepositoryShape shape) {
+                                SettingsAdmin.RepositoryShape shape, String description, String created,
+                                boolean removing) {
     }
 
     /** One valid-but-risky definition warning for the console banner (item 4): the repository it applies to and

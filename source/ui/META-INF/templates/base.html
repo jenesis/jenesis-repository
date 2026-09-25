@@ -20,6 +20,7 @@
     field(label, name, value, help) - a labelled text input with inline help text.
     alert(message, kind)            - a flash/outcome banner; kind in {pass,warn,danger} or null for info.
     dangerButton(label, confirm)    - a destructive submit: the danger treatment plus its confirmation, together.
+    deleteButton(label, name, warning) - a deletion: the danger treatment, guarded by typing `delete <name>`.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 
@@ -238,6 +239,12 @@
      not already know. */-->
 <button th:fragment="dangerButton(label, confirm)" type="submit" class="secondary outline app-danger"
         th:attr="data-confirm=${confirm}" th:text="${label}">delete</button>
+
+<!--/* A button that deletes something, and the dialog that guards it: pressing it asks the reader to type
+     `delete <name>` under `warning` - what is lost - and a line saying it cannot be undone (console.js). Every
+     deletion in the console renders through this, so none of them is one reflexive click away. */-->
+<button th:fragment="deleteButton(label, name, warning)" type="submit" class="secondary outline app-danger"
+        th:attr="data-delete=${name},data-delete-warning=${warning}" th:text="${label}">delete</button>
 
 </body>
 </html>

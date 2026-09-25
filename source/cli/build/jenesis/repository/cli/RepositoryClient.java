@@ -989,8 +989,15 @@ public final class RepositoryClient {
      * server's own sentence.
      */
     public boolean createRepository(String name, String format) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("PUT", repository(name), body(Map.of("value", format)),
-                "application/json");
+        return createRepository(name, format, null);
+    }
+
+    /** {@link #createRepository(String, String)}, giving the repository {@code description} when one is given. */
+    public boolean createRepository(String name, String format, String description)
+            throws IOException, InterruptedException {
+        Map<String, String> request = description == null
+                ? Map.of("value", format) : Map.of("value", format, "description", description);
+        HttpResponse<String> response = send("PUT", repository(name), body(request), "application/json");
         if (response.statusCode() == 201 || response.statusCode() == 200) {
             return response.statusCode() == 201;
         }
@@ -999,6 +1006,26 @@ public final class RepositoryClient {
         }
         require(response, 201, "create repository " + name);
         return false;
+    }
+
+    /** Give a repository {@code description}; an empty one clears it. A refusal carries the server's own sentence. */
+    public void describeRepository(String name, String description) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("PUT", repository(name), body(Map.of("description", description)),
+                "application/json");
+        if (response.statusCode() == 400 || response.statusCode() == 404) {
+            throw new IOException(response.body());
+        }
+        require(response, 200, "describe repository " + name);
+    }
+
+    /** Delete a repository and everything it holds; the server's own sentence about what it began. */
+    public String deleteRepository(String name) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("DELETE", repository(name), null, null);
+        if (response.statusCode() == 404) {
+            throw new IOException(response.body());
+        }
+        require(response, 202, "delete repository " + name);
+        return response.body();
     }
 
     public void setRepository(String name, String specification) throws IOException, InterruptedException {

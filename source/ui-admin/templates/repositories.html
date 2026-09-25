@@ -23,67 +23,81 @@
         </ul>
     </article>
 
-    <figure th:unless="${repositories.isEmpty()}">
-        <table class="app-list">
-            <thead>
-            <tr>
-                <th scope="col">Repository</th>
-                <th scope="col">Format</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="r : ${repositories}">
-                <td class="app-list__name">
-                    <!--/* The marks of the formats this repository holds (W4.2b), rendered inline so each mark's
-                         stroke="currentColor" inherits the text colour and inverts with the theme; sized uniformly by
-                         .format-icon. The SVG is a trusted document built from module-embedded constants and from
-                         geometry - never from a name - so th:utext is safe here; the title/aria-label carry the
-                         contributor the mark attributes to, for every reader a drawing does not reach. A repository
-                         no installed format marks draws the one neutral figure instead. */-->
-                    <span th:each="mark : ${r.marks}" class="format-icon"
-                          th:title="${mark.title}" role="img" th:attr="aria-label=${mark.title}"
-                          th:utext="${mark.svg}"></span>
-                    <span th:if="${#lists.isEmpty(r.marks)}" class="format-icon"
-                          title="no installed format marks this repository" role="img"
-                          aria-label="no installed format marks this repository" th:utext="${neutralMark}"></span>
-                    <a th:href="@{'/ui/repositories/' + ${r.name}}" th:text="${r.name}">name</a>
-                    <!--/* EPIC 23: a hardened proxy enforces full-body screening of every untrusted upstream body
-                         before releasing a byte. Badge it so an operator sees which repositories enforce it. */-->
-                    <span th:if="${r.hardened}" class="app-badge" title="Hardening proxy - full upstream screening enforced">hardened</span>
-                    <!--/* T25.6 item 2: the repository's SHAPE from its parsed Definition - writable (accepts uploads)
-                         vs read-only, the host+proxy hybrid, and per-fallback badges (store/no-store + screen strength
-                         for an upstream; an inner-repo reference for a repository fallback). */-->
-                    <span th:replace="~{fragments :: shapeBadges(${r.shape})}"></span>
-                </td>
-                <td>
-                    <code th:if="${r.format != null}" th:text="${r.format}">maven</code>
-                    <!--/* A repository created before repositories held a format answers no request until it is given
-                         one; an editor gives it one here, choosing the format its content was published in. */-->
-                    <th:block th:if="${r.format == null}">
-                        <span class="app-badge app-badge--warn" title="Answers no request until it is given a format">no format</span>
-                        <form th:if="${isEditor}" class="app-actions" method="post"
-                              th:action="@{/ui/repositories/create}">
-                            <input type="hidden" name="name" th:value="${r.name}">
-                            <select name="format" required th:attr="aria-label=|Format for ${r.name}|">
-                                <option th:each="f : ${formats}" th:value="${f}" th:text="${f}">maven</option>
-                            </select>
-                            <button type="submit">Give format</button>
+    <!--/* The repositories and the way to add one, side by side where the screen is wide - the list the wider of the
+         two - and one under the other where it is not. */-->
+    <div class="app-panels app-panels--lead">
+    <article>
+        <h2>Current repositories</h2>
+        <figure th:unless="${repositories.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Repository</th>
+                    <th scope="col">Format</th>
+                    <th scope="col">Created</th>
+                    <th scope="col" th:if="${isAdmin}"><span class="app-sr-only">Delete</span></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="r : ${repositories}">
+                    <td class="app-list__name">
+                        <!--/* The marks of the formats this repository holds (W4.2b), rendered inline so each mark's
+                             stroke="currentColor" inherits the text colour and inverts with the theme; sized uniformly by
+                             .format-icon. The SVG is a trusted document built from module-embedded constants and from
+                             geometry - never from a name - so th:utext is safe here; the title/aria-label carry the
+                             contributor the mark attributes to, for every reader a drawing does not reach. A repository
+                             no installed format marks draws the one neutral figure instead. */-->
+                        <span th:each="mark : ${r.marks}" class="format-icon"
+                              th:title="${mark.title}" role="img" th:attr="aria-label=${mark.title}"
+                              th:utext="${mark.svg}"></span>
+                        <span th:if="${#lists.isEmpty(r.marks)}" class="format-icon"
+                              title="no installed format marks this repository" role="img"
+                              aria-label="no installed format marks this repository" th:utext="${neutralMark}"></span>
+                        <a th:href="@{'/ui/repositories/' + ${r.name}}" th:text="${r.name}">name</a>
+                        <!--/* EPIC 23: a hardened proxy enforces full-body screening of every untrusted upstream body
+                             before releasing a byte. Badge it so an operator sees which repositories enforce it. */-->
+                        <span th:if="${r.hardened}" class="app-badge" title="Hardening proxy - full upstream screening enforced">hardened</span>
+                        <!--/* T25.6 item 2: the repository's SHAPE from its parsed Definition - writable (accepts uploads)
+                             vs read-only, the host+proxy hybrid, and per-fallback badges (store/no-store + screen strength
+                             for an upstream; an inner-repo reference for a repository fallback). */-->
+                        <span th:replace="~{fragments :: shapeBadges(${r.shape})}"></span>
+                        <span th:if="${r.removing}" class="app-badge app-badge--warn"
+                              title="It answers no request; it leaves this list once everything it held is gone">being deleted</span>
+                        <small th:if="${!r.description.isEmpty()}" class="app-list__description"
+                               th:text="${r.description}">description</small>
+                    </td>
+                    <td>
+                        <code th:if="${r.format != null}" th:text="${r.format}">maven</code>
+                        <!--/* A repository created before repositories held a format answers no request until it is given
+                             one; an editor gives it one here, choosing the format its content was published in. */-->
+                        <th:block th:if="${r.format == null and !r.removing}">
+                            <span class="app-badge app-badge--warn" title="Answers no request until it is given a format">no format</span>
+                            <form th:if="${isEditor}" class="app-actions" method="post"
+                                  th:action="@{/ui/repositories/create}">
+                                <input type="hidden" name="name" th:value="${r.name}">
+                                <select name="format" required th:attr="aria-label=|Format for ${r.name}|">
+                                    <option th:each="f : ${formats}" th:value="${f}" th:text="${f}">maven</option>
+                                </select>
+                                <button type="submit">Give format</button>
+                            </form>
+                        </th:block>
+                    </td>
+                    <td class="app-list__date"><small th:text="${r.created}">2026-09-25</small></td>
+                    <td th:if="${isAdmin}" class="app-list__action">
+                        <form method="post" th:action="@{'/ui/repositories/' + ${r.name} + '/delete'}" style="margin:0">
+                            <button th:replace="~{base :: deleteButton('Delete', ${r.name}, 'Everything this repository holds is deleted: every artifact, index, staged upload and pin, and what it is defined as.')}">Delete</button>
                         </form>
-                    </th:block>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-    </figure>
-    <th:block th:if="${repositories.isEmpty()}">
-        <div th:replace="~{base :: empty('No repositories yet. Create one below, then publish into it.')}"></div>
-    </th:block>
-    <!--/* The page's own settings, side by side where the screen is wide and one under the other where it is not. */-->
-    <div class="app-panels">
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <th:block th:if="${repositories.isEmpty()}">
+            <div th:replace="~{base :: empty('No repositories yet. Create one, then publish into it.')}"></div>
+        </th:block>
+    </article>
     <article th:if="${isEditor}">
         <h2>New repository</h2>
-        <p><small>A repository holds one format, chosen here, and answers at <code>/repository/&lt;tenant&gt;/&lt;name&gt;/</code>
-            - or <code>/v2/&lt;tenant&gt;/&lt;name&gt;/</code> for container images. Create it before publishing into it.</small></p>
         <form method="post" th:action="@{/ui/repositories/create}">
             <label>Name
                 <input name="name" required pattern="[A-Za-z0-9_\-]+" placeholder="maven"
@@ -92,34 +106,44 @@
                 <select name="format" required>
                     <option th:each="f : ${formats}" th:value="${f}" th:text="${f}">maven</option>
                 </select></label>
+            <label>Description <small>(optional)</small>
+                <input name="description" maxlength="280" placeholder="What this repository is for"></label>
             <button type="submit">Create repository</button>
         </form>
     </article>
-    <article>
-        <h2>Storage quota</h2>
-        <p><small>A tenant-wide cap on stored content across every repository; a publish that would exceed it is
-            refused. Currently storing <strong th:text="${quota.usedBytes}">0</strong> bytes<span
-                    th:if="${quota.maxBytes > 0}"> of <strong th:text="${quota.maxBytes}">0</strong></span><span
-                    th:if="${quota.maxBytes == 0}"> (no limit set)</span>.</small></p>
-        <form th:if="${isEditor}" method="post" th:action="@{/ui/repositories/quota}">
-            <label>Maximum bytes (0 = unlimited)
-                <input type="number" name="maxBytes" min="0" th:value="${quota.maxBytes}"></label>
-            <button type="submit">Save quota</button>
-        </form>
-    </article>
-    <article th:if="${capabilities.rateLimit()}">
-        <h2>Rate limit</h2>
-        <p><small>A ceiling on this tenant's request rate; excess requests are answered <code>429 Too Many
-            Requests</code>. <span th:if="${rateLimit > 0}">Currently <strong th:text="${rateLimit}">0</strong>
-            permits per minute.</span><span th:if="${rateLimit == 0}">Currently using the deployment
-            default.</span></small></p>
-        <form th:if="${isEditor}" method="post" th:action="@{/ui/repositories/rate-limit}">
-            <label>Permits per minute (0 = deployment default)
-                <input type="number" name="permitsPerMinute" min="0" th:value="${rateLimit}"></label>
-            <button type="submit">Save rate limit</button>
-        </form>
-    </article>
     </div>
+
+    <!--/* What applies to the tenant as a whole rather than to one repository, set apart under a rule of its own. */-->
+    <section class="app-divide" aria-labelledby="limits">
+        <h2 id="limits">Limits</h2>
+        <p><small>Tenant-wide: each applies to every repository in this tenant together.</small></p>
+        <div class="app-panels">
+            <article>
+                <h2>Storage quota</h2>
+                <p><small>A tenant-wide cap on stored content across every repository; a publish that would exceed it is
+                    refused. Currently storing <strong th:text="${quota.usedBytes}">0</strong> bytes<span
+                            th:if="${quota.maxBytes > 0}"> of <strong th:text="${quota.maxBytes}">0</strong></span><span
+                            th:if="${quota.maxBytes == 0}"> (no limit set)</span>.</small></p>
+                <form th:if="${isEditor}" method="post" th:action="@{/ui/repositories/quota}">
+                    <label>Maximum bytes (0 = unlimited)
+                        <input type="number" name="maxBytes" min="0" th:value="${quota.maxBytes}"></label>
+                    <button type="submit">Save quota</button>
+                </form>
+            </article>
+            <article th:if="${capabilities.rateLimit()}">
+                <h2>Rate limit</h2>
+                <p><small>A ceiling on this tenant's request rate; excess requests are answered <code>429 Too Many
+                    Requests</code>. <span th:if="${rateLimit > 0}">Currently <strong th:text="${rateLimit}">0</strong>
+                    permits per minute.</span><span th:if="${rateLimit == 0}">Currently using the deployment
+                    default.</span></small></p>
+                <form th:if="${isEditor}" method="post" th:action="@{/ui/repositories/rate-limit}">
+                    <label>Permits per minute (0 = deployment default)
+                        <input type="number" name="permitsPerMinute" min="0" th:value="${rateLimit}"></label>
+                    <button type="submit">Save rate limit</button>
+                </form>
+            </article>
+        </div>
+    </section>
 </main>
 </body>
 </html>

@@ -48,7 +48,7 @@
                 <td>
                     <form method="post" th:action="@{/ui/settings/repositories/remove}" style="margin:0">
                         <input type="hidden" name="name" th:value="${e.key}">
-                        <button th:replace="~{base :: dangerButton('Remove', 'Remove this repository definition? Requests routed to it stop resolving until it is defined again.')}">Remove</button>
+                        <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The definition is removed; requests routed through it stop resolving until it is defined again.')}">Remove</button>
                     </form>
                 </td>
             </tr>
@@ -82,7 +82,7 @@
                 <td>
                     <form method="post" th:action="@{/ui/settings/upstreams/remove}" style="margin:0">
                         <input type="hidden" name="format" th:value="${e.key}">
-                        <button th:replace="~{base :: dangerButton('Remove', 'Remove the proxy upstream of this format? Misses stop being pulled through until it is set again.')}">Remove</button>
+                        <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The proxy upstream is removed; misses stop being pulled through until it is set again.')}">Remove</button>
                     </form>
                 </td>
             </tr>
@@ -115,7 +115,7 @@
                 <td>
                     <form method="post" th:action="@{/ui/settings/upstream-auth/remove}" style="margin:0">
                         <input type="hidden" name="host" th:value="${h}">
-                        <button th:replace="~{base :: dangerButton('Remove', 'Remove the stored credential for this host? The secret is not recoverable and must be entered again.')}">Remove</button>
+                        <button th:replace="~{base :: deleteButton('Remove', ${h}, 'The stored credential for this host is removed; the secret is not recoverable and must be entered again.')}">Remove</button>
                     </form>
                 </td>
             </tr>

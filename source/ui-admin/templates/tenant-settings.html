@@ -58,7 +58,12 @@
                 <span>effective: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
                 <span>deployment: <span th:text="${s.defaultDisplay()}">deployment value</span></span>
             </p>
-            <form method="post" th:action="@{/ui/settings/tenant/save}" class="setting-edit" th:unless="${s.pinned}"
+            <th:block th:if="${s.toggle()}">
+                <div th:replace="~{fragments :: settingSwitch(${s}, '/ui/settings/tenant/save', null,
+                        'Apply this high-impact policy change for this tenant?')}"></div>
+            </th:block>
+            <form method="post" th:action="@{/ui/settings/tenant/save}" class="setting-edit"
+                  th:unless="${s.pinned or s.toggle()}"
                   th:attr="data-confirm=${s.highImpact} ? 'Apply this high-impact policy change for this tenant?' : null">
                 <input type="hidden" name="key" th:value="${s.key}">
                 <select name="value" th:if="${s.dropdown()}" th:attr="aria-label=${s.label}">
@@ -70,7 +75,7 @@
                        th:placeholder="${s.editPlaceholder()}">
                 <button type="submit">Save</button>
             </form>
-            <div class="setting-edit setting-pinned" th:if="${s.pinned}">
+            <div class="setting-edit setting-pinned" th:if="${s.pinned and !s.toggle()}">
                 <select th:if="${s.dropdown()}" disabled th:attr="aria-label=${s.label}">
                     <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
                             th:selected="${o == s.value}">option</option>

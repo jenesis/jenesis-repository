@@ -74,10 +74,9 @@
             </fieldset>
             <button type="submit">Save</button>
         </form>
-        <form method="post" th:action="@{/ui/walks/remove}" class="setting-revert"
-              th:attr="data-confirm=|Remove the walk ${e.name}? The consumers it carries ride no walk until another entry names them.|">
+        <form method="post" th:action="@{/ui/walks/remove}" class="setting-revert">
             <input type="hidden" name="name" th:value="${e.name}">
-            <button class="secondary outline" type="submit">Remove</button>
+            <button th:replace="~{base :: deleteButton('Remove', ${e.name}, 'The walk is removed; the consumers it carries ride no walk until another entry names them.')}">Remove</button>
         </form>
     </article>
 

@@ -1019,9 +1019,26 @@ public class SettingsAdmin {
             choices = List.copyOf(choices);
         }
 
-        /** A CHOICE or BOOLEAN renders as a select of fixed options; every other kind as a typed text input. */
+        /** A CHOICE renders as a select of its catalogued options; a BOOLEAN as a {@link #toggle() switch}; every
+         *  other kind as a typed text input. */
         public boolean dropdown() {
-            return "CHOICE".equals(kind) || "BOOLEAN".equals(kind);
+            return "CHOICE".equals(kind);
+        }
+
+        /** A BOOLEAN renders as a switch showing its effective value, which saves the opposite value in one click -
+         *  a select of {@code true} and {@code false} beside a Save button asked for two actions to state one bit. */
+        public boolean toggle() {
+            return "BOOLEAN".equals(kind);
+        }
+
+        /** Whether a {@link #toggle() switch} is on: the effective value, as the switch shows it. */
+        public boolean on() {
+            return Boolean.parseBoolean(value.trim());
+        }
+
+        /** The value a {@link #toggle() switch} saves when pressed: the opposite of its effective value. */
+        public String flipped() {
+            return Boolean.toString(!on());
         }
 
         /** The fixed options a {@link #dropdown()} offers: the catalogued choices, or true/false for a boolean. */

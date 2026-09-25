@@ -67,6 +67,12 @@ public final class AuditActions {
     /** A repository given a type that holds every format its old one did - {@code maven} made {@code java}, say. */
     public static final String REPOSITORY_RETYPE = action("repository.retype");
 
+    /** A repository's description changed. */
+    public static final String REPOSITORY_DESCRIBE = action("repository.describe");
+
+    /** A repository deleted with everything it held - begun, since the objects go off the request path. */
+    public static final String REPOSITORY_DELETE = action("repository.delete");
+
     /** A repository definition written. */
     public static final String REPOSITORY_SET = action("repository.set");
 

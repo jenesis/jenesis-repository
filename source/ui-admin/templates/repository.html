@@ -11,6 +11,17 @@
         it - its contents, what the gate decided, how long it keeps what it holds - is a page of its own in the
         sidebar.</small></p>
 
+    <article id="description">
+        <h2>Description</h2>
+        <p th:unless="${isEditor}" th:text="${description.isEmpty()} ? 'No description.' : ${description}">text</p>
+        <form th:if="${isEditor}" class="setting-edit" method="post"
+              th:action="@{'/ui/repositories/' + ${repo} + '/describe'}">
+            <input name="description" maxlength="280" th:value="${description}" aria-label="Description"
+                   placeholder="What this repository is for">
+            <button type="submit">Save</button>
+        </form>
+    </article>
+
     <article th:if="${shape.configured()}" id="shape">
         <h2>Shape</h2>
         <p><small>How this repository is routed, from its <code>repositories.<span th:text="${repo}">name</span></code>
@@ -56,7 +67,7 @@
                   method="post" style="display:inline; margin:0" class="app-actions__danger"
                   th:action="@{'/ui/repositories/' + ${repo} + '/forget-ecosystem'}">
                 <input type="hidden" name="ecosystem" th:value="${eco}">
-                <button th:replace="~{base :: dangerButton('Forget ecosystem', 'Retire every record of this ecosystem in this repository? Its content is then reclaimed by the collector, and this cannot be undone.')}">Forget ecosystem</button>
+                <button th:replace="~{base :: deleteButton('Forget ecosystem', ${eco}, 'Every record of this ecosystem in this repository is retired, and the collector reclaims its content.')}">Forget ecosystem</button>
             </form>
         </div>
     </article>
@@ -129,6 +140,14 @@
             <div th:replace="~{base :: empty('No published releases yet.')}"></div>
         </th:block>
     </article>
+    <section th:if="${isAdmin}" class="app-divide" aria-labelledby="delete-repository">
+        <h2 id="delete-repository">Delete repository</h2>
+        <p><small>Deletes this repository and everything it holds - every artifact, index, staged upload and pin, and
+            what it is defined as. It stops answering at once; the rest is removed in the background.</small></p>
+        <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/delete'}">
+            <button th:replace="~{base :: deleteButton('Delete repository', ${repo}, 'Everything this repository holds is deleted: every artifact, index, staged upload and pin, and what it is defined as.')}">Delete repository</button>
+        </form>
+    </section>
 </main>
 </body>
 </html>

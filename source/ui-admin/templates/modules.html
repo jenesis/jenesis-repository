@@ -63,10 +63,9 @@
                 intentional removal. If the removal was intentional, purge here (the counts above are the blast
                 radius), or script it: <code>jenesis purge <span th:text="${m.module}">module</span></code> /
                 <code>POST /api/admin/purge?namespace=<span th:text="${m.module}">module</span></code>.</small>
-                <form method="post" th:action="@{/ui/settings/modules/purge}" class="module-toggle"
-                      onsubmit="return confirm('Delete this module\'s orphaned data everywhere? This cannot be undone.');">
+                <form method="post" th:action="@{/ui/settings/modules/purge}" class="module-toggle">
                     <input type="hidden" name="module" th:value="${m.module}">
-                    <button type="submit" class="secondary outline">Purge orphaned data</button>
+                    <button th:replace="~{base :: deleteButton('Purge orphaned data', ${m.module}, 'Everything this module left behind is deleted, in every tenant.')}">Purge orphaned data</button>
                 </form></div>
             <ul class="module-settings" th:if="${!m.settings.isEmpty()}">
                 <li th:each="s : ${m.settings}">

@@ -57,7 +57,7 @@
                         <form method="post" style="display:inline; margin:0" class="app-actions__danger"
                               th:action="@{'/ui/repositories/' + ${repo} + '/quarantine/discard'}">
                             <input type="hidden" name="path" th:value="${q.path}">
-                            <button th:replace="~{base :: dangerButton('discard', 'Discard this held artifact? Its bytes are dropped and it cannot be released afterwards.')}">discard</button>
+                            <button th:replace="~{base :: deleteButton('discard', ${q.coordinate}, 'The bytes of the held artifact are dropped, and it can no longer be released.')}">discard</button>
                         </form>
                     </td>
                 </tr>

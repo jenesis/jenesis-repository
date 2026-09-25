@@ -9,6 +9,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.store.RepositoryRemoval;
 import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.store.ServableNames;
 import io.micrometer.observation.ObservationRegistry;
@@ -68,6 +69,17 @@ public class RepositoryAdmin extends TenantScope {
      *  the bookkeeping namespaces unmarked. A single prefix listing, never a tree scan. */
     public List<String> namespaces(String repository) {
         return scope(repository).list("").stream().filter(name -> !name.equals(Scopes.REPOSITORY)).toList();
+    }
+
+    /** A repository's own document - its format, when it was created, its description - or empty for one that has
+     *  none: created before repositories held a format, or being deleted. Read through the node's cache. */
+    public Optional<RepositoryDocument> document(String repository) throws IOException {
+        return RepositoryDocument.cached(root, tenant(), repository);
+    }
+
+    /** Whether a repository is being deleted: one point probe, asked only of a repository that has no document. */
+    public boolean removing(String repository) throws IOException {
+        return RepositoryRemoval.removing(scope(repository));
     }
 
     /** The format a repository holds, or empty for one created before repositories held a format - which answers

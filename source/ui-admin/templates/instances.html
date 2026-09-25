@@ -30,11 +30,9 @@
                     </form>
                 </td>
                 <td th:if="${superadmin}">
-                    <form method="post" th:action="@{/ui/instances/delete}"
-                          onsubmit="return confirm('Delete tenant and ALL of its projects, credentials and members?');"
-                          style="margin:0">
+                    <form method="post" th:action="@{/ui/instances/delete}" style="margin:0">
                         <input type="hidden" name="name" th:value="${t}">
-                        <button class="secondary outline" type="submit">Delete</button>
+                        <button th:replace="~{base :: deleteButton('Delete', ${t}, 'The tenant is deleted with everything in it: every repository and artifact, every build-cache project, every credential and member, and its audit trail.')}">Delete</button>
                     </form>
                 </td>
             </tr>

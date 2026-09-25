@@ -53,6 +53,139 @@
 })();
 
 /*
+ * The deletion guard.
+ *
+ * A control that deletes something carries `data-delete="<name>"` and `data-delete-warning="<what is lost>"`
+ * (the `deleteButton` fragment renders both). Pressing it opens a dialog that says what is lost and that it cannot
+ * be undone, and its confirm button stays disabled until the reader has typed `delete <name>` - a click can be
+ * reflexive, typing the name of the thing cannot. Confirming submits the form with that phrase as `confirm`, so a
+ * server that checks it refuses a request that did not come through the dialog.
+ *
+ * Every string is set as text, never as markup: the name and the warning come from the repository.
+ */
+(function () {
+    'use strict';
+
+    var confirmed = null;
+
+    function guarded(event) {
+        var submitter = event.submitter;
+        if (submitter && submitter.dataset && submitter.dataset.delete) {
+            return submitter;
+        }
+        var form = event.target;
+        return form && form.dataset && form.dataset.delete ? form : null;
+    }
+
+    function element(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) {
+            node.className = className;
+        }
+        if (text) {
+            node.textContent = text;
+        }
+        return node;
+    }
+
+    function open(form, submitter, source) {
+        var name = source.dataset.delete;
+        var phrase = 'delete ' + name;
+        var dialog = element('dialog', 'app-delete-dialog');
+        var article = element('article');
+        var heading = element('h2', null, 'Delete ' + name + '?');
+        heading.id = 'app-delete-dialog-title';
+        dialog.setAttribute('aria-labelledby', heading.id);
+        var warning = element('p', 'app-delete-dialog__warning');
+        if (source.dataset.deleteWarning) {
+            warning.appendChild(document.createTextNode(source.dataset.deleteWarning + ' '));
+        }
+        warning.appendChild(element('strong', null, 'This cannot be undone.'));
+        var label = element('label');
+        label.appendChild(document.createTextNode('Type '));
+        label.appendChild(element('code', null, phrase));
+        label.appendChild(document.createTextNode(' to confirm'));
+        var input = element('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.setAttribute('autocapitalize', 'off');
+        label.appendChild(input);
+        var footer = element('footer');
+        var cancel = element('button', 'secondary outline', 'Cancel');
+        cancel.type = 'button';
+        var confirm = element('button', 'app-danger', (submitter && submitter.textContent.trim()) || 'Delete');
+        confirm.type = 'button';
+        confirm.disabled = true;
+        footer.appendChild(cancel);
+        footer.appendChild(confirm);
+        article.appendChild(heading);
+        article.appendChild(warning);
+        article.appendChild(label);
+        article.appendChild(footer);
+        dialog.appendChild(article);
+        document.body.appendChild(dialog);
+
+        function close() {
+            dialog.close();
+            dialog.remove();
+            (submitter || form).focus();
+        }
+        input.addEventListener('input', function () {
+            confirm.disabled = input.value.trim() !== phrase;
+        });
+        input.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                if (!confirm.disabled) {
+                    confirm.click();
+                }
+            }
+        });
+        cancel.addEventListener('click', close);
+        dialog.addEventListener('cancel', function (event) {
+            event.preventDefault();
+            close();
+        });
+        confirm.addEventListener('click', function () {
+            if (input.value.trim() !== phrase) {
+                return;
+            }
+            var field = form.querySelector('input[name=confirm]') || element('input');
+            field.type = 'hidden';
+            field.name = 'confirm';
+            field.value = phrase;
+            form.appendChild(field);
+            dialog.close();
+            dialog.remove();
+            confirmed = form;
+            if (form.requestSubmit) {
+                form.requestSubmit(submitter || undefined);
+            } else {
+                form.submit();
+            }
+        });
+        dialog.showModal();
+        input.focus();
+    }
+
+    // Capture phase, ahead of the confirmation guard above: a deletion asks this question instead of that one.
+    document.addEventListener('submit', function (event) {
+        var source = guarded(event);
+        if (!source) {
+            return;
+        }
+        if (confirmed === event.target) {
+            confirmed = null;
+            return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        open(event.target, event.submitter, source);
+    }, true);
+})();
+
+/*
  * htmx must send the CSRF token on every request it issues, since it bypasses the form post the server's own
  * hidden field rides on. The token and its header name are published as meta tags by the shared head; a page
  * without them (a console that does not use CSRF) simply wires nothing.

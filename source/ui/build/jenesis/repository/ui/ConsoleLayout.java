@@ -44,6 +44,10 @@ public final class ConsoleLayout {
     /** A destructive submit: the danger treatment and its confirmation together, so neither can be forgotten. */
     public static final String DANGER_BUTTON = "dangerButton";
 
+    /** A deletion: the danger treatment, guarded by a dialog in which the reader types {@code delete <name>}, taking the
+     *  label, the name and what is lost. */
+    public static final String DELETE_BUTTON = "deleteButton";
+
     /** The console frame every screen renders above its {@code <main>}: the edition's notice strip, the header with
      *  the brand, the groups, the theme switch and the signed-in identity, and the sidebar listing the pages of the
      *  group - or the repository - the reader is in. It reads the published {@link Navigation}, so a page passes
@@ -74,7 +78,7 @@ public final class ConsoleLayout {
 
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
-            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, HEAD_CONTENTS, DANGER_BUTTON, SHELL, SIGN_IN_SHELL,
+            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, HEAD_CONTENTS, DANGER_BUTTON, DELETE_BUTTON, SHELL, SIGN_IN_SHELL,
             MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP, RUNNING);
 
     private ConsoleLayout() {
