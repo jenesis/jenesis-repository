@@ -47,6 +47,8 @@ open module build.jenesis.repository.ui.admin.test {
     requires spring.webmvc;
     requires spring.security.core;
     requires spring.security.web;
+    requires jakarta.servlet;
+    requires build.jenesis.repository.console.api;
     requires org.junit.jupiter;
     requires org.assertj.core;
     uses build.jenesis.repository.ui.ConsoleLayout.Extension;

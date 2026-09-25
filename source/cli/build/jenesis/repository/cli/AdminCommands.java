@@ -456,6 +456,50 @@ final class AdminCommands {
         };
     }
 
+    static int tenants(String[] args, Path home) throws Exception {
+        RepositoryClient client = CliSupport.client(home);
+        if (args.length == 1) {
+            client.tenants().forEach(System.out::println);
+            return 0;
+        }
+        if (args.length < 3) {
+            throw new IllegalArgumentException("Usage: tenants create <name> | tenants delete <name> [--yes]");
+        }
+        String name = args[2];
+        switch (args[1]) {
+            case "create" -> System.out.println(client.createTenant(name)
+                    ? "Created tenant " + name + "."
+                    : "Tenant " + name + " already exists.");
+            case "delete" -> {
+                if (!Arrays.asList(args).subList(3, args.length).contains("--yes") && !confirmed(name,
+                        "Deleting tenant " + name + " removes everything it owns: its repositories and their "
+                                + "artifacts, its credentials, its audit trail and its members. "
+                                + "This cannot be undone.")) {
+                    System.out.println("Nothing was deleted.");
+                    return 1;
+                }
+                client.deleteTenant(name);
+                System.out.println("Deleted tenant " + name + ".");
+            }
+            default -> throw new IllegalArgumentException("Unknown tenants action: " + args[1]);
+        }
+        return 0;
+    }
+
+    /**
+     * The console's deletion dialog on a terminal: what is lost and that it cannot be undone, then the name typed out.
+     * With no terminal to confirm on the caller is told to pass {@code --yes}, which is how a script says it means it.
+     */
+    private static boolean confirmed(String name, String warning) {
+        Console console = System.console();
+        if (console == null) {
+            throw new IllegalArgumentException(warning + " With no terminal to confirm on, pass --yes.");
+        }
+        console.printf("%s%n", warning);
+        String typed = console.readLine("Type 'delete %s' to confirm: ", name);
+        return typed != null && typed.trim().equals("delete " + name);
+    }
+
     static int repos(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
@@ -491,22 +535,11 @@ final class AdminCommands {
                     throw new IllegalArgumentException("Usage: repos delete <name> [--yes]");
                 }
                 String name = args[2];
-                boolean yes = Arrays.asList(args).subList(3, args.length).contains("--yes");
-                if (!yes) {
-                    // The same guard the console's dialog is: what is lost, that it cannot be undone, and the name
-                    // typed out - a script that means it says --yes instead.
-                    Console console = System.console();
-                    if (console == null) {
-                        throw new IllegalArgumentException("Deleting " + name + " removes everything it holds and "
-                                + "cannot be undone; with no terminal to confirm on, pass --yes.");
-                    }
-                    console.printf("Deleting repository %s removes everything it holds: every artifact, index, "
-                            + "staged upload and pin, and what it is defined as. This cannot be undone.%n", name);
-                    String typed = console.readLine("Type 'delete %s' to confirm: ", name);
-                    if (typed == null || !typed.trim().equals("delete " + name)) {
-                        System.out.println("Nothing was deleted.");
-                        return 1;
-                    }
+                if (!Arrays.asList(args).subList(3, args.length).contains("--yes") && !confirmed(name,
+                        "Deleting repository " + name + " removes everything it holds: every artifact, index, staged "
+                                + "upload and pin, and what it is defined as. This cannot be undone.")) {
+                    System.out.println("Nothing was deleted.");
+                    return 1;
                 }
                 System.out.println(client.deleteRepository(name));
             }

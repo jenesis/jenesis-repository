@@ -13,6 +13,32 @@ final class ComplianceCommands {
     private ComplianceCommands() {
     }
 
+    static int health(String[] args, Path home) throws Exception {
+        if (args.length < 2) {
+            throw new IllegalArgumentException("Usage: health <repo> [--refresh]");
+        }
+        boolean refresh = Arrays.asList(args).subList(2, args.length).contains("--refresh");
+        RepositoryClient.HealthReport report = CliSupport.client(home).health(args[1], refresh);
+        if (!report.available()) {
+            System.out.println("No health source is configured on this deployment.");
+            return 0;
+        }
+        for (RepositoryClient.HealthEntry entry : report.entries()) {
+            System.out.printf(Locale.ROOT, "%5.1f  %s %s (maintenance %s, review %s, provenance %s)%n",
+                    entry.overall(), entry.ecosystem(), entry.coordinate(), score(entry.maintenance()),
+                    score(entry.review()), score(entry.provenance()));
+        }
+        System.out.println(report.entries().size() + " of " + report.total() + " scored"
+                + (report.lastScanned() == null ? ", never refreshed" : ", as of " + report.lastScanned())
+                + (refresh ? "; a refresh has been started" : "") + ".");
+        return 0;
+    }
+
+    /** A component score, or {@code unknown} for the {@code -1} a source could not evaluate. */
+    private static String score(double value) {
+        return value < 0 ? "unknown" : String.format(Locale.ROOT, "%.1f", value);
+    }
+
     static int vulnerabilities(String[] args, Path home) throws Exception {
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: vulnerabilities <repo> [--reachability "

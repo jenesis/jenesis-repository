@@ -4,6 +4,8 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.server.spi.Authorization;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -35,5 +37,17 @@ public class ConsoleApiConfig {
     @Bean
     public OriginController originController(Repositories repositories) {
         return new OriginController(repositories);
+    }
+
+    /** The tenants, over the documents the console's own tenant directory is built over: the repository store's root,
+     *  which every composition has, so this twin needs no console to answer. */
+    @Bean
+    public TenantsApiController tenantsApiController(Repositories repositories, Authorization authorization,
+                                                     AuditTrail audit, RepositoryProperties properties) {
+        String operatorTenant = properties.getOperatorTenant().isBlank()
+                ? properties.getDefaultTenant()
+                : properties.getOperatorTenant();
+        return new TenantsApiController(Documents.over(repositories.root()), repositories.root(), authorization,
+                audit, operatorTenant);
     }
 }

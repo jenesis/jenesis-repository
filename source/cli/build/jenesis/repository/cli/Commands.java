@@ -85,6 +85,10 @@ public final class Commands {
                                     "the assembled third-party attribution document")))),
 
             new Section("Compliance", List.of(
+                    noun("health", "the maintainer health of what a repository holds",
+                            "build.jenesis.repository.compliance.web", ComplianceCommands::health,
+                            act("health <repo> [--refresh]", "the stored scores, lowest first where ranked; "
+                                    + "--refresh re-scores every coordinate in the background")),
                     noun("vulnerabilities", "re-scan against the installed advisory feeds",
                             "build.jenesis.repository.advisory", ComplianceCommands::vulnerabilities,
                             act("vulnerabilities <repo> [--reachability reachable|not-reachable|unknown]"
@@ -176,7 +180,11 @@ public final class Commands {
                     noun("forwarding", "the publish-through outbox", "build.jenesis.repository.webhook",
                             LifecycleCommands::forwarding,
                             act("forwarding <repo>", "the outbox"),
-                            act("forwarding retry <repo> <path>", "unpark a parked forward")),
+                            act("forwarding retry <repo> <path>", "unpark a parked forward"),
+                            act("forwarding internal <repo> <dest-tenant> <dest-repo>",
+                                    "forward every accepted publish into another tenant's repository"),
+                            act("forwarding internal remove <repo> <dest-tenant> <dest-repo>",
+                                    "stop forwarding into it")),
                     noun("index", "the published-index status", "build.jenesis.repository.index",
                             LifecycleCommands::index,
                             act("index <repo>", "generation, chunks and record count")),
@@ -285,6 +293,12 @@ public final class Commands {
                             act("repos set <name> <definition>",
                                     "define a repository (hosted | proxy <url> [nocache] [harden] | group a,b)"),
                             act("repos remove <name>", "remove a definition")),
+                    noun("tenants", "the deployment's tenants (an operator key's)", "build.jenesis.repository.ui.admin",
+                            AdminCommands::tenants,
+                            act("tenants", "list the tenants"),
+                            act("tenants create <name>", "create a tenant"),
+                            act("tenants delete <name> [--yes]", "delete a tenant and everything it owns, after "
+                                    + "typing 'delete <name>' - or --yes, for a script")),
                     noun("upstreams", "the per-format proxy upstreams", null, AdminCommands::upstreams,
                             act("upstreams", "list the upstreams"),
                             act("upstreams set <format> <url>", "set a format's upstream"),

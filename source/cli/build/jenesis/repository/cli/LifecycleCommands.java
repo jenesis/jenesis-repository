@@ -260,9 +260,30 @@ final class LifecycleCommands {
 
     static int forwarding(String[] args, Path home) throws Exception {
         if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: forwarding <repo> | forwarding retry <repo> <path>");
+            throw new IllegalArgumentException("Usage: forwarding <repo> | forwarding retry <repo> <path>"
+                    + " | forwarding internal [remove] <repo> <dest-tenant> <dest-repo>");
         }
         RepositoryClient client = CliSupport.client(home);
+        if (args[1].equals("internal")) {
+            boolean remove = args.length > 2 && args[2].equals("remove");
+            int first = remove ? 3 : 2;
+            if (args.length < first + 3) {
+                throw new IllegalArgumentException(
+                        "Usage: forwarding internal [remove] <repo> <dest-tenant> <dest-repo>");
+            }
+            String repo = args[first], tenant = args[first + 1], destination = args[first + 2];
+            if (!remove) {
+                client.addInternalForward(repo, tenant, destination);
+                System.out.println("Forwarding " + repo + " to " + tenant + "/" + destination + ".");
+                return 0;
+            }
+            if (client.removeInternalForward(repo, tenant, destination)) {
+                System.out.println("Stopped forwarding " + repo + " to " + tenant + "/" + destination + ".");
+                return 0;
+            }
+            System.out.println(repo + " was not forwarded to " + tenant + "/" + destination + ".");
+            return 1;
+        }
         if (args[1].equals("retry")) {
             if (args.length < 4) {
                 throw new IllegalArgumentException("Usage: forwarding retry <repo> <path>");

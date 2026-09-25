@@ -192,6 +192,46 @@ public final class RepositoryClient {
 
     /** Unpark a parked forward for another delivery attempt; {@code false} when nothing parked is queued at the path
      *  (HTTP 404, nothing to retry). */
+    /** Forward every accepted publish in the caller's {@code repo} to {@code destRepo} of {@code destTenant}. The
+     *  key must administer both tenants. */
+    public void addInternalForward(String repo, String destTenant, String destRepo)
+            throws IOException, InterruptedException {
+        require(send("POST", "/api/forwarding/internal?sourceRepo=" + enc(repo) + "&destTenant=" + enc(destTenant)
+                + "&destRepo=" + enc(destRepo), HttpRequest.BodyPublishers.noBody(), null), 200,
+                "forward " + repo + " to " + destTenant + "/" + destRepo);
+    }
+
+    /** Stop forwarding {@code repo} to {@code destRepo} of {@code destTenant}: {@code false} when it was not. */
+    public boolean removeInternalForward(String repo, String destTenant, String destRepo)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response = send("DELETE", "/api/forwarding/internal?sourceRepo=" + enc(repo)
+                + "&destTenant=" + enc(destTenant) + "&destRepo=" + enc(destRepo), null, null);
+        if (response.statusCode() == 404) {
+            return false;
+        }
+        require(response, 200, "stop forwarding " + repo + " to " + destTenant + "/" + destRepo);
+        return true;
+    }
+
+    /** The maintainer health stored for a repository's coordinates, one page; {@code refresh} starts a re-score of
+     *  every coordinate off the request path and answers the ledger as it stands. */
+    public HealthReport health(String repo, boolean refresh) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/health?repo=" + enc(repo)
+                + (refresh ? "&refresh=true" : ""), null, null);
+        require(response, 200, "read the health of " + repo);
+        return JSON.readValue(response.body(), HealthReport.class);
+    }
+
+    /** The answer {@code GET /api/health} gives: the scored coordinates, and when the scores were last refreshed. */
+    public record HealthReport(boolean available, boolean ranked, List<HealthEntry> entries, String nextCursor,
+                               int total, String lastScanned) {
+    }
+
+    /** One coordinate's maintainer health: the overall score and its three components ({@code -1} when unknown). */
+    public record HealthEntry(String ecosystem, String coordinate, String sourceRepository, double overall,
+                              double maintenance, double review, double provenance, String scannedAt) {
+    }
+
     public boolean retryForwarding(String repo, String path) throws IOException, InterruptedException {
         HttpResponse<String> response = send("POST", "/api/forwarding/retry?repo=" + enc(repo),
                 body(Map.of("path", path)), "application/json");
@@ -1029,6 +1069,36 @@ public final class RepositoryClient {
         return response.body();
     }
 
+    /** The deployment's tenants - an operator key's view, which is the only one allowed to ask. */
+    public List<String> tenants() throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/admin/tenants", null, null);
+        require(response, 200, "list tenants");
+        return JSON.readValue(response.body(), TenantList.class).tenants();
+    }
+
+    /** Create a tenant: {@code true} when this call created it, {@code false} when it already existed. */
+    public boolean createTenant(String name) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("PUT", "/api/admin/tenants/" + name, null, null);
+        if (response.statusCode() == 409) {
+            return false;
+        }
+        require(response, 201, "create tenant " + name);
+        return true;
+    }
+
+    /** Delete a tenant and everything it owns. */
+    public void deleteTenant(String name) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("DELETE", "/api/admin/tenants/" + name, null, null);
+        if (response.statusCode() == 404) {
+            throw new IOException(response.body());
+        }
+        require(response, 200, "delete tenant " + name);
+    }
+
+    /** The answer {@code GET /api/admin/tenants} gives. */
+    public record TenantList(List<String> tenants) {
+    }
+
     public void setRepository(String name, String specification) throws IOException, InterruptedException {
         require(send("PUT", "/api/repositories/" + name, body(Map.of("value", specification)), "application/json"),
                 200, "set repository " + name);
@@ -1242,8 +1312,15 @@ public final class RepositoryClient {
      * being false means one was already running rather than that anything failed.
      */
     public String evictCache(String name, String pass) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("POST",
-                "/api/cache/projects/" + enc(name) + "/evict/" + enc(pass),
+        // Each pass's path written whole rather than assembled from the pass's name, so the route it reaches is a
+        // constant this client carries - which is what anything reading the compiled client can see it send.
+        String route = switch (pass) {
+            case "size" -> "/evict/size";
+            case "ttl" -> "/evict/ttl";
+            case "clear" -> "/evict/clear";
+            default -> throw new IllegalArgumentException("Unknown pass '" + pass + "': size, ttl or clear");
+        };
+        HttpResponse<String> response = send("POST", "/api/cache/projects/" + enc(name) + route,
                 HttpRequest.BodyPublishers.noBody(), null);
         require(response, 200, "start the build-cache eviction pass");
         return response.body();

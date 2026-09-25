@@ -134,7 +134,10 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         // itself a credential for every other scope.
         // It also takes the manage: rights rather than the repository: ones - issuing a key is administration, and
         // a key that may publish an artifact must not thereby be able to issue more keys.
-        boolean credentials = "/api/credentials".equals(uri) || uri.startsWith("/api/credentials/");
+        // The deployment's tenants are administered the same way: creating or deleting one is administration over
+        // every repository, never a publish right, and the controller further holds it to the operator tenant's keys.
+        boolean credentials = "/api/credentials".equals(uri) || uri.startsWith("/api/credentials/")
+                || "/api/admin/tenants".equals(uri) || uri.startsWith("/api/admin/tenants/");
         if (credentials) {
             scope = "*";
             required = "GET".equals(method) || "HEAD".equals(method)

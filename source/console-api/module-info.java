@@ -14,12 +14,14 @@
  */
 open module build.jenesis.repository.console.api {
     requires build.jenesis.repository.store;
-    exports build.jenesis.repository.console.api to build.jenesis.repository.server.kernel.test;
+    exports build.jenesis.repository.console.api to build.jenesis.repository.server.kernel.test,
+            build.jenesis.repository.ui.admin.test;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.ui.store;
     requires build.jenesis.repository.ui;
+    requires build.jenesis.repository.scope;
     requires jakarta.servlet;
     requires spring.beans;
     requires spring.context;
