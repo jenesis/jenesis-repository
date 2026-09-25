@@ -228,6 +228,31 @@ public interface BlobLayout extends BlobRoots {
         return described.filter(artifact -> artifact.coordinate() != null && artifact.version() != null);
     }
 
+    /**
+     * {@link #served(RepositoryFormat, String)}, falling back - when the claiming format has no layout of its own -
+     * to a capability-only blobs-namespace layout among {@code installed} that describes the path in its own
+     * ecosystem. That is the OCI shape: the registry format serves the path, and a separate inventory layout of the
+     * same ecosystem is what names the image and tag, exactly as the inventory's own publish recording resolves it.
+     */
+    static Optional<ArtifactDescriptor> served(RepositoryFormat claiming, String path,
+                                               List<RepositoryFormat> installed) {
+        Optional<ArtifactDescriptor> described = served(claiming, path);
+        if (described.isPresent()) {
+            return described;
+        }
+        for (RepositoryFormat format : installed) {
+            if (format != claiming && format instanceof BlobLayout layout) {
+                Optional<ArtifactDescriptor> fallback = layout.describe(path)
+                        .filter(artifact -> layout.ecosystem().equals(artifact.ecosystem()))
+                        .filter(artifact -> artifact.coordinate() != null && artifact.version() != null);
+                if (fallback.isPresent()) {
+                    return fallback;
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     /** The served request paths one coordinate version currently occupies in this format's blobs namespace - the
      *  inverse of {@link #describe}, so a retroactive hold can retract a whole blobs-namespace release from serving
      *  (a {@code /quarantine<servedPath>} review handle per path) exactly as {@code ArtifactLayout.paths} does for a
