@@ -30,7 +30,9 @@ final class PublicationHookFixtures {
         List<PublicationHookFixture> fixtures = new ArrayList<>(List.of(
                 new IndexObserverFixture(), new FeedSplittingObserverFixture(), new OutboxObserverFixture(),
                 new RecordingScreenFixture(), new WithholdingScreenFixture(), new AuditingScreenFixture(),
-                new OverrideHookFixture()));
+                new OverrideHookFixture(),
+                // The core's own hooks beyond the formats' listing observers.
+                new SubtreeSizeObserverFixture(), new IndexPublicationObserverFixture()));
         for (String observer : LISTING_OBSERVERS) {
             String format = observer.substring(0, observer.indexOf('.'));
             fixtures.add(new ListingObserverFixture(format + "-listing",

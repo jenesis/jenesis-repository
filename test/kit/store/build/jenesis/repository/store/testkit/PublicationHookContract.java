@@ -79,7 +79,7 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
 public final class PublicationHookContract {
 
     /** The body every check publishes. Small, and the same for every check so a hash is stable across a replay. */
-    static final String BODY = "the-artifact-body";
+    public static final String BODY = "the-artifact-body";
 
     /**
      * One documented clause, keyed to the role whose contract states it. The enum is the kit's vocabulary: a fixture

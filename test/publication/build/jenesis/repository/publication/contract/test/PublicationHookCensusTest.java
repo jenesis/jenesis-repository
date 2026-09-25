@@ -65,8 +65,6 @@ class PublicationHookCensusTest {
                     "build.jenesis.repository.gate.store.ComplianceScreen",
                     "build.jenesis.repository.gate.store.OciHoldRecorder",
                     "build.jenesis.repository.index.IndexRetractionObserver",
-                    "build.jenesis.repository.index.IndexPublicationObserver",
-                    "build.jenesis.repository.inventory.SubtreeSizePublicationObserver",
                     "build.jenesis.repository.staging.store.StagingWithholdInterceptor")
             .map(hook -> new Exemption(hook, "no fixture yet: a core hook the census's graph did not carry until "
                     + "2026-09-25; the worklist carries its fixture"))
