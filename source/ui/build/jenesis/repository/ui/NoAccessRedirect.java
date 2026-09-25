@@ -45,7 +45,7 @@ public class NoAccessRedirect implements AccessDeniedHandler {
         // somebody the floor had already admitted - which is what an administrator refused ONE screen above their
         // grade would then be told.
         if (!ConsoleAccessRule.holds(access, authentication)) {
-            response.sendRedirect(request.getContextPath() + "/no-access");
+            response.sendRedirect(request.getContextPath() + "/ui/no-access");
             return;
         }
         refused.handle(request, response, denied);

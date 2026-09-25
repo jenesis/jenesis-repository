@@ -24,27 +24,27 @@ public class ProjectsController {
         this.service = service;
     }
 
-    @GetMapping("/projects")
+    @GetMapping("/ui/projects")
     public String list(Model model) throws IOException {
         model.addAttribute("projects", service.listProjects());
         return "projects";
     }
 
-    @PostMapping("/projects")
+    @PostMapping("/ui/projects")
     public String create(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
         service.createProject(name);
         redirect.addFlashAttribute("message",
                 "Created project '" + name + "'. Grant access by adding it to a credential.");
-        return "redirect:/projects/" + name;
+        return "redirect:/ui/projects/" + name;
     }
 
-    @GetMapping("/projects/{name}")
+    @GetMapping("/ui/projects/{name}")
     public String detail(@PathVariable("name") String name, Model model) throws IOException {
         model.addAttribute("project", service.project(name));
         return "project";
     }
 
-    @PostMapping("/projects/{name}/cache")
+    @PostMapping("/ui/projects/{name}/cache")
     public String saveCache(@PathVariable("name") String name,
                             @RequestParam(name = "size", required = false) String size,
                             @RequestParam(name = "lru", required = false) String lru,
@@ -52,6 +52,6 @@ public class ProjectsController {
                             RedirectAttributes redirect) throws IOException {
         service.saveCacheConfig(name, size, lru, ttl);
         redirect.addFlashAttribute("message", "Saved cache settings for '" + name + "'.");
-        return "redirect:/projects/" + name;
+        return "redirect:/ui/projects/" + name;
     }
 }

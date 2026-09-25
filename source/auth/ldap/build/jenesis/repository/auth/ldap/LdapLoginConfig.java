@@ -66,15 +66,15 @@ public class LdapLoginConfig {
         return http -> {
             UsernamePasswordAuthenticationFilter filter = new UsernamePasswordAuthenticationFilter(manager);
             filter.setRequiresAuthenticationRequestMatcher(
-                    PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/ldap"));
+                    PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/ui/login/ldap"));
             filter.setUsernameParameter("username");
             filter.setPasswordParameter("password");
             filter.setSecurityContextRepository(new HttpSessionSecurityContextRepository());
             SavedRequestAwareAuthenticationSuccessHandler success = new SavedRequestAwareAuthenticationSuccessHandler();
-            success.setDefaultTargetUrl("/console");
+            success.setDefaultTargetUrl("/ui/");
             success.setAlwaysUseDefaultTargetUrl(true);
             filter.setAuthenticationSuccessHandler(success);
-            filter.setAuthenticationFailureHandler(new SimpleUrlAuthenticationFailureHandler("/login/ldap?error"));
+            filter.setAuthenticationFailureHandler(new SimpleUrlAuthenticationFailureHandler("/ui/login/ldap?error"));
             http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class);
         };
     }
@@ -83,7 +83,7 @@ public class LdapLoginConfig {
     @Bean
     public LoginOptions ldapLoginOptions(LdapProperties properties) {
         return () -> List.of(new LoginOptions.LoginOption(LdapLoginMechanism.NAME, properties.getName().trim(),
-                "/login/ldap", Optional.empty()));
+                "/ui/login/ldap", Optional.empty()));
     }
 
     @Bean

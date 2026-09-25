@@ -69,7 +69,7 @@ public class RepositoryAdminController {
         this.marks = marks;
     }
 
-    @GetMapping("/repositories")
+    @GetMapping("/ui/repositories")
     public String list(Model model) throws IOException {
         List<RepositoryRow> rows = new ArrayList<>();
         List<RepositoryWarning> warnings = new ArrayList<>();
@@ -146,7 +146,7 @@ public class RepositoryAdminController {
 
     /** Create a repository to hold one type - the only way a repository comes into being - give one that holds content
      *  but no format the type it holds, or move one to a type that holds everything its old one did. */
-    @PostMapping("/repositories/create")
+    @PostMapping("/ui/repositories/create")
     public String create(@RequestParam("name") String name, @RequestParam("format") String format,
                          RedirectAttributes redirect) throws IOException {
         String repository = name.trim();
@@ -155,7 +155,7 @@ public class RepositoryAdminController {
             creation = lifecycle.create(repository, format);
         } catch (IllegalArgumentException refused) {
             redirect.addFlashAttribute("error", refused.getMessage());
-            return "redirect:/repositories";
+            return "redirect:/ui/repositories";
         }
         switch (creation) {
             case CREATED -> redirect.addFlashAttribute("message",
@@ -167,10 +167,10 @@ public class RepositoryAdminController {
             case CONFLICT -> {
                 redirect.addFlashAttribute("error", "Repository '" + repository + "' holds a type " + format
                         + " does not hold everything of, so what is stored there would stop answering.");
-                return "redirect:/repositories";
+                return "redirect:/ui/repositories";
             }
         }
-        return "redirect:/repositories/" + repository;
+        return "redirect:/ui/repositories/" + repository;
     }
 
     /** The types a repository can be created as - a format, or a combined type of several. */
@@ -178,21 +178,21 @@ public class RepositoryAdminController {
         return RepositoryType.offerable();
     }
 
-    @PostMapping("/repositories/quota")
+    @PostMapping("/ui/repositories/quota")
     public String setQuota(@RequestParam(name = "maxBytes", defaultValue = "0") long maxBytes,
                            RedirectAttributes redirect) throws IOException {
         limits.setQuota(maxBytes);
         redirect.addFlashAttribute("message", maxBytes > 0 ? "Storage quota updated." : "Storage quota cleared.");
-        return "redirect:/repositories";
+        return "redirect:/ui/repositories";
     }
 
-    @PostMapping("/repositories/rate-limit")
+    @PostMapping("/ui/repositories/rate-limit")
     public String setRateLimit(@RequestParam(name = "permitsPerMinute", defaultValue = "0") long permitsPerMinute,
                                RedirectAttributes redirect) throws IOException {
         limits.setRateLimit(permitsPerMinute);
         redirect.addFlashAttribute("message",
                 permitsPerMinute > 0 ? "Rate limit updated." : "Rate limit cleared.");
-        return "redirect:/repositories";
+        return "redirect:/ui/repositories";
     }
 
     /**
@@ -216,7 +216,7 @@ public class RepositoryAdminController {
         }
     }
 
-    @GetMapping("/repositories/{repo}")
+    @GetMapping("/ui/repositories/{repo}")
     public String detail(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);
         RepositoryAdmin.Releases releases = repositories.recentReleases(repo, DETAIL_RELEASES);
@@ -241,7 +241,7 @@ public class RepositoryAdminController {
     }
 
     /** The repository's staging ids, a bounded window of them, each promoted or dropped from here. */
-    @GetMapping("/repositories/{repo}/staging")
+    @GetMapping("/ui/repositories/{repo}/staging")
     public String staging(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);
         RepositoryLifecycle.StagingWindow staging = lifecycle.stagingWindow(repo, HUB_WINDOW);
@@ -253,7 +253,7 @@ public class RepositoryAdminController {
     }
 
     /** The versions pinned against eviction, and the form that pins another. */
-    @GetMapping("/repositories/{repo}/pins")
+    @GetMapping("/ui/repositories/{repo}/pins")
     public String pins(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);
         model.addAttribute("pins", lifecycle.pins(repo));
@@ -262,7 +262,7 @@ public class RepositoryAdminController {
     }
 
     /** The retention policy, and the cleanup it drives: both stored results, the last preview and the last sweep. */
-    @GetMapping("/repositories/{repo}/retention")
+    @GetMapping("/ui/repositories/{repo}/retention")
     public String retention(@PathVariable("repo") String repo, Model model) throws IOException {
         RetentionPolicy policy = lifecycle.retention(repo);
         model.addAttribute("repo", repo);
@@ -274,7 +274,7 @@ public class RepositoryAdminController {
         return "repository-retention";
     }
 
-    @GetMapping("/repositories/{repo}/browse")
+    @GetMapping("/ui/repositories/{repo}/browse")
     public String browse(@PathVariable("repo") String repo,
                          @RequestParam(name = "prefix", defaultValue = "") String prefix,
                          @RequestParam(name = "q", defaultValue = "") String query,
@@ -320,7 +320,7 @@ public class RepositoryAdminController {
      *  sort so an expanded folder's children keep the order the level above them chose, and the page's own prefix
      *  ({@code base}) so an injected row indents one step per level below the page - children read as nested under
      *  their folder, not as flat siblings. */
-    @GetMapping("/repositories/{repo}/browse/children")
+    @GetMapping("/ui/repositories/{repo}/browse/children")
     public String browseChildren(@PathVariable("repo") String repo,
                                  @RequestParam(name = "prefix", defaultValue = "") String prefix,
                                  @RequestParam(name = "base", defaultValue = "") String base,
@@ -355,13 +355,13 @@ public class RepositoryAdminController {
         List<BrowseRow> rows = new ArrayList<>();
         for (RepositoryBrowse.BrowseEntry entry : entries) {
             String href = entry.folder()
-                    ? UriComponentsBuilder.fromPath("/repositories/{repo}/browse")
+                    ? UriComponentsBuilder.fromPath("/ui/repositories/{repo}/browse")
                             .queryParam("prefix", entry.path()).queryParam("sort", sort).queryParam("dir", dir)
                             .buildAndExpand(repo).toUriString()
-                    : UriComponentsBuilder.fromPath("/repositories/{repo}/artifact")
+                    : UriComponentsBuilder.fromPath("/ui/repositories/{repo}/artifact")
                             .queryParam("path", entry.path()).buildAndExpand(repo).toUriString();
             String children = entry.folder()
-                    ? UriComponentsBuilder.fromPath("/repositories/{repo}/browse/children")
+                    ? UriComponentsBuilder.fromPath("/ui/repositories/{repo}/browse/children")
                             .queryParam("prefix", entry.path()).queryParam("base", base)
                             .queryParam("sort", sort).queryParam("dir", dir)
                             .buildAndExpand(repo).toUriString()
@@ -380,7 +380,7 @@ public class RepositoryAdminController {
     /** The detail of one published artifact: its content-addressed checksum, size, the coordinate/version the owning
      *  format describes for the path, the other versions of that coordinate, any compliance-gate verdict, and a link
      *  to its provenance attestation - all from small objects, never the artifact body. Reached from a browse leaf. */
-    @GetMapping("/repositories/{repo}/coordinate")
+    @GetMapping("/ui/repositories/{repo}/coordinate")
     public String coordinate(@PathVariable("repo") String repo,
                              @RequestParam("ecosystem") String ecosystem,
                              @RequestParam("coordinate") String coordinate,
@@ -429,13 +429,15 @@ public class RepositoryAdminController {
         return count + " " + unit + (count == 1 ? "" : "s");
     }
 
-    @GetMapping("/repositories/{repo}/artifact")
+    @GetMapping("/ui/repositories/{repo}/artifact")
     public String artifact(@PathVariable("repo") String repo,
                            @RequestParam(name = "path", defaultValue = "") String path,
                            Model model) throws IOException {
         RepositoryBrowse.ArtifactDetail detail = browse.artifact(repo, path);
         model.addAttribute("repo", repo);
         model.addAttribute("detail", detail);
+        // The API names an artifact by the path a client uses within the repository, so its links do too.
+        model.addAttribute("servedPath", repositories.servedPath(repo, detail.path()));
         // The origin acquisition rows (item 3, over the earlier OriginSection): where this deployment's bytes came
         // from - uploaded vs via which fallback, stored/passed-through, screening, serves. A neutral display the gate
         // does not consume; empty when the coordinate carries no recorded origin (or no metadata module is installed).
@@ -455,7 +457,7 @@ public class RepositoryAdminController {
      * tenant, by SecurityConfig - operator/admin-appropriate for this neutral, gate-neutral display); a caller who
      * cannot read the repository never reaches it. Empty when the path carries no recorded origin.
      */
-    @GetMapping("/repositories/{repo}/artifact/origin")
+    @GetMapping("/ui/repositories/{repo}/artifact/origin")
     @ResponseBody
     public List<RepositoryBrowse.OriginRow> artifactOrigin(@PathVariable("repo") String repo,
                                                            @RequestParam(name = "path", defaultValue = "") String path)
@@ -469,7 +471,7 @@ public class RepositoryAdminController {
 
 
 
-    @GetMapping("/repositories/{repo}/import")
+    @GetMapping("/ui/repositories/{repo}/import")
     public String imports(@PathVariable("repo") String repo,
                           @RequestParam(name = "after", defaultValue = "") String after, Model model)
             throws IOException {
@@ -484,7 +486,7 @@ public class RepositoryAdminController {
         return "import";
     }
 
-    @PostMapping("/repositories/{repo}/import")
+    @PostMapping("/ui/repositories/{repo}/import")
     public String startImport(@PathVariable("repo") String repo,
                               @RequestParam(name = "source", defaultValue = "") String source,
                               @RequestParam(name = "url", defaultValue = "") String url,
@@ -501,27 +503,27 @@ public class RepositoryAdminController {
                     password.isBlank() ? null : password, resume.isBlank() ? null : resume);
         } catch (IllegalArgumentException refused) {
             redirect.addFlashAttribute("error", refused.getMessage());
-            return "redirect:/repositories/" + repo + "/import";
+            return "redirect:/ui/repositories/" + repo + "/import";
         }
         redirect.addFlashAttribute("message",
                 (resume.isBlank() ? "Started migration " : "Resumed migration ") + job + ".");
-        return "redirect:/repositories/" + repo + "/import";
+        return "redirect:/ui/repositories/" + repo + "/import";
     }
 
-    @PostMapping("/repositories/{repo}/import/{job}/dismiss")
+    @PostMapping("/ui/repositories/{repo}/import/{job}/dismiss")
     public String dismissImport(@PathVariable("repo") String repo, @PathVariable("job") String job,
                                 RedirectAttributes redirect) throws IOException {
         boolean dismissed = migrations.dismiss(repo, job);
         redirect.addFlashAttribute("message", dismissed
                 ? "Dismissed migration " + job + "."
                 : "Migration " + job + " is still running and was left in place.");
-        return "redirect:/repositories/" + repo + "/import";
+        return "redirect:/ui/repositories/" + repo + "/import";
     }
 
     /** Forget one unplaceable ecosystem's records - the hub's explicit retirement of an absent format's data. The
      *  primitive refuses while an installed format still places the ecosystem, so the button can never retire live
      *  records; the flash line carries the refusal instead. */
-    @PostMapping("/repositories/{repo}/forget-ecosystem")
+    @PostMapping("/ui/repositories/{repo}/forget-ecosystem")
     public String forgetEcosystem(@PathVariable("repo") String repo,
                                   @RequestParam("ecosystem") String ecosystem,
                                   RedirectAttributes redirect) throws IOException {
@@ -535,10 +537,10 @@ public class RepositoryAdminController {
         } catch (IllegalStateException stillPlaced) {
             redirect.addFlashAttribute("message", stillPlaced.getMessage());
         }
-        return "redirect:/repositories/" + repo;
+        return "redirect:/ui/repositories/" + repo;
     }
 
-    @PostMapping("/repositories/{repo}/retention")
+    @PostMapping("/ui/repositories/{repo}/retention")
     public String setRetention(@PathVariable("repo") String repo,
                                @RequestParam(name = "keepLast", defaultValue = "0") int keepLast,
                                @RequestParam(name = "maxAge", defaultValue = "") String maxAge,
@@ -547,10 +549,10 @@ public class RepositoryAdminController {
                                RedirectAttributes redirect) throws IOException {
         lifecycle.setRetention(repo, RetentionPolicy.parse(keepLast, maxAge, prereleaseExpiry, notDownloadedFor));
         redirect.addFlashAttribute("message", "Retention updated.");
-        return "redirect:/repositories/" + repo + "/retention";
+        return "redirect:/ui/repositories/" + repo + "/retention";
     }
 
-    @PostMapping("/repositories/{repo}/pins")
+    @PostMapping("/ui/repositories/{repo}/pins")
     public String pin(@PathVariable("repo") String repo,
                       @RequestParam("ecosystem") String ecosystem,
                       @RequestParam("coordinate") String coordinate,
@@ -558,10 +560,10 @@ public class RepositoryAdminController {
                       RedirectAttributes redirect) throws IOException {
         lifecycle.pin(repo, ecosystem, coordinate, version);
         redirect.addFlashAttribute("message", "Pinned " + coordinate + ":" + version + ".");
-        return "redirect:/repositories/" + repo + "/pins";
+        return "redirect:/ui/repositories/" + repo + "/pins";
     }
 
-    @PostMapping("/repositories/{repo}/pins/remove")
+    @PostMapping("/ui/repositories/{repo}/pins/remove")
     public String unpin(@PathVariable("repo") String repo,
                         @RequestParam("ecosystem") String ecosystem,
                         @RequestParam("coordinate") String coordinate,
@@ -569,40 +571,40 @@ public class RepositoryAdminController {
                         RedirectAttributes redirect) throws IOException {
         lifecycle.unpin(repo, ecosystem, coordinate, version);
         redirect.addFlashAttribute("message", "Unpinned " + coordinate + ":" + version + ".");
-        return "redirect:/repositories/" + repo + "/pins";
+        return "redirect:/ui/repositories/" + repo + "/pins";
     }
 
-    @PostMapping("/repositories/{repo}/staging/{id}/promote")
+    @PostMapping("/ui/repositories/{repo}/staging/{id}/promote")
     public String promote(@PathVariable("repo") String repo, @PathVariable("id") String id,
                           RedirectAttributes redirect) throws IOException {
         lifecycle.promote(repo, id);
         redirect.addFlashAttribute("message", "Promoted staging " + id + ".");
-        return "redirect:/repositories/" + repo + "/staging";
+        return "redirect:/ui/repositories/" + repo + "/staging";
     }
 
-    @PostMapping("/repositories/{repo}/staging/{id}/drop")
+    @PostMapping("/ui/repositories/{repo}/staging/{id}/drop")
     public String drop(@PathVariable("repo") String repo, @PathVariable("id") String id,
                        RedirectAttributes redirect) throws IOException {
         lifecycle.drop(repo, id);
         redirect.addFlashAttribute("message", "Dropped staging " + id + ".");
-        return "redirect:/repositories/" + repo + "/staging";
+        return "redirect:/ui/repositories/" + repo + "/staging";
     }
 
-    @PostMapping("/repositories/{repo}/cleanup")
+    @PostMapping("/ui/repositories/{repo}/cleanup")
     public String cleanup(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
         // The sweep walks every release, so the request starts it and returns; the hub shows the stored result.
         redirect.addFlashAttribute("message", lifecycle.cleanup(repo)
                 ? "Cleanup started; its result appears under Cleanup when it finishes."
                 : "A cleanup is already running; its result appears under Cleanup when it finishes.");
-        return "redirect:/repositories/" + repo + "/retention";
+        return "redirect:/ui/repositories/" + repo + "/retention";
     }
 
-    @PostMapping("/repositories/{repo}/cleanup/preview")
+    @PostMapping("/ui/repositories/{repo}/cleanup/preview")
     public String previewCleanup(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
         redirect.addFlashAttribute("message", lifecycle.previewCleanup(repo)
                 ? "Cleanup preview started; it appears under Cleanup when it finishes."
                 : "A cleanup preview is already running.");
-        return "redirect:/repositories/" + repo + "/retention";
+        return "redirect:/ui/repositories/" + repo + "/retention";
     }
 
 

@@ -92,6 +92,12 @@ public class RepositoryAdmin extends TenantScope {
         return Optional.of(new Identity(format.get(), root + "/" + tenant() + "/" + repository + "/"));
     }
 
+    /** The path a client names within {@code repository} for a path its format lays out - the path the API takes. */
+    public String servedPath(String repository, String formatPath) throws IOException {
+        return format(repository).flatMap(RepositoryType::installed).map(type -> type.servedPath(formatPath))
+                .orElse(formatPath);
+    }
+
     /** The format a repository holds and the URL a client reaches it at. */
     public record Identity(String format, String url) {
     }

@@ -50,12 +50,12 @@
                     <td><small th:text="${#strings.listJoin(q.reasons, '; ')}">reason</small></td>
                     <td th:if="${isEditor}">
                         <form method="post" style="display:inline; margin:0"
-                              th:action="@{'/repositories/' + ${repo} + '/quarantine/release'}">
+                              th:action="@{'/ui/repositories/' + ${repo} + '/quarantine/release'}">
                             <input type="hidden" name="path" th:value="${q.path}">
                             <button type="submit">release</button>
                         </form>
                         <form method="post" style="display:inline; margin:0" class="app-actions__danger"
-                              th:action="@{'/repositories/' + ${repo} + '/quarantine/discard'}">
+                              th:action="@{'/ui/repositories/' + ${repo} + '/quarantine/discard'}">
                             <input type="hidden" name="path" th:value="${q.path}">
                             <button th:replace="~{base :: dangerButton('discard', 'Discard this held artifact? Its bytes are dropped and it cannot be released afterwards.')}">discard</button>
                         </form>
@@ -65,7 +65,7 @@
             </table>
         </figure>
         <p th:if="${next != null}"><small>
-            <a th:href="@{/repositories/{repo}/quarantine(repo=${repo},after=${next})}">Next page &rarr;</a></small></p>
+            <a th:href="@{/ui/repositories/{repo}/quarantine(repo=${repo},after=${next})}">Next page &rarr;</a></small></p>
         <th:block th:if="${quarantine.isEmpty()}">
             <div th:replace="~{base :: empty('Nothing in quarantine.')}"></div>
         </th:block>

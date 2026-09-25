@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class DevLoginController {
 
-    @GetMapping("/login/dev")
+    @GetMapping("/ui/login/dev")
     public String form() {
         return "console/dev-login";
     }

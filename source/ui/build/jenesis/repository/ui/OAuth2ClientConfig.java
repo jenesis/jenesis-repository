@@ -70,11 +70,11 @@ public class OAuth2ClientConfig {
     @Conditional(AnyProviderConfigured.class)
     public LoginContributor oauth2LoginContributor(OAuth2PrincipalService oauth2Users, OidcPrincipalService oidcUsers) {
         return http -> http.oauth2Login(oauth -> oauth
-                .loginPage("/login")
+                .loginPage("/ui/login")
                 .userInfoEndpoint(userInfo -> userInfo
                         .userService(oauth2Users)
                         .oidcUserService(oidcUsers))
-                .defaultSuccessUrl("/console", true));
+                .defaultSuccessUrl("/ui/", true));
     }
 
     @Bean

@@ -17,14 +17,14 @@
             recorded against this repository's artifacts, attributed to the module or feed that produced each row.
             A superseded finding stays listed with its mark - categorized, never discarded. An AI-produced row is
             a candidate for human review, never an authoritative verdict: confirm or dismiss it here - the
-            <a th:href="@{'/repositories/' + ${repo} + '/findings'(kind='ai-candidate')}">AI review queue</a>
+            <a th:href="@{'/ui/repositories/' + ${repo} + '/findings'(kind='ai-candidate')}">AI review queue</a>
             lists the code-audit candidates awaiting that decision.</small></p>
         <p><small th:if="${panel.lastScanned() != null}">Last scanned against the advisory feeds:
             <span th:text="${panel.lastScanned()}">-</span></small>
             <small th:if="${panel.lastScanned() == null}">Never scanned against the advisory feeds - rows shown come
             from publish-time screening and reviews only.</small></p>
 
-        <form method="get" th:action="@{'/repositories/' + ${repo} + '/findings'}">
+        <form method="get" th:action="@{'/ui/repositories/' + ${repo} + '/findings'}">
             <div class="grid">
                 <label>Coordinate
                     <input type="text" name="coordinate" th:value="${coordinate}"
@@ -130,7 +130,7 @@
                                   class="app-badge app-badge--muted">dismissed</span>
                             <span th:if="${row.review() == ''}" class="app-badge app-badge--warn">pending</span>
                             <form method="post" style="display:inline"
-                                  th:action="@{'/repositories/' + ${repo} + '/findings/review'}">
+                                  th:action="@{'/ui/repositories/' + ${repo} + '/findings/review'}">
                                 <input type="hidden" name="ecosystem" th:value="${row.ecosystem()}">
                                 <input type="hidden" name="coordinate" th:value="${row.bareCoordinate()}">
                                 <input type="hidden" name="version" th:value="${row.version()}">

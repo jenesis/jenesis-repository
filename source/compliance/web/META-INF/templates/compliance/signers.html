@@ -27,7 +27,7 @@
                 </thead>
                 <tbody>
                 <tr th:each="s : ${signers}">
-                    <td><a th:href="@{/repositories/{repo}/signers/signed(repo=${repo},signer=${s.signer})}"
+                    <td><a th:href="@{/ui/repositories/{repo}/signers/signed(repo=${repo},signer=${s.signer})}"
                            th:text="${s.abbreviated}">signer</a></td>
                     <td><small><code th:text="${s.signer}">identity</code></small></td>
                     <td><small th:if="${s.issuer != null}" th:text="${s.issuer}">issuer</small>
@@ -37,7 +37,7 @@
             </table>
         </figure>
         <p th:if="${next != null}"><small>
-            <a th:href="@{/repositories/{repo}/signers(repo=${repo},after=${next})}">Next page &rarr;</a></small></p>
+            <a th:href="@{/ui/repositories/{repo}/signers(repo=${repo},after=${next})}">Next page &rarr;</a></small></p>
         <th:block th:if="${signers.isEmpty()}">
             <div th:replace="~{base :: empty('No signed version has been accepted yet.')}"></div>
         </th:block>

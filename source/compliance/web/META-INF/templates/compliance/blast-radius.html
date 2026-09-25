@@ -29,15 +29,15 @@
             what enabling then holds. Nothing here is written; enforcement stays off until you turn it on.
         </p>
         <p>
-            <a th:href="@{/repositories/{repo}/blast-radius(repo=${repo})}" role="button"
+            <a th:href="@{/ui/repositories/{repo}/blast-radius(repo=${repo})}" role="button"
                class="secondary" th:classappend="${unknown} ? 'outline' : ''">Denied only</a>
-            <a th:href="@{/repositories/{repo}/blast-radius(repo=${repo},unknown=true)}" role="button"
+            <a th:href="@{/ui/repositories/{repo}/blast-radius(repo=${repo},unknown=true)}" role="button"
                class="secondary" th:classappend="${unknown} ? '' : 'outline'">Denied + unknown license</a>
         </p>
 
         <!--/* The pass assesses every release, so it runs in the background and this screen reads what the last pass
                found: when it finished, how many releases it would hold, and the first rows of them. */-->
-        <form th:if="${isEditor}" method="post" th:action="@{'/repositories/' + ${repo} + '/blast-radius'}">
+        <form th:if="${isEditor}" method="post" th:action="@{'/ui/repositories/' + ${repo} + '/blast-radius'}">
             <input type="hidden" name="unknown" th:value="${unknown}">
             <button type="submit" th:disabled="${blast.running()}">Recompute</button>
         </form>

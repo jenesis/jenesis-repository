@@ -33,7 +33,7 @@ class LoginControllerTest {
                 // A second mechanism, and deliberately not an OAuth2 one: the page flattens what the mechanisms
                 // offer rather than asking one framework what it knows about.
                 mechanism(option("saml", "Single sign-on", "/saml2/authenticate/idp"),
-                        option("key", "An access key", "/login/key"))));
+                        option("key", "An access key", "/ui/login/key"))));
 
         Model model = new ConcurrentModel();
         String view = controller.login(anonymous(), model);
@@ -46,7 +46,7 @@ class LoginControllerTest {
                 .containsExactly("GitHub", "Single sign-on", "An access key");
         assertThat(options).extracting(LoginController.Choice::href)
                 .as("a mechanism owns its own URL space, so the page links where it says rather than deriving it")
-                .containsExactly("/oauth2/authorization/github", "/saml2/authenticate/idp", "/login/key");
+                .containsExactly("/oauth2/authorization/github", "/saml2/authenticate/idp", "/ui/login/key");
     }
 
     @Test
@@ -129,7 +129,7 @@ class LoginControllerTest {
         Authentication authenticated = new UsernamePasswordAuthenticationToken(
                 "alice", "n/a", AuthorityUtils.createAuthorityList("ROLE_USER"));
 
-        assertThat(controller.login(authenticated, new ConcurrentModel())).isEqualTo("redirect:/console");
+        assertThat(controller.login(authenticated, new ConcurrentModel())).isEqualTo("redirect:/ui/");
     }
 
     private static Authentication anonymous() {

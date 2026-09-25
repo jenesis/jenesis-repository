@@ -10,7 +10,7 @@
         <strong th:text="${tenant}">tenant</strong> — the gate policy, deny list and forward targets a tenant may
         retune for its own artifact space. The same store of truth the deployment settings and
         <code>/api/settings?tenant=</code> drive; the deployment-wide dials are managed on the
-        <a th:href="@{/settings}">Settings</a> screen and are not shown here. Each knob's <strong>effective</strong>
+        <a th:href="@{/ui/settings}">Settings</a> screen and are not shown here. Each knob's <strong>effective</strong>
         value follows <em>tenant override, then the deployment value, then the default</em>; a blank value clears the
         tenant override and falls back to the <strong>deployment</strong> value.</small></p>
 
@@ -44,7 +44,7 @@
                           th:text="|🔒 pinned by ${s.pinnedBy}|">🔒 pinned</span>
                     <span class="app-badge app-badge--danger" th:if="${s.highImpact}"
                           title="A change here can start rejecting or admitting packages.">high-impact</span>
-                    <form method="post" th:action="@{/settings/tenant/save}" class="setting-revert"
+                    <form method="post" th:action="@{/ui/settings/tenant/save}" class="setting-revert"
                           th:if="${s.overridden and !s.pinned}"
                           th:attr="data-confirm=${s.highImpact} ? 'Revert this high-impact policy knob to the deployment value?' : null">
                         <input type="hidden" name="key" th:value="${s.key}">
@@ -58,7 +58,7 @@
                 <span>effective: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
                 <span>deployment: <span th:text="${s.defaultDisplay()}">deployment value</span></span>
             </p>
-            <form method="post" th:action="@{/settings/tenant/save}" class="setting-edit" th:unless="${s.pinned}"
+            <form method="post" th:action="@{/ui/settings/tenant/save}" class="setting-edit" th:unless="${s.pinned}"
                   th:attr="data-confirm=${s.highImpact} ? 'Apply this high-impact policy change for this tenant?' : null">
                 <input type="hidden" name="key" th:value="${s.key}">
                 <select name="value" th:if="${s.dropdown()}" th:attr="aria-label=${s.label}">
@@ -94,7 +94,7 @@
              upload body before a format read it - D-018) nothing parses the body before the CsrfFilter runs, so a
              token hidden in the body would never be seen. The body is read by the product's own bounded multipart
              reader in SettingsController instead. */-->
-        <form method="post" th:action="@{/settings/tenant/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
+        <form method="post" th:action="@{/ui/settings/tenant/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
               onsubmit="return window.confirm('Restore this tenant from this bundle? It replaces the stored overrides for this tenant.');">
             <input type="file" name="bundle" accept="application/json,.json" required>
             <button type="submit">Import tenant bundle</button>

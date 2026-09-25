@@ -15,14 +15,14 @@
     <th:block th:if="${param.error}">
         <p th:replace="~{base :: alert('Sign-in failed: the directory did not accept that name and password.', 'danger')}"></p>
     </th:block>
-    <form method="post" th:action="@{/login/ldap}">
+    <form method="post" th:action="@{/ui/login/ldap}">
         <label for="username">Name</label>
         <input type="text" id="username" name="username" autocomplete="username" autofocus required/>
         <label for="password">Password</label>
         <input type="password" id="password" name="password" autocomplete="current-password" required/>
         <button type="submit">Sign in</button>
     </form>
-    <p class="app-signin__foot"><a th:href="@{/login}">&larr; Back to sign-in options</a></p>
+    <p class="app-signin__foot"><a th:href="@{/ui/login}">&larr; Back to sign-in options</a></p>
 </main>
 </body>
 </html>

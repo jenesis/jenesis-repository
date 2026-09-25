@@ -23,28 +23,28 @@ public class EvictionController {
         this.service = service;
     }
 
-    @PostMapping("/projects/{name}/evict/size")
+    @PostMapping("/ui/projects/{name}/evict/size")
     public String enforceSizeCap(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         flash(redirect, "size-cap sweep", service.enforceSizeCap(name));
-        return "redirect:/projects/" + name;
+        return "redirect:/ui/projects/" + name;
     }
 
-    @PostMapping("/projects/{name}/evict/ttl")
+    @PostMapping("/ui/projects/{name}/evict/ttl")
     public String expireTtl(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         flash(redirect, "stale-entry sweep", service.expireTtl(name));
-        return "redirect:/projects/" + name;
+        return "redirect:/ui/projects/" + name;
     }
 
-    @PostMapping("/projects/{name}/evict/clear")
+    @PostMapping("/ui/projects/{name}/evict/clear")
     public String clear(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         flash(redirect, "clear", service.clearAll(name));
-        return "redirect:/projects/" + name;
+        return "redirect:/ui/projects/" + name;
     }
 
-    @PostMapping("/projects/{name}/recount")
+    @PostMapping("/ui/projects/{name}/recount")
     public String recount(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         flash(redirect, "count", service.recount(name));
-        return "redirect:/projects/" + name;
+        return "redirect:/ui/projects/" + name;
     }
 
     /** Every pass walks the project's entries, so it runs in the background and the page shows its outcome. */

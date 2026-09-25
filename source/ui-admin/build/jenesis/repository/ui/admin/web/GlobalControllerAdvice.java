@@ -209,22 +209,22 @@ public class GlobalControllerAdvice {
         boolean admin = roleAtLeast(authentication, Role.ADMIN);
         boolean superadmin = hasSuperadmin(authentication);
         List<NavEntry> entries = new ArrayList<>();
-        entries.add(new NavEntry("All repositories", "/repositories", Group.REPOSITORIES));
-        entries.add(new NavEntry("Projects", "/projects", Group.BUILD_CACHE));
-        entries.add(new NavEntry("Credentials", "/credentials", Access.ADMIN, Group.ACCESS));
-        entries.add(new NavEntry("Members", "/admin", Access.ADMIN, Group.ACCESS));
-        entries.add(new NavEntry("Audit trail", "/admin/audit", Access.ADMIN, Group.ACCESS, "audit"));
-        entries.add(new NavEntry("Metrics", "/observability", Access.SUPERADMIN, Group.OPERATIONS));
-        entries.add(new NavEntry("Security posture", "/posture", Access.SUPERADMIN, Group.OPERATIONS));
-        entries.add(new NavEntry("Setup", "/setup", Access.SUPERADMIN, Group.SETTINGS));
-        entries.add(new NavEntry("Settings", "/settings", Access.SUPERADMIN, Group.SETTINGS));
-        entries.add(new NavEntry("Tenant settings", "/settings/tenant", Access.SUPERADMIN, Group.SETTINGS));
-        entries.add(new NavEntry("Modules", "/settings/modules", Access.SUPERADMIN, Group.SETTINGS));
-        entries.add(new NavEntry("Installed providers", "/catalog", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("All repositories", "/ui/repositories", Group.REPOSITORIES));
+        entries.add(new NavEntry("Projects", "/ui/projects", Group.BUILD_CACHE));
+        entries.add(new NavEntry("Credentials", "/ui/credentials", Access.ADMIN, Group.ACCESS));
+        entries.add(new NavEntry("Members", "/ui/admin", Access.ADMIN, Group.ACCESS));
+        entries.add(new NavEntry("Audit trail", "/ui/admin/audit", Access.ADMIN, Group.ACCESS, "audit"));
+        entries.add(new NavEntry("Metrics", "/ui/observability", Access.SUPERADMIN, Group.OPERATIONS));
+        entries.add(new NavEntry("Security posture", "/ui/posture", Access.SUPERADMIN, Group.OPERATIONS));
+        entries.add(new NavEntry("Setup", "/ui/setup", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Settings", "/ui/settings", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Tenant settings", "/ui/settings/tenant", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Modules", "/ui/settings/modules", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Installed providers", "/ui/catalog", Access.SUPERADMIN, Group.SETTINGS));
         // Picking a tenant is meaningful only where there is more than one to pick, and the header's tenant name
         // links here too, so a member of several tenants reaches it without the Settings group being theirs.
         if (showInstances(authentication)) {
-            entries.add(new NavEntry("Instances", "/instances", Group.SETTINGS));
+            entries.add(new NavEntry("Instances", "/ui/instances", Group.SETTINGS));
         }
         entries.addAll(capabilities.moduleNav());
         List<RepositoryPage> pages = new ArrayList<>();
@@ -239,7 +239,7 @@ public class GlobalControllerAdvice {
         // Until a tenant is chosen there is nothing tenant-scoped to open: the reader sees what belongs to the
         // deployment, and the tenant's own sections appear once the header's chooser has been used.
         if (current.name() == null) {
-            entries.removeIf(entry -> TENANT_GROUPS.contains(entry.group()) || entry.path().equals("/settings/tenant"));
+            entries.removeIf(entry -> TENANT_GROUPS.contains(entry.group()) || entry.path().equals("/ui/settings/tenant"));
         }
         return ConsoleNavigation.resolve(
                 entries.stream()
@@ -292,17 +292,17 @@ public class GlobalControllerAdvice {
 
     @ExceptionHandler(IllegalStateException.class)
     public String noTenant(HttpServletRequest request, Model model) {
-        // A missing tenant selection normally bounces back through the router at /console. But when the request that
-        // failed IS the console router (or something under it), redirecting there would loop - the router re-throws the
+        // A missing tenant selection normally bounces back through the router at /ui/. But when the request that
+        // failed IS the console router, redirecting there would loop - the router re-throws the
         // same IllegalStateException and we redirect again. On the console path, render the error page instead of
         // redirecting into that loop.
         String path = request == null ? null : request.getRequestURI();
-        if (path != null && (path.equals("/console") || path.startsWith("/console/"))) {
+        if (path != null && (path.equals("/ui") || path.equals("/ui/"))) {
             model.addAttribute("error", "No tenant could be selected for your account. Contact an administrator to be "
                     + "granted access to a tenant.");
             return "error";
         }
-        return "redirect:/console";
+        return "redirect:/ui/";
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

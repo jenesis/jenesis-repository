@@ -35,7 +35,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class DevConsoleSecurity {
 
     /** Where the dev form is served and where it posts - the same URL, as Spring Security's form login expects. */
-    public static final String PATH = "/login/dev";
+    public static final String PATH = "/ui/login/dev";
 
     /** The dev chain, scoped and authorized by the edition's policy and identical in every other respect. */
     @Bean
@@ -47,11 +47,11 @@ public class DevConsoleSecurity {
                 .formLogin(form -> form
                         .loginPage(PATH)
                         .loginProcessingUrl(PATH)
-                        .defaultSuccessUrl("/console", true)
+                        .defaultSuccessUrl("/ui/", true)
                         .failureUrl(PATH + "?error")
                         .permitAll())
                 .httpBasic(Customizer.withDefaults())
-                .logout(logout -> logout.logoutSuccessUrl("/login?logout").permitAll())
+                .logout(logout -> logout.logoutUrl("/ui/logout").logoutSuccessUrl("/ui/login?logout").permitAll())
                 .build();
     }
 

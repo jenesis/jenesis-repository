@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class NoAccessController {
 
-    @GetMapping("/no-access")
+    @GetMapping("/ui/no-access")
     public String noAccess(Authentication authentication, Model model) {
         model.addAttribute("qualifiedId", authentication == null ? "" : authentication.getName());
         return "console/no-access";

@@ -29,10 +29,10 @@ public class LoginController {
         this.mechanisms = mechanisms;
     }
 
-    @GetMapping("/login")
+    @GetMapping("/ui/login")
     public String login(Authentication authentication, Model model) {
         if (authenticated(authentication)) {
-            return "redirect:/console";
+            return "redirect:/ui/";
         }
         List<Choice> options = new ArrayList<>();
         for (LoginOptions mechanism : mechanisms) {

@@ -7,7 +7,7 @@
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Administration')}"></header>
     <p>Console members of tenant <strong th:text="${tenant}">default</strong>.
-        <a href="/projects">&larr; Projects</a></p>
+        <a href="/ui/projects">&larr; Projects</a></p>
 
     <article>
         <h2>Console members</h2>
@@ -29,7 +29,7 @@
                     <td th:text="${#strings.isEmpty(u.login)} ? '-' : ${u.login}">-</td>
                     <td th:text="${u.role.label()}">viewer</td>
                     <td th:if="${isAdmin}">
-                        <form method="post" th:action="@{/admin/users/remove}"
+                        <form method="post" th:action="@{/ui/admin/users/remove}"
                               onsubmit="return confirm('Remove this user?');" style="margin:0">
                             <input type="hidden" name="id" th:value="${u.id}">
                             <button class="secondary outline" type="submit">Remove</button>
@@ -40,11 +40,11 @@
             </table>
         </figure>
         <p th:if="${nextCursor != null}"><small>Showing the first <span th:text="${users.size()}">200</span> members;
-            <a th:href="@{/admin(cursor=${nextCursor})}">more</a>.</small></p>
+            <a th:href="@{/ui/admin(cursor=${nextCursor})}">more</a>.</small></p>
         <th:block th:if="${users.isEmpty()}">
             <div th:replace="~{base :: empty('No members yet — an env super-admin (JENREG_UI_ADMINS) can add the first one below.')}"></div>
         </th:block>
-        <form th:if="${isAdmin}" method="post" th:action="@{/admin/users}">
+        <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/users}">
             <div class="grid">
                 <!--/* The suggestion list is what makes this field usable: a provider subject is opaque, and an
                      administrator has no way to learn one except from the person themselves. Every id here is
@@ -97,7 +97,7 @@
                         <span th:if="${g.grants().isEmpty()}"><small>grants nothing</small></span>
                         <span th:each="grant : ${g.grants()}">
                             <code th:text="${grant.key} + ' → ' + ${grant.value}">* → repository:read</code>
-                            <form th:if="${isAdmin}" method="post" th:action="@{/admin/groups/revoke-grant}"
+                            <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/revoke-grant}"
                                   style="display:inline">
                                 <input type="hidden" name="name" th:value="${g.name()}">
                                 <input type="hidden" name="scope" th:value="${grant.key}">
@@ -109,7 +109,7 @@
                         <span th:if="${g.members().isEmpty()}"><small>nobody yet</small></span>
                         <span th:each="member : ${g.members()}">
                             <code th:text="${member}">oidc/ada</code>
-                            <form th:if="${isAdmin}" method="post" th:action="@{/admin/groups/members/remove}"
+                            <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/members/remove}"
                                   style="display:inline">
                                 <input type="hidden" name="name" th:value="${g.name()}">
                                 <input type="hidden" name="id" th:value="${member}">
@@ -121,7 +121,7 @@
                         <small th:if="${g.more()}">and more</small>
                     </td>
                     <td th:if="${isAdmin}">
-                        <form method="post" th:action="@{/admin/groups/remove}">
+                        <form method="post" th:action="@{/ui/admin/groups/remove}">
                             <input type="hidden" name="name" th:value="${g.name()}">
                             <button type="submit" class="secondary">Delete group</button>
                         </form>
@@ -133,7 +133,7 @@
         <th:block th:if="${groups.isEmpty()}">
             <div th:replace="~{base :: empty('No groups yet — grant one below and everyone in it holds those rights.')}"></div>
         </th:block>
-        <form th:if="${isAdmin}" method="post" th:action="@{/admin/groups/grant}">
+        <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/grant}">
             <div class="grid">
                 <label>Group <input name="name" required placeholder="developers"></label>
                 <label>Scope <small>(a repository, or <code>*</code>)</small>
@@ -143,7 +143,7 @@
             </div>
             <button type="submit">Grant to the group</button>
         </form>
-        <form th:if="${isAdmin}" method="post" th:action="@{/admin/groups/members}">
+        <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/members}">
             <div class="grid">
                 <label>Group <input name="name" required placeholder="developers"></label>
                 <label>Provider-qualified id
@@ -163,10 +163,10 @@
             hash is stored. Status:
             <strong th:text="${scimConfigured} ? 'configured' : 'not configured'">not configured</strong>.</small></p>
         <div class="grid">
-            <form method="post" th:action="@{/admin/scim-token}">
+            <form method="post" th:action="@{/ui/admin/scim-token}">
                 <button type="submit" th:text="${scimConfigured} ? 'Regenerate token' : 'Generate token'">Generate token</button>
             </form>
-            <form th:if="${scimConfigured}" method="post" th:action="@{/admin/scim-token/clear}"
+            <form th:if="${scimConfigured}" method="post" th:action="@{/ui/admin/scim-token/clear}"
                   onsubmit="return confirm('Disable SCIM for this tenant?');">
                 <button class="secondary outline" type="submit">Clear token</button>
             </form>
@@ -194,7 +194,7 @@
                 </tbody>
             </table>
         </figure>
-        <form method="post" th:action="@{/admin/caches/clear}"
+        <form method="post" th:action="@{/ui/admin/caches/clear}"
               onsubmit="return confirm('Drop every cached entry on this node?');">
             <button class="secondary outline" type="submit">Clear caches on this node</button>
         </form>

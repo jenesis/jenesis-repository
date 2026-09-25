@@ -46,7 +46,7 @@
                     <span th:if="${#lists.isEmpty(r.marks)}" class="format-icon"
                           title="no installed format marks this repository" role="img"
                           aria-label="no installed format marks this repository" th:utext="${neutralMark}"></span>
-                    <a th:href="@{'/repositories/' + ${r.name}}" th:text="${r.name}">name</a>
+                    <a th:href="@{'/ui/repositories/' + ${r.name}}" th:text="${r.name}">name</a>
                     <!--/* EPIC 23: a hardened proxy enforces full-body screening of every untrusted upstream body
                          before releasing a byte. Badge it so an operator sees which repositories enforce it. */-->
                     <span th:if="${r.hardened}" class="app-badge" title="Hardening proxy - full upstream screening enforced">hardened</span>
@@ -60,9 +60,9 @@
                     <!--/* A repository created before repositories held a format answers no request until it is given
                          one; an editor gives it one here, choosing the format its content was published in. */-->
                     <th:block th:if="${r.format == null}">
-                        <span class="app-badge" title="Answers no request until it is given a format">no format</span>
+                        <span class="app-badge app-badge--warn" title="Answers no request until it is given a format">no format</span>
                         <form th:if="${isEditor}" class="app-actions" method="post"
-                              th:action="@{/repositories/create}">
+                              th:action="@{/ui/repositories/create}">
                             <input type="hidden" name="name" th:value="${r.name}">
                             <select name="format" required th:attr="aria-label=|Format for ${r.name}|">
                                 <option th:each="f : ${formats}" th:value="${f}" th:text="${f}">maven</option>
@@ -84,7 +84,7 @@
         <h2>New repository</h2>
         <p><small>A repository holds one format, chosen here, and answers at <code>/repository/&lt;tenant&gt;/&lt;name&gt;/</code>
             - or <code>/v2/&lt;tenant&gt;/&lt;name&gt;/</code> for container images. Create it before publishing into it.</small></p>
-        <form method="post" th:action="@{/repositories/create}">
+        <form method="post" th:action="@{/ui/repositories/create}">
             <label>Name
                 <input name="name" required pattern="[A-Za-z0-9_\-]+" placeholder="maven"
                        title="Letters, digits, hyphens and underscores"></label>
@@ -101,7 +101,7 @@
             refused. Currently storing <strong th:text="${quota.usedBytes}">0</strong> bytes<span
                     th:if="${quota.maxBytes > 0}"> of <strong th:text="${quota.maxBytes}">0</strong></span><span
                     th:if="${quota.maxBytes == 0}"> (no limit set)</span>.</small></p>
-        <form th:if="${isEditor}" method="post" th:action="@{/repositories/quota}">
+        <form th:if="${isEditor}" method="post" th:action="@{/ui/repositories/quota}">
             <label>Maximum bytes (0 = unlimited)
                 <input type="number" name="maxBytes" min="0" th:value="${quota.maxBytes}"></label>
             <button type="submit">Save quota</button>
@@ -113,7 +113,7 @@
             Requests</code>. <span th:if="${rateLimit > 0}">Currently <strong th:text="${rateLimit}">0</strong>
             permits per minute.</span><span th:if="${rateLimit == 0}">Currently using the deployment
             default.</span></small></p>
-        <form th:if="${isEditor}" method="post" th:action="@{/repositories/rate-limit}">
+        <form th:if="${isEditor}" method="post" th:action="@{/ui/repositories/rate-limit}">
             <label>Permits per minute (0 = deployment default)
                 <input type="number" name="permitsPerMinute" min="0" th:value="${rateLimit}"></label>
             <button type="submit">Save rate limit</button>

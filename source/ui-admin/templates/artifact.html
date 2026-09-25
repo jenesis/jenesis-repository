@@ -17,9 +17,9 @@
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Artifact')}"></header>
     <p>
-        <a th:href="@{/repositories/{repo}/browse(repo=${repo},prefix=${parent})}">&larr; back to folder</a>
+        <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${parent})}">&larr; back to folder</a>
         &nbsp;·&nbsp;
-        <a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
+        <a th:href="@{/ui/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
     </p>
 
     <article>
@@ -34,7 +34,7 @@
                 <th scope="row">Coordinate</th>
                 <td><code th:text="${detail.coordinate}">org.acme:lib</code>
                     <a th:if="${capabilities.findings() and !detail.version.isEmpty()}"
-                       th:href="@{'/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + detail.version})}">
+                       th:href="@{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + detail.version})}">
                         findings &rarr;</a></td>
             </tr>
             <tr th:if="${!detail.version.isEmpty()}">
@@ -93,7 +93,7 @@
             </tbody>
         </table>
         </figure>
-        <p><a th:href="@{'/repositories/' + ${repo} + '#quarantine'}">Review the quarantine queue &rarr;</a></p>
+        <p><a th:href="@{'/ui/repositories/' + ${repo} + '#quarantine'}">Review the quarantine queue &rarr;</a></p>
     </article>
 
     <!--/* Quality-inspection subsection: a scoped error state, rendered on the shared subsectionError wrapper, only when
@@ -138,7 +138,7 @@
             </table>
             <p th:if="${detail.moreVersions()}">
                 <small>Showing the first <span th:text="${detail.versions().size()}">100</span> versions;</small>
-                <a th:href="@{/repositories/{repo}/coordinate(repo=${repo}, ecosystem=${detail.ecosystem()},
+                <a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo}, ecosystem=${detail.ecosystem()},
                         coordinate=${detail.coordinate()})}">all versions &rarr;</a>
             </p>
         </figure>
@@ -202,7 +202,7 @@
         <h2>Provenance</h2>
         <p th:if="${detail.provenance}">
             <small>A signed in-toto attestation can be served for this artifact.</small><br>
-            <a th:href="@{/api/provenance(repo=${repo},path=${detail.path})}">View provenance attestation &rarr;</a>
+            <a th:href="@{/api/provenance(repo=${repo},path=${servedPath})}">View provenance attestation &rarr;</a>
         </p>
         <p th:unless="${detail.provenance}"><small>No provenance signer is configured on this deployment.</small></p>
     </article>

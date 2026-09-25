@@ -73,7 +73,7 @@
             <p><small><strong>Suggested fix:</strong> <span th:text="${advisory.fix()}">The safer alternative.</span></small></p>
             <p th:if="${!advisory.settingKey().isEmpty()}"><small>Set
                 <code th:text="${advisory.settingKey()} + '=' + ${advisory.settingValue()}">jenreg.key=value</code>
-                for this tenant on the <a href="/settings/tenant">tenant settings</a> screen</small></p>
+                for this tenant on the <a href="/ui/settings/tenant">tenant settings</a> screen</small></p>
             <p th:if="${!advisory.docs().isEmpty()}"><small><a th:href="${advisory.docs()}" rel="noopener noreferrer"
                 target="_blank">Read more &rarr;</a></small></p>
         </article>

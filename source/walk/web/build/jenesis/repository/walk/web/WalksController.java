@@ -51,7 +51,7 @@ public class WalksController {
                 : properties.getOperatorTenant();
     }
 
-    @GetMapping("/walks")
+    @GetMapping("/ui/walks")
     public String walks(Model model) throws IOException {
         Map<String, TaskSchedule.TaskRun> runs = maintenance.taskRuns();
         model.addAttribute("overview", WalkRuns.overview(key -> settings.getOrDefault(key, null), root,
@@ -61,7 +61,7 @@ public class WalksController {
     }
 
     /** Save one entry: added when no entry carries the name, replaced otherwise. */
-    @PostMapping("/walks/save")
+    @PostMapping("/ui/walks/save")
     public String save(@RequestParam("name") String name,
                        @RequestParam("cron") String cron,
                        @RequestParam(value = "enabled", required = false) String enabled,
@@ -76,25 +76,25 @@ public class WalksController {
         } catch (IllegalArgumentException refused) {
             redirect.addFlashAttribute("error", "Nothing saved: " + refused.getMessage());
         }
-        return "redirect:/walks";
+        return "redirect:/ui/walks";
     }
 
     /** Remove one entry; the consumers it carried ride no walk until another entry names them. */
-    @PostMapping("/walks/remove")
+    @PostMapping("/ui/walks/remove")
     public String remove(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
         settings.set(WalkSchedules.SETTING, WalkRuns.remove(settings.getOrDefault(WalkSchedules.SETTING, null),
                 name.trim()));
         redirect.addFlashAttribute("message", "Removed the walk '" + name.trim() + "'.");
-        return "redirect:/walks";
+        return "redirect:/ui/walks";
     }
 
     /** Ask for a walk of the store now, on the signed-in operator's behalf. */
-    @PostMapping("/walks/run")
+    @PostMapping("/ui/walks/run")
     public String run(Principal principal, RedirectAttributes redirect) throws IOException {
         WalkRuns.request(root, audit, operatorTenant, principal == null ? "anonymous" : principal.getName());
         redirect.addFlashAttribute("message", "A walk of the store is requested; every node picks it up within "
                 + "half a minute and the rebuild entry's consumers ride it.");
-        return "redirect:/walks";
+        return "redirect:/ui/walks";
     }
 
     private static Optional<WalkRuns.LastRun> lastRun(TaskSchedule.TaskRun run) {

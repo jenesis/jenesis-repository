@@ -46,7 +46,7 @@
                 <td><code th:text="${e.key}">name</code></td>
                 <td><code th:text="${e.value}">spec</code></td>
                 <td>
-                    <form method="post" th:action="@{/settings/repositories/remove}" style="margin:0">
+                    <form method="post" th:action="@{/ui/settings/repositories/remove}" style="margin:0">
                         <input type="hidden" name="name" th:value="${e.key}">
                         <button th:replace="~{base :: dangerButton('Remove', 'Remove this repository definition? Requests routed to it stop resolving until it is defined again.')}">Remove</button>
                     </form>
@@ -55,7 +55,7 @@
             </tbody>
         </table>
         </figure>
-        <form method="post" th:action="@{/settings/repositories}" class="grid">
+        <form method="post" th:action="@{/ui/settings/repositories}" class="grid">
             <input name="name" placeholder="name" required pattern="[A-Za-z0-9_-]+">
             <input name="definition" placeholder="hosted | proxy <url> | group a,b,c" required>
             <button type="submit">Save</button>
@@ -80,7 +80,7 @@
                 <td><code th:text="${e.key}">format</code></td>
                 <td><code th:text="${e.value}">url</code></td>
                 <td>
-                    <form method="post" th:action="@{/settings/upstreams/remove}" style="margin:0">
+                    <form method="post" th:action="@{/ui/settings/upstreams/remove}" style="margin:0">
                         <input type="hidden" name="format" th:value="${e.key}">
                         <button th:replace="~{base :: dangerButton('Remove', 'Remove the proxy upstream of this format? Misses stop being pulled through until it is set again.')}">Remove</button>
                     </form>
@@ -89,7 +89,7 @@
             </tbody>
         </table>
         </figure>
-        <form method="post" th:action="@{/settings/upstreams}" class="grid">
+        <form method="post" th:action="@{/ui/settings/upstreams}" class="grid">
             <input name="format" placeholder="format name" required pattern="[A-Za-z0-9_-]+">
             <input name="url" placeholder="upstream URL" required>
             <button type="submit">Save</button>
@@ -113,7 +113,7 @@
             <tr th:each="h : ${upstreamAuthHosts}">
                 <td><code th:text="${h}">registry.internal</code></td>
                 <td>
-                    <form method="post" th:action="@{/settings/upstream-auth/remove}" style="margin:0">
+                    <form method="post" th:action="@{/ui/settings/upstream-auth/remove}" style="margin:0">
                         <input type="hidden" name="host" th:value="${h}">
                         <button th:replace="~{base :: dangerButton('Remove', 'Remove the stored credential for this host? The secret is not recoverable and must be entered again.')}">Remove</button>
                     </form>
@@ -122,7 +122,7 @@
             </tbody>
         </table>
         </figure>
-        <form method="post" th:action="@{/settings/upstream-auth}">
+        <form method="post" th:action="@{/ui/settings/upstream-auth}">
             <div class="grid">
                 <input name="host" placeholder="registry.internal" required pattern="[A-Za-z0-9.-]+">
                 <select name="scheme">
@@ -151,14 +151,14 @@
             construction - every secret-kind setting is excluded, so a stored secret never travels in the backup. An
             import is validated first and refused whole if any value would not resolve, then it replaces the current
             stored settings.</small></p>
-        <a class="secondary" role="button" th:href="@{/settings/export}" download="jenesis-settings.json">Download
+        <a class="secondary" role="button" th:href="@{/ui/settings/export}" download="jenesis-settings.json">Download
             settings bundle</a>
         <!--/* The CSRF token rides in the action URL, not only in the body: this is the one multipart form in the
              console, and with Spring's multipart resolver deliberately off everywhere (it would drain an artifact
              upload body before a format read it - D-018) nothing parses the body before the CsrfFilter runs, so a
              token hidden in the body would never be seen. The body is read by the product's own bounded multipart
              reader in SettingsController instead. */-->
-        <form method="post" th:action="@{/settings/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
+        <form method="post" th:action="@{/ui/settings/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
               onsubmit="return window.confirm('Restore settings from this bundle? It replaces the current stored settings.');">
             <input type="file" name="bundle" accept="application/json,.json" required>
             <button type="submit">Import bundle</button>

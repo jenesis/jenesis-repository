@@ -31,6 +31,6 @@ public final class WalksConsoleModule implements ConsoleModuleProvider {
     public List<NavEntry> navEntries() {
         // Deployment-wide, like the settings it edits: the walks document is one document for every tenant, and a
         // walk it schedules reads every tenant's store.
-        return List.of(new NavEntry("Walks", "/walks", NavEntry.Access.SUPERADMIN, NavEntry.Group.OPERATIONS));
+        return List.of(new NavEntry("Walks", "/ui/walks", NavEntry.Access.SUPERADMIN, NavEntry.Group.OPERATIONS));
     }
 }

@@ -34,7 +34,7 @@ import org.thymeleaf.templatemode.TemplateMode;
 public class DevSources implements WebMvcConfigurer {
 
     /** Where the shell's static files live below a checkout's root. */
-    private static final Path STATIC = Path.of("core", "source", "ui", "META-INF", "resources");
+    private static final Path STATIC = Path.of("core", "source", "ui", "META-INF", "resources", "ui");
 
     private final Path root;
 
@@ -55,7 +55,7 @@ public class DevSources implements WebMvcConfigurer {
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         for (String folder : List.of("css", "js", "fonts", "img")) {
-            registry.addResourceHandler("/" + folder + "/**")
+            registry.addResourceHandler("/ui/" + folder + "/**")
                     .addResourceLocations(root.resolve(STATIC).resolve(folder).toUri().toString())
                     .setCachePeriod(0);
         }

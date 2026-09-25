@@ -30,7 +30,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * {@code -parameters}.
  */
 @Controller
-@RequestMapping("/admin")
+@RequestMapping("/ui/admin")
 public class AdminController {
 
     private final UserDirectory directory;
@@ -136,7 +136,7 @@ public class AdminController {
         audit("group.grant.set", name + " " + scope);
         redirect.addFlashAttribute("message",
                 "Granted " + tokens.trim() + " on " + scope + " to everyone in " + name + ".");
-        return "redirect:/admin";
+        return "redirect:/ui/admin";
     }
 
     @PostMapping("/groups/revoke-grant")
@@ -146,7 +146,7 @@ public class AdminController {
         authorization.removeGrant(current.name(), Authorization.Subject.group(name), scope);
         audit("group.grant.remove", name + " " + scope);
         redirect.addFlashAttribute("message", "Removed the grant on " + scope + " from " + name + ".");
-        return "redirect:/admin";
+        return "redirect:/ui/admin";
     }
 
     /** Put a principal in a group. The group need not exist first: one with members and no grants confers nothing,
@@ -158,7 +158,7 @@ public class AdminController {
         authorization.addMember(current.name(), name, id.trim());
         audit("group.member.add", name + " " + id.trim());
         redirect.addFlashAttribute("message", "Added " + id.trim() + " to " + name + ".");
-        return "redirect:/admin";
+        return "redirect:/ui/admin";
     }
 
     @PostMapping("/groups/members/remove")
@@ -168,7 +168,7 @@ public class AdminController {
         authorization.removeMember(current.name(), name, id);
         audit("group.member.remove", name + " " + id);
         redirect.addFlashAttribute("message", "Removed " + id + " from " + name + ".");
-        return "redirect:/admin";
+        return "redirect:/ui/admin";
     }
 
     /** Delete a group: its grants, its metadata and its membership, with every member re-derived so nothing of it
@@ -178,7 +178,7 @@ public class AdminController {
         authorization.removeSubject(current.name(), Authorization.Subject.group(name));
         audit("group.remove", name);
         redirect.addFlashAttribute("message", "Removed group " + name + " and everything it granted.");
-        return "redirect:/admin";
+        return "redirect:/ui/admin";
     }
 
     /** Drop every read cache on the node that served this request, and every node's authorization cache - the
@@ -194,7 +194,7 @@ public class AdminController {
                 + (grants ? " Every node's authorization cache follows within seconds;" : " This deployment enforces"
                         + " no authorization, so there were no grants to drop;")
                 + " their other caches keep their own until each entry's ttl.");
-        return "redirect:/admin";
+        return "redirect:/ui/admin";
     }
 
     /** Every read cache on this node, for the screen: name, ttl, hits, misses, entries. */
@@ -245,7 +245,7 @@ public class AdminController {
         audit("scim.token.set", "scim");
         redirect.addFlashAttribute("message",
                 "SCIM token (shown once): " + token + " - set it on your identity provider's SCIM connector.");
-        return "redirect:/admin";
+        return "redirect:/ui/admin";
     }
 
     @PostMapping("/scim-token/clear")
@@ -253,7 +253,7 @@ public class AdminController {
         new ScimTokens(tenantDocuments()).set(null);
         audit("scim.token.clear", "scim");
         redirect.addFlashAttribute("message", "Cleared the SCIM token; SCIM provisioning for this tenant is off.");
-        return "redirect:/admin";
+        return "redirect:/ui/admin";
     }
 
     @PostMapping("/users")
@@ -278,7 +278,7 @@ public class AdminController {
         directory.put(id, parsed, login);
         audit(existing ? "member.update" : "member.provision", id + " " + parsed.label());
         redirect.addFlashAttribute("message", "Saved user " + id + " (" + parsed.label() + ").");
-        return "redirect:/admin";
+        return "redirect:/ui/admin";
     }
 
     /** Whether {@code id} is currently an admin of this tenant and no OTHER member holds admin - so demoting them would
@@ -312,6 +312,6 @@ public class AdminController {
         directory.remove(id);
         audit("member.deprovision", id);
         redirect.addFlashAttribute("message", "Removed user " + id + ".");
-        return "redirect:/admin";
+        return "redirect:/ui/admin";
     }
 }

@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <p><a href="/projects">&larr; All projects</a></p>
+    <p><a href="/ui/projects">&larr; All projects</a></p>
     <header th:replace="~{base :: pageHeader(${project.name})}"></header>
     <!--/* The count is a stored figure from the last pass - a count, or an eviction, both of which walk every
            entry and so run in the background - never a sweep on the request. */-->
@@ -21,13 +21,13 @@
     <p th:if="${!project.stats.counting() and !#strings.isEmpty(project.stats.lastOutcome())}"><small>Last
         <span th:text="${project.stats.lastAction()}">count</span>: <span th:text="${project.stats.lastOutcome()}">outcome</span>.</small></p>
     <form th:if="${isEditor and !project.stats.counting()}" method="post"
-          th:action="@{'/projects/' + ${project.name} + '/recount'}">
+          th:action="@{'/ui/projects/' + ${project.name} + '/recount'}">
         <button type="submit" class="secondary">Count entries now</button>
     </form>
 
     <article>
         <h2>Cache settings</h2>
-        <form method="post" th:action="@{'/projects/' + ${project.name} + '/cache'}">
+        <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/cache'}">
             <label>Size cap <small>(bytes; blank = no cap)</small>
                 <input name="size" th:value="${project.size}" inputmode="numeric" placeholder="(none)">
             </label>
@@ -49,13 +49,13 @@
         <p><small>Runs the cache server's own sweep directly on the volume, in the background; the outcome and the
             entries left are shown above when it lands.</small></p>
         <div class="grid">
-            <form method="post" th:action="@{'/projects/' + ${project.name} + '/evict/size'}">
+            <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/size'}">
                 <button type="submit" th:disabled="${!isEditor}">Enforce size cap now</button>
             </form>
-            <form method="post" th:action="@{'/projects/' + ${project.name} + '/evict/ttl'}">
+            <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/ttl'}">
                 <button type="submit" th:disabled="${!isEditor}">Expire stale (ttl) now</button>
             </form>
-            <form method="post" th:action="@{'/projects/' + ${project.name} + '/evict/clear'}"
+            <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/clear'}"
                   onsubmit="return confirm('Delete ALL cached entries for this project?');">
                 <button type="submit" class="secondary" th:disabled="${!isEditor}">Clear all entries</button>
             </form>
@@ -65,7 +65,7 @@
     <article>
         <h2>Access</h2>
         <p>A build reaches this project with a key granted it: on the key's page under
-            <a href="/credentials">Access &rarr; Credentials</a>, grant this project - or <code>*</code> for every
+            <a href="/ui/credentials">Access &rarr; Credentials</a>, grant this project - or <code>*</code> for every
             project - the role <strong>deploy</strong> to read and store, or <strong>read-only</strong> to read.</p>
     </article>
 </main>

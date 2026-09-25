@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class KeyLoginPageController {
 
-    @GetMapping("/login/key")
+    @GetMapping("/ui/login/key")
     public String form() {
         return "keylogin/form";
     }

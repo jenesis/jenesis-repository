@@ -15,7 +15,7 @@
         <p th:unless="${status == 404}" class="app-alert app-alert--danger" role="alert"
            th:text="${error} ?: (${message} ?: 'Unexpected error.')">Unexpected error.</p>
         <p th:if="${status}"><small>Status <span th:text="${status}">500</span></small></p>
-        <a th:href="@{/console}" role="button">Back to the console</a>
+        <a th:href="@{/ui/}" role="button">Back to the console</a>
     </article>
 </main>
 </body>

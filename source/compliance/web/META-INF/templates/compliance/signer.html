@@ -11,7 +11,7 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Signer')}"></header>
-    <p><a th:href="@{/repositories/{repo}/signers(repo=${repo})}">&larr; All signers</a></p>
+    <p><a th:href="@{/ui/repositories/{repo}/signers(repo=${repo})}">&larr; All signers</a></p>
 
     <article>
         <p><strong th:text="${abbreviated}">signer</strong><br><small><code th:text="${signer}">identity</code></small></p>
@@ -47,7 +47,7 @@
             </table>
         </figure>
         <p th:if="${next != null}"><small>
-            <a th:href="@{/repositories/{repo}/signers/signed(repo=${repo},signer=${signer},after=${next})}">Next page &rarr;</a></small></p>
+            <a th:href="@{/ui/repositories/{repo}/signers/signed(repo=${repo},signer=${signer},after=${next})}">Next page &rarr;</a></small></p>
         <th:block th:if="${coordinates.isEmpty()}">
             <div th:replace="~{base :: empty('This signer signed nothing that was accepted here.')}"></div>
         </th:block>

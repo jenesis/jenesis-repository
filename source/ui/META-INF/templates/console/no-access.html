@@ -25,7 +25,7 @@
     <!--/* The one value on this page that comes from outside: rendered as text, never as markup. */-->
     <p><code th:text="${qualifiedId}">oidc/00000000-0000-0000-0000-000000000000</code></p>
     <p><small>Once you have been granted access, reload this page.</small></p>
-    <form th:action="@{/logout}" method="post">
+    <form th:action="@{/ui/logout}" method="post">
         <button type="submit" class="secondary">Sign out</button>
     </form>
 </main>

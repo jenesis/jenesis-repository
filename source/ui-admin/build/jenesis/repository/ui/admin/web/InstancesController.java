@@ -53,7 +53,7 @@ public class InstancesController {
         this.volumeReclaim = volumeReclaim;
     }
 
-    @GetMapping("/instances")
+    @GetMapping("/ui/instances")
     public String list(Authentication authentication, Model model) throws IOException {
         boolean superadmin = hasSuperadmin(authentication);
         List<String> all = superadmin ? tenants.all() : memberships.accessibleTo(authentication.getName(), false);
@@ -73,7 +73,7 @@ public class InstancesController {
         return "instances";
     }
 
-    @PostMapping("/instances/select")
+    @PostMapping("/ui/instances/select")
     public String select(@RequestParam("tenant") String tenant, Authentication authentication) {
         boolean superadmin = hasSuperadmin(authentication);
         if (!tenants.exists(tenant)) {
@@ -83,28 +83,28 @@ public class InstancesController {
             throw new IllegalArgumentException("You do not have access to tenant '" + tenant + "'.");
         }
         current.select(tenant);
-        return "redirect:/repositories";
+        return "redirect:/ui/repositories";
     }
 
-    @PostMapping("/instances/create")
+    @PostMapping("/ui/instances/create")
     public String create(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
         tenants.create(name);           // records the tenant.create audit event in the domain (TenantService)
         redirect.addFlashAttribute("message",
                 "Created tenant '" + name + "'. Select it, then add its first admin under Admin.");
-        return "redirect:/instances";
+        return "redirect:/ui/instances";
     }
 
-    @PostMapping("/instances/delete")
+    @PostMapping("/ui/instances/delete")
     public String delete(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
         purge.delete(name);
         if (name.equals(current.name())) {
             current.clear();
         }
         redirect.addFlashAttribute("message", "Deleted tenant '" + name + "'.");
-        return "redirect:/instances";
+        return "redirect:/ui/instances";
     }
 
-    @PostMapping("/instances/reclaim")
+    @PostMapping("/ui/instances/reclaim")
     public String reclaim(@RequestParam(name = "minFreeBytes", required = false) Long minFreeBytes,
                           @RequestParam(name = "minFreePercent", required = false) Integer minFreePercent,
                           RedirectAttributes redirect) {
@@ -116,7 +116,7 @@ public class InstancesController {
         String suffix = result.entriesDeleted() == 0 ? " (target already met or no thresholds set)" : "";
         redirect.addFlashAttribute("message", "Global reclaim: deleted " + result.entriesDeleted()
                 + " entries, freed " + format.bytes(result.bytesFreed()) + suffix + ".");
-        return "redirect:/instances";
+        return "redirect:/ui/instances";
     }
 
     private static boolean hasSuperadmin(Authentication authentication) {

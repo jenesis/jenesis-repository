@@ -24,7 +24,7 @@ public class AuditController {
         this.current = current;
     }
 
-    @GetMapping("/admin/audit")
+    @GetMapping("/ui/admin/audit")
     public String audit(@RequestParam(name = "action", required = false) String action,
                         @RequestParam(name = "after", defaultValue = "") String after,
                         @RequestParam(name = "limit", defaultValue = "200") int limit, Model model) throws IOException {
@@ -45,7 +45,7 @@ public class AuditController {
      *  whole-trail StringBuilder (three full copies Spring would re-copy to a String then bytes) nor the SPI's
      *  materialised event list ever lands in heap - the store-backed trail holds only one day's events at a time, so a
      *  very large trail exports within a flat memory envelope. Matches the API's {@code /api/audit.csv}. */
-    @GetMapping(value = "/admin/audit.csv", produces = "text/csv;charset=UTF-8")
+    @GetMapping(value = "/ui/admin/audit.csv", produces = "text/csv;charset=UTF-8")
     public void csv(@RequestParam(name = "action", required = false) String action,
                     HttpServletResponse response) throws IOException {
         response.setContentType("text/csv;charset=UTF-8");

@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <p><a th:href="@{'/repositories/' + ${repo}}">&larr; Repository <span th:text="${repo}">name</span></a></p>
+    <p><a th:href="@{'/ui/repositories/' + ${repo}}">&larr; Repository <span th:text="${repo}">name</span></a></p>
     <header th:replace="~{base :: pageHeader('Migrate into ' + ${repo})}"></header>
     <p th:replace="~{fragments :: repositoryIdentity(${identity})}"></p>
 
@@ -20,7 +20,7 @@
             deployment.</small></p>
         <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
         <form th:if="${isEditor and capabilities.importAvailable()}" method="post"
-              th:action="@{'/repositories/' + ${repo} + '/import'}">
+              th:action="@{'/ui/repositories/' + ${repo} + '/import'}">
             <div class="grid">
                 <label>Source
                     <select name="source">
@@ -97,7 +97,7 @@
                             <p><small>Continues <code th:text="${job.source}">nexus</code>
                                 <code th:text="${job.url}">url</code>/<code th:text="${job.sourceRepository}">repo</code>
                                 from the cursor; re-enter the credentials (they are never stored).</small></p>
-                            <form method="post" th:action="@{'/repositories/' + ${repo} + '/import'}">
+                            <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/import'}">
                                 <input type="hidden" name="resume" th:value="${job.id}">
                                 <input type="hidden" name="source" th:value="${job.source}">
                                 <input type="hidden" name="url" th:value="${job.url}">
@@ -112,7 +112,7 @@
                             </form>
                         </details>
                         <form th:if="${job.state != 'running'}" method="post" style="margin:.3rem 0 0 0"
-                              th:action="@{'/repositories/' + ${repo} + '/import/' + ${job.id} + '/dismiss'}">
+                              th:action="@{'/ui/repositories/' + ${repo} + '/import/' + ${job.id} + '/dismiss'}">
                             <button class="secondary outline" type="submit">Dismiss</button>
                         </form>
                     </td>
@@ -120,8 +120,8 @@
                 </tbody>
             </table>
             <p th:if="${next != null or paged}"><small>
-                <a th:if="${paged}" th:href="@{/repositories/{repo}/import(repo=${repo})}">&larr; first page</a>
-                <a th:if="${next != null}" th:href="@{/repositories/{repo}/import(repo=${repo}, after=${next})}">more
+                <a th:if="${paged}" th:href="@{/ui/repositories/{repo}/import(repo=${repo})}">&larr; first page</a>
+                <a th:if="${next != null}" th:href="@{/ui/repositories/{repo}/import(repo=${repo}, after=${next})}">more
                     migrations &rarr;</a></small></p>
         </figure>
         <th:block th:if="${jobs.isEmpty() and !paged}">

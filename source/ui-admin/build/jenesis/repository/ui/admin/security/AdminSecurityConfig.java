@@ -62,15 +62,15 @@ public class AdminSecurityConfig {
                     // The federated login callbacks this chain serves, permitted ahead of the shared matrix since
                     // the first matching rule wins. The dev chain signs in through a form and permits none of them,
                     // which is the whole of the difference between the two matrices.
-                    auth.requestMatchers("/oauth2/**", "/saml2/**", "/login/**").permitAll();
+                    auth.requestMatchers("/oauth2/**", "/saml2/**", "/login/**", "/ui/login/**").permitAll();
                     ConsoleAuthorization.rules(auth, tenants, access);
                 })
-                .exceptionHandling(e -> e.authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
+                .exceptionHandling(e -> e.authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/ui/login"))
                         // A refusal for a principal that holds nothing anywhere is not the same event as a refusal
                         // at one screen, and answering both with a 403 would tell a new colleague the deployment is
                         // broken. See NoAccessRedirect for the distinction.
                         .accessDeniedHandler(new NoAccessRedirect(access)))
-                .logout(logout -> logout.logoutSuccessUrl("/login?logout").permitAll());
+                .logout(logout -> logout.logoutUrl("/ui/logout").logoutSuccessUrl("/ui/login?logout").permitAll());
 
         for (LoginContributor contributor : loginContributors) {
             contributor.configure(http);

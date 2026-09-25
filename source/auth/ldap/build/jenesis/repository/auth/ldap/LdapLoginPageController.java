@@ -14,7 +14,7 @@ public class LdapLoginPageController {
         this.properties = properties;
     }
 
-    @GetMapping("/login/ldap")
+    @GetMapping("/ui/login/ldap")
     public String form(Model model) {
         model.addAttribute("directory", properties.getName().trim());
         return "ldap/form";

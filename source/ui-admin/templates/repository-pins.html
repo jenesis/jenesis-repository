@@ -12,7 +12,7 @@
         <li th:each="pin : ${pins}">
             <code th:text="${pin.ecosystem()} + ':' + ${pin.coordinate()} + ':' + ${pin.version()}">ecosystem:coordinate:version</code>
             <form th:if="${isEditor}" method="post" style="display:inline; margin:0"
-                  th:action="@{'/repositories/' + ${repo} + '/pins/remove'}"
+                  th:action="@{'/ui/repositories/' + ${repo} + '/pins/remove'}"
                   data-confirm="Lift this pin? The version becomes eligible for retention eviction.">
                 <input type="hidden" name="ecosystem" th:value="${pin.ecosystem()}">
                 <input type="hidden" name="coordinate" th:value="${pin.coordinate()}">
@@ -24,7 +24,7 @@
     <th:block th:if="${pins.isEmpty()}">
         <div th:replace="~{base :: empty('No pins. A pinned version is never evicted by retention.')}"></div>
     </th:block>
-    <form th:if="${isEditor}" method="post" th:action="@{'/repositories/' + ${repo} + '/pins'}">
+    <form th:if="${isEditor}" method="post" th:action="@{'/ui/repositories/' + ${repo} + '/pins'}">
         <div class="grid">
             <!--/* Labelled, not merely placeheld: a placeholder disappears the moment there is a value, so a
                  field carrying only one is unlabelled for anyone reviewing what they typed, and unlabelled

@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class ObservabilityScreenController {
 
-    @GetMapping("/observability")
+    @GetMapping("/ui/observability")
     public String observability(Model model) throws IOException {
         model.addAttribute("report", ObservabilityReport.discover());
         return "console/observability";

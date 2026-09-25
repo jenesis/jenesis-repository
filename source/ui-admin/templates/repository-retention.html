@@ -11,7 +11,7 @@
     <p><small>A version is kept only if it satisfies every dial set below; durations are ISO-8601 (for
         example <code>P90D</code>). A pinned version is always kept, whatever the policy says.</small></p>
     <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
-    <form th:if="${isEditor}" method="post" th:action="@{'/repositories/' + ${repo} + '/retention'}">
+    <form th:if="${isEditor}" method="post" th:action="@{'/ui/repositories/' + ${repo} + '/retention'}">
         <div class="grid">
             <label>keep-last
                 <input type="number" name="keepLast" min="0" th:value="${retention.keepLast}"></label>
@@ -62,10 +62,10 @@
         <p th:unless="${capabilities.gc()}"><small>Garbage collection is off - no collector module is installed
             or selected, so a cleanup evicts versions but reclaims no storage.</small></p>
         <div th:if="${isEditor}" style="display:flex; gap:0.5em">
-            <form method="post" th:action="@{'/repositories/' + ${repo} + '/cleanup/preview'}">
+            <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/cleanup/preview'}">
                 <button class="secondary" type="submit">Preview cleanup</button>
             </form>
-            <form method="post" th:action="@{'/repositories/' + ${repo} + '/cleanup'}">
+            <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/cleanup'}">
                 <button type="submit">Run cleanup now</button>
             </form>
         </div>

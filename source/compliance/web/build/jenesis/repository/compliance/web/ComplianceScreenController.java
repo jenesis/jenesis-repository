@@ -36,7 +36,7 @@ public class ComplianceScreenController {
         this.compliance = compliance;
     }
 
-    @GetMapping("/repositories/{repo}/vulnerabilities")
+    @GetMapping("/ui/repositories/{repo}/vulnerabilities")
     public String vulnerabilities(@PathVariable("repo") String repo,
                                   @RequestParam(name = "reachability", defaultValue = "") String reachability,
                                   @RequestParam(name = "applicability", defaultValue = "") String applicability,
@@ -53,21 +53,21 @@ public class ComplianceScreenController {
     /** The panel's explicit rescan action - the write path the read-only render deliberately does not take: query
      *  every enabled advisory feed for every published coordinate and persist the findings to the ledger. The scan
      *  runs in the background; the panel reports it as running until it lands. */
-    @PostMapping("/repositories/{repo}/vulnerabilities/rescan")
+    @PostMapping("/ui/repositories/{repo}/vulnerabilities/rescan")
     public String rescanVulnerabilities(@PathVariable("repo") String repo, RedirectAttributes redirect)
             throws IOException {
         boolean started = compliance.rescanVulnerabilities(repo);
         redirect.addFlashAttribute("message", started
                 ? "Rescan started; the panel shows the outcome once it lands."
                 : "A rescan is already running.");
-        return "redirect:/repositories/" + repo + "/vulnerabilities";
+        return "redirect:/ui/repositories/" + repo + "/vulnerabilities";
     }
 
     /** The retroactive-license-enforcement blast-radius panel: a read-only preview of what turning enforcement on
      *  would newly hold in this repository under the current license policy (the console face of
      *  {@code GET /api/licenses/retro/plan}). {@code unknown} widens the preview to the riskier {@code denied+unknown}
      *  mode. The panel degrades to a "not installed" note when no license-policy module contributes a planner. */
-    @GetMapping("/repositories/{repo}/blast-radius")
+    @GetMapping("/ui/repositories/{repo}/blast-radius")
     public String blastRadius(@PathVariable("repo") String repo,
                               @RequestParam(name = "unknown", defaultValue = "false") boolean unknown,
                               Model model) throws IOException {
@@ -77,7 +77,7 @@ public class ComplianceScreenController {
         return QUALIFIER + "/blast-radius";
     }
 
-    @PostMapping("/repositories/{repo}/blast-radius")
+    @PostMapping("/ui/repositories/{repo}/blast-radius")
     public String recomputeBlastRadius(@PathVariable("repo") String repo,
                                        @RequestParam(name = "unknown", defaultValue = "false") boolean unknown,
                                        RedirectAttributes redirect) throws IOException {
@@ -85,13 +85,13 @@ public class ComplianceScreenController {
         redirect.addFlashAttribute("message", compliance.computeBlastRadius(repo, unknown)
                 ? "Blast-radius pass started; this screen shows its result when it finishes."
                 : "A blast-radius pass is already running, or no license policy is installed.");
-        return "redirect:/repositories/" + repo + "/blast-radius?unknown=" + unknown;
+        return "redirect:/ui/repositories/" + repo + "/blast-radius?unknown=" + unknown;
     }
 
     /** The maintainer-health panel: the durable OpenSSF Scorecard-style health the sweep persisted for a repository's
      *  coordinates, read from the store with no deps.dev probe on the render path (Principle 10). The staleness stamp is
      *  always shown; the rescan button is offered only to a caller who may take the write path (below). */
-    @GetMapping("/repositories/{repo}/health")
+    @GetMapping("/ui/repositories/{repo}/health")
     public String health(@PathVariable("repo") String repo,
                          @RequestParam(name = "after", defaultValue = "") String after, Model model)
             throws IOException {
@@ -103,19 +103,19 @@ public class ComplianceScreenController {
     /** The health panel's explicit rescan action - the write path the read-only render deliberately does not take:
      *  probe the live maintainer-health source for every published coordinate, upsert what it scores into the ledger,
      *  stamp the freshness, then land back on the freshly-served panel. */
-    @PostMapping("/repositories/{repo}/health/rescan")
+    @PostMapping("/ui/repositories/{repo}/health/rescan")
     public String rescanHealth(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
         // Started, not awaited: the pass asks a live source about every published coordinate. The screen shows it
         // running and the result when it lands, the same way the vulnerability and blast-radius passes report.
         redirect.addFlashAttribute("message", compliance.rescanMaintainerHealth(repo)
                 ? "Maintainer-health rescan started; this panel shows its result when it finishes."
                 : "A rescan is already running, or no maintainer-health module is installed.");
-        return "redirect:/repositories/" + repo + "/health";
+        return "redirect:/ui/repositories/" + repo + "/health";
     }
 
     /** The findings screen: the persisted findings ledger for a repository, filterable by coordinate (the
      *  per-artifact view), kind, source, category and severity - read from the store, no feed queried. */
-    @GetMapping("/repositories/{repo}/findings")
+    @GetMapping("/ui/repositories/{repo}/findings")
     public String findings(@PathVariable("repo") String repo,
                            @RequestParam(name = "coordinate", defaultValue = "") String coordinate,
                            @RequestParam(name = "kind", defaultValue = "") String kind,
@@ -135,7 +135,7 @@ public class ComplianceScreenController {
 
     /** The AI review queue's confirm/dismiss on an AI-produced finding - a label on the still-present row through
      *  the shared review contract, never a deletion, and reversible. */
-    @PostMapping("/repositories/{repo}/findings/review")
+    @PostMapping("/ui/repositories/{repo}/findings/review")
     public String reviewFinding(@PathVariable("repo") String repo,
                                 @RequestParam("ecosystem") String ecosystem,
                                 @RequestParam("coordinate") String coordinate,
@@ -149,10 +149,10 @@ public class ComplianceScreenController {
                 note.isBlank() ? null : note);
         redirect.addFlashAttribute("message", ("confirmed".equalsIgnoreCase(decision) ? "Confirmed " : "Dismissed ")
                 + id + " on " + coordinate + ":" + version + ".");
-        return "redirect:/repositories/" + repo + "/findings";
+        return "redirect:/ui/repositories/" + repo + "/findings";
     }
 
-    @GetMapping("/repositories/{repo}/quarantine")
+    @GetMapping("/ui/repositories/{repo}/quarantine")
     public String quarantine(@PathVariable("repo") String repo,
                              @RequestParam(name = "after", required = false) String after,
                              Model model) throws IOException {
@@ -165,7 +165,7 @@ public class ComplianceScreenController {
         return QUALIFIER + "/quarantine";
     }
 
-    @GetMapping("/repositories/{repo}/signers")
+    @GetMapping("/ui/repositories/{repo}/signers")
     public String signers(@PathVariable("repo") String repo,
                           @RequestParam(name = "after", required = false) String after,
                           Model model) throws IOException {
@@ -178,7 +178,7 @@ public class ComplianceScreenController {
         return QUALIFIER + "/signers";
     }
 
-    @GetMapping("/repositories/{repo}/signers/signed")
+    @GetMapping("/ui/repositories/{repo}/signers/signed")
     public String signedBy(@PathVariable("repo") String repo,
                            @RequestParam("signer") String signer,
                            @RequestParam(name = "after", required = false) String after,
@@ -201,16 +201,16 @@ public class ComplianceScreenController {
         return QUALIFIER + "/signer";
     }
 
-    @PostMapping("/repositories/{repo}/quarantine/release")
+    @PostMapping("/ui/repositories/{repo}/quarantine/release")
     public String releaseQuarantined(@PathVariable("repo") String repo,
                                      @RequestParam("path") String path,
                                      RedirectAttributes redirect) throws IOException {
         compliance.releaseQuarantined(repo, path);
         redirect.addFlashAttribute("message", "Released " + path + " into the layout.");
-        return "redirect:/repositories/" + repo + "/quarantine";
+        return "redirect:/ui/repositories/" + repo + "/quarantine";
     }
 
-    @PostMapping("/repositories/{repo}/quarantine/discard")
+    @PostMapping("/ui/repositories/{repo}/quarantine/discard")
     public String discardQuarantined(@PathVariable("repo") String repo,
                                      @RequestParam("path") String path,
                                      RedirectAttributes redirect) throws IOException {
@@ -218,7 +218,7 @@ public class ComplianceScreenController {
         redirect.addFlashAttribute("message", discarded
                 ? "Discarded " + path + "."
                 : "Nothing is held at " + path + " - it was already released or discarded.");
-        return "redirect:/repositories/" + repo + "/quarantine";
+        return "redirect:/ui/repositories/" + repo + "/quarantine";
     }
 
 
@@ -231,7 +231,7 @@ public class ComplianceScreenController {
      * <p>A refused body keeps no bytes and links no pointer, so it is never in the review queue and the durable log
      * row is its only record - which makes this page an operator's only sight of a denied publish.
      */
-    @GetMapping("/repositories/{repo}/refusals")
+    @GetMapping("/ui/repositories/{repo}/refusals")
     public String refusals(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);
         model.addAttribute("refusals", compliance.refusals(repo, REFUSALS));

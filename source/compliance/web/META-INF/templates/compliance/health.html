@@ -32,7 +32,7 @@
             <p th:replace="~{base :: running('A rescan against the maintainer-health source is running.')}"></p>
         </th:block>
         <form th:if="${isAdmin and !report.scanning()}" method="post"
-              th:action="@{'/repositories/' + ${repo} + '/health/rescan'}">
+              th:action="@{'/ui/repositories/' + ${repo} + '/health/rescan'}">
             <button type="submit" class="secondary">Rescan maintainer-health</button>
         </form>
         <!--/* The ranking is a built artefact, so "not built yet" is a state of its own and never an empty table. An
@@ -93,7 +93,7 @@
                 <p><small>This page lists <span th:text="${report.entries().size()}">0</span> of
                     <span th:text="${report.total()}">0</span> scored coordinates, weakest first.</small></p>
                 <p th:if="${report.nextCursor() != null}">
-                    <a th:href="@{/repositories/{repo}/health(repo=${repo}, after=${report.nextCursor()})}">next weakest &rarr;</a>
+                    <a th:href="@{/ui/repositories/{repo}/health(repo=${repo}, after=${report.nextCursor()})}">next weakest &rarr;</a>
                 </p>
             </footer>
         </th:block>

@@ -17,10 +17,10 @@
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Coordinate')}"></header>
     <p>
-        <a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
+        <a th:href="@{/ui/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
         <th:block th:if="${!detail.location.isEmpty()}">
             &nbsp;·&nbsp;
-            <a th:href="@{/repositories/{repo}/browse(repo=${repo},prefix=${detail.location})}">browse folder &rarr;</a>
+            <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${detail.location})}">browse folder &rarr;</a>
         </th:block>
     </p>
 
@@ -33,7 +33,7 @@
             <small th:text="${detail.ecosystem}">npm</small>
             <small th:if="${mark != null and !mark.installed}">&mdash; no installed format serves this ecosystem</small>
             <a th:if="${capabilities.findings()}"
-               th:href="@{'/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate})}">findings &rarr;</a>
+               th:href="@{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate})}">findings &rarr;</a>
         </p>
     </article>
 
@@ -74,7 +74,7 @@
                         <ul th:if="${!v.paths.isEmpty()}" style="margin:0; padding-left:1em">
                             <li th:each="p : ${v.paths}">
                                 <a th:if="${v.browsable}"
-                                   th:href="@{/repositories/{repo}/artifact(repo=${repo},path=${p})}"
+                                   th:href="@{/ui/repositories/{repo}/artifact(repo=${repo},path=${p})}"
                                    th:text="${p}">/maven/org/acme/lib/1.0/lib-1.0.jar</a>
                                 <code th:unless="${v.browsable}" th:text="${p}">/npm/left-pad/-/left-pad-1.0.0.tgz</code>
                             </li>
@@ -85,7 +85,7 @@
                 </tbody>
             </table>
             <p th:if="${detail.next() != null}">
-                <a th:href="@{/repositories/{repo}/coordinate(repo=${repo}, ecosystem=${detail.ecosystem()},
+                <a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo}, ecosystem=${detail.ecosystem()},
                         coordinate=${detail.coordinate()}, after=${detail.next()})}">more versions &rarr;</a>
             </p>
         </figure>

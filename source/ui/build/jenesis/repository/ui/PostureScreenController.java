@@ -26,7 +26,7 @@ public class PostureScreenController {
         this.current = current;
     }
 
-    @GetMapping("/posture")
+    @GetMapping("/ui/posture")
     public String posture(Model model) throws IOException {
         PostureSource.Collected collected = source.collect(current.name());
         model.addAttribute("posture", collected.report());

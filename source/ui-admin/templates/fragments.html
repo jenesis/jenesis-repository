@@ -100,7 +100,7 @@
                   th:text="|🔒 pinned by ${s.pinnedBy}|">🔒 pinned</span>
             <span class="app-badge app-badge--danger" th:if="${s.highImpact}"
                   title="A change here can start rejecting or admitting packages.">high-impact</span>
-            <form method="post" th:action="@{/settings/save}" class="setting-revert"
+            <form method="post" th:action="@{/ui/settings/save}" class="setting-revert"
                   th:if="${s.overridden and !s.pinned}"
                   th:attr="data-confirm=${s.highImpact} ? 'Revert this high-impact policy knob to its default?' : null">
                 <input type="hidden" name="key" th:value="${s.key}">
@@ -115,7 +115,7 @@
         <span>effective: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
         <span>default: <span th:text="${s.defaultDisplay()}">default</span></span>
     </p>
-    <form method="post" th:action="@{/settings/save}" class="setting-edit" th:unless="${s.pinned}"
+    <form method="post" th:action="@{/ui/settings/save}" class="setting-edit" th:unless="${s.pinned}"
           th:attr="data-confirm=${s.highImpact} ? 'Apply this high-impact policy change?' : null">
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}">

@@ -26,11 +26,11 @@
                 <td class="app-list__num" th:text="${s.items >= stagedCountCap} ? ${stagedCountCap} + '+' : ${s.items}">0</td>
                 <td th:if="${isEditor}">
                     <form method="post" style="display:inline; margin:0"
-                          th:action="@{'/repositories/' + ${repo} + '/staging/' + ${s.id} + '/promote'}">
+                          th:action="@{'/ui/repositories/' + ${repo} + '/staging/' + ${s.id} + '/promote'}">
                         <button type="submit">promote</button>
                     </form>
                     <form method="post" style="display:inline; margin:0" class="app-actions__danger"
-                          th:action="@{'/repositories/' + ${repo} + '/staging/' + ${s.id} + '/drop'}">
+                          th:action="@{'/ui/repositories/' + ${repo} + '/staging/' + ${s.id} + '/drop'}">
                         <button th:replace="~{base :: dangerButton('drop', 'Drop this staging id? Everything staged under it is discarded and cannot be promoted afterwards.')}">drop</button>
                     </form>
                 </td>

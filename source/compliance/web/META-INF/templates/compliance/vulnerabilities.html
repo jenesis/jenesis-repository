@@ -13,7 +13,7 @@
 
     <p th:if="${capabilities.advisories() and !report.scanned()}">
         Vulnerability scanning is off. No advisory feed is enabled in the runtime
-        <a th:href="@{/settings}">settings</a>; enable an installed feed there to scan this repository's published
+        <a th:href="@{/ui/settings}">settings</a>; enable an installed feed there to scan this repository's published
         artifacts against it. This panel reads the runtime settings; a feed enabled only through the deployment's
         environment is used by the server's scan but is not reflected here.
     </p>
@@ -24,7 +24,7 @@
              never a clean bill. The operator chooses what the reachability facet keys on: the static verdict, the
              AI classifier's opinion (ai:), or the two labels' agreement (agreed:) - where a decisive static
              verdict always outranks; the applicability facet keys on the AI applicability pass's opinion. */-->
-        <form method="get" th:action="@{'/repositories/' + ${repo} + '/vulnerabilities'}">
+        <form method="get" th:action="@{'/ui/repositories/' + ${repo} + '/vulnerabilities'}">
             <div class="grid">
                 <label>Reachability
                     <select name="reachability">
@@ -59,7 +59,7 @@
             <p th:replace="~{base :: running('A rescan against the advisory feeds is running.')}"></p>
         </th:block>
         <form th:if="${isAdmin and !report.scanning()}" method="post"
-              th:action="@{'/repositories/' + ${repo} + '/vulnerabilities/rescan'}">
+              th:action="@{'/ui/repositories/' + ${repo} + '/vulnerabilities/rescan'}">
             <button type="submit" class="secondary">Rescan against the advisory feeds</button>
         </form>
         <p th:if="${report.partial()}"><small>The ranking has not been built yet, so this page ranks the first
@@ -128,7 +128,7 @@
                 </tbody>
             </table>
             <p th:if="${report.nextCursor() != null}">
-                <a th:href="@{/repositories/{repo}/vulnerabilities(repo=${repo}, reachability=${reachability},
+                <a th:href="@{/ui/repositories/{repo}/vulnerabilities(repo=${repo}, reachability=${reachability},
                         applicability=${applicability}, after=${report.nextCursor()})}">next worst &rarr;</a>
             </p>
         </figure>

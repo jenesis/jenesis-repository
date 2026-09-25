@@ -27,17 +27,17 @@
         <hgroup class="app-page-header__heading">
             <nav aria-label="Breadcrumb" th:unless="${searching}">
                 <ol class="app-breadcrumb">
-                    <li><a th:href="@{/repositories}">Repositories</a></li>
-                    <li><a th:href="@{/repositories/{repo}(repo=${repo})}" th:text="${repo}">name</a></li>
+                    <li><a th:href="@{/ui/repositories}">Repositories</a></li>
+                    <li><a th:href="@{/ui/repositories/{repo}(repo=${repo})}" th:text="${repo}">name</a></li>
                     <li>
                         <span th:if="${crumbs.isEmpty()}" aria-current="page">Browse</span>
                         <a th:unless="${crumbs.isEmpty()}"
-                           th:href="@{/repositories/{repo}/browse(repo=${repo},sort=${sort},dir=${dir})}">Browse</a>
+                           th:href="@{/ui/repositories/{repo}/browse(repo=${repo},sort=${sort},dir=${dir})}">Browse</a>
                     </li>
                     <li th:each="c : ${crumbs}">
                         <span th:if="${c.current}" th:text="${c.label}" aria-current="page">segment</span>
                         <a th:unless="${c.current}"
-                           th:href="@{/repositories/{repo}/browse(repo=${repo},prefix=${c.prefix},sort=${sort},dir=${dir})}"
+                           th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${c.prefix},sort=${sort},dir=${dir})}"
                            th:text="${c.label}">segment</a>
                     </li>
                 </ol>
@@ -46,7 +46,7 @@
         </hgroup>
     </header>
 
-    <form method="get" th:action="@{/repositories/{repo}/browse(repo=${repo})}">
+    <form method="get" th:action="@{/ui/repositories/{repo}/browse(repo=${repo})}">
         <div class="grid">
             <input name="q" type="search" th:value="${query}"
                    placeholder="search coordinates" aria-label="Search coordinates">
@@ -55,7 +55,7 @@
     </form>
 
     <article th:if="${searching}">
-        <p><a th:href="@{/repositories/{repo}/browse(repo=${repo})}">&larr; back to browse</a></p>
+        <p><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo})}">&larr; back to browse</a></p>
         <h2>Matches for &ldquo;<span th:text="${query}">query</span>&rdquo;</h2>
 
         <!--/* Search hits are coordinates, not tree entries: a coordinate spans several files, so it has no single
@@ -86,13 +86,13 @@
                     <span th:if="${r.mark == null}" class="format-icon" title="no ecosystem recorded" role="img"
                           aria-label="no ecosystem recorded" th:utext="${neutralMark}"></span>
                     <a th:if="${!r.location.isEmpty()}"
-                       th:href="@{/repositories/{repo}/browse(repo=${repo},prefix=${r.location})}"
+                       th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${r.location})}"
                        th:text="${r.coordinate} + ':' + ${r.version}">group:artifact:version</a>
                     <!--/* A hit with no folder in the tree is a blobs-namespace format's (npm, PyPI, NuGet ...), or
                          one whose format is gone; either way its coordinate has a screen of its own, which lists
                          every version and the paths each is served at. */-->
                     <a th:if="${r.location.isEmpty() and !r.ecosystem.isEmpty()}"
-                       th:href="@{/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem},coordinate=${r.coordinate})}"
+                       th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem},coordinate=${r.coordinate})}"
                        th:text="${r.coordinate} + ':' + ${r.version}">name:version</a>
                     <code th:if="${r.location.isEmpty() and r.ecosystem.isEmpty()}"
                           th:text="${r.coordinate} + ':' + ${r.version}">group:artifact:version</code>
@@ -130,22 +130,22 @@
                  its cached subtree roll-up. aria-sort marks the active column and the arrow shows its direction. */-->
             <tr>
                 <th scope="col" th:attr="aria-sort=${sort == 'name' ? (dir == 'asc' ? 'ascending' : 'descending') : 'none'}">
-                    <a th:href="@{/repositories/{repo}/browse(repo=${repo},prefix=${prefix},sort='name',dir=${sort == 'name' and dir == 'asc' ? 'desc' : 'asc'})}">Name</a>
+                    <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${prefix},sort='name',dir=${sort == 'name' and dir == 'asc' ? 'desc' : 'asc'})}">Name</a>
                     <span th:if="${sort == 'name'}" aria-hidden="true" th:text="${dir == 'asc' ? '▲' : '▼'}">▲</span>
                 </th>
                 <th scope="col" th:attr="aria-sort=${sort == 'type' ? (dir == 'asc' ? 'ascending' : 'descending') : 'none'}">
-                    <a th:href="@{/repositories/{repo}/browse(repo=${repo},prefix=${prefix},sort='type',dir=${sort == 'type' and dir == 'asc' ? 'desc' : 'asc'})}">Type</a>
+                    <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${prefix},sort='type',dir=${sort == 'type' and dir == 'asc' ? 'desc' : 'asc'})}">Type</a>
                     <span th:if="${sort == 'type'}" aria-hidden="true" th:text="${dir == 'asc' ? '▲' : '▼'}">▲</span>
                 </th>
                 <th scope="col" th:attr="aria-sort=${sort == 'size' ? (dir == 'asc' ? 'ascending' : 'descending') : 'none'}">
-                    <a th:href="@{/repositories/{repo}/browse(repo=${repo},prefix=${prefix},sort='size',dir=${sort == 'size' and dir == 'asc' ? 'desc' : 'asc'})}">Size</a>
+                    <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${prefix},sort='size',dir=${sort == 'size' and dir == 'asc' ? 'desc' : 'asc'})}">Size</a>
                     <span th:if="${sort == 'size'}" aria-hidden="true" th:text="${dir == 'asc' ? '▲' : '▼'}">▲</span>
                 </th>
             </tr>
             </thead>
             <tbody>
             <th:block th:if="${hasParent}">
-                <tr th:replace="~{base :: browseUp(@{/repositories/{repo}/browse(repo=${repo},prefix=${parent},sort=${sort},dir=${dir})})}"></tr>
+                <tr th:replace="~{base :: browseUp(@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${parent},sort=${sort},dir=${dir})})}"></tr>
             </th:block>
             <!--/* Named so htmx can fetch just this block for a folder's children; it delegates to the shared tree,
                  so the lazily injected rows and the page's own rows are the same rows. */-->

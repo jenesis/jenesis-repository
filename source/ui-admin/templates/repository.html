@@ -42,7 +42,7 @@
             unreachable but kept - nothing is deleted on absence - and garbage collection refuses this repository
             until each is resolved: reinstall (or re-enable) the format, or retire its records here. Retiring lets
             the collector reclaim the ecosystem's content on its next pass; purge the format module's remaining
-            pointers on the <a th:href="@{/settings/modules}">Modules</a> screen.</small></p>
+            pointers on the <a th:href="@{/ui/settings/modules}">Modules</a> screen.</small></p>
         <div th:each="eco : ${unplaceable}" class="app-actions">
             <code th:text="${eco}">ecosystem</code>
             <!--/* The retirement runs off the request, so the row says what its last (or current) pass did rather
@@ -54,7 +54,7 @@
                 retired</small>
             <form th:if="${isEditor and (retirements == null or !retirements.containsKey(eco) or !retirements.get(eco).running())}"
                   method="post" style="display:inline; margin:0" class="app-actions__danger"
-                  th:action="@{'/repositories/' + ${repo} + '/forget-ecosystem'}">
+                  th:action="@{'/ui/repositories/' + ${repo} + '/forget-ecosystem'}">
                 <input type="hidden" name="ecosystem" th:value="${eco}">
                 <button th:replace="~{base :: dangerButton('Forget ecosystem', 'Retire every record of this ecosystem in this repository? Its content is then reclaimed by the collector, and this cannot be undone.')}">Forget ecosystem</button>
             </form>
@@ -112,7 +112,7 @@
                     <!--/* Every release has a screen of its own, whichever way its format stores: the coordinate page
                          lists the versions and the paths each is served at, for the blobs-namespace formats that have
                          no folder in the browse tree as much as for the ones that do. */-->
-                    <td><a th:href="@{/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem()},coordinate=${r.coordinate()})}"
+                    <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem()},coordinate=${r.coordinate()})}"
                            th:text="${r.coordinate()}">group:artifact</a></td>
                     <td th:text="${r.version}">1.0.0</td>
                     <td th:text="${r.pinned} ? 'yes' : ''">yes</td>
@@ -123,7 +123,7 @@
                  overview. When more releases exist than this page shows, the count says so and links to the browse page,
                  which pages the full list; nothing is silently dropped. */-->
             <p th:if="${releasesMore}"><small>The <span th:text="${releases.size()}">0</span> most recent
-                releases. <a th:href="@{/repositories/{repo}/browse(repo=${repo})}">Browse all &rarr;</a></small></p>
+                releases. <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo})}">Browse all &rarr;</a></small></p>
         </figure>
         <th:block th:if="${releases.isEmpty()}">
             <div th:replace="~{base :: empty('No published releases yet.')}"></div>

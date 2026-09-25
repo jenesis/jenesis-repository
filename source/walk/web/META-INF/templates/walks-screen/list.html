@@ -18,7 +18,7 @@
 
     <article>
         <h2>Now</h2>
-        <form method="post" th:action="@{/walks/run}" class="setting-edit">
+        <form method="post" th:action="@{/ui/walks/run}" class="setting-edit">
             <button type="submit">Walk the store now</button>
             <small>Every node picks the request up within half a minute; the <code>rebuild</code> entry's consumers
                 ride it, and a node that did not shut down cleanly asks for the same walk on its own.</small>
@@ -51,7 +51,7 @@
                 <span th:text="${e.cost.get().derived}">0</span> derived rows) over
                 <span th:text="${e.cost.get().repositories}">0</span> repositories</span>
         </p>
-        <form method="post" th:action="@{/walks/save}" class="setting-edit">
+        <form method="post" th:action="@{/ui/walks/save}" class="setting-edit">
             <input type="hidden" name="name" th:value="${e.name}">
             <label>Cron expression (UTC; six fields, seconds first)
                 <input type="text" name="cron" required th:value="${e.cron}" th:attr="aria-label=|Cron expression of ${e.name}|">
@@ -69,12 +69,12 @@
                     <small th:if="${!c.settings.isEmpty()}">Governed by:
                         <span th:each="d : ${c.settings}"><code th:text="${d.key}">key</code>
                             = <span th:text="${d.value}">value</span>
-                            (<a th:href="@{/settings}" th:text="${d.label}">label</a>)</span></small>
+                            (<a th:href="@{/ui/settings}" th:text="${d.label}">label</a>)</span></small>
                 </label>
             </fieldset>
             <button type="submit">Save</button>
         </form>
-        <form method="post" th:action="@{/walks/remove}" class="setting-revert"
+        <form method="post" th:action="@{/ui/walks/remove}" class="setting-revert"
               th:attr="data-confirm=|Remove the walk ${e.name}? The consumers it carries ride no walk until another entry names them.|">
             <input type="hidden" name="name" th:value="${e.name}">
             <button class="secondary outline" type="submit">Remove</button>
@@ -83,7 +83,7 @@
 
     <article class="setting-group">
         <h2>Add a walk</h2>
-        <form method="post" th:action="@{/walks/save}" class="setting-edit">
+        <form method="post" th:action="@{/ui/walks/save}" class="setting-edit">
             <label>Name (lower case, letters, digits and dashes)
                 <input type="text" name="name" required pattern="[a-z][a-z0-9-]*" placeholder="nightly">
             </label>

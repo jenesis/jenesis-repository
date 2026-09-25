@@ -22,7 +22,7 @@
             <!--/* The entries and bytes are the figure the last pass stored, never a sweep of the cache per row:
                    a project that has never been counted says so, and its page offers the count. */-->
             <tr th:each="p : ${projects}">
-                <td><a th:href="@{'/projects/' + ${p.name}}" th:text="${p.name}">name</a></td>
+                <td><a th:href="@{'/ui/projects/' + ${p.name}}" th:text="${p.name}">name</a></td>
                 <td class="app-list__num" th:text="${p.stats.known()} ? ${p.entryCount} : '?'">0</td>
                 <td class="app-list__num" th:text="${p.stats.known()} ? ${@format.bytes(p.totalBytes)} : '?'">0 B</td>
                 <td><small th:if="${p.stats.counting()}">counting&hellip;</small>
@@ -40,7 +40,7 @@
 
     <article th:if="${isEditor}">
         <h2>New project</h2>
-        <form method="post" th:action="@{/projects}">
+        <form method="post" th:action="@{/ui/projects}">
             <label>Name
                 <input name="name" required pattern="[A-Za-z0-9_]+" placeholder="my_project">
             </label>

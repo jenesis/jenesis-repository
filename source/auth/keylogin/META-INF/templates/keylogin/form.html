@@ -15,7 +15,7 @@
     <th:block th:if="${param.error}">
         <p th:replace="~{base :: alert('Sign-in failed, or your account belongs to no tenant.', 'danger')}"></p>
     </th:block>
-    <form method="post" th:action="@{/login/key}">
+    <form method="post" th:action="@{/ui/login/key}">
         <label for="key">Login key</label>
         <input type="password" id="key" name="key" autocomplete="off" autofocus required
                placeholder="Paste your login key"/>
@@ -23,7 +23,7 @@
     </form>
     <p class="app-signin__foot">Key-based sign-in is for <strong>demos and simple deployments</strong> without
         single sign-on. For production, prefer OIDC or LDAP, and switch this off once real credentials exist.</p>
-    <p class="app-signin__foot"><a th:href="@{/login}">&larr; Back to sign-in options</a></p>
+    <p class="app-signin__foot"><a th:href="@{/ui/login}">&larr; Back to sign-in options</a></p>
 </main>
 </body>
 </html>

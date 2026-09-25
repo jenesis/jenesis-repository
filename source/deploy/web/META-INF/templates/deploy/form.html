@@ -17,7 +17,7 @@
              application - it would drain an artifact upload before the format read it - so nothing parses the
              multipart body before the security filter runs, and a token in the body would never be seen. The
              settings-bundle import carries its token the same way and for the same reason. */-->
-        <form method="post" th:action="@{/deploy(_csrf=${_csrf.token})}" enctype="multipart/form-data">
+        <form method="post" th:action="@{/ui/deploy(_csrf=${_csrf.token})}" enctype="multipart/form-data">
             <label>Repository
                 <input type="text" name="repository" required placeholder="maven"
                        th:attr="aria-describedby='deploy-repository-help'">

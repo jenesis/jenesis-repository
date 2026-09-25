@@ -29,17 +29,17 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:text="${title} + ' · ' + ${product}">Jenesis Repository</title>
-    <link rel="icon" th:href="@{/img/jenesis-repository-light.svg}">
-    <link rel="stylesheet" th:href="@{/css/pico.min.css}">
-    <link rel="stylesheet" th:href="@{/css/console.css}">
+    <link rel="icon" th:href="@{/ui/img/jenesis-repository-light.svg}">
+    <link rel="stylesheet" th:href="@{/ui/css/pico.min.css}">
+    <link rel="stylesheet" th:href="@{/ui/css/console.css}">
     <!--/* Rendered only where a CSRF token exists, so one head serves a page that has one and a page that does
          not. */-->
     <meta th:if="${_csrf != null}" name="_csrf" th:content="${_csrf.token}">
     <meta th:if="${_csrf != null}" name="_csrf_header" th:content="${_csrf.headerName}">
     <!--/* Deliberately not deferred: a stored dark/light choice must apply before the first paint. */-->
-    <script th:src="@{/js/theme.js}"></script>
-    <script th:src="@{/js/htmx.min.js}" defer></script>
-    <script th:src="@{/js/console.js}" defer></script>
+    <script th:src="@{/ui/js/theme.js}"></script>
+    <script th:src="@{/ui/js/htmx.min.js}" defer></script>
+    <script th:src="@{/ui/js/console.js}" defer></script>
 </th:block>
 
 <head th:fragment="head(title, product)">
@@ -50,10 +50,10 @@
 
 <!--/* The brand: the Jenesis Repository mark and the product's name, linking home. The mark ships once per theme,
      because it is a single-colour drawing that has to stay legible on either background. */-->
-<a th:fragment="brand" th:href="@{/}" class="app-brand">
-    <img class="app-brand__mark app-brand__mark--light" th:src="@{/img/jenesis-repository-light.svg}" alt=""
+<a th:fragment="brand" th:href="@{/ui/}" class="app-brand">
+    <img class="app-brand__mark app-brand__mark--light" th:src="@{/ui/img/jenesis-repository-light.svg}" alt=""
          width="28" height="28">
-    <img class="app-brand__mark app-brand__mark--dark" th:src="@{/img/jenesis-repository-dark.svg}" alt=""
+    <img class="app-brand__mark app-brand__mark--dark" th:src="@{/ui/img/jenesis-repository-dark.svg}" alt=""
          width="28" height="28">
     <span class="app-brand__name" th:text="${product ?: 'Jenesis Repository'}">Jenesis Repository</span>
 </a>
@@ -88,7 +88,7 @@
             <a th:replace="~{base :: brand}"></a>
             <!--/* The tenant, beside the brand, wherever the deployment serves several: the one being worked in, or
                  that none is chosen yet. Either way it leads to the screen that lists the tenants to choose from. */-->
-            <a th:if="${multiTenant}" class="app-tenant" th:href="@{/instances}"
+            <a th:if="${multiTenant}" class="app-tenant" th:href="@{/ui/instances}"
                th:classappend="${tenant == null} ? 'app-tenant--none'"
                th:title="${tenant != null} ? |Working in tenant ${tenant} - switch tenant| : 'Choose a tenant to work in'">
                 <th:block th:if="${tenant != null}"><span class="app-sr-only">Tenant </span><span
@@ -104,11 +104,11 @@
             <div class="app-header__session">
                 <th:block th:replace="~{__${editionBadges ?: ''}__}"></th:block>
                 <a th:if="${postureBadge != null and postureBadge.visible()}" class="app-posture app-badge app-badge--warn"
-                   th:href="@{/posture}" th:title="${postureBadge.title()}" th:text="${postureBadge.label()}">posture</a>
+                   th:href="@{/ui/posture}" th:title="${postureBadge.title()}" th:text="${postureBadge.label()}">posture</a>
                 <button th:replace="~{base :: themeToggle}"></button>
                 <!--/* The name is the control, and the arrow is what says so. A POST, because signing out is a
                      state change and the CSRF token rides the form. */-->
-                <form th:if="${currentUser}" method="post" th:action="@{/logout}" class="app-signout">
+                <form th:if="${currentUser}" method="post" th:action="@{/ui/logout}" class="app-signout">
                     <button class="app-signout__button" type="submit" title="Sign out"
                             th:attr="aria-label='Sign out ' + ${currentUser}">
                         <span th:text="${currentUser}">user</span>

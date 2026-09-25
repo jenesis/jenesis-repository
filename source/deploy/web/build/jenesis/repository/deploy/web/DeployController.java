@@ -47,7 +47,7 @@ public class DeployController {
         this.tenant = tenant;
     }
 
-    @GetMapping("/deploy")
+    @GetMapping("/ui/deploy")
     public String form(Model model) {
         model.addAttribute("tenant", tenant.name());
         return "deploy/form";
@@ -60,7 +60,7 @@ public class DeployController {
      * quarantined it and a reviewer decides - and a refusal is not an error page, it is the gate working. Reporting
      * both as "upload failed" is how an operator learns to distrust the screen.
      */
-    @PostMapping("/deploy")
+    @PostMapping("/ui/deploy")
     public String deploy(@RequestParam("repository") String target,
                          @RequestParam("path") String path,
                          HttpServletRequest request,
@@ -81,7 +81,7 @@ public class DeployController {
         } catch (IOException | RuntimeException failure) {
             redirect.addFlashAttribute("error", "Could not publish " + artifactPath + ": " + failure.getMessage());
         }
-        return "redirect:/deploy";
+        return "redirect:/ui/deploy";
     }
 
     /** What each status the edge answers means to an operator, in their terms rather than the protocol's. */

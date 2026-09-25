@@ -24,13 +24,13 @@
                     <small th:if="${t == selected}">- selected</small>
                 </td>
                 <td>
-                    <form method="post" th:action="@{/instances/select}" style="margin:0">
+                    <form method="post" th:action="@{/ui/instances/select}" style="margin:0">
                         <input type="hidden" name="tenant" th:value="${t}">
                         <button type="submit">Open</button>
                     </form>
                 </td>
                 <td th:if="${superadmin}">
-                    <form method="post" th:action="@{/instances/delete}"
+                    <form method="post" th:action="@{/ui/instances/delete}"
                           onsubmit="return confirm('Delete tenant and ALL of its projects, credentials and members?');"
                           style="margin:0">
                         <input type="hidden" name="name" th:value="${t}">
@@ -47,7 +47,7 @@
 
     <article th:if="${superadmin}">
         <h2>New tenant</h2>
-        <form method="post" th:action="@{/instances/create}">
+        <form method="post" th:action="@{/ui/instances/create}">
             <label>Name
                 <input name="name" required pattern="[A-Za-z0-9_]+" placeholder="acme">
             </label>
@@ -64,7 +64,7 @@
             <span th:text="${minFreePercent}">0</span>%.
         </p>
         <p><small>Runs a least-recently-used sweep across every tenant's projects until the target is met.</small></p>
-        <form method="post" th:action="@{/instances/reclaim}"
+        <form method="post" th:action="@{/ui/instances/reclaim}"
               onsubmit="return confirm('Run a global LRU sweep across all tenants?');">
             <div class="grid">
                 <label>Min free bytes <small>(blank = configured)</small>

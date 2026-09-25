@@ -10,7 +10,7 @@
         <strong>installed</strong> state (whether it is on this image's module path) and its <strong>enabled</strong>
         state (whether its enable flag is switched on), with its contributed settings beneath. Where a module declares
         an enable flag you can switch it here; the change is written through the same store the
-        <a th:href="@{/settings}">Settings</a> screen edits, so a <strong>live</strong> toggle applies on a node's next
+        <a th:href="@{/ui/settings}">Settings</a> screen edits, so a <strong>live</strong> toggle applies on a node's next
         scheduled re-read and a <strong>restart</strong> one only on its next boot. Whether a module is installed at all
         is an image-build decision (the image's feature set), never a runtime one — a module you do not see was not built
         into this image.</small></p>
@@ -43,7 +43,7 @@
                           title="This module's declared key-spaces still hold data. Nothing is deleted automatically; purge it explicitly if the removal was intentional.">orphaned data</span>
                     <!--/* A boolean enable flag renders as a one-click toggle, posting the opposite value through the
                          existing settings write path. A numeric gate (a ceiling) or an ungated module has no switch. */-->
-                    <form method="post" th:action="@{/settings/save}" class="module-toggle"
+                    <form method="post" th:action="@{/ui/settings/save}" class="module-toggle"
                           th:if="${m.installed and m.gated and m.toggleable}">
                         <input type="hidden" name="key" th:value="${m.enableKey}">
                         <input type="hidden" name="value" th:value="${m.toggleValue()}">
@@ -63,7 +63,7 @@
                 intentional removal. If the removal was intentional, purge here (the counts above are the blast
                 radius), or script it: <code>jenesis purge <span th:text="${m.module}">module</span></code> /
                 <code>POST /api/admin/purge?namespace=<span th:text="${m.module}">module</span></code>.</small>
-                <form method="post" th:action="@{/settings/modules/purge}" class="module-toggle"
+                <form method="post" th:action="@{/ui/settings/modules/purge}" class="module-toggle"
                       onsubmit="return confirm('Delete this module\'s orphaned data everywhere? This cannot be undone.');">
                     <input type="hidden" name="module" th:value="${m.module}">
                     <button type="submit" class="secondary outline">Purge orphaned data</button>
@@ -79,7 +79,7 @@
             <p th:if="${m.installed and m.settings.isEmpty()}"><small class="setting-nomatch">No editable settings.</small></p>
         </div>
     </article>
-    <p><small><a th:href="@{/settings}">Edit these settings on the Settings screen &rarr;</a></small></p>
+    <p><small><a th:href="@{/ui/settings}">Edit these settings on the Settings screen &rarr;</a></small></p>
 </main>
 </body>
 </html>

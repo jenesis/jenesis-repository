@@ -83,19 +83,19 @@ public class KeyLoginConfig {
         return http -> {
             http.authenticationProvider(provider);
             http.formLogin(form -> form
-                    .loginPage("/login")
-                    .loginProcessingUrl("/login/key")
+                    .loginPage("/ui/login")
+                    .loginProcessingUrl("/ui/login/key")
                     .usernameParameter("principal")
                     .passwordParameter("key")
-                    .defaultSuccessUrl("/console", true)
-                    .failureUrl("/login?error"));
+                    .defaultSuccessUrl("/ui/", true)
+                    .failureUrl("/ui/login?error"));
         };
     }
 
     /** The "Sign in with a key" option added to the login page, linking to the key-entry form. */
     @Bean
     public LoginOptions keyLoginOptions() {
-        return () -> List.of(new LoginOptions.LoginOption(KeyLoginMechanism.QUALIFIER, "a key", "/login/key",
+        return () -> List.of(new LoginOptions.LoginOption(KeyLoginMechanism.QUALIFIER, "a key", "/ui/login/key",
                 Optional.empty()));
     }
 

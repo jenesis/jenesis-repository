@@ -28,7 +28,7 @@ public class CredentialsController {
         this.credentials = credentials;
     }
 
-    @GetMapping("/credentials")
+    @GetMapping("/ui/credentials")
     public String list(@RequestParam(name = "after", defaultValue = "") String after, Model model)
             throws IOException {
         CredentialService.Page page = credentials.list(after.isBlank() ? null : after, CredentialService.PAGE);
@@ -42,23 +42,23 @@ public class CredentialsController {
         return "credentials";
     }
 
-    @PostMapping("/credentials/roles")
+    @PostMapping("/ui/credentials/roles")
     public String setRole(@RequestParam("name") String name,
                           @RequestParam("tokens") String tokens,
                           RedirectAttributes redirect) throws IOException {
         credentials.setRole(name, tokens);
         redirect.addFlashAttribute("message", "Saved role '" + name + "'.");
-        return "redirect:/credentials";
+        return "redirect:/ui/credentials";
     }
 
-    @PostMapping("/credentials/roles/{name}/remove")
+    @PostMapping("/ui/credentials/roles/{name}/remove")
     public String removeRole(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         credentials.removeRole(name);
         redirect.addFlashAttribute("message", "Removed role '" + name + "'.");
-        return "redirect:/credentials";
+        return "redirect:/ui/credentials";
     }
 
-    @PostMapping("/credentials/trusts")
+    @PostMapping("/ui/credentials/trusts")
     public String setTrust(@RequestParam("name") String name,
                            @RequestParam("issuer") String issuer,
                            @RequestParam(name = "audience", required = false) String audience,
@@ -69,26 +69,26 @@ public class CredentialsController {
                            RedirectAttributes redirect) throws IOException {
         credentials.setTrust(name, issuer, audience, subject, scope, rights, Authorization.lifetime(ttl));
         redirect.addFlashAttribute("message", "Saved OIDC trust '" + name + "'.");
-        return "redirect:/credentials";
+        return "redirect:/ui/credentials";
     }
 
-    @PostMapping("/credentials/trusts/{name}/remove")
+    @PostMapping("/ui/credentials/trusts/{name}/remove")
     public String removeTrust(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         credentials.removeTrust(name);
         redirect.addFlashAttribute("message", "Removed OIDC trust '" + name + "'.");
-        return "redirect:/credentials";
+        return "redirect:/ui/credentials";
     }
 
-    @PostMapping("/credentials/policy")
+    @PostMapping("/ui/credentials/policy")
     public String setPolicy(@RequestParam(name = "default", required = false) String defaultLifetime,
                             @RequestParam(name = "max", required = false) String max,
                             RedirectAttributes redirect) throws IOException {
         credentials.setPolicy(Authorization.lifetime(defaultLifetime), Authorization.lifetime(max));
         redirect.addFlashAttribute("message", "Updated the credential-lifetime policy.");
-        return "redirect:/credentials";
+        return "redirect:/ui/credentials";
     }
 
-    @PostMapping("/credentials")
+    @PostMapping("/ui/credentials")
     public String create(@RequestParam(name = "label", required = false) String label,
                          @RequestParam(name = "expires", required = false) String expires,
                          @RequestParam(name = "never", required = false, defaultValue = "false") boolean never,
@@ -99,17 +99,17 @@ public class CredentialsController {
                 : " It expires on " + created.expires() + ".";
         redirect.addFlashAttribute("message",
                 "Created credential. Copy its key now - it is shown only once: " + created.key() + lifetime);
-        return "redirect:/credentials/" + created.id();
+        return "redirect:/ui/credentials/" + created.id();
     }
 
-    @GetMapping("/credentials/{id}")
+    @GetMapping("/ui/credentials/{id}")
     public String detail(@PathVariable("id") String id, Model model) throws IOException {
         model.addAttribute("credential", credentials.get(id));
         model.addAttribute("roles", credentials.roleNames());
         return "credential";
     }
 
-    @PostMapping("/credentials/{id}/grants")
+    @PostMapping("/ui/credentials/{id}/grants")
     public String setGrant(@PathVariable("id") String id,
                            @RequestParam("project") String project,
                            @RequestParam(name = "path", required = false) String path,
@@ -118,29 +118,29 @@ public class CredentialsController {
         credentials.setGrant(id, project, path, role);
         String where = path == null || path.isBlank() ? "'" + project + "'" : "'" + project + "' under " + path.trim();
         redirect.addFlashAttribute("message", "Granted " + role + " on " + where + ".");
-        return "redirect:/credentials/" + id;
+        return "redirect:/ui/credentials/" + id;
     }
 
-    @PostMapping("/credentials/{id}/grants/remove")
+    @PostMapping("/ui/credentials/{id}/grants/remove")
     public String removeGrant(@PathVariable("id") String id,
                               @RequestParam("project") String project,
                               RedirectAttributes redirect) throws IOException {
         credentials.removeGrant(id, project);
         redirect.addFlashAttribute("message", "Revoked access to '" + project + "'.");
-        return "redirect:/credentials/" + id;
+        return "redirect:/ui/credentials/" + id;
     }
 
-    @PostMapping("/credentials/{id}/expiry")
+    @PostMapping("/ui/credentials/{id}/expiry")
     public String setExpiry(@PathVariable("id") String id,
                             @RequestParam(name = "expires", required = false) String expires,
                             RedirectAttributes redirect) throws IOException {
         Instant expiry = Authorization.expiry(expires);
         credentials.setExpiry(id, expiry);
         redirect.addFlashAttribute("message", expiry == null ? "Cleared expiry." : "Expires " + expiry + ".");
-        return "redirect:/credentials/" + id;
+        return "redirect:/ui/credentials/" + id;
     }
 
-    @PostMapping("/credentials/{id}/rotate")
+    @PostMapping("/ui/credentials/{id}/rotate")
     public String rotate(@PathVariable("id") String id,
                          @RequestParam(name = "overlap", required = false) String overlap,
                          RedirectAttributes redirect) throws IOException {
@@ -148,10 +148,10 @@ public class CredentialsController {
         redirect.addFlashAttribute("message",
                 "Rotated. Copy the new key now - it is shown only once: " + created.key()
                         + " The previous key keeps working until the overlap elapses.");
-        return "redirect:/credentials/" + created.id();
+        return "redirect:/ui/credentials/" + created.id();
     }
 
-    @PostMapping("/credentials/{id}/allowed-ips")
+    @PostMapping("/ui/credentials/{id}/allowed-ips")
     public String setAllowedAddresses(@PathVariable("id") String id,
                                       @RequestParam(name = "addresses", required = false) String addresses,
                                       RedirectAttributes redirect) throws IOException {
@@ -159,13 +159,13 @@ public class CredentialsController {
         redirect.addFlashAttribute("message", addresses == null || addresses.isBlank()
                 ? "Cleared the source-IP allowlist."
                 : "Restricted the key to " + addresses.trim() + ".");
-        return "redirect:/credentials/" + id;
+        return "redirect:/ui/credentials/" + id;
     }
 
-    @PostMapping("/credentials/{id}/delete")
+    @PostMapping("/ui/credentials/{id}/delete")
     public String delete(@PathVariable("id") String id, RedirectAttributes redirect) throws IOException {
         credentials.delete(id);
         redirect.addFlashAttribute("message", "Deleted credential.");
-        return "redirect:/credentials";
+        return "redirect:/ui/credentials";
     }
 }

@@ -35,7 +35,7 @@ public class SetupController {
 
     /** The guide. Its reads are the settings document - one object per module under a constant prefix, narrow by
      *  construction and the same read the settings screen makes - and nothing that grows with the store. */
-    @GetMapping("/setup")
+    @GetMapping("/ui/setup")
     public String setup(Authentication authentication, Model model) throws IOException {
         model.addAttribute("steps", wizard.steps());
         model.addAttribute("starterSession", StarterCredential.signedInWith(authentication));
@@ -46,10 +46,10 @@ public class SetupController {
     }
 
     /** Skip the guide for this session and land where the console would have: the instances screen. */
-    @PostMapping("/setup/skip")
+    @PostMapping("/ui/setup/skip")
     public String skip(HttpSession session) {
         SetupWizard.skip(session);
-        return "redirect:/console";
+        return "redirect:/ui/";
     }
 
     private boolean set(String key) {

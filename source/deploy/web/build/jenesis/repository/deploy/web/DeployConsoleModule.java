@@ -37,6 +37,6 @@ public final class DeployConsoleModule implements ConsoleModuleProvider {
     public List<NavEntry> navEntries() {
         // A tenant admin, not any signed-in user: this writes into the tenant's repositories, and the floor should
         // read the same as the act. The screen re-checks rather than trusting the nav to have hidden it.
-        return List.of(new NavEntry("Deploy", "/deploy", NavEntry.Access.ADMIN, NavEntry.Group.OPERATIONS));
+        return List.of(new NavEntry("Deploy", "/ui/deploy", NavEntry.Access.ADMIN, NavEntry.Group.OPERATIONS));
     }
 }

@@ -17,7 +17,7 @@ import build.jenesis.repository.ui.RepositoryPage;
 final class ConsoleNavigation {
 
     /** The collection the repository pages live below. */
-    static final String REPOSITORIES = "/repositories";
+    static final String REPOSITORIES = "/ui/repositories";
 
     /** How many repositories the Repositories group's sidebar names before pointing at the whole list. */
     static final int LISTED = 50;
