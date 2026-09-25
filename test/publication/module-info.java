@@ -89,4 +89,8 @@ open module build.jenesis.repository.publication.contract.test {
             build.jenesis.repository.publication.contract.test.RecordingScreen,
             build.jenesis.repository.publication.contract.test.WithholdingScreen,
             build.jenesis.repository.publication.contract.test.AuditingScreen;
+
+    // The one event sink on this graph, so the event publication observer's fan-out is a surface the kit can read.
+    provides build.jenesis.repository.events.EventSink
+            with build.jenesis.repository.publication.contract.test.EventProbeSink;
 }

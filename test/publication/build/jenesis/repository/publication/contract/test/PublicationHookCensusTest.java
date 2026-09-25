@@ -61,7 +61,6 @@ class PublicationHookCensusTest {
                     "build.jenesis.repository.compliance.signatures.SignatureCompletionObserver",
                     "build.jenesis.repository.compliance.signatures.AttestationLookupObserver",
                     "build.jenesis.repository.compliance.web.ProvenanceAttestationReaper",
-                    "build.jenesis.repository.events.EventPublicationObserver",
                     "build.jenesis.repository.gate.store.ComplianceScreen",
                     "build.jenesis.repository.gate.store.OciHoldRecorder",
                     "build.jenesis.repository.staging.store.StagingWithholdInterceptor")

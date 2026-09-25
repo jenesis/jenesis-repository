@@ -33,7 +33,7 @@ final class PublicationHookFixtures {
                 new OverrideHookFixture(),
                 // The core's own hooks beyond the formats' listing observers.
                 new SubtreeSizeObserverFixture(), new IndexPublicationObserverFixture(),
-                new IndexRetractionObserverFixture()));
+                new IndexRetractionObserverFixture(), new EventPublicationObserverFixture()));
         for (String observer : LISTING_OBSERVERS) {
             String format = observer.substring(0, observer.indexOf('.'));
             fixtures.add(new ListingObserverFixture(format + "-listing",
