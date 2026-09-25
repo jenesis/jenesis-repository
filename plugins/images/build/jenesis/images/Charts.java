@@ -80,8 +80,8 @@ record Charts(long version, Configuration configuration) implements BuildStep {
 
     /**
      * A path named as {@code <input>/<path>}: the bound input whose name is the first segment, and the path within
-     * what it binds. The launcher names the inputs, so the configuration refers to a deploy tree by the name it was
-     * bound under rather than by where it lies in the project.
+     * what it binds. The plugin's values bind the inputs, so the configuration refers to a deploy tree by the name
+     * it was bound under rather than by where it lies in the project.
      */
     private static Path resolve(SequencedMap<String, BuildStepArgument> arguments, String named) {
         int slash = named.indexOf('/');

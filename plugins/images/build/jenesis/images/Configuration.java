@@ -3,8 +3,8 @@ package build.jenesis.images;
 import module java.base;
 
 /**
- * What a build's images goal makes and publishes, read from the properties its launcher hands the plugin -
- * conventionally a repository's {@code deploy/images.properties}:
+ * What a build's images goal makes and publishes, read from the plugin's values - {@code images.<key>} in the
+ * repository's {@code jenesis.plugins.arguments.properties}:
  *
  * <pre>
  * image.&lt;module path&gt;=&lt;repository&gt;      the image a module's staged context is built as

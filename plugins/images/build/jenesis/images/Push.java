@@ -19,8 +19,10 @@ import build.jenesis.BuildStepResult;
  * <p>{@link #shouldRun} is what carries that: it ignores whether anything changed, because a push is not derived
  * from its inputs - it is derived from the state of somebody else's registry, which this build cannot see. So
  * naming a target runs the push, every time, however cold or warm the tree is. It runs <em>only</em> when a target
- * is named ({@code -Djenesis.images.push=hub|aws|azure|gcp|scaleway|all}, or several comma-separated, or
- * {@code PUSH_TARGET}), so building the images does not publish them.
+ * is named - {@code images.push=hub|aws|azure|gcp|scaleway|all}, or several comma-separated, which a profile's
+ * {@code jenesis.plugins.arguments-<profile>.properties} brings - so building the images does not publish them. The
+ * version it publishes as is the one thing set per invocation, and it comes from {@code PUSH_VERSION} with the
+ * registry credentials.
  *
  * <p>{@link #shouldCacheRemotely} declines the <em>shared</em> build cache while leaving the local one: a push's
  * effect is in a registry, and a shared cache answering this step would report a push that never happened.
@@ -32,7 +34,7 @@ import build.jenesis.BuildStepResult;
  * image published with it ({@link #released}). Two images never share a repository with the image as the tag, since
  * a registry shows every tag of a repository to anyone who can see it.
  */
-record Push(long version, Configuration configuration) implements BuildStep {
+record Push(long version, Configuration configuration, List<String> targets) implements BuildStep {
 
     /** A push's whole value is its effect on a registry, and that effect does not travel in a step output - so a
      *  shared cache answering this step would report a push that never happened. The local cache is left alone:
@@ -43,19 +45,13 @@ record Push(long version, Configuration configuration) implements BuildStep {
     }
 
 
-    /** Which registries to publish to. */
-    private static final String TARGET = "jenesis.images.push";
-
-    /** The marketplace product version, independent of the Jenesis tool version. */
-    private static final String VERSION = "jenesis.images.version";
-
     private static final String DEFAULT_VERSION = "1.0.0";
 
     @Override
     public boolean shouldRun(SequencedMap<String, BuildStepArgument> arguments) {
         // Never "did anything change" - a push is derived from a registry this build cannot see. Named a target,
         // do it; that is the whole condition.
-        return !targets().isEmpty();
+        return !targets.isEmpty();
     }
 
     @Override
@@ -63,7 +59,6 @@ record Push(long version, Configuration configuration) implements BuildStep {
                                                   BuildStepContext context,
                                                   SequencedMap<String, BuildStepArgument> arguments)
             throws IOException {
-        List<String> targets = targets();
         if (targets.isEmpty()) {
             // An initial run executes every step regardless of shouldRun, since there is no previous output to
             // reuse. Naming no target means naming no work, not an error.
@@ -91,7 +86,7 @@ record Push(long version, Configuration configuration) implements BuildStep {
                     + "packaged. Publishing half of a release - the image without the chart that names it - is "
                     + "worse than publishing none, so this stops rather than skipping them.");
         }
-        String release = setting(VERSION, "PUSH_VERSION", DEFAULT_VERSION);
+        String release = environment("PUSH_VERSION", DEFAULT_VERSION);
         for (String target : targets) {
             publish(target, images, charts, release, context.next());
         }
@@ -139,7 +134,7 @@ record Push(long version, Configuration configuration) implements BuildStep {
             case "azure" -> azure();
             case "gcp" -> gcp();
             case "scaleway" -> scaleway();
-            default -> throw new IllegalStateException("Unknown publish target '" + target + "'. Set " + TARGET
+            default -> throw new IllegalStateException("Unknown publish target '" + target + "'. Set images.push"
                     + " to one or more of " + TARGETS + ", comma-separated, or to all.");
         };
         System.out.println("[images] publishing to " + target + " at " + registry + " (version " + release + ")");
@@ -362,24 +357,24 @@ record Push(long version, Configuration configuration) implements BuildStep {
     /** Every target, in the order a publish walks them; {@code all} names this list. */
     private static final List<String> TARGETS = List.of("hub", "aws", "azure", "gcp", "scaleway");
 
-    /** The targets named, in a stable order; {@code all} is every one of them. */
-    private static List<String> targets() {
-        String named = setting(TARGET, "PUSH_TARGET", "");
-        if (named.isEmpty()) {
+    /** The targets a value names, in a stable order; {@code all} is every one of them, and none is none. */
+    static List<String> targets(String named) {
+        if (named == null || named.isBlank()) {
             return List.of();
         }
-        return named.equals("all") ? TARGETS
+        List<String> targets = named.strip().equals("all") ? TARGETS
                 : Stream.of(named.split(",")).map(String::strip).filter(target -> !target.isEmpty()).toList();
+        for (String target : targets) {
+            if (!TARGETS.contains(target)) {
+                throw new IllegalArgumentException("images.push names '" + target + "' - one of " + TARGETS
+                        + " or all, several comma-separated");
+            }
+        }
+        return targets;
     }
 
     private static boolean skipLogin() {
         return "1".equals(environment("SKIP_LOGIN", "0"));
-    }
-
-    /** A system property, then the environment variable the workflow already sets, then a default. */
-    private static String setting(String property, String variable, String fallback) {
-        String value = System.getProperty(property, "");
-        return value.isEmpty() ? environment(variable, fallback) : value;
     }
 
     private static String environment(String variable, String fallback) {

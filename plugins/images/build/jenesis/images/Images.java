@@ -13,8 +13,9 @@ import build.jenesis.BuildStepResult;
  * Builds the images a build's {@link Configuration} names from the Docker contexts its {@code stage} goal wrote,
  * packages its Helm charts, and publishes both when a registry is named.
  *
- * <p>The contexts are the {@code stage} goal's own output, declared as this module's input by the launcher that wires
- * it - so the images rebuild when and only when what goes into them changed. An image's contents are its module's
+ * <p>This is an exporter of the whole project - {@code images+export=<path to this module>} in
+ * {@code jenesis.plugins.properties} - so it is handed everything {@code stage} wrote, and the contexts it builds from
+ * are among that: the images rebuild when and only when what goes into them changed. An image's contents are its module's
  * {@code requires} closure, which the build tool writes into the context's {@code Dockerfile}; nothing here decides
  * what an image holds, only what it is called and where it goes.
  *
@@ -23,9 +24,11 @@ import build.jenesis.BuildStepResult;
  * the charts, which ride the same goal and the same publish targets: a deployment needs the chart and the image it
  * names, and publishing them from one command with one credential is what keeps them from disagreeing.
  *
- * <p>The launcher hands the configuration over as the properties of the internal module that loads this one, which
- * is why this provider takes a {@code SequencedMap}; its no-argument constructor, which a service provider must
- * have, configures nothing and so builds nothing.
+ * <p>The configuration is the plugin's values, {@code images.<key>} in {@code jenesis.plugins.arguments.properties},
+ * which is why this provider takes a {@code SequencedMap}; its no-argument constructor, which a service provider
+ * must have, configures nothing and so builds nothing. The deploy trees a chart is packaged from are bound there
+ * too, as {@code images.@<input>/sources=<folder>}, and {@code images.push} names where to publish - a value a
+ * profile brings, since the tool hands a plugin values from files alone.
  */
 public class Images implements BuildExecutorModule {
 
@@ -40,16 +43,24 @@ public class Images implements BuildExecutorModule {
     private static final long CHARTING = 3L;
 
     /** Bumped when the push step's behaviour changes, for the same reason as {@link #VERSION}. */
-    private static final long PUSHING = 7L;
+    private static final long PUSHING = 8L;
+
+    /** The value naming where to publish; kept apart from the {@link Configuration} the other steps are keyed by, so
+     *  naming a target publishes what was built instead of building it again. */
+    private static final String PUSH = "push";
 
     private final Configuration configuration;
+
+    private final List<String> targets;
 
     public Images() {
         this(new LinkedHashMap<>());
     }
 
     public Images(SequencedMap<String, String> properties) {
-        configuration = Configuration.of(properties);
+        SequencedMap<String, String> described = new LinkedHashMap<>(properties);
+        targets = Push.targets(described.remove(PUSH));
+        configuration = Configuration.of(described);
     }
 
     @Override
@@ -60,7 +71,7 @@ public class Images implements BuildExecutorModule {
         executor.addStep("chart", new Charts(CHARTING, configuration), inherited.sequencedKeySet());
         // The push reads what the two builds just wrote, and runs only when a target is named - so building does
         // not publish. See Push for why it is a step at all and what makes it really happen.
-        executor.addStep("push", new Push(PUSHING, configuration), "docker", "chart");
+        executor.addStep("push", new Push(PUSHING, configuration, targets), "docker", "chart");
     }
 
     private record Build(long version, Configuration configuration) implements BuildStep {

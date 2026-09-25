@@ -1,9 +1,9 @@
 # Build the Jenesis Repository image and its Helm chart and push them to Docker Hub, on demand. Run it from the
-# Actions tab (Run workflow) on main with a product version. It runs this repository's images goal
-# (build/Build.java images), which builds the image from the staged Docker context - its contents are the bundle
-# module's requires closure - packages the chart, and, because a registry is named, pushes jenesis-repository
-# (tagged with the version and latest) and the jenesis chart.
-# What the goal builds and publishes is deploy/images.properties.
+# Actions tab (Run workflow) on main with a product version. It runs this repository's images exporter
+# (export/custom/images), which builds the image from the staged Docker context - its contents are the bundle
+# module's requires closure - packages the chart, and, because the hub profile names a registry, pushes
+# jenesis-repository (tagged with the version and latest) and the jenesis chart.
+# What the exporter builds and publishes is its values in jenesis.plugins.arguments.properties.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 #  ONE-TIME SETUP
@@ -18,8 +18,9 @@
 #
 #  The cloud registries - Amazon ECR, Azure Container Registry, Google Artifact Registry and Scaleway -
 #  are switched off for now: this workflow publishes to Docker Hub alone. The images module still
-#  pushes to each (-Djenesis.images.push=aws|azure|gcp|scaleway, with the credentials documented on
-#  plugins/images/Push), and the workflow's history holds the one-time setup of each.
+#  pushes to each (images.push=aws|azure|gcp|scaleway in a profile's jenesis.plugins.arguments-<profile>.properties,
+#  with the credentials documented on plugins/images/Push), and the workflow's history holds the one-time setup
+#  of each.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 #  AFTER THE IMAGE IS PUSHED:  standing up a server
@@ -72,10 +73,9 @@ jobs:
       - name: Publish
         shell: bash
         env:
-          PUSH_TARGET: hub
           PUSH_VERSION: ${{ inputs.version }}
           PUSH_LATEST: ${{ inputs.push_latest && '1' || '0' }}
           DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
           DOCKER_HUB_NAMESPACE: ${{ vars.DOCKER_HUB_NAMESPACE }}
-        run: java -Djenesis.test.skip=true -Djenesis.images.push="$PUSH_TARGET" build/Build.java images
+        run: java -Djenesis.test.skip=true -Djenesis.make.profiles=hub build/jenesis/Make.java export/custom/images

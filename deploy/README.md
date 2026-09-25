@@ -5,7 +5,6 @@ Everything here deploys the published image, `docker.io/jenesisbuild/jenesis-rep
 building first. Each template takes the image as a parameter defaulting to `:latest`; pin a release for a
 deployment that should not move on its own.
 
-    images.properties     what this repository's `build/Build.java images` goal builds and publishes
     helm/jenesis/         the Helm chart, published as oci://registry-1.docker.io/jenesisbuild/jenesis
     gcp/                  Terraform: Cloud Run over a Cloud Storage bucket (the gcs backend, keyless under ADC)
     scaleway/             Terraform: a Serverless Container over Object Storage (the s3 backend)
