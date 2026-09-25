@@ -56,7 +56,7 @@ whose `requires` name only the modules it should speak. Authentication is enforc
 deployment starts from `JENREG_BOOTSTRAP_KEY` (a well-formed `jenk_<tenant>.<secret><checksum>` key that
 `java -Djenesis.execute.module=source+server-spi build/jenesis/Execute.java` mints and the server provisions at boot) and issues its keys through `/api/credentials`, while `JENREG_AUTH=false` is the
 shortcut for local work. **The web console runs in that same process**, on the same port: the launcher
-above scans it in, so `/` and `/console` are served beside the repository's own routes. It used to be a
+above scans it in, so it answers under `/ui/` beside the repository's own routes, and `/` redirects there. It used to be a
 second entry point on port 8081, which is why an older reading of this file describes one. The `dev`
 profile swaps its OAuth sign-in for a built-in `admin`/`admin` form login:
 
@@ -108,7 +108,7 @@ seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by 
 | `source/importer/*`, and an importer inside fifteen formats | Migration connectors that walk another repository and replay each asset through the owning format's real publish path. |
 | `source/proxy` | The upstream fetcher behind pull-through caching, with revalidation and a negative cache. |
 | `source/walk/{spi,store}`, `source/gc/{spi,store}` | The resumable artifact walk, and mark-sweep garbage collection over it. |
-| `source/ui` | The web console (`/console`, `/browse`) and its design system. |
+| `source/ui` | The web console (`/ui/`) and its design system. |
 | `source/auth/ldap` | Console sign-in against an LDAP or Active Directory server, with the directory's groups reconciled into the deployment's group memberships. |
 | `source/oidc`, `source/ratelimit`, `source/usage` | Sign-in, the request-rate ceiling, and credential-usage tracking. |
 | `source/observation/spi`, `source/posture/spi`, `source/icon/spi` | Observation hooks, security-posture advisories, and console iconography. |
@@ -159,8 +159,9 @@ optional `sha` input names the commit (default: the head it runs on) and the opt
 
 Apache License 2.0 - see [LICENSE](LICENSE). Copyright Rafael Winterhalter.
 
-The console ships two third-party assets under `source/ui/META-INF/resources/`, which keep the terms their
+The console ships third-party assets under `source/ui/META-INF/resources/ui/`, which keep the terms their
 own authors chose. [Pico CSS](https://picocss.com) 2.1.1 (`css/pico.min.css`) is MIT, and its notice ships
 beside it in `css/pico.LICENSE.txt` because MIT asks that it accompany every copy.
 [htmx](https://htmx.org) 2.0.4 (`js/htmx.min.js`) is 0BSD, which requires no notice and carries no copyright
-line of its own.
+line of its own. The [Archivo](https://github.com/Omnibus-Type/Archivo) ExtraBold face (`fonts/Archivo-ExtraBold.ttf`)
+is under the SIL Open Font License 1.1, which ships beside it in `fonts/OFL.txt`.

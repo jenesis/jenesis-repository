@@ -6,3 +6,8 @@ file distributed with it.
 
 Its dependencies are separate works under the licences their own authors chose,
 and are not part of this product.
+
+The console module bundles third-party assets under their own terms, with the
+notices those terms ask for beside them in the module: Pico CSS 2.1.1 (MIT,
+ui/css/pico.LICENSE.txt), htmx 2.0.4 (0BSD, which asks for none), and the Archivo
+ExtraBold font (SIL Open Font License 1.1, ui/fonts/OFL.txt).

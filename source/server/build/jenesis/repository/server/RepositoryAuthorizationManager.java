@@ -66,10 +66,12 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
             request.setAttribute("jenreg.decision", Authorization.Decision.FORBIDDEN);
             return new AuthorizationDecision(false);
         }
-        String scope = request.getHeader("Jenesis-Repository-Name");
+        // No scope, unless the request names one below, is the deployment-wide "*": a route that says nothing about
+        // which repository it reads takes a right over all of them. The scope is never a header the caller chose,
+        // which would let a key scoped to one repository reach a route that reads another by naming its own.
+        String scope = null;
         // An artifact request names its repository in the URL, and that is the repository its right is checked
-        // against - never a header the caller chose, which would let a key scoped to one repository write another
-        // by naming its own. The URL is read the way every routing reads it, so a path-scoped grant (<repo>:<prefix>)
+        // against. The URL is read the way every routing reads it, so a path-scoped grant (<repo>:<prefix>)
         // authorizes exactly the subtree it grants; which tenants a request may address is the routing's to refuse,
         // at the controller. The bare /v2/ names no tenant and no repository: it is the OCI registry's version probe,
         // which asks only whether the credential is accepted.
@@ -87,11 +89,10 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         if (artifact && !probe && "PUT".equals(method) && target.path().equals("/") && !uri.endsWith("/")) {
             required = Authorization.MANAGE_WRITE;
         }
-        // The asset enumeration scopes the store it reads by the ?repo= parameter, not the routed name, so authorize
-        // the repository that is actually enumerated - otherwise a key scoped to repository A could satisfy the header
-        // check for A and then read repository B by passing repo=B. Read the parameter only for that GET route (never
-        // on an upload path, where touching getParameter could drain a form-encoded body). When repo is absent the
-        // controller falls back to the routed name, which is exactly this header, so the scopes stay in lock-step.
+        // The asset enumeration scopes the store it reads by its ?repo= parameter, so the repository authorized is the
+        // one actually enumerated. Read the parameter only for that GET route (never on an upload path, where touching
+        // getParameter could drain a form-encoded body). The controller refuses a request without it; the scope is then
+        // "*", which only a deployment-wide key holds.
         if ("/api/assets".equals(uri)) {
             String repo = request.getParameter("repo");
             if (repo != null && !repo.isBlank()) {
@@ -104,11 +105,10 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         // advisories (each posture row names the tenant, scope and the exact jenreg.* key/value that is unsafe - the
         // deployment's whole security-weakness enumeration, though never a resolved secret value), and the actuator's
         // deployment-wide Micrometer metrics (request counts/URIs/statuses across all repositories, JVM internals) and
-        // build info. Authorizing them against the caller's self-named Jenesis-Repository-Name lets a key scoped to a
-        // single repository read every other scope's content by naming its own repository (a cross-scope leak, the same
-        // class the /api/assets ?repo re-scope closes). Bind them to the deployment-wide scope "*" instead, so only a key
-        // holding a wildcard (deployment-wide) grant may read them - a repository-scoped key is refused. A "*" grant
-        // still reads the whole view (the intended deployment-observability feature); a per-repo grant no longer does.
+        // build info. They are bound to the deployment-wide scope "*", so only a key holding a wildcard grant may read
+        // them - a repository-scoped key is refused, since each of them reads every other scope's content. A "*" grant
+        // reads the whole view, which is the deployment-observability feature they exist for. The binding is named
+        // here rather than left to the default scope because the anonymous rule below keys on the same routes.
         // (The three probe paths - /actuator/health and the liveness/readiness groups - are permit-all in the security
         // chain, so they never reach this manager. Everything else under /actuator does, this binding included: the
         // per-component health paths, the /actuator/health/full group that carries the whole breakdown,
@@ -120,8 +120,8 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
                 && ("/api/logs".equals(uri) || "/api/consistency".equals(uri)
                         || "/actuator".equals(uri) || uri.startsWith("/actuator/"));
         // The credential surface administers the TENANT's keys, not one repository's content, so it is bound
-        // deployment-wide for the same reason the observability routes are: authorizing it against the caller's
-        // self-named repository would let a repository-scoped key mint itself a credential for every other scope.
+        // deployment-wide for the same reason the observability routes are: a repository-scoped key must not mint
+        // itself a credential for every other scope.
         // It also takes the manage: rights rather than the repository: ones - issuing a key is administration, and
         // a key that may publish an artifact must not thereby be able to issue more keys.
         boolean credentials = "/api/credentials".equals(uri) || uri.startsWith("/api/credentials/");
