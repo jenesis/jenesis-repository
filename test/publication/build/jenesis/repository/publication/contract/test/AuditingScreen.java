@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /**
  * The one-class-two-failure-modes archetype: a screen that also opts into the inherited after-commit observer leg.
@@ -35,11 +36,11 @@ public final class AuditingScreen implements PublishInterceptor {
     @Override
     public void committed(ArtifactDescriptor artifact, Disposition disposition, ArtifactStore store)
             throws IOException {
-        Keys.upsert(store, COMMITTED + "/" + Keys.slug(artifact.path()), disposition.name());
+        Hooks.upsert(store, COMMITTED + "/" + Hooks.slug(artifact.path()), disposition.name());
     }
 
     @Override
     public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-        Keys.upsert(store, OBSERVED + "/" + Keys.slug(artifact.path()), IndexObserver.row(artifact));
+        Hooks.upsert(store, OBSERVED + "/" + Hooks.slug(artifact.path()), IndexObserver.row(artifact));
     }
 }

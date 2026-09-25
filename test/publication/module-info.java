@@ -65,11 +65,17 @@ open module build.jenesis.repository.publication.contract.test {
     requires build.jenesis.repository.metadata;
     requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.format;
-    // The index fixture reads the chain's record lines back.
-    requires tools.jackson.databind;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.staging.store;
     requires build.jenesis.repository.store.testkit;
+    // What a fixture over a shipped hook needs beyond the contract: the deployment it is gated on, the pass its
+    // repair leg runs, the format that gives the kit's paths a coordinate, and the hold-release fixture's shape.
+    requires build.jenesis.repository.hooks.testkit;
+    // The event observer's installed sink, whose outbox is the surface its fixture reads; the findings the discarded
+    // hold's hook reclaims.
+    requires build.jenesis.repository.webhook;
+    requires build.jenesis.repository.findings;
+    requires build.jenesis.repository.findings.store;
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.contract.testkit;
     requires org.junit.jupiter;
@@ -81,6 +87,8 @@ open module build.jenesis.repository.publication.contract.test {
     // way a deployment reaches it. The same `uses`-in-a-test-module shape test/store/contract and test/walkconsumer
     // already carry.
     uses build.jenesis.repository.store.PublicationObserver;
+    // The hold-release hooks are a service of their own, counted by their own census leg.
+    uses build.jenesis.repository.gate.HoldReleaseObserver;
 
     // The role archetypes the contract is run over. They are declared here rather than in the testkit because a
     // source testkit must stay inert on a runtime graph - and because this one clause is what makes the census's
@@ -93,7 +101,4 @@ open module build.jenesis.repository.publication.contract.test {
             build.jenesis.repository.publication.contract.test.WithholdingScreen,
             build.jenesis.repository.publication.contract.test.AuditingScreen;
 
-    // The one event sink on this graph, so the event publication observer's fan-out is a surface the kit can read.
-    provides build.jenesis.repository.events.EventSink
-            with build.jenesis.repository.publication.contract.test.EventProbeSink;
 }

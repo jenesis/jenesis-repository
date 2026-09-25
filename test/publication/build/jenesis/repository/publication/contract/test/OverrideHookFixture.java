@@ -6,6 +6,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /**
  * The {@link OverrideHook} fixture, plus the synthetic release surface it runs on.
@@ -45,7 +46,7 @@ final class OverrideHookFixture implements PublicationHookFixture.Release {
 
     @Override
     public Map<String, String> projection(ArtifactStore store) throws IOException {
-        return Keys.rows(store, OverrideHook.OVERRIDES);
+        return Hooks.rows(store, OverrideHook.OVERRIDES);
     }
 
     @Override
@@ -55,7 +56,7 @@ final class OverrideHookFixture implements PublicationHookFixture.Release {
         Publication publication = publication(store);
         String hash = publication.storeBlob(new ByteArrayInputStream(body));
         publication.link("/quarantine" + path, hash);            // stored, diverted, not served
-        Keys.upsert(store, OverrideHook.RECORDS + "/" + Keys.slug(path), hash);
+        Hooks.upsert(store, OverrideHook.RECORDS + "/" + Hooks.slug(path), hash);
     }
 
     @Override
@@ -70,12 +71,12 @@ final class OverrideHookFixture implements PublicationHookFixture.Release {
 
     @Override
     public boolean records(ArtifactStore store, String path) throws IOException {
-        return store.readVersioned(OverrideHook.RECORDS + "/" + Keys.slug(path)).isPresent();
+        return store.readVersioned(OverrideHook.RECORDS + "/" + Hooks.slug(path)).isPresent();
     }
 
     @Override
     public Optional<String> override(ArtifactStore store, String path) throws IOException {
-        return Keys.read(store, OverrideHook.OVERRIDES + "/" + Keys.slug(path));
+        return Hooks.read(store, OverrideHook.OVERRIDES + "/" + Hooks.slug(path));
     }
 
     @Override
@@ -86,7 +87,7 @@ final class OverrideHookFixture implements PublicationHookFixture.Release {
         for (PublicationHookFixture.ReleaseHook hook : hooks) {
             hook.onReleased(store, path);
         }
-        Optional<String> hash = Keys.read(store, "publish/quarantine" + path).map(String::trim);
+        Optional<String> hash = Hooks.read(store, "publish/quarantine" + path).map(String::trim);
         if (hash.isEmpty()) {
             return;    // nothing was held here: the release is a no-op, not a failure
         }

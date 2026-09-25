@@ -6,11 +6,13 @@ import module java.base;
 import build.jenesis.repository.contract.testkit.ContractCensus;
 import build.jenesis.repository.contract.testkit.ContractCensus.Exemption;
 import build.jenesis.repository.contract.testkit.ContractCensus.Provider;
+import build.jenesis.repository.gate.HoldReleaseObserver;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.ChoreographyMutant;
 import build.jenesis.repository.store.testkit.Falsification;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
@@ -20,6 +22,10 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.Delivery;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.ObserverLeg;
 import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
+import build.jenesis.repository.hooks.testkit.HoldReleaseFixture;
+import build.jenesis.repository.hooks.testkit.HookStores;
+import build.jenesis.repository.hooks.testkit.ServedOnly;
+import build.jenesis.repository.hooks.testkit.Hooks;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -41,53 +47,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * and then confirmed against what {@code Publication} actually did with the discovered list.
  *
  * <p><b>What it covers.</b> The kit's own role and delivery archetypes, which assert the contract the SPI states
- * rather than one implementation's habits, and every hook the core ships: each format's stored-listing observer, and
- * the screens and observers of the gate, staging, signatures, index, inventory and events modules - the last group on
- * a burn-down list until each has a fixture. It once read that the core shipped no hook at all, while its graph
- * carried three formats and none of those modules; the matrix-reach inspection rule is what now keeps this module
- * requiring every core provider.
+ * rather than one implementation's habits, and every hook the core ships: each format's stored-listing observer, the
+ * screens and observers of the gate, staging, signatures, index, inventory and events modules, and every hold-release
+ * hook. It once read that the core shipped no hook at all, while its graph carried three formats and none of those
+ * modules; the matrix-reach inspection rule is what now keeps this module requiring every core provider of both
+ * services.
  */
 class PublicationHookCensusTest {
 
     /** Every fixture the kit registers - one per role, one per delivery class, and one per shipped listing observer. */
     private static final List<PublicationHookFixture> FIXTURES = PublicationHookFixtures.all();
 
-    /**
-     * The core hooks with no fixture yet - a burn-down list, which only shrinks. Each moved into the core after the kit
-     * was written, and nothing required its module here, so neither census leg saw it until the matrix-reach inspection
-     * rule named the module; each is on the worklist to be given a fixture of its role.
-     */
-    private static final List<Exemption> EXEMPTIONS = Stream.of(
-                    "build.jenesis.repository.gate.store.ComplianceScreen",
-                    "build.jenesis.repository.gate.store.OciHoldRecorder",
-                    "build.jenesis.repository.staging.store.StagingWithholdInterceptor")
-            .map(hook -> new Exemption(hook, "no fixture yet: a core hook the census's graph did not carry until "
-                    + "2026-09-25; the worklist carries its fixture"))
-            .toList();
-
-    /**
-     * The publication hooks that exist but that this module's graph cannot reach, each with the reason and the ticket
-     * that covers it. They are deliberately <em>not</em> fed to {@link ContractCensus}: the helper requires every
-     * declared provider to be runtime-discoverable here, which is exactly the property that makes its census
-     * meaningful, and a provider in another repository can never satisfy it. Keeping them here as data, each keyed to
-     * the role its downstream source declares, is the honest alternative to widening the helper until it stops
-     * asserting anything.
-     *
-     * <p>Only the enterprise edition's hooks are here: a core module may not require an enterprise one. The list once
-     * held fourteen, most of them hooks that had since moved into the core and were reachable after all, under
-     * package names they no longer had - which is why the guard below, that no entry names a reachable hook, never
-     * tripped. The split matters: the hold-release hook is pre-commit and fail-closed, and running it through the
-     * after-commit legs would assert the opposite of its contract.
-     */
-    private static final Map<String, Role> OUT_OF_GRAPH = Map.ofEntries(
-            // Enterprise after-commit observers - contained, best-effort, repaired by the walk
-            Map.entry("build.jenesis.repository.forwarding.ForwardingObserver", Role.AFTER_COMMIT_OBSERVER),
-            Map.entry("build.jenesis.repository.search.lucene.SearchPublicationObserver", Role.AFTER_COMMIT_OBSERVER),
-            Map.entry("build.jenesis.repository.dependents.DependentsPublicationObserver", Role.AFTER_COMMIT_OBSERVER),
-            Map.entry("build.jenesis.repository.attribution.AttributionListingRebuilder", Role.AFTER_COMMIT_OBSERVER),
-            // An enterprise hold-release hook - pre-commit, fail-closed, and NOT a PublicationObserver despite the name
-            Map.entry("build.jenesis.repository.security.reachability.ReachabilityHoldReleaseObserver",
-                    Role.PRE_COMMIT_RELEASE_HOOK));
+    /** The hooks with no fixture - none. A hook that arrives without one fails the census rather than joining a list. */
+    private static final List<Exemption> EXEMPTIONS = List.of();
 
     @TempDir
     Path root;
@@ -123,6 +95,27 @@ class PublicationHookCensusTest {
     @Test
     void every_declared_and_discovered_hook_has_a_fixture() throws IOException {
         ContractCensus.of(PublicationObserver.class, declared(), discovered(), discoverableFixtures(), EXEMPTIONS);
+    }
+
+    /**
+     * The hold-release hooks are a service of their own, so they are counted on their own. They are not
+     * {@code PublicationObserver}s, so the census above cannot see them, and one arrived with the signature dimension
+     * and ran no contract at all until this leg asked.
+     */
+    @Test
+    void every_declared_and_discovered_hold_release_hook_has_a_fixture() {
+        List<Provider> discovered = ServiceLoader.load(HoldReleaseObserver.class).stream()
+                .map(ServiceLoader.Provider::get)
+                .map(hook -> Provider.runtime(hook.getClass().getName(), hook))
+                .toList();
+        // The kit's own release archetype is a release hook of the kit's shape, not a HoldReleaseObserver, so only the
+        // fixtures over the real service are counted here.
+        List<String> fixtures = FIXTURES.stream()
+                .filter(HoldReleaseFixture.class::isInstance)
+                .map(PublicationHookFixture::providerClass)
+                .toList();
+        ContractCensus.of(HoldReleaseObserver.class, ContractCensus.declaredProviders(HoldReleaseObserver.class),
+                discovered, fixtures, List.of());
     }
 
     @Test
@@ -182,10 +175,12 @@ class PublicationHookCensusTest {
     void every_fixture_is_keyed_to_the_role_its_own_instance_declares() {
         for (PublicationHookFixture fixture : FIXTURES) {
             Object hook = fixture.create();
+            // A hold-release hook reaches the kit through the adapter to its release role; the hook is what it carries.
+            Object driven = hook instanceof HoldReleaseFixture.Adapter adapter ? adapter.observer() : hook;
             assertThat(fixture.role())
                     .as("the '%s' fixture's role is derived from its instance, never declared", fixture.hook())
                     .isEqualTo(Role.of(hook));
-            assertThat(hook.getClass().getName())
+            assertThat(driven.getClass().getName())
                     .as("the '%s' fixture drives the provider class it names", fixture.hook())
                     .isEqualTo(fixture.providerClass());
             assertThat(fixture.create())
@@ -213,7 +208,7 @@ class PublicationHookCensusTest {
                 Publication.Republish.overwrite(), _ -> Publication.Visibility.at(artifact.path()));
 
         assertThat(committed.visible()).as("the discovered chain accepts an unarranged upload").isTrue();
-        String slug = Keys.slug(artifact.path());
+        String slug = Hooks.slug(artifact.path());
         assertThat(store.readVersioned(RecordingScreen.COMMITTED + "/" + slug))
                 .as("the recording screen was driven through the VERDICT chain - a committed row is reachable no "
                         + "other way, so this is Publication's own instanceof split at work")
@@ -356,28 +351,60 @@ class PublicationHookCensusTest {
                     + "reaches all three and is falsified on it."),
             Map.entry("kit-auditing-screen / ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS",
                     "the same one-verdict shape.")),
-            listingPairs());
+            silentPairs(), screenPairs());
 
     /** The recording clauses of every observer that records nothing on a publish, each argued by the fixture's own
      *  {@link RecordsNothingOnPublish#whyNothingOnPublish}: the argument is about the shape of the hook, so it is stated
      *  once, beside the hook, and applied to every recording clause. */
-    private static Map<String, String> listingPairs() {
+    private static Map<String, String> silentPairs() {
+        // The clauses about what an observer records for a publish, which a hook that records nothing cannot fail.
+        Set<PublicationHookContract.Property> recording = EnumSet.of(
+                PublicationHookContract.Property.A_DUPLICATE_DELIVERY_CONVERGES,
+                PublicationHookContract.Property.A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED,
+                PublicationHookContract.Property.THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE,
+                PublicationHookContract.Property.A_REPEATED_DRAIN_LEAVES_THE_SAME_SURFACE);
         Map<String, String> pairs = new TreeMap<>();
         for (PublicationHookFixture fixture : PublicationHookFixtures.all()) {
             if (fixture instanceof RecordsNothingOnPublish silent && !fixture.recordsWhatTheKitPublishes()) {
-                for (String property : List.of("A_DUPLICATE_DELIVERY_CONVERGES",
-                        "A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED",
-                        "THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE")) {
-                    pairs.put(fixture.hook() + " / " + property, silent.whyNothingOnPublish());
+                for (PublicationHookContract.Check check : PublicationHookContract.checks(fixture)) {
+                    if (recording.contains(check.property())) {
+                        pairs.put(fixture.hook() + " / " + check.property(), silent.whyNothingOnPublish());
+                    }
                 }
             }
         }
         return pairs;
     }
 
-    private static Map<String, String> merged(Map<String, String> first, Map<String, String> second) {
+    /**
+     * The read-side and verdict clauses of every screen that declares no read and no verdict but the neutral one,
+     * argued from those two declarations rather than per hook: with no declared read there is nothing to fault and no
+     * later read to retract through, and with one verdict there is nothing for a concurrent publish to be confused
+     * with. Such a screen's work is on its observer or committed legs, which the other clauses hold.
+     */
+    private static Map<String, String> screenPairs() {
+        Map<String, String> pairs = new TreeMap<>();
+        for (PublicationHookFixture fixture : PublicationHookFixtures.all()) {
+            if (fixture instanceof PublicationHookFixture.Interceptor screen && screen.reads().isEmpty()
+                    && screen.verdicts().equals(Set.of(PublishInterceptor.Disposition.ACCEPT))) {
+                for (String property : List.of("A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
+                        "A_SCREEN_DOES_NOT_CATCH_ITS_OWN_STORE_FAILURE_INTO_AN_ACCEPT",
+                        "ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS")) {
+                    pairs.put(fixture.hook() + " / " + property, "'" + fixture.hook() + "' declares no read and "
+                            + "can reach no verdict but ACCEPT, so there is no read to fault, no later verdict to "
+                            + "retract through and no answer for a concurrent publish to confuse");
+                }
+            }
+        }
+        return pairs;
+    }
+
+    @SafeVarargs
+    private static Map<String, String> merged(Map<String, String> first, Map<String, String>... more) {
         Map<String, String> merged = new TreeMap<>(first);
-        merged.putAll(second);
+        for (Map<String, String> next : more) {
+            next.forEach(merged::putIfAbsent);
+        }
         return Collections.unmodifiableMap(merged);
     }
 
@@ -421,7 +448,8 @@ class PublicationHookCensusTest {
                     continue;
                 }
                 try {
-                    Falsification.requireBrokenByChoreography(fixture, check, arrangement, this::faulting);
+                    Falsification.requireBrokenByChoreography(fixture, check, arrangement,
+                            name -> deployed(fixture, name));
                 } catch (AssertionError unfalsified) {
                     survived.add(fixture.hook() + " / " + check.property() + " under " + arrangement + ": "
                             + String.valueOf(unfalsified.getMessage()).lines().findFirst().orElse(""));
@@ -529,18 +557,16 @@ class PublicationHookCensusTest {
      * <b>The kit's own lens, executed rather than declared.</b> Every check of every fixture is run once more
      * against a hook that is a no-op from end to end - the shape every hand-run mutation pass in this plan has found -
      * and the survivors are required to be covered some other way: by a <em>targeted</em> mutation this fixture runs,
-     * or by one of the two reviewed lists above.
+     * by one of the two reviewed lists above, or - where a targeted mutation exists but the driver cannot put it in
+     * front of the hook - by the pinned count of those pairs.
      *
      * <p>It is derived rather than pinned to a literal, because the honest answer is large and moves with the kit:
-     * on this graph a hook that does nothing at all passes <b>101 of the 114 checks</b>, and almost all of them for
-     * the same reason {@link PublicationHookContract#choreography()} gives - the clause is Publication's, and the hook is a bystander in it.
-     * What must never happen is a check that an inert hook survives AND that nothing else falsifies, because that
-     * check is proven over nothing at all; that is what this leg refuses.
-     *
-     * <p><b>The population this figure is measured over is worth naming</b>, because it is not the product's. The free
-     * core ships no hook at all, so every fixture here is a synthetic archetype the kit invented. The number that says
-     * what this contract proves about the <em>shipped</em> hooks would have to be measured in the edition that has
-     * them, and today is not - which is a recorded defect rather than a gap in this file.
+     * a hook that does nothing at all passes most checks, and almost all of them for the same reason
+     * {@link PublicationHookContract#choreography()} gives - the clause is Publication's, and the hook is a bystander
+     * in it. What must never happen is a check that an inert hook survives AND that nothing else falsifies, because
+     * that check is proven over nothing at all; that is what this leg refuses. It is measured over the kit's
+     * archetypes and every hook the core ships alike, and a targeted mutation only counts where the driver can put it
+     * in front of the hook ({@link HookStores#injectable}).
      */
     @Test
     void every_check_an_inert_hook_survives_is_falsified_some_other_way() throws Exception {
@@ -554,9 +580,15 @@ class PublicationHookCensusTest {
                         || NOT_THIS_HOOKS_TO_FALSIFY.containsKey(fixture.hook() + " / " + check.property())) {
                     continue;                                   // argued above, or falsified by an arrangement
                 }
-                boolean targeted = PublicationHookContract.mutations(fixture, check.property()).stream()
-                        .anyMatch(mutation -> mutation.mutant() != Mutant.NO_WORK_AT_ALL);
-                if (!targeted) {
+                List<PublicationHookContract.Mutation> targeted =
+                        PublicationHookContract.mutations(fixture, check.property()).stream()
+                                .filter(mutation -> mutation.mutant() != Mutant.NO_WORK_AT_ALL)
+                                .toList();
+                if (!targeted.isEmpty() && targeted.stream().noneMatch(mutation ->
+                        HookStores.injectable(fixture, mutation))) {
+                    continue;                                   // a falsifier the driver cannot reach: the reviewed count
+                }
+                if (targeted.isEmpty()) {
                     unguarded.add(fixture.hook() + " / " + check.property());
                 }
             }
@@ -569,6 +601,40 @@ class PublicationHookCensusTest {
                         + "the behaviour it is really about, or argue the pair onto PublicationHookContract.unfalsifiable() / "
                         + "NOT_THIS_HOOKS_TO_FALSIFY.%n%s", String.join(System.lineSeparator(), unguarded))
                 .isEmpty();
+    }
+
+    /**
+     * The (hook, mutation) pairs the falsification leg cannot put in front of a hook are a REVIEWED count, not a filter
+     * that quietly grows. {@link HookStores#injectable} skips two families, each for a mechanism written down beside
+     * it: {@code A_ROW_PER_DELIVERY} appends under a variant subject a {@link ServedOnly} fixture cannot
+     * see; and {@code A_PUBLISH_ROW_FROM_THE_WITHHOLD_LEG} applies only to a hook with a withhold row distinct from its
+     * publish row, and to a fixture that can see a subject that does not serve.
+     *
+     * <p>Pinning the count is what stops that gate becoming a place to put an inconvenient red. A new skipped pair
+     * fails here and has to arrive with its own mechanism; a pair that starts biting fails here too, and the gate
+     * shrinks by the same review.
+     */
+    @Test
+    void the_pairs_the_falsification_leg_cannot_reach_are_a_reviewed_list() {
+        Map<Mutant, Integer> skipped = new EnumMap<>(Mutant.class);
+        for (PublicationHookFixture fixture : FIXTURES) {
+            for (PublicationHookContract.Check check : PublicationHookContract.checks(fixture)) {
+                for (PublicationHookContract.Mutation mutation
+                        : PublicationHookContract.mutations(fixture, check.property())) {
+                    if (!HookStores.injectable(fixture, mutation)) {
+                        skipped.merge(mutation.mutant(), 1, Integer::sum);
+                    }
+                }
+            }
+        }
+        assertThat(skipped)
+                .as("the falsification leg's unreachable pairs moved. If a family GREW, the new pair needs its own "
+                        + "measured mechanism in HookStores.injectable - the gate is not a place to put a red. If one "
+                        + "SHRANK, the seam it waited on has landed and the gate should lose that clause")
+                .isEqualTo(Map.of(
+                        // The fixtures whose probes see only served subjects: two screens and the subtree sizes.
+                        Mutant.A_ROW_PER_DELIVERY, 5,
+                        Mutant.A_PUBLISH_ROW_FROM_THE_WITHHOLD_LEG, 1));
     }
 
     @Test
@@ -596,7 +662,7 @@ class PublicationHookCensusTest {
     private boolean survivesAnInertHook(PublicationHookFixture fixture, PublicationHookContract.Check check)
             throws Exception {
         try {
-            Falsification.run(fixture, check, Mutant.NO_WORK_AT_ALL, this::faulting);
+            Falsification.run(fixture, check, Mutant.NO_WORK_AT_ALL, name -> deployed(fixture, name));
             return true;
         } catch (AssertionError | RuntimeException | IOException caught) {
             return false;
@@ -678,25 +744,13 @@ class PublicationHookCensusTest {
                 PublicationHookContract.Property.THE_HOOK_STAYS_INSIDE_ITS_DECLARED_NAMESPACES, name, body);
     }
 
-    private FaultInjectingStore faulting(String name) throws IOException {
-        return FaultInjectingStore.wrap(store(name.replaceAll("[^A-Za-z0-9]", "_")));
+    /** A check's store for a fixture: its deployment seeded, and the process latches put back first. */
+    private FaultInjectingStore deployed(PublicationHookFixture fixture, String name) throws IOException {
+        return HookStores.deployed(root, fixture, name, PublicationHookContractTest::reset);
     }
 
-    // --- the out-of-graph inventory inherits ----------------------------------------------------------------
-
-    @Test
-    void the_out_of_graph_hooks_stay_named_and_role_keyed() {
-        assertThat(OUT_OF_GRAPH)
-                .as("every hook this graph cannot reach is named WITH the role its downstream source declares, "
-                        + "because that role is what decides which legs the earlier fixture must run")
-                .hasSize(5);
-        assertThat(OUT_OF_GRAPH.values().stream().filter(Role.PRE_COMMIT_RELEASE_HOOK::equals).count())
-                .as("the hold-release hook, which is not a PublicationObserver at all").isEqualTo(1);
-        assertThat(OUT_OF_GRAPH.values().stream().filter(Role.AFTER_COMMIT_OBSERVER::equals).count())
-                .as("and the four contained after-commit observers").isEqualTo(4);
-        assertThat(OUT_OF_GRAPH.keySet())
-                .as("no out-of-graph entry may name a hook this graph CAN reach - that would be a fixture dodge")
-                .doesNotContainAnyElementsOf(discovered().stream().map(Provider::implementation).toList());
+    private FaultInjectingStore faulting(String name) throws IOException {
+        return FaultInjectingStore.wrap(store(name.replaceAll("[^A-Za-z0-9]", "_")));
     }
 
     // --- negative controls ------------------------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 package build.jenesis.repository.publication.contract.test;
 
 import module java.base;
+import build.jenesis.repository.hooks.testkit.Discovered;
 import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;

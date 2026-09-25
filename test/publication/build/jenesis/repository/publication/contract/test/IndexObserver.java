@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /**
  * The best-effort archetype: a derived index of served paths, written inline from the callback and healed by a sweep
@@ -27,12 +28,12 @@ public final class IndexObserver implements PublicationObserver {
 
     @Override
     public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-        Keys.upsert(store, SPACE + "/" + Keys.slug(artifact.path()), row(artifact));
+        Hooks.upsert(store, SPACE + "/" + Hooks.slug(artifact.path()), row(artifact));
     }
 
     @Override
     public void onDeleted(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-        store.delete(SPACE + "/" + Keys.slug(artifact.path()));
+        store.delete(SPACE + "/" + Hooks.slug(artifact.path()));
     }
 
     /** What one row holds. A publish whose descriptor carries no blob identity is recorded as such rather than

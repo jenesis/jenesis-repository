@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /**
  * The read-side archetype: a screen whose verdict lives on {@code withheld} rather than on {@code assess} - the
@@ -33,12 +34,12 @@ public final class WithholdingScreen implements PublishInterceptor {
 
     @Override
     public boolean withheld(String path, ArtifactStore store) throws IOException {
-        return store.readVersioned(HELD + "/" + Keys.slug(path)).isPresent();
+        return store.readVersioned(HELD + "/" + Hooks.slug(path)).isPresent();
     }
 
     @Override
     public void committed(ArtifactDescriptor artifact, Disposition disposition, ArtifactStore store)
             throws IOException {
-        Keys.upsert(store, AUDIT + "/" + Keys.slug(artifact.path()), disposition.name());
+        Hooks.upsert(store, AUDIT + "/" + Hooks.slug(artifact.path()), disposition.name());
     }
 }

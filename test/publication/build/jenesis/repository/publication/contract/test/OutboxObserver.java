@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /**
  * The durable-after-enqueue archetype: the callback writes a durable note and a later drain performs the effect - the
@@ -31,20 +32,20 @@ public final class OutboxObserver implements PublicationObserver {
     @Override
     public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         // The whole callback: one small durable note, no remote call. Anything slow belongs to the drain.
-        Keys.upsert(store, PENDING + "/" + Keys.slug(artifact.path()), IndexObserver.row(artifact));
+        Hooks.upsert(store, PENDING + "/" + Hooks.slug(artifact.path()), IndexObserver.row(artifact));
     }
 
     @Override
     public void onDeleted(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-        store.delete(PENDING + "/" + Keys.slug(artifact.path()));
-        store.delete(SENT + "/" + Keys.slug(artifact.path()));
+        store.delete(PENDING + "/" + Hooks.slug(artifact.path()));
+        store.delete(SENT + "/" + Hooks.slug(artifact.path()));
     }
 
     /** Deliver every pending note. Idempotent by construction: the delivery is an upsert keyed by the same row the
      *  note is, so a drain that crashed after writing and before clearing simply re-writes the same row. */
     static void drain(ArtifactStore store) throws IOException {
-        for (Map.Entry<String, String> note : Keys.rows(store, PENDING).entrySet()) {
-            Keys.upsert(store, SENT + "/" + note.getKey(), note.getValue());
+        for (Map.Entry<String, String> note : Hooks.rows(store, PENDING).entrySet()) {
+            Hooks.upsert(store, SENT + "/" + note.getKey(), note.getValue());
             store.delete(PENDING + "/" + note.getKey());
         }
     }

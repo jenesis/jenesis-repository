@@ -2,10 +2,12 @@ package build.jenesis.repository.publication.contract.test;
 
 import module java.base;
 
+import build.jenesis.repository.hooks.testkit.Discovered;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /** The {@link WithholdingScreen} fixture: the screen whose verdict lives on the read side, so it is the one that
  *  drives the retraction and read-purity clauses and the fail-closed direction of an unanswerable hold probe. */
@@ -47,7 +49,7 @@ final class WithholdingScreenFixture implements PublicationHookFixture.Intercept
 
     @Override
     public boolean arrangeWithhold(ArtifactStore store, String path) throws IOException {
-        Keys.upsert(store, WithholdingScreen.HELD + "/" + Keys.slug(path), "held");
+        Hooks.upsert(store, WithholdingScreen.HELD + "/" + Hooks.slug(path), "held");
         return true;
     }
 
@@ -58,6 +60,6 @@ final class WithholdingScreenFixture implements PublicationHookFixture.Intercept
 
     @Override
     public Map<String, String> projection(ArtifactStore store) throws IOException {
-        return Keys.rows(store, WithholdingScreen.AUDIT);
+        return Hooks.rows(store, WithholdingScreen.AUDIT);
     }
 }

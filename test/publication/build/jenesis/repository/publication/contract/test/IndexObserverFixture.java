@@ -2,10 +2,12 @@ package build.jenesis.repository.publication.contract.test;
 
 import module java.base;
 
+import build.jenesis.repository.hooks.testkit.Discovered;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /** The {@link IndexObserver} fixture: a best-effort derived index whose repair leg is a real sweep over the durable
  *  {@code publish/} pointer namespace, re-presenting every retained artifact exactly as the walk's {@code onRetained}
@@ -39,13 +41,13 @@ class IndexObserverFixture implements PublicationHookFixture.Observer {
 
     @Override
     public Map<String, String> projection(ArtifactStore store) throws IOException {
-        return Keys.rows(store, IndexObserver.SPACE);
+        return Hooks.rows(store, IndexObserver.SPACE);
     }
 
     @Override
     public Map<String, String> converged(List<ArtifactDescriptor> published) {
         Map<String, String> converged = new TreeMap<>();
-        published.forEach(artifact -> converged.put(Keys.slug(artifact.path()), artifact.path()));
+        published.forEach(artifact -> converged.put(Hooks.slug(artifact.path()), artifact.path()));
         return converged;
     }
 
@@ -55,8 +57,8 @@ class IndexObserverFixture implements PublicationHookFixture.Observer {
         // retained artifact read back out of the durable pointer namespace, so the surface is rebuilt from truth
         // rather than from anything the live events happened to deliver.
         PublicationObserver fresh = create();
-        for (String path : Keys.published(store)) {
-            String hash = Keys.read(store, "publish" + path).map(String::trim).orElse(null);
+        for (String path : Hooks.published(store)) {
+            String hash = Hooks.read(store, "publish" + path).map(String::trim).orElse(null);
             fresh.onPublished(ArtifactDescriptor.at("kit", path).withBlob(hash, -1L), store);
         }
     }

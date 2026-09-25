@@ -2,10 +2,12 @@ package build.jenesis.repository.publication.contract.test;
 
 import module java.base;
 
+import build.jenesis.repository.hooks.testkit.Discovered;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /** The {@link AuditingScreen} fixture: the screen that also overrides the inherited observer leg, so it is the one
  *  that puts a propagating {@code committed} and a contained {@code onPublished} on the same instance. */
@@ -58,8 +60,8 @@ class AuditingScreenFixture implements PublicationHookFixture.Interceptor {
     @Override
     public Map<String, String> projection(ArtifactStore store) throws IOException {
         Map<String, String> projection = new TreeMap<>();
-        Keys.rows(store, AuditingScreen.COMMITTED).forEach((key, body) -> projection.put("committed/" + key, body));
-        Keys.rows(store, AuditingScreen.OBSERVED).forEach((key, body) -> projection.put("observed/" + key, body));
+        Hooks.rows(store, AuditingScreen.COMMITTED).forEach((key, body) -> projection.put("committed/" + key, body));
+        Hooks.rows(store, AuditingScreen.OBSERVED).forEach((key, body) -> projection.put("observed/" + key, body));
         return projection;
     }
 }

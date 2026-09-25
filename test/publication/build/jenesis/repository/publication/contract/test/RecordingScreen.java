@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /**
  * The verdict archetype: a screen that votes from durable state and records both what it saw and what the chain
@@ -49,8 +50,8 @@ public final class RecordingScreen implements PublishInterceptor {
     public Disposition assess(ArtifactDescriptor artifact, Content content) throws IOException {
         // readVersioned, never exists: a backend outage has to arrive here as an exception, or this screen would
         // answer "nothing against it" for an artifact it never managed to look up.
-        Optional<String> recorded = Keys.read(content.store(), VERDICTS + "/" + Keys.slug(artifact.path()));
-        Keys.upsert(content.store(), SEEN + "/" + Keys.slug(artifact.path()), artifact.path());
+        Optional<String> recorded = Hooks.read(content.store(), VERDICTS + "/" + Hooks.slug(artifact.path()));
+        Hooks.upsert(content.store(), SEEN + "/" + Hooks.slug(artifact.path()), artifact.path());
         return recorded.map(Disposition::valueOf).orElse(Disposition.ACCEPT);
     }
 
@@ -59,6 +60,6 @@ public final class RecordingScreen implements PublishInterceptor {
             throws IOException {
         // An upsert, because committed is called again on every replay - including the replay that repairs a first
         // attempt which crashed between this notification and the visibility write.
-        Keys.upsert(store, COMMITTED + "/" + Keys.slug(artifact.path()), disposition.name());
+        Hooks.upsert(store, COMMITTED + "/" + Hooks.slug(artifact.path()), disposition.name());
     }
 }

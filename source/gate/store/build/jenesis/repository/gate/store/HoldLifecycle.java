@@ -65,6 +65,13 @@ public final class HoldLifecycle {
      * @throws IllegalStateException when nothing is quarantined at {@code path} (already released or never held).
      */
     public static String release(ArtifactStore store, String path) throws IOException {
+        return release(store, path, HoldReleaseObserver.discovered());
+    }
+
+    /** {@link #release(ArtifactStore, String)} fanning out to {@code hooks} rather than to the discovered ones - the
+     *  substitution seam, so a contract over one hook drives the real choreography with that hook in it. */
+    public static String release(ArtifactStore store, String path, Iterable<HoldReleaseObserver> hooks)
+            throws IOException {
         Publication publication = new Publication(store);
         Optional<String> held = publication.blob("/quarantine" + path);
         if (held.isEmpty()) {
@@ -107,12 +114,12 @@ public final class HoldLifecycle {
         // version routinely share a hash, and a version's other files are not this file under another name.
         for (String alias : ServedAliases.group(store, path)) {
             if (!alias.equals(path)) {
-                releaseAlias(store, publication, path, alias);
+                releaseAlias(store, publication, path, alias, hooks);
             }
         }
         // Overrides durable BEFORE the pointer clears: a crash here leaves the hold in place and overridden, so a
         // re-run converges and the kev-/license-/reachability-enforce sweeps never re-hold the human's release.
-        HoldReleaseObserver.released(store, path);
+        HoldReleaseObserver.released(store, path, hooks);
         // A hold whose kind is no longer installed has no hook to consume its record, and the record is authoritative
         // - so without this a released artifact would read as held forever and no operator could ever get it
         // back. This IS that operator action: a human chose release at a review surface, so the orphaned records go
@@ -207,6 +214,13 @@ public final class HoldLifecycle {
      * duplicate or stale discard never strips a served version's audit trail.
      */
     public static boolean discard(ArtifactStore store, String path) throws IOException {
+        return discard(store, path, HoldReleaseObserver.discovered());
+    }
+
+    /** {@link #discard(ArtifactStore, String)} fanning out to {@code hooks} rather than to the discovered ones - the
+     *  substitution seam. */
+    public static boolean discard(ArtifactStore store, String path, Iterable<HoldReleaseObserver> hooks)
+            throws IOException {
         Publication publication = new Publication(store);
         Optional<String> held = publication.blob("/quarantine" + path);
         if (held.isEmpty()) {
@@ -240,7 +254,7 @@ public final class HoldLifecycle {
         // Log rows and hold records first: a crash mid-discard leaves the /quarantine pointer - the review queue's
         // index - in place as the surface an operator retries from, instead of dangling record rows forever.
         new QuarantineLog(store).discarded(path);
-        HoldReleaseObserver.discarded(store, path);
+        HoldReleaseObserver.discarded(store, path, hooks);
         // The discard counterpart of the release leg's orphan reap: a kind with no installed hook cannot drop its own
         // record, and a discarded version has no published/ sidecar for any sweep to ever reach, so the row would
         // dangle forever. Guarded exactly as the installed kinds' own onDiscarded guards it - the record is per
@@ -621,12 +635,12 @@ public final class HoldLifecycle {
      * marker left standing - the state before this existed - rather than a disclosure.
      */
     private static void releaseAlias(ArtifactStore store, Publication publication, String released,
-                                     String alias) {
+                                     String alias, Iterable<HoldReleaseObserver> hooks) {
         try {
             if (publication.blob("/quarantine" + alias).isEmpty()) {
                 return;   // not held: the common case for a view whose hold was only ever the content marker
             }
-            HoldReleaseObserver.released(store, alias);
+            HoldReleaseObserver.released(store, alias, hooks);
             HoldRecords.releaseOrphaned(store, alias);
             publication.unpublish("/quarantine" + alias);
             QuarantineDispatch.discard(store, alias);

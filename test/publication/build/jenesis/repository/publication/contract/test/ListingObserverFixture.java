@@ -2,12 +2,14 @@ package build.jenesis.repository.publication.contract.test;
 
 import module java.base;
 
+import build.jenesis.repository.hooks.testkit.Discovered;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.testkit.PublicationHookContract.Property;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /**
  * The fixture of a format's stored-listing observer - the after-commit hook that keeps a {@link StoredListing} in
@@ -66,7 +68,7 @@ final class ListingObserverFixture implements PublicationHookFixture.Observer, R
 
     @Override
     public Map<String, String> projection(ArtifactStore store) throws IOException {
-        return Keys.rows(store, StoredListing.ROOT.substring(0, StoredListing.ROOT.length() - 1));
+        return Hooks.rows(store, StoredListing.ROOT.substring(0, StoredListing.ROOT.length() - 1));
     }
 
     @Override

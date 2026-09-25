@@ -1,6 +1,8 @@
 package build.jenesis.repository.gate.store;
 
 import module java.base;
+
+import build.jenesis.repository.gate.HoldReleaseObserver;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
@@ -17,8 +19,17 @@ public final class GatedRepository {
 
     private final ArtifactStore store;
 
+    private final Iterable<HoldReleaseObserver> hooks;
+
     public GatedRepository(ArtifactStore store) {
+        this(store, HoldReleaseObserver.discovered());
+    }
+
+    /** A review surface whose release and discard fan out to {@code hooks} - the substitution seam a contract over
+     *  one hold-release hook drives the real choreography through. */
+    public GatedRepository(ArtifactStore store, Iterable<HoldReleaseObserver> hooks) {
         this.store = store;
+        this.hooks = hooks;
     }
 
     /** Promote a previously quarantined path into the release layout after review, through the shared
@@ -26,7 +37,7 @@ public final class GatedRepository {
      *  never disagree on crash-window ordering (override markers durable before the hold pointer clears, the
      *  release pointer linked only when absent so a corrected republish is never rolled back to the held bytes). */
     public void release(String path) throws IOException {
-        HoldLifecycle.release(store, path);
+        HoldLifecycle.release(store, path, hooks);
     }
 
     /** Discard a quarantined path without releasing it, through the shared {@link HoldLifecycle} primitive: the
@@ -35,6 +46,6 @@ public final class GatedRepository {
      *  stale discard strips no served version's history and is reported as having discarded nothing - the same answer
      *  the console gives - rather than raised, so both surfaces tell the reviewer the same thing. */
     public boolean discard(String path) throws IOException {
-        return HoldLifecycle.discard(store, path);
+        return HoldLifecycle.discard(store, path, hooks);
     }
 }

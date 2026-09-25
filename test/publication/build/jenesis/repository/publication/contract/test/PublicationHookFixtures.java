@@ -31,11 +31,15 @@ final class PublicationHookFixtures {
                 new IndexObserverFixture(), new FeedSplittingObserverFixture(), new OutboxObserverFixture(),
                 new RecordingScreenFixture(), new WithholdingScreenFixture(), new AuditingScreenFixture(),
                 new OverrideHookFixture(),
-                // The core's own hooks beyond the formats' listing observers.
-                new SubtreeSizeObserverFixture(), new IndexPublicationObserverFixture(),
-                new IndexRetractionObserverFixture(), new EventPublicationObserverFixture(),
-                new ProvenanceAttestationReaperFixture(), new AttestationLookupObserverFixture(),
-                new SignatureCompletionObserverFixture()));
+                // The core's own hooks beyond the formats' listing observers: the after-commit observers ...
+                new SubtreeSizeFixture(), new IndexRetractionFixture(), new IndexPublicationFixture(),
+                new PublicationEventFixture(), new ProvenanceReaperFixture(), new AttestationLookupObserverFixture(),
+                new SignatureCompletionObserverFixture(),
+                // ... the pre-commit screens ...
+                new ComplianceScreenFixture(), new StagingWithholdFixture(), new OciHoldRecorderFixture(),
+                // ... and the hold-release hooks, which are not PublicationObservers at all.
+                new KevReleaseFixture(), new LicenseReleaseFixture(), new SignatureReleaseFixture(),
+                new DiscardedFindingsFixture()));
         for (String observer : LISTING_OBSERVERS) {
             String format = observer.substring(0, observer.indexOf('.'));
             fixtures.add(new ListingObserverFixture(format + "-listing",

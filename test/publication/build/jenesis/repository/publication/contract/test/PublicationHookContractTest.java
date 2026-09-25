@@ -3,7 +3,6 @@ package build.jenesis.repository.publication.contract.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
-import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.store.testkit.Falsification;
 import build.jenesis.repository.store.testkit.Mutant;
@@ -12,6 +11,8 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
 import org.junit.jupiter.params.Parameter;
 import org.junit.jupiter.params.ParameterizedClass;
 import org.junit.jupiter.params.provider.MethodSource;
+import build.jenesis.repository.hooks.testkit.HookStores;
+import build.jenesis.repository.webhook.Webhooks;
 
 /**
  * The JUnit driver of the shared publication-hook contract, run once over every fixture in
@@ -25,7 +26,8 @@ import org.junit.jupiter.params.provider.MethodSource;
  *
  * <p>Each check gets its own freshly created, empty store wrapped in a {@link FaultInjectingStore}: absence,
  * convergence and crash windows are all what these checks assert, so a store carrying another check's rows would
- * weaken them.
+ * weaken them. A shipped hook gated on the surface it feeds gets that surface's deployment seeded first, by
+ * {@link HookStores#deployed}, and the webhook latch is put back before every check.
  *
  * <p><b>And every check is run a second time against each mutation its property declares</b>, by
  * {@link #every_contract_check_is_falsifiable()}. The two factories are deliberately separate: the first says what
@@ -70,14 +72,18 @@ class PublicationHookContractTest {
     Stream<DynamicTest> every_contract_check_is_falsifiable() {
         return PublicationHookContract.checks(fixture).stream()
                 .flatMap(check -> PublicationHookContract.mutations(fixture, check.property()).stream()
+                        .filter(mutation -> HookStores.injectable(fixture, mutation))
                         .map(mutation -> DynamicTest.dynamicTest(
                                 fixture.hook() + ": " + mutation.mutant() + " must break - " + check.name(),
                                 () -> Falsification.requireBroken(fixture, check, mutation, this::store))));
     }
 
     private FaultInjectingStore store(String name) throws IOException {
-        Path directory = Files.createDirectories(root.resolve(name.replaceAll("[^A-Za-z0-9]", "_")));
-        return FaultInjectingStore.wrap(ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? directory.toString() : null));
+        return HookStores.deployed(root, fixture, name, PublicationHookContractTest::reset);
+    }
+
+    /** Put the one process-global latch this graph carries back where a fresh process finds it. */
+    static void reset() {
+        Webhooks.configure(false);
     }
 }

@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /**
  * An observer that records on <em>both</em> feeds and keeps them apart - the shape needed to prove that a hook
@@ -32,18 +33,18 @@ public final class FeedSplittingObserver implements PublicationObserver {
 
     @Override
     public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-        Keys.upsert(store, SPACE + "/" + Keys.slug(artifact.path()), PUBLISHED);
+        Hooks.upsert(store, SPACE + "/" + Hooks.slug(artifact.path()), PUBLISHED);
     }
 
     @Override
     public void onWithheld(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         // The whole point: a held artifact gets a row, and it is NOT the publish row. An observer that treated the
         // two feeds as one would write PUBLISHED here, which is exactly the mutation this fixture exists to catch.
-        Keys.upsert(store, SPACE + "/" + Keys.slug(artifact.path()), WITHHELD);
+        Hooks.upsert(store, SPACE + "/" + Hooks.slug(artifact.path()), WITHHELD);
     }
 
     @Override
     public void onWithholdCleared(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-        Keys.upsert(store, SPACE + "/" + Keys.slug(artifact.path()), PUBLISHED);
+        Hooks.upsert(store, SPACE + "/" + Hooks.slug(artifact.path()), PUBLISHED);
     }
 }

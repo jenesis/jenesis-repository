@@ -2,10 +2,12 @@ package build.jenesis.repository.publication.contract.test;
 
 import module java.base;
 
+import build.jenesis.repository.hooks.testkit.Discovered;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /** The {@link OutboxObserver} fixture: durable-after-enqueue, so its projection is the <em>drained</em> surface and
  *  its enqueued notes are a separate, independently readable state - which is exactly what the kit compares to tell
@@ -39,12 +41,12 @@ final class OutboxObserverFixture implements PublicationHookFixture.Observer {
 
     @Override
     public Map<String, String> projection(ArtifactStore store) throws IOException {
-        return Keys.rows(store, OutboxObserver.SENT);
+        return Hooks.rows(store, OutboxObserver.SENT);
     }
 
     @Override
     public Map<String, String> enqueued(ArtifactStore store) throws IOException {
-        return Keys.rows(store, OutboxObserver.PENDING);
+        return Hooks.rows(store, OutboxObserver.PENDING);
     }
 
     @Override
@@ -55,15 +57,15 @@ final class OutboxObserverFixture implements PublicationHookFixture.Observer {
     @Override
     public Map<String, String> converged(List<ArtifactDescriptor> published) {
         Map<String, String> converged = new TreeMap<>();
-        published.forEach(artifact -> converged.put(Keys.slug(artifact.path()), artifact.path()));
+        published.forEach(artifact -> converged.put(Hooks.slug(artifact.path()), artifact.path()));
         return converged;
     }
 
     @Override
     public void repair(ArtifactStore store) throws IOException {
         PublicationObserver fresh = create();
-        for (String path : Keys.published(store)) {
-            String hash = Keys.read(store, "publish" + path).map(String::trim).orElse(null);
+        for (String path : Hooks.published(store)) {
+            String hash = Hooks.read(store, "publish" + path).map(String::trim).orElse(null);
             fresh.onPublished(ArtifactDescriptor.at("kit", path).withBlob(hash, -1L), store);
         }
     }

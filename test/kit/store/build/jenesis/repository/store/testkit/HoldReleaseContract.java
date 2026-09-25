@@ -230,7 +230,14 @@ final class HoldReleaseContract {
             throws Exception {
         Release release = (Release) fixture;
         String path = "/kit/never-held";
-        commit(publication(store, List.of()), descriptor(path));
+        // Under review, but for a reason that is not this hook's kind: a review pointer over the published bytes and
+        // no record of any kind beside it. A path under no review at all is refused by a release surface before any
+        // hook is asked, so it would say nothing about the hook; this is the path a hook really meets and must leave
+        // alone.
+        Publication publication = publication(store, List.of());
+        String hash = publication.storeBlob(new ByteArrayInputStream(BODY.getBytes(StandardCharsets.UTF_8)));
+        publication.link(path, hash);
+        publication.link("/quarantine" + path, hash);
 
         Throwable failed = thrownBy(() -> release.release(store, path, List.of(release.create())));
 

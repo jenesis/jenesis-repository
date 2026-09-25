@@ -2,10 +2,12 @@ package build.jenesis.repository.publication.contract.test;
 
 import module java.base;
 
+import build.jenesis.repository.hooks.testkit.Discovered;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /** The {@link RecordingScreen} fixture: the screen that can reach every disposition from durable state, so it is the
  *  one that drives the verdict legs and the "does not degrade to ACCEPT when its own store is down" clause. */
@@ -39,7 +41,7 @@ final class RecordingScreenFixture implements PublicationHookFixture.Interceptor
     @Override
     public void arrange(ArtifactStore store, ArtifactDescriptor artifact, PublishInterceptor.Disposition verdict)
             throws IOException {
-        Keys.upsert(store, RecordingScreen.VERDICTS + "/" + Keys.slug(artifact.path()), verdict.name());
+        Hooks.upsert(store, RecordingScreen.VERDICTS + "/" + Hooks.slug(artifact.path()), verdict.name());
     }
 
     @Override
@@ -55,8 +57,8 @@ final class RecordingScreenFixture implements PublicationHookFixture.Interceptor
     @Override
     public Map<String, String> projection(ArtifactStore store) throws IOException {
         Map<String, String> projection = new TreeMap<>();
-        Keys.rows(store, RecordingScreen.SEEN).forEach((key, body) -> projection.put("seen/" + key, body));
-        Keys.rows(store, RecordingScreen.COMMITTED).forEach((key, body) -> projection.put("committed/" + key, body));
+        Hooks.rows(store, RecordingScreen.SEEN).forEach((key, body) -> projection.put("seen/" + key, body));
+        Hooks.rows(store, RecordingScreen.COMMITTED).forEach((key, body) -> projection.put("committed/" + key, body));
         return projection;
     }
 }

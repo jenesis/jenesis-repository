@@ -3,6 +3,7 @@ package build.jenesis.repository.publication.contract.test;
 import module java.base;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.hooks.testkit.Discovered;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;

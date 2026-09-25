@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.testkit.PublicationHookFixture;
+import build.jenesis.repository.hooks.testkit.Hooks;
 
 /**
  * The pre-commit hold-release archetype, modelled on downstream's {@code KevHold} / {@code LicenseHold} release
@@ -34,19 +35,19 @@ public final class OverrideHook implements PublicationHookFixture.ReleaseHook {
 
     @Override
     public void onReleased(ArtifactStore store, String path) throws IOException {
-        if (store.readVersioned(RECORDS + "/" + Keys.slug(path)).isEmpty()) {
+        if (store.readVersioned(RECORDS + "/" + Hooks.slug(path)).isEmpty()) {
             return;    // this kind never held the path: a no-op, so registering an unused hold kind is harmless
         }
         // Atomic create: an override already promoted by an earlier attempt stays exactly as it was, which is what
         // makes a retry after a failed fan-out converge rather than compound.
-        store.writeVersioned(OVERRIDES + "/" + Keys.slug(path), "cleared".getBytes(StandardCharsets.UTF_8), null);
-        store.delete(RECORDS + "/" + Keys.slug(path));
+        store.writeVersioned(OVERRIDES + "/" + Hooks.slug(path), "cleared".getBytes(StandardCharsets.UTF_8), null);
+        store.delete(RECORDS + "/" + Hooks.slug(path));
     }
 
     @Override
     public void onDiscarded(ArtifactStore store, String path) throws IOException {
         // The record goes, so a thrown-away version's row does not dangle forever - but NO override is promoted: a
         // discarded version was never cleared by anyone, and an override would suppress a future legitimate hold.
-        store.delete(RECORDS + "/" + Keys.slug(path));
+        store.delete(RECORDS + "/" + Hooks.slug(path));
     }
 }
