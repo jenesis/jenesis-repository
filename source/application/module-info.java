@@ -65,6 +65,12 @@ open module build.jenesis.repository.application {
     requires spring.boot.webmvc;
     requires spring.boot.starter.jetty;
     requires org.eclipse.jetty.jndi;
+    // The server customizer that admits an encoded slash (EncodedSlashConfig): the connector's URI compliance and
+    // the servlet handler's ambiguous-URI decoding, both Jetty's own API.
+    requires spring.boot.jetty;
+    requires org.eclipse.jetty.server;
+    requires org.eclipse.jetty.http;
+    requires org.eclipse.jetty.ee11.servlet;
     requires spring.boot.actuator;
     requires spring.boot.starter.actuator;
     requires spring.security.config;

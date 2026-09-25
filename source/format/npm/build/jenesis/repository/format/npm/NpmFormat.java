@@ -10,6 +10,8 @@ import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.blobs.ProxyRelay;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.icon.IconResource;
 import build.jenesis.repository.format.ProxyFormat;
@@ -38,7 +40,7 @@ import build.jenesis.repository.format.Semver;
  * served verbatim, so npm's integrity check passes.
  */
 public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter,
-        ArtifactSignatures {
+        ArtifactSignatures, RepositoryExporter {
 
     static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -187,8 +189,14 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     @Override
     public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         Blobs blobs = new Blobs(store);
-        String rest = exchange.path().substring("/npm/".length());
+        // npm sends a scoped package's name with its slash encoded (@scope%2Fname), on a publish, a packument read and
+        // the tarball URL a packument read completes; no name or tarball file carries a literal "%2F" otherwise.
+        String rest = exchange.path().substring("/npm/".length()).replace("%2F", "/").replace("%2f", "/");
         String method = exchange.method();
+        if (rest.startsWith(DIST_TAGS_API)) {
+            distTags(rest.substring(DIST_TAGS_API.length()), exchange, blobs, store);
+            return;
+        }
         int tarball = rest.indexOf("/-/");
         if (tarball >= 0) {
             if (!method.equals("GET") && !method.equals("HEAD")) {
@@ -481,7 +489,11 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         }
         Publication.Commit strongest = null;
         while (parser.nextToken() == JsonToken.PROPERTY_NAME) {
-            String file = parser.currentName();
+            // npm names a scoped package's tarball after the whole name - "@scope/name-1.0.0.tgz" - and it is stored
+            // and served under the unscoped file name the packument's tarball URL uses; any other slash is unsafe.
+            String sent = parser.currentName();
+            String scope = name.contains("/") ? name.substring(0, name.indexOf('/') + 1) : "";
+            String file = !scope.isEmpty() && sent.startsWith(scope) ? sent.substring(scope.length()) : sent;
             parser.nextToken();   // advance onto the attachment object
             if (Keys.unsafe(file)) {
                 return new Attachments(false, strongest);
@@ -555,6 +567,224 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         // The served packument is written here, on the publish: the envelope's versions (those that are servable)
         // and dist-tags join the stored document rather than being enumerated and screened on every read.
         new NpmListings(blobs).published(name, envelope.versions(), envelope.distTags() != null);
+    }
+
+    /** Where {@code npm dist-tag} addresses a package's tags: {@code -/package/<name>/dist-tags[/<tag>]}. */
+    private static final String DIST_TAGS_API = "-/package/";
+
+    /**
+     * {@code npm dist-tag ls|add|rm}: {@code GET -/package/<name>/dist-tags} answers the tags the packument carries,
+     * {@code PUT} (or {@code POST}) {@code .../dist-tags/<tag>} with a JSON string body points a tag at a listed
+     * version, and {@code DELETE .../dist-tags/<tag>} removes one other than {@code latest}, which npm's own registry
+     * refuses to remove. A package whose tags were never written has a computed {@code latest}, and a first change
+     * keeps it: the stored document starts from the tags the packument shows, not from nothing.
+     */
+    private void distTags(String rest, FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
+        int marker = rest.lastIndexOf("/dist-tags");
+        String name = marker > 0 ? rest.substring(0, marker) : "";
+        String tail = marker > 0 ? rest.substring(marker + "/dist-tags".length()) : "";
+        String tag = tail.startsWith("/") ? tail.substring(1) : tail;
+        if (name.isEmpty() || Keys.unsafePath(name) || (!tail.isEmpty() && (!tail.startsWith("/") || Keys.unsafe(tag)))) {
+            exchange.respond(404);
+            return;
+        }
+        Optional<ObjectNode> current = tags(name, blobs, store);
+        if (current.isEmpty()) {
+            exchange.respond(404);
+            return;
+        }
+        ObjectNode tags = current.get();
+        String method = exchange.method();
+        if (tag.isEmpty()) {
+            if (!method.equals("GET") && !method.equals("HEAD")) {
+                exchange.respond(405);
+                return;
+            }
+            exchange.setResponseHeader("Content-Type", "application/json");
+            exchange.respond(200, MAPPER.writeValueAsBytes(tags));
+            return;
+        }
+        if (method.equals("PUT") || method.equals("POST")) {
+            JsonNode body;
+            try (InputStream in = exchange.requestStream()) {
+                body = MAPPER.readTree(in.readNBytes(1024));
+            } catch (RuntimeException malformed) {
+                exchange.respond(400);
+                return;
+            }
+            String version = body.isString() ? body.asString() : "";
+            if (Keys.unsafe(version) || blobs.locate(tarballKey(name, shortName(name), version)).isEmpty()
+                    || !blobs.exists("npm/" + name + "/versions/" + version)) {
+                exchange.respond(404);   // a tag points at a listed version or nowhere
+                return;
+            }
+            tags.put(tag, version);
+        } else if (method.equals("DELETE")) {
+            if (tag.equals("latest")) {
+                exchange.respond(400);
+                return;
+            }
+            tags.remove(tag);
+        } else {
+            exchange.respond(405);
+            return;
+        }
+        byte[] document = MAPPER.writeValueAsBytes(tags);
+        new Publication(store, List.of(), List.of()).commit(ArtifactDescriptor.at("npm", "/npm/" + name),
+                new ByteArrayInputStream(document), METADATA,
+                _ -> Publication.Visibility.through((hash, _, _) -> blobs.link("npm/" + name + "/dist-tags", hash)));
+        new NpmListings(blobs).published(name, Map.of(), true);
+        exchange.setResponseHeader("Content-Type", "application/json");
+        exchange.respond(200, document);
+    }
+
+    /** The dist-tags a package's packument shows, read off the stored document without holding its versions; empty
+     *  when nothing of the package is listed. */
+    private static Optional<ObjectNode> tags(String name, Blobs blobs, ArtifactStore store) throws IOException {
+        if (!StoredListing.present(store, NpmListings.packument(name)) && blobs.isEmpty("npm/" + name + "/versions")) {
+            return Optional.empty();
+        }
+        Optional<StoredListing.Served> served = StoredListing.open(store, new NpmListings(blobs).spec(name));
+        if (served.isEmpty()) {
+            return Optional.empty();
+        }
+        try (StoredListing.Served document = served.get();
+             JsonParser parser = MAPPER.createParser(document.body())) {
+            if (parser.nextToken() != JsonToken.START_OBJECT) {
+                return Optional.empty();
+            }
+            while (parser.nextToken() == JsonToken.PROPERTY_NAME) {
+                String field = parser.currentName();
+                parser.nextToken();
+                if (field.equals("dist-tags") && parser.currentToken() == JsonToken.START_OBJECT
+                        && parser.readValueAsTree() instanceof ObjectNode tags) {
+                    return Optional.of(tags);
+                }
+                parser.skipChildren();
+            }
+        }
+        return Optional.of(MAPPER.createObjectNode());
+    }
+
+    // ---- export: each version as npm publish sends it ----
+
+    /**
+     * One version as {@code npm publish} sends it: {@code PUT <name>} with the stored version document under
+     * {@code versions}, the tarball base64 under {@code _attachments}, and the dist-tags the source points at this
+     * version - streamed, so the tarball is never held. A target that already serves the tarball with the same
+     * SHA-256 has it.
+     */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        Blobs blobs = new Blobs(repository);
+        String shortName = shortName(coordinate);
+        String file = shortName + "-" + version + ".tgz";
+        Optional<Blobs.Located> tarball = Keys.unsafe(version) ? Optional.empty()
+                : blobs.locate(tarballKey(coordinate, shortName, version));
+        ByteArrayOutputStream metadata = new ByteArrayOutputStream();
+        if (tarball.isEmpty() || !blobs.read("npm/" + coordinate + "/versions/" + version, metadata)) {
+            return Exported.WITHHELD;
+        }
+        String served = coordinate + "/-/" + file;
+        if (target.sha256(served).filter(tarball.get().hash()::equals).isPresent()) {
+            return Exported.ALREADY_PRESENT;
+        }
+        ObjectNode tags = MAPPER.createObjectNode();
+        storedTags(coordinate, blobs).properties().forEach(tag -> {
+            if (tag.getValue().asString("").equals(version)) {
+                tags.set(tag.getKey(), tag.getValue());
+            }
+        });
+        String name = MAPPER.writeValueAsString(coordinate);
+        String head = "{\"_id\":" + name + ",\"name\":" + name + ",\"versions\":{"
+                + MAPPER.writeValueAsString(version) + ":" + metadata.toString(StandardCharsets.UTF_8) + "},"
+                + (tags.isEmpty() ? "" : "\"dist-tags\":" + MAPPER.writeValueAsString(tags) + ",")
+                + "\"_attachments\":{" + MAPPER.writeValueAsString(coordinate + "-" + version + ".tgz")
+                + ":{\"content_type\":\"application/octet-stream\",\"length\":" + tarball.get().size()
+                + ",\"data\":\"";
+        String tail = "\"}}}";
+        byte[] prefix = head.getBytes(StandardCharsets.UTF_8);
+        byte[] suffix = tail.getBytes(StandardCharsets.UTF_8);
+        long size = tarball.get().size();
+        long length = size < 0 ? -1 : prefix.length + 4 * ((size + 2) / 3) + suffix.length;
+        ExportTarget.Body body = new ExportTarget.Body() {
+            @Override
+            public long length() {
+                return length;
+            }
+
+            @Override
+            public InputStream open() throws IOException {
+                PipedInputStream in = new PipedInputStream(1 << 16);
+                PipedOutputStream out = new PipedOutputStream(in);
+                Thread.ofVirtual().name("npm-export-" + file).start(() -> {
+                    try (out) {
+                        out.write(prefix);
+                        try (OutputStream encoded = Base64.getEncoder().wrap(new FilterOutputStream(out) {
+                            @Override
+                            public void write(byte[] bytes, int offset, int count) throws IOException {
+                                out.write(bytes, offset, count);
+                            }
+
+                            @Override
+                            public void close() throws IOException {
+                                flush();   // the encoder's close pads; the pipe stays open for the suffix
+                            }
+                        })) {
+                            blobs.stream(tarball.get(), encoded);
+                        }
+                        out.write(suffix);
+                    } catch (IOException _) {
+                        // the reader sees the pipe close early and the request fails with the target's answer
+                    }
+                });
+                return in;
+            }
+        };
+        ExportTarget.Response response = target.send(new ExportTarget.Request("PUT", coordinate,
+                Map.of("Content-Type", "application/json", "npm-command", "publish"), body));
+        if (response.ok()) {
+            return Exported.PUBLISHED;
+        }
+        if (target.sha256(served).filter(tarball.get().hash()::equals).isPresent()) {
+            return Exported.ALREADY_PRESENT;
+        }
+        throw new IOException("the target answered " + response.status() + " to the publish of " + served + ": "
+                + response.body());
+    }
+
+    /**
+     * After a package's last version, every tag the source carries is set as {@code npm dist-tag add} sets it, since
+     * a registry that replaces a package's tags on publish (as this one does) keeps only the last version's.
+     */
+    @Override
+    public void exported(ArtifactStore repository, String coordinate, ExportTarget target) throws IOException {
+        Blobs blobs = new Blobs(repository);
+        for (Map.Entry<String, JsonNode> tag : storedTags(coordinate, blobs).properties()) {
+            String version = tag.getValue().asString("");
+            if (Keys.unsafe(tag.getKey()) || Keys.unsafe(version)
+                    || blobs.locate(tarballKey(coordinate, shortName(coordinate), version)).isEmpty()) {
+                continue;   // a tag at a withheld version was not exported with it
+            }
+            ExportTarget.Response response = target.send(ExportTarget.Request.put(
+                    DIST_TAGS_API + coordinate + "/dist-tags/" + tag.getKey(), "application/json",
+                    ExportTarget.Body.of(MAPPER.writeValueAsBytes(version))));
+            if (!response.ok()) {
+                throw new IOException("the target answered " + response.status() + " to setting the dist-tag "
+                        + tag.getKey() + " of " + coordinate + " to " + version + ": " + response.body());
+            }
+        }
+    }
+
+    /** The source's stored dist-tags document, or an empty one when its tags are computed. */
+    private static ObjectNode storedTags(String name, Blobs blobs) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        if (blobs.read("npm/" + name + "/dist-tags", buffer)
+                && MAPPER.readTree(buffer.toByteArray()) instanceof ObjectNode tags) {
+            return tags;
+        }
+        return MAPPER.createObjectNode();
     }
 
     /** A package's unscoped short name - the {@code <shortName>-<version>.tgz} tarball filenames are built from it. */

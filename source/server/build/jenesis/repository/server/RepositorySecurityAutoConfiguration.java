@@ -20,6 +20,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.firewall.HttpFirewall;
+import org.springframework.security.web.firewall.StrictHttpFirewall;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -67,6 +69,21 @@ public class RepositorySecurityAutoConfiguration {
         return AuthorizationManagerProvider
                 .resolve(authorization, keyUsageTracker, routing, Features.namespaced(environment::getProperty))
                 .orElseGet(() -> new RepositoryAuthorizationManager(authorization, keyUsageTracker, properties));
+    }
+
+    /**
+     * The request firewall, admitting an encoded slash ({@code %2F}) and nothing else the strict default refuses. npm
+     * addresses a scoped package that way - {@code PUT} and {@code GET /@scope%2Fname} - so refusing it refused every
+     * scoped package the npm client publishes or installs. It is safe because nothing decides on the encoded form:
+     * {@link RepositoryAuthorizationManager} authorizes the decoded path and refuses one that decodes into an empty or
+     * dot segment, and the routing takes the tenant and repository from segments that cannot carry a {@code %}.
+     */
+    @Bean
+    @ConditionalOnMissingBean(HttpFirewall.class)
+    public HttpFirewall repositoryHttpFirewall() {
+        StrictHttpFirewall firewall = new StrictHttpFirewall();
+        firewall.setAllowUrlEncodedSlash(true);
+        return firewall;
     }
 
     @Bean
