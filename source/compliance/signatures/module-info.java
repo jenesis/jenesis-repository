@@ -44,9 +44,9 @@ module build.jenesis.repository.compliance.signatures {
             // The signer index is read by the API and the console through one implementation, and seeded by their tests.
             build.jenesis.repository.compliance.web, build.jenesis.repository.ui.store,
             build.jenesis.repository.server.kernel.test, build.jenesis.repository.ui.admin.installed.test,
-            // and by the browser suite, which seeds a signer so the screens have one to render: what a
+            // and by the browser suites' seed, which records a signer so the screens have one to render: what a
             // keyless identity looks like on a page is not decidable from the model behind it.
-            build.jenesis.repository.ui.admin.browser.test;
+            build.jenesis.repository.console.seed.testkit;
     provides build.jenesis.repository.compliance.QualityInspector
             with build.jenesis.repository.compliance.signatures.SignatureInspector;
     provides build.jenesis.repository.gate.HoldReleaseObserver

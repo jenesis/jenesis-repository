@@ -59,7 +59,12 @@
     --app-status-info-bg: #cfe2ff;
     --app-status-info-fg: #084298;
     --app-status-muted-bg: var(--pico-muted-border-color);
-    --app-status-muted-fg: var(--pico-muted-color);
+    --app-status-muted-fg: var(--app-muted-text);
+    /* Secondary text that sits on a card or a badge rather than on the page. Pico's muted colour clears AA on the
+       page background and not on either of those - 4.4:1 on a muted badge, 4.0 to 4.4 on a dark card - which the
+       accessibility walk found once it reached the screens that set text there. A shade darker in light and a
+       shade lighter in dark, both clearing 5:1 wherever this is used. */
+    --app-muted-text: #5a6170;
 
     /* The icon set, as mask sources: stroke-drawn on one 24x24 grid, painted with currentColor. */
     --app-icon-check: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>');
@@ -80,6 +85,7 @@
     --app-status-danger-fg: #f5a7ae;
     --app-status-info-bg: #10243f;
     --app-status-info-fg: #9dc3ff;
+    --app-muted-text: #949dad;
 }
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -91,6 +97,7 @@
         --app-status-danger-fg: #f5a7ae;
         --app-status-info-bg: #10243f;
         --app-status-info-fg: #9dc3ff;
+        --app-muted-text: #949dad;
     }
 }
 
@@ -1106,13 +1113,13 @@ main .app-switch {
     margin: .1rem 0;
 }
 .setting-module {
-    color: var(--pico-muted-color);
+    color: var(--app-muted-text);
     font-family: var(--pico-font-family-monospace);
     font-size: .72rem;
 }
 .setting-doc {
     margin: .25rem 0;
-    color: var(--pico-muted-color);
+    color: var(--app-muted-text);
 }
 /* Everything in these rows is a name somebody else chose, and any of them may be one long unbreakable token. */
 .setting, .setting-doc, .module-card {

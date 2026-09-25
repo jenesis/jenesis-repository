@@ -124,7 +124,7 @@
         <form method="post" th:action="@{/ui/settings/upstream-auth}">
             <div class="grid">
                 <input name="host" placeholder="registry.internal" required pattern="[A-Za-z0-9.-]+">
-                <select name="scheme">
+                <select name="scheme" aria-label="Authentication scheme">
                     <option value="basic">basic (username + password)</option>
                     <option value="bearer">bearer (token)</option>
                     <option value="header">header (custom name + value)</option>
@@ -159,7 +159,8 @@
              reader in SettingsController instead. */-->
         <form method="post" th:action="@{/ui/settings/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
               onsubmit="return window.confirm('Restore settings from this bundle? It replaces the current stored settings.');">
-            <input type="file" name="bundle" accept="application/json,.json" required>
+            <input type="file" name="bundle" accept="application/json,.json" required
+                   aria-label="Settings bundle to import">
             <button type="submit">Import bundle</button>
         </form>
     </article>

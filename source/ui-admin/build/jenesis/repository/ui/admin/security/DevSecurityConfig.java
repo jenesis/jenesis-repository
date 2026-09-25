@@ -7,6 +7,7 @@ import build.jenesis.repository.ui.ConsoleAccess;
 import build.jenesis.repository.ui.DevConsolePolicy;
 import build.jenesis.repository.ui.store.TenantService;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -62,15 +63,17 @@ public class DevSecurityConfig {
                 User.withUsername("viewer").password("{noop}viewer").roles("USER").build());
     }
 
-    /** Seed the {@link Scopes#DEFAULT_TENANT default} tenant whose members are the dev admin/editor/viewer accounts
-     *  (keyed by username). */
+    /** Seed the tenant this deployment serves - {@code jenreg.default-tenant}, else {@link Scopes#DEFAULT_TENANT} -
+     *  with the dev admin/editor/viewer accounts as its members (keyed by username). The configured one rather than
+     *  the constant, because the console signs these accounts in to the tenant it serves. */
     @Bean
-    public ApplicationRunner devTenantSeed(Authorization authorization, TenantService tenants) {
+    public ApplicationRunner devTenantSeed(Authorization authorization, TenantService tenants,
+            @Value("${jenreg.default-tenant:" + Scopes.DEFAULT_TENANT + "}") String tenant) {
         return _ -> {
-            if (!tenants.exists(Scopes.DEFAULT_TENANT)) {
-                tenants.create(Scopes.DEFAULT_TENANT);
+            if (!tenants.exists(tenant)) {
+                tenants.create(tenant);
             }
-            UserDirectory directory = new UserDirectory(authorization, Scopes.DEFAULT_TENANT);
+            UserDirectory directory = new UserDirectory(authorization, tenant);
             directory.put("admin", UserDirectory.Role.ADMIN, "admin");
             directory.put("editor", UserDirectory.Role.EDITOR, "editor");
             directory.put("viewer", UserDirectory.Role.VIEWER, "viewer");

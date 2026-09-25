@@ -95,6 +95,36 @@ public class RepositoryApplication {
         return new Running(bound, context);
     }
 
+    /**
+     * The {@code (method, path-pattern)} routes a booted context mapped, as {@link Running#routes()} reports them -
+     * shared with the launchers that compose this application with others, so a handle on any of them answers the
+     * question the same way.
+     */
+    public static Set<String> routes(ConfigurableApplicationContext context) {
+        // Select the app controllers' mapping by name: actuator contributes a second RequestMappingHandlerMapping
+        // (controllerEndpointHandlerMapping), so a by-type lookup is ambiguous.
+        RequestMappingHandlerMapping mapping = context.getBean(
+                "requestMappingHandlerMapping", RequestMappingHandlerMapping.class);
+        Set<String> routes = new TreeSet<>();
+        mapping.getHandlerMethods().forEach((info, handler) -> {
+            var patterns = info.getPathPatternsCondition();
+            if (patterns == null) {
+                return;
+            }
+            Set<RequestMethod> methods = info.getMethodsCondition().getMethods();
+            for (String pattern : patterns.getPatternValues()) {
+                if (methods.isEmpty()) {
+                    routes.add("* " + pattern);
+                } else {
+                    for (RequestMethod method : methods) {
+                        routes.add(method.name() + " " + pattern);
+                    }
+                }
+            }
+        });
+        return routes;
+    }
+
     public static final class Running implements AutoCloseable {
 
         private final int port;
@@ -117,28 +147,7 @@ public class RepositoryApplication {
          * of the handle.
          */
         public Set<String> routes() {
-            // Select the app controllers' mapping by name: actuator contributes a second RequestMappingHandlerMapping
-            // (controllerEndpointHandlerMapping), so a by-type lookup is ambiguous.
-            RequestMappingHandlerMapping mapping = context.getBean(
-                    "requestMappingHandlerMapping", RequestMappingHandlerMapping.class);
-            Set<String> routes = new TreeSet<>();
-            mapping.getHandlerMethods().forEach((info, handler) -> {
-                var patterns = info.getPathPatternsCondition();
-                if (patterns == null) {
-                    return;
-                }
-                Set<RequestMethod> methods = info.getMethodsCondition().getMethods();
-                for (String pattern : patterns.getPatternValues()) {
-                    if (methods.isEmpty()) {
-                        routes.add("* " + pattern);
-                    } else {
-                        for (RequestMethod method : methods) {
-                            routes.add(method.name() + " " + pattern);
-                        }
-                    }
-                }
-            });
-            return routes;
+            return RepositoryApplication.routes(context);
         }
 
         /**

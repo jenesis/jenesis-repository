@@ -307,3 +307,27 @@
         sync();
     });
 })();
+
+/*
+ * A table wider than the screen scrolls inside its own <figure>, and a region that scrolls has to be reachable by
+ * keyboard, or its right-hand columns are for mouse users only. So a figure whose content overflows it becomes a tab
+ * stop, and one that fits does not - a focusable region with nothing to scroll is a stop that does nothing. Checked
+ * when the page loads, when it is resized, and after htmx swaps content in, which is when a table can grow.
+ */
+(function () {
+    'use strict';
+
+    function reachable() {
+        document.querySelectorAll('main figure').forEach(function (figure) {
+            if (figure.scrollWidth > figure.clientWidth) {
+                figure.setAttribute('tabindex', '0');
+            } else if (figure.getAttribute('tabindex') === '0') {
+                figure.removeAttribute('tabindex');
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', reachable);
+    window.addEventListener('resize', reachable);
+    document.addEventListener('htmx:afterSwap', reachable);
+})();
