@@ -1,0 +1,224 @@
+# Build the Jenesis Repository image and its Helm chart and push them to the chosen registries, on demand. Run it
+# from the Actions tab (Run workflow) on main: switch on the registries and give a product version. It runs this
+# repository's images goal (build/Build.java images), which builds the image from the staged Docker context -
+# its contents are the bundle module's requires closure - packages the chart, and, because a registry is named,
+# pushes jenesis-repository (tagged with the version and latest) and the jenesis chart to each one switched on.
+# What the goal builds and publishes is deploy/images.properties.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+#  ONE-TIME SETUP  (per registry you want to publish to)
+# ─────────────────────────────────────────────────────────────────────────────
+#  Configure these under the repo's Settings -> Secrets and variables -> Actions.
+#  Non-secret coordinates go under "Variables"; credentials under "Secrets".
+#
+#  Every target receives the image - jenesis-repository - and the chart, except Scaleway, which takes the
+#  image alone. There is no image per cloud: all four storage
+#  backends are aboard each image and the deployment selects between them, so only the registry differs
+#  per target. There is no image per node either: the repository, the console and the build cache are one
+#  application with its security chains partitioned by path, so which of them to run is configuration.
+#
+#  Azure and Google Cloud are signed in with the OIDC token GitHub issues to this workflow, so neither stores
+#  a key here: each cloud trusts runs of this repository's main branch and nothing else. That is also the only
+#  way Google works on an organisation created since May 2024, whose default policy forbids service-account
+#  keys. Docker Hub, AWS and Scaleway take a stored key, because their registries offer nothing else to a
+#  GitHub run.
+#
+#  Docker Hub  ->  hub.docker.com
+#    Create an access token under Account Settings -> Personal access tokens (Read & Write).
+#      Secrets:    DOCKER_HUB_TOKEN
+#      Variables:  DOCKER_HUB_USER, DOCKER_HUB_NAMESPACE   (the org or user the repo lives under)
+#
+#  Azure  ->  Azure Container Registry
+#    A registry, an app registration allowed to push to it, and a federated credential for this repository's
+#    main branch (az CLI, signed in with `az login`; ACR is the registry name, globally unique):
+#      az group create --name jenesis --location norwayeast
+#      az acr create --resource-group jenesis --name ACR --sku Basic
+#      APP=$(az ad app create --display-name jenesis-publish --query appId -o tsv)
+#      az ad sp create --id "$APP"
+#      az role assignment create --assignee "$APP" --role AcrPush \
+#        --scope "$(az acr show --name ACR --query id -o tsv)"
+#      az ad app federated-credential create --id "$APP" --parameters '{"name": "jenesis-repository-main",
+#        "issuer": "https://token.actions.githubusercontent.com",
+#        "subject": "repo:jenesis@319352130/jenesis-repository@<REPOSITORY_ID>:ref:refs/heads/main",
+#        "audiences": ["api://AzureADTokenExchange"]}'
+#    The subject carries the organisation and repository IDs because this repository's OIDC tokens use
+#    GitHub's immutable subject format (a renamed repository gets it): a subject without them is accepted
+#    by Azure and then never matches, with no error beyond a failed sign-in. The portal writes this form when
+#    its Organization ID (319352130) and Repository ID fields are filled in; the repository ID is
+#    `gh api repos/jenesis/jenesis-repository --jq .id`, and the current form is
+#    `gh api repos/jenesis/jenesis-repository/actions/oidc/customization/sub`.
+#      Variables:  AZURE_CLIENT_ID        "$APP"
+#                  AZURE_TENANT_ID        az account show --query tenantId -o tsv
+#                  AZURE_SUBSCRIPTION_ID  az account show --query id -o tsv
+#                  AZURE_ACR              ACR (login server ACR.azurecr.io)
+#
+#  Google Cloud  ->  Artifact Registry
+#    A Docker repository, a service account allowed to write to it, and a workload identity pool that lets
+#    this repository's main branch act as that service account (gcloud CLI, in the project PROJECT):
+#      gcloud config set project PROJECT
+#      gcloud services enable artifactregistry.googleapis.com iamcredentials.googleapis.com sts.googleapis.com
+#      gcloud artifacts repositories create jenesis --repository-format=docker --location=europe-north1
+#      gcloud iam service-accounts create jenesis-publish
+#      gcloud artifacts repositories add-iam-policy-binding jenesis --location=europe-north1 \
+#        --member=serviceAccount:jenesis-publish@PROJECT.iam.gserviceaccount.com --role=roles/artifactregistry.writer
+#      gcloud iam workload-identity-pools create github --location=global
+#      gcloud iam workload-identity-pools providers create-oidc github --location=global \
+#        --workload-identity-pool=github --issuer-uri=https://token.actions.githubusercontent.com \
+#        --attribute-mapping=google.subject=assertion.sub,attribute.repository=assertion.repository \
+#        --attribute-condition="assertion.repository=='jenesis/jenesis-repository' && assertion.ref=='refs/heads/main'"
+#      gcloud iam service-accounts add-iam-policy-binding jenesis-publish@PROJECT.iam.gserviceaccount.com \
+#        --role=roles/iam.workloadIdentityUser \
+#        --member=principalSet://iam.googleapis.com/projects/NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/jenesis/jenesis-repository
+#      (NUMBER is the project number: gcloud projects describe PROJECT --format='value(projectNumber)')
+#      Variables:  GCP_AR_REPO                     europe-north1-docker.pkg.dev/PROJECT/jenesis
+#                  GCP_WORKLOAD_IDENTITY_PROVIDER  projects/NUMBER/locations/global/workloadIdentityPools/github/providers/github
+#                  GCP_SERVICE_ACCOUNT             jenesis-publish@PROJECT.iam.gserviceaccount.com
+#
+#  Scaleway  ->  Container Registry   (the image only)
+#    In the console: Container Registry -> create a namespace (e.g. jenesis in fr-par); IAM -> Applications ->
+#    create one with a policy granting ContainerRegistryFullAccess on the project, then generate an API key for
+#    it and keep the secret key.
+#      Secrets:    SCW_SECRET_KEY
+#      Variables:  SCW_REGISTRY       rg.fr-par.scw.cloud/<namespace>
+#
+#  AWS  ->  Amazon ECR
+#    Create an IAM user/role allowed to push to ECR (ecr:GetAuthorizationToken on *,
+#    plus Create/DescribeRepositories and the layer/PutImage actions on the repos;
+#    the workflow creates the repos if missing).
+#      Secrets:    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#      Variables:  AWS_REGION         e.g. eu-north-1
+#                  AWS_ECR_REGISTRY   <acct>.dkr.ecr.<region>.amazonaws.com
+#                                     (or set AWS_ACCOUNT_ID and it is derived)
+#    For an AWS Marketplace container product, set AWS_ECR_REGISTRY to the
+#    Marketplace-provided ECR registry rather than your own account's.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+#  AFTER THE IMAGE IS PUSHED:  standing up a server
+# ─────────────────────────────────────────────────────────────────────────────
+#  The image is the all-in-one server. Deploy it with the chart (deploy/helm/jenesis) pointing the image at a
+#  URI this workflow pushed. The server reads JENREG_* environment variables: JENREG_STORE selects the backend
+#  (filesystem needs JENREG_FILESYSTEM_ROOT; s3, gcs and azure-blob their bucket or container and a
+#  credential), and JENREG_UI_GITHUB_* or JENREG_UI_OIDC_* configure the console's sign-in.
+
+name: Publish the image and chart
+
+on:
+  workflow_dispatch:
+    inputs:
+      hub:
+        description: Push to Docker Hub
+        type: boolean
+        default: true
+      azure:
+        description: Push to Azure Container Registry
+        type: boolean
+        default: false
+      gcp:
+        description: Push to Google Artifact Registry
+        type: boolean
+        default: false
+      scaleway:
+        description: Push to Scaleway Container Registry (image only)
+        type: boolean
+        default: false
+      aws:
+        description: Push to Amazon ECR
+        type: boolean
+        default: false
+      version:
+        description: Image/product version tag (independent of the Jenesis tool version)
+        type: string
+        default: "1.0.0"
+      push_latest:
+        description: Also tag :latest
+        type: boolean
+        default: true
+
+# The images goal is the build itself, so the runner needs JDK 25 as well as the Docker, helm, az and gcloud the
+# hosted image preinstalls. Maven Central goes through the repository variable MAVEN_REPOSITORY_URI when set.
+env:
+  MAVEN_REPOSITORY_URI: ${{ vars.MAVEN_REPOSITORY_URI || 'https://repo1.maven.org/maven2/' }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # id-token is what the Azure and Google sign-ins exchange for a short-lived credential; nothing else here
+    # writes to GitHub.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # build/jenesis is a symlink into the build/.upstream submodule (the pinned jenesis build tool).
+          submodules: recursive
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      # One switch per registry: the push step reads the comma-separated list this writes, and a run with nothing
+      # switched on is refused rather than building an image to push nowhere.
+      - name: Decide which registries to push to
+        shell: bash
+        env:
+          HUB: ${{ inputs.hub }}
+          AWS: ${{ inputs.aws }}
+          AZURE: ${{ inputs.azure }}
+          GCP: ${{ inputs.gcp }}
+          SCALEWAY: ${{ inputs.scaleway }}
+        run: |
+          TARGETS=()
+          [ "$HUB" = "true" ]      && TARGETS+=(hub)
+          [ "$AWS" = "true" ]      && TARGETS+=(aws)
+          [ "$AZURE" = "true" ]    && TARGETS+=(azure)
+          [ "$GCP" = "true" ]      && TARGETS+=(gcp)
+          [ "$SCALEWAY" = "true" ] && TARGETS+=(scaleway)
+          if [ ${#TARGETS[@]} -eq 0 ]; then
+            echo "no registry selected: switch on at least one of hub, aws, azure, gcp, scaleway"
+            exit 1
+          fi
+          PUSH_TARGET="$(IFS=,; echo "${TARGETS[*]}")"
+          echo "registries -> $PUSH_TARGET"
+          echo "PUSH_TARGET=$PUSH_TARGET" >> "$GITHUB_ENV"
+
+      # The cloud CLIs sign in before the images goal runs, because each one's login is that cloud's business; the push step then only asks each CLI for a registry login.
+      - name: Sign in to Azure
+        if: inputs.azure
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign in to Google Cloud
+        if: inputs.gcp
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      # One invocation builds and publishes: the images goal builds the image from the staged context, packages the
+      # chart and, because a target is named, pushes both. Built here rather than assumed, so a publish can never
+      # push an image from a previous checkout. Every stored credential is passed whether or not this run uses it:
+      # an unset variable makes the push refuse that target by name, which is the message an operator needs.
+      - name: Publish
+        shell: bash
+        env:
+          PUSH_VERSION: ${{ inputs.version }}
+          PUSH_LATEST: ${{ inputs.push_latest && '1' || '0' }}
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+          DOCKER_HUB_NAMESPACE: ${{ vars.DOCKER_HUB_NAMESPACE }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ECR_REGISTRY: ${{ vars.AWS_ECR_REGISTRY }}
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AZURE_ACR: ${{ vars.AZURE_ACR }}
+          GCP_AR_REPO: ${{ vars.GCP_AR_REPO }}
+          SCW_REGISTRY: ${{ vars.SCW_REGISTRY }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+        run: java -Djenesis.test.skip=true -Djenesis.images.push="$PUSH_TARGET" build/Build.java images

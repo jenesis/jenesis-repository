@@ -72,8 +72,13 @@ is not a deployment".
 
 The image is built by the build rather than by a hand-written `Dockerfile`: `source/bundle` requires every
 implementation, its `bundle=true` packaging emits the resolved runtime closure, and its `docker=` packaging
-line makes `stage` write a ready-to-build context - `java -Djenesis.test.skip=true build/jenesis/Make.java stage`,
-then `docker build -t jenesis-repository:free 'target/stage/docker/output/module-source+bundle'` is the image.
+line makes `stage` write a ready-to-build context. `java -Djenesis.test.skip=true build/Build.java images` stages it,
+builds `jenesis-repository:latest` from it and packages the Helm chart in `deploy/helm/jenesis`; adding
+`-Djenesis.images.push=hub` (or `aws`, `azure`, `gcp`, `scaleway`, several comma-separated) publishes both, which is
+what the `Publish the image and chart` workflow runs. The goal is `plugins/images`, a build module the launcher
+`build/Build.java` wires off `stage` and configures with `deploy/images.properties` - an example of extending the
+Jenesis build with a module of one's own, and the same module any build of this product publishes its images
+with.
 There was a `Dockerfile` here that re-ran the whole build inside Docker - a second mechanism for a job the
 shared one does - and the deployment settings it carried (`JENREG_FILESYSTEM_ROOT=/data`, a `VOLUME`) belong
 to a deployment's own descriptor, which can make them conditional on the storage backend where an image cannot:
