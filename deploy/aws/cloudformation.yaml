@@ -268,5 +268,5 @@ Resources:
 
 Outputs:
   Endpoint:
-    Description: Repository server URL (check /actuator/health; the console is at /ui/)
+    Description: Repository server URL (check /actuator/health; open it for the console)
     Value: !Sub http://${LoadBalancer.DNSName}

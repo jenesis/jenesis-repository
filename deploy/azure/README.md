@@ -9,7 +9,7 @@ hand.
     az group create -n jenesis -l westeurope
     az deployment group create -g jenesis --template-file main.bicep \
       --parameters secrets='{"JENREG_BOOTSTRAP_KEY":"jenk_...","JENREG_UI_ADMIN_KEY":"..."}' ingressExternal=true
-    # the output `endpoint` is the repository; check <endpoint>/actuator/health, the console is at <endpoint>/ui/
+    # the output `endpoint` is the repository; check <endpoint>/actuator/health, and open <endpoint> for the console
 
 | Parameter | Default | |
 |---|---|---|

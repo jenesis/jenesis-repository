@@ -148,6 +148,6 @@ resource "google_cloud_run_v2_service_iam_member" "invoker" {
 }
 
 output "url" {
-  description = "Repository server URL (check <url>/actuator/health; the console is at <url>/ui/)."
+  description = "Repository server URL (check <url>/actuator/health; open <url> for the console)."
   value       = google_cloud_run_v2_service.repository.uri
 }

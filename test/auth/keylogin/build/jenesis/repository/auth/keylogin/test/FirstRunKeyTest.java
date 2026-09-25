@@ -130,7 +130,7 @@ class FirstRunKeyTest {
         String message = FirstRunWelcome.message(
                 new FirstRunKey.Issued("jfr_example", Instant.parse("2026-09-25T13:00:00Z")), "8080");
         assertThat(message).contains("WELCOME TO JENESIS REPOSITORY", "jfr_example",
-                "http://localhost:8080/ui/", "Sign in with a key", "2026-09-25 13:00 UTC");
+                "Open http://localhost:8080 (", "Sign in with a key", "2026-09-25 13:00 UTC");
     }
 
     private static Set<String> roles(Authentication authentication) {

@@ -67,7 +67,7 @@ public final class FirstRunWelcome implements ApplicationListener<ContextRefresh
                 + n
                 + "       " + issued.key() + n
                 + n
-                + "   Open http://localhost:" + port + "/ui/ (or this server's address), choose" + n
+                + "   Open http://localhost:" + port + " (or this server's address), choose" + n
                 + "   \"Sign in with a key\" and paste it. The setup guide opens after you sign in." + n
                 + n
                 + "   The key works until " + until + ", and only until an administrator is set up." + n

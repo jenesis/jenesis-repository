@@ -61,8 +61,8 @@ store:
 # credential.
 repository: {}
 
-# Console / single sign-on (JENREG_UI_*). The image serves the console on the main port under
-# /ui/, in the same process as the repository; admins is a comma-separated list of GitHub/OIDC
+# Console / single sign-on (JENREG_UI_*). The image serves the console on the main port, in the
+# same process as the repository; admins is a comma-separated list of GitHub/OIDC
 # logins granted admin. Set jenreg.console=false through `repository` below to run without one.
 ui:
   admins: ""

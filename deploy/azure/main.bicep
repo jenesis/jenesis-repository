@@ -140,5 +140,5 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-@description('HTTPS endpoint of the repository server (the console is at /ui/). With the default internal ingress this FQDN resolves only inside the Container Apps environment / VNet; it is publicly reachable only when ingressExternal is true.')
+@description('HTTPS endpoint of the repository server (open it for the console). With the default internal ingress this FQDN resolves only inside the Container Apps environment / VNet; it is publicly reachable only when ingressExternal is true.')
 output endpoint string = 'https://${app.properties.configuration.ingress.fqdn}'

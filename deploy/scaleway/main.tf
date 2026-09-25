@@ -105,6 +105,6 @@ resource "scaleway_container" "repository" {
 }
 
 output "url" {
-  description = "Repository server URL (check <url>/actuator/health; the console is at <url>/ui/)."
+  description = "Repository server URL (check <url>/actuator/health; open <url> for the console)."
   value       = scaleway_container.repository.public_endpoint
 }

@@ -1,7 +1,7 @@
 Jenesis Repository ({{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}, {{ .Values.store.backend }} store) is deploying as {{ include "jenreg.fullname" . }}.
 
-The all-in-one repository image serves every installed capability on one port, the console under
-/ui/; trim it through the `repository:` values (jenreg.* keys) instead of changing images. Reach it:
+The all-in-one repository image serves every installed capability on one port, the console
+included; trim it through the `repository:` values (jenreg.* keys) instead of changing images. Reach it:
 
 {{- if .Values.ingress.enabled }}
   {{- range .Values.ingress.hosts }}

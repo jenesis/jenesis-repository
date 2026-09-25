@@ -13,7 +13,7 @@ instances would lose updates silently. The `gcs` backend's precondition is Cloud
     terraform init
     terraform apply -var project_id=PROJECT -var bucket_name=GLOBALLY-UNIQUE-NAME \
       -var 'secrets={JENREG_BOOTSTRAP_KEY="jenk_...", JENREG_UI_ADMIN_KEY="..."}'
-    # the `url` output is the repository; check <url>/actuator/health, the console is at <url>/ui/
+    # the `url` output is the repository; check <url>/actuator/health, and open <url> for the console
 
 | Variable | Default | |
 |---|---|---|

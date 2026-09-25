@@ -16,7 +16,7 @@ OVHcloud's object storage ignores both headers and Exoscale's takes no ETag on `
     terraform init
     terraform apply -var project_id=PROJECT -var bucket_name=UNIQUE-IN-REGION \
       -var 'secrets={JENREG_BOOTSTRAP_KEY="jenk_...", JENREG_UI_ADMIN_KEY="..."}'
-    # the `url` output is the repository; check <url>/actuator/health, the console is at <url>/ui/
+    # the `url` output is the repository; check <url>/actuator/health, and open <url> for the console
 
 The default image is the one on Docker Hub, and Scaleway advises against pulling from there for anything that
 matters: Docker Hub's rate limits can fail a container start. Copy it into the Scaleway Container Registry and name

@@ -10,7 +10,7 @@ standard AWS credential chain, so no key is set anywhere.
       --template-file cloudformation.yaml \
       --parameter-overrides VpcId=vpc-xxxx SubnetIds=subnet-aaaa,subnet-bbbb \
         BootstrapKey=jenk_... AdminKey=...
-    # the stack output `Endpoint` is the repository; check <endpoint>/actuator/health, the console is at <endpoint>/ui/
+    # the stack output `Endpoint` is the repository; check <endpoint>/actuator/health, and open <endpoint> for the console
 
 | Parameter | Default | |
 |---|---|---|

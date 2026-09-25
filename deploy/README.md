@@ -18,7 +18,7 @@ the one store is the product's multi-node shape; the templates start one.
 **Authentication is on by default**, so a deployment needs a credential to begin with. Each template takes two as
 secrets: `JENREG_BOOTSTRAP_KEY`, the API key the server provisions at boot (a `jenk_<tenant>.<secret><checksum>`
 key; `java -Djenesis.execute.module=source+server-spi build/jenesis/Execute.java` mints one), and
-`JENREG_UI_ADMIN_KEY`, which signs into the console's first-run setup at `/ui/`. Issue real credentials from there
+`JENREG_UI_ADMIN_KEY`, which signs into the console's first-run setup at the server's address. Issue real credentials from there
 and unset both - they are re-provisioned on every boot for as long as they are set.
 
 **Any other setting is an environment variable**: a `jenreg.*` key under its `JENREG_*` name, by Spring's relaxed
