@@ -2,8 +2,9 @@
 # by configuration instead of rebuilt. The published chart names its image below; every other value is
 # independent of which image runs.
 image:
-  # The registry namespace the images are published under, e.g. "docker.io/<org>". Required: an
-  # unqualified name resolves to docker.io/library, where these images are not.
+  # The registry namespace the images are published under, e.g. "docker.io/<org>". A published chart
+  # carries the one it was published to; a chart installed from source needs it, since an unqualified
+  # name resolves to docker.io/library, where these images are not.
   registry: ""
   repository: jenesis-repository
   # Empty means Chart.yaml's appVersion, latest. Set it to pin a published version, e.g. "1.2.0".

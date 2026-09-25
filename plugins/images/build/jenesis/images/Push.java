@@ -28,8 +28,9 @@ import build.jenesis.BuildStepResult;
  * <h2>One naming rule</h2>
  *
  * <p>Every image is published to a repository named for it, tagged with the version and with {@code latest}; a chart
- * goes to the same registry as an OCI artifact under its own name. Two images never share a repository with the
- * image as the tag, since a registry shows every tag of a repository to anyone who can see it.
+ * goes to the same registry as an OCI artifact under its own name, versioned with the release and pointing at the
+ * image published with it ({@link #released}). Two images never share a repository with the image as the tag, since
+ * a registry shows every tag of a repository to anyone who can see it.
  */
 record Push(long version, Configuration configuration) implements BuildStep {
 
@@ -92,7 +93,7 @@ record Push(long version, Configuration configuration) implements BuildStep {
         }
         String release = setting(VERSION, "PUSH_VERSION", DEFAULT_VERSION);
         for (String target : targets) {
-            publish(target, images, charts, release);
+            publish(target, images, charts, release, context.next());
         }
         return CompletableFuture.completedStage(new BuildStepResult(true));
     }
@@ -130,7 +131,8 @@ record Push(long version, Configuration configuration) implements BuildStep {
         return List.of();
     }
 
-    private void publish(String target, List<String> images, List<Path> charts, String release) throws IOException {
+    private void publish(String target, List<String> images, List<Path> charts, String release, Path work)
+            throws IOException {
         String registry = switch (target) {
             case "hub" -> hub();
             case "aws" -> aws();
@@ -161,11 +163,61 @@ record Push(long version, Configuration configuration) implements BuildStep {
             return;
         }
         for (Path chart : charts) {
+            Path released = released(chart, release, images(target, registry),
+                    work.resolve("charts-" + target).resolve(chart.getFileName().toString()));
             // helm derives the OCI repository from the chart's own name and the tag from its version, so the target
             // is the namespace alone - which is also why what tells two charts apart is their name, not their tag.
-            Cli.run(List.of("helm", "push", chart.toString(), "oci://" + oci(target, registry)));
-            System.out.println("[images]   pushed " + chart.getFileName() + " to oci://" + oci(target, registry));
+            Cli.run(List.of("helm", "push", released.toString(), "oci://" + oci(target, registry)));
+            System.out.println("[images]   pushed " + released.getFileName() + " to oci://" + oci(target, registry));
         }
+    }
+
+    /**
+     * The chart as it is published with a release: the packaged archive with its {@code version} and
+     * {@code appVersion} set to the release, and its default {@code image.registry} set to where this target's images
+     * are - so {@code helm install <name> oci://<registry>/<name> --version <release>} deploys the image this publish
+     * pushed with that release, and nothing has to be set to make it find the image.
+     *
+     * <p>Stamped here rather than when the chart is packaged, because the release and the registry are named per
+     * publish and the chart step is cached on its inputs. A published chart version is never reused for other
+     * contents, which a fixed version in {@code Chart.yaml} would do on every publish. The stamped chart is rendered
+     * before it goes, and the render must name the image at the registry and release it was stamped with.
+     */
+    private Path released(Path archive, String release, String imageRegistry, Path work) throws IOException {
+        Path unpacked = Files.createDirectories(work.resolve("unpacked"));
+        Cli.run(List.of("tar", "-xzf", archive.toString(), "-C", unpacked.toString()));
+        Path chart;
+        try (Stream<Path> roots = Files.list(unpacked)) {
+            chart = roots.filter(path -> Files.isRegularFile(path.resolve("Chart.yaml"))).findFirst()
+                    .orElseThrow(() -> new IllegalStateException(archive + " holds no chart"));
+        }
+        List<String> metadata = new ArrayList<>(Files.readAllLines(chart.resolve("Chart.yaml")));
+        Charts.set(metadata, chart.resolve("Chart.yaml"), "version:", "version: " + release);
+        Charts.set(metadata, chart.resolve("Chart.yaml"), "appVersion:", "appVersion: \"" + release + "\"");
+        Files.write(chart.resolve("Chart.yaml"), metadata);
+        List<String> values = new ArrayList<>(Files.readAllLines(chart.resolve("values.yaml")));
+        Charts.set(values, chart.resolve("values.yaml"), "  registry: ", "  registry: \"" + imageRegistry + "\"");
+        Files.write(chart.resolve("values.yaml"), values);
+        Path out = Files.createDirectories(work.resolve("released"));
+        Cli.run(List.of("helm", "package", chart.toString(), "--destination", out.toString()));
+        Path released = out.resolve(chart.getFileName() + "-" + release + ".tgz");
+        String name = chart.getFileName().toString();
+        String image = configuration.charts().containsKey(name) ? configuration.charts().get(name).image() : null;
+        String rendered = Cli.capture(List.of("helm", "template", "release", released.toString()));
+        if (image != null && !rendered.contains("\"" + imageRegistry + "/" + image + ":" + release + "\"")) {
+            throw new IllegalStateException("The released " + name + " renders no image " + imageRegistry + "/" + image
+                    + ":" + release + ", so it would not deploy what this publish pushed. Rendered:\n" + rendered);
+        }
+        return released;
+    }
+
+    /**
+     * Where a target's images are, as a chart names them in {@code image.registry}. A {@code docker push} to Docker
+     * Hub takes the bare {@code <namespace>}, but a Kubernetes image reference without a host means
+     * {@code docker.io/library}, so the chart gets the host as well.
+     */
+    private static String images(String target, String registry) {
+        return "hub".equals(target) ? "docker.io/" + registry : registry;
     }
 
     /**

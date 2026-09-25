@@ -25,7 +25,9 @@ executor.addModule("images", (images, _) -> {
 ```
 
 and hands it `deploy/images.properties`, which says what becomes of each staged context and which chart to
-package:
+package. A published chart is versioned with the release (`PUSH_VERSION`) and points at the image published with
+it, at the registry it was pushed to, so `helm install jenesis oci://<registry>/jenesis --version <release>` needs
+nothing set to find its image:
 
 ```properties
 image.source/bundle=jenesis-repository      # the module's context, built as jenesis-repository:latest

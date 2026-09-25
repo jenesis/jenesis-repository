@@ -144,7 +144,7 @@ record Charts(long version, Configuration configuration) implements BuildStep {
         Files.write(values, lines);
     }
 
-    private static void set(List<String> lines, Path chart, String key, String replacement) {
+    static void set(List<String> lines, Path chart, String key, String replacement) {
         for (int index = 0; index < lines.size(); index++) {
             if (lines.get(index).startsWith(key)) {
                 lines.set(index, replacement);

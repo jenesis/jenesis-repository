@@ -40,7 +40,7 @@ public class Images implements BuildExecutorModule {
     private static final long CHARTING = 3L;
 
     /** Bumped when the push step's behaviour changes, for the same reason as {@link #VERSION}. */
-    private static final long PUSHING = 6L;
+    private static final long PUSHING = 7L;
 
     private final Configuration configuration;
 

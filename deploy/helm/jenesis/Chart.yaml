@@ -9,8 +9,10 @@ description: |
 type: application
 version: 0.3.0
 # The image tag the chart deploys when image.tag is left empty. Packaging points image.repository at the
-# published repository of the image it is packaged for; a chart installed straight out of this directory
-# deploys jenesis-repository.
+# published repository of the image it is packaged for, and a publish sets version and appVersion to the
+# release and image.registry to where it pushed the image - so a published chart deploys the image published
+# with it. A chart installed straight out of this directory deploys jenesis-repository:latest and needs
+# image.registry set.
 appVersion: "latest"
 keywords:
   - artifact-repository
