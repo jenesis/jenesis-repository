@@ -9,6 +9,7 @@
  */
 module build.jenesis.repository.cli {
     requires java.net.http;
+    requires build.jenesis.repository.scope;
     requires tools.jackson.databind;
     exports build.jenesis.repository.cli;
     opens build.jenesis.repository.cli to tools.jackson.databind;

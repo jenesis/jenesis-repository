@@ -1,6 +1,7 @@
 package build.jenesis.repository.cache.server;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import build.jenesis.repository.scope.Scopes;
 
 /**
  * The cache server's configuration, bound from {@code jenreg.cache.*}; each property also accepts its
@@ -33,7 +34,7 @@ public class CacheProperties {
     /** Optional trial bootstrap key: a single static key for the default tenant (warned, trials only). */
     private String key = "";
     /** Tenant the bootstrap key and default-project fallback resolve against. */
-    private String defaultTenant = "default";
+    private String defaultTenant = Scopes.DEFAULT_TENANT;
 
     public long getMaxBytes() {
         return maxBytes;

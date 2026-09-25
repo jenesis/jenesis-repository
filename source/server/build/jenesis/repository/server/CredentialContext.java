@@ -3,6 +3,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.scope.Scopes;
 
 /**
  * What a deployment may vary about the credential surface, so that the surface itself exists only once.
@@ -56,7 +57,7 @@ public interface CredentialContext {
      * deployment's own business: this core has one tenant and a distribution with several has a configured default.
      */
     default String defaultTenant() {
-        return "default";
+        return Scopes.DEFAULT_TENANT;
     }
 
     /** The default: tenant from the key, no auditing. */

@@ -2,6 +2,7 @@ package build.jenesis.repository.auth.ldap;
 
 import module java.base;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import build.jenesis.repository.scope.Scopes;
 
 /**
  * The directory, read at boot from {@code jenreg.ui.ldap.*}.
@@ -25,7 +26,7 @@ public class LdapProperties {
     private String groupSearchFilter = "(member={0})";
     private String groupNameAttribute = "cn";
     private String adminGroup = "";
-    private String tenants = "default";
+    private String tenants = Scopes.DEFAULT_TENANT;
     private boolean startTls;
     private boolean allowPlaintext;
     private String name = "your directory account";

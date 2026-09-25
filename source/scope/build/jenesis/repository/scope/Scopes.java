@@ -36,6 +36,14 @@ public final class Scopes {
      */
     public static final String SYSTEM = ".system";
 
+    /**
+     * The tenant a deployment serves when its configuration names none, and so the first segment of every URL a
+     * single-tenant deployment answers: {@code /repository/releases/<repository>/}. Defined here once, because the
+     * server, the console, the key mint and the command line all fall back to it and a second copy is a deployment
+     * whose surfaces disagree about where its repositories are.
+     */
+    public static final String DEFAULT_TENANT = "releases";
+
     /** Credentials, at the root: deployment-wide, because a user spans tenants. */
     public static final String AUTH = "auth";
 

@@ -16,6 +16,7 @@ import org.springframework.security.config.annotation.web.configurers.AuthorizeH
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import build.jenesis.repository.scope.Scopes;
 
 /**
  * This console's half of the development sign-in: the URL space it guards, the authorization matrix it applies, the
@@ -61,14 +62,15 @@ public class DevSecurityConfig {
                 User.withUsername("viewer").password("{noop}viewer").roles("USER").build());
     }
 
-    /** Seed a {@code default} tenant whose members are the dev admin/editor/viewer accounts (keyed by username). */
+    /** Seed the {@link Scopes#DEFAULT_TENANT default} tenant whose members are the dev admin/editor/viewer accounts
+     *  (keyed by username). */
     @Bean
     public ApplicationRunner devTenantSeed(Authorization authorization, TenantService tenants) {
         return _ -> {
-            if (!tenants.exists("default")) {
-                tenants.create("default");
+            if (!tenants.exists(Scopes.DEFAULT_TENANT)) {
+                tenants.create(Scopes.DEFAULT_TENANT);
             }
-            UserDirectory directory = new UserDirectory(authorization, "default");
+            UserDirectory directory = new UserDirectory(authorization, Scopes.DEFAULT_TENANT);
             directory.put("admin", UserDirectory.Role.ADMIN, "admin");
             directory.put("editor", UserDirectory.Role.EDITOR, "editor");
             directory.put("viewer", UserDirectory.Role.VIEWER, "viewer");

@@ -63,7 +63,7 @@ public final class FirstRunWelcome implements ApplicationListener<ContextRefresh
                 + n
                 + "   WELCOME TO JENESIS REPOSITORY" + n
                 + n
-                + "   Nobody can sign in to this deployment yet, so this start made a one-time key:" + n
+                + "   Nobody can sign in yet, so here is a one-time key to get started:" + n
                 + n
                 + "       " + issued.key() + n
                 + n

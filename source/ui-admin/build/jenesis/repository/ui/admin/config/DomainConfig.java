@@ -31,6 +31,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.ConfigurableEnvironment;
+import build.jenesis.repository.scope.Scopes;
 
 /**
  * Wires the Spring-free {@code build.jenesis.repository.ui.store} application-service layer into the console's context. The
@@ -119,7 +120,7 @@ public class DomainConfig {
         if (!tenancy.fixed() || environment.getProperty("jenreg.read-only", Boolean.class, false)) {
             return new FixedTenant(null);
         }
-        String tenant = environment.getProperty("jenreg.default-tenant", "default");
+        String tenant = environment.getProperty("jenreg.default-tenant", Scopes.DEFAULT_TENANT);
         try {
             if (!tenants.exists(tenant)) {
                 tenants.create(tenant);
@@ -152,13 +153,13 @@ public class DomainConfig {
         }
     }
 
-    /** The deployment-wide operator tenant (operator-tenant, else default-tenant, else {@code default}): the scope
-     *  where cross-tenant privileged mutations that belong to no single tenant are audited. Shared by the tenant purge
-     *  and the volume reclaim so the two apply one rule. */
+    /** The deployment-wide operator tenant (operator-tenant, else default-tenant, else
+     *  {@link Scopes#DEFAULT_TENANT}): the scope where cross-tenant privileged mutations that belong to no single
+     *  tenant are audited. Shared by the tenant purge and the volume reclaim so the two apply one rule. */
     private static String operatorTenant(ConfigurableEnvironment environment) {
         String operatorTenant = environment.getProperty("jenreg.operator-tenant", "");
         return operatorTenant.isBlank()
-                ? environment.getProperty("jenreg.default-tenant", "default")
+                ? environment.getProperty("jenreg.default-tenant", Scopes.DEFAULT_TENANT)
                 : operatorTenant;
     }
 

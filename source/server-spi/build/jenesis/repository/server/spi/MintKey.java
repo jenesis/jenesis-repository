@@ -12,14 +12,11 @@ import build.jenesis.repository.scope.Scopes;
  * hand-typed string or a snippet in another language that has to keep the format in step.
  *
  * <p>{@code java -Djenesis.execute.module=source+server-spi build/jenesis/Execute.java [tenant]} prints one key for
- * the tenant named, {@code default} when none is, and nothing else; nothing is stored. The tenant is held to the
- * scope-name shape ({@link Scopes#require}), because a key names its tenant in the clear and the server cannot route
- * one whose tenant is not a name it could store under.
+ * the tenant named, {@link Scopes#DEFAULT_TENANT} when none is, and nothing else; nothing is stored. The tenant is
+ * held to the scope-name shape ({@link Scopes#require}), because a key names its tenant in the clear and the server
+ * cannot route one whose tenant is not a name it could store under.
  */
 public final class MintKey {
-
-    /** The tenant a key is minted for when the command line names none: the one a single-tenant server routes to. */
-    static final String DEFAULT_TENANT = "default";
 
     private MintKey() {
     }
@@ -43,9 +40,9 @@ public final class MintKey {
     public static String key(String... args) {
         if (args.length > 1) {
             throw new IllegalArgumentException("usage: MintKey [tenant] - one key for one tenant, "
-                    + DEFAULT_TENANT + " when none is named");
+                    + Scopes.DEFAULT_TENANT + " when none is named");
         }
-        String tenant = args.length == 1 ? args[0] : DEFAULT_TENANT;
+        String tenant = args.length == 1 ? args[0] : Scopes.DEFAULT_TENANT;
         return Authorization.mint(Scopes.require("tenant", tenant));
     }
 }

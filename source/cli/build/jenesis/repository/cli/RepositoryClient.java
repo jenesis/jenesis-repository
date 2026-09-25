@@ -5,6 +5,7 @@ import module java.net.http;
 import module tools.jackson.databind;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import build.jenesis.repository.scope.Scopes;
 
 /**
  * A thin client of a repository's HTTP API, holding the base URL and the key sent on each request as the {@code
@@ -1626,7 +1627,8 @@ public final class RepositoryClient {
 
     /**
      * The tenant a bare repository name addresses: the one this client was given, else the one its key belongs to - a
-     * key reads {@code jenk_<tenant>.<secret>} - else {@code default}, the tenant a deployment configuring none serves.
+     * key reads {@code jenk_<tenant>.<secret>} - else {@link Scopes#DEFAULT_TENANT}, the tenant a deployment
+     * configuring none serves.
      */
     public String tenant() {
         if (tenant != null) {
@@ -1635,7 +1637,7 @@ public final class RepositoryClient {
         if (key != null && key.startsWith("jenk_") && key.indexOf('.') > "jenk_".length()) {
             return key.substring("jenk_".length(), key.indexOf('.'));
         }
-        return "default";
+        return Scopes.DEFAULT_TENANT;
     }
 
     private HttpResponse<String> send(String method, String path, HttpRequest.BodyPublisher body, String contentType)

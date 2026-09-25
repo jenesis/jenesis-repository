@@ -17,7 +17,8 @@ public final class TerraformSettingsContributor implements SettingsContributor {
                 "The path this deployment serves its Terraform registry under, as the discovery document at "
                         + "/.well-known/terraform.json reports it. It has to be configured rather than derived: "
                         + "a client fetches that document from the host root, so the request carries no "
-                        + "repository segment to infer one from. The default is a repository named terraform in the default tenant.",
-                Setting.Kind.STRING, "/repository/default/terraform/registry", false));
+                        + "repository segment to infer one from. The default is a repository named terraform "
+                        + "in the default tenant.",
+                Setting.Kind.STRING, TerraformDiscoveryConfig.DEFAULT_PREFIX, false));
     }
 }

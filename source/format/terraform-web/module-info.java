@@ -16,6 +16,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.format.terraform.web {
+    requires build.jenesis.repository.scope;
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.server.kernel;
     requires jakarta.servlet;

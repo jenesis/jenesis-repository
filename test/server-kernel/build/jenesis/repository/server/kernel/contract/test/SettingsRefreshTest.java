@@ -39,6 +39,9 @@ class SettingsRefreshTest {
         store = ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         environment = new StandardEnvironment();
+        // A deployment with nothing set: the test JVM is started with the suites' tenant named as a system property,
+        // which would stand in for the file default this test watches being shadowed and restored.
+        environment.getPropertySources().remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);
         settings = new Settings(store);
         // The live config reads a plugin key's file/env fallback through the environment, exactly as the deployment
         // wires it, so a cleared lookup-consumed key must stop shadowing the file default once the pass re-seeds it.
@@ -63,10 +66,10 @@ class SettingsRefreshTest {
 
     @Test
     void the_interval_refresh_converges_a_live_key_into_the_live_config() throws IOException {
-        assertThat(live.defaultTenant()).as("the file default before any override").isEqualTo("default");
+        assertThat(live.defaultTenant()).as("the file default before any override").isEqualTo("releases");
 
         new Settings(store).set("default-tenant", "acme");   // another node writes
-        assertThat(live.defaultTenant()).as("not yet converged before the interval fires").isEqualTo("default");
+        assertThat(live.defaultTenant()).as("not yet converged before the interval fires").isEqualTo("releases");
 
         refresh.refresh();
         assertThat(live.defaultTenant()).as("the pass re-read the store and rebuilt the live config").isEqualTo("acme");

@@ -5,6 +5,7 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.settings.CoreDefaults;
 import build.jenesis.repository.settings.ImportHostGuard;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import build.jenesis.repository.scope.Scopes;
 
 /**
  * The repository server's configuration, bound from {@code jenreg.*} - every dial the server itself binds, in one
@@ -135,7 +136,7 @@ public class RepositoryProperties {
     private Map<String, String> repositories = new LinkedHashMap<>();
 
     /** Tenant a request resolves to when its key carries none (anonymous or keyless). */
-    private String defaultTenant = "default";
+    private String defaultTenant = Scopes.DEFAULT_TENANT;
 
     /** Request routing over the shared {@code <tenant>/<repository>/...} store layout. {@code fixed} (the default,
      *  and the default of every image this product ships) binds <em>every</em> request to the one

@@ -25,6 +25,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
+import build.jenesis.repository.scope.Scopes;
 
 /**
  * Wires key-based console sign-in unless {@code jenreg.key-login=false}, and nothing at all when it is, so switching
@@ -94,7 +95,7 @@ public class KeyLoginConfig {
                                                                          Superadmins superadmins) {
         RateLimiter limiter = RateLimiterProvider.resolve(environment::getProperty);
         double permits = environment.getProperty("jenreg.key-login.rate-limit", Double.class, 30.0);
-        String tenant = environment.getProperty("jenreg.default-tenant", "default");
+        String tenant = environment.getProperty("jenreg.default-tenant", Scopes.DEFAULT_TENANT);
         return new KeyLoginAuthenticationProvider(keys, firstRunKey, properties.getAdminKey().trim(), limiter, permits,
                 audit, tenant, superadmins::is);
     }

@@ -1,6 +1,7 @@
 package build.jenesis.repository.settings;
 
 import module java.base;
+import build.jenesis.repository.scope.Scopes;
 
 /**
  * The neutral core's own {@link SettingsContributor} - the product's built-in runtime dials (the compliance verdict
@@ -78,7 +79,7 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "once at boot, so until the deployment restarts the console's instance list, the "
                                 + "orphan diagnostic and the purge keep naming the previous default while keyless "
                                 + "traffic has already moved.",
-                        Setting.Kind.STRING, "default", false),
+                        Setting.Kind.STRING, Scopes.DEFAULT_TENANT, false),
                 new Setting("block-private-import-hosts", "Defaults", "Block private import hosts",
                         "Reject a migration URL that is plaintext http, or that resolves to a loopback, link-local or "
                                 + "private address. A migration is fetched server-side with the upstream credentials "

@@ -22,6 +22,7 @@
 open module build.jenesis.repository.auth.ldap {
     requires build.jenesis.repository.ui;
     requires build.jenesis.repository.server.spi;
+    requires build.jenesis.repository.scope;
     requires build.jenesis.repository.audit;
     requires org.slf4j;
     requires spring.beans;

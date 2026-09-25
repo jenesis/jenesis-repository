@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The command-line mint: one well-formed key for the tenant named, {@code default} when none is, refused for a
+ * The command-line mint: one well-formed key for the tenant named, {@code releases} when none is, refused for a
  * tenant that is not a scope name. Exercised through {@code main} once, because the program is what a deployment
  * runs, and the rest through the method behind it.
  */
@@ -32,10 +32,10 @@ class MintKeyTest {
     }
 
     @Test
-    void the_tenant_defaults_to_default_and_every_key_is_fresh() {
+    void the_tenant_defaults_to_releases_and_every_key_is_fresh() {
         String first = MintKey.key();
         String second = MintKey.key();
-        assertThat(Authorization.tenantOf(first)).isEqualTo("default");
+        assertThat(Authorization.tenantOf(first)).isEqualTo("releases");
         assertThat(Authorization.wellFormed(second)).isTrue();
         assertThat(first).isNotEqualTo(second);
     }
