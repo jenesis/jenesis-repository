@@ -11,7 +11,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Import-job records stop growing: before this, only a manual dismiss removed a finished migration's
+ * Import- and export-job records stop growing: before this, only a manual dismiss removed a finished migration's
  * {@code imports/<id>} record and its remembered {@code import-source/<id>}. The cleanup pass now stamps an
  * {@code import-expiry/<id>} marker when it first observes a job terminal and auto-dismisses a full TTL later -
  * never sooner than the TTL after finishing, never touching a running job, and cleaning its own marker up when the
@@ -78,13 +78,34 @@ class ImportJobReapTest {
         assertThat(store.readVersioned("import-expiry/orphan")).as("orphan marker of a dismissed job").isEmpty();
     }
 
+    @Test
+    void a_finished_export_job_is_dismissed_on_its_own_dial() throws IOException {
+        String json = "{\"state\":\"completed\",\"sent\":3}";
+        store.write("exports/moved", new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
+
+        task.repository(context(NOW, "PT0S"));
+        assertThat(store.readVersioned("export-expiry/moved")).as("the import dial does not govern exports").isPresent();
+
+        task.repository(context(NOW.plus(Duration.ofDays(8)), "PT0S"));
+        assertThat(store.readVersioned("exports/moved")).isEmpty();
+        assertThat(store.readVersioned("export-expiry/moved")).isEmpty();
+
+        store.write("exports/kept", new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
+        task.repository(context(NOW, null, "PT0S"));
+        assertThat(store.readVersioned("export-expiry/kept")).as("PT0S on the export dial disables it").isEmpty();
+    }
+
     private void job(String id, String state) throws IOException {
         String json = "{\"state\":\"" + state + "\",\"imported\":3,\"skipped\":0,\"cursor\":null}";
         store.write("imports/" + id, new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
     }
 
-    /** A minimal pass context over the temp store; {@code import-job-ttl} is the only setting the reap reads. */
     private RepositoryContext context(Instant now, String ttl) {
+        return context(now, ttl, null);
+    }
+
+    /** A minimal pass context over the temp store; the two job TTLs are the only settings the reap reads. */
+    private RepositoryContext context(Instant now, String ttl, String exportTtl) {
         return new RepositoryContext() {
             @Override
             public UnitFailures failures(String work, String consequence) {
@@ -108,7 +129,11 @@ class ImportJobReapTest {
 
             @Override
             public UnaryOperator<String> config() {
-                return key -> "import-job-ttl".equals(key) ? ttl : null;
+                return key -> switch (key) {
+                    case "import-job-ttl" -> ttl;
+                    case "export-job-ttl" -> exportTtl;
+                    default -> null;
+                };
             }
 
             @Override

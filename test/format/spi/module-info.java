@@ -12,6 +12,9 @@
  * and every seam that maps an ecosystem back to a layout answers over both rather than over whichever discovery
  * yielded first. That is driven over two {@code provides}-registered stub formats sharing one.
  *
+ * <p>And the export every put-at-its-path format shares, {@link build.jenesis.repository.format.PublishedExport}, over
+ * a filesystem store and a target that records what it was sent.
+ *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.format
  * @jenesis.bom pin-repository.properties
@@ -20,6 +23,7 @@
 open module build.jenesis.repository.format.test {
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.store.filesystem;
     requires org.junit.jupiter;
     requires org.assertj.core;
     provides build.jenesis.repository.format.RepositoryFormat

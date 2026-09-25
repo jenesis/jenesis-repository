@@ -48,6 +48,10 @@ public final class RetentionSettingsContributor implements SettingsContributor {
                         "Auto-dismiss completed or failed migration jobs (and their remembered sources) this "
                                 + "ISO-8601 duration after the sweep first sees them finished; a running job is "
                                 + "never touched. PT0S disables the auto-dismiss.",
-                        Setting.Kind.DURATION, CleanupTask.IMPORT_JOB_TTL.fallbackText(), true));
+                        Setting.Kind.DURATION, CleanupTask.IMPORT_JOB_TTL.fallbackText(), true),
+                new Setting(CleanupTask.EXPORT_JOB_TTL.key(), "Retention", "Export job time-to-live",
+                        "How long a finished export job's status stays before the scheduled cleanup dismisses it. "
+                                + "Zero, negative or blank keeps every job until an operator dismisses it by hand.",
+                        Setting.Kind.DURATION, CleanupTask.EXPORT_JOB_TTL.fallbackText(), true));
     }
 }
