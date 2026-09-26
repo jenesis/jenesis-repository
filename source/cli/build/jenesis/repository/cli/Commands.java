@@ -299,7 +299,8 @@ public final class Commands {
                             act("repos delete <name> [--yes]", "delete a repository and everything it holds, after "
                                     + "typing 'delete <name>' - or --yes, for a script"),
                             act("repos set <name> <definition>",
-                                    "define a repository (hosted | proxy <url> [nocache] [harden] | group a,b)"),
+                                    "define a repository in clauses (writable, fallback <url> [nocache] [harden], "
+                                            + "fallback <repository>)"),
                             act("repos remove <name>", "remove a definition")),
                     noun("tenants", "the deployment's tenants (an operator key's)", "build.jenesis.repository.ui.admin",
                             AdminCommands::tenants,

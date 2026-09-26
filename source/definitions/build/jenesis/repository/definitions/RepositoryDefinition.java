@@ -8,25 +8,16 @@ import build.jenesis.repository.settings.PrivateHostGuard;
 import build.jenesis.repository.store.ArtifactDescriptor;
 
 /**
- * A repository's shape in the generalized model (EPIC 25): whether it accepts uploads into its <b>own</b>
- * store ({@code writable}) and an ordered list of {@link Fallback}s consulted, first-hit-wins, when the repository
- * does not itself hold the requested artifact. The three historical types are exactly three points in this space
- * and stay as parse-time spelling sugar: {@code hosted} =
- * writable with no fallbacks; {@code proxy <url>} = non-writable with one {@link Source.Upstream} fallback;
- * {@code group a,b} = non-writable with {@link Source.Repository} fallbacks in order. The clause grammar
- * ({@code writable} / {@code fallback <source> [nocache] [harden] [unscreened]}) additionally expresses what the
- * old model could not - the writable-and-fallbacked host+proxy hybrid, per-fallback cache and per-fallback
- * screening strength - and {@link #parse} produces this one record for both the old and the new spelling.
+ * A repository's shape: whether it accepts uploads into its <b>own</b> store ({@code writable}) and an ordered list
+ * of {@link Fallback}s consulted, first-hit-wins, when the repository does not itself hold the requested artifact.
+ * One clause grammar spells it - {@code writable} and {@code fallback <source> [options]} - and {@link #parse}
+ * accepts nothing else. A repository that only accepts uploads is {@code writable}; a caching proxy is
+ * {@code fallback <url>}; a grouped view is {@code fallback a fallback b}; and the same grammar expresses the
+ * writable repository with fallbacks, a per-fallback cache and a per-fallback screening strength.
  *
- * <p><b>rewired resolution to walk this record directly</b> ({@code RepositoryRouter#resolve} consumes
- * {@code (writable, fallbacks)} through the typed-outcome channel), and <b>deleted the vestigial legacy
- * {@code Type} enum and its derived {@code type()} accessor</b> - the cutover close, once its last consumer (the
- * migration re-screen sweep's hardened-proxy filter) moved onto the {@code (writable, fallbacks)} model directly.
- * {@code RepositoryRouter#writeTarget} is {@code writable ? repository : null} and {@code group … push=…} is a
- * <b>hard parse refusal</b> (§2.3) - the write-delegation carry-over is gone. A few non-throwing derived views over
- * the orthogonal axes remain for the console/{@code Repositories#hardened} badge - {@link #upstream()},
- * {@link #cache()}, {@link #harden()}, {@link #members()} - each returning a safe default for a generalized shape the
- * old model could not name (a writable repo with fallbacks, a multi-upstream list); they are off the resolution path.
+ * <p>{@code RepositoryRouter#resolve} walks this record directly, and a write lands in a repository's own store iff
+ * it is {@code writable}: writability is a repository's own property, so no definition delegates its writes to
+ * another. {@link #harden()} is the one derived view, read by the console badge and the re-screen sweeps.
  *
  * <p><b>Its own module, because it is data every repository screen reads.</b> The record, its parser and the
  * two parse-time module switches ({@link #redirectHandlerInstalled(boolean)},
@@ -44,16 +35,14 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
     /** One ordered fallback: an external upstream URL or another repository, with this repository's per-fallback
      *  copy ({@code store}) and {@code screening} policy for content fetched from it. {@code store} and
      *  {@code screening} are meaningful <b>only</b> on an {@link Source.Upstream} fallback - a
-     *  {@link Source.Repository} fallback is a view whose inner repository owns its own bytes and policy (§1.1),
+     *  {@link Source.Repository} fallback is a view whose inner repository owns its own bytes and policy,
      *  so a {@code nocache}/{@code harden}/{@code unscreened} option on it is refused at parse.
      *
-     * <p><b>EPIC 29 RD-5 (stage 2)</b> adds two orthogonal axes the clause grammar can set on an
-     * {@link Source.Upstream} fallback (§1.2): an optional {@link Match} coordinate predicate ({@code match=} - the
-     * fallback applies only to a request whose derived {@code ecosystem:coordinate} matches, so the walk becomes
+     * <p>Two further axes are orthogonal to those: an optional {@link Match} coordinate predicate ({@code match=} -
+     * the fallback applies only to a request whose derived {@code ecosystem:coordinate} matches, so the walk becomes
      * MISS-composable over a coordinate-partitioned upstream set) and a {@link Serve} policy ({@code redirect} -
      * emit a {@code 307} to the upstream through the injected redirect handler instead of fetch-screen-serving it).
-     * Both default to no-match / {@link Serve#PROXY}, so every legacy and non-redirect construction stays exactly a
-     * caching-or-not proxy fallback and the existing {@code equals} semantics are unchanged for those. */
+     * Both default to no-match / {@link Serve#PROXY}, which is a caching-or-not proxy fallback. */
     public record Fallback(Source source, boolean store, Screening screening, Match match, Serve serve) {
         public Fallback {
             Objects.requireNonNull(source, "source");
@@ -61,9 +50,8 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
             Objects.requireNonNull(serve, "serve");
         }
 
-        /** A plain proxy fallback with no coordinate predicate and the default {@link Serve#PROXY} policy - the
-         *  legacy shape every existing construction and desugar path yields, kept as a secondary constructor so
-         *  those call sites (and the {@code equals}-based parse tests) are byte-for-byte unchanged. */
+        /** A fallback with no coordinate predicate and the default {@link Serve#PROXY} policy - what a
+         *  {@code fallback <source>} clause without {@code match=} or {@code redirect} parses to. */
         public Fallback(Source source, boolean store, Screening screening) {
             this(source, store, screening, null, Serve.PROXY);
         }
@@ -91,7 +79,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
         }
     }
 
-    /** How a matched {@link Source.Upstream} fallback is served (§1.2): {@link #PROXY} fetch-screen-serves it
+    /** How a matched {@link Source.Upstream} fallback is served: {@link #PROXY} fetch-screen-serves it
      *  through the pull-through walk as today (the default for every fallback); {@link #REDIRECT} delegates to the
      *  injected redirect handler ({@code redirect-directory} module) to emit a {@code 307} to the upstream rather
      *  than moving its bytes through the JVM - a screened-floor redirect by default, an {@code unscreened} bookmark
@@ -102,10 +90,9 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
      *  request whose format-derived {@link ArtifactDescriptor} carries a coordinate in {@code ecosystem} (matched
      *  case-insensitively, so a rule's {@code maven} matches the descriptor's OSV {@code Maven}) whose value the
      *  {@code glob} matches. A descriptor with no coordinate (a checksum root, generated metadata) is never matched
-     *  by the predicate - it is left to the walk's configured order (§1.2, "empty-coordinate ⇒ configured order"),
-     *  so a coordinate-less sibling is never partitioned away from the leg its artifact took. The glob is anchored
-     *  and treats every character literally except {@code *} (any run, including none), identical to the
-     *  {@code redirect-directory} rule-table semantics this stage migrates rules from. */
+     *  by the predicate - it is left to the walk's configured order, so a coordinate-less sibling is never
+     *  partitioned away from the leg its artifact took. The glob is anchored and treats every character literally
+     *  except {@code *} (any run, including none). */
     public record Match(String ecosystem, String glob) {
         public Match {
             Objects.requireNonNull(ecosystem, "ecosystem");
@@ -153,7 +140,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
 
     /** Where a fallback's content comes from: an external upstream fetched via {@code ProxyFormat.Fetcher},
      *  another repository resolved by recursion, or the DNS directory whose upstream is resolved per request by the
-     *  DNS walk (EPIC 30 DF-6). */
+     *  DNS walk. */
     public sealed interface Source {
         /** An external upstream URL (the source token contains a scheme, {@code "://"}). */
         record Upstream(URI url) implements Source {
@@ -169,25 +156,24 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
             }
         }
 
-        /** The DNS directory (EPIC 30 DF-6, design §7.2): a {@code fallback dns redirect} leg whose upstream is not
-         *  a clause literal but resolved per request by the {@code redirect-dns} module's DNS walk
-         *  ({@code DnsDirectory.locate}), through the same {@code RepositoryRouter.RedirectHandler} seam an {@link Upstream} redirect
-         *  uses. The reserved source keyword {@code dns} spells it (keyword precedence over a repository literally
-         *  named {@code dns}, §7.2); it is served only as a {@link Serve#REDIRECT}, so it carries no per-fallback
-         *  upstream URL of its own. A singleton-shaped marker record - every DNS-directory leg is identical, the
-         *  routing lives in the walk. */
+        /** The DNS directory: a {@code fallback dns redirect} leg whose upstream is not a clause literal but resolved
+         *  per request by the {@code redirect-dns} module's DNS walk ({@code DnsDirectory.locate}), through the same
+         *  {@code RepositoryRouter.RedirectHandler} seam an {@link Upstream} redirect uses. The reserved source keyword
+         *  {@code dns} spells it (the keyword takes precedence over a repository literally named {@code dns}); it is
+         *  served only as a {@link Serve#REDIRECT}, so it carries no per-fallback upstream URL of its own. A
+         *  singleton-shaped marker record - every DNS-directory leg is identical, the routing lives in the walk. */
         record DnsDirectory() implements Source {
         }
     }
 
-    /** Per-fallback screening strength for fetched content (§1.1). {@code DEFAULT} = the serving tenant's gate as
-     *  today (prefix screen; none if the tenant is ungated); {@code HARDEN} = EPIC 23 full-body fail-closed;
-     *  {@code UNSCREENED} = an explicit, loudly-warned no-screen opt-out (never silent, §9 secure-defaults). */
+    /** Per-fallback screening strength for fetched content. {@code DEFAULT} = the serving tenant's gate (a prefix
+     *  screen; none if the tenant is ungated); {@code HARDEN} = a full-body, fail-closed screen before anything is
+     *  served; {@code UNSCREENED} = an explicit, loudly-warned no-screen opt-out (never silent, §9). */
     public enum Screening { DEFAULT, HARDEN, UNSCREENED }
 
     /** Defensively copy the fallback list into an unmodifiable list and reject the one shape that could never
-     *  serve anything - not writable and with no fallbacks (§1.1, fail-loud §9). Every legacy and clause-grammar
-     *  construction path yields a serveable shape, so this guards only genuinely malformed direct construction. */
+     *  serve anything - not writable and with no fallbacks (fail-loud, §9). Every clause-grammar parse yields a
+     *  serveable shape, so this guards only malformed direct construction. */
     public RepositoryDefinition {
         fallbacks = List.copyOf(fallbacks);
         if (!writable && fallbacks.isEmpty()) {
@@ -198,98 +184,46 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
     }
 
     /**
-     * Parse a definition string into the generalized record, for both the old and the new spelling. The old
-     * spellings desugar (§2.1): {@code hosted} (and any unconfigured name) -> writable, no fallbacks;
-     * {@code proxy <url> [nocache] [harden]} -> non-writable with one {@link Source.Upstream} fallback whose
-     * {@code store}/{@code screening} carry the mode tokens; {@code group a,b,c} -> non-writable with
-     * {@link Source.Repository} fallbacks in order. The new clause grammar is
-     * {@code ( "writable" | "fallback" <source> ("nocache"|"harden"|"unscreened")* )*} with options binding to the
-     * nearest preceding {@code fallback} and {@code writable} appearing at most once, position-free. <b>Cache
-     * policy defaults to store:</b> a bare {@code fallback <url>} (equivalently a bare {@code proxy <url>}) caches
-     * its fetched bytes ({@code store=true}) - the caching-proxy default; {@code nocache} is the explicit opt-out
-     * to a discard-after-serve pass-through. An unknown leading token, an unknown proxy mode, an option with no
-     * preceding fallback, or an option on a repository-name fallback is refused (fail-loud, PRINCIPLES §9).
+     * Parse a definition string in the clause grammar {@code ( "writable" | "fallback" <source> <option>* )*}, an
+     * option being {@code nocache}, {@code harden}, {@code unscreened}, {@code redirect} or
+     * {@code match=<ecosystem>:<glob>}, into the record. An option binds to the nearest preceding {@code fallback},
+     * and {@code writable} appears at most once, position-free. <b>Cache policy defaults to store:</b> a bare
+     * {@code fallback <url>} caches its fetched bytes ({@code store=true}); {@code nocache} is the explicit opt-out to
+     * a discard-after-serve pass-through. A definition that does not start with a clause, an option with no preceding
+     * fallback, an unknown option, or a store/screening option on a repository-name fallback is refused (fail-loud,
+     * §9). The words {@code hosted}, {@code proxy} and {@code group} are refused like any other leading token, with
+     * the clause that says the same thing named in the message.
      */
     public static RepositoryDefinition parse(String specification) {
         String[] parts = specification.trim().split("\\s+");
         return switch (parts[0]) {
-            case "hosted" -> hosted();
-            case "proxy" -> parseProxy(parts, specification);
-            case "group" -> parseGroup(parts, specification);
             case "writable", "fallback" -> parseClauses(parts, specification);
-            default -> throw new IllegalArgumentException("Unknown repository type: " + specification);
+            default -> throw new IllegalArgumentException("A repository definition is written in clauses - "
+                    + "'writable' and/or 'fallback <source> [options]' - and cannot start with '" + parts[0] + "'"
+                    + instead(parts) + ": " + specification);
         };
     }
 
-    /** Desugar the legacy {@code proxy <url> [nocache] [harden]} spelling (§2.1). Behavior-preserving: the mode
-     *  tokens map onto the single upstream fallback's {@code store} (nocache -> no-store) and {@code screening}
-     *  (harden -> HARDEN), with the same order-independence and the same fail-loud on an unknown token as before. */
-    private static RepositoryDefinition parseProxy(String[] parts, String specification) {
-        if (parts.length < 2 || parts[1].isBlank()) {
-            throw new IllegalArgumentException("A proxy repository needs an upstream URL: " + specification);
-        }
-        URI upstream = upstreamUri(parts[1], specification);
-        if (plaintextUpstream(upstream)) {
-            warnPlaintext(upstream);
-        }
-        // Mode tokens after the URL, order-independent: `nocache` (do not store the fetched bytes) and/or `harden`
-        // (untrusted-upstream full screening). Plain `harden` stays store-on-pass; `harden nocache` fully screens
-        // every fetch yet stores nothing durably. An unknown token is refused (fail-loud, PRINCIPLES §9).
-        boolean cache = true;
-        boolean harden = false;
-        for (int index = 2; index < parts.length; index++) {
-            if (parts[index].isBlank()) {
-                continue;
+    /** The clause that says what a word outside the grammar meant, for the three words that name a repository kind
+     *  rather than a clause - or nothing, for any other token. */
+    private static String instead(String[] parts) {
+        String rest = String.join(" ", Arrays.copyOfRange(parts, 1, parts.length)).trim();
+        return switch (parts[0]) {
+            case "hosted" -> "; write 'writable'";
+            case "proxy" -> "; write 'fallback " + (rest.isEmpty() ? "<url>" : rest) + "'";
+            case "group" -> {
+                String clauses = Arrays.stream(rest.split("[,\\s]+"))
+                        .filter(member -> !member.isBlank() && !member.contains("="))
+                        .map(member -> "fallback " + member)
+                        .collect(Collectors.joining(" "));
+                yield "; write one 'fallback <repository>' clause per member, in order: '"
+                        + (clauses.isEmpty() ? "fallback a fallback b" : clauses) + "'";
             }
-            switch (parts[index]) {
-                case "nocache" -> cache = false;
-                case "harden" -> harden = true;
-                default -> throw new IllegalArgumentException("Unknown proxy mode '" + parts[index]
-                        + "' (expected 'nocache', 'harden', or 'harden nocache'): " + specification);
-            }
-        }
-        return proxy(upstream, cache, harden);
+            default -> "";
+        };
     }
 
-    /** Desugar the legacy {@code group a,b,c} spelling (§2.1) into non-writable {@link Source.Repository} fallbacks
-     *  in order. §2.3: {@code group … push=…} is a <b>hard parse refusal</b> in - the write-delegation it
-     *  named has no honest desugar now that writability is the repository's own property, so a silent rewrite would
-     *  move where uploaded bytes land (a §9 violation). The refusal names both remedies. */
-    private static RepositoryDefinition parseGroup(String[] parts, String specification) {
-        // Every token after "group" is either a push= directive or a comma-separated member list; scan them all so
-        // a lone push= token (e.g. "group push=releases") is recognised as a directive rather than mistaken for a
-        // member, leaving no members and failing with the clear error.
-        String push = null;
-        List<String> members = new ArrayList<>();
-        for (int index = 1; index < parts.length; index++) {
-            if (parts[index].startsWith("push=")) {
-                push = parts[index].substring("push=".length());
-            } else {
-                for (String member : parts[index].split(",")) {
-                    if (!member.isBlank()) {
-                        members.add(member.trim());
-                    }
-                }
-            }
-        }
-        if (members.isEmpty()) {
-            throw new IllegalArgumentException("A group repository needs at least one member: " + specification);
-        }
-        if (push != null) {
-            // §2.3 hard cutover: `push=` delegated a write on the group into member `push`'s store. The generalized
-            // model makes writability the repository's OWN property, so this spelling has no honest desugar - a
-            // silent rewrite would move where uploaded bytes land (into the front repo's store, not the member's),
-            // a §9 fail-loud violation. Refuse at parse, naming both remedies.
-            throw new IllegalArgumentException("'group … push=" + push + "' is no longer supported (EPIC 25 §2.3): "
-                    + "writability is now a repository's own property, so delegating a write into member '" + push
-                    + "' has no honest meaning. Declare the front repository 'writable' (uploads then land in its "
-                    + "own store, served local-first), or point publishers directly at '" + push + "': "
-                    + specification);
-        }
-        return group(members);
-    }
-
-    /** Parse the new clause grammar (§1.2): {@code ( "writable" | "fallback" <source> <option>* )*} where an
+    /** Parse the clause grammar: {@code ( "writable" | "fallback" <source> <option>* )*} where an
      *  {@code <option>} ({@code nocache}/{@code harden}/{@code unscreened}) binds to the nearest preceding
      *  {@code fallback}, and {@code writable} appears at most once, position-free. A {@code fallback <url>} defaults
      *  to {@code store=true} (the caching-proxy default); {@code nocache} is the explicit opt-out. */
@@ -321,19 +255,17 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
                     if (source instanceof Source.Upstream upstream && plaintextUpstream(upstream.url())) {
                         warnPlaintext(upstream.url());
                     }
-                    // store defaults to caching on an Upstream fallback (today's proxy default); on a Repository or
-                    // DnsDirectory fallback store is meaningless - the inner repository / DNS-designated target owns
-                    // its own bytes, the outer stores nothing for the view (§1.1) - so it is canonicalized to false,
-                    // matching the group() desugar and the redirect-only DNS leg.
+                    // store defaults to caching on an Upstream fallback; on a Repository or DnsDirectory fallback
+                    // store is meaningless - the inner repository / DNS-designated target owns its own bytes, the
+                    // outer stores nothing for the view - so it is canonicalized to false.
                     boolean store = source instanceof Source.Upstream;
                     fallbacks.add(new Fallback(source, store, Screening.DEFAULT));
                     current = fallbacks.size() - 1;
                 }
                 default -> {
                     // Every other token is an option binding to the nearest preceding `fallback` - the store /
-                    // screening tokens (nocache/harden/unscreened), the RD-5 `match=<ecosystem>:<glob>` coordinate
-                    // predicate, and the RD-5 `redirect` serve policy. An option with no preceding fallback is
-                    // refused exactly as before.
+                    // screening tokens (nocache/harden/unscreened), the `match=<ecosystem>:<glob>` coordinate
+                    // predicate, and the `redirect` serve policy. An option with no preceding fallback is refused.
                     if (current < 0) {
                         throw new IllegalArgumentException("Option '" + token + "' must follow a 'fallback' "
                                 + "clause: " + specification);
@@ -342,7 +274,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
                 }
             }
         }
-        // EPIC 30 DF-6 (§7.2): a DNS-directory leg is served ONLY as a redirect - it has no clause-literal upstream
+        // A DNS-directory leg is served ONLY as a redirect - it has no clause-literal upstream
         // to fetch-screen-serve, its target is resolved per request by the DNS walk. A `fallback dns` without the
         // `redirect` serve is the reserved-keyword collision: refuse it as a fail-loud rename ask (the keyword `dns`
         // takes precedence over a repository literally named `dns`, so such a repository must be renamed), rather
@@ -356,19 +288,19 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
             }
         }
         if (mixedStrength(fallbacks)) {
-            // (⚑ owner-decided: warn, not refuse): a `harden` upstream beside a weaker
+            // Warned, not refused: a `harden` upstream beside a weaker
             // (DEFAULT/UNSCREENED) upstream means a weaker fallback ordered first can serve before the strong
             // screen runs. Allowed (ordering is operator expressiveness) but flagged loudly.
             LOGGER.warn("Mixed-strength fallback list in '" + specification + "': a "
                     + "'harden' upstream sits beside a non-hardened (DEFAULT/UNSCREENED) upstream, so a weaker "
-                    + "fallback ordered before a hardened one can serve first-hit before the strong screen runs "
+                    + "fallback ordered before a hardened one can serve first-hit before the strong screen runs"
                     + ". This is allowed but flagged; reorder so the strongest screen leads, or 'harden' "
                     + "the weaker fallback too.");
         }
         return new RepositoryDefinition(writable, fallbacks);
     }
 
-    /** Apply one option token to the nearest preceding fallback, returning the updated fallback (§1.2, RD-5). The
+    /** Apply one option token to the nearest preceding fallback, returning the updated fallback. The
      *  store/screening tokens ({@code nocache}/{@code harden}/{@code unscreened}) and the {@code redirect} serve
      *  policy are refused on a {@link Source.Repository} fallback (the inner repository owns its own store, policy
      *  and serving); the {@code match=} coordinate predicate is a pure walk filter allowed on either source. A
@@ -387,15 +319,15 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
                         + "upstream URL, which a repository-name view does not have. " + specification);
             }
             if (fallback.source() instanceof Source.DnsDirectory) {
-                // A DNS-directory leg (EPIC 30 DF-6): the redirect is served by the `redirect-dns` module's handler,
+                // A DNS-directory leg: the redirect is served by the `redirect-dns` module's handler,
                 // not the static `redirect-directory` one, and the `dns` source keyword already gated on that module
                 // being installed at parse time (see parseSource). So `redirect` here needs no further module check -
-                // it is the mandatory serve policy for the DNS directory (design §7.2).
+                // it is the mandatory serve policy for the DNS directory.
                 return fallback.withServe(Serve.REDIRECT);
             }
             if (!redirectHandlerInstalled) {
-                // Fail-loud when the behavior is unavailable (the store=s3-without-module precedent,
-                // ArtifactStoreProvider.resolve:47-53): a `redirect` serve policy is served by the
+                // Fail-loud when the behavior is unavailable (as a store backend without its module is refused in
+                // ArtifactStoreProvider.resolve): a `redirect` serve policy is served by the
                 // `redirect-directory` module's injected handler, so with that module absent the token is refused
                 // at every write site rather than silently degrading to fetch-screen-serve (which would move the
                 // very bytes the operator asked to redirect).
@@ -407,7 +339,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
             return fallback.withServe(Serve.REDIRECT);
         }
         // The store / screening tokens: not allowed on a repository-name fallback (the inner repository owns its
-        // own store and screening policy), exactly as before.
+        // own store and screening policy).
         if (fallback.source() instanceof Source.Repository repository) {
             throw new IllegalArgumentException("Option '" + token + "' is not allowed on the "
                     + "repository-name fallback '" + repository.name() + "': the fallback repository "
@@ -425,7 +357,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
             case "nocache" -> fallback.withStore(false);
             case "harden" -> fallback.withScreening(Screening.HARDEN);
             case "unscreened" -> {
-                // §9 secure-defaults: an explicit no-screen opt-out is never silent. On a `redirect` fallback this
+                // §9: an explicit no-screen opt-out is never silent. On a `redirect` fallback this
                 // is the loudly-warned bookmark-redirect opt-out; on a proxy fallback it is the no-screen proxy.
                 LOGGER.warn("SECURITY: fallback '"
                         + ((Source.Upstream) fallback.source()).url() + "' is declared 'unscreened' - its "
@@ -454,79 +386,21 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
         return hardened && weaker;
     }
 
-    public static RepositoryDefinition hosted() {
-        return new RepositoryDefinition(true, List.of());
-    }
-
-    public static RepositoryDefinition proxy(URI upstream, boolean cache) {
-        return proxy(upstream, cache, false);
-    }
-
-    /** A proxy of {@code upstream}: {@code cache} stores the fetched bytes, {@code harden} makes it an
-     *  untrusted-upstream hardening proxy (full-screen-then-serve). In the generalized model this is a
-     *  non-writable repository with a single {@link Source.Upstream} fallback whose {@code store} is {@code cache}
-     *  and whose {@code screening} is {@code HARDEN} when {@code harden}, else {@code DEFAULT}. */
-    public static RepositoryDefinition proxy(URI upstream, boolean cache, boolean harden) {
-        Fallback fallback = new Fallback(new Source.Upstream(upstream), cache,
-                harden ? Screening.HARDEN : Screening.DEFAULT);
-        return new RepositoryDefinition(false, List.of(fallback));
-    }
-
-    /** A group of {@code members} in order: a non-writable repository whose fallbacks are those members as
-     *  {@link Source.Repository} sources. Write-delegation ({@code push=}) is gone (§2.3): a group is read-only,
-     *  and a front door that should accept uploads is declared {@code writable}. */
-    public static RepositoryDefinition group(List<String> members) {
-        List<Fallback> fallbacks = members.stream()
-                .map(member -> new Fallback(new Source.Repository(member), false, Screening.DEFAULT))
-                .toList();
-        return new RepositoryDefinition(false, fallbacks);
-    }
-
-    /** The single upstream URL of a legacy proxy shape, or {@code null} for hosted/group (as today). */
-    public URI upstream() {
-        return isProxyShape() ? ((Source.Upstream) fallbacks.getFirst().source()).url() : null;
-    }
-
-    /** Whether the legacy proxy shape caches fetched bytes (its single upstream fallback's {@code store});
-     *  {@code false} for hosted/group (as today). */
-    public boolean cache() {
-        return isProxyShape() && fallbacks.getFirst().store();
-    }
-
     /** Whether this repository serves any untrusted-upstream hardening leg: it has at least one
-     *  {@link Source.Upstream} fallback whose {@code screening == HARDEN}. This is deliberately NOT limited to the
-     *  legacy single-upstream proxy shape - a hardened upstream expressed in the generalized model (a
-     *  {@code writable} repo with a hardened upstream fallback, or a multi-fallback list carrying a hardened
-     *  upstream) is equally a hardening proxy whose cached upstream bytes must be re-verified per hit and are never
-     *  redirect-safe. Restricting this to {@code isProxyShape()} let those generalized shapes skip the per-hit
-     *  re-screen and the redirect exclusion (§4.2), serving retroactively-refused cached bytes; keying it
-     *  on the hardened-upstream fact closes that. A {@link Source.Repository} member's effective strength is its own
-     *  resolved definition (evaluated recursively by the resolution engine, which then hardens it in turn), so only
-     *  {@code Upstream} screening is inspected statically here - the same rule {@link #mixedStrength} uses. */
+     *  {@link Source.Upstream} fallback whose {@code screening == HARDEN}, whatever else the definition holds - a
+     *  {@code writable} repository with a hardened upstream fallback, or a list of several fallbacks carrying one,
+     *  is equally a hardening proxy whose cached upstream bytes must be re-verified per hit and are never
+     *  redirect-safe. Keying this on anything narrower than the hardened-upstream fact would let such a definition
+     *  skip the per-hit re-screen and the redirect exclusion and serve retroactively-refused cached bytes. A
+     *  {@link Source.Repository} member's effective strength is its own resolved definition (evaluated recursively
+     *  by the resolution engine, which then hardens it in turn), so only {@code Upstream} screening is inspected
+     *  statically here - the same rule {@link #mixedStrength} uses. */
     public boolean harden() {
         return fallbacks.stream().anyMatch(fallback ->
                 fallback.source() instanceof Source.Upstream && fallback.screening() == Screening.HARDEN);
     }
 
-    /** The member repository names of a legacy group shape, or an empty list for hosted/proxy (as today). */
-    public List<String> members() {
-        return isGroupShape()
-                ? fallbacks.stream().map(fallback -> ((Source.Repository) fallback.source()).name()).toList()
-                : List.of();
-    }
-
-    /** The legacy proxy shape: non-writable, exactly one upstream fallback. */
-    private boolean isProxyShape() {
-        return !writable && fallbacks.size() == 1 && fallbacks.getFirst().source() instanceof Source.Upstream;
-    }
-
-    /** The legacy group shape: non-writable, one or more fallbacks, every one a repository-name source. */
-    private boolean isGroupShape() {
-        return !writable && !fallbacks.isEmpty()
-                && fallbacks.stream().allMatch(fallback -> fallback.source() instanceof Source.Repository);
-    }
-
-    /** Resolve a {@code fallback} source token to its {@link Source} (§1.2, EPIC 30 DF-6 §7.2): an
+    /** Resolve a {@code fallback} source token to its {@link Source}: an
      *  {@code "://"}-bearing token is an {@link Source.Upstream}; the reserved keyword {@code dns} is the
      *  {@link Source.DnsDirectory} (keyword precedence over a repository literally named {@code dns}); every other
      *  token is a {@link Source.Repository}. The {@code dns} keyword needs the {@code redirect-dns} module to resolve
@@ -562,7 +436,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
 
     /** The one proxy outbound dial, named here so a surface that screens a configured upstream reads the key by
      *  its declared constant rather than respelling the literal - it IS {@link ProxyLeg#ALLOW_INTERNAL}, the same
-     *  dial the proxy legs read for upstream-advertised URLs (/share it deliberately). */
+     *  dial the proxy legs read for upstream-advertised URLs, shared deliberately. */
     public static final String ALLOW_INTERNAL_SETTING = ProxyLeg.ALLOW_INTERNAL;
 
     /** Warn loudly that an upstream travels in cleartext. Since this is only reachable when the deployment
@@ -588,12 +462,11 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
 
     /**
      * The reason an <b>operator-configured</b> proxy upstream must be refused, or {@code null} when it may be
-     * used. This is the proxy upstream was the one operator-configured outbound target in the product that
-     * was <em>warned about</em> rather than refused, while every peer - the webhook endpoint, the forwarding
-     * target, the emulator target, the redirect directory, the import guard - runs
-     * {@code PrivateHostGuard.refusalReason} and declines. It carries a per-host upstream credential (the old
-     * warning text said so in as many words), so it is the same credential-in-cleartext hazard on the same class
-     * of URL, and the earlier ruling is that a <em>transport</em> is judgeable and therefore refusable.
+     * used. It is refused like every other operator-configured outbound target - the webhook endpoint, the
+     * forwarding target, the emulator target, the redirect directory, the import guard - each of which runs
+     * {@code PrivateHostGuard.refusalReason} and declines. It carries a per-host upstream credential, so it is the
+     * same credential-in-cleartext hazard on the same class of URL, and a <em>transport</em> is judgeable and
+     * therefore refusable.
      *
      * <p><b>The transport half only, and deliberately so.</b> Unlike a webhook callback, this URL is the
      * operator's own choice of where to pull from, and an internal, privately-addressed mirror is a legitimate and
@@ -606,9 +479,9 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
      * upstream-advertised URLs: a deployment that pulls from a plaintext internal mirror has to admit its
      * advertised downloads too, so two dials could only ever disagree with each other.
      *
-     * <p>The rule itself moved to {@link OutboundTargets#configuredRefusal} in, because this is not the only
-     * operator-configured outbound root in the edition - {@code jenreg.go.sumdb} is the other, and the two
-     * were about to be two spellings of one decision. This method is where the decision is <em>applied</em> to a
+     * <p>The rule itself lives in {@link OutboundTargets#configuredRefusal}, because this is not the only
+     * operator-configured outbound root - {@code jenreg.go.sumdb} is the other, and the two would otherwise be two
+     * spellings of one decision. This method is where the decision is <em>applied</em> to a
      * repository definition; the decision itself is stated once.
      */
     public static String upstreamRefusal(URI upstream, boolean allowInternal) {
@@ -617,7 +490,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
 
     /** The reason any upstream in {@code definition} must be refused, or {@code null} when every one may be used -
      *  {@link #upstreamRefusal(URI, boolean)} over the parsed fallback list, so a multi-fallback definition is
-     *  screened leg by leg rather than only in its legacy single-upstream spelling. */
+     *  screened leg by leg. */
     public static String upstreamRefusal(RepositoryDefinition definition, boolean allowInternal) {
         for (Fallback fallback : definition.fallbacks()) {
             if (fallback.source() instanceof Source.Upstream upstream) {
@@ -660,7 +533,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
         return redirectHandlerInstalled;
     }
 
-    /** Whether the {@code redirect-dns} module is installed (EPIC 30 DF-6, §7.2). It gates the parse of the reserved
+    /** Whether the {@code redirect-dns} module is installed. It gates the parse of the reserved
      *  {@code dns} source keyword: absent, {@code fallback dns} is a fail-loud parse refusal naming the missing
      *  {@code redirect-dns} module rather than a silent reinterpretation as a repository named {@code dns} (see
      *  {@code parseSource}). It defaults {@code false} so a deployment without the module refuses a

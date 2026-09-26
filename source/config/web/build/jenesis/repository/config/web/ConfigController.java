@@ -445,8 +445,7 @@ public class ConfigController {
     }
 
     /** The repositories defined at runtime ({@code repositories.<name>} in the settings store): each name with its
-     *  routing specification ({@code hosted} | {@code proxy <url> [nocache] [harden]} | {@code group a,b} | one or
-     *  more {@code writable} / {@code fallback <source>} clauses). They add to
+     *  routing specification (one or more {@code writable} / {@code fallback <source> [options]} clauses). They add to
      *  or override the deployment's file-configured repositories ({@code jenreg.repositories.<name>}) and
      *  route on the next request. */
     @GetMapping("/api/repositories")
@@ -464,13 +463,13 @@ public class ConfigController {
             response.setStatus(400);
             return;
         }
-        // Write-time validation (item 1, PRINCIPLES §9): run the SAME parser the boot sweep (
+        // Write-time validation (§9): run the SAME parser the boot sweep (
         // LiveConfig.sweepDefinitions) uses BEFORE the definition is stored, so a broken definition never reaches the
         // store. The refusal is LOUD and NAMED - the repository, what is wrong, and the fix - not a bare 400: the
-        // parse remedy is surfaced verbatim so the operator can correct it. The parser accepts the new clause grammar
-        // (writable / fallback <source> [nocache|harden|unscreened]) and the legacy hosted/proxy/group spellings (they
-        // desugar). A valid-but-risky definition (unscreened/plaintext/mixed-strength) parses - its warning is logged
-        // and surfaced by the console banner, not refused here.
+        // parse remedy is surfaced verbatim so the operator can correct it. The parser accepts the clause grammar
+        // (writable / fallback <source> [nocache|harden|unscreened]) and nothing else. A valid-but-risky definition
+        // (unscreened/plaintext/mixed-strength) parses - its warning is logged and surfaced by the console banner, not
+        // refused here.
         RepositoryDefinition definition;
         try {
             definition = RepositoryDefinition.parse(request.value());
@@ -479,7 +478,7 @@ public class ConfigController {
             response.setContentType("text/plain;charset=UTF-8");
             response.getWriter().write("Repository '" + name + "' has an invalid definition '" + request.value()
                     + "': " + invalid.getMessage() + " Fix the definition (writable / fallback <source> "
-                    + "[nocache|harden|unscreened], or a legacy hosted/proxy/group spelling), or remove it - a "
+                    + "[nocache|harden|unscreened]), or remove it - a "
                     + "repository definition that cannot be parsed is refused rather than stored.");
             return;
         }

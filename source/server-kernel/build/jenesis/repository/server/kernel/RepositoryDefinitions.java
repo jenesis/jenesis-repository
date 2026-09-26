@@ -2,8 +2,8 @@ package build.jenesis.repository.server.kernel;
 
 /**
  * What the kernel needs to know about a named repository's definition, and nothing more: whether a write may land
- * in it, and whether its proxy leg is hardened. The definitions themselves - hosted, proxy, group, their fallbacks
- * and screening - are the router's model, and the router is a feature the kernel does not require; the boot module
+ * in it, and whether its proxy leg is hardened. The definitions themselves - writability, the fallbacks and their
+ * screening - are the router's model, and the router is a feature the kernel does not require; the boot module
  * hands the kernel an implementation the router's live definitions answer, and a composition without the router
  * answers {@link #HOSTED}, which is what a repository with no definition has always meant.
  *
@@ -14,8 +14,8 @@ package build.jenesis.repository.server.kernel;
  */
 public interface RepositoryDefinitions {
 
-    /** Whether {@code repository} accepts uploads into its own store. Undefined means hosted, which is writable;
-     *  only a definition can say otherwise - a proxy, a group view, or one marked read-only. */
+    /** Whether {@code repository} accepts uploads into its own store. Undefined means writable; only a definition
+     *  can say otherwise - one that is not {@code writable}, such as a proxy or a grouped view. */
     boolean writable(String repository);
 
     /** Whether {@code repository}'s proxy leg screens the whole body of what it fetches. */

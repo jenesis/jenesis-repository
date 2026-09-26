@@ -69,8 +69,9 @@ import build.jenesis.repository.store.Publication;
  * the leg records no verdict and reuses none, so the sweep degrades to re-screening every cached artifact each pass
  * (always safe, never a silently-incomplete view) - exactly the /graceful-absence behaviour.
  *
- * <p><b>Gated to {@code harden} repos.</b> A repository whose definition is not {@code proxy <url> harden} is skipped:
- * a hosted repo, a group, a plain caching proxy and a {@code nocache} pass-through all have nothing to back-fill.
+ * <p><b>Gated to {@code harden} repos.</b> A repository whose definition carries no {@code harden} upstream fallback is
+ * skipped: a repository with no fallbacks, a grouped view, a plain caching proxy and a {@code nocache} pass-through all
+ * have nothing to back-fill.
  *
  * <p><b>Each artifact is re-screened through the gate flavour it was reached by.</b> The pass used to run the
  * PROXY gate over everything the store held, which is right for a repository that accepts no upload but wrong for the
@@ -249,13 +250,11 @@ public final class MigrationRescreenTask implements MaintenanceTask {
     }
 
     /** Whether a repository serves any untrusted-upstream hardening leg whose cached bytes need the per-hit re-screen -
-     *  {@link RepositoryDefinition#harden()}, the single source of truth. This is NOT limited to the legacy
-     *  single-upstream {@code proxy <url> harden} shape: a hardened upstream expressed in the generalized model (a
-     *  {@code writable} repo with a hardened upstream fallback, or a multi-fallback list carrying a hardened upstream)
-     *  is equally a hardening proxy. The old form keyed on the discrete single-upstream shape, so those generalized
-     *  shapes slipped the cache-hit re-verify (and the redirect exclusion) and could serve retroactively-refused
-     *  cached bytes; delegating to {@code harden()} closes that. A {@code harden-nocache} repo still has nothing durably
-     *  cached, so the sweep enumerates nothing for it (harmless, as before). */
+     *  {@link RepositoryDefinition#harden()}, the single source of truth. It is not limited to a definition whose only
+     *  clause is {@code fallback <url> harden}: a {@code writable} repository with a hardened upstream fallback, or a
+     *  list of several fallbacks carrying one, is equally a hardening proxy, and keying on anything narrower would let
+     *  it slip the cache-hit re-verify (and the redirect exclusion) and serve retroactively-refused cached bytes. A
+     *  {@code harden nocache} repository has nothing durably cached, so the sweep enumerates nothing for it. */
     static boolean hardenedProxy(RepositoryDefinition definition) {
         return definition.harden();
     }

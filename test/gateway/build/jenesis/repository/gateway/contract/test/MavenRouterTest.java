@@ -45,9 +45,9 @@ public class MavenRouterTest {
                     : new ProxyFormat.Fetched(200, body, Map.of()));
         };
         Map<String, RepositoryDefinition> definitions = Map.of(
-                "releases", RepositoryDefinition.parse("hosted"),
-                "central", RepositoryDefinition.parse("proxy http://central/"),
-                "public", RepositoryDefinition.parse("group releases,central"));
+                "releases", RepositoryDefinition.parse("writable"),
+                "central", RepositoryDefinition.parse("fallback http://central/"),
+                "public", RepositoryDefinition.parse("fallback releases fallback central"));
         router = new RepositoryRouter(definitions::get,
                 (tenant, repository) -> store.scope(tenant).scope(repository), fetcher);
 
@@ -70,7 +70,7 @@ public class MavenRouterTest {
         assertThat(get("central", JAR)).as("the proxy cached the jar").isEqualTo("the dependency jar");
         assertThat(fetches.get()).as("served from the cache").isEqualTo(4);
 
-        assertThat(router.writeTarget("public")).as("a group is read-only (no push-delegation)").isNull();
+        assertThat(router.writeTarget("public")).as("a group is read-only, and delegates no write").isNull();
     }
 
     private String get(String repository, String path) throws IOException {

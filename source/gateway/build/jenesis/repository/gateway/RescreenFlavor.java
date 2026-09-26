@@ -29,9 +29,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
  *       assesses a stored artifact <em>through whichever flavor it was reached by</em>".</li>
  * </ul>
  *
- * <p>For a plain {@code proxy <url> harden} repository the two readings agree with the old unconditional
+ * <p>For a plain {@code fallback <url> harden} repository the two readings agree with an unconditional
  * {@code PROXY}: the repository accepts no upload, so every byte in its store was reached by the fallback. They part
- * company on the generalized hybrid the model expresses - a {@code writable} repository carrying a
+ * company on the hybrid - a {@code writable} repository carrying a
  * hardened upstream fallback, which {@link RepositoryDefinition#harden()} (rightly) reports as a hardening
  * proxy. Its store holds <em>both</em> channels, and re-screening an upload through the proxy flavour is wrong in both
  * directions:

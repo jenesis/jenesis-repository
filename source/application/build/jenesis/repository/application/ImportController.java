@@ -200,8 +200,8 @@ public class ImportController {
     }
 
     /** The store a migration into {@code repo} writes to and reads its jobs from: the repository's OWN store when it is
-     *  {@code writable} ({@code writeTarget} is writable-only; there is no push-delegation), or {@code 405} when
-     *  it is a read-only proxy/group. An unconfigured name is a plain writable repository. */
+     *  {@code writable} ({@code writeTarget} is writable-only, and no definition delegates its writes), or {@code 405}
+     *  when it is a read-only proxy/group. An unconfigured name is a plain writable repository. */
     private ArtifactStore importStore(String repo, String tenant, HttpServletResponse response) {
         String target = router.writeTarget(repo);
         if (target == null) {

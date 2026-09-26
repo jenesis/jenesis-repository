@@ -22,11 +22,11 @@ import build.jenesis.repository.store.Publication;
 /**
  * Resolves a named repository to its backings and serves a request across them, so one deployment can offer
  * writable stores, read-through proxies and grouped views rather than a single deployment-wide mode. A
- * {@link RepositoryDefinition} is the generalized {@code (writable, ordered fallbacks)} model: {@code writable} =
+ * {@link RepositoryDefinition} is the {@code (writable, ordered fallbacks)} model: {@code writable} =
  * accepts uploads into its own store, and each {@link RepositoryDefinition.Fallback} is an external upstream URL or another
  * repository consulted, first-hit-wins, on a local miss - with a per-upstream copy ({@code store}) and screening
- * policy. The three historical shapes are points in this space: hosted = writable with no fallbacks; proxy =
- * non-writable with one upstream fallback; group = non-writable with repository-name fallbacks.
+ * policy. A repository with no definition is {@code writable} with no fallbacks; a proxy is a single upstream
+ * fallback; a grouped view is a list of repository-name fallbacks.
  *
  * <p>{@link #resolve} walks it with a <b>typed {@link Outcome} channel</b>:
  * local-first over the repository's own store, then the fallbacks in
@@ -38,11 +38,14 @@ import build.jenesis.repository.store.Publication;
  * through a buffering {@link Deferred} that streams a hit and swallows a {@code 404}. The router reuses the free
  * {@link PullThroughCache} for each upstream leg and each format's own {@code handle} for the local leg, so it adds
  * only the routing. A publish targets a repository's own store iff it is {@code writable} (a non-writable repo
- * answers {@code 405}); write-delegation ({@code push=}) is gone.
+ * answers {@code 405}); no definition delegates its writes to another repository.
  */
 public final class RepositoryRouter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryRouter.class);
+
+    /** What a repository with no definition is: writable, with no fallbacks. */
+    private static final RepositoryDefinition UNDEFINED = new RepositoryDefinition(true, List.of());
 
     /**
      * The typed outcome of resolving one repository (or one fallback leg) - the channel that replaces the boolean
@@ -267,9 +270,8 @@ public final class RepositoryRouter {
     }
 
     /** The repository a write to {@code repository} lands in - <b>itself</b> when it is {@code writable}, else
-     *  {@code null} (it is read-only and a publish answers {@code 405}). An unconfigured name is a plain writable repo:
-     *  writability is a repository's own property now - a group/proxy is read-only, and write-delegation
-     *  ({@code push=}) is gone. */
+     *  {@code null} (it is read-only and a publish answers {@code 405}). An unconfigured name is a plain writable
+     *  repository: writability is a repository's own property, so a proxy or a grouped view is read-only. */
     public String writeTarget(String repository) {
         RepositoryDefinition definition = definitions.apply(repository);
         if (definition == null) {
@@ -319,7 +321,7 @@ public final class RepositoryRouter {
         }
         RepositoryDefinition definition = definitions.apply(repository);
         if (definition == null) {
-            definition = RepositoryDefinition.hosted();
+            definition = UNDEFINED;
         }
         // 1. LOCAL-FIRST: the repository's OWN store (uploads + previously cached fallback fetches), exactly the
         // local-first discipline PullThroughCache drives - a local upload shadows a fallback's same coordinate, and a

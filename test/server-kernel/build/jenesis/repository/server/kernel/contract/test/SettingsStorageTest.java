@@ -32,7 +32,7 @@ class SettingsStorageTest {
     void keys_land_in_their_owning_module_document_and_round_trip() throws IOException {
         Settings settings = new Settings(store);
         settings.set("vulnerability-threshold", "HIGH");   // a core dial - the neutral document
-        settings.set("repositories.mirror", "hosted");     // a map entry - the neutral document
+        settings.set("repositories.mirror", "writable");   // a map entry - the neutral document
         settings.set("demo", "true");                      // a contributed key - the contributing module's document
 
         assertThat(SettingsDocuments.moduleOf("vulnerability-threshold")).isEqualTo(SettingsDocuments.NEUTRAL);
@@ -45,7 +45,7 @@ class SettingsStorageTest {
         assertThat(reopened.getOrDefault("demo", "false")).isEqualTo("true");
         assertThat(reopened.overrides())
                 .containsEntry("vulnerability-threshold", "HIGH")
-                .containsEntry("repositories.mirror", "hosted")
+                .containsEntry("repositories.mirror", "writable")
                 .containsEntry("demo", "true");
 
         settings.set("demo", null);   // clearing removes it from its document

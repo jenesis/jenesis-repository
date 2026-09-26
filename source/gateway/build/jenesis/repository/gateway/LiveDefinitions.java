@@ -60,7 +60,7 @@ public final class LiveDefinitions implements RepositoryDefinitions {
      * is every {@code repositories.<name>} the deployment names - the file-configured
      * {@code jenreg.repositories.<name>} defaults and the runtime-stored {@code repositories.<name>}
      * overrides layered over them, resolved through the same effective lookup {@link #definition} uses - so a broken
-     * definition is caught wherever it was written. An invalid clause, a {@code push=} directive (now refused), a
+     * definition is caught wherever it was written. A definition outside the clause grammar, an unknown option, a
      * policy option on a repository-name fallback, a {@code !writable}-with-no-fallbacks shape, or an unknown token
      * throws here at startup rather than being silently ignored while the repository serves the deployment's default
      * path - the same {@code store=s3}-with-the-s3-module-off fail-fast posture, applied to repository definitions. A

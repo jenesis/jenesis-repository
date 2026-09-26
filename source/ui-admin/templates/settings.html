@@ -28,9 +28,10 @@
 
     <article>
         <h2>Repository definitions</h2>
-        <p><small>Named repositories routed at runtime: <code>hosted</code>, <code>proxy &lt;url&gt; [nocache]</code>
-            or <code>group a,b push=x</code>. They add to or override the deployment's file-configured repositories
-            and route on the next request.</small></p>
+        <p><small>Named repositories routed at runtime, written in clauses: <code>writable</code> accepts uploads,
+            and each <code>fallback &lt;url&gt; [nocache] [harden] [unscreened]</code> or
+            <code>fallback &lt;repository&gt;</code> is consulted in order on a local miss. They add to or override
+            the deployment's file-configured repositories and route on the next request.</small></p>
         <figure th:if="${!repositories.isEmpty()}">
         <table class="app-list">
             <thead>
@@ -56,7 +57,7 @@
         </figure>
         <form method="post" th:action="@{/ui/settings/repositories}" class="grid">
             <input name="name" placeholder="name" required pattern="[A-Za-z0-9_-]+">
-            <input name="definition" placeholder="hosted | proxy <url> | group a,b,c" required>
+            <input name="definition" placeholder="writable | fallback <url> | fallback a fallback b" required>
             <button type="submit">Save</button>
         </form>
     </article>

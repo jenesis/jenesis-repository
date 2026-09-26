@@ -654,12 +654,12 @@ public class SettingsAdmin {
         return entries(SettingsScopes.REPOSITORY_PREFIX);
     }
 
-    /** Whether a repository is defined at runtime as a hardened proxy ({@code proxy <url> harden}) - an
+    /** Whether a repository is defined at runtime with a hardened upstream ({@code fallback <url> harden}) - an
      *  untrusted-upstream leg that spools and fully screens every fetched body before releasing a byte. The
      *  console reads this to badge such repositories in the list and gate the hardened verdict/refusal/drift panel. Only
      *  the runtime {@code repositories.<name>} definitions are visible to the console (the same set {@link #repositories}
-     *  lists); a repository defined only in the server's file/env config, or one that is hosted, a group or a plain
-     *  caching proxy, reads as not hardened. A malformed stored specification degrades to not hardened rather than
+     *  lists); a repository defined only in the server's file/env config, or one with no hardened upstream fallback,
+     *  reads as not hardened. A malformed stored specification degrades to not hardened rather than
      *  throwing out of a list render. */
     public boolean hardened(String name) throws IOException {
         return hardenedDefinition(repositories().get(name));
@@ -683,8 +683,8 @@ public class SettingsAdmin {
      * uploads ({@code writable}) and, per fallback, an upstream's copy ({@code store}) and screen strength or an
      * inner-repository reference - rendered from the one {@link RepositoryDefinition} the router routes on, so the
      * badges never drift from what actually serves. Only the runtime {@code repositories.<name>} definitions the console
-     * manages are visible (as {@link #hardened} notes); an unconfigured repository is the default plain writable hosted
-     * shape (no fallbacks), and a malformed stored specification degrades to that same neutral shape rather than throwing
+     * manages are visible (as {@link #hardened} notes); an unconfigured repository is the default shape - writable, with
+     * no fallbacks - and a malformed stored specification degrades to that same neutral shape rather than throwing
      * out of a list render (§10 render-what-you-have). {@link RepositoryShape#warnings} carries the valid-but-risky
      * flags (mixed screening strength, an unscreened or plaintext upstream) the parse logs loudly - surfaced by the
      * console as a non-blocking notice, not a refusal (item 4).
@@ -779,8 +779,8 @@ public class SettingsAdmin {
             return configured && !writable;
         }
 
-        /** Whether this repository both accepts uploads and consults fallbacks - the host+proxy hybrid the old
-         *  three-type model could not name (a badge worth calling out). */
+        /** Whether this repository both accepts uploads and consults fallbacks - the host+proxy hybrid (a badge
+         *  worth calling out). */
         public boolean hybrid() {
             return writable && !fallbacks.isEmpty();
         }
@@ -810,7 +810,7 @@ public class SettingsAdmin {
         } catch (RuntimeException invalid) {
             throw new IllegalArgumentException("Repository '" + name + "' has an invalid definition '" + specification
                     + "': " + invalid.getMessage() + " Fix the definition (writable / fallback <source> "
-                    + "[nocache|harden|unscreened], or a legacy hosted/proxy/group spelling), or remove it - a "
+                    + "[nocache|harden|unscreened]), or remove it - a "
                     + "repository definition that cannot be parsed is refused rather than stored.", invalid);
         }
         // A plaintext upstream is refused rather than stored with a console notice, exactly as the API write

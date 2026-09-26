@@ -40,7 +40,7 @@ class PassThroughStreamingTest {
                 return Optional.of(new ProxyFormat.Download(200, new SyntheticInputStream(SIZE), Map.of()));
             }
         };
-        Map<String, RepositoryDefinition> definitions = Map.of("passthru", RepositoryDefinition.parse("proxy http://up/ nocache"));
+        Map<String, RepositoryDefinition> definitions = Map.of("passthru", RepositoryDefinition.parse("fallback http://up/ nocache"));
         RepositoryRouter router = new RepositoryRouter(definitions::get,
                 (_, _) -> {
                     throw new AssertionError("a pass-through never touches the repository store");

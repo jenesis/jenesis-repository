@@ -1,10 +1,9 @@
 /**
  * The repository definitions model: a repository's shape as {@code (writable, ordered fallbacks)}, the parser that
- * produces it from both the legacy ({@code hosted}, {@code proxy <url>}, {@code group a,b}) and the clause
- * ({@code writable} / {@code fallback <source> [options]}) spelling, the derived views the console badges read, the
- * outbound-target screen a write surface applies to a configured upstream, and the two parse-time switches the
- * redirect modules flip so a {@code redirect} serve token or a {@code dns} source keyword parses only where the
- * module that serves it is installed.
+ * produces it from the clause grammar ({@code writable} / {@code fallback <source> [options]}), the derived view the
+ * console badge reads, the outbound-target screen a write surface applies to a configured upstream, and the two
+ * parse-time switches the redirect modules flip so a {@code redirect} serve token or a {@code dns} source keyword
+ * parses only where the module that serves it is installed.
  *
  * <p>It exists because the model was a nested type of the router until 2026-09-20, so every surface that rendered
  * or validated a definition - the console's settings store, the configuration API, the three redirect modules -

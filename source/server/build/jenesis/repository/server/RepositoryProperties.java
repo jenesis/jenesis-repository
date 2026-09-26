@@ -130,10 +130,8 @@ public class RepositoryProperties {
      *  {@code proxy} key). */
     private boolean proxyEnabled = Boolean.parseBoolean(CoreDefaults.PROXY_ENABLED);
 
-    /** Per-repository backing definitions, by name. The generalized grammar is
-     *  {@code ( writable | fallback <source> [nocache] [harden] [unscreened] )*}; the old spellings {@code hosted} |
-     *  {@code proxy <url> [nocache] [harden]} | {@code group a,b} desugar to it. Write-delegation ({@code group … push=x})
-     *  is a hard parse refusal now: declare the front repository {@code writable} instead. Named
+    /** Per-repository backing definitions, by name, in the clause grammar
+     *  {@code ( writable | fallback <source> [nocache] [harden] [unscreened] )*} - nothing else parses. Named
      *  {@code repositories} rather than {@code repository} because a scalar of that name used to hold the
      *  fixed-space name, and one prefix cannot be both a string and a map; the scalar is gone and the plural
      *  stays, since renaming a live key to reclaim a dead one would move every deployment's configuration. */

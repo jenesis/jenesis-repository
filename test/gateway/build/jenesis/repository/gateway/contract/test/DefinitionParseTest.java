@@ -18,92 +18,72 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The parse/model layer: the generalized {@link RepositoryDefinition} record - {@code writable} plus an ordered
- * list of {@link Fallback}s (each an {@link Source.Upstream} URL or a {@link Source.Repository} name, with a
- * per-upstream {@code store} and {@link Screening} policy) - the clause grammar that produces it, the desugar of the
- * old {@code hosted}/{@code proxy}/{@code group} spellings into the same record, the parse
- * refusals (fail-loud, §9), and the mixed-strength warn (⚑ warn, not refuse).
+ * The parse/model layer: the {@link RepositoryDefinition} record - {@code writable} plus an ordered list of
+ * {@link Fallback}s (each an {@link Source.Upstream} URL or a {@link Source.Repository} name, with a per-upstream
+ * {@code store} and {@link Screening} policy) - the clause grammar that produces it, the parse refusals (fail-loud,
+ * §9) including every word outside the grammar, and the mixed-strength warning (a warning, not a refusal).
  *
- * <p>These assertions are additive: the legacy routing/resolution behavior stays proven by the unchanged
- * {@code RepositoryRouterTest}/{@code MavenRouterTest}/{@code GatedRouterTest}/{@code PassThroughStreamingTest};
- * {@link #the_new_fallback_spelling_routes_through_the_unchanged_legacy_walk()} adds one proof that the new
- * {@code fallback <url>} spelling resolves identically to {@code proxy <url>} through that unchanged walk.
+ * <p>{@link #a_fallback_definition_routes_through_the_walk()} adds one proof that a parsed {@code fallback <url>}
+ * resolves through the router's walk as a caching (or, with {@code nocache}, a pass-through) proxy.
  */
 public class DefinitionParseTest {
 
     @TempDir
     Path root;
 
-    // ---- Mapping table: every old spelling desugars to the right generalized record ---------------------------
+    // ---- the shapes a repository takes ----------------------------------------------------------------------------
 
     @Test
-    public void hosted_and_the_hosted_factory_desugar_to_writable_with_no_fallbacks() {
-        for (RepositoryDefinition hosted : List.of(RepositoryDefinition.parse("hosted"), RepositoryDefinition.hosted())) {
-            assertThat(hosted.writable()).as("hosted accepts uploads into its own store").isTrue();
-            assertThat(hosted.fallbacks()).as("hosted has no fallbacks").isEmpty();
-        }
+    public void writable_alone_parses_to_writable_with_no_fallbacks() {
+        RepositoryDefinition writable = RepositoryDefinition.parse("writable");
+        assertThat(writable.writable()).as("accepts uploads into its own store").isTrue();
+        assertThat(writable.fallbacks()).as("and consults nothing else").isEmpty();
     }
 
     @Test
-    public void proxy_desugars_to_a_non_writable_single_upstream_fallback() {
-        RepositoryDefinition proxy = RepositoryDefinition.parse("proxy https://repo1.maven.org/maven2");
+    public void a_single_upstream_fallback_is_a_non_writable_caching_proxy() {
+        RepositoryDefinition proxy = RepositoryDefinition.parse("fallback https://repo1.maven.org/maven2");
         assertThat(proxy.writable()).isFalse();
         assertThat(proxy.fallbacks()).singleElement().satisfies(fallback -> {
             assertThat(fallback.source()).isEqualTo(new Source.Upstream(URI.create("https://repo1.maven.org/maven2")));
             assertThat(fallback.store()).as("a proxy caches by default").isTrue();
             assertThat(fallback.screening()).isEqualTo(Screening.DEFAULT);
         });
-        // the non-throwing legacy derived views are unchanged
-        assertThat(proxy.upstream()).isEqualTo(URI.create("https://repo1.maven.org/maven2"));
-        assertThat(proxy.cache()).isTrue();
         assertThat(proxy.harden()).isFalse();
-        assertThat(proxy.members()).isEmpty();
     }
 
     @Test
-    public void the_proxy_mode_tokens_map_onto_store_and_screening() {
-        assertThat(only(RepositoryDefinition.parse("proxy https://up/ nocache")))
+    public void the_store_and_screening_options_map_onto_the_fallback() {
+        assertThat(only(RepositoryDefinition.parse("fallback https://up/ nocache")))
                 .as("nocache -> no-store, DEFAULT screening")
                 .isEqualTo(new Fallback(new Source.Upstream(URI.create("https://up/")), false, Screening.DEFAULT));
-        assertThat(only(RepositoryDefinition.parse("proxy https://up/ harden")))
+        assertThat(only(RepositoryDefinition.parse("fallback https://up/ harden")))
                 .as("harden -> store-on-pass, HARDEN screening")
                 .isEqualTo(new Fallback(new Source.Upstream(URI.create("https://up/")), true, Screening.HARDEN));
-        assertThat(only(RepositoryDefinition.parse("proxy https://up/ harden nocache")))
+        assertThat(only(RepositoryDefinition.parse("fallback https://up/ harden nocache")))
                 .as("harden nocache -> no-store, HARDEN screening")
                 .isEqualTo(new Fallback(new Source.Upstream(URI.create("https://up/")), false, Screening.HARDEN));
-        assertThat(only(RepositoryDefinition.parse("proxy https://up/ nocache harden")))
-                .as("token order does not matter")
+        assertThat(only(RepositoryDefinition.parse("fallback https://up/ nocache harden")))
+                .as("option order does not matter")
                 .isEqualTo(new Fallback(new Source.Upstream(URI.create("https://up/")), false, Screening.HARDEN));
     }
 
     @Test
-    public void group_desugars_to_non_writable_repository_fallbacks_in_order() {
-        RepositoryDefinition group = RepositoryDefinition.parse("group a,b,c");
-        assertThat(group.writable()).isFalse();
-        assertThat(group.fallbacks()).containsExactly(
+    public void repository_name_fallbacks_are_a_non_writable_view_in_order() {
+        RepositoryDefinition view = RepositoryDefinition.parse("fallback a fallback b fallback c");
+        assertThat(view.writable()).isFalse();
+        assertThat(view.fallbacks()).containsExactly(
                 new Fallback(new Source.Repository("a"), false, Screening.DEFAULT),
                 new Fallback(new Source.Repository("b"), false, Screening.DEFAULT),
                 new Fallback(new Source.Repository("c"), false, Screening.DEFAULT));
-        assertThat(group.members()).containsExactly("a", "b", "c");
-    }
-
-    // ---- The new clause grammar ------------------------------------------------------------------------------
-
-    @Test
-    public void writable_alone_parses_to_a_hosted_shaped_record() {
-        RepositoryDefinition writable = RepositoryDefinition.parse("writable");
-        assertThat(writable.writable()).isTrue();
-        assertThat(writable.fallbacks()).isEmpty();
     }
 
     @Test
     public void the_default_cache_policy_of_a_bare_fallback_is_store() {
-        // §pin: a bare `fallback <url>` (and the legacy `proxy <url>` spelling it desugars from) defaults to
-        // store=true - the caching-proxy default. `nocache` is the explicit opt-out to a discard-after-serve pass.
+        // A bare `fallback <url>` defaults to store=true - the caching-proxy default. `nocache` is the explicit
+        // opt-out to a discard-after-serve pass.
         assertThat(only(RepositoryDefinition.parse("fallback https://up/")).store())
                 .as("a bare 'fallback <url>' caches its fetched bytes by default").isTrue();
-        assertThat(only(RepositoryDefinition.parse("proxy https://up/")).store())
-                .as("the legacy 'proxy <url>' spelling defaults to store too").isTrue();
         assertThat(only(RepositoryDefinition.parse("fallback https://up/ nocache")).store())
                 .as("'nocache' is the explicit opt-out of the store default").isFalse();
     }
@@ -121,7 +101,7 @@ public class DefinitionParseTest {
 
     @Test
     public void options_bind_to_the_nearest_preceding_fallback() {
-        // the plan's `mirror-chain`: cache the primary, pass-through the spillover
+        // a mirror chain: cache the primary, pass-through the spillover
         RepositoryDefinition mirrorChain = RepositoryDefinition.parse("fallback https://mirror-a/ fallback https://mirror-b/ nocache");
         assertThat(mirrorChain.fallbacks()).containsExactly(
                 new Fallback(new Source.Upstream(URI.create("https://mirror-a/")), true, Screening.DEFAULT),
@@ -135,7 +115,7 @@ public class DefinitionParseTest {
 
     @Test
     public void writable_is_position_free_and_the_hybrid_host_and_proxy_shape_parses() {
-        // the owner's headline case the old model could not express: hosts its own artifacts AND falls back
+        // hosts its own artifacts AND falls back
         RepositoryDefinition frontdoor = RepositoryDefinition.parse("writable fallback releases fallback central-hard");
         assertThat(frontdoor.writable()).isTrue();
         assertThat(frontdoor.fallbacks()).containsExactly(
@@ -149,6 +129,32 @@ public class DefinitionParseTest {
     }
 
     // ---- validation / fail-loud (§9) ------------------------------------------------------------------------------
+
+    @Test
+    public void a_definition_outside_the_clause_grammar_is_refused_naming_the_clause_to_write() {
+        assertThatThrownBy(() -> RepositoryDefinition.parse("hosted"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("written in clauses")
+                .hasMessageContaining("write 'writable'");
+        assertThatThrownBy(() -> RepositoryDefinition.parse("proxy https://up/ harden nocache"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("written in clauses")
+                .hasMessageContaining("write 'fallback https://up/ harden nocache'");
+        assertThatThrownBy(() -> RepositoryDefinition.parse("group a,b,c"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("written in clauses")
+                .hasMessageContaining("'fallback a fallback b fallback c'");
+        assertThatThrownBy(() -> RepositoryDefinition.parse("group a,b push=a"))
+                .as("a write delegation has no clause: writability is the repository's own")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("in order: 'fallback a fallback b'");
+        assertThatThrownBy(() -> RepositoryDefinition.parse("bogus"))
+                .as("any other leading token names the grammar and nothing more")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("written in clauses")
+                .hasMessageContaining("cannot start with 'bogus'")
+                .hasMessageNotContaining("; write");
+    }
 
     @Test
     public void a_repository_name_fallback_carrying_a_policy_option_is_refused() {
@@ -184,7 +190,7 @@ public class DefinitionParseTest {
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Unknown definition token");
     }
 
-    // ---- mixed-strength: ⚑ warn, never a refusal -----------------------------------------------------------
+    // ---- mixed-strength: a warning, never a refusal -----------------------------------------------------------------
 
     @Test
     public void a_mixed_strength_upstream_fallback_list_is_flagged_but_parses() {
@@ -204,25 +210,10 @@ public class DefinitionParseTest {
                 .as("a lone hardened upstream is not mixed").isFalse();
     }
 
-    // ---- push=: hard parse refusal (cutover) -----------------------------------------------------------
+    // ---- through the walk -----------------------------------------------------------------------------------------
 
     @Test
-    public void a_group_push_directive_is_a_hard_parse_refusal_naming_both_remedies() {
-        // Hard cutover: `group … push=…` delegated a write into a member's store; writability is now a
-        // repository's own property, so this spelling has no honest desugar (a silent rewrite would move where uploaded
-        // bytes land - a §9 violation). It is refused at parse, naming both remedies: declare the front repository
-        // writable, or point publishers at the member.
-        assertThatThrownBy(() -> RepositoryDefinition.parse("group a,b push=a"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("no longer supported")
-                .hasMessageContaining("writable")
-                .hasMessageContaining("directly at 'a'");
-    }
-
-    // ---- behavior preservation through the unchanged legacy walk --------------------------------------------------
-
-    @Test
-    public void the_new_fallback_spelling_routes_through_the_unchanged_legacy_walk() throws Exception {
+    public void a_fallback_definition_routes_through_the_walk() throws Exception {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         Map<String, byte[]> upstream = Map.of("http://up/remote.txt", "from upstream".getBytes(StandardCharsets.UTF_8));
@@ -235,18 +226,18 @@ public class DefinitionParseTest {
                     : new ProxyFormat.Fetched(200, body, Map.of()));
         };
         Map<String, RepositoryDefinition> definitions = Map.of(
-                "sugar", RepositoryDefinition.parse("fallback http://up/"),            // new spelling of a caching proxy
+                "sugar", RepositoryDefinition.parse("fallback http://up/"),            // a caching proxy
                 "sugar-nocache", RepositoryDefinition.parse("fallback http://up/ nocache"));
         RepositoryRouter router = new RepositoryRouter(definitions::get,
                 (tenant, repository) -> store.scope(tenant).scope(repository), fetcher);
 
-        // `fallback http://up/` caches exactly like `proxy http://up/`: one fetch, then served from the store
+        // `fallback http://up/` caches: one fetch, then served from the store
         assertThat(get(router, "sugar", "/t/remote.txt")).isEqualTo("from upstream");
         assertThat(fetches.get()).isEqualTo(1);
         assertThat(get(router, "sugar", "/t/remote.txt")).isEqualTo("from upstream");
         assertThat(fetches.get()).as("served from the cache, no second fetch").isEqualTo(1);
 
-        // the new spelling of a non-writable single upstream is read-only, exactly as a proxy is
+        // a non-writable single upstream is read-only
         assertThat(router.writeTarget("sugar")).isNull();
 
         // `fallback http://up/ nocache` streams without storing: each read fetches again
@@ -268,7 +259,7 @@ public class DefinitionParseTest {
         return new String(exchange.responseBody(), StandardCharsets.UTF_8);
     }
 
-    /** A trivial format: a GET serves stored bytes, a miss proxies one upstream (mirrors RepositoryRouterTest). */
+    /** A trivial format: a GET serves stored bytes, a miss proxies one upstream (as in RepositoryRouterTest). */
     private static final class TestFormat implements RepositoryFormat, ProxyFormat {
 
         @Override
@@ -317,7 +308,7 @@ public class DefinitionParseTest {
         }
     }
 
-    /** A {@link FormatExchange} that records the response so a test can assert it (mirrors RepositoryRouterTest). */
+    /** A {@link FormatExchange} that records the response so a test can assert it (as in RepositoryRouterTest). */
     private static final class TestExchange implements FormatExchange {
 
         private final String method;

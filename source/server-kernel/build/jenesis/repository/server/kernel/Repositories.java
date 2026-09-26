@@ -136,10 +136,10 @@ public final class Repositories {
     }
 
 
-    /** Whether a repository is a hardened proxy ({@code proxy <url> harden}): an untrusted-upstream leg that spools and
-     *  fully screens every fetched body before releasing a byte. Drives the console's "hardened" badge and gates the
-     *  hardened verdict/refusal/drift panel. A repository with no definition, a plain hosted or a plain caching proxy is
-     *  not hardened. */
+    /** Whether a repository has a hardened upstream fallback ({@code fallback <url> harden}): an untrusted-upstream leg
+     *  that spools and fully screens every fetched body before releasing a byte. Drives the console's "hardened" badge
+     *  and gates the hardened verdict/refusal/drift panel. A repository with no definition, or with no hardened
+     *  upstream fallback, is not hardened. */
     public boolean hardened(String repository) {
         return definitions.hardened(repository);
     }

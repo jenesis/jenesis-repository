@@ -62,9 +62,9 @@ import build.jenesis.repository.store.Publication;
  *
  * <p><b>The flavour is the artifact's.</b> This leg is reached for every hit in a repository whose
  * {@link RepositoryDefinition#harden()} is set, and that includes the hybrid {@code writable} + hardened-fallback
- * shape, whose store holds uploads beside cached fetches. So the gate is not "the proxy gate" but the flavour {@link
- * RescreenFlavor} reads off the artifact's own durable {@code origin} trail - the same one decision {@link
- * MigrationRescreenTask} makes, so the verdict the sweep pre-records and the verdict this leg would reach cannot
+ * shape, whose store holds uploads beside cached fetches. So the gate is not "the proxy gate" but the flavour
+ * {@link RescreenFlavor} reads off the artifact's own durable {@code origin} trail - the same one decision
+ * {@link MigrationRescreenTask} makes, so the verdict the sweep pre-records and the verdict this leg would reach cannot
  * disagree.
  */
 public final class HardenedHitVerify implements PullThroughHooks {

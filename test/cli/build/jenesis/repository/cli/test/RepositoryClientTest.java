@@ -52,7 +52,7 @@ public class RepositoryClientTest {
             + "\"allowedAddresses\":\"\",\"grants\":{\"*/releases\":\"deploy\"}}]";
     private static final String MINTED = "{\"id\":\"def456\",\"key\":\"jenk_acme.secret\",\"expires\":\"\"}";
     private static final String REPOSITORIES =
-            "[{\"name\":\"mirror\",\"value\":\"proxy https://repo1.maven.org/maven2/\"}]";
+            "[{\"name\":\"mirror\",\"value\":\"fallback https://repo1.maven.org/maven2/\"}]";
     private static final String UPSTREAMS = "[{\"name\":\"npm\",\"value\":\"https://npm.internal/\"}]";
     private static final String UPSTREAM_AUTH = "[\"nexus.internal\"]";
     private static final String PROVENANCE = "{\"payloadType\":\"application/vnd.in-toto+json\","
@@ -396,12 +396,12 @@ public class RepositoryClientTest {
         List<RepositoryClient.NamedValue> repos = client.repositories();
         assertThat(repos).hasSize(1);
         assertThat(repos.get(0).name()).isEqualTo("mirror");
-        assertThat(repos.get(0).value()).isEqualTo("proxy https://repo1.maven.org/maven2/");
+        assertThat(repos.get(0).value()).isEqualTo("fallback https://repo1.maven.org/maven2/");
 
-        client.setRepository("mirror", "hosted");
+        client.setRepository("mirror", "writable");
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/repositories/mirror");
-        assertThat(lastBody).isEqualTo("{\"value\":\"hosted\"}");
+        assertThat(lastBody).isEqualTo("{\"value\":\"writable\"}");
 
         client.removeRepository("mirror");
         assertThat(lastMethod).isEqualTo("DELETE");

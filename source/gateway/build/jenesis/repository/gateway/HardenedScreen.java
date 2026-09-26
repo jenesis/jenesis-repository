@@ -13,7 +13,7 @@ import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The hardened proxy fetch firewall for a repository declared {@code proxy <url> harden}: the untrusted-upstream
+ * The hardened proxy fetch firewall for a repository declared {@code fallback <url> harden}: the untrusted-upstream
  * strictening of {@link ProxyScreen}, the keystone of the hardening proxy. Where the ordinary proxy screen reads
  * a bounded prefix and then streams the un-screened remainder straight to the client on {@code ALLOW}
  * ({@code prefix-screen-stream-through}, so the verdict is reached before the body has fully transited), the hardened

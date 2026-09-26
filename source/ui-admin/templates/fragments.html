@@ -197,7 +197,7 @@
 <!--/* shapeBadges: the parsed repository shape as inline badges, shared by the repositories list and the
      repository detail hub so both render one repository's writable/read-only/host+proxy posture and its per-fallback
      store/no-store + screen-strength (or inner-repo reference) badges identically, straight from the one Definition the
-     router routes on. Nothing renders for an unconfigured/malformed shape (the default plain writable hosted). */-->
+     router routes on. Nothing renders for an unconfigured/malformed shape (the default: writable, no fallbacks). */-->
 <th:block th:fragment="shapeBadges(shape)">
     <th:block th:if="${shape != null and shape.configured()}">
         <span th:if="${shape.hybrid()}" class="app-badge"
