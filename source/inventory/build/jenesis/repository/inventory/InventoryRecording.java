@@ -146,6 +146,9 @@ final class InventoryRecording {
             if (recording.licenses != null) {
                 mutations.put(LicenseSection.TAG, LicenseSection.union(recording.licenses, now));
             }
+            if (recording.dependencies != null) {
+                mutations.put(DependencySection.TAG, DependencySection.record(recording.dependencies, now));
+            }
             if (recording.provenanceVerified != null) {
                 mutations.put(ProvenanceSection.TAG,
                         ProvenanceSection.record(recording.provenanceVerified, recording.provenanceSha256, now));
@@ -324,6 +327,14 @@ final class InventoryRecording {
             return Optional.empty();
         }
         return DownloadsSection.facts(metadata.section(ecosystem, coordinate, version, DownloadsSection.TAG));
+    }
+
+    Optional<List<DependencySection.Declared>> dependencies(String ecosystem, String coordinate, String version)
+            throws IOException {
+        if (metadata == null) {
+            return Optional.empty();
+        }
+        return DependencySection.declared(metadata.section(ecosystem, coordinate, version, DependencySection.TAG));
     }
 
     /** When a coordinate version was recorded as published - the {@code published/} sidecar's instant - or empty. */

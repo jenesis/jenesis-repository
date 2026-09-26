@@ -26,12 +26,19 @@ public final class ManifestSubjectBuilder {
     private final String ecosystem;
     private final List<ComplianceGate.DeclaredLicense> licenses;
     private final List<Maintainer> maintainers;
+    private final List<ComplianceGate.Dependency> dependencies;
 
     private ManifestSubjectBuilder(String ecosystem, List<ComplianceGate.DeclaredLicense> licenses,
                                    List<Maintainer> maintainers) {
+        this(ecosystem, licenses, maintainers, null);
+    }
+
+    private ManifestSubjectBuilder(String ecosystem, List<ComplianceGate.DeclaredLicense> licenses,
+                                   List<Maintainer> maintainers, List<ComplianceGate.Dependency> dependencies) {
         this.ecosystem = ecosystem;
         this.licenses = licenses;
         this.maintainers = maintainers;
+        this.dependencies = dependencies;
     }
 
     /**
@@ -51,7 +58,7 @@ public final class ManifestSubjectBuilder {
         }
         List<Maintainer> named = new ArrayList<>(maintainers);
         named.add(maintainer);
-        return new ManifestSubjectBuilder(ecosystem, licenses, List.copyOf(named));
+        return new ManifestSubjectBuilder(ecosystem, licenses, List.copyOf(named), dependencies);
     }
 
     public ManifestSubjectBuilder maintainers(Collection<Maintainer> named) {
@@ -60,6 +67,36 @@ public final class ManifestSubjectBuilder {
             built = built.maintainer(maintainer);
         }
         return built;
+    }
+
+    /**
+     * That the manifest was read for what it depends on, whether or not it declares anything - what makes a subject
+     * with no dependencies read as "depends on nothing" rather than as "nobody looked". {@link #dependency} implies it.
+     */
+    public ManifestSubjectBuilder readsDependencies() {
+        return dependencies != null ? this
+                : new ManifestSubjectBuilder(ecosystem, licenses, maintainers, List.of());
+    }
+
+    /**
+     * What the manifest declares the artifact depends on: a package's coordinate and the requirement it states, one
+     * entry per declaration. A blank coordinate is dropped, and a coordinate declared twice - as a runtime and a
+     * development dependency, say - is kept once, with its first requirement.
+     */
+    public ManifestSubjectBuilder dependency(String coordinate, String requirement) {
+        ManifestSubjectBuilder read = readsDependencies();
+        if (coordinate == null || coordinate.isBlank()
+                || read.dependencies.stream().anyMatch(declared -> declared.coordinate().equals(coordinate.strip()))) {
+            return read;
+        }
+        List<ComplianceGate.Dependency> declared = new ArrayList<>(read.dependencies);
+        declared.add(new ComplianceGate.Dependency(coordinate.strip(), requirement == null ? "" : requirement.strip()));
+        return new ManifestSubjectBuilder(ecosystem, licenses, maintainers, List.copyOf(declared));
+    }
+
+    /** The dependencies declared so far, or {@code null} when the manifest was not read for them. */
+    public List<ComplianceGate.Dependency> dependencies() {
+        return dependencies;
     }
 
     /** Whom the manifest named so far. */
@@ -89,7 +126,7 @@ public final class ManifestSubjectBuilder {
         }
         List<ComplianceGate.DeclaredLicense> declared = new ArrayList<>(licenses);
         declared.add(new ComplianceGate.DeclaredLicense(name, url));
-        return new ManifestSubjectBuilder(ecosystem, List.copyOf(declared), maintainers);
+        return new ManifestSubjectBuilder(ecosystem, List.copyOf(declared), maintainers, dependencies);
     }
 
     /**
@@ -117,7 +154,7 @@ public final class ManifestSubjectBuilder {
      */
     public List<ComplianceGate.Subject> subject(String coordinate, String version) {
         return List.of(new ComplianceGate.Subject(ecosystem, coordinate, version, licenses)
-                .withMaintainers(maintainers));
+                .withMaintainers(maintainers).withDependencies(dependencies));
     }
 
     /**
@@ -130,7 +167,7 @@ public final class ManifestSubjectBuilder {
     public List<ComplianceGate.Subject> subject(String coordinate, String version,
                                                 ComplianceGate.Reachability reachability) {
         return List.of(new ComplianceGate.Subject(ecosystem, coordinate, version, licenses, reachability)
-                .withMaintainers(maintainers));
+                .withMaintainers(maintainers).withDependencies(dependencies));
     }
 
     /**

@@ -410,6 +410,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
     private void push(InputStream body, Attestations attestations, Blobs blobs, FormatExchange exchange,
                       ArtifactStore store) throws IOException {
+        Spec[] pushed = new Spec[1];
         Publication.Commit commit = new Publication(store, List.of(), List.of()).commit(
                 ArtifactDescriptor.at("RubyGems", exchange.path()), body, REPUBLISH,
                 accepted -> {
@@ -435,6 +436,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                             return Publication.Visibility.declined();
                         }
                     }
+                    pushed[0] = spec;
                     // Precompute the legacy quick spec gem install fetches, exactly as the compact-index line is
                     // precomputed, so serving it is a plain streamed read; the Marshal encoding lives in QuickSpec.
                     blobs.write("rubygemfiles/" + spec.name() + "-" + spec.version() + ".gemspec.rz",
@@ -462,6 +464,12 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                             .andThrough((hash, _, _) -> new RubyGemsListings(blobs).published(spec.name(),
                                     spec.version(), line(spec, hash).getBytes(StandardCharsets.UTF_8)));
                 });
+        if (commit.visible()) {
+            // The push endpoint names no gem, so the edge is told which one this laid out.
+            exchange.laidOut(new ArtifactDescriptor("RubyGems", pushed[0].name(), pushed[0].version(),
+                    "/rubygems/gems/" + pushed[0].name() + "-" + pushed[0].version() + ".gem",
+                    "application/octet-stream", false, null, -1L));
+        }
         exchange.respond(commit.visible() ? 200 : 400);
     }
 

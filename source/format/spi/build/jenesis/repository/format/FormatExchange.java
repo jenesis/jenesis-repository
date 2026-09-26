@@ -111,4 +111,15 @@ public interface FormatExchange {
             respond(200, body);
         }
     }
+
+    /**
+     * Name the artifact a publish laid out, when the request's own path does not - a push to an endpoint such as
+     * RubyGems' {@code api/v1/gems}, whose coordinate is only known once the stored bytes are parsed. The ingress edge
+     * that screened the body notifies the after-commit observers with this rather than with the endpoint, so what
+     * they record - an inventory row, a forward, an event - names the artifact that serves. A format that commits
+     * its own publish refines it through {@link build.jenesis.repository.store.Publication.Visibility#describing}
+     * instead; an exchange no edge wraps ignores it.
+     */
+    default void laidOut(build.jenesis.repository.store.ArtifactDescriptor artifact) {
+    }
 }

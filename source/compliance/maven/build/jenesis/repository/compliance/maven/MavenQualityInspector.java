@@ -306,9 +306,58 @@ public final class MavenQualityInspector implements QualityInspector {
                             + "is the one an eviction, a hold and a deny-list all key on",
                             path, declared[0], declared[1], canonical, coordinate[2]));
         }
-        return ownLicenses(path, archive, content, coordinate, lookup)
-                .maintainers(maintainers(path, archive, content, coordinate, lookup))
-                .subject(canonical, coordinate[2], ComplianceGate.Reachability.root(canonical + ":" + coordinate[2]));
+        ManifestSubjectBuilder declared = ownLicenses(path, archive, content, coordinate, lookup)
+                .maintainers(maintainers(path, archive, content, coordinate, lookup));
+        if (path.endsWith(".pom")) {
+            declared = dependenciesFromPom(declared, content);
+        }
+        return declared.subject(canonical, coordinate[2],
+                ComplianceGate.Reachability.root(canonical + ":" + coordinate[2]));
+    }
+
+    /**
+     * What a published POM declares the artifact depends on: its own {@code <dependencies>} - never those under
+     * {@code <dependencyManagement>}, which pin versions without adding anything - as {@code group:artifact} and the
+     * version it states, which may be a range or a property the POM's parents resolve. A test, provided or system
+     * dependency, or an optional one, is not something depending on the artifact brings in. Only the POM's own
+     * publish reads it, so a jar's publish records nothing and leaves what the POM recorded.
+     */
+    private static ManifestSubjectBuilder dependenciesFromPom(ManifestSubjectBuilder declared, byte[] pom) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setNamespaceAware(false);
+            Element project = factory.newDocumentBuilder().parse(new ByteArrayInputStream(pom)).getDocumentElement();
+            ManifestSubjectBuilder read = declared.readsDependencies();
+            for (Element dependencies : children(project, "dependencies")) {
+                for (Element dependency : children(dependencies, "dependency")) {
+                    String scope = text(dependency, "scope");
+                    if (scope != null && !scope.equals("compile") && !scope.equals("runtime")
+                            || "true".equals(text(dependency, "optional"))) {
+                        continue;
+                    }
+                    String group = text(dependency, "groupId");
+                    String artifact = text(dependency, "artifactId");
+                    if (group != null && artifact != null) {
+                        read = read.dependency(group + ":" + artifact, text(dependency, "version"));
+                    }
+                }
+            }
+            return read;
+        } catch (ParserConfigurationException | SAXException | IOException | RuntimeException unreadable) {
+            return declared;         // a POM that does not parse declares nothing this can read
+        }
+    }
+
+    /** The direct child elements of {@code parent} named {@code name}. */
+    private static List<Element> children(Element parent, String name) {
+        List<Element> children = new ArrayList<>();
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element element && element.getTagName().equals(name)) {
+                children.add(element);
+            }
+        }
+        return children;
     }
 
     /**

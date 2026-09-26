@@ -116,7 +116,10 @@ public final class ScreenedDispatch {
                     DeferredResponse held = new DeferredResponse(new RestreamExchange(exchange, accepted));
                     format.handle(held, store);
                     answer[0] = held;
-                    return Publication.Visibility.laidOut();
+                    // A format whose request path names no artifact - a push endpoint - names what it laid out, and
+                    // the observers are told about that rather than the endpoint.
+                    return held.described().map(Publication.Visibility.laidOut()::describing)
+                            .orElse(Publication.Visibility.laidOut());
                 });
         switch (commit.disposition()) {
             // ACCEPT was answered inside the layout above - the format writes its own 201, and a refusal its own

@@ -231,6 +231,14 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return recording.downloads(ecosystem, coordinate, version);
     }
 
+    /** What a coordinate version's manifest declared it depends on, as its inspector read it at publish, or empty
+     *  where nothing was recorded - a format whose inspector reads no dependency list, a version published before
+     *  they were recorded, or no consolidated store. An empty list is a manifest that declared none. */
+    public Optional<List<DependencySection.Declared>> dependencies(String ecosystem, String coordinate,
+                                                                   String version) throws IOException {
+        return recording.dependencies(ecosystem, coordinate, version);
+    }
+
     /** When a coordinate version was recorded as published - the {@code published/} sidecar's instant - or empty if no
      *  sidecar exists, so a non-retroactive backstop (forwarding self-repair) can compare a publication against a
      *  watermark without enumerating every {@link Release}. Reads only the tiny sidecar, never an artifact blob. */

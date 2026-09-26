@@ -398,16 +398,30 @@ public final class ComplianceGate {
      * unless an inspector that resolves a dependency graph (the Maven inspector) places the subject on it.
      * {@code maintainers} is whom the artifact's own metadata names as responsible for it ({@link Maintainer}),
      * read by the ecosystem inspector out of the document it parses for the licence, and empty where it names
-     * nobody or the inspector reads no such document.
+     * nobody or the inspector reads no such document. {@code dependencies} is what the same document declares the
+     * artifact depends on ({@link Dependency}), recorded at publish so the SBOM and the dependents index can answer
+     * for a format whose artifacts carry no SBOM of their own: empty where the manifest declares none, and
+     * {@code null} where the inspector reads no dependency list at all - two different facts, since only the first
+     * lets a screen say the artifact depends on nothing.
      */
     public record Subject(String ecosystem, String coordinate, String version, List<DeclaredLicense> licenses,
                           Reachability reachability, List<DetectedSecret> secrets, Attestation attestation,
-                          List<Signature> signatures, List<Maintainer> maintainers) {
+                          List<Signature> signatures, List<Maintainer> maintainers, List<Dependency> dependencies) {
 
         public Subject {
             secrets = secrets == null ? List.of() : List.copyOf(secrets);
             signatures = signatures == null ? List.of() : List.copyOf(signatures);
             maintainers = maintainers == null ? List.of() : List.copyOf(maintainers);
+            dependencies = dependencies == null ? null : List.copyOf(dependencies);
+        }
+
+        /** The shape before declared dependencies were a subject fact, kept so the callers that build a subject
+         *  without them need not restate an empty list. */
+        public Subject(String ecosystem, String coordinate, String version, List<DeclaredLicense> licenses,
+                       Reachability reachability, List<DetectedSecret> secrets, Attestation attestation,
+                       List<Signature> signatures, List<Maintainer> maintainers) {
+            this(ecosystem, coordinate, version, licenses, reachability, secrets, attestation, signatures,
+                    maintainers, null);
         }
 
         /** The shape before maintainers were a subject fact, kept so the callers that build a subject without one
@@ -438,7 +452,7 @@ public final class ComplianceGate {
          *  inspector uses to hand its detections to the discovered secret-scan gate dimension. */
         public Subject withSecrets(List<DetectedSecret> secrets) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers);
+                    signatures, maintainers, dependencies);
         }
 
         /** This subject re-stamped with the inbound attestation an inspector read from the artifact's co-located
@@ -446,7 +460,7 @@ public final class ComplianceGate {
          *  verified attestation, exactly as {@link #withSecrets} hands the secret-scan dimension its detections. */
         public Subject withAttestation(Attestation attestation) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers);
+                    signatures, maintainers, dependencies);
         }
 
         /** This subject re-stamped with the inbound signatures the signature inspector verified for it - the seam that
@@ -454,14 +468,21 @@ public final class ComplianceGate {
          *  {@link #withAttestation} hand theirs to the secret-scan and admission dimensions. */
         public Subject withSignatures(List<Signature> signatures) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers);
+                    signatures, maintainers, dependencies);
         }
 
         /** This subject re-stamped with whom its metadata names as maintainers - the seam an ecosystem inspector
          *  uses to hand the trust what a key-discovery source that looks keys up by their owner needs. */
         public Subject withMaintainers(List<Maintainer> maintainers) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers);
+                    signatures, maintainers, dependencies);
+        }
+
+        /** This subject re-stamped with what its manifest declares it depends on - the seam an ecosystem inspector
+         *  uses to hand the publish record what the SBOM and the dependents index are built from. */
+        public Subject withDependencies(List<Dependency> dependencies) {
+            return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
+                    signatures, maintainers, dependencies);
         }
 
         /** Whether this is a <em>content-scan</em> subject - one an inspector derived from an artifact's bytes (an
@@ -472,6 +493,20 @@ public final class ComplianceGate {
          *  reaches the unknown-license branch. */
         public boolean contentScan() {
             return licenses.isEmpty() && (!secrets.isEmpty() || attestation != null || !signatures.isEmpty());
+        }
+    }
+
+    /**
+     * One dependency an artifact's manifest declares: the depended-on package's coordinate in the artifact's own
+     * ecosystem - an npm or PyPI name, Maven's {@code group:artifact} - and the requirement it states, exactly as
+     * written ({@code ^4.18.0}, {@code >=2.0,<3}, {@code [1.2,2.0)}), empty where it states none. A declaration, not a
+     * resolution: what a client would install for it is the client's to decide.
+     */
+    public record Dependency(String coordinate, String requirement) {
+
+        public Dependency {
+            Objects.requireNonNull(coordinate, "coordinate");
+            requirement = requirement == null ? "" : requirement;
         }
     }
 

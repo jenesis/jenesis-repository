@@ -32,6 +32,7 @@ public final class Recording {
     String signatureLocation;
     String signatureSource;
     Map<String, String> signatureDetails;
+    List<DependencySection.Declared> dependencies;
 
     Recording(InventoryRecording recording, String ecosystem, String coordinate, String version, boolean prerelease,
               Instant published) {
@@ -55,6 +56,14 @@ public final class Recording {
      *  fact in its own right and not the absence of one. */
     public Recording licenses(List<LicenseInventory.Declared> licenses) {
         this.licenses = List.copyOf(licenses);
+        return this;
+    }
+
+    /** What the inspected manifest declares the version depends on; an empty list is a manifest that declared none.
+     *  Recorded only when an inspector read a manifest, so a publish no inspector parsed leaves the section as it
+     *  was. */
+    public Recording dependencies(List<DependencySection.Declared> dependencies) {
+        this.dependencies = List.copyOf(dependencies);
         return this;
     }
 

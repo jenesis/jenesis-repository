@@ -25,6 +25,18 @@ public record DependencyGraph(String rootRef, List<DependencyComponent> componen
     }
 
     /** Whether the SBOM named no components (an absent or empty graph carries nothing for an index to record). */
+    /** The graph a manifest declares: {@code root} and one edge from it to each of {@code dependencies} - one level,
+     *  since a manifest declares what it depends on directly and nothing of what those depend on in turn. */
+    public static DependencyGraph declared(DependencyComponent root, List<DependencyComponent> dependencies) {
+        List<DependencyComponent> components = new ArrayList<>();
+        components.add(root);
+        components.addAll(dependencies);
+        List<DependencyEdge> edges = dependencies.stream()
+                .map(dependency -> new DependencyEdge(root.ref(), dependency.ref()))
+                .toList();
+        return new DependencyGraph(root.ref(), components, edges);
+    }
+
     public boolean isEmpty() {
         return components.isEmpty();
     }

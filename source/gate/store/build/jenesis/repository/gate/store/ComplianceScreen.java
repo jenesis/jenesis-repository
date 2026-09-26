@@ -33,6 +33,7 @@ import build.jenesis.repository.health.HealthLedgerProvider;
 import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.LicenseInventory;
 import build.jenesis.repository.inventory.Recording;
+import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -1241,6 +1242,14 @@ public final class ComplianceScreen implements PublishInterceptor {
                 declared.add(new LicenseInventory.Declared(license.name(), license.url()));
             }
             recording.licenses(declared);
+            if (subject.dependencies() != null) {
+                // Recorded only where the inspector read the manifest for them: an empty list is a manifest that
+                // declares none, and a subject no inspector read for them leaves the section as it was.
+                recording.dependencies(subject.dependencies().stream()
+                        .map(dependency -> new DependencySection.Declared(dependency.coordinate(),
+                                dependency.requirement()))
+                        .toList());
+            }
             ComplianceGate.Attestation attestation = subject.attestation();
             if (attestation != null) {
                 recording.provenance(attestation.artifactPresent() && attestation.artifactDigest() != null,

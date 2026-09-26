@@ -3,6 +3,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.store.ArtifactDescriptor;
 
 /**
  * A {@link FormatExchange} that holds the format's response back until the edge lets it go.
@@ -106,6 +107,19 @@ public final class DeferredResponse implements FormatExchange {
                 // The client's stream is closed when the response is released, not when the format is done with it.
             }
         };
+    }
+
+    /** What the format named as laid out, which the edge notifies the observers with. */
+    private ArtifactDescriptor laidOut;
+
+    @Override
+    public void laidOut(ArtifactDescriptor artifact) {
+        this.laidOut = artifact;
+    }
+
+    /** The artifact the format named as laid out, or empty when it named none. */
+    public Optional<ArtifactDescriptor> described() {
+        return Optional.ofNullable(laidOut);
     }
 
     /** Whether the format answered at all; a format that laid out and said nothing leaves the edge to answer. */

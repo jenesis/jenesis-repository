@@ -537,6 +537,15 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
                     segments[3].substring(0, segments[3].length() - ".zip".length()),
                     path, "application/zip", false, null, -1L));
         }
+        if (segments.length == 4 && !segments[3].isEmpty()) {
+            // The release itself - the path a publish PUTs and the release document is read from - is that version, and
+            // what it releases is the archive: so a publish is screened, held and forwarded under the version's
+            // coordinate, while the descriptor's path names the archive rather than claiming the document is one.
+            String version = strip(segments[3]);
+            return Optional.of(new ArtifactDescriptor(ECOSYSTEM, segments[1] + "." + segments[2], version,
+                    PREFIX + segments[0] + "/" + segments[1] + "/" + segments[2] + "/" + version + ".zip",
+                    "application/zip", false, null, -1L));
+        }
         return Optional.of(ArtifactDescriptor.at(ECOSYSTEM, path));
     }
 
