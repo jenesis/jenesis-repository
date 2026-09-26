@@ -76,7 +76,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     private final ArtifactStore store;
     private final ArtifactWalk walk;
 
-    /** The consolidated metadata store the publish facts live in (§5.4), or {@code null} when no
+    /** The consolidated metadata store the publish facts live in, or {@code null} when no
      *  {@link MetadataProvider} is installed - the graceful-absence path stays on the {@code published/}/{@code pinned/}
      *  sidecars instead. When present, the {@code published} section is the source of truth and the only one read:
      *  the publish instant, the prerelease flag and the pin, with set completeness back-filled by the reconcile
@@ -152,13 +152,13 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** Record a published request path, folding a {@code local-upload} origin row for {@code originSha256} (the stored
-     *  blob's content hash) into the same publish-commit doc mutate as the {@code published} section (§6.2) - one
+     *  blob's content hash) into the same publish-commit doc mutate as the {@code published} section - one
      *  CAS. A {@code null} sha records no origin row (the non-upload record paths). */
     public void record(String path, Instant published, String originSha256) throws IOException {
         recording.record(path, published, originSha256);
     }
 
-    /** Record a publish from the descriptor, folding a {@code local-upload} origin row for {@code originSha256} (§6.2). */
+    /** Record a publish from the descriptor, folding a {@code local-upload} origin row for {@code originSha256}. */
     public void record(ArtifactDescriptor descriptor, Instant published, String originSha256) throws IOException {
         recording.record(descriptor, published, originSha256);
     }
@@ -182,13 +182,13 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** Record a publish, folding a {@code local-upload} origin row for {@code originSha256} into the same doc mutate as
-     *  the {@code published} section (§6.2). A {@code null} sha records no origin row. */
+     *  the {@code published} section. A {@code null} sha records no origin row. */
     public void record(String ecosystem, String coordinate, String version, boolean prerelease, Instant published,
                        String originSha256) throws IOException {
         recording.record(ecosystem, coordinate, version, prerelease, published, originSha256);
     }
 
-    /** Record a coordinate version's provenance summary at publish (§5.1/§6): whether its inbound attestation
+    /** Record a coordinate version's provenance summary at publish: whether its inbound attestation
      *  verified and bound to this artifact, and the SHA-256 it bound - the durable, GUI-facing summary that points at
      *  the content-keyed attestation cache without duplicating it. A no-op when the consolidated metadata store is
      *  absent (graceful, §3), since the summary has nowhere to live. */
@@ -251,7 +251,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return recording.lastDownloaded(ecosystem, coordinate, version);
     }
 
-    /** Pin a coordinate version - mark it force-kept, immune to every retention rule. As of the pin is a field
+    /** Pin a coordinate version - mark it force-kept, immune to every retention rule. The pin is a field
      *  of the document's {@code published} section (preserving the publish instant/prerelease), so it evicts with the
      *  version's document instead of dangling as its own {@code pinned/} sidecar. */
     public void pin(String ecosystem, String coordinate, String version) throws IOException {
@@ -353,12 +353,12 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  <p>A colon-less {@code display} (a bare name carrying no {@code :version}) is rejected with
      *  {@link IllegalArgumentException}: this is the {@code coordinate:version} face, and a name-level surface must
      *  screen through {@code ServableNames} instead. Historically a colon-less argument returned {@code true}
-     *  unconditionally (the a27/a2 F3 fail-open, where the right-to-left split loop never ran and the method fell
+     *  unconditionally (the fail-open, where the right-to-left split loop never ran and the method fell
      *  through to the ghost-coordinate {@code return true}); no live caller passes a bare name (every caller supplies a
      *  {@code coordinate + ":" + version} or an already-versioned {@code group:name:version}), so the fail-open default
      *  is closed here rather than left to leak. The colon-BEARING ghost-coordinate contract is preserved: a
      *  {@code coordinate:version} display no installed ecosystem places on any split still discloses (membership is the
-     *  only truth there). Accepted residual (a27/a2 F2): a cross-ecosystem {@code coordinate:version} collision resolves
+     *  only truth there). Accepted residual: a cross-ecosystem {@code coordinate:version} collision resolves
      *  to the first ecosystem whose {@code published/} rows place the split, so two ecosystems that share an identical
      *  {@code coordinate:version} are screened by whichever the probe reaches first. */
     /**
@@ -379,7 +379,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
             throw new IllegalArgumentException("disclosableDisplay is the coordinate:version screening face and requires "
                     + "a coordinate:version display, not the bare name \"" + display + "\": a name-level surface must "
                     + "screen through ServableNames, not this face. A colon-less argument once returned "
-                    + "disclosable=true unconditionally (the a27/a2 F3 fail-open); it now fails closed by throwing.");
+                    + "disclosable=true unconditionally, failing open; it now fails closed by throwing.");
         }
         SortedSet<String> ecosystems = ecosystems();
         for (int split = display.lastIndexOf(':'); split >= 0; split = display.lastIndexOf(':', split - 1)) {
@@ -519,7 +519,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     record PublishedAt(String ecosystem, String coordinate, String version, PublishedSection.Facts facts) {
     }
 
-    /** The publish facts of one coordinate version as a point read, with the §5.4 sweep-window fallback. Package-visible
+    /** The publish facts of one coordinate version as a point read, with the sweep-window fallback. Package-visible
      *  so {@link LicenseInventory} guards its rollup re-fold on the same "is this a published member" question. */
     Optional<PublishedSection.Facts> publishedFacts(String ecosystem, String coordinate, String version)
             throws IOException {
@@ -757,7 +757,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** Reclaim a re-heatable cached fallback blob under quota/disk pressure while retaining its {@code origin} and
-     *  {@code verdict} meta-document sections (§6.2 eviction dividend): the bytes are discarded (pointers
+     *  {@code verdict} meta-document sections: the bytes are discarded (pointers
      *  unpublished, the blob garbage-collected) but the audit records survive, so a pull-through can re-heat the entry
      *  (§5). Returns {@code true} when the blob was reclaimed; {@code false} when the version is <b>not</b> re-heatable -
      *  a {@code local-upload}-origin blob is system-of-record and is never cache-evicted, and a version with no origin
@@ -872,7 +872,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     /**
      * The pointer roots of {@link #pointerRoots()} <em>together with</em> the ecosystems this store durably records
      * that no installed format can place at all - the three-valued form every reclaiming pass must judge from
-     * (the rule applied to the one act that is irreversible).
+     * (the liveness rule, applied to the one act that is irreversible).
      *
      * <p>The {@code GarbageCollector} sweeps the whole {@code blobs/} namespace against the roots it is handed;
      * there is no way, through that seam, to spare one root's subtree. So an incomplete root set is not a degraded
@@ -885,7 +885,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * itself, reporting the cause through {@code GcPlan.refusal()}; there is no longer a pre-check for a caller to
      * forget.
      *
-     * <p>Judged from the durable record rather than from discovery, exactly as and judge theirs: the
+     * <p>Judged from the durable record rather than from discovery, exactly as the hold records and the reconcile sweep judge theirs: the
      * published set's own first level names every ecosystem this repository has content for, and it is read from
      * <em>both</em> planes - the consolidated {@code meta} documents and the legacy {@code published/} sidecars -
      * because which of the two is authoritative is itself a function of an installed module ({@link #publishedRoot}),
@@ -1011,7 +1011,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  published coordinate version, each member folding that version's declared-license fingerprint. A single O(1)
      *  small-object read a whole-repository export's ETag derives from, so an {@code If-None-Match} revalidation of the
      *  SBOM / attribution {@code NOTICE} answers {@code 304} BEFORE the O(#versions) coordinate walk that assembles the
-     *  document (PRINCIPLES §4/§7). Built once, lazily, when no accumulator exists yet, then maintained incrementally by
+     *  document (§4/§7). Built once, lazily, when no accumulator exists yet, then maintained incrementally by
      *  publish / eviction / license-record and rebuilt authoritatively by {@link #reconcile}. */
     public String identity() throws IOException {
         Optional<byte[]> current = identity.current();
@@ -1281,7 +1281,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /** The three per-version sidecar roots this class composes every key of, and the only place their spelling is
      *  written. The reconcile sweep that reaps them and the manifest that declares {@code downloaded/} name
-     *  these constants rather than re-spelling the literals - which is what {@code overrides/} needed for and
+     *  these constants rather than re-spelling the literals - which is what {@code overrides/} was given and
      *  what these three still lacked: a reaper composing its own spelling reaps a key no writer wrote. */
     static final String PUBLISHED = "published";
 
@@ -1329,8 +1329,8 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  entry cap is therefore only a per-call continuation, followed to exhaustion by {@link #walk}, and what really
      *  bounds the sweep is the step budget - one {@link ArtifactStore#exists} probe per opened node - which raises a
      *  named {@link build.jenesis.repository.walk.TraversalException} instead of answering short. Depth stays at the
-     *  primitive's {@link ArtifactStore#MAX_SEGMENTS} default, so a legacy key deeper than the store's own write-path
-     *  ceiling now fails <em>by name</em> where the previous recursion guard silently skipped it.
+     *  primitive's {@link ArtifactStore#MAX_SEGMENTS} default, so a key deeper than any the store accepts
+     *  fails <em>by name</em> rather than being skipped.
      *
      *  <p>It pages at {@link BoundedChildren#DRAIN_PAGE} rather than the primitive's default, because every caller
      *  here drains and a filesystem cannot seek a directory: each page rescans the container, so a sweep of N names
@@ -1343,7 +1343,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /** Walk the key subtree under {@code root} in path order, streaming each stored leaf key to {@code visitor} as it
      *  is reached rather than materialising the whole key set into a {@code List} first - the shared bounded,
-     *  iterative, paged descent (the earlier {@link PagedTreeWalk}), so a wide level is paged rather than listed whole and
+     *  iterative, paged descent ({@link PagedTreeWalk}), so a wide level is paged rather than listed whole and
      *  an attacker-shaped key depth cannot overflow a thread stack. The per-call entry cap is a continuation this
      *  method follows to exhaustion, so the sweep stays complete; the step and depth caps have no continuation and
      *  surface as a {@link build.jenesis.repository.walk.TraversalException}. Package-private so the extracted

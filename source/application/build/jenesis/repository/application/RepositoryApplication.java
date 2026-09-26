@@ -32,13 +32,9 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
  * <p>No free auto-configuration is excluded. The {@code RepositoryAutoConfiguration} now runs alongside
  * the security one: every one of its beans is {@code @ConditionalOnMissingBean}, so each backs off behind this
  * module's richer replacement (the serving controller is registered here under the bean name
- * {@code repositoryController} so the one backs off too). The former exclusion existed only because both
- * compositions bound the same {@code jenreg.repository} prefix with an <em>incompatible schema</em>: one read
- * {@code proxy} as a {@code Map<String,String>} of format upstreams and {@code repository} as a scalar, while the
- * other bound a boolean {@code proxy} switch and a {@code repository} map. Both collisions are gone - the switch
- * is {@code jenreg.proxy-enabled}, the definitions are {@code jenreg.repositories.<name>}, and the scalar went
- * with the second pair of keys that named the fixed artifact space - so one prefix carries one schema, and
- * {@link LegacyPropertyProbe} fails a boot fast that still carries an old key.
+ * {@code repositoryController} so the one backs off too). One prefix carries one schema: the pull-through switch is
+ * {@code jenreg.proxy-enabled}, the per-format upstreams are {@code jenreg.proxy.<format>}, and the repository
+ * definitions are {@code jenreg.repositories.<name>}.
  *
  * <p><b>Nothing ships this.</b> It was an image of its own once; the shipped artifact is the bundle,
  * which imports this composition. The module declares no {@code @jenesis.main}, so no launcher is built from it -
@@ -72,7 +68,7 @@ public class RepositoryApplication {
         // imports the kernel's feature modules constructs - so this node reports without naming the licence, and
         // the bundle still reports from its own main; the guard keeps it to one line per JVM either way.
         new SpringApplicationBuilder(RepositoryApplication.class)
-                .listeners(new SettingsEnvironmentLayer(), new LegacyPropertyProbe())
+                .listeners(new SettingsEnvironmentLayer())
                 .properties("spring.config.name=repository")
                 .run(args);
     }
@@ -88,7 +84,7 @@ public class RepositoryApplication {
         // for one fixed port. No file pins server.port any more - 8080 is Spring's own default - so the argument is
         // what makes 0 mean 0.
         ConfigurableApplicationContext context = new SpringApplicationBuilder(RepositoryApplication.class)
-                .listeners(new SettingsEnvironmentLayer(), new LegacyPropertyProbe())
+                .listeners(new SettingsEnvironmentLayer())
                 .properties("spring.config.name=repository")
                 .run("--server.port=" + port);
         int bound = Integer.parseInt(context.getEnvironment().getProperty("local.server.port"));

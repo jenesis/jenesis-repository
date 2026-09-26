@@ -56,7 +56,7 @@ import build.jenesis.repository.store.Features;
  *     A collector catches <em>neither</em>: both mean "I cannot enumerate", and the only safe reading of that on a
  *     deletion path is to fail the pass. The distinction exists for the consumers whose blast radius is the other way
  *     round - a browse, an enforcement sweep, a hold release - which derive the same set to decide what to
- *     <em>withhold</em>. There, propagating would fail a whole pass over one corrupt legacy document while degrading
+ *     <em>withhold</em>. There, propagating would fail a whole pass over one corrupt stored document while degrading
  *     to a shorter set only under-enforces; so such a consumer catches {@link Unresolvable} alone, degrades, and says
  *     so, and still propagates a store failure rather than turning every store hiccup into an under-enforced hold.
  *     One derivation, two postures, chosen by the caller and not by the format - this is deliberately the opposite
@@ -118,7 +118,7 @@ public interface BlobReferences {
      * fails the pass and deletes nothing. A consumer deriving the same set to decide what to <em>withhold</em> (a
      * console browse, an enforcement sweep, a hold release) catches this one, degrades to what it can name and says
      * so, and lets a plain {@link IOException} propagate - because degrading on a store hiccup would silently
-     * under-enforce a hold, while propagating on one corrupt legacy document would fail a whole repository's pass.
+     * under-enforce a hold, while propagating on one corrupt stored document would fail a whole repository's pass.
      * Catching {@code IOException} to get that behaviour would take both; catching this takes exactly the one that
      * will never resolve itself.
      *

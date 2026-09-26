@@ -34,17 +34,6 @@ import build.jenesis.repository.store.Features;
  *     special case written down here; it is what a {@code Map}-typed property <em>means</em>.</li>
  * </ul>
  *
- * <h2>Its relationship to the legacy probe, which does refuse</h2>
- * {@code LegacyPropertyProbe} fails a boot outright on three named legacy keys, and that is not this check
- * written twice. The difference is what the old spelling does now: those three would <em>still bind</em>, to the free
- * schema's different semantics - flipping pull-through, or dropping every repository definition - so a warning would
- * be read past while the deployment came up meaning something else. A key nothing reads at all cannot do that; it
- * simply has no effect. Hence a hard failure with a named replacement for the three, and a warning for the open set.
- *
- * <p>The probe's list is also the shape this check exists to make unnecessary: it must be extended by hand for every
- * future rename, and nobody will remember. This one needs no entry - a renamed key stops being recognised the moment
- * its declaration moves, because recognition is computed from the declarations.
- *
  * <h2>It warns, and it never refuses</h2>
  * A refusal would turn a stale key in someone's config into a failed start, which is a bad trade for a diagnostic,
  * and it would make this check the most dangerous line in a boot. The register is {@code Features.active}'s, which

@@ -2100,8 +2100,8 @@ public final class RepositoryClient {
     public record ImportStatus(String state, int imported, int skipped, List<String> skippedFormats, String cursor,
                                String asset, String error, Map<String, Integer> dropped) {
 
-        /** Rows the source offered that no connector would carry, by reason. Null on a server that predates the
-         *  field, which is why every reader guards it - a missing count must not print as zero refusals. */
+        /** Rows the source offered that no connector would carry, by reason, or null when the answer carries
+         *  none - which every reader guards, so a missing count never prints as zero refusals. */
         public int droppedTotal() {
             return dropped == null ? 0 : dropped.values().stream().mapToInt(Integer::intValue).sum();
         }

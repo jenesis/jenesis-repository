@@ -25,7 +25,7 @@ import build.jenesis.repository.upstream.UpstreamTokenIssuer;
  * it reaches {@code config/upstream-auth}: only the {@code enc:v1:} ciphertext is ever persisted (the header
  * <em>name</em> is not a secret and stays in the clear beside it). A write with no master key configured is refused
  * (§9), so plaintext never reaches the store; a read on the proxy-fetch path decrypts and, failing closed (§9), throws
- * rather than send a value it could not decrypt - a stored value that is not an {@code enc:v1:} envelope (a legacy
+ * rather than send a value it could not decrypt - a stored value that is not an {@code enc:v1:} envelope (a
  * plaintext credential) is invalid and must be re-entered, never sent as the literal header.
  */
 public final class StoreUpstreamCredentials implements UpstreamCredentialSource {
@@ -97,8 +97,8 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
 
     /** The usable header value of a stored credential: decrypted when it is an {@code enc:v1:} envelope (fail-closed
      *  through {@link SecretCipher#decrypt} - a wrong/absent key or tampered value throws rather than reading back the
-     *  ciphertext); and refused when it is not an envelope, because a legacy/tampered plaintext credential is invalid
-     *  and must be re-entered - it is never sent as a plaintext header (§9, clean cutover). Throwing here aborts the
+     *  ciphertext); and refused when it is not an envelope, because a plaintext or tampered credential is invalid
+     *  and must be re-entered - it is never sent as a plaintext header (§9). Throwing here aborts the
      *  proxied fetch, so no upstream call is ever made with a credential this node could not decrypt. */
     private String decrypted(String value) {
         if (SecretCipher.isEnvelope(value)) {

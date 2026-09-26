@@ -323,23 +323,23 @@ class StagingReapTest {
     }
 
     @Test
-    void legacy_leftovers_are_stamped_on_first_observation_and_reaped_a_ttl_later() throws IOException {
-        // A marker written before timestamps existed, and a staged tree whose marker never existed at all.
-        store.writeVersioned("staging-state/old-marker",
-                StagingState.DROPPED.name().getBytes(StandardCharsets.UTF_8), null);
+    void a_tree_whose_marker_was_lost_is_stamped_on_first_observation_and_reaped_a_ttl_later() throws IOException {
+        // A staged tree whose marker a partial purge of the staging-state space took, and beside it a marker that
+        // is not "<STATE> <instant>" - not one this class wrote, so never one it deletes.
+        store.writeVersioned("staging-state/foreign", StagingState.DROPPED.name().getBytes(StandardCharsets.UTF_8),
+                null);
         Publication publication = new Publication(store);
-        publication.link("/staging/old-tree/maven/org/example/c/1/c-1.jar",
+        publication.link("/staging/orphan-tree/maven/org/example/c/1/c-1.jar",
                 publication.storeBlob(new ByteArrayInputStream("c".getBytes(StandardCharsets.UTF_8))));
 
         Instant firstPass = Instant.now();
         assertThat(staging.reap(firstPass, TTL)).as("first observation only stamps").isZero();
-        assertThat(staging.ids(100).ids()).containsExactlyInAnyOrder("old-marker", "old-tree");
-        assertThat(staging.state("old-marker")).isEqualTo(StagingState.DROPPED);
-        assertThat(staging.state("old-tree")).isEqualTo(StagingState.OPEN);
+        assertThat(staging.state("orphan-tree")).isEqualTo(StagingState.OPEN);
 
-        assertThat(staging.reap(firstPass.plus(TTL).plusSeconds(1), TTL)).isEqualTo(2);
-        assertThat(staging.ids(100).ids()).isEmpty();
-        assertThat(staging.staged("old-tree")).isEmpty();
+        assertThat(staging.reap(firstPass.plus(TTL).plusSeconds(1), TTL)).isEqualTo(1);
+        assertThat(staging.staged("orphan-tree")).isEmpty();
+        assertThat(store.readVersioned("staging-state/foreign").map(marker -> new String(marker.content(),
+                StandardCharsets.UTF_8))).as("a marker without its instant is left as it was").contains("DROPPED");
     }
 
     @Test

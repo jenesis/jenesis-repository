@@ -32,8 +32,9 @@ import build.jenesis.repository.store.Names;
  * so the {@link #reap} sweep the scheduled cleanup pass drives can age the lifecycle: an abandoned-OPEN id past the
  * TTL has its staged artifacts unpublished (their blobs then fall to the blob GC) and a sealed marker past the TTL
  * is deleted - neither leaks forever, while a marker younger than the TTL keeps the sealed transitions rejected
- * exactly as before. A legacy marker without a timestamp, or a staged tree without any marker, is stamped on first
- * observation and reaped a TTL later, so pre-existing leftovers converge too.
+ * exactly as before. A staged tree without any marker - one whose marker a partial purge of the staging-state space
+ * lost - is stamped on first observation and reaped a TTL later, so it converges too; a marker that is not
+ * {@code <STATE> <instant>} was not written here, and the reap never deletes it.
  */
 public final class StoreStaging implements Staging {
 
@@ -75,8 +76,7 @@ public final class StoreStaging implements Staging {
 
     /** The ids of all staging repositories the store holds: the recorded-state markers unioned with the live held
      *  trees under {@code publish/staging}, exactly as {@link #reap} walks them. A staged tree whose marker is absent
-     *  - a deploy from a staging version that predates the marker mechanism, or a marker lost to a partial purge of
-     *  the {@code staging-state} key-space - is still a real staging repository the console must show and the operator
+     *  - a marker lost to a partial purge of the {@code staging-state} key-space - is still a real staging repository the console must show and the operator
      *  must be able to review, promote or drop; listing the markers alone served a silently-incomplete view, the tree
      *  invisible and unreleasable until the reap eventually stamped-then-GC'd it (and the reap is opt-in, so it may
      *  never run). {@link #state} defaults a marker-less id to {@code OPEN}, {@link #staged} walks the live tree and
@@ -85,8 +85,8 @@ public final class StoreStaging implements Staging {
      *  staged content. */
     @Override
     public StagingState state(String id) throws IOException {
-        // The marker is "<STATE> <instant>"; a legacy marker carries the bare state. Only the first token is the
-        // state, read totally (see stateOf): a corrupt/legacy/foreign marker whose first token is not a StagingState
+        // The marker is "<STATE> <instant>". Only the first token is the state, read totally (see stateOf): a
+        // corrupt or foreign marker whose first token is not a StagingState
         // reads as OPEN rather than throwing, so one garbled marker cannot 500 the whole `stagingList` walk (which
         // calls state() per id) - the same tolerance the reap's valueOf carries, mirroring the missing-marker default.
         return store.readVersioned(stateKey(id))
@@ -94,7 +94,7 @@ public final class StoreStaging implements Staging {
                 .orElse(StagingState.OPEN);
     }
 
-    /** The lifecycle state a marker's whitespace-split tokens name, tolerating a corrupt / legacy / foreign first
+    /** The lifecycle state a marker's whitespace-split tokens name, tolerating a corrupt or foreign first
      *  token (or none) as {@code OPEN} - the same totality {@link #state} and {@link #reap} carry, so one garbled
      *  marker neither 500s the listing walk nor 400s a fresh deploy into an id whose marker was torn. */
     private static StagingState stateOf(String[] tokens) {
@@ -290,7 +290,7 @@ public final class StoreStaging implements Staging {
                 // lease holder (the rival, or the next lease-guarded retry) re-converges the set idempotently.
                 throw lost;
             } catch (IOException | RuntimeException failure) {
-                // Lease-fence the rollback through the lease (C4-A2). rollback() is an UNCONDITIONAL
+                // Lease-fence the rollback through the lease. rollback() is an UNCONDITIONAL
                 // unpublish (delete) of every release this pass created, and the failing step - format.handle above -
                 // is unbounded and can outlast the lease ttl (a large artifact, a slow gate, a hanging store). So this
                 // node's lease may have lapsed mid-handle and a rival may have acquired it, re-published the same
@@ -310,7 +310,7 @@ public final class StoreStaging implements Staging {
             if (!withheld.isEmpty()) {
                 // Honour the gate atomically: a quarantined artifact is not sealed lost, and no sibling is left released
                 // beside it. Retract the releases, leave the id OPEN (every staged copy retained) for review, and report
-                // which paths the gate held back. Fenced through the same owner (C4-A2): the loop renewed on each
+                // which paths the gate held back. Fenced through the same owner: the loop renewed on each
                 // iteration so we normally still hold the lease and roll back, but if it lapsed and a rival took over
                 // (and committed the same releases) we must not retract its work - guarded skips and we still surface
                 // the withheld outcome.
@@ -421,14 +421,14 @@ public final class StoreStaging implements Staging {
      * are unpublished (the freed blobs fall to the next garbage collection) and its marker deleted. A sealed
      * ({@code PROMOTED} / {@code DROPPED}) marker past {@code ttl} has nothing left to guard - the sealed-transition
      * rejection matters against a client reusing the id moments later, not weeks - so it is deleted. Ageing needs a
-     * timestamp, so a marker without one (written before this sweep existed) and a staged tree without any marker are
-     * <em>stamped</em> at {@code now} and reaped a full TTL later - two idempotent passes converge any pre-existing
-     * leftover, and nothing is ever reaped less than one TTL after it was first observed. Returns how many ids were
+     * timestamp, so a staged tree without any marker is <em>stamped</em> at {@code now} and reaped a full TTL later -
+     * nothing is ever reaped less than one TTL after it was first observed - and a marker without one was not written
+     * here and is left alone. Returns how many ids were
      * reaped (markers removed).
      */
     public int reap(Instant now, Duration ttl) throws IOException {
         // The ids a page at a time, never the whole set: first every id with a state marker, then every staged
-        // pointer root that has none (a pre-timestamp deploy, which the loop stamps). This used to list both levels
+        // pointer root that has none (a marker a partial purge lost, which the loop stamps). This used to list both levels
         // whole into one set before judging the first id, so a farm that opens a staging per build and never
         // closes them left a reap that could not run in the heap it was given - the staging-reap canary measured
         // the pass failing at a million open stagings under 512 MiB. An id both levels hold is judged once, through
@@ -439,7 +439,7 @@ public final class StoreStaging implements Staging {
             String id = next;                                     // final for the lambdas below
             Optional<ArtifactStore.Versioned> marker = store.readVersioned(stateKey(id));
             if (marker.isEmpty()) {
-                // A staged tree with no marker (a pre-timestamp deploy): stamp it, reap once the TTL has passed.
+                // A staged tree with no marker (one a partial purge lost): stamp it, reap once the TTL has passed.
                 store.writeVersioned(stateKey(id),
                         (StagingState.OPEN.name() + " " + now).getBytes(StandardCharsets.UTF_8), null);
                 continue;
@@ -453,10 +453,7 @@ public final class StoreStaging implements Staging {
             }
             Instant since = value.length > 1 ? parse(value[1]) : null;
             if (since == null) {
-                // A legacy marker without a timestamp: stamp the state's age at now, reap a TTL later.
-                store.writeVersioned(stateKey(id),
-                        (state.name() + " " + now).getBytes(StandardCharsets.UTF_8), marker.get().token());
-                continue;
+                continue;                                        // not "<STATE> <instant>" - never delete it
             }
             if (Duration.between(since, now).compareTo(ttl) < 0) {
                 continue;
@@ -497,13 +494,13 @@ public final class StoreStaging implements Staging {
                 // stage that raced a seal (or a crash mid-mutation that outlived the single-writer lease) can leave:
                 // the seal never revisits the id, so without this the residual pointer leaks forever. Withheld from
                 // serving by StagingWithholdInterceptor meanwhile, so it is invisible until the reap collects it here.
-                // Fence every lease-path mutation (Audit-28 A5-F2): reap holds the lease, but the mutations below
+                // Fence every lease-path mutation: reap holds the lease, but the mutations below
                 // unpublish each staged pointer and delete the state marker. The original ran them UNCONDITIONALLY and
                 // never renewed, so a reap of a large abandoned tree whose unpublish loop outran the 2-minute TTL would
                 // let a rival stage() steal the lapsed lease and re-stamp a fresh OPEN marker + link a new pointer - and
                 // this reap, unaware it lost the lease, would then drop the rival's fresh pointer and delete its
                 // just-written marker (silent loss of an accepted deploy). Route each mutation through lock.guarded on a
-                // FRESH instant - the promote-rollback fence (C4-A2): guarded re-asserts single-writer ownership via a
+                // FRESH instant - the promote-rollback fence: guarded re-asserts single-writer ownership via a
                 // renew CAS against our holder token (true iff we still own the lease, which also EXTENDS it), so a long
                 // loop keeps the lease fresh and the moment a rival takes it a guarded action is skipped. On a lost
                 // lease we stop and leave the residual to a later sweep rather than wipe a live writer's staging; a store

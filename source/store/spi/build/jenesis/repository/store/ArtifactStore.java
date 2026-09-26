@@ -233,9 +233,8 @@ public interface ArtifactStore {
      * addressed in, and on an object store it lands a literal key that no other backend can then address - so the same
      * publish would be refused on one backend and silently accepted on another (&sect;13). Screening it at the one write
      * choke point every backend already calls keeps the four backends interchangeable, which is what makes a store
-     * migration a configuration change. Enforced on new writes only: any key already stored predates the screen and
-     * stays readable, deletable and walkable (the iterative store walk bounds traversal regardless of a legacy key's
-     * depth), so a store that predates this cannot become unreadable.
+     * migration a configuration change. No stored key is deeper or longer, so every descent over the store takes
+     * these caps as its own bounds.
      */
     static String key(String key) {
         if (key == null) {

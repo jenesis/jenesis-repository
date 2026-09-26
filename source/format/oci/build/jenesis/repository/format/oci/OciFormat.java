@@ -418,9 +418,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * condemned on one pass and DELETED on the next (the fail-open this seam's contract clause 3 makes illegal).
      * Failing the pass deletes nothing, and the message names the key so an operator can discard the manifest. Those
      * two sites are the ONLY ones that raise it: anything else that fails here is the store failing, and stays a plain
-     * {@link IOException}, so a consumer that must degrade on a corrupt legacy manifest can do so without also
-     * degrading on a store outage (clause 3). The state is unrepresentable for anything pushed since manifest
-     * validation landed; this bites only stored legacy bytes. A <em>sub</em>-manifest of an index degrades silently
+     * {@link IOException}, so a consumer that must degrade on a corrupt stored manifest can do so without also
+     * degrading on a store outage (clause 3). Validation at push keeps this state out of anything the
+     * product stores; it is what a store corrupted outside it answers. A <em>sub</em>-manifest of an index degrades silently
      * instead: a hostile index entry may legitimately point at a layer blob, which has no children to lose, so only the
      * root - the one blob that is contractually a manifest - is an invariant break.
      */

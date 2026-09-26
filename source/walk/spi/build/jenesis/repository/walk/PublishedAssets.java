@@ -89,14 +89,9 @@ public final class PublishedAssets {
      * seam instead of this walk keeping its own descent.
      */
     private void collect(String after, int cap, int[] emitted, Visitor visitor) throws IOException {
-        // Depth is deliberately unbounded here, which is the one bound this walk cannot take from the shared
-        // default. ArtifactStore.key caps new writes at MAX_SEGMENTS, but it promises in the same breath that a key
-        // stored before that screen "stays readable, deletable and walkable (the iterative store walk bounds
-        // traversal regardless of a legacy key's depth)". A depth ceiling here would break exactly that promise, and
-        // break it durably: the pointer is stored, so /api/assets and the console export would refuse for as long as
-        // it exists. There is no stack risk to trade against - Trees descends iteratively - so the step budget is
-        // what bounds the work, and depth is left to the data.
-        PagedTreeWalk.bounded().depth(Integer.MAX_VALUE)
+        // Depth is the shared default, the store's own write ceiling: no key deeper than it can be stored, so a
+        // chain past it is a store nothing here wrote, and the walk refuses it by name rather than descending it.
+        PagedTreeWalk.bounded()
                 .entries(cap == Integer.MAX_VALUE ? PagedTreeWalk.ENTRIES : cap)
                 .walk(store, ROOT, cursor(after), key -> {
                     if (emitted[0] >= cap) {

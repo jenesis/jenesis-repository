@@ -384,7 +384,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * <p><b>What the delegation had to wait for, and what it costs.</b> The two sides carry <b>opposite failure
      * postures by design</b>: a present-but-unenumerable manifest makes the seam THROW (its contract clause 3 - a
      * short list handed to a deleter is data loss), while the callers here are a console browse, a KEV sweep and a
-     * release path, where a throw turns one corrupt legacy manifest into a repository whose whole enforcement pass
+     * release path, where a throw turns one corrupt stored manifest into a repository whose whole enforcement pass
      * fails. That is why this could not simply call the seam until free named its refusal: catching {@link IOException}
      * would convert every store hiccup into a silently under-enforced hold. It now catches exactly
      * {@link BlobReferences.Unresolvable} - "these bytes will never parse", no retry changes it - degrades to the

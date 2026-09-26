@@ -1038,8 +1038,8 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
                 sha256 = line.substring("SHA256:".length()).trim();
             }
             if (recorded >= MAX_RECORDED_DIGESTS) {
-                // Stop rather than grow without bound. Past this the remaining packages proxy unverified, which is
-                // the behaviour that predates this recording - a cap degrades to the old answer, it does not refuse.
+                // Stop rather than grow without bound. Past this the remaining packages proxy unverified, as a package
+                // with no recorded digest does - a cap degrades to that answer, it does not refuse.
                 return;
             }
         }

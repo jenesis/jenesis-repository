@@ -12,7 +12,7 @@ import build.jenesis.repository.walk.Traversal;
  * The one descent over the live {@code publish/quarantine} review-pointer subtree, shared by the review queue
  * ({@code QuarantineLog.heldPaths}) and the cross-alias withhold guard ({@code HoldLifecycle.withheldByAnotherAlias}).
  * Both previously carried their own self-recursive descent that listed each level whole with
- * {@link ArtifactStore#list} - the unbounded-work class exists to remove - and both had to answer the same
+ * {@link ArtifactStore#list} - the unbounded-work class the bounded traversal primitives exist to remove - and both had to answer the same
  * awkward question about this particular tree, so the answer is written once here rather than twice.
  *
  * <p><strong>Why this is not simply {@link PagedTreeWalk} applied to the root.</strong> The shared bounded tree walk
@@ -52,8 +52,7 @@ final class HeldPointers {
 
     /** The subtree bounds. The step budget is what really bounds this descent - the entry cap is followed to
      *  exhaustion by {@link #descend} - and depth stays at the primitive's {@link ArtifactStore#MAX_SEGMENTS} default,
-     *  so a legacy pointer deeper than the store's own write-path ceiling now fails <em>by name</em> where the previous
-     *  recursion guard silently skipped it. */
+     *  so a pointer deeper than any the store accepts fails <em>by name</em> rather than being skipped. */
     private static final PagedTreeWalk SUBTREE = PagedTreeWalk.bounded().steps(1_000_000);
     /** The same walk at the drain width, for the two descents that follow their continuation to exhaustion: a
      *  filesystem rescans a container per page, so for a drain the page width is the number of rescans of a

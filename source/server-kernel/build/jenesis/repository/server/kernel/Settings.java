@@ -104,7 +104,7 @@ public final class Settings {
 
     /** The usable value of a stored entry for {@code key}: decrypted when it is an {@code enc:v1:} envelope; passed
      *  through for a non-secret; and refused (§9, fail-closed) when it is a SECRET key whose stored value is not an
-     *  envelope - a legacy/tampered plaintext secret must be re-entered, never silently used. A stored envelope that no
+     *  envelope - a plaintext or tampered secret must be re-entered, never silently used. A stored envelope that no
      *  configured key can open throws from {@link SecretCipher#decrypt}, so a broken secret never reads as blank. */
     private String fromStore(String key, String value) {
         if (SecretCipher.isEnvelope(value)) {
