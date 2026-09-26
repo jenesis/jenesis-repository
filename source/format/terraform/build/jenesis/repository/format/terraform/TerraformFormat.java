@@ -12,6 +12,7 @@ import build.jenesis.repository.blobs.RequestBase;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -49,7 +50,8 @@ import build.jenesis.repository.format.Listings;
  * document is contributed by a separate module rather than served here. A deployment that does not install it can
  * still be read by anything addressing these paths directly, but not by {@code terraform init}.
  */
-public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryExporter {
+public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryExporter,
+        RepositoryImporter {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -77,6 +79,23 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     @Override
     public String name() {
         return "terraform";
+    }
+
+    private final TerraformImporter importer = new TerraformImporter();
+
+    @Override
+    public boolean imports(String format) {
+        return importer.imports(format);
+    }
+
+    @Override
+    public Optional<ArtifactDescriptor> importTarget(String path) {
+        return importer.importTarget(path);
+    }
+
+    @Override
+    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
+        importer.importArtifact(path, content, store);
     }
 
     /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */

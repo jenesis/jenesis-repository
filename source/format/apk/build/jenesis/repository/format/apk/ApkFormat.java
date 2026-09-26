@@ -12,6 +12,7 @@ import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -45,7 +46,8 @@ import build.jenesis.repository.format.Listings;
  * half is served at {@code GET /apk/keys/jenesis.rsa.pub} for an operator to place in {@code /etc/apk/keys/}. See
  * {@link ApkSigner} for the scheme and how each part of it was measured.
  */
-public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures, RepositoryExporter {
+public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures, RepositoryExporter,
+        RepositoryImporter {
 
     /** The package-ecosystem name apk coordinates report. */
     public static final String ECOSYSTEM = "Alpine";
@@ -77,6 +79,23 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
     @Override
     public String name() {
         return "apk";
+    }
+
+    private final ApkImporter importer = new ApkImporter();
+
+    @Override
+    public boolean imports(String format) {
+        return importer.imports(format);
+    }
+
+    @Override
+    public Optional<ArtifactDescriptor> importTarget(String path) {
+        return importer.importTarget(path);
+    }
+
+    @Override
+    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
+        importer.importArtifact(path, content, store);
     }
 
     /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */

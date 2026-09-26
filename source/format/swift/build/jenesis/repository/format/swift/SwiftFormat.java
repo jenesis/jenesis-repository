@@ -10,6 +10,7 @@ import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.multipart.MultipartBody;
 import build.jenesis.repository.multipart.MultipartForm;
 import build.jenesis.repository.format.ExportTarget;
@@ -49,7 +50,7 @@ import tools.jackson.databind.ObjectMapper;
  * thing.
  */
 public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures,
-        RepositoryExporter {
+        RepositoryExporter, RepositoryImporter {
 
     /** The archive signature's sidecar suffix under the archive key and path: {@code <version>.zip.sig}. */
     private static final String SIGNATURE = ".sig";
@@ -146,6 +147,23 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
     @Override
     public String name() {
         return "swift";
+    }
+
+    private final SwiftImporter importer = new SwiftImporter();
+
+    @Override
+    public boolean imports(String format) {
+        return importer.imports(format);
+    }
+
+    @Override
+    public Optional<ArtifactDescriptor> importTarget(String path) {
+        return importer.importTarget(path);
+    }
+
+    @Override
+    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
+        importer.importArtifact(path, content, store);
     }
 
     /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */

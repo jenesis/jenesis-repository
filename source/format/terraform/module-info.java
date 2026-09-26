@@ -39,6 +39,8 @@ module build.jenesis.repository.format.terraform {
     requires build.jenesis.repository.format.signing;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.blobs;
+    // A module moved off a registry that serves zips is re-packed as the tar this one serves.
+    requires org.apache.commons.compress;
     requires org.slf4j;
     requires tools.jackson.databind;
     // Exported to test modules only. The unit suite is named here because its assertions are about

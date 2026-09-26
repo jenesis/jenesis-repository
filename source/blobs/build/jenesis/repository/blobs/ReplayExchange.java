@@ -8,8 +8,8 @@ import build.jenesis.repository.format.FormatExchange;
  * {@code handle}, so an {@code importArtifact} lays an asset out by driving the format's publish path rather than
  * re-implementing it. The source stream is passed straight through (never buffered whole), so the format spools a large
  * package into the CAS unbuffered; the format's response is discarded, since a replay cares that the version
- * materialises, not what the publish would have answered. Carries no query parameters and no request headers (a hosted
- * publish reads none from an import replay) - the language importers each declared a private, byte-identical copy
+ * materialises, not what the publish would have answered. Carries no query parameters, and request headers only when
+ * built with them ({@link #put(String, InputStream, Map)}) - the language importers each declared a private, byte-identical copy
  * of this stub before it was hoisted here, the one module every format module already requires.
  *
  * <p>The method defaults to {@code PUT} (the raw-push shape every pool/flat-container/dist format uses); a format whose
@@ -20,22 +20,32 @@ public final class ReplayExchange implements FormatExchange {
     private final String method;
     private final String path;
     private final InputStream body;
+    private final Map<String, String> headers;
 
     /** A {@code PUT} replay of {@code body} at {@code path} - the raw-push shape the pool/flat-container/dist formats use. */
     public ReplayExchange(String path, InputStream body) {
-        this("PUT", path, body);
+        this("PUT", path, body, Map.of());
     }
 
-    private ReplayExchange(String method, String path, InputStream body) {
+    private ReplayExchange(String method, String path, InputStream body, Map<String, String> headers) {
         this.method = method;
         this.path = path;
         this.body = body;
+        this.headers = headers;
+    }
+
+    /** A {@code PUT} replay that carries request headers - the shape a format whose publish reads one (a multipart
+     *  boundary in {@code Content-Type}) drives its {@code handle} with. Header names match case-insensitively. */
+    public static ReplayExchange put(String path, InputStream body, Map<String, String> headers) {
+        Map<String, String> named = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        named.putAll(headers);
+        return new ReplayExchange("PUT", path, body, Collections.unmodifiableMap(named));
     }
 
     /** A {@code POST} replay of {@code body} at {@code path} - the shape a format whose publish endpoint is a POST (a
      *  RubyGems gem push) drives its {@code handle} with. */
     public static ReplayExchange post(String path, InputStream body) {
-        return new ReplayExchange("POST", path, body);
+        return new ReplayExchange("POST", path, body, Map.of());
     }
 
     @Override
@@ -55,7 +65,7 @@ public final class ReplayExchange implements FormatExchange {
 
     @Override
     public String requestHeader(String name) {
-        return null;
+        return headers.get(name);
     }
 
     @Override
