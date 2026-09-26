@@ -35,7 +35,6 @@
                     <th scope="col">Repository</th>
                     <th scope="col">Format</th>
                     <th scope="col">Created</th>
-                    <th scope="col" th:if="${isAdmin}"><span class="app-sr-only">Delete</span></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -83,11 +82,6 @@
                         </th:block>
                     </td>
                     <td class="app-list__date"><small th:text="${r.created}">2026-09-25</small></td>
-                    <td th:if="${isAdmin}" class="app-list__action">
-                        <form method="post" th:action="@{'/ui/repositories/' + ${r.name} + '/delete'}" style="margin:0">
-                            <button th:replace="~{base :: deleteButton('Delete', ${r.name}, 'Everything this repository holds is deleted: every artifact, index, staged upload and pin, and what it is defined as.')}">Delete</button>
-                        </form>
-                    </td>
                 </tr>
                 </tbody>
             </table>

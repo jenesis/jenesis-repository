@@ -222,7 +222,9 @@ public final class Commands {
                                     "set the well-known cache values; an omitted one is cleared"),
                             act("cache evict <project> <size|ttl|clear>",
                                     "start a sweep in the background and report whether this call started it"),
-                            act("cache recount <project>", "recount the project's entries and bytes")),
+                            act("cache recount <project>", "recount the project's entries and bytes"),
+                            act("cache delete <project> [--yes]", "delete a project, its entries and its settings in "
+                                    + "the background, after typing 'delete <project>' - or --yes, for a script")),
                     noun("keylogin", "the deployment's issued login keys", "build.jenesis.repository.auth.keylogin",
                             AuthCommands::keylogin,
                             act("keylogin list", "every issued login key"),

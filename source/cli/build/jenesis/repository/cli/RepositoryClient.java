@@ -1403,6 +1403,13 @@ public final class RepositoryClient {
         return response.body();
     }
 
+    /** Start deleting a build-cache project; the answer says whether this call started it. */
+    public String deleteCacheProject(String name) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("DELETE", "/api/cache/projects/" + enc(name), null, null);
+        require(response, 200, "start deleting the build-cache project");
+        return response.body();
+    }
+
     /** Per-node fingerprints and any divergence between the nodes of a cluster. */
     public String consistency() throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/admin/consistency", null, null);

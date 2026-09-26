@@ -90,6 +90,9 @@ final class ConsoleAuthorization {
                 // admin-grade: clearing a project wipes its cache for everyone, which an EDITOR must not do.
                 .requestMatchers(HttpMethod.POST, "/ui/projects/*/evict/**")
                         .access(tenants.require(UserDirectory.Role.ADMIN))
+                // Deleting a project removes its entries and its settings, which is eviction and more.
+                .requestMatchers(HttpMethod.POST, "/ui/projects/*/delete")
+                        .access(tenants.require(UserDirectory.Role.ADMIN))
                 .requestMatchers(HttpMethod.POST, "/**").access(tenants.require(UserDirectory.Role.EDITOR))
                 .requestMatchers(HttpMethod.PUT, "/**").access(tenants.require(UserDirectory.Role.EDITOR))
                 .requestMatchers(HttpMethod.DELETE, "/**").access(tenants.require(UserDirectory.Role.EDITOR))

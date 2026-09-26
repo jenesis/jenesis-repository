@@ -253,7 +253,7 @@ public class RepositoryAdminController {
                          RedirectAttributes redirect) throws IOException {
         if (!confirm.trim().equals("delete " + name)) {
             redirect.addFlashAttribute("error", "Nothing was deleted: type \"delete " + name + "\" to confirm.");
-            return "redirect:/ui/repositories";
+            return "redirect:/ui/repositories/" + name;
         }
         // The tenant's own definition goes with its repository; the deployment's is every tenant's and stays.
         if (tenant.name() != null && settings.repositories(tenant.name()).containsKey(name)) {

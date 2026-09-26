@@ -76,6 +76,17 @@
             </form>
         </div>
     </section>
+
+    <!--/* Deleting the project is the last and largest of these, so it closes the page under a rule of its own. */-->
+    <section th:if="${isAdmin}" class="app-divide" aria-labelledby="delete-project">
+        <h2 id="delete-project">Delete project</h2>
+        <p><small>Removes every cached entry and the cache settings, in the background. A credential's grant naming the
+            project stays and reaches a project created again under this name; a build still writing to it brings it
+            back, so revoke its grants first.</small></p>
+        <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/delete'}">
+            <button th:replace="~{base :: deleteButton('Delete project', ${project.name}, 'Every cached entry and the cache settings of this project are deleted.')}">Delete project</button>
+        </form>
+    </section>
 </main>
 </body>
 </html>

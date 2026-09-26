@@ -175,9 +175,10 @@
         <article th:if="${isAdmin}">
             <h3>Delete repository</h3>
             <p><small>Deletes this repository and everything it holds - every artifact, index, staged upload and pin, and
-                what it is defined as. It stops answering at once; the rest is removed in the background.</small></p>
+                this tenant's own routing of it. It stops answering at once; the rest is removed in the
+                background.</small></p>
             <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/delete'}">
-                <button th:replace="~{base :: deleteButton('Delete repository', ${repo}, 'Everything this repository holds is deleted: every artifact, index, staged upload and pin, and what it is defined as.')}">Delete repository</button>
+                <button th:replace="~{base :: deleteButton('Delete repository', ${repo}, 'Everything this repository holds is deleted: every artifact, index, staged upload and pin, and the routing set for it in this tenant.')}">Delete repository</button>
             </form>
         </article>
     </section>

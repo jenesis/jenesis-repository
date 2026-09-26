@@ -26,7 +26,7 @@ final class CacheCommands {
 
     static int cache(String[] args, Path home) throws Exception {
         if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: cache <projects|show|create|config|evict|recount> [...]");
+            throw new IllegalArgumentException("Usage: cache <projects|show|create|config|evict|recount|delete> [...]");
         }
         return switch (args[1]) {
             case "projects" -> print(CliSupport.client(home).cacheProjects());
@@ -35,6 +35,7 @@ final class CacheCommands {
             case "config" -> config(args, home);
             case "evict" -> evict(args, home);
             case "recount" -> print(CliSupport.client(home).recountCache(name(args, "recount <project>")));
+            case "delete" -> delete(args, home);
             default -> throw new IllegalArgumentException("Unknown cache command '" + args[1] + "'");
         };
     }
@@ -60,6 +61,18 @@ final class CacheCommands {
             throw new IllegalArgumentException("Usage: cache evict <project> <size|ttl|clear>");
         }
         return print(CliSupport.client(home).evictCache(project, args[3]));
+    }
+
+    private static int delete(String[] args, Path home) throws Exception {
+        String project = name(args, "delete <project> [--yes]");
+        if (!Arrays.asList(args).subList(3, args.length).contains("--yes") && !AdminCommands.confirmed(project,
+                "Deleting build-cache project " + project + " removes every cached entry and its cache settings; "
+                        + "the next builds run without them. Grants naming it stay on their credentials. "
+                        + "This cannot be undone.")) {
+            System.out.println("Nothing was deleted.");
+            return 1;
+        }
+        return print(CliSupport.client(home).deleteCacheProject(project));
     }
 
     private static String name(String[] args, String usage) {

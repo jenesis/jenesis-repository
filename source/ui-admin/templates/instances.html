@@ -32,6 +32,8 @@
                             <button type="submit">Open</button>
                         </form>
                     </td>
+                    <!--/* Everywhere else an object is deleted on its own page; a tenant has no page of its own, so
+                         its deletion stays on its row. */-->
                     <td th:if="${superadmin}">
                         <form method="post" th:action="@{/ui/instances/delete}" style="margin:0">
                             <input type="hidden" name="name" th:value="${t}">

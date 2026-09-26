@@ -101,4 +101,24 @@ public class ProjectsController {
         redirect.addFlashAttribute("message", "Saved cache settings for '" + name + "'.");
         return "redirect:/ui/projects/" + name;
     }
+
+    /** Delete the project behind the typed-name dialog, which submits the phrase as {@code confirm}; the phrase is
+     *  checked here too, so a request that skipped the dialog deletes nothing. It runs in the background, and the
+     *  list shows the project as being deleted until it has gone. */
+    @PostMapping("/ui/projects/{name}/delete")
+    public String delete(@PathVariable("name") String name,
+                         @RequestParam(name = "confirm", defaultValue = "") String confirm,
+                         RedirectAttributes redirect) throws IOException {
+        if (!confirm.trim().equals("delete " + name)) {
+            redirect.addFlashAttribute("error", "Nothing was deleted: type \"delete " + name + "\" to confirm.");
+            return "redirect:/ui/projects/" + name;
+        }
+        if (!service.deleteProject(name)) {
+            redirect.addFlashAttribute("error", "A pass is running on '" + name + "'; delete it once that has landed.");
+            return "redirect:/ui/projects/" + name;
+        }
+        redirect.addFlashAttribute("message", "Deleting project '" + name
+                + "' in the background. It is removed from the list once its entries are gone.");
+        return "redirect:/ui/projects";
+    }
 }

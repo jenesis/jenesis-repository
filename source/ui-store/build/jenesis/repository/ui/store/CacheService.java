@@ -122,17 +122,9 @@ public class CacheService {
     /** Run {@code action} in the background, then count what it left, and store both; refuses to start while a
      *  pass younger than {@link #STALE_PASS} is running. */
     private boolean pass(String name, String action, Callable<Eviction.Result> work) throws IOException {
-        Properties stored = storage.readConfig(name, STATS_FILE);
-        if (Boolean.parseBoolean(stored.getProperty("running", "false"))) {
-            String started = stored.getProperty("started", "");
-            if (!started.isBlank() && Instant.parse(started).isAfter(Instant.now().minus(STALE_PASS))) {
-                return false;
-            }
+        if (!begin(name, action)) {
+            return false;
         }
-        stored.setProperty("running", "true");
-        stored.setProperty("started", Instant.now().toString());
-        stored.setProperty("last-action", action);
-        storage.writeConfig(name, STATS_FILE, stored);
         passes.start("cache-" + action + "-" + name, () -> {
             String outcome;
             try {
@@ -154,6 +146,60 @@ public class CacheService {
                 storage.writeConfig(name, STATS_FILE, done);
             } catch (IOException | RuntimeException unwritable) {
                 // the next pass overwrites; a stale "running" flag ages out after STALE_PASS
+            }
+        });
+        return true;
+    }
+
+    /** Mark the project running {@code action}, unless a pass younger than {@link #STALE_PASS} already is; whether
+     *  this call is the one that started. */
+    private boolean begin(String name, String action) throws IOException {
+        Properties stored = storage.readConfig(name, STATS_FILE);
+        if (Boolean.parseBoolean(stored.getProperty("running", "false"))) {
+            String started = stored.getProperty("started", "");
+            if (!started.isBlank() && Instant.parse(started).isAfter(Instant.now().minus(STALE_PASS))) {
+                return false;
+            }
+        }
+        stored.setProperty("running", "true");
+        stored.setProperty("started", Instant.now().toString());
+        stored.setProperty("last-action", action);
+        storage.writeConfig(name, STATS_FILE, stored);
+        return true;
+    }
+
+    /**
+     * Delete the project - its entries, its cache settings and its stored figures - in the background, since removing
+     * them walks every entry; whether this call started it. Audited before the deletion starts, as the sweeps are.
+     *
+     * <p>It shares the sweeps' guard and is refused while one runs, because a sweep writes its figures back into the
+     * project when it lands and would bring the project back; for the same reason the deletion writes nothing back
+     * when it succeeds, and says only on failure what it left. The store deletes page by page, so a failed deletion
+     * leaves a project that a second one finishes.
+     *
+     * <p>What names the project elsewhere stays: a credential's grant outlives the project it names, and reaches one
+     * created again under that name. So does a build still writing to it, since a project exists while anything is
+     * under it - the grants are what keep a build out.
+     */
+    public boolean deleteProject(String name) throws IOException {
+        requireProject(name);
+        if (!begin(name, "delete")) {
+            return false;
+        }
+        audit("cache.project.delete", name);
+        passes.start("cache-delete-" + name, () -> {
+            try {
+                storage.deleteDir(name);
+            } catch (IOException | RuntimeException failure) {
+                try {
+                    Properties failed = storage.readConfig(name, STATS_FILE);
+                    failed.setProperty("running", "false");
+                    failed.setProperty("last-action", "delete");
+                    failed.setProperty("last-outcome", "failed: " + failure);
+                    storage.writeConfig(name, STATS_FILE, failed);
+                } catch (IOException | RuntimeException unwritable) {
+                    // the "running" flag ages out after STALE_PASS, and a second deletion finishes this one
+                }
             }
         });
         return true;

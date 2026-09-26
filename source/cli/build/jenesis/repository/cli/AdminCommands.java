@@ -562,7 +562,9 @@ final class AdminCommands {
      * The console's deletion dialog on a terminal: what is lost and that it cannot be undone, then the name typed out.
      * With no terminal to confirm on the caller is told to pass {@code --yes}, which is how a script says it means it.
      */
-    private static boolean confirmed(String name, String warning) {
+    /** Whether the reader typed {@code delete <name>} after the warning; refuses outright with no terminal, which is
+     *  where a script passes {@code --yes} instead. Every deleting verb asks through this one. */
+    static boolean confirmed(String name, String warning) {
         Console console = System.console();
         if (console == null) {
             throw new IllegalArgumentException(warning + " With no terminal to confirm on, pass --yes.");

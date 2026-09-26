@@ -13,6 +13,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Every command reaches the server, at the endpoint it is supposed to reach.
@@ -192,6 +193,26 @@ public class CliBindingTest {
         assertThat(requests.get(1).getUrl())
                 .as("and a clear names the version too, or it clears nothing")
                 .contains("version=1.0");
+    }
+
+    /**
+     * A project deletion is a {@code DELETE} of the project itself, and with no terminal to type the name on it goes
+     * only with {@code --yes}: refused without it, the command sends nothing at all.
+     */
+    @Test
+    void a_cache_project_is_deleted_only_when_confirmed() throws Exception {
+        server.resetRequests();
+        assertThatThrownBy(() -> run("cache", "delete", "agents"))
+                .as("with no terminal and no --yes, nothing is confirmed").isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("--yes");
+        assertThat(server.findAll(RequestPatternBuilder.allRequests())).as("and nothing was sent").isEmpty();
+
+        run("cache", "delete", "agents", "--yes");
+
+        List<LoggedRequest> requests = server.findAll(RequestPatternBuilder.allRequests());
+        assertThat(requests).hasSize(1);
+        assertThat(requests.getFirst().getMethod().toString()).isEqualTo("DELETE");
+        assertThat(requests.getFirst().getUrl()).isEqualTo("/api/cache/projects/agents");
     }
 
     @TestFactory

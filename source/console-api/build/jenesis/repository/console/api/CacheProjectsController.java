@@ -11,6 +11,7 @@ import build.jenesis.repository.ui.store.CacheService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -163,6 +164,24 @@ public class CacheProjectsController {
                                        @RequestHeader(value = Repositories.KEY, required = false) String key,
                                        HttpServletResponse response) throws IOException {
         return pass(name, key, response, CacheService::recount);
+    }
+
+    /**
+     * Delete the project: its entries, its cache settings and its stored figures. Like a sweep it starts in the
+     * background and answers whether this call started it - {@code false} while a pass runs on the project - and the
+     * project is gone from {@code GET /api/cache/projects} once it lands. A credential's grant naming the project is
+     * left where it is.
+     */
+    @DeleteMapping("/api/cache/projects/{name}")
+    public Map<String, Object> delete(@PathVariable("name") String name,
+                                      @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                      HttpServletResponse response) throws IOException {
+        CacheService service = service(key, response);
+        if (service == null) {
+            return Map.of();
+        }
+        RepositoryRequests.rejectTraversal(name);
+        return Map.of("project", name, "started", service.deleteProject(name));
     }
 
     /** One shape for the four passes: they all start work and answer whether this call is the one that started it. */
