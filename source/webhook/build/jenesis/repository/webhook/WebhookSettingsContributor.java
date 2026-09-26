@@ -30,7 +30,7 @@ public final class WebhookSettingsContributor implements SettingsContributor {
                                 + "look rather than as the record. Off unless an operator turns it on: most "
                                 + "deployments have no receiver, and an enabled one with no endpoint configured "
                                 + "still writes a note per publish for the next drain to delete.",
-                        Setting.Kind.BOOLEAN, "false", false).gate(),
+                        Setting.Kind.BOOLEAN, "false", false).gate().essential(),
                 new Setting("webhook-endpoints", "Webhooks", "Webhook endpoints",
                         "One endpoint per line or semicolon: '<https-url> [events]'. 'events' is a comma-list of "
                                 + "'publish,unpublish,quarantine,release,discard,finding,promotion' or '*' (all). "
@@ -41,7 +41,7 @@ public final class WebhookSettingsContributor implements SettingsContributor {
                                 + "'webhook-secrets', keyed by this URL: an endpoint with no entry is delivered "
                                 + "UNSIGNED, and its receiver then cannot tell a genuine event from a POST anyone who "
                                 + "learns this URL can forge.",
-                        Setting.Kind.STRING, "", false, Setting.Scope.TENANT),
+                        Setting.Kind.STRING, "", false, Setting.Scope.TENANT).essential(),
                 new Setting("webhook-secrets", "Webhooks", "Webhook signing secrets",
                         "Per-endpoint HMAC-SHA256 signing secrets, one '<https-url>=<secret>' per line, keyed by the "
                                 + "endpoint URL as it appears in 'webhook-endpoints'. When an endpoint has a matching "
@@ -52,13 +52,13 @@ public final class WebhookSettingsContributor implements SettingsContributor {
                                 + "'jenreg.webhook.unsigned' gauge counts this tenant's endpoints that have none. "
                                 + "Write-only: stored as a secret, so it is redacted on read-back and kept out of the "
                                 + "settings export bundle.",
-                        Setting.Kind.SECRET, "", false, Setting.Scope.TENANT),
+                        Setting.Kind.SECRET, "", false, Setting.Scope.TENANT).essential(),
                 new Setting(WebhookDeliveryTaskProvider.INTERVAL.key(), "Webhooks", "Webhook drain interval",
                         "How often the webhook outbox is drained.",
-                        Setting.Kind.DURATION, WebhookDeliveryTaskProvider.INTERVAL.fallbackText(), false),
+                        Setting.Kind.DURATION, WebhookDeliveryTaskProvider.INTERVAL.fallbackText(), false).advanced(),
                 new Setting("webhook-attempts", "Webhooks", "Webhook retry attempts",
                         "How many times a failing delivery is retried (with exponential backoff) before it is parked.",
-                        Setting.Kind.INTEGER, "5", false),
+                        Setting.Kind.INTEGER, "5", false).advanced(),
                 new Setting("webhook-allow-internal", "Webhooks", "Allow internal webhook targets",
                         "Permit webhook endpoints that resolve to a loopback, private, link-local or cloud-metadata "
                                 + "address, AND plaintext http:// endpoints. Off by default so a per-tenant callback "
@@ -66,6 +66,6 @@ public final class WebhookSettingsContributor implements SettingsContributor {
                                 + "event metadata on the wire in cleartext; a deployment-global operator dial (the "
                                 + "same one the forwarding leg uses for its own targets), enable only for a trusted "
                                 + "internal receiver.",
-                        Setting.Kind.BOOLEAN, "false", false));
+                        Setting.Kind.BOOLEAN, "false", false).essential());
     }
 }

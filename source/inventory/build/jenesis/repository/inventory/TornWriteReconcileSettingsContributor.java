@@ -25,12 +25,12 @@ public final class TornWriteReconcileSettingsContributor implements SettingsCont
                                 + "and left to garbage collection). A listener of the one walk (jenreg.walks) rather "
                                 + "than a sweep of its own, paying no read the walk did not already make; on by "
                                 + "default, and a dry run that flags and counts unless Apply is also set.",
-                        Setting.Kind.BOOLEAN, "true", true),
+                        Setting.Kind.BOOLEAN, "true", true).advanced(),
                 new Setting(TornWriteConsumer.APPLY, "Maintenance", "Apply torn-write repairs",
                         "When the torn-write reconcile is on, actually remove the dangling pointers a walk finds (a "
                                 + "pointer that serves nothing because its blob is gone) rather than only flagging and "
                                 + "counting them. Orphan blobs are always left to garbage collection; a referenced "
                                 + "object is never removed. Off by default, so removal is a deliberate opt-in.",
-                        Setting.Kind.BOOLEAN, "false", true));
+                        Setting.Kind.BOOLEAN, "false", true).advanced());
     }
 }

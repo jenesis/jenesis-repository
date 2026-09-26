@@ -20,7 +20,7 @@ public final class TerraformSettingsContributor implements SettingsContributor {
                         + "a client fetches that document from the host root, so the request carries no "
                         + "repository segment to infer one from. The default is a repository named terraform "
                         + "in the default tenant.",
-                Setting.Kind.STRING, TerraformDiscoveryConfig.DEFAULT_PREFIX, false),
+                Setting.Kind.STRING, TerraformDiscoveryConfig.DEFAULT_PREFIX, false).advanced(),
                 new Setting("terraform.git-hosts", "Formats", "Terraform git hosts",
                         "The git hosts a proxied Terraform module's git source may be fetched from, so the module "
                                 + "downloads through this repository rather than being cloned by the client. Each "
@@ -30,11 +30,11 @@ public final class TerraformSettingsContributor implements SettingsContributor {
                                 + "bitbucket.org names its kind after '=' (github, gitlab or bitbucket), as in "
                                 + "git.example.com=gitlab. Empty by default, since it reaches a third party: to "
                                 + "fetch from the three public hosts, set github.com,gitlab.com,bitbucket.org.",
-                        Setting.Kind.STRING, "", false),
+                        Setting.Kind.STRING, "", false).essential(),
                 new Setting("terraform.git-refuse-unlisted", "Formats", "Refuse Terraform git sources elsewhere",
                         "Whether a proxied Terraform module whose git source cannot be fetched through this "
                                 + "repository - its host is not in the git hosts, or it names no single ref - is "
                                 + "refused rather than handed to the client to clone.",
-                        Setting.Kind.BOOLEAN, "false", false));
+                        Setting.Kind.BOOLEAN, "false", false).essential());
     }
 }

@@ -20,6 +20,6 @@ public final class RubyGemsSettingsContributor implements SettingsContributor {
                                 + "default, which reads /api/v1/attestations/ under the proxied upstream - what "
                                 + "rubygems.org serves. A mirror without the API answers 404, which is absence "
                                 + "rather than a failure. Applies on the next restart.",
-                        Setting.Kind.STRING, "", false));
+                        Setting.Kind.STRING, "", false).advanced());
     }
 }

@@ -19,11 +19,11 @@ public final class ProvenanceSweepSettingsContributor implements SettingsContrib
                                 + "notification could not - a delete that failed transiently, a descriptor with no "
                                 + "blob identity, and everything written before the reaper was installed. Off by "
                                 + "default: it walks the attestation space.",
-                        Setting.Kind.BOOLEAN, "false", true),
+                        Setting.Kind.BOOLEAN, "false", true).essential(),
                 new Setting(ProvenanceAttestationSweepProvider.INTERVAL.key(), "Compliance",
                         "Provenance attestation sweep interval",
                         "How often the attestation sweep runs.",
                         Setting.Kind.DURATION,
-                        ProvenanceAttestationSweepProvider.INTERVAL.fallbackText(), true));
+                        ProvenanceAttestationSweepProvider.INTERVAL.fallbackText(), true).advanced());
     }
 }

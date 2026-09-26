@@ -16,9 +16,9 @@ public final class GitHubSettingsContributor implements SettingsContributor {
         return List.of(
                 new Setting("github", "Compliance", "GitHub advisories",
                         "Consult the GitHub Advisory Database.",
-                        Setting.Kind.BOOLEAN, "false", false),
+                        Setting.Kind.BOOLEAN, "false", false).essential(),
                 new Setting("github-endpoint", "Compliance", "GitHub endpoint",
                         "The GitHub REST API base URL, for a self-hosted GitHub or a proxy.",
-                        Setting.Kind.URI, "https://api.github.com", false));
+                        Setting.Kind.URI, "https://api.github.com", false).advanced());
     }
 }

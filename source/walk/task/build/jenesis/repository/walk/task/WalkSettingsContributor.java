@@ -22,7 +22,7 @@ public final class WalkSettingsContributor implements SettingsContributor {
                                 + "and self-heal route) from one shared enumeration of the pointer roots. On by "
                                 + "default: without a consumer nothing is enumerated, and without an installed walk "
                                 + "implementation no pass schedules at all.",
-                        Setting.Kind.BOOLEAN, "true", true).gate(),
+                        Setting.Kind.BOOLEAN, "true", true).gate().advanced(),
                 new Setting(WalkSchedules.SETTING, "Maintenance", "Walks",
                         "The walks of the store this deployment schedules, as a JSON array of entries - each a name, "
                                 + "a cron expression (Spring's grammar with seconds, in UTC) and the consumers that "
@@ -38,6 +38,6 @@ public final class WalkSettingsContributor implements SettingsContributor {
                                 + "reason. Adding collect to the daily entry returns reclaimed space within the "
                                 + "day instead of within the week, and multiplies that part of the bill by "
                                 + "seven; a store that does not charge per request pays neither way.",
-                        Setting.Kind.STRING, WalkSchedules.DEFAULT, true));
+                        Setting.Kind.STRING, WalkSchedules.DEFAULT, true).essential());
     }
 }

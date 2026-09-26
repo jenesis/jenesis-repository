@@ -21,7 +21,7 @@ public final class CachingSettingsContributor implements SettingsContributor {
     @Override
     public List<Setting> settings() {
         return List.of(
-                new Setting(StoreCache.TTL_SETTING, "Operations", "Store cache ttl",
+                new Setting(StoreCache.TTL_SETTING, "Caches", "Store cache ttl",
                         "How long a node serves a credential, a settings document, a ceiling or a tenant list it has "
                                 + "already read before asking the store again. On the node that made a write the cache "
                                 + "is exact regardless; across nodes this is the bound on how stale another node's "
@@ -30,8 +30,8 @@ public final class CachingSettingsContributor implements SettingsContributor {
                                 + "Credentials are the exception and no longer need this turned down: they carry a "
                                 + "deployment epoch that every grant and revocation bumps, so a revoked key stops "
                                 + "everywhere within seconds whatever this says - see the auth cache ttl.",
-                        Setting.Kind.DURATION, StoreCache.DEFAULT_TTL_TEXT, false),
-                new Setting(MissMemory.TTL_SETTING, "Operations", "Miss memory ttl",
+                        Setting.Kind.DURATION, StoreCache.DEFAULT_TTL_TEXT, false).advanced(),
+                new Setting(MissMemory.TTL_SETTING, "Caches", "Miss memory ttl",
                         "How long a node remembers that a coordinate it looked for was not there, and answers the "
                                 + "same probe from memory instead of reading the store again - a build tool asking "
                                 + "for a version range, a missing snapshot or an optional classifier asks the same "
@@ -41,8 +41,8 @@ public final class CachingSettingsContributor implements SettingsContributor {
                                 + "publish once its entry expires, which is what this bounds. Node-local, held to a "
                                 + "hundred thousand keys, dropped with the caches by POST /api/admin/caches/clear. 0 "
                                 + "switches it off and every probe is the store's.",
-                        Setting.Kind.DURATION, MissMemory.DEFAULT_TTL_TEXT, false),
-                new Setting(DocumentMemory.TTL_SETTING, "Operations", "Document memory ttl",
+                        Setting.Kind.DURATION, MissMemory.DEFAULT_TTL_TEXT, false).advanced(),
+                new Setting(DocumentMemory.TTL_SETTING, "Caches", "Document memory ttl",
                         "How long a node serves a listing it has already read - a packument, a Simple page, a "
                                 + "maven-metadata.xml, a Packages file, a tag list - from memory before reading the "
                                 + "store again, so a burst of builds starting at once costs the store one read per "
@@ -57,19 +57,19 @@ public final class CachingSettingsContributor implements SettingsContributor {
                                 + "a listing's compare-and-set is read past this memory for exactly that reason. "
                                 + "Node-local, held to sixty-four megabytes, dropped with the caches by POST "
                                 + "/api/admin/caches/clear. 0 switches it off.",
-                        Setting.Kind.DURATION, DocumentMemory.DEFAULT_TTL_TEXT, false),
-                new Setting(Authorization.CACHE_TTL_SETTING, "Operations", "Credential cache ttl",
+                        Setting.Kind.DURATION, DocumentMemory.DEFAULT_TTL_TEXT, false).advanced(),
+                new Setting(Authorization.CACHE_TTL_SETTING, "Caches", "Credential cache ttl",
                         "How long a node serves a credential's documents before asking the store again. Longer than "
                                 + "the store cache ttl on purpose: an authorization happens on every request, and "
                                 + "the auth epoch - one small document every credential mutation bumps, re-read every "
                                 + "few seconds - is what bounds how long a revocation takes to reach another node, "
                                 + "so this bounds only how often a busy node re-reads a credential it already has. "
                                 + "Applies on restart.",
-                        Setting.Kind.DURATION, Authorization.DEFAULT_CACHE_TTL_TEXT, false),
+                        Setting.Kind.DURATION, Authorization.DEFAULT_CACHE_TTL_TEXT, false).advanced(),
                 new Setting(StoredCounter.FLUSH_SETTING, "Maintenance", "Counter flush cadence",
                         "How long a node holds the quota and folder-size deltas its publishes produce before folding "
                                 + "them into one compare-and-set per counter; the node itself counts them at once. "
                                 + "0 writes every delta as it happens, one compare-and-set per publish per counter.",
-                        Setting.Kind.DURATION, StoredCounter.DEFAULT_FLUSH_TEXT, false));
+                        Setting.Kind.DURATION, StoredCounter.DEFAULT_FLUSH_TEXT, false).advanced());
     }
 }

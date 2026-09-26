@@ -226,7 +226,8 @@ public class SettingsAdmin {
                              Optional<Pin> pin, String module) {
         return new SettingView(setting.key(), setting.group(), setting.label(), setting.description(),
                 setting.kind().name(), setting.choices(), effective, baseline, overridden, setting.live(),
-                highImpact(setting), pin.isPresent(), pin.map(Pin::source).orElse(""), module);
+                highImpact(setting), pin.isPresent(), pin.map(Pin::source).orElse(""), module,
+                setting.tier() == Setting.Tier.ADVANCED);
     }
 
     /** The JPMS module a key is attributed to - the contributor that declares it, or {@link SettingsDocuments#NEUTRAL}
@@ -1009,6 +1010,21 @@ public class SettingsAdmin {
 
     /** One area's settings, for a section on the form. */
     public record Group(String name, List<SettingView> settings) {
+
+        /** The settings an operator is expected to decide, which the section shows. */
+        public List<SettingView> essentials() {
+            return settings.stream().filter(setting -> !setting.advanced()).toList();
+        }
+
+        /** The settings that tune what was decided, which the section folds behind a disclosure. */
+        public List<SettingView> tuning() {
+            return settings.stream().filter(SettingView::advanced).toList();
+        }
+
+        /** How many of the folded settings carry a value of their own, which the disclosure says. */
+        public long tuningChanged() {
+            return tuning().stream().filter(SettingView::overridden).count();
+        }
     }
 
     /**
@@ -1075,11 +1091,12 @@ public class SettingsAdmin {
      *  on save, whether it is pinned from above the store (with the phrase naming what pins it) - a pinned knob
      *  renders greyed and inert - and the JPMS module that contributes it ({@link SettingsDocuments#NEUTRAL the neutral
      *  core} for a core dial), so the settings screen attributes each knob to its module and the modules screen groups
-     *  by it. The presentation helpers keep the mapping out of the template so a view holds no logic. */
+     *  by it - and whether it is {@link Setting.Tier#ADVANCED tuning}, which the screen folds away. The presentation
+     *  helpers keep the mapping out of the template so a view holds no logic. */
     public record SettingView(String key, String group, String label, String description,
                               String kind, List<String> choices, String value, String defaultValue,
                               boolean overridden, boolean live, boolean highImpact,
-                              boolean pinned, String pinnedBy, String module) {
+                              boolean pinned, String pinnedBy, String module, boolean advanced) {
 
         public SettingView {
             choices = List.copyOf(choices);

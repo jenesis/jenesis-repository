@@ -22,6 +22,6 @@ public final class KeyLoginSettingsContributor implements SettingsContributor {
                         + "prints a one-time key at start, valid for an hour; an operator may also set a full-access "
                         + "admin key (JENREG_UI_ADMIN_KEY) and issue scoped login keys. Switch it off once single "
                         + "sign-on (OIDC) or a directory (LDAP) signs people in. Applies on restart.",
-                Setting.Kind.BOOLEAN, KeyLoginMechanism.ON_BY_DEFAULT, false).gate());
+                Setting.Kind.BOOLEAN, KeyLoginMechanism.ON_BY_DEFAULT, false).gate().essential());
     }
 }

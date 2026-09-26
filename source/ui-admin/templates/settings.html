@@ -19,42 +19,10 @@
     </label>
     <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
 
-    <article th:each="g : ${groups}" class="setting-group">
-        <h2 th:text="${g.name}">Group</h2>
-        <th:block th:each="s : ${g.settings}">
-            <div th:replace="~{fragments :: settingRow(${s}, '/settings')}"></div>
-        </th:block>
-    </article>
-
-    <script>
-        // In-memory option search: a client-side filter matching each knob's key *and* its
-        // documentation text, so a setting is found by what it does, not only its name. Purely on the
-        // catalogue already rendered - no request, no server round-trip. Each `.setting` carries a
-        // `data-search` string of its key + label + description; a group collapses when all its knobs
-        // are filtered out.
-        (function () {
-            var input = document.getElementById('setting-filter');
-            if (!input) return;
-            var settings = Array.prototype.slice.call(document.querySelectorAll('.setting'));
-            var groups = Array.prototype.slice.call(document.querySelectorAll('.setting-group'));
-            var noMatch = document.getElementById('setting-nomatch');
-            function apply() {
-                var query = input.value.trim().toLowerCase();
-                var anyVisible = false;
-                settings.forEach(function (setting) {
-                    var haystack = (setting.getAttribute('data-search') || '').toLowerCase();
-                    var show = query === '' || haystack.indexOf(query) !== -1;
-                    setting.hidden = !show;
-                    if (show) anyVisible = true;
-                });
-                groups.forEach(function (group) {
-                    group.hidden = !group.querySelector('.setting:not([hidden])');
-                });
-                if (noMatch) noMatch.hidden = query === '' || anyVisible;
-            }
-            input.addEventListener('input', apply);
-        })();
-    </script>
+    <th:block th:each="g : ${groups}">
+        <article th:replace="~{fragments :: settingGroup(${g}, '/ui/settings/save', '/settings', 'changed', 'default',
+                'its default', '')}"></article>
+    </th:block>
 </main>
 </body>
 </html>

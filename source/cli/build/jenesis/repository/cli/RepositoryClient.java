@@ -1856,10 +1856,11 @@ public final class RepositoryClient {
 
     /** One runtime setting as the API returns it. {@code kind} is the value kind ({@code SECRET}, {@code CHOICE}, …)
      *  so the CLI masks a secret; a SECRET's {@code value} and {@code defaultValue} come back {@code null} - the server
-     *  never reads a secret back - while {@code overridden}/{@code pinned} still say whether it is set. */
+     *  never reads a secret back - while {@code overridden}/{@code pinned} still say whether it is set.
+     *  {@code advanced} marks tuning, whose default nearly every deployment keeps. */
     public record Setting(String key, String kind, String value, String defaultValue, boolean overridden,
                           boolean appliesImmediately, boolean pinned, String pinnedBy,
-                          String group, String label, String description) {
+                          String group, String label, String description, boolean advanced) {
     }
 
     /** The first-run setup guide the server serves at {@code /api/setup}. */

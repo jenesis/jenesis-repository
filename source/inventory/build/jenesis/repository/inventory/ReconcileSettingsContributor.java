@@ -22,6 +22,6 @@ public final class ReconcileSettingsContributor implements SettingsContributor {
                                 + "license index, and a crashed eviction's orphan facts and derived rows go. A listener "
                                 + "of the one walk (jenreg.walks) rather than a sweep of its own; on by default, and "
                                 + "nothing until a walk runs.",
-                        Setting.Kind.BOOLEAN, "true", true));
+                        Setting.Kind.BOOLEAN, "true", true).advanced());
     }
 }

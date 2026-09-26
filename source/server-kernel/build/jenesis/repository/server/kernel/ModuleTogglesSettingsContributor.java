@@ -77,7 +77,7 @@ public final class ModuleTogglesSettingsContributor implements SettingsContribut
                 settings.add(new Setting(name, "Modules", name,
                         "Enable " + what + "; false removes it at the next start, degrading exactly like an "
                                 + "absent module.",
-                        Setting.Kind.BOOLEAN, "true", false));
+                        Setting.Kind.BOOLEAN, "true", false).advanced());
             }
         });
         return List.copyOf(settings);

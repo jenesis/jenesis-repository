@@ -188,7 +188,7 @@ public class ConfigController {
         return new SettingView(setting.key(), setting.kind().name(),
                 secret ? null : effective, secret ? null : baseline, overridden, setting.live(),
                 pin.isPresent(), pin.map(PinnedSettings.Pin::source).orElse(""),
-                setting.group(), setting.label(), setting.description());
+                setting.group(), setting.label(), setting.description(), setting.tier() == Setting.Tier.ADVANCED);
     }
 
     /** Set a runtime override for one editable setting; unknown keys are rejected so only the catalogued settings
@@ -832,7 +832,7 @@ public class ConfigController {
      *  read back - while {@code overridden}/{@code pinned} still say whether it is set. */
     public record SettingView(String key, String kind, String value, String defaultValue, boolean overridden,
                               boolean appliesImmediately, boolean pinned, String pinnedBy,
-                              String group, String label, String description) {
+                              String group, String label, String description, boolean advanced) {
     }
 
     /** The first-run setup guide as the API serves it: the steps, each with the rows it is about. */

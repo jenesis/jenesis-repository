@@ -25,6 +25,6 @@ public final class WithheldReconcileSettingsContributor implements SettingsContr
                                 + "still claims the bytes AND no /quarantine review pointer or holds/ record covers "
                                 + "them, so a rejected (marker-only) manifest stays withheld. A listener of the one "
                                 + "walk (jenreg.walks) rather than a sweep of its own; on by default.",
-                        Setting.Kind.BOOLEAN, "true", true));
+                        Setting.Kind.BOOLEAN, "true", true).advanced());
     }
 }

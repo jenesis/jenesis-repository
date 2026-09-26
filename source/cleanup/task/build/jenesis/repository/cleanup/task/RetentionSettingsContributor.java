@@ -23,35 +23,35 @@ public final class RetentionSettingsContributor implements SettingsContributor {
                                 + "than one enabled engine needs this setting to disambiguate them. A named "
                                 + "selection that no installed engine answers to fails fast rather than silently "
                                 + "degrading to no retention.",
-                        Setting.Kind.STRING, "", true),
+                        Setting.Kind.STRING, "", true).essential(),
                 new Setting("keep-last", "Retention", "Keep last",
                         "Keep at most this many newest versions per coordinate; 0 disables the count cap.",
-                        Setting.Kind.INTEGER, "0", true),
+                        Setting.Kind.INTEGER, "0", true).essential(),
                 new Setting("max-age", "Retention", "Maximum age",
                         "Evict versions older than this ISO-8601 duration; empty disables age eviction.",
-                        Setting.Kind.DURATION, "", true),
+                        Setting.Kind.DURATION, "", true).essential(),
                 new Setting("prerelease-expiry", "Retention", "Prerelease expiry",
                         "Evict prereleases older than this ISO-8601 duration; empty disables.",
-                        Setting.Kind.DURATION, "", true),
+                        Setting.Kind.DURATION, "", true).essential(),
                 new Setting("not-downloaded-for", "Retention", "Not downloaded for",
                         "Evict versions not downloaded within this ISO-8601 duration; needs download tracking.",
-                        Setting.Kind.DURATION, "", true),
+                        Setting.Kind.DURATION, "", true).essential(),
                 new Setting("scheduled-cleanup", "Retention", "Scheduled cleanup",
                         "Run the scheduled reaps: finished import jobs past their time-to-live and a quota'd "
                                 + "tenant's usage recount. Retention, garbage collection and the folder-size "
                                 + "roll-up ride the walks setting's retention entry instead.",
-                        Setting.Kind.BOOLEAN, "true", true).gate(),
+                        Setting.Kind.BOOLEAN, "true", true).gate().essential(),
                 new Setting(CleanupTaskProvider.INTERVAL.key(), "Retention", "Cleanup interval",
                         "How often the scheduled reaps run.",
-                        Setting.Kind.DURATION, CleanupTaskProvider.INTERVAL.fallbackText(), true),
-                new Setting(CleanupTask.IMPORT_JOB_TTL.key(), "Retention", "Import job time-to-live",
+                        Setting.Kind.DURATION, CleanupTaskProvider.INTERVAL.fallbackText(), true).advanced(),
+                new Setting(CleanupTask.IMPORT_JOB_TTL.key(), "Record lifetimes", "Import job time-to-live",
                         "Auto-dismiss completed or failed migration jobs (and their remembered sources) this "
                                 + "ISO-8601 duration after the sweep first sees them finished; a running job is "
                                 + "never touched. PT0S disables the auto-dismiss.",
-                        Setting.Kind.DURATION, CleanupTask.IMPORT_JOB_TTL.fallbackText(), true),
-                new Setting(CleanupTask.EXPORT_JOB_TTL.key(), "Retention", "Export job time-to-live",
+                        Setting.Kind.DURATION, CleanupTask.IMPORT_JOB_TTL.fallbackText(), true).advanced(),
+                new Setting(CleanupTask.EXPORT_JOB_TTL.key(), "Record lifetimes", "Export job time-to-live",
                         "How long a finished export job's status stays before the scheduled cleanup dismisses it. "
                                 + "Zero, negative or blank keeps every job until an operator dismisses it by hand.",
-                        Setting.Kind.DURATION, CleanupTask.EXPORT_JOB_TTL.fallbackText(), true));
+                        Setting.Kind.DURATION, CleanupTask.EXPORT_JOB_TTL.fallbackText(), true).advanced());
     }
 }

@@ -45,30 +45,30 @@ public final class ConsistencySettingsContributor implements SettingsContributor
                         "How recently a node must have published its fingerprint to be counted live. A node quiet "
                                 + "for longer is not yet dead - it is simply not compared, so a paused or restarting "
                                 + "node does not read as divergent.",
-                        Setting.Kind.DURATION, ConsistencyReport.Settings.DEFAULT_STALENESS_WINDOW, false),
+                        Setting.Kind.DURATION, ConsistencyReport.Settings.DEFAULT_STALENESS_WINDOW, false).advanced(),
                 new Setting("consistency.sweep-interval", GROUP, "Consistency sweep interval",
                         "How often a node publishes its own fingerprint and compares the fleet's. Shorter detects "
                                 + "divergence sooner and costs one small read and write per node per sweep.",
-                        Setting.Kind.DURATION, ConsistencyReport.Settings.DEFAULT_SWEEP_INTERVAL, false),
+                        Setting.Kind.DURATION, ConsistencyReport.Settings.DEFAULT_SWEEP_INTERVAL, false).advanced(),
                 new Setting("consistency.sweep-intervals", GROUP, "Sweeps before a lagging node is stuck",
                         "How many sweep intervals a node may fail to advance its cursor before it is reported "
                                 + "stuck rather than merely behind. A count of sweeps, not a duration: the budget "
                                 + "is this many times the sweep interval.",
-                        Setting.Kind.INTEGER, ConsistencyReport.Settings.DEFAULT_SWEEP_INTERVALS, false),
+                        Setting.Kind.INTEGER, ConsistencyReport.Settings.DEFAULT_SWEEP_INTERVALS, false).advanced(),
                 new Setting("consistency.dead-after", GROUP, "Silence before a node is dead",
                         "How long a node may publish nothing before the fleet reports it dead rather than stale. "
                                 + "Longer tolerates a slow restart; shorter surfaces a lost node sooner.",
-                        Setting.Kind.DURATION, ConsistencyReport.Settings.DEFAULT_DEAD_AFTER, false),
+                        Setting.Kind.DURATION, ConsistencyReport.Settings.DEFAULT_DEAD_AFTER, false).advanced(),
                 new Setting("consistency.forget-after", GROUP, "How long a dead node is remembered",
                         "How long a dead node's fingerprint is kept before the sweep removes it, so a "
                                 + "decommissioned node leaves the report rather than sitting in it for good.",
-                        Setting.Kind.DURATION, ConsistencyReport.Settings.DEFAULT_FORGET_AFTER, false),
+                        Setting.Kind.DURATION, ConsistencyReport.Settings.DEFAULT_FORGET_AFTER, false).advanced(),
                 new Setting("consistency.heartbeat", GROUP, "Fingerprint publish interval",
                         "How often this node publishes its own fingerprint for the fleet to compare. Left unset it "
                                 + "follows the sweep interval above, which is why it has no default of its own; set "
                                 + "it only to publish more often than the fleet compares. Never shorter than one "
                                 + "second, whatever is asked for.",
-                        Setting.Kind.DURATION, "", false));
+                        Setting.Kind.DURATION, "", false).advanced());
     }
 
     @Override

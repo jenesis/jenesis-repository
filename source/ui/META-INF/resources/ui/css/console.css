@@ -1125,6 +1125,16 @@ main .app-switch {
 .setting, .setting-doc, .module-card {
     overflow-wrap: anywhere;
 }
+/* A group's advanced settings, folded under the ones an operator decides: the fold is set off by a rule above it,
+   and its count reads as a note rather than as a heading. */
+.setting-advanced {
+    margin: 1rem 0 0;
+    padding-top: .75rem;
+    border-top: 1px solid var(--pico-muted-border-color);
+}
+.setting-advanced > summary small {
+    color: var(--app-muted-text);
+}
 
 /* ---- Narrow screens --------------------------------------------------------------------------------------- */
 /* Below the documentation's breakpoint the groups leave the header for the sidebar, which folds away behind the

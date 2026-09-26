@@ -13,14 +13,14 @@ public final class QuarantineSettingsContributor implements SettingsContributor 
     @Override
     public List<Setting> settings() {
         return List.of(
-                new Setting(QuarantineRetentionTask.RETENTION.key(), "Retention", "Quarantine log retention",
+                new Setting(QuarantineRetentionTask.RETENTION.key(), "Record lifetimes", "Quarantine log retention",
                         "Remove gate-decision log rows older than this ISO-8601 duration on the scheduled cleanup "
                                 + "pass; a still-held path keeps its verdict whatever its age. PT0S disables age "
                                 + "pruning.",
-                        Setting.Kind.DURATION, QuarantineRetentionTask.RETENTION.fallbackText(), true),
-                new Setting("quarantine-log-cap", "Retention", "Quarantine log cap",
+                        Setting.Kind.DURATION, QuarantineRetentionTask.RETENTION.fallbackText(), true).essential(),
+                new Setting("quarantine-log-cap", "Record lifetimes", "Quarantine log cap",
                         "Keep at most this many newest gate-decision log rows; 0 disables the count cap.",
-                        Setting.Kind.INTEGER, "0", true),
+                        Setting.Kind.INTEGER, "0", true).advanced(),
                 new Setting("strict-hold-mapping", "Compliance", "Strict hold-mapping",
                         "Off by default: after an accepted publish through a blobs-namespace format, the publish-time "
                                 + "hold-mapping round-trip check verifies the format's blobKeys/servedPaths resolve the "
@@ -29,6 +29,6 @@ public final class QuarantineSettingsContributor implements SettingsContributor 
                                 + "Turn it on to also FAIL such a publish rather than only alarm - on in every test "
                                 + "config so a wiring regression fails on the first publish; off in production so one "
                                 + "broken format cannot DoS publishes.",
-                        Setting.Kind.BOOLEAN, "false", true));
+                        Setting.Kind.BOOLEAN, "false", true).advanced());
     }
 }

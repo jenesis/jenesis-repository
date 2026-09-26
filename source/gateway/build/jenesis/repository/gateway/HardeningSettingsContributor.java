@@ -23,13 +23,13 @@ public final class HardeningSettingsContributor implements SettingsContributor {
                                 + "records the digest-pinned verdict, and evicts any that re-screen non-ALLOW so a "
                                 + "subsequent request re-fetches through the hardened leg. A converged pass re-screens "
                                 + "nothing.",
-                        Setting.Kind.BOOLEAN, "false", true).gate(),
+                        Setting.Kind.BOOLEAN, "false", true).gate().essential(),
                 new Setting(MigrationRescreenTaskProvider.INTERVAL.key(), "Hardening proxy",
                         "Migration re-screen interval",
                         "How often the migration re-screen sweep runs, as an ISO-8601 duration. Daily by default: "
                                 + "every pass lists every cached artifact of every hardened repository, and a "
                                 + "late-flipped repository is verified fail-closed on every read until the sweep "
                                 + "reaches it.",
-                        Setting.Kind.DURATION, MigrationRescreenTaskProvider.INTERVAL.fallbackText(), true));
+                        Setting.Kind.DURATION, MigrationRescreenTaskProvider.INTERVAL.fallbackText(), true).advanced());
     }
 }

@@ -29,37 +29,37 @@ public final class CoreSettingsContributor implements SettingsContributor {
                 new Setting("vulnerability-threshold", "Compliance", "Vulnerability threshold",
                         "Reject vulnerabilities at or above this CVSS band; NONE disables the check. Defaults to "
                                 + "CRITICAL (the secure floor); an operator sets NONE to opt out.",
-                        Setting.Kind.CHOICE, SEVERITIES, CoreDefaults.VULNERABILITY_THRESHOLD, true),
+                        Setting.Kind.CHOICE, SEVERITIES, CoreDefaults.VULNERABILITY_THRESHOLD, true).essential(),
                 new Setting("malware-action", "Compliance", "Malware action",
                         "Verdict for a package the feed marks malicious. Defaults to REJECT, as the vulnerability "
                                 + "and deny-list dimensions do: a curated malicious-package record is a more certain "
                                 + "signal than a severity score, so it should not refuse less. An operator softens "
                                 + "it to QUARANTINE to hold such a package for review instead.",
-                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.MALWARE_ACTION, true),
+                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.MALWARE_ACTION, true).essential(),
                 new Setting("vulnerability-action", "Compliance", "Vulnerability action",
                         "Verdict for an artifact whose advisories reach the threshold above. Defaults to REJECT "
                                 + "(the secure floor); an operator softens it to QUARANTINE to review such artifacts "
                                 + "rather than refuse them outright, which is what the malicious-package dimension "
                                 + "has always allowed. REJECT refuses the publish and stores nothing; QUARANTINE "
                                 + "stores the bytes and withholds them until a reviewer releases or discards them.",
-                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.VULNERABILITY_ACTION, true),
+                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.VULNERABILITY_ACTION, true).essential(),
                 new Setting("deny-list", "Compliance", "Deny list",
                         "Comma-separated coordinates an operator forbids; always refused.",
-                        Setting.Kind.STRING, "", true),
+                        Setting.Kind.STRING, "", true).essential(),
                 new Setting("deny-list-action", "Compliance", "Deny list action",
                         "Verdict for a coordinate the deny list names. Defaults to REJECT (the secure floor); an "
                                 + "operator softens it to QUARANTINE to hold such coordinates for review.",
-                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.DENY_LIST_ACTION, true),
+                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.DENY_LIST_ACTION, true).essential(),
                 new Setting("proxy-enabled", "Proxy", "Pull-through proxy",
                         "Proxy reads that miss locally from the upstreams, caching and bridging them.",
-                        Setting.Kind.BOOLEAN, CoreDefaults.PROXY_ENABLED, true),
+                        Setting.Kind.BOOLEAN, CoreDefaults.PROXY_ENABLED, true).essential(),
                 new Setting("immaturity-hold-days", "Proxy", "Immaturity hold",
                         "Quarantine proxied artifacts the upstream published within this many days; 0 disables. "
                                 + "Defaults to 2 (the secure floor): a brand-new upstream version is held for review "
                                 + "over the highest-risk window in which a typosquat or compromised release is usually "
                                 + "yanked. Fail-open (only bites on an upstream Last-Modified date); an operator raises "
                                 + "it or sets 0 to disable.",
-                        Setting.Kind.INTEGER, "2", true),
+                        Setting.Kind.INTEGER, "2", true).essential(),
                 new Setting("proxy-allow-internal", "Proxy", "Allow internal proxy targets",
                         "Permit proxy upstreams, and the download URLs an upstream document advertises, that are "
                                 + "plain http or resolve to a loopback, private, link-local or cloud-metadata address. "
@@ -69,18 +69,18 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "an internal one lets an upstream steer the fetch into this deployment's own network "
                                 + "(SSRF). A deployment-global operator dial - one question, one answer, for every "
                                 + "format - enable only for a trusted internal or plaintext mirror.",
-                        Setting.Kind.BOOLEAN, "false", false),
+                        Setting.Kind.BOOLEAN, "false", false).essential(),
                 new Setting("cleanup-lease", "Operations", "Maintenance lease",
                         "How long one node holds the background-maintenance lease; keep under the task intervals.",
-                        Setting.Kind.DURATION, "PT10M", false),
-                new Setting("default-tenant", "Defaults", "Default tenant",
+                        Setting.Kind.DURATION, "PT10M", false).advanced(),
+                new Setting("default-tenant", "Tenancy", "Default tenant",
                         "Tenant a request resolves to when its key carries none. Applies on the next restart: the "
                                 + "routing legs pick a new value up immediately, but the tenants directory resolves "
                                 + "once at boot, so until the deployment restarts the console's instance list, the "
                                 + "orphan diagnostic and the purge keep naming the previous default while keyless "
                                 + "traffic has already moved.",
-                        Setting.Kind.STRING, Scopes.DEFAULT_TENANT, false),
-                new Setting("block-private-import-hosts", "Defaults", "Block private import hosts",
+                        Setting.Kind.STRING, Scopes.DEFAULT_TENANT, false).essential(),
+                new Setting("block-private-import-hosts", "Network", "Block private import hosts",
                         "Reject a migration URL - an import's source or an export's target - that is plaintext http, "
                                 + "or that resolves to a loopback, link-local or private address. A migration runs "
                                 + "server-side with a credential attached, so a plaintext URL hands it to any "
@@ -89,17 +89,17 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "identically on the API and console legs; an operator sets it false to migrate from "
                                 + "or to an internal or plaintext repository - the one dial, covering both, so "
                                 + "neither can be opted out of alone.",
-                        Setting.Kind.BOOLEAN, "true", false),
-                new Setting("trusted-proxies", "Defaults", "Trusted proxies",
+                        Setting.Kind.BOOLEAN, "true", false).essential(),
+                new Setting("trusted-proxies", "Network", "Trusted proxies",
                         "Comma-separated CIDRs of reverse proxies whose X-Forwarded-For, X-Forwarded-Proto and "
                                 + "X-Forwarded-Host are believed.",
-                        Setting.Kind.STRING, "", false),
-                new Setting("public-url", "Defaults", "Public URL",
+                        Setting.Kind.STRING, "", false).essential(),
+                new Setting("public-url", "Network", "Public URL",
                         "The address clients reach this deployment at (https://repo.example.com), for the absolute "
                                 + "URLs generated indexes carry. Set it behind a front door that rewrites paths or "
                                 + "sends no forwarded headers; unset, the request's own scheme and host are used, or "
                                 + "a trusted proxy's forwarded ones.",
-                        Setting.Kind.STRING, "", false));
+                        Setting.Kind.STRING, "", false).essential());
     }
 
     /** The core's dials are neutral: they render in the catalogue ({@link SettingsContributor#all()}) but stay out of

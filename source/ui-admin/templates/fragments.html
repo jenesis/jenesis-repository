@@ -83,7 +83,16 @@
      here once for the settings screen and the first-run setup guide, which shows the same rows for the keys each step
      names. `s` is a SettingsAdmin.SettingView; `back` is the console path the save returns to (the settings screen
      vets it). Both forms post to /settings/save, so a value applied from either screen is applied by one path. */-->
-<div th:fragment="settingRow(s, back)" class="setting"
+<div th:fragment="settingRow(s, back)"
+     th:replace="~{fragments :: settingRowFor(${s}, '/ui/settings/save', ${back}, 'changed', 'default', 'its default',
+             '')}"></div>
+
+<!--/* settingRowFor: the row itself, for either layer it edits. The deployment's settings and a tenant's overrides
+     differ only in where a value is saved and what it falls back to, so the one row takes those as parameters rather
+     than being drawn twice: `action` is the save route, `back` the return path (null where the route takes none),
+     `changed` the badge an override carries, `baseline` what the value falls back to, `revertTo` the same in a
+     sentence, and `scope` what a confirmation adds (" for this tenant", or nothing). */-->
+<div th:fragment="settingRowFor(s, action, back, changed, baseline, revertTo, scope)" class="setting"
      th:attr="data-search=|${s.key} ${s.label} ${s.description} ${s.module}|">
     <div class="setting-head">
         <div>
@@ -94,17 +103,18 @@
         <div class="setting-badges">
             <span class="app-badge app-badge--pass" th:if="${s.live}">live</span>
             <span class="app-badge" th:unless="${s.live}">↻ restart</span>
-            <span class="app-badge app-badge--warn" th:if="${s.overridden and !s.pinned}">changed</span>
+            <span class="app-badge app-badge--warn" th:if="${s.overridden and !s.pinned}"
+                  th:text="${changed}">changed</span>
             <span class="app-badge" th:if="${s.pinned}"
                   th:title="|This value is fixed by ${s.pinnedBy} and cannot be changed from the store.|"
                   th:text="|🔒 pinned by ${s.pinnedBy}|">🔒 pinned</span>
             <span class="app-badge app-badge--danger" th:if="${s.highImpact}"
                   title="A change here can start rejecting or admitting packages.">high-impact</span>
-            <form method="post" th:action="@{/ui/settings/save}" class="setting-revert"
+            <form method="post" th:action="@{${action}}" class="setting-revert"
                   th:if="${s.overridden and !s.pinned}"
-                  th:attr="data-confirm=${s.highImpact} ? 'Revert this high-impact policy knob to its default?' : null">
+                  th:attr="data-confirm=${s.highImpact} ? |Revert this high-impact policy knob to ${revertTo}?| : null">
                 <input type="hidden" name="key" th:value="${s.key}">
-                <input type="hidden" name="return" th:value="${back}">
+                <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
                 <input type="hidden" name="value" value="">
                 <button class="secondary outline" type="submit">Revert</button>
             </form>
@@ -113,16 +123,17 @@
     <p class="setting-doc" th:text="${s.description}">What this setting does.</p>
     <p class="setting-values">
         <span>effective: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
-        <span>default: <span th:text="${s.defaultDisplay()}">default</span></span>
+        <span><th:block th:text="${baseline}">default</th:block>: <span
+                th:text="${s.defaultDisplay()}">default</span></span>
     </p>
     <th:block th:if="${s.toggle()}">
-        <div th:replace="~{fragments :: settingSwitch(${s}, '/ui/settings/save', ${back},
-                'Apply this high-impact policy change?')}"></div>
+        <div th:replace="~{fragments :: settingSwitch(${s}, ${action}, ${back},
+                |Apply this high-impact policy change${scope}?|)}"></div>
     </th:block>
-    <form method="post" th:action="@{/ui/settings/save}" class="setting-edit" th:unless="${s.pinned or s.toggle()}"
-          th:attr="data-confirm=${s.highImpact} ? 'Apply this high-impact policy change?' : null">
+    <form method="post" th:action="@{${action}}" class="setting-edit" th:unless="${s.pinned or s.toggle()}"
+          th:attr="data-confirm=${s.highImpact} ? |Apply this high-impact policy change${scope}?| : null">
         <input type="hidden" name="key" th:value="${s.key}">
-        <input type="hidden" name="return" th:value="${back}">
+        <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
         <select name="value" th:if="${s.dropdown()}" th:attr="aria-label=${s.label}">
             <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
                     th:selected="${o == s.value}">option</option>
@@ -143,6 +154,26 @@
             Pinned — not editable here.</p>
     </div>
 </div>
+
+<!--/* settingGroup: one group of settings, its essential ones shown and its advanced ones - tuning whose default nearly
+     every deployment keeps - folded behind a disclosure that says how many it holds and how many of those have been
+     changed, so a changed value is never out of sight without a word. The settings filter opens the disclosure when
+     it matches inside it. The parameters after `g` are settingRowFor's. */-->
+<article th:fragment="settingGroup(g, action, back, changed, baseline, revertTo, scope)" class="setting-group">
+    <h2 th:text="${g.name}">Group</h2>
+    <th:block th:each="s : ${g.essentials()}">
+        <div th:replace="~{fragments :: settingRowFor(${s}, ${action}, ${back}, ${changed}, ${baseline}, ${revertTo},
+                ${scope})}"></div>
+    </th:block>
+    <details class="setting-advanced" th:unless="${g.tuning().isEmpty()}">
+        <summary><th:block th:text="|Advanced (${g.tuning().size()})|">Advanced</th:block><small
+                th:if="${g.tuningChanged() > 0}" th:text="| · ${g.tuningChanged()} ${changed}|"></small></summary>
+        <th:block th:each="s : ${g.tuning()}">
+            <div th:replace="~{fragments :: settingRowFor(${s}, ${action}, ${back}, ${changed}, ${baseline},
+                    ${revertTo}, ${scope})}"></div>
+        </th:block>
+    </details>
+</article>
 
 <!--/* settingSwitch: a boolean setting as a switch showing its effective value. Pressing it posts the opposite value
      to `action` - the same save route the other kinds use, so a switch saves through one path - and a pinned one is

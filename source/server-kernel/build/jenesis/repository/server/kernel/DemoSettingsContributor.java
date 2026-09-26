@@ -18,13 +18,13 @@ public final class DemoSettingsContributor implements SettingsContributor {
     @Override
     public List<Setting> settings() {
         return List.of(
-                new Setting("demo", "Operations", "Demo seeding",
+                new Setting("demo", "First run", "Demo seeding",
                         "Seed a fresh, completely empty repository with real artifacts (including old, "
                                 + "benign-but-vulnerable coordinates like log4j-core 2.14.1 and lodash 4.17.11) so an "
                                 + "evaluator has data to look at - pulled through the formats' own upstreams, screened "
                                 + "by the compliance gate, with a small demo gate config applied. Off by default; a "
                                 + "non-empty repository is never seeded, so this is a no-op in production. Applies on "
                                 + "the next restart.",
-                        Setting.Kind.BOOLEAN, "false", false));
+                        Setting.Kind.BOOLEAN, "false", false).essential());
     }
 }

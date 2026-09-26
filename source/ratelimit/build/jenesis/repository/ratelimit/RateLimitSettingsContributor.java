@@ -13,11 +13,11 @@ public final class RateLimitSettingsContributor implements SettingsContributor {
     @Override
     public List<Setting> settings() {
         return List.of(
-                new Setting("rate-limit", "Defaults", "Rate limit",
+                new Setting("rate-limit", "Network", "Rate limit",
                         "Default request ceiling in permits per minute per tenant; 0 disables. Defaults to 6000 "
                                 + "(100 req/s per tenant) - a sane ceiling that caps a runaway or abusive client "
                                 + "without biting legitimate parallel CI; an operator raises, lowers, or sets 0 to "
                                 + "disable, and a per-tenant value overrides it.",
-                        Setting.Kind.LONG, "6000", false).gate());
+                        Setting.Kind.LONG, "6000", false).gate().essential());
     }
 }

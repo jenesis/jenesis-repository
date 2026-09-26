@@ -331,3 +331,66 @@
     window.addEventListener('resize', reachable);
     document.addEventListener('htmx:afterSwap', reachable);
 })();
+
+/*
+ * The settings filter.
+ *
+ * A settings screen carries `#setting-filter`; typing in it keeps the `.setting` rows whose `data-search` (key,
+ * label, description and module) contains what was typed, so a setting is found by what it does and not only by its
+ * name. It works over the rows already rendered and asks the server nothing. A group none of whose rows match steps
+ * aside, and so does any other panel of the page, so the result is only what matched. A match inside a group's
+ * folded advanced settings opens the fold, and clearing the filter puts every fold back as the reader left it.
+ */
+(function () {
+    'use strict';
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var input = document.getElementById('setting-filter');
+        if (!input) {
+            return;
+        }
+        var settings = Array.prototype.slice.call(document.querySelectorAll('.setting'));
+        var groups = Array.prototype.slice.call(document.querySelectorAll('.setting-group'));
+        var folds = Array.prototype.slice.call(document.querySelectorAll('.setting-advanced'));
+        var others = Array.prototype.slice.call(document.querySelectorAll('main > article:not(.setting-group)'));
+        var noMatch = document.getElementById('setting-nomatch');
+        var left = null;
+
+        function apply() {
+            var query = input.value.trim().toLowerCase();
+            if (query !== '' && left === null) {
+                left = folds.map(function (fold) { return fold.open; });
+            }
+            var anyVisible = false;
+            settings.forEach(function (setting) {
+                var haystack = (setting.getAttribute('data-search') || '').toLowerCase();
+                var show = query === '' || haystack.indexOf(query) !== -1;
+                setting.hidden = !show;
+                if (show) {
+                    anyVisible = true;
+                }
+            });
+            folds.forEach(function (fold, index) {
+                if (query === '') {
+                    fold.open = left === null ? fold.open : left[index];
+                } else {
+                    fold.open = fold.querySelector('.setting:not([hidden])') !== null;
+                }
+            });
+            if (query === '') {
+                left = null;
+            }
+            groups.forEach(function (group) {
+                group.hidden = !group.querySelector('.setting:not([hidden])');
+            });
+            others.forEach(function (panel) {
+                panel.hidden = query !== '';
+            });
+            if (noMatch) {
+                noMatch.hidden = query === '' || anyVisible;
+            }
+        }
+
+        input.addEventListener('input', apply);
+    });
+})();

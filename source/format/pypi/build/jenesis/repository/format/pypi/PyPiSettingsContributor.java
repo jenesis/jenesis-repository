@@ -20,6 +20,6 @@ public final class PyPiSettingsContributor implements SettingsContributor {
                                 + "Empty by default, which reads the proxied index's own origin - pypi.org serves "
                                 + "it at https://pypi.org/integrity/. A mirror without an integrity API answers "
                                 + "404, which is absence rather than a failure. Applies on the next restart.",
-                        Setting.Kind.STRING, "", false));
+                        Setting.Kind.STRING, "", false).advanced());
     }
 }

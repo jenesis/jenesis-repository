@@ -35,6 +35,6 @@ public final class MavenMetadataSettingsContributor implements SettingsContribut
                                 + "version folders (every other field preserved), and derive a document for a "
                                 + "coordinate no client ever uploaded one for (an imported or batch-ingested "
                                 + "repository). Off by default; applies on the next restart.",
-                        Setting.Kind.BOOLEAN, "false", false));
+                        Setting.Kind.BOOLEAN, "false", false).advanced());
     }
 }

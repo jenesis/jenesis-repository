@@ -72,8 +72,8 @@ final class AdminCommands {
                 String display = "SECRET".equals(setting.kind())
                         ? (setting.overridden() || setting.pinned() ? "(set)" : "(unset)")
                         : setting.value() == null || setting.value().isEmpty() ? "(empty)" : setting.value();
-                System.out.printf("%-26s %-30s %s%s%n", setting.key(), display, state,
-                        setting.appliesImmediately() ? "" : " (restart)");
+                System.out.printf("%-26s %-30s %s%s%s%n", setting.key(), display, state,
+                        setting.appliesImmediately() ? "" : " (restart)", setting.advanced() ? " (advanced)" : "");
             }
             return 0;
         }

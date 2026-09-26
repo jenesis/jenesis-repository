@@ -24,68 +24,10 @@
     <p th:if="${groups.isEmpty()}"><small>No tenant-overridable settings are installed on this deployment. A tenant
         may override the compliance gate policy and forward targets when those modules are present.</small></p>
 
-    <article th:each="g : ${groups}" class="setting-group">
-        <h2 th:text="${g.name}">Group</h2>
-        <div class="setting" th:each="s : ${g.settings}"
-             th:attr="data-search=|${s.key} ${s.label} ${s.description} ${s.module}|">
-            <div class="setting-head">
-                <div>
-                    <strong th:text="${s.label}">Label</strong>
-                    <code th:text="${s.key}">key</code>
-                    <small class="setting-module" th:text="${s.module}">module</small>
-                </div>
-                <div class="setting-badges">
-                    <span class="app-badge app-badge--pass" th:if="${s.live}">live</span>
-                    <span class="app-badge" th:unless="${s.live}">↻ restart</span>
-                    <span class="app-badge app-badge--warn" th:if="${s.overridden and !s.pinned}">tenant override</span>
-                    <span class="app-badge" th:if="${s.pinned}"
-                          th:title="|This value is fixed by ${s.pinnedBy} and cannot be changed from the store.|"
-                          th:text="|🔒 pinned by ${s.pinnedBy}|">🔒 pinned</span>
-                    <span class="app-badge app-badge--danger" th:if="${s.highImpact}"
-                          title="A change here can start rejecting or admitting packages.">high-impact</span>
-                    <form method="post" th:action="@{/ui/settings/tenant/save}" class="setting-revert"
-                          th:if="${s.overridden and !s.pinned}"
-                          th:attr="data-confirm=${s.highImpact} ? 'Revert this high-impact policy knob to the deployment value?' : null">
-                        <input type="hidden" name="key" th:value="${s.key}">
-                        <input type="hidden" name="value" value="">
-                        <button class="secondary outline" type="submit">Revert</button>
-                    </form>
-                </div>
-            </div>
-            <p class="setting-doc" th:text="${s.description}">What this setting does.</p>
-            <p class="setting-values">
-                <span>effective: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
-                <span>deployment: <span th:text="${s.defaultDisplay()}">deployment value</span></span>
-            </p>
-            <th:block th:if="${s.toggle()}">
-                <div th:replace="~{fragments :: settingSwitch(${s}, '/ui/settings/tenant/save', null,
-                        'Apply this high-impact policy change for this tenant?')}"></div>
-            </th:block>
-            <form method="post" th:action="@{/ui/settings/tenant/save}" class="setting-edit"
-                  th:unless="${s.pinned or s.toggle()}"
-                  th:attr="data-confirm=${s.highImpact} ? 'Apply this high-impact policy change for this tenant?' : null">
-                <input type="hidden" name="key" th:value="${s.key}">
-                <select name="value" th:if="${s.dropdown()}" th:attr="aria-label=${s.label}">
-                    <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
-                            th:selected="${o == s.value}">option</option>
-                </select>
-                <input th:unless="${s.dropdown()}" name="value" th:type="${s.inputType()}"
-                       th:value="${s.editValue()}" th:attr="aria-label=${s.label}"
-                       th:placeholder="${s.editPlaceholder()}">
-                <button type="submit">Save</button>
-            </form>
-            <div class="setting-edit setting-pinned" th:if="${s.pinned and !s.toggle()}">
-                <select th:if="${s.dropdown()}" disabled th:attr="aria-label=${s.label}">
-                    <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
-                            th:selected="${o == s.value}">option</option>
-                </select>
-                <input th:unless="${s.dropdown()}" th:type="${s.inputType()}" disabled
-                       th:value="${s.secret()} ? '' : ${s.value}" th:attr="aria-label=${s.label}">
-                <p class="setting-pinned-note" th:text="|Pinned by ${s.pinnedBy} — not editable here.|">
-                    Pinned — not editable here.</p>
-            </div>
-        </div>
-    </article>
+    <th:block th:each="g : ${groups}">
+        <article th:replace="~{fragments :: settingGroup(${g}, '/ui/settings/tenant/save', null, 'tenant override',
+                'deployment', 'the deployment value', ' for this tenant')}"></article>
+    </th:block>
 
     <article>
         <h2>Restore</h2>
@@ -105,36 +47,6 @@
         </form>
     </article>
 
-    <script>
-        // In-memory option search: a client-side filter matching each knob's key and its documentation text, so a
-        // setting is found by what it does, not only its name. Purely over the catalogue already rendered - no
-        // request. The restore panel below steps aside while a filter is active, keeping the result focused on
-        // matching options.
-        (function () {
-            var input = document.getElementById('setting-filter');
-            if (!input) return;
-            var settings = Array.prototype.slice.call(document.querySelectorAll('.setting'));
-            var groups = Array.prototype.slice.call(document.querySelectorAll('.setting-group'));
-            var others = Array.prototype.slice.call(document.querySelectorAll('main > article:not(.setting-group)'));
-            var noMatch = document.getElementById('setting-nomatch');
-            function apply() {
-                var query = input.value.trim().toLowerCase();
-                var anyVisible = false;
-                settings.forEach(function (setting) {
-                    var haystack = (setting.getAttribute('data-search') || '').toLowerCase();
-                    var show = query === '' || haystack.indexOf(query) !== -1;
-                    setting.hidden = !show;
-                    if (show) anyVisible = true;
-                });
-                groups.forEach(function (group) {
-                    group.hidden = !group.querySelector('.setting:not([hidden])');
-                });
-                others.forEach(function (panel) { panel.hidden = query !== ''; });
-                if (noMatch) noMatch.hidden = query === '' || anyVisible;
-            }
-            input.addEventListener('input', apply);
-        })();
-    </script>
 </main>
 </body>
 </html>

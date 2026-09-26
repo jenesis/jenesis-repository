@@ -29,8 +29,8 @@ public final class ConsoleSettingsContributor implements SettingsContributor {
                         + "registered at all and the node answers only the repository's own surfaces - which is the "
                         + "posture for a deployment that is operated through the API and the CLI, or one that runs "
                         + "its console elsewhere. Applies on restart.",
-                Setting.Kind.BOOLEAN, "true", false).gate(),
-                new Setting(SetupWizard.SETTING, "Console", "First-run setup guide",
+                Setting.Kind.BOOLEAN, "true", false).gate().essential(),
+                new Setting(SetupWizard.SETTING, "First run", "First-run setup guide",
                         "Send a super-admin who signs in with the starter key to the first-run setup screen, which "
                                 + "walks the decisions a new deployment should make: the starter credentials, the "
                                 + "compliance verdicts, the advisory feeds, retention. On by default, because the "
@@ -39,6 +39,6 @@ public final class ConsoleSettingsContributor implements SettingsContributor {
                                 + "hundredth time switches it off here, once. The screen stays reachable as Setup, "
                                 + "under Settings, either way, and this is not what says setup is finished - "
                                 + "that is whether the starter credential is still in use. Applies live.",
-                        Setting.Kind.BOOLEAN, SetupWizard.ON_BY_DEFAULT, true));
+                        Setting.Kind.BOOLEAN, SetupWizard.ON_BY_DEFAULT, true).essential());
     }
 }

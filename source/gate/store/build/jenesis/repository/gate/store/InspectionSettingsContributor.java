@@ -31,6 +31,6 @@ public final class InspectionSettingsContributor implements SettingsContributor 
                                 + "to the client as it is fetched, where there is no stored body to go back to, "
                                 + "or spooled whole by the hardening proxy, which already screens it whole.",
                         Setting.Kind.CHOICE, List.of("STREAM", "QUARANTINE", "REJECT"),
-                        QualityInspector.OVERSIZED_DEFAULT, true));
+                        QualityInspector.OVERSIZED_DEFAULT, true).advanced());
     }
 }

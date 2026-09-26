@@ -24,6 +24,6 @@ public final class InventoryBackfillSettingsContributor implements SettingsContr
                         + "advisory or licence sweep no longer enumerates it, so it can carry a later-listed CVE "
                         + "while the held count reads clean. It costs one membership probe per live pointer once "
                         + "converged.",
-                Setting.Kind.BOOLEAN, "true", false));
+                Setting.Kind.BOOLEAN, "true", false).advanced());
     }
 }

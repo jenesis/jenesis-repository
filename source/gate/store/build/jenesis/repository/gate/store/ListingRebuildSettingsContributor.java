@@ -17,6 +17,6 @@ public final class ListingRebuildSettingsContributor implements SettingsContribu
                                 + "materialised on first read - so any drift an interrupted write could have left is "
                                 + "corrected by the walk (jenreg.walks) and never by a read. A listener of the one "
                                 + "walk rather than a daily pass of its own; on by default.",
-                        Setting.Kind.BOOLEAN, "true", true));
+                        Setting.Kind.BOOLEAN, "true", true).advanced());
     }
 }

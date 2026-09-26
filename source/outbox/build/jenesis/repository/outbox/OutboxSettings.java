@@ -48,12 +48,12 @@ public final class OutboxSettings implements SettingsContributor {
                                 + "rather than how long it is retried. Blank keeps them forever, which lets a target "
                                 + "that is permanently gone accumulate one entry per delivery. One dial for every "
                                 + "outbox: the mechanism is shared, so its retention is too.",
-                        Setting.Kind.DURATION, PARKED_RETENTION.fallbackText(), false),
+                        Setting.Kind.DURATION, PARKED_RETENTION.fallbackText(), false).advanced(),
                 new Setting(PARKED_CAP, "Outboxes", "Parked entry cap",
                         "A hard ceiling on a parked backlog: everything beyond the newest N is reclaimed whatever "
                                 + "its age. Off by default, since the retention above already bounds it by time; set "
                                 + "this where a burst of failures could outgrow the space before the age bound "
                                 + "reaches it.",
-                        Setting.Kind.INTEGER, "0", false));
+                        Setting.Kind.INTEGER, "0", false).advanced());
     }
 }

@@ -19,10 +19,15 @@ import build.jenesis.repository.store.Durations;
  * the rate limiter's ceiling). The modules console reads it to pair a module with its toggle without a maintained
  * table; {@code live} on that setting says whether flipping it applies on the next scheduled re-read or only on the
  * next restart. A contributor sets it with {@link #gate()}.
+ *
+ * <p>{@code tier} says whether an operator is expected to decide the setting or whether it tunes how the product does
+ * what was already decided - see {@link Tier}. Every constructor leaves it undecided ({@code null}) and a contributor
+ * declares it with {@link #essential()} or {@link #advanced()} on each setting it contributes; the catalogue census
+ * refuses a setting that arrives undecided, because a default here would decide for every contributor that forgot.
  */
 public record Setting(String key, String group, String label, String description,
                       Kind kind, List<String> choices, String defaultValue, boolean live, Scope scope,
-                      boolean enablement) {
+                      boolean enablement, Tier tier) {
 
     public Setting {
         choices = List.copyOf(choices);
@@ -32,7 +37,7 @@ public record Setting(String key, String group, String label, String description
     /** A setting at an explicit {@link Scope} that is not its module's enablement gate (the common case). */
     public Setting(String key, String group, String label, String description,
                    Kind kind, List<String> choices, String defaultValue, boolean live, Scope scope) {
-        this(key, group, label, description, kind, choices, defaultValue, live, scope, false);
+        this(key, group, label, description, kind, choices, defaultValue, live, scope, false, null);
     }
 
     /** A choice-carrying setting, deployment-wide by default. */
@@ -45,7 +50,19 @@ public record Setting(String key, String group, String label, String description
      *  module's enable/disable toggle. A copy, so a contributor writes {@code new Setting(...).gate()} without a wider
      *  constructor. */
     public Setting gate() {
-        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, true);
+        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, true, tier);
+    }
+
+    /** This setting, declared one an operator is expected to decide - see {@link Tier#ESSENTIAL}. */
+    public Setting essential() {
+        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement,
+                Tier.ESSENTIAL);
+    }
+
+    /** This setting, declared one that tunes what was already decided - see {@link Tier#ADVANCED}. */
+    public Setting advanced() {
+        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement,
+                Tier.ADVANCED);
     }
 
     /** A setting whose kind carries no choice list (every kind but {@link Kind#CHOICE}), deployment-wide by default. */
@@ -66,6 +83,23 @@ public record Setting(String key, String group, String label, String description
      *  over the global default in the effective chain. */
     public boolean tenantOverridable() {
         return scope == Scope.TENANT;
+    }
+
+    /**
+     * Whether an operator is expected to decide a setting, or whether it tunes how the product does what was already
+     * decided. The settings screen shows each group's essential settings and folds the advanced ones behind a
+     * disclosure its filter opens on a match; the generated reference marks them. Nothing else differs: an advanced
+     * setting is as editable, as validated and as live as an essential one.
+     */
+    public enum Tier {
+
+        /** A decision: a feature switched on or off, a policy and its action, where something is fetched from or
+         *  sent to, and the credential that goes with it. */
+        ESSENTIAL,
+
+        /** Tuning: a cadence, a cap, a ttl, a retry count, a timeout, a repair riding a walk, or an endpoint that
+         *  already points at the one public service. The default is what nearly every deployment wants. */
+        ADVANCED
     }
 
     /** Whether a setting is deployment-wide ({@link #GLOBAL}, the default) or a tenant may override it for its own
