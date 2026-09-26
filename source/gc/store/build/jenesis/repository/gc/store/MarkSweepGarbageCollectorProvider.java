@@ -18,11 +18,12 @@ import build.jenesis.repository.store.Durations;
  * often a segment claim is renewed (keep stride x per-item time well under {@code jenreg.walk.ttl}). A malformed
  * value fails loudly rather than collecting with a silently-wrong stride.
  *
- * <p>{@code jenreg.gc.grace} - an optional ISO-8601 wall-clock floor on the condemn-to-collect grace (default
- * {@code PT0S}, i.e. purely generation-based: condemn in one pass, collect in the next). Set it to guarantee a blob
- * carries its condemned marker for at least this long before deletion even when generations advance faster than the
- * collection interval - several nodes collecting, or a node re-collecting after a lease expiry. It only ever delays a
- * deletion, so it never reclaims a blob the generation gap would spare.
+ * <p>{@code jenreg.gc.grace} - an ISO-8601 wall-clock floor on the condemn-to-collect grace, on top of the rule that a
+ * blob is condemned in one pass and collected in a later one: {@link GarbageCollector#defaultGrace()} when unset, and
+ * {@code PT0S} for the purely generation-based rule. It guarantees a blob carries its condemned marker for at least
+ * this long before deletion even when generations advance faster than the collection interval - frequent collection,
+ * several nodes collecting, a node re-collecting after a lease expiry. It only ever delays a deletion, so it never
+ * reclaims a blob the generation gap would spare.
  *
  * <p>It also resolves the installed {@link BlobReferences} formats once, here, and hands them to the collector: the
  * discovery lives at the provider like every other provider's does, so the collector stays a mechanism a test can hand
@@ -39,7 +40,7 @@ public final class MarkSweepGarbageCollectorProvider implements GarbageCollector
     @Override
     public Optional<GarbageCollector> create(UnaryOperator<String> config) {
         String stride = Integer.toString(integer(config, "gc.stride", 20_000));
-        Duration grace = duration(config, "gc.grace");
+        Duration grace = duration(config, "gc.grace", GarbageCollector.defaultGrace());
         List<BlobReferences> lenders = BlobReferences.installed();
         return WalkProvider.resolve(key ->
                         "walk.checkpoint".equals(key) ? stride : config.apply(key))
@@ -50,10 +51,10 @@ public final class MarkSweepGarbageCollectorProvider implements GarbageCollector
                 });
     }
 
-    private static Duration duration(UnaryOperator<String> config, String key) {
+    private static Duration duration(UnaryOperator<String> config, String key, Duration fallback) {
         String value = config.apply(key);
         if (value == null || value.isBlank()) {
-            return Duration.ZERO;
+            return fallback;
         }
         Duration duration;
         try {

@@ -328,6 +328,16 @@ public final class LiveConfig {
         return Integer.parseInt(effective("batch-upload-max-entries", Integer.toString(defaults.getBatchUploadMaxEntries())));
     }
 
+    /** The live ceiling on how many bytes one exploded archive's entries may inflate to in all. */
+    public long batchUploadMaxBytes() {
+        return Long.parseLong(effective("batch-upload-max-bytes", Long.toString(defaults.getBatchUploadMaxBytes())));
+    }
+
+    /** The live ceiling on how many times the compressed bytes read an exploded archive may inflate to. */
+    public int batchUploadMaxRatio() {
+        return Integer.parseInt(effective("batch-upload-max-ratio", Integer.toString(defaults.getBatchUploadMaxRatio())));
+    }
+
     /** Whether demo mode is on: the runtime-stored {@code demo} over the deployment default. Read once at boot by the
      *  seeding trigger (the seed runs post-boot against an empty space), so switching it live takes effect on the
      *  next restart. */

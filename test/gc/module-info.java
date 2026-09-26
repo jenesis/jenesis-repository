@@ -23,6 +23,8 @@
 open module build.jenesis.repository.gc.test {
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.gc.store;
+    requires build.jenesis.repository.gc.walk;
+    requires build.jenesis.repository.settings;
     // The reference-lending seam, exercised through a format-neutral stand-in: the collector's half of is that
     // it unions a lender's set into the shards the sweep reads, not how any one format spells its documents.
     requires build.jenesis.repository.format;

@@ -413,7 +413,8 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public BatchIngestion batchIngestion(RepositoryProperties properties) {
         // Off by default; the archive-explode feature is a deployment opt-in, its entry cap the zip-bomb bound.
-        return new BatchIngestion(properties::isBatchUpload, properties::getBatchUploadMaxEntries);
+        return new BatchIngestion(properties::isBatchUpload, properties::getBatchUploadMaxEntries,
+                properties::getBatchUploadMaxBytes, properties::getBatchUploadMaxRatio);
     }
 
     @Bean(initMethod = "start")

@@ -282,7 +282,8 @@ public class ServingConfig {
         // Batch archive ingestion, gated live: off unless the operator switches batch-upload on, its entry cap the
         // live zip-bomb bound. Driven by the serving controller for every write (both tenancy modes), so an
         // exploded entry rides the same discovered compliance gate - and the same EdgeHooks - a single upload does.
-        return new BatchIngestion(liveConfig::batchUpload, liveConfig::batchUploadMaxEntries);
+        return new BatchIngestion(liveConfig::batchUpload, liveConfig::batchUploadMaxEntries,
+                liveConfig::batchUploadMaxBytes, liveConfig::batchUploadMaxRatio);
     }
 
     @Bean("repositoryController")

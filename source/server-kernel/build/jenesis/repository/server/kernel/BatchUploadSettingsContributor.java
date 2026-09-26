@@ -1,6 +1,7 @@
 package build.jenesis.repository.server.kernel;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
@@ -19,9 +20,18 @@ public final class BatchUploadSettingsContributor implements SettingsContributor
                                 + "entry, each screened by the compliance gate. Off by default.",
                         Setting.Kind.BOOLEAN, "false", true),
                 new Setting("batch-upload-max-entries", "Operations", "Batch upload entry cap",
-                        "The most members one exploded archive may publish; the walk stops at this cap. Bounds the "
-                                + "zip-bomb axis - entry size is harmless because every entry streams.",
+                        "The most members one exploded archive may publish; the walk stops at this cap.",
                         Setting.Kind.INTEGER, "10000", true),
+                new Setting("batch-upload-max-bytes", "Operations", "Batch upload inflated-size cap",
+                        "The most bytes one exploded archive's entries may inflate to in all. Streaming bounds memory, "
+                                + "not the store: an entry compressed a thousand to one writes its inflated size. The "
+                                + "entry that crosses it is refused whole, the walk stops, and the upload answers 413.",
+                        Setting.Kind.LONG, Long.toString(RepositoryProperties.BATCH_UPLOAD_MAX_BYTES), true),
+                new Setting("batch-upload-max-ratio", "Operations", "Batch upload compression-ratio cap",
+                        "How many times the compressed bytes read an exploded archive may inflate to, once past a "
+                                + "mebibyte - a ratio no archive of artifacts reaches and a zip bomb starts from. The "
+                                + "entry that crosses it is refused whole, the walk stops, and the upload answers 413.",
+                        Setting.Kind.INTEGER, Integer.toString(RepositoryProperties.BATCH_UPLOAD_MAX_RATIO), true),
                 new Setting("store-families", "Operations", "Count store operations by key family",
                         "Count every store operation by the key family it touched as well as by its name, reported "
                                 + "as jenreg.store.family.<operation>.<family> beside jenreg.store.ops.<operation>. "

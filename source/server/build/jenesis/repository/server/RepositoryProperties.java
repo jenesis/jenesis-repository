@@ -112,6 +112,10 @@ public class RepositoryProperties {
 
     private int batchUploadMaxEntries = 10_000;
 
+    private long batchUploadMaxBytes = BATCH_UPLOAD_MAX_BYTES;
+
+    private int batchUploadMaxRatio = BATCH_UPLOAD_MAX_RATIO;
+
     /** The recent-logs ring size: how many most-recent log entries the in-memory recent-logs buffer retains
      *  before the oldest is evicted, the bound behind {@code GET /api/logs}. Sized once at startup. */
     private int logsBuffer = LogRingBuffer.DEFAULT_CAPACITY;
@@ -376,6 +380,32 @@ public class RepositoryProperties {
 
     public void setBatchUploadMaxEntries(int batchUploadMaxEntries) {
         this.batchUploadMaxEntries = batchUploadMaxEntries;
+    }
+
+    /** The most bytes one exploded archive's entries may inflate to in all, 4 GiB unless set: streaming bounds the
+     *  heap, not the store, so this is what stops a highly compressed archive from filling it. A live
+     *  {@code batch-upload-max-bytes} setting overrides it. */
+    public static final long BATCH_UPLOAD_MAX_BYTES = 4L * 1024 * 1024 * 1024;
+
+    /** How many times the compressed bytes read an exploded archive may inflate to, once past a mebibyte - the
+     *  compression ratio no archive of artifacts reaches and a zip bomb starts from. A live
+     *  {@code batch-upload-max-ratio} setting overrides it. */
+    public static final int BATCH_UPLOAD_MAX_RATIO = 100;
+
+    public long getBatchUploadMaxBytes() {
+        return batchUploadMaxBytes;
+    }
+
+    public void setBatchUploadMaxBytes(long batchUploadMaxBytes) {
+        this.batchUploadMaxBytes = batchUploadMaxBytes;
+    }
+
+    public int getBatchUploadMaxRatio() {
+        return batchUploadMaxRatio;
+    }
+
+    public void setBatchUploadMaxRatio(int batchUploadMaxRatio) {
+        this.batchUploadMaxRatio = batchUploadMaxRatio;
     }
 
     public int getLogsBuffer() {

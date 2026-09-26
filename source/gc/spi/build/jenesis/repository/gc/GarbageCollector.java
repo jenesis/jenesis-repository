@@ -120,4 +120,19 @@ public interface GarbageCollector {
      * swept on an unanswerable root set would delete serving bytes it could not see.
      */
     GcPlan collect(ArtifactStore store, Known<List<String>> pointerRoots, Instant now) throws IOException;
+
+    /**
+     * The wall-clock floor between condemning a blob and deleting it when {@code jenreg.gc.grace} names none: two
+     * hours. An upload in several steps leaves its pieces unreferenced for a while - a {@code docker push} sends its
+     * layers before the manifest naming them - and where an operator schedules collection often, two passes could
+     * otherwise fall inside that while and take the pieces. Harbor spares blobs uploaded within the last two hours
+     * for the same reason. It only ever delays a deletion.
+     */
+    static Duration defaultGrace() {
+        return Duration.parse(DEFAULT_GRACE);
+    }
+
+    /** {@link #defaultGrace()} as the text the setting catalogue declares - one definition, kept as a compile-time
+     *  constant because the generated settings reference reads a default out of the class file. */
+    String DEFAULT_GRACE = "PT2H";
 }

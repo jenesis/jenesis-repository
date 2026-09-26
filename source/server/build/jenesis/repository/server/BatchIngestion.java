@@ -21,8 +21,12 @@ import tools.jackson.databind.node.ObjectNode;
  *
  * <p>Nothing is materialized: neither the archive nor an entry is ever read whole into memory - the entry stream is
  * handed to the format, which streams it hash-on-write. The archive is opt-in (a deployment gate, {@code batch-upload},
- * off by default), entry-count capped (the zip-bomb axis that matters; entry size is harmless because everything
- * streams), nested archives are not re-exploded (an entry is just published, never re-walked), and entry paths are
+ * off by default) and bounded three ways, each read live: in entries ({@code batch-upload-max-entries}), in the bytes
+ * its entries inflate to in all ({@code batch-upload-max-bytes}), and in how far that exceeds the compressed bytes
+ * read ({@code batch-upload-max-ratio}). Streaming bounds memory, not the store: a single entry compressed a thousand
+ * to one writes its inflated size, so the byte bounds are what stop a zip bomb from filling the store, and an entry
+ * that crosses one is refused whole - nothing of it is kept - while the entries before it stand. Nested archives are
+ * not re-exploded (an entry is just published, never re-walked), and entry paths are
  * traversal-guarded before any store touch. The response is a per-entry manifest ({@code path -> stored | quarantined
  * | rejected | unclaimed}) so a client sees exactly what each member became.
  */
@@ -54,14 +58,23 @@ public final class BatchIngestion {
         Outcome publish(String path, InputStream body) throws IOException;
     }
 
+    /** Inflated bytes the ratio bound allows before it applies, so an ordinary small archive of well-compressing
+     *  text is never refused for compressing well: the ratio is a question about a large archive. */
+    static final long RATIO_FLOOR = 1024L * 1024L;
+
     private final BooleanSupplier enabled;
     private final IntSupplier maxEntries;
+    private final LongSupplier maxBytes;
+    private final IntSupplier maxRatio;
 
-    /** @param enabled whether batch ingestion is switched on for this deployment (read live), and {@code maxEntries}
-     *  the ceiling on how many members one archive may explode into (read live). */
-    public BatchIngestion(BooleanSupplier enabled, IntSupplier maxEntries) {
+    /** @param enabled whether batch ingestion is switched on for this deployment, {@code maxEntries} the most members
+     *  one archive may explode into, {@code maxBytes} the most bytes its entries may inflate to in all and
+     *  {@code maxRatio} how many times the compressed bytes read that may be - every one read live. */
+    public BatchIngestion(BooleanSupplier enabled, IntSupplier maxEntries, LongSupplier maxBytes, IntSupplier maxRatio) {
         this.enabled = enabled;
         this.maxEntries = maxEntries;
+        this.maxBytes = maxBytes;
+        this.maxRatio = maxRatio;
     }
 
     /**
@@ -111,8 +124,11 @@ public final class BatchIngestion {
         ArrayNode entries = manifest.putArray("entries");
         boolean capped = false;
         boolean malformed = false;
+        String tooLarge = null;
         int processed = 0;
-        try (ZipInputStream zip = new ZipInputStream(outer.requestStream())) {
+        Inflation inflation = new Inflation(outer.requestStream(), Math.max(1, maxBytes.getAsLong()),
+                Math.max(1, maxRatio.getAsInt()));
+        try (ZipInputStream zip = new ZipInputStream(inflation.compressed)) {
             while (true) {
                 ZipEntry entry;
                 try {
@@ -143,15 +159,104 @@ public final class BatchIngestion {
                 }
                 String path = join(base, safe);
                 record.put("path", path);
-                record.put("status", label(publisher.publish(path, new Unclosable(zip))));
+                try {
+                    record.put("status", label(publisher.publish(path, inflation.entry(zip))));
+                } catch (IOException | RuntimeException failure) {
+                    if (inflation.exceeded == null) {
+                        throw failure;
+                    }
+                    // Refused whole: the publish failed as its body crossed the bound, so nothing of it was stored,
+                    // and the walk stops here rather than inflating the rest of the archive.
+                    record.put("status", "rejected");
+                    record.put("reason", inflation.exceeded);
+                    tooLarge = inflation.exceeded;
+                    break;
+                }
             }
         }
-        manifest.put("capped", capped);
+        manifest.put("capped", capped || tooLarge != null);
         if (malformed) {
             manifest.put("error", "malformed-archive");
+        } else if (tooLarge != null) {
+            manifest.put("error", tooLarge);
         }
         outer.setResponseHeader("Content-Type", "application/json");
-        outer.respond(malformed ? 400 : 200, JSON.writeValueAsBytes(manifest));
+        outer.respond(malformed ? 400 : tooLarge != null ? 413 : 200, JSON.writeValueAsBytes(manifest));
+    }
+
+    /**
+     * What an archive has cost so far: the compressed bytes read from the request and the bytes its entries have
+     * inflated to, with the bounds they are held to. An entry's stream fails the read that crosses a bound, so the
+     * publish reading it stores nothing, and records which bound it was for the manifest.
+     */
+    private static final class Inflation {
+
+        private final long maxBytes;
+        private final int maxRatio;
+        private long compressedBytes;
+        private long inflatedBytes;
+        private String exceeded;
+        private final InputStream compressed;
+
+        private Inflation(InputStream request, long maxBytes, int maxRatio) {
+            this.maxBytes = maxBytes;
+            this.maxRatio = maxRatio;
+            this.compressed = new FilterInputStream(request) {
+                @Override
+                public int read() throws IOException {
+                    int one = super.read();
+                    if (one >= 0) {
+                        compressedBytes++;
+                    }
+                    return one;
+                }
+
+                @Override
+                public int read(byte[] buffer, int offset, int length) throws IOException {
+                    int read = super.read(buffer, offset, length);
+                    if (read > 0) {
+                        compressedBytes += read;
+                    }
+                    return read;
+                }
+            };
+        }
+
+        /** The current entry's body, counted against the bounds and kept open for the walk. */
+        private InputStream entry(ZipInputStream zip) {
+            return new Unclosable(zip) {
+                @Override
+                public int read() throws IOException {
+                    int one = super.read();
+                    if (one >= 0) {
+                        inflated(1);
+                    }
+                    return one;
+                }
+
+                @Override
+                public int read(byte[] buffer, int offset, int length) throws IOException {
+                    int read = super.read(buffer, offset, length);
+                    if (read > 0) {
+                        inflated(read);
+                    }
+                    return read;
+                }
+            };
+        }
+
+        private void inflated(long bytes) throws IOException {
+            inflatedBytes += bytes;
+            if (inflatedBytes > maxBytes) {
+                exceeded = "archive-bytes";
+                throw new IOException("the archive inflates past batch-upload-max-bytes=" + maxBytes);
+            }
+            if (inflatedBytes > RATIO_FLOOR && inflatedBytes > (long) maxRatio * Math.max(1, compressedBytes)) {
+                exceeded = "archive-ratio";
+                throw new IOException("the archive inflates past batch-upload-max-ratio=" + maxRatio + " times the "
+                        + compressedBytes + " compressed bytes read");
+            }
+        }
     }
 
     /** Screen one entry at the shared ingress edge and read its outcome off the status the edge set: an accepted entry
@@ -215,7 +320,7 @@ public final class BatchIngestion {
 
     /** Keeps the shared {@link ZipInputStream} open when a format closes the per-entry stream it was handed, so the
      *  next entry can still be read; the walk advances the zip itself. */
-    private static final class Unclosable extends FilterInputStream {
+    private static class Unclosable extends FilterInputStream {
         private Unclosable(InputStream in) {
             super(in);
         }

@@ -1,6 +1,7 @@
 package build.jenesis.repository.gc.walk;
 
 import module java.base;
+import build.jenesis.repository.gc.GarbageCollector;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
@@ -33,8 +34,9 @@ public final class CollectionSettingsContributor implements SettingsContributor 
                         Setting.Kind.INTEGER, "20000", true),
                 new Setting("gc.grace", "Retention", "Collector grace",
                         "A wall-clock floor on the gap between condemning a blob and deleting it, on top of the "
-                                + "two-pass rule. It only ever delays a deletion, which is what makes it the dial "
-                                + "to reach for where several nodes collect.",
-                        Setting.Kind.DURATION, "PT0S", true));
+                                + "two-pass rule, so an upload whose pieces are unreferenced for a while - a push's "
+                                + "layers before its manifest - is not collected when collection runs often. It only "
+                                + "ever delays a deletion; PT0S leaves the two-pass rule alone.",
+                        Setting.Kind.DURATION, GarbageCollector.DEFAULT_GRACE, true));
     }
 }
