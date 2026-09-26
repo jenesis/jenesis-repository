@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments :: head('Migrate')}"></head>
+<head th:replace="~{fragments :: head('Import')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <p><a th:href="@{'/ui/repositories/' + ${repo}}">&larr; Repository <span th:text="${repo}">name</span></a></p>
-    <header th:replace="~{base :: pageHeader('Migrate into ' + ${repo})}"></header>
+    <header th:replace="~{base :: pageHeader('Import into ' + ${repo})}"></header>
     <p th:replace="~{fragments :: repositoryIdentity(${identity})}"></p>
 
     <article>

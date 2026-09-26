@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments :: head('Admin')}"></head>
+<head th:replace="~{fragments :: head('Members')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Administration')}"></header>
+    <header th:replace="~{base :: pageHeader('Members')}"></header>
     <p>Console members of tenant <strong th:text="${tenant}">default</strong>.</p>
 
     <article>
@@ -134,7 +134,7 @@
         <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/grant}">
             <div class="grid">
                 <label>Group <input name="name" required placeholder="developers"></label>
-                <label>Scope <small>(a repository, or <code>*</code>)</small>
+                <label>Scope <small>(a repository, a build-cache project, or <code>*</code>)</small>
                     <input name="scope" required placeholder="*" value="*"></label>
                 <label>Rights <small>(comma-separated)</small>
                     <input name="tokens" required placeholder="repository:read"></label>

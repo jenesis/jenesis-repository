@@ -26,14 +26,16 @@
         <p>
             A dry run of what a fresh enabling pass would <strong>newly hold</strong> under the current license
             policy - a release already held or already released by an operator is excluded, so this count matches
-            what enabling then holds. Nothing here is written; enforcement stays off until you turn it on.
+            what enabling then holds. Nothing here is written; enforcement stays off until you turn it on<span
+                th:if="${isSuperadmin}"> in the <a th:href="@{/ui/settings}">settings</a></span>.
         </p>
-        <p>
-            <a th:href="@{/ui/repositories/{repo}/blast-radius(repo=${repo})}" role="button"
-               class="secondary" th:classappend="${unknown} ? 'outline' : ''">Denied only</a>
-            <a th:href="@{/ui/repositories/{repo}/blast-radius(repo=${repo},unknown=true)}" role="button"
-               class="secondary" th:classappend="${unknown} ? '' : 'outline'">Denied + unknown license</a>
-        </p>
+        <!--/* Which licences the preview counts is a view of the result, so it is a pair of links marking the one shown;
+             the one button on the screen is the recompute, which starts work. */-->
+        <p><small>Counting:
+            <a th:href="@{/ui/repositories/{repo}/blast-radius(repo=${repo})}"
+               th:attr="aria-current=${unknown} ? null : 'true'">denied licenses</a> |
+            <a th:href="@{/ui/repositories/{repo}/blast-radius(repo=${repo},unknown=true)}"
+               th:attr="aria-current=${unknown} ? 'true' : null">denied and unknown licenses</a></small></p>
 
         <!--/* The pass assesses every release, so it runs in the background and this screen reads what the last pass
                found: when it finished, how many releases it would hold, and the first rows of them. */-->
@@ -42,7 +44,7 @@
             <button type="submit" th:disabled="${blast.running()}">Recompute</button>
         </form>
         <article th:unless="${blast.computed()}">
-            <div th:replace="~{base :: empty('No blast-radius pass has been computed yet for this mode.')}"></div>
+            <div th:replace="~{base :: empty('No preview has been computed yet for this mode.')}"></div>
         </article>
         <article th:if="${blast.computed() and blast.running()}">
             <p th:replace="~{base :: running(|A pass is running, started ${blast.computedAt()}.|)}"></p>
@@ -70,7 +72,8 @@
                     </thead>
                     <tbody>
                     <tr th:each="h : ${blast.held()}">
-                        <td><code th:text="${h.coordinate()}">group:artifact</code></td>
+                        <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${h.ecosystem()},coordinate=${h.coordinate()})}"><code
+                                th:text="${h.coordinate()}">group:artifact</code></a></td>
                         <td th:text="${h.version()}">1.0.0</td>
                         <td th:text="${h.ecosystem()}">Maven</td>
                         <td><small th:text="${#strings.listJoin(h.reasons(), '; ')}">reason</small></td>

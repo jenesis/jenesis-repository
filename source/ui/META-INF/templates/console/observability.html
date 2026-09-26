@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{base :: head('Metrics overview', ${product})}"></head>
+<head th:replace="~{base :: head('Metrics', ${product})}"></head>
 <body>
 <th:block th:replace="~{base :: shell}"></th:block>
 <main id="main">
     <div th:replace="~{base :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Metrics overview')}"></header>
+    <header th:replace="~{base :: pageHeader('Metrics')}"></header>
     <p><small>Every metric, health state and background-task status this deployment reports, in one plain overview —
         current values, health and task status, each with the <strong>description from its registration</strong>. No
         graphs: a metric with a limit shows <em>used vs available</em> as a plain number and bar. This screen is

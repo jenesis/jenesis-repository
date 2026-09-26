@@ -230,7 +230,7 @@ public class GlobalControllerAdvice {
             entries.add(new NavEntry("Tenants", "/ui/instances", Group.SETTINGS));
         }
         entries.add(new NavEntry("Backup & restore", "/ui/settings/backup", Access.SUPERADMIN, Group.SETTINGS));
-        entries.add(new NavEntry("Setup", "/ui/setup", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("First-run setup", "/ui/setup", Access.SUPERADMIN, Group.SETTINGS));
         entries.addAll(capabilities.moduleNav());
         List<RepositoryPage> pages = new ArrayList<>();
         pages.add(new RepositoryPage("Overview", "", Topic.CONTENTS));

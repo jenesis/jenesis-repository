@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Walks of the store')}"></header>
+    <header th:replace="~{base :: pageHeader('Walks')}"></header>
 
     <p><small><strong>A walk reads every object in the store</strong>, and a scheduled walk is a recurring cost:
         every run pays a read per pointer, per inventory row and per blob it hands its consumers - a round trip
@@ -14,7 +14,8 @@
         repair what a crash left behind. Schedule as many walks as you like, each a cron expression in UTC and the
         consumers that ride it, and read what the last run of each one measured before you shorten a cadence. The
         same document is the <code>walks</code> setting the settings screen, <code>/api/settings</code> and the
-        CLI edit.</small></p>
+        CLI edit. The state of every background task, the walks' consumers among them, is on
+        <a th:href="@{/ui/observability}">Metrics</a>.</small></p>
 
     <article th:each="e : ${overview.entries}" class="setting-group">
         <h2 th:text="${e.name}">rebuild</h2>

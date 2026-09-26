@@ -15,6 +15,8 @@
     <article th:if="${panel.available()}">
         <p><small>The durable findings ledger: what the advisory feeds, the compliance gate and the AI analyses
             recorded against this repository's artifacts, attributed to the module or feed that produced each row.
+            The <a th:href="@{'/ui/repositories/' + ${repo} + '/vulnerabilities'}">vulnerabilities</a> page ranks
+            what the feeds say now, worst first.
             A superseded finding stays listed with its mark - categorized, never discarded. An AI-produced row is
             a candidate for human review, never an authoritative verdict: confirm or dismiss it here - the
             <a th:href="@{'/ui/repositories/' + ${repo} + '/ai-review'}">AI review queue</a>
@@ -86,7 +88,8 @@
                 </thead>
                 <tbody>
                 <tr th:each="row : ${panel.rows()}">
-                    <td><code th:text="${row.coordinate()}">coordinate:version</code></td>
+                    <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${row.ecosystem()},coordinate=${row.bareCoordinate()})}"><code
+                            th:text="${row.coordinate()}">coordinate:version</code></a></td>
                     <td>
                         <code th:text="${row.id()}">FINDING-1</code>
                         <span th:if="${row.supersededBy() != null}" class="app-badge"

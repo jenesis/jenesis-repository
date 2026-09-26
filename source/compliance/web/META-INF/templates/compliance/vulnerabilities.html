@@ -6,6 +6,9 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Vulnerabilities · ' + ${repo})}"></header>
+    <p><small>What the advisory feeds say about this repository's published artifacts now, worst first. Every row the
+        scans and the gate recorded, with the reviews on each, is the
+        <a th:href="@{'/ui/repositories/' + ${repo} + '/findings'}">findings ledger</a>.</small></p>
 
     <p th:unless="${capabilities.advisories()}">
         No advisory feed module is installed on this deployment, so its published artifacts are not scanned.
