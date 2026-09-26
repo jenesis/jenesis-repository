@@ -1,7 +1,9 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.store.ArtifactStore;
@@ -28,6 +30,10 @@ final class HelmFormatFixture implements EcosystemFormatFixture {
     private static final String VERSION = "1.0.0";
 
     private static final String INDEX = BASE + "/index.yaml";
+
+    /** The upstream chart repository a proxy leg reads, and the one chart version it serves. */
+    private static final URI ROOT = URI.create("https://charts.invalid/stable/");
+    private static final String PROXIED_FILE = "proxied-chart-9.9.9.tgz";
 
     private RepositoryFormat serving;
 
@@ -106,9 +112,10 @@ final class HelmFormatFixture implements EcosystemFormatFixture {
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
 
-                FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY, PROXY,
-                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE, PROXY,
-                FormatContract.Property.PROXY_STREAMS_UPSTREAM_BODY, PROXY,
+                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
+                "every path this leg proxies is one a miss on fails the install: index.yaml is an ENUMERATION, "
+                        + "refused as a 502 rather than answered empty, and a chart archive is the file the index "
+                        + "named. Helm has no optional file a client resolves by its absence",
                 FormatContract.Property.PUBLISH_PATHS_ARE_DESCRIBED,
                 "same protocol reason as PUBLISH_SERVES_EXACT_BYTES: the kit's arbitrary body publishes nowhere here. "
                         + "Restated, not dropped: PackagedArtifactContract records where a real package publish "
@@ -138,11 +145,45 @@ final class HelmFormatFixture implements EcosystemFormatFixture {
                         + "REQUEST_PATH_TRAVERSAL_REFUSED");
     }
 
-    /** This entry is scoped to the classic HTTP repository, and a pull-through against an upstream chart repository
-     *  is a separate change - so these three rows have no subject rather than a failing one. */
-    private static final String PROXY =
-            "helm has no proxy leg: this format is scoped to serving the classic index.yaml + .tgz repository, and "
-                    + "pulling through an upstream chart repository is a separate change that these rows arrive with";
+    @Override
+    public Optional<Upstream> upstream(GeneratedBody body) {
+        // The honest upstream: an index naming the archive relative to itself, with its digest, and the archive.
+        return Optional.of(new Upstream(BASE + "/charts/" + PROXIED_FILE, ROOT, fetcher(body, body.sha256())));
+    }
+
+    @Override
+    public Optional<Upstream> tampered(GeneratedBody body) {
+        // The same bytes under a digest they do not hash to: nothing may be linked, and the local 404 must stand.
+        return Optional.of(new Upstream(BASE + "/charts/" + PROXIED_FILE, ROOT, fetcher(body, "0".repeat(64))));
+    }
+
+    /** An upstream chart repository answering its index.yaml and the one archive it names. */
+    private static ProxyFormat.Fetcher fetcher(GeneratedBody body, String digest) {
+        String index = ROOT + "index.yaml";
+        String archive = ROOT + "archives/" + PROXIED_FILE;
+        byte[] document = ("apiVersion: v1\nentries:\n  proxied-chart:\n  - apiVersion: v2\n"
+                + "    name: proxied-chart\n    version: 9.9.9\n    digest: " + digest + "\n"
+                + "    urls:\n    - archives/" + PROXIED_FILE + "\n").getBytes(StandardCharsets.UTF_8);
+        return new ProxyFormat.Fetcher.Buffered() {
+
+            @Override
+            public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
+                return url.toString().equals(index)
+                        ? Optional.of(new ProxyFormat.Fetched(200, document, Map.of()))
+                        : Optional.of(new ProxyFormat.Fetched(404, new byte[0], Map.of()));
+            }
+
+            @Override
+            public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) {
+                if (url.toString().equals(index)) {
+                    return Optional.of(new ProxyFormat.Download(200, new ByteArrayInputStream(document), Map.of()));
+                }
+                return url.toString().equals(archive)
+                        ? Optional.of(new ProxyFormat.Download(200, body.open(), Map.of()))
+                        : Optional.of(new ProxyFormat.Download(404, InputStream.nullInputStream(), Map.of()));
+            }
+        };
+    }
 
     private static String download(String version) {
         return BASE + "/charts/" + CHART + "-" + version + ".tgz";

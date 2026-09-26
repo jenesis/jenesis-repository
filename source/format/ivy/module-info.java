@@ -22,6 +22,9 @@
  */
 module build.jenesis.repository.format.ivy {
     requires build.jenesis.repository.format;
+    // The proxy leg's seam and its shared relay rules.
+    requires build.jenesis.repository.blobs;
+    requires org.slf4j;
     requires build.jenesis.repository.store;
     exports build.jenesis.repository.format.ivy to
             build.jenesis.repository.format.contract.ecosystem.test,

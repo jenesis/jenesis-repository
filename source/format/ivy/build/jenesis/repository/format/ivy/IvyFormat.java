@@ -2,7 +2,10 @@ package build.jenesis.repository.format.ivy;
 
 import module java.base;
 
+import build.jenesis.repository.blobs.ProxyLeg;
+import build.jenesis.repository.blobs.ProxyRelay;
 import build.jenesis.repository.format.ArtifactLayout;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -65,7 +68,10 @@ import build.jenesis.repository.format.PublishedExport;
  * {@link ArtifactLayout#paths(String, String, ArtifactStore)} and the reason this format needs no configuration
  * document of its own.
  */
-public final class IvyFormat implements RepositoryFormat, ArtifactLayout, ArtifactSignatures, RepositoryExporter {
+public final class IvyFormat implements RepositoryFormat, ArtifactLayout, ArtifactSignatures, RepositoryExporter,
+        ProxyLeg {
+
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(IvyFormat.class);
 
     /**
      * The coordinate space these artifacts belong to.
@@ -305,6 +311,117 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
             }
         }
         return !segment.isEmpty();
+    }
+
+    // ---- proxy ----
+
+    /**
+     * Proxy a miss to an upstream Ivy repository laid out as this one is,
+     * {@code <organisation>/<module>/<revision>/<file>} under the upstream's root. Every target is composed from the
+     * configured upstream and the request path, so nothing an upstream advertises is followed.
+     *
+     * <p>A module directory is an ENUMERATION: Ivy resolves {@code 1.+} and {@code latest.release} by listing it, so it
+     * is fetched fresh on every read and only an upstream that answered 404/410 reaches the client as a 404. Its
+     * entries are names relative to the directory, so it is relayed unchanged.
+     *
+     * <p>A revision's file is PINNED, and held to the {@code .sha1} the upstream publishes beside it - a separate
+     * document. One the upstream answered 404 for leaves the file unverified, as an Ivy repository is allowed to
+     * publish no checksum; one this repository could not read declines the fill, and a mismatch is refused. The bytes
+     * are stored as they stream and linked only once they are held to the checksum, so a refused fill leaves nothing
+     * reachable. A checksum or signature beside a file is laid out as it is.
+     *
+     * <p>The revision's descriptor is the one file a client resolves against the absence of: with no
+     * {@code ivy-<revision>.xml} Ivy assumes a module with one jar and no dependencies. So a descriptor this leg
+     * refuses, or cannot read the checksum of, answers {@code 502} rather than a miss the client would take for that.
+     *
+     * <p>A proxied revision does not join the module's listing: through a proxy, the listing a client reads is the
+     * upstream's.
+     */
+    @Override
+    public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
+                               ProxyFormat.Fetcher fetcher) throws IOException {
+        String path = exchange.path();
+        String root = upstream.toString().endsWith("/") ? upstream.toString() : upstream + "/";
+        Optional<Module> module = Module.of(path);
+        if (module.isPresent()) {
+            return ProxyRelay.streamFresh(fetcher,
+                    URI.create(root + module.get().organisation() + "/" + module.get().module() + "/"), "text/html",
+                    exchange, ProxyRelay.Document.ENUMERATION);
+        }
+        Optional<Coordinate> coordinate = Coordinate.of(path);
+        if (coordinate.isEmpty()) {
+            return false;
+        }
+        URI target = URI.create(root + path.substring(PREFIX.length()));
+        Publication publication = new Publication(store);
+        boolean descriptor = coordinate.get().file().equals("ivy-" + coordinate.get().revision() + ".xml")
+                || coordinate.get().file().equals("ivy.xml");
+        if (sidecar(coordinate.get().file())) {
+            try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+                if (download == null || download.status() != 200) {
+                    return false;
+                }
+                publication.link(path, publication.storeBlob(download.body()));
+            }
+            serve(exchange, store);
+            return true;
+        }
+        URI checksum = URI.create(target + ".sha1");
+        ProxyRelay.Sidecar sidecar = ProxyRelay.declaring(fetcher, checksum, Map.of());
+        ProxyRelay.Declared declared = sidecar.answered() ? sha1(sidecar.document().body(), checksum)
+                : sidecar.verdict();
+        if (!declared.readable()) {
+            return descriptor
+                    ? undecided(target, exchange, "its checksum could not be read: " + declared.unreadable())
+                    : ProxyRelay.unverifiable(target, declared);
+        }
+        Optional<ProxyFormat.Download> fetched = fetcher.download(target, Map.of());
+        if (fetched.isEmpty()) {
+            return descriptor && undecided(target, exchange, "the upstream could not be reached");
+        }
+        try (ProxyFormat.Download download = fetched.get()) {
+            if (download.status() != 200) {
+                return descriptor && !ProxyRelay.upstreamMiss(download.status())
+                        && undecided(target, exchange, "the upstream answered " + download.status());
+            }
+            MessageDigest digest = sha1();
+            Publication.Blob stored = publication.stored(new DigestInputStream(download.body(), digest));
+            if (declared.verifiable() && !MessageDigest.isEqual(declared.expected(), digest.digest())) {
+                LOGGER.warn("Refusing to cache the proxied Ivy file {}: it does not match the SHA-1 {} the upstream "
+                        + "publishes for it. Nothing was cached or served.", target,
+                        HexFormat.of().formatHex(declared.expected()));
+                return descriptor && undecided(target, exchange, "it does not match the SHA-1 the upstream publishes for it");
+            }
+            publication.link(path, stored.hash(), stored.size());
+        }
+        serve(exchange, store);
+        return true;
+    }
+
+    /** Answer a descriptor this leg could not decide {@code 502}, since Ivy reads a missing one as a module with one jar
+     *  and no dependencies. */
+    private static boolean undecided(URI target, FormatExchange exchange, String reason) throws IOException {
+        LOGGER.warn("Refusing to answer the proxied Ivy descriptor {} as a miss: {}. Ivy reads a missing descriptor as "
+                + "a module with one jar and no dependencies, so the client is answered 502.", target, reason);
+        exchange.respond(502);
+        return true;
+    }
+
+    /** What an upstream {@code .sha1} declares: its first token, when that is 40 hex characters. Anything else is a
+     *  document this repository could not read, not one declaring nothing. */
+    private static ProxyRelay.Declared sha1(byte[] body, URI document) {
+        String token = new String(body, StandardCharsets.UTF_8).strip().split("\\s+", 2)[0];
+        return token.matches("[0-9a-fA-F]{40}")
+                ? ProxyRelay.Declared.of("SHA-1", HexFormat.of().parseHex(token))
+                : ProxyRelay.Declared.unreadable("the checksum " + document + " is not a SHA-1");
+    }
+
+    private static MessageDigest sha1() {
+        try {
+            return MessageDigest.getInstance("SHA-1");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("every JDK provides SHA-1", e);
+        }
     }
 
     // ---- layout ----

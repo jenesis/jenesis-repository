@@ -1,7 +1,9 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.ContractHold;
 import build.jenesis.repository.format.testkit.FormatContract;
@@ -34,6 +36,13 @@ final class IvyFormatFixture implements EcosystemFormatFixture {
      *  is a Maven {@code groupId:artifactId} precisely because the accepted layout is restricted to the one Gradle
      *  writes the group into. */
     private static final String COORDINATE = ORGANISATION + ":" + MODULE;
+
+    /** The upstream Ivy repository a proxy leg reads, and the revision it serves. */
+    private static final URI ROOT = URI.create("https://ivy.invalid/repository/");
+    private static final String PROXIED_REVISION = "9.9.9";
+    private static final String PROXIED_DIRECTORY = ORGANISATION + "/" + MODULE + "/" + PROXIED_REVISION + "/";
+    private static final String PROXIED_JAR = PROXIED_DIRECTORY + MODULE + "-" + PROXIED_REVISION + ".jar";
+    private static final String PROXIED_DESCRIPTOR = PROXIED_DIRECTORY + "ivy-" + PROXIED_REVISION + ".xml";
 
     private RepositoryFormat serving;
 
@@ -115,9 +124,6 @@ final class IvyFormatFixture implements EcosystemFormatFixture {
     @Override
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
-                FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY, PROXY,
-                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE, PROXY,
-                FormatContract.Property.PROXY_STREAMS_UPSTREAM_BODY, PROXY,
                 FormatContract.Property.GENERATED_INDEX_IS_REVALIDATABLE, STORED_NOT_GENERATED,
                 FormatContract.Property.GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME, STORED_NOT_GENERATED);
     }
@@ -131,9 +137,48 @@ final class IvyFormatFixture implements EcosystemFormatFixture {
                     + "last revision is WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION's business, which this fixture "
                     + "does assert";
 
-    private static final String PROXY =
-            "ivy has no proxy leg: this format is scoped to serving a repository a deployment hosts, and mirroring "
-                    + "a remote Ivy repository is a separate change that these rows arrive with";
+    @Override
+    public Optional<Upstream> upstream(GeneratedBody body) {
+        return Optional.of(new Upstream("/ivy/" + PROXIED_JAR, ROOT,
+                fetcher(PROXIED_JAR, body, body.digest("SHA-1"))));
+    }
+
+    @Override
+    public Optional<Upstream> tampered(GeneratedBody body) {
+        return Optional.of(new Upstream("/ivy/" + PROXIED_JAR, ROOT, fetcher(PROXIED_JAR, body, "0".repeat(40))));
+    }
+
+    /** The descriptor: with none, Ivy assumes a module of one jar and no dependencies, so a refusal of it must not
+     *  read as an absence. */
+    @Override
+    public Optional<Elective> elective(GeneratedBody body) {
+        return Optional.of(new Elective("/ivy/" + PROXIED_DESCRIPTOR, ROOT, fetcher(PROXIED_DESCRIPTOR, null, null),
+                fetcher(PROXIED_DESCRIPTOR, body, "0".repeat(40))));
+    }
+
+    /** An upstream Ivy repository serving {@code file} and a {@code .sha1} beside it, or nothing at all when there is
+     *  no body. */
+    private static ProxyFormat.Fetcher fetcher(String file, GeneratedBody body, String sha1) {
+        String artifact = ROOT + file;
+        return new ProxyFormat.Fetcher.Buffered() {
+
+            @Override
+            public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
+                return body != null && url.toString().equals(artifact + ".sha1")
+                        ? Optional.of(new ProxyFormat.Fetched(200, sha1.getBytes(StandardCharsets.UTF_8), Map.of()))
+                        : Optional.of(new ProxyFormat.Fetched(404, new byte[0], Map.of()));
+            }
+
+            @Override
+            public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) {
+                if (body != null && url.toString().equals(artifact)) {
+                    return Optional.of(new ProxyFormat.Download(200, body.open(), Map.of()));
+                }
+                return fetch(url, requestHeaders).map(fetched -> new ProxyFormat.Download(fetched.status(),
+                        new ByteArrayInputStream(fetched.body()), Map.of()));
+            }
+        };
+    }
 
     private void put(ArtifactStore store, String path, byte[] body) throws IOException {
         seed(store, ContractExchange.of("PUT", path, body), 201);

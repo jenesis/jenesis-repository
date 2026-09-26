@@ -12,6 +12,10 @@ import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
+import build.jenesis.repository.blobs.OutboundTargets;
+import build.jenesis.repository.blobs.ProxyLeg;
+import build.jenesis.repository.blobs.ProxyRelay;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -50,7 +54,7 @@ import build.jenesis.repository.store.StoredListing;
  * {@link BlobLayout} seam instead.
  */
 public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryImporter,
-        ArtifactSignatures, RepositoryExporter {
+        ArtifactSignatures, RepositoryExporter, ProxyLeg {
 
     /** The package-ecosystem name Helm coordinates report. OSV has no Helm advisory feed, so a vulnerability lookup
      *  finds nothing while the deny-list, the malicious-package flag and licence policy still key on the coordinate. */
@@ -304,6 +308,209 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
             return;
         }
         blobs.serve(located.get(), exchange);
+    }
+
+    // ------------------------------------------------------------------ proxy
+
+    /**
+     * Proxy a miss to an upstream chart repository: the classic one {@code helm repo add} reads, an
+     * {@code index.yaml} at its root that names each chart version's archive and the archive's {@code digest}.
+     *
+     * <p>The index is an ENUMERATION, listing every chart and version a client can install. So it is fetched fresh
+     * on every read, and only an upstream that answered 404/410 reaches the client as a 404. It is rewritten on the
+     * way out, which is this leg's rewrite-fidelity clause. Each version's {@code urls} become
+     * {@code charts/<file>}, relative to this repository, so a client installs through this repository's cache and
+     * gate rather than straight from the upstream. The {@code digest} is left as it is, and the rewritten URL serves
+     * exactly the archive the original named, verified against that digest. A version whose URL names no chart file
+     * is left out rather than listed with a link that would lead back to the upstream.
+     *
+     * <p>A chart archive is PINNED. Its location and its digest come from the same index, so there is no separate
+     * document to lose: an index that cannot be read declines the fill because it leaves no location either. The
+     * location is chosen by the upstream, and an index commonly names archives on another host, so it passes the
+     * outbound screen ({@link OutboundTargets}) before it is fetched. Helm has no canonical public repository, so a
+     * deployment names one per repository and {@link #defaultUpstream()} stays empty.
+     */
+    @Override
+    public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
+                               ProxyFormat.Fetcher fetcher) throws IOException {
+        String rest = exchange.path().substring(PREFIX.length());
+        int slash = rest.indexOf('/');
+        if (slash < 0) {
+            return false;
+        }
+        String repo = rest.substring(0, slash), sub = rest.substring(slash + 1);
+        String root = upstream.toString().endsWith("/") ? upstream.toString() : upstream + "/";
+        URI index = URI.create(root + INDEX);
+        if (sub.equals(INDEX)) {
+            ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, index, Map.of(), exchange,
+                    ProxyRelay.Document.ENUMERATION);
+            if (!answer.answered()) {
+                return answer.served();
+            }
+            Map<?, ?> document = upstreamIndex(answer.document().body());
+            if (document == null) {
+                return ProxyRelay.unanswered(index, exchange, ProxyRelay.Document.ENUMERATION,
+                        "the upstream answered an index.yaml that is not a chart repository index");
+            }
+            exchange.setResponseHeader("Content-Type", "application/x-yaml");
+            exchange.respond(200, rewritten(document, index).getBytes(StandardCharsets.UTF_8));
+            return true;
+        }
+        if (!sub.startsWith(CHARTS) || !sub.endsWith(TGZ)) {
+            return false;
+        }
+        String file = sub.substring(CHARTS.length());
+        if (file.indexOf('/') >= 0 || Keys.unsafe(file)) {
+            return false;
+        }
+        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(index, Map.of());
+        if (fetched.isEmpty() || fetched.get().status() != 200) {
+            return false;
+        }
+        Map<?, ?> document = upstreamIndex(fetched.get().body());
+        Upstream chart = document == null ? null : locate(document, index, file);
+        if (chart == null || !OutboundTargets.mayFollow(chart.url(), upstream,
+                ProxyLeg.allowInternalTargets(exchange))) {
+            return false;
+        }
+        Blobs blobs = new Blobs(store);
+        try (ProxyFormat.Download download = fetcher.download(chart.url(), Map.of()).orElse(null)) {
+            if (download == null || download.status() != 200
+                    || !ProxyRelay.fill(blobs, fileKey(repo, file), chart.url(), download.body(), chart.digest())) {
+                return false;
+            }
+        }
+        download(repo, file, exchange, blobs);
+        return true;
+    }
+
+    /** Where a proxied chart's archive is, and the digest its index entry declares for it. */
+    private record Upstream(URI url, ProxyRelay.Declared digest) {
+    }
+
+    /**
+     * An upstream {@code index.yaml}, or {@code null} when the body is not a YAML mapping carrying an
+     * {@code entries} mapping. Read whole, since it is rewritten: the fetch that produced it already bounds it, and
+     * the parser's own ceiling is lifted to that body's size rather than left at a default that would refuse a large
+     * public repository's index.
+     */
+    private static Map<?, ?> upstreamIndex(byte[] body) {
+        try {
+            Object loaded = indexYaml(body.length).load(new ByteArrayInputStream(body));
+            return loaded instanceof Map<?, ?> document && document.get("entries") instanceof Map<?, ?>
+                    ? document : null;
+        } catch (RuntimeException unreadable) {
+            return null;
+        }
+    }
+
+    /** The index as this repository serves it: every version's {@code urls} pointing at its own {@code charts/}. */
+    private static String rewritten(Map<?, ?> document, URI index) {
+        Map<Object, Object> rewritten = new LinkedHashMap<>(document);
+        Map<Object, Object> entries = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> chart : ((Map<?, ?>) document.get("entries")).entrySet()) {
+            if (!(chart.getValue() instanceof List<?> versions)) {
+                continue;
+            }
+            List<Object> served = new ArrayList<>();
+            for (Object version : versions) {
+                if (!(version instanceof Map<?, ?> entry)) {
+                    continue;
+                }
+                List<String> files = new ArrayList<>();
+                for (URI url : urls(entry, index)) {
+                    String file = chartFile(url);
+                    if (file != null && !files.contains(CHARTS + file)) {
+                        files.add(CHARTS + file);
+                    }
+                }
+                if (!files.isEmpty()) {
+                    Map<Object, Object> copy = new LinkedHashMap<>(entry);
+                    copy.put("urls", files);
+                    served.add(copy);
+                }
+            }
+            if (!served.isEmpty()) {
+                entries.put(chart.getKey(), served);
+            }
+        }
+        rewritten.put("entries", entries);
+        return indexYaml(1).dump(rewritten);
+    }
+
+    /**
+     * The YAML an upstream index is read and written back with. Its scalars stay the text they were, apart from
+     * booleans and nulls: a default reading turns {@code version: 1.10} into the number {@code 1.1} and a
+     * {@code created} time into a date, and writing either back would change what the index says. Kept as text, a
+     * scalar is written back as it was read.
+     */
+    private static Yaml indexYaml(int limit) {
+        LoaderOptions loading = new LoaderOptions();
+        loading.setCodePointLimit(Math.max(limit, 1));
+        loading.setAllowDuplicateKeys(false);
+        DumperOptions dumping = new DumperOptions();
+        dumping.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        dumping.setSplitLines(false);
+        return new Yaml(new SafeConstructor(loading), new Representer(dumping), dumping, loading, new Resolver() {
+            @Override
+            protected void addImplicitResolvers() {
+                addImplicitResolver(Tag.BOOL, BOOL, "yYnNtTfFoO");
+                addImplicitResolver(Tag.NULL, NULL, "~nN\0");
+                addImplicitResolver(Tag.NULL, EMPTY, null);
+            }
+        });
+    }
+
+    /** The version whose archive is {@code file}, located against the index it was read from. */
+    private static Upstream locate(Map<?, ?> document, URI index, String file) {
+        for (Object versions : ((Map<?, ?>) document.get("entries")).values()) {
+            if (!(versions instanceof List<?> list)) {
+                continue;
+            }
+            for (Object version : list) {
+                if (!(version instanceof Map<?, ?> entry)) {
+                    continue;
+                }
+                for (URI url : urls(entry, index)) {
+                    if (file.equals(chartFile(url))) {
+                        String digest = text(entry, "digest");
+                        return new Upstream(url, digest != null && digest.matches("[0-9a-fA-F]{64}")
+                                ? ProxyRelay.Declared.of("SHA-256", HexFormat.of().parseHex(digest))
+                                : ProxyRelay.Declared.NONE);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** A version entry's {@code urls}, each resolved against the index - an index may name its archives relative to
+     *  itself. One that is not a URL at all is left out. */
+    private static List<URI> urls(Map<?, ?> entry, URI index) {
+        List<URI> urls = new ArrayList<>();
+        if (entry.get("urls") instanceof List<?> listed) {
+            for (Object url : listed) {
+                if (url instanceof String text) {
+                    try {
+                        urls.add(index.resolve(text.strip()));
+                    } catch (IllegalArgumentException _) {
+                        // not a URL: nothing this repository could fetch or serve under it
+                    }
+                }
+            }
+        }
+        return urls;
+    }
+
+    /** The chart archive a URL names - the last segment of its path when that is a {@code .tgz} this repository can
+     *  key - or {@code null}. */
+    private static String chartFile(URI url) {
+        String path = url.getPath();
+        if (path == null) {
+            return null;
+        }
+        String file = path.substring(path.lastIndexOf('/') + 1);
+        return file.endsWith(TGZ) && !file.equals(TGZ) && !Keys.unsafe(file) ? file : null;
     }
 
     // ------------------------------------------------------------------ layout
