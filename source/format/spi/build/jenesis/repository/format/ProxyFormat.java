@@ -208,6 +208,26 @@ public interface ProxyFormat {
     }
 
     /**
+     * The path an upstream answer to {@code exchange} is kept, screened and recorded under, when that is not the path
+     * the client asked for - a request naming a mutable reference (a branch) whose answer the upstream identifies by
+     * an immutable one (a commit), so the bytes are one version however many names reach them. Empty keeps the
+     * requested path, which is right for every format whose request path already names what it serves.
+     *
+     * <p>Asked once per miss, before the screen, with the upstream fetcher; what it answers is then the path the fill
+     * is screened under, the path its publish is recorded under and the {@link FormatExchange#path()} the leg is
+     * handed, while {@link FormatExchange#requestedPath()} still carries what the client sent - so the leg fetches
+     * upstream what was asked for and keeps it under the name the upstream gave it. A format that resolves here
+     * makes the upstream round trip once, and its leg reads the answer off the kept path rather than asking again.
+     *
+     * @param exchange the request being filled, as the client sent it
+     * @param upstream the upstream root the fill is served from
+     * @param fetcher  the upstream fetcher, unscreened - a resolution reads headers, never an artifact's bytes
+     */
+    default Optional<String> keptAs(FormatExchange exchange, URI upstream, Fetcher fetcher) throws IOException {
+        return Optional.empty();
+    }
+
+    /**
      * Keep a fetched companion where this format reads it from, when that is not the companion's own request path:
      * a registry document the format stores under a key of its own and renders through an endpoint of its own, the
      * way PyPI keeps a provenance document as the attestations its integrity endpoint serves. Answering {@code false}

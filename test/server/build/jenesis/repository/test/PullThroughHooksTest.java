@@ -85,6 +85,38 @@ public class PullThroughHooksTest {
     }
 
     @Test
+    void an_answer_kept_under_another_path_is_screened_filled_and_served_under_it() throws IOException {
+        SpyFormat format = new SpyFormat();
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/branch", UPSTREAM);
+        // The upstream names what the branch answers with - a commit - so the fill is one content under one name.
+        format.keptAs = Map.of("/spyproxy/branch", "/spyproxy/commit");
+        SpyHooks hooks = new SpyHooks();
+
+        FakeExchange miss = new FakeExchange("GET", "/spyproxy/branch");
+        new PullThroughCache(format.fetcher, hooks).serve(format, format, UPSTREAM_BASE, miss, store);
+
+        assertThat(miss.status).isEqualTo(200);
+        assertThat(miss.responseBody).as("the client is answered with what it asked for").isEqualTo(UPSTREAM);
+        assertThat(hooks.screenFetchPaths).as("the screen decides under the kept path").containsExactly("/spyproxy/commit");
+        assertThat(format.proxied).as("the leg keeps under the kept path and fetches what was requested")
+                .containsExactly("/spyproxy/commit <- /spyproxy/branch");
+        assertThat(format.local).containsOnlyKeys("/spyproxy/commit");
+    }
+
+    @Test
+    void a_format_that_keeps_nothing_elsewhere_hands_its_leg_the_request_unchanged() throws IOException {
+        SpyFormat format = new SpyFormat();
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/plain", UPSTREAM);
+        SpyHooks hooks = new SpyHooks();
+
+        new PullThroughCache(format.fetcher, hooks).serve(format, format, UPSTREAM_BASE,
+                new FakeExchange("GET", "/spyproxy/plain"), store);
+
+        assertThat(format.proxied).containsExactly("/spyproxy/plain <- /spyproxy/plain");
+        assertThat(hooks.screenFetchPaths).containsExactly("/spyproxy/plain");
+    }
+
+    @Test
     void a_withhold_decision_answers_404_without_serving_the_local_bytes() throws IOException {
         SpyFormat format = new SpyFormat();
         format.local.put("/spyproxy/withheld", HIT);
@@ -191,6 +223,13 @@ public class PullThroughHooksTest {
      *  proxy leg, and counters record how often it served locally and fetched upstream. */
     private static final class SpyFormat implements RepositoryFormat, ProxyFormat {
         private List<ProxyFormat.Companion> companions = List.of();
+        private Map<String, String> keptAs = Map.of();
+        private final List<String> proxied = new ArrayList<>();
+
+        @Override
+        public Optional<String> keptAs(FormatExchange exchange, URI upstream, ProxyFormat.Fetcher fetcher) {
+            return Optional.ofNullable(keptAs.get(exchange.path()));
+        }
         private boolean keeps;
         private final Map<String, byte[]> kept = new HashMap<>();
 
@@ -246,8 +285,9 @@ public class PullThroughHooksTest {
         @Override
         public boolean proxy(FormatExchange exchange, ArtifactStore store, URI base, ProxyFormat.Fetcher fetcher)
                 throws IOException {
+            proxied.add(exchange.path() + " <- " + exchange.requestedPath());
             Optional<ProxyFormat.Fetched> fetched =
-                    fetcher.fetch(base.resolve(exchange.path().substring(1)), Map.of());
+                    fetcher.fetch(base.resolve(exchange.requestedPath().substring(1)), Map.of());
             if (fetched.isEmpty() || fetched.get().status() != 200) {
                 return false;
             }

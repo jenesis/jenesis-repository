@@ -84,7 +84,7 @@ class BlobLayoutCoordinateSeamTest {
      */
     private static final List<String> CLAIMS = List.of("npm", "rubygems", "nuget", "go", "cargo", "composer",
             "debian", "rpm", "cocoapods", "conda", "conan", "pypi",
-            "helm", "terraform", "apk", "winget", "swift", "homebrew");
+            "helm", "terraform", "apk", "winget", "swift", "homebrew", "huggingface");
 
     /**
      * The layouts that answer {@code describePointer} and are proven somewhere other than this suite, with where.

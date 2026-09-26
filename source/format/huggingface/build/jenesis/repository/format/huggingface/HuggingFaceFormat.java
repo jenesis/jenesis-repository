@@ -218,20 +218,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
      * revision itself, or the stored value is unsafe as a key segment - so the union only ever adds a distinct, safe
      * commit alias.
      *
-     * <p><b>This alias is why this format does not answer {@code BlobLayout.describePointer}, and the reason is
-     * worth keeping.</b> That clause rebuilds a lost {@code published/} row by naming, from a stored pointer key
-     * alone, the coordinate version the pointer serves. Every other format here can: the pair is in the key, in
-     * path segments or in a filename the ecosystem guarantees is splittable. Here it is not - a key under
-     * {@code revs/<commit>/files} looks identical to one under {@code revs/<branch>/files}, and which of the two
-     * the publish recorded is decided by a stored commit document this method reads. {@code describePointer} is
-     * handed a key and nothing else, so it cannot make that read.
-     *
-     * <p>Answering the storage revision anyway would not be a parse error, it would be a decision: a commit is a
-     * revision a client really can resolve at, so the row would not be fictional - it would be a <em>second</em>
-     * version of the same content that the publish never recorded, which retention would then age on its own and
-     * eviction would count separately. That is a product decision about the inventory, not a key grammar, so this
-     * format answers nothing until it is made. Empty is the documented answer for "no repair for this format",
-     * and a format with no repair is exactly as repairable as it was before the seam existed.
+     * <p>The alias is a read-time union only. What a revision's files are recorded under is the revision they are
+     * stored under - a hosted branch under its own name, a proxied fetch under the commit it resolved to
+     * ({@link #keptAs}) - which is what lets {@link #describePointer} name a pointer's version from its key.
      */
     private static String commitAlias(String base, String revision, ArtifactStore store) throws IOException {
         String commit = storedCommit(base, revision, store);
@@ -649,10 +638,53 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
      * points back through us). Returns {@code false} to let the local {@code 404} stand on an unproxyable path or an
      * upstream miss.
      */
+    /**
+     * A {@code GET} of a file at a branch is kept under the commit the upstream resolves the branch to: the bytes are
+     * cached under that commit already, and recording them under it too makes one content one version - the commit,
+     * which a client can resolve at and which never changes under its name - rather than a {@code main} whose bytes
+     * move while its version stays. It is how Artifactory's and Nexus's Hugging Face proxies keep a model, and it is
+     * what lets {@link #describePointer} name a proxied pointer's version from its key.
+     *
+     * <p>The resolution is the one HEAD the leg made before this seam existed, moved here; the leg reads the commit
+     * off the kept path and asks nothing again. A {@code HEAD} records nothing, so it keeps its path and its single
+     * upstream probe, and a branch the upstream cannot resolve to a commit keeps its path and is declined by the leg
+     * as before.
+     */
+    @Override
+    public Optional<String> keptAs(FormatExchange exchange, URI upstream, ProxyFormat.Fetcher fetcher)
+            throws IOException {
+        String path = exchange.path();
+        if (!exchange.method().equals("GET") || !path.startsWith(PREFIX)) {
+            return Optional.empty();
+        }
+        String rest = path.substring(PREFIX.length());
+        int slash = rest.indexOf('/');
+        if (slash < 0) {
+            return Optional.empty();
+        }
+        String repo = rest.substring(0, slash);
+        String sub = rest.substring(slash + 1);
+        Resolve resolve = parseResolve(sub);
+        if (repo.isEmpty() || Keys.unsafe(repo) || resolve == null || isCommit(resolve.revision())
+                || base(repo, resolve.type(), resolve.repoId()) == null || Keys.unsafe(resolve.revision())
+                || unsafeFilepath(resolve.filepath())) {
+            return Optional.empty();
+        }
+        ProxyFormat.Head head = fetcher.head(target(upstream, sub), Map.of()).orElse(null);
+        String commit = head == null || head.status() != 200 ? null : commitOf(head);
+        if (commit == null || !isCommit(commit)) {
+            return Optional.empty();
+        }
+        return Optional.of(resolvePath(repo, resolve.type(), resolve.repoId(), commit, resolve.filepath()));
+    }
+
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
                                ProxyFormat.Fetcher fetcher) throws IOException {
         String path = exchange.path();
+        // What the client asked for, which is what is fetched upstream; path() is the name it is kept under, which
+        // differs where keptAs resolved a branch to its commit.
+        String requested = exchange.requestedPath();
         String rest = path.substring(PREFIX.length());
         int slash = rest.indexOf('/');
         if (slash < 0) {
@@ -679,7 +711,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         if (base == null || Keys.unsafe(resolve.revision()) || unsafeFilepath(resolve.filepath())) {
             return false;
         }
-        URI fileUrl = target(upstream, sub);
+        URI fileUrl = target(upstream, requested.startsWith(PREFIX + repo + "/")
+                ? requested.substring((PREFIX + repo + "/").length()) : sub);
         // Resolve the requested revision to the immutable commit sha the cache is keyed under. A 40-hex sha is already
         // immutable and cached directly; a branch/tag (main) must never be a cache key - it is resolved to its current
         // upstream commit via a HEAD on every read. The bytes are keyed under the resolved commit and never under the
@@ -935,6 +968,23 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         }
         String fileKey = base + "/revs/" + storageRev + "/files/" + enc(resolve.filepath());
         return new Blobs(store).size(fileKey) < 0 ? Optional.empty() : Optional.of(fileKey);
+    }
+
+    /**
+     * The version a pointer serves, from its key alone: the revision its files are stored under, which is the
+     * revision they are recorded under - a hosted branch's own name, or the commit a proxied fetch resolved to
+     * ({@link #keptAs}). A key that is not a file pointer names nothing.
+     */
+    @Override
+    public Optional<ArtifactDescriptor> describePointer(String key) {
+        Located located = locateKey(key);
+        if (located == null || located.filepath().isEmpty()) {
+            return Optional.empty();
+        }
+        String repo = located.base().split("/")[1];
+        return describe(resolvePath(repo, located.type(), located.repoId(), located.revision(), located.filepath()))
+                .filter(described -> described.coordinate() != null && described.version() != null)
+                .map(described -> described.withPath(key));
     }
 
     @Override

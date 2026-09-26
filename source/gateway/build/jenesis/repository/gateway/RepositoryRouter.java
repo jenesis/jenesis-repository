@@ -652,9 +652,13 @@ public final class RepositoryRouter {
             // non-hardened fallback serves through (today's withheld-pointer retraction). This body store is usually the
             // same durable store resolve()'s step-1 local-first already hit-verified, so this leg's verify is reached
             // only when step-1 missed - idempotent, never a double serve.
+            // Composed eagerly for the requested path, so an unsatisfiable hardened leg fails at resolution; a format
+            // that keeps its answer under another path (ProxyFormat.keptAs) is screened under that one.
             ProxyFormat.Fetcher screened = screening(tenant, exchange.path(), records, fallback, spool, probe);
+            Function<String, ProxyFormat.Fetcher> screen = path -> path.equals(exchange.path()) ? screened
+                    : screening(tenant, path, records, fallback, spool, probe);
             HardenedHitVerify hooks = new HardenedHitVerify(fallback.screening() == RepositoryDefinition.Screening.HARDEN,
-                    gates(tenant), holdDays.getAsInt(), hardeningBounds, passThrough, metadataOver, screened);
+                    gates(tenant), holdDays.getAsInt(), hardeningBounds, passThrough, metadataOver, screen);
             new PullThroughCache(probe, hooks).serve(format, proxy, upstream, exchange, body);
         } else {
             format.handle(exchange, body);

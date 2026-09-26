@@ -18,6 +18,16 @@ public interface FormatExchange {
     String path();
 
     /**
+     * The path the client asked for. It is {@link #path()}, except where a pull-through keeps the upstream's answer
+     * under another path than the one requested ({@code ProxyFormat.keptAs}) - a branch resolved to its commit - and
+     * hands the leg an exchange whose {@link #path()} is the kept one; this is then still what the client sent, so the
+     * leg fetches upstream what was asked for.
+     */
+    default String requestedPath() {
+        return path();
+    }
+
+    /**
      * The full external request path, including any repository prefix the dispatcher stripped from {@link #path()}.
      * A format builds absolute self-referential URLs (an npm tarball, say) from this so they keep the {@code /<repo>/}
      * segment under multi-tenant routing; on the single-repository headless server it is the same as {@link #path()}.

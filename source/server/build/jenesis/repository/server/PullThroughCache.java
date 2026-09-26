@@ -164,14 +164,23 @@ public final class PullThroughCache {
     /** Fetch the missed path from the upstream through the format, screened by the hooks, and record the outcome -
      *  and, beside it, what the upstream answered, so a {@code negative} is a reading rather than a prompt to
      *  reproduce. */
-    private void fetch(FormatExchange exchange, ArtifactStore store, RepositoryFormat format, ProxyFormat proxy,
+    private void fetch(FormatExchange requested, ArtifactStore store, RepositoryFormat format, ProxyFormat proxy,
                        URI upstream, Observation observation) throws IOException {
+        // Where the upstream names what it answers with something other than what was asked for - a branch resolved
+        // to its commit - the fill is screened, kept and recorded under that name, so one content is one version
+        // however many names reach it; the leg still fetches what the client asked for (requestedPath).
+        String asked = requested.path();
+        FormatExchange exchange = proxy.keptAs(requested, upstream, fetcher)
+                .filter(kept -> !kept.equals(asked))
+                .<FormatExchange>map(kept -> new Kept(requested, kept))
+                .orElse(requested);
+        String path = exchange.path();
         // The documents the upstream publishes beside the artifact are fetched first, so the screen inside the fill
         // decides over the signature the upstream publishes rather than over what an earlier request left here; they
         // are kept only once the fill has an artifact for them to be a sidecar of - served, or held for review.
         List<ProxyFormat.Companion> companions = proxy.companions(exchange, upstream);
-        Map<String, byte[]> fetched = companions(exchange.path(), companions);
-        Answered answered = new Answered(hooks.screenFetch(exchange.path(), fetcher, store, fetched));
+        Map<String, byte[]> fetched = companions(path, companions);
+        Answered answered = new Answered(hooks.screenFetch(path, fetcher, store, fetched));
         boolean served;
         try {
             served = proxy.proxy(exchange, store, upstream, answered);
@@ -181,9 +190,9 @@ public final class PullThroughCache {
         if (served) {
             keep(proxy, store, companions, fetched);
             observation.lowCardinalityKeyValue("outcome", "miss");
-            observePublish(format, exchange.path(), store);
+            observePublish(format, path, store);
         } else {
-            if (!fetched.isEmpty() && held(store, exchange.path())) {
+            if (!fetched.isEmpty() && held(store, path)) {
                 keep(proxy, store, companions, fetched);
             }
             observation.lowCardinalityKeyValue("outcome", "negative");
@@ -348,6 +357,99 @@ public final class PullThroughCache {
      * real exchange unchanged.
      */
     /** Waits for the leader's fill; false when the wait ended without one, so the caller fetches for itself. */
+    /**
+     * The request a leg is handed when its answer is kept under another path than the one asked for
+     * ({@link ProxyFormat#keptAs}): {@link #path()} is the kept path, {@link #requestedPath()} what the client sent,
+     * and the request URI carries the kept path behind whatever the routing put in front of the requested one, so a
+     * self-referential URL a leg writes keeps its routing. Everything else is the client's request and response.
+     */
+    private static final class Kept implements FormatExchange {
+
+        private final FormatExchange delegate;
+        private final String kept;
+
+        private Kept(FormatExchange delegate, String kept) {
+            this.delegate = delegate;
+            this.kept = kept;
+        }
+
+        @Override
+        public String method() {
+            return delegate.method();
+        }
+
+        @Override
+        public String path() {
+            return kept;
+        }
+
+        @Override
+        public String requestedPath() {
+            return delegate.requestedPath();
+        }
+
+        @Override
+        public String requestUri() {
+            String uri = delegate.requestUri();
+            String path = delegate.path();
+            String prefix = uri.length() >= path.length() && uri.endsWith(path)
+                    ? uri.substring(0, uri.length() - path.length()) : "";
+            return prefix + kept;
+        }
+
+        @Override
+        public String scheme() {
+            return delegate.scheme();
+        }
+
+        @Override
+        public String remoteAddress() {
+            return delegate.remoteAddress();
+        }
+
+        @Override
+        public String queryParameter(String name) {
+            return delegate.queryParameter(name);
+        }
+
+        @Override
+        public String requestHeader(String name) {
+            return delegate.requestHeader(name);
+        }
+
+        @Override
+        public String setting(String key) {
+            return delegate.setting(key);
+        }
+
+        @Override
+        public InputStream requestStream() throws IOException {
+            return delegate.requestStream();
+        }
+
+        @Override
+        public void setResponseHeader(String name, String value) {
+            delegate.setResponseHeader(name, value);
+        }
+
+        @Override
+        public OutputStream respond(int status, long contentLength) throws IOException {
+            return delegate.respond(status, contentLength);
+        }
+
+        /** Forwarded whole, so a buffered answer keeps the delegate's conditional revalidation (see
+         *  {@link Deferred#respond(int, byte[])}). */
+        @Override
+        public void respond(int status, byte[] content) throws IOException {
+            delegate.respond(status, content);
+        }
+
+        @Override
+        public void laidOut(build.jenesis.repository.store.ArtifactDescriptor artifact) {
+            delegate.laidOut(artifact);
+        }
+    }
+
     private static final class Deferred implements FormatExchange {
 
         private final FormatExchange delegate;
