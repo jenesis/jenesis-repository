@@ -64,12 +64,10 @@ public class WorkersConfig {
                 Features.namespaced(environment::getProperty));
     }
 
-    /** The core's scheduled rebuild driver stands down here: this edition's maintenance scheduler drives its
-     *  two jobs - the rebuild walk and the daily stored-listing repair - as the {@code rebuild} and
-     *  {@code listing-rebuild} tasks, per repository and under its lease, so the driver is declared off rather
-     *  than running a second, fixed-tenant pass beside them. The first task is on whenever a walk resolves; the
-     *  second is opt-in in code and switched on by the image ({@code Server.DEFAULTS}), which is what keeps this
-     *  edition repairing what the one repairs. */
+    /** The core's scheduled rebuild driver stands down here: this node's maintenance scheduler drives the rebuild
+     *  walk as the {@code rebuild} task, per repository and under its lease, and the stored-listing repair rides that
+     *  walk as the {@code listing-rebuild} consumer - so the driver is declared off rather than running a second,
+     *  fixed-tenant pass beside them. */
     @Bean(initMethod = "start", destroyMethod = "close")
     public RebuildScheduler rebuildScheduler(ArtifactStore store) {
         return new RebuildScheduler(store, store, key -> RebuildScheduler.INTERVAL.equals(key) ? "off" : null,

@@ -11,30 +11,16 @@ on:
 env:
   MAVEN_REPOSITORY_URI: ${{ vars.MAVEN_REPOSITORY_URI || 'https://repo1.maven.org/maven2/' }}
 
-# A single build runs the whole project in one `java build/jenesis/Make.java`
-# invocation, so the expensive tool integration tests are gated with JUnit tags
-# rather than split into separate (re-compiling) jobs. Each such test carries a
-# @Tag ("docker", "helm", "proxy", "maven", "nexus", "artifactory", "s3", "gcs", "azure"); on a pull request the step below
-# diffs the changed paths and, for every area left untouched, adds that tag to a single
-# --include-tag negation expression (jenesis.test.tag), so the run skips exactly
-# those suites while still executing every other test. A push to main always runs
-# the full suite. The "docker" tag also covers the OCI pull-through proxy against Docker
-# Hub, "proxy" covers the Maven pull-through proxy against Maven Central, "maven" is the
-# Maven deploy/resolve round-trip driven by the real mvn client, and "nexus"/"artifactory" migrate from a real
-# Sonatype Nexus / JFrog Artifactory OSS (seeded with mvn). No tool is installed on the runner: every
-# ecosystem client runs from a pinned image through ToolContainer (mvn from maven:3.9.9-eclipse-temurin-21,
-# helm from alpine/helm:3.16.3), and MinIO/Azurite, Nexus, Artifactory and Selenium are containers their
-# tests start themselves. Only the preinstalled docker CLI is used from the host. The mvn, nexus and
-# artifactory suites route their plugin resolution through MAVEN_REPOSITORY_URI, so they hit the same mirror.
+# One build runs every module and every suite, in one `java build/jenesis/Make.java` invocation. Every suite here runs
+# in process against the code it tests - no container, browser, booted server or live network - so the runner needs
+# JDK 25 and nothing else, and there is nothing to select or skip by tag. The `ci` profile makes a suite that would
+# self-skip for a missing prerequisite fail instead, so a green run means every suite ran.
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          fetch-depth: 0
           # build/jenesis is a symlink into the build/.upstream submodule (the pinned jenesis build tool).
           submodules: true
 
@@ -44,90 +30,9 @@ jobs:
           distribution: temurin
           java-version: '25'
 
-      - name: Decide which tagged suites to run
-        shell: bash
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
-            echo "event=$GITHUB_EVENT_NAME -> running the full suite"
-            echo "REQUIRE_TOOLS=true" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          CHANGED="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
-          printf '%s\n' "Changed files:" "$CHANGED"
-          match() { printf '%s\n' "$CHANGED" | grep -qE "$1"; }
-          if match '^(build/|\.github/|source/format/spi/|source/store/spi/|source/store/filesystem/|source/server/|source/proxy/|test/server/module-info\.java)'; then
-            echo "core change -> running the full suite"
-            echo "REQUIRE_TOOLS=true" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          inc_oci=false
-          if match '^source/format/oci/' || match '/(OciDockerTest|HelmOciTest|OciFormatTest|OciProxyTest)\.java'; then inc_oci=true; fi
-          inc_proxy=false
-          if match '^source/format/maven/' || match '/Maven.*Test\.java'; then inc_proxy=true; fi
-          inc_maven=false
-          if match '^source/format/maven/' || match '/Maven.*Test\.java'; then inc_maven=true; fi
-          inc_nexus=false
-          if match '^source/importer/(spi|nexus|maven)/' || match '/NexusImportTest\.java'; then inc_nexus=true; fi
-          inc_artifactory=false
-          if match '^source/importer/(spi|artifactory|maven)/' || match '/ArtifactoryOssImportTest\.java'; then inc_artifactory=true; fi
-          inc_s3=false
-          if match '^source/store/s3/' || match '^test/store/s3/'; then inc_s3=true; fi
-          inc_gcs=false
-          if match '^source/store/gcs/' || match '^test/store/gcs/'; then inc_gcs=true; fi
-          inc_azure=false
-          if match '^source/store/azure/' || match '^test/store/azure/'; then inc_azure=true; fi
-          # The shared store contract kit and its fixtures drive every backend, so a change to either has to pull in
-          # all three containerised legs - none of them lives under source/store/<backend>/ or test/store/<backend>/,
-          # so without this a kit change would run only the filesystem leg and report green. The kit moved from
-          # source/store/testkit to test/kit/store when the JUnit rule was restated by dependency direction; this
-          # matcher moved with it, because a stale path here fails silently and green.
-          if match '^test/kit/store/' || match '^test/store/contract/'; then
-            inc_s3=true; inc_gcs=true; inc_azure=true
-          fi
-          exclude=()
-          $inc_oci   || exclude+=(docker helm)
-          $inc_proxy || exclude+=(proxy)
-          $inc_maven || exclude+=(maven)
-          $inc_nexus || exclude+=(nexus)
-          $inc_artifactory || exclude+=(artifactory)
-          $inc_s3    || exclude+=(s3)
-          $inc_gcs   || exclude+=(gcs)
-          $inc_azure || exclude+=(azure)
-          if [ ${#exclude[@]} -gt 0 ]; then
-            joined="$(IFS='|'; printf '%s' "${exclude[*]}")"
-            echo "TAG=!(${joined})" >> "$GITHUB_ENV"
-            echo "Excluding tags: ${joined}"
-          fi
-          true
-
-      - name: Log in to Docker Hub (optional, avoids anonymous pull rate limits)
-        if: env.DOCKERHUB_USERNAME != ''
-        shell: bash
-        env:
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-
       - name: Build and test
         shell: bash
-        run: |
-          # A full-suite run selects the `ci` profile: its process-override properties inject
-          # -Djenreg.test.required into the forked test JVMs, so a tool/network-gated test FAILS
-          # instead of self-skipping (the runner's docker CLI is all that is needed - every other
-          # client and service is a container the tests start). A pull request's partial run stays
-          # lenient - its excluded suites make an unreachable dependency expected.
-          ARGS=()
-          if [ "${REQUIRE_TOOLS:-}" = "true" ]; then
-            ARGS+=("-Djenesis.make.profiles=ci")
-          fi
-          if [ -n "${TAG:-}" ]; then
-            echo "Running with jenesis.test.tag=$TAG"
-            ARGS+=("-Djenesis.test.tag=$TAG")
-          fi
-          java "${ARGS[@]}" build/jenesis/Make.java
+        run: java -Djenesis.make.profiles=ci build/jenesis/Make.java
 
       - name: Upload target on failure
         if: failure()

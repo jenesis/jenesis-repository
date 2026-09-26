@@ -5,11 +5,10 @@
  * <p>The suite exists because {@code StoreInvariants} / {@code FaultInjectingStore} were shared but the backend
  * <em>contract</em> was not: {@code test/store/{filesystem,s3,gcs,azure}} each hand-wrote their own idea of
  * what an {@code ArtifactStore} promises and drifted apart. Here the contract is stated once in the testkit and every
- * backend runs all of it through a {@link build.jenesis.repository.store.testkit.StoreFixture}: the filesystem inline
- * on a temporary directory, {@code s3} and {@code gcs} against one MinIO container (the GCS backend speaks the
- * S3-compatible XML surface), {@code azure-blob} against Azurite. The containerised fixtures self-skip without a
- * Docker daemon and <em>fail</em> under the strict lane's {@code -Djenreg.test.required}, where the environment is
- * declared complete and a skip would be a broken lane reported as green.
+ * backend runs all of it through a {@link build.jenesis.repository.store.testkit.StoreFixture} - in this module the
+ * filesystem backend, inline on a temporary directory, and the quota decorator over it. A backend whose service has to be
+ * emulated is held to the same contract by a fixture that starts the emulator, which is not a test that belongs in
+ * a suite running in process.
  *
  * <p>This module deliberately requires all four backend implementations and reaches them only through
  * {@code ArtifactStoreProvider.resolve} - the way a deployment does - so it is simultaneously the runtime-discovery

@@ -13,7 +13,7 @@ import build.jenesis.repository.store.Retries;
 
 /**
  * Deployment-wide settings that can be changed at runtime, kept as one JSON document per contributing module in the
- * artifact store ({@code config/settings/<module>.json}, {@link SettingsDocuments}) and layered over the file/env
+ * artifact store ({@code .system/config/settings/<module>.json}, {@link SettingsDocuments}) and layered over the file/env
  * defaults from {@link RepositoryProperties}: a stored value wins, an absent one falls back to the configured default
  * - mirroring how a per-tenant policy or quota overrides its deployment default. So an operator retunes compliance,
  * retention, the cleanup schedule and the defaults through the API, console or CLI without redeploying, and all three
@@ -32,7 +32,7 @@ import build.jenesis.repository.store.Retries;
  *
  * <p><b>Global and per-tenant scope.</b> A setting is either deployment-wide (global) or one a tenant may override for
  * its own artifact space, classified by {@link SettingsScopes}. A tenant's documents live under the tenant's own store
- * scope ({@code <tenant>/config/settings/<module>.json}, the aligned layout), so the effective value of a
+ * scope ({@code <tenant>/.system/config/settings/<module>.json}, the aligned layout), so the effective value of a
  * tenant-overridable key follows the chain <em>Spring pin &gt; tenant document &gt; global document &gt; packaged
  * default</em> ({@link #getOrDefault(String, String, String)}), while a global-only key is refused in a tenant document
  * and always resolves deployment-wide. Gate policies, deny lists and forward targets can therefore differ per tenant
