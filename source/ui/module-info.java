@@ -29,6 +29,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.ui {
+    requires build.jenesis.repository.net.http;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.store;
     // The console's authority model is grants now, and a grant is an Authorization. A small closure: this
@@ -55,6 +56,7 @@ open module build.jenesis.repository.ui {
     requires java.net.http;
     requires tools.jackson.databind;
     requires spring.security.oauth2.core;
+    requires spring.security.oauth2.jose;
     requires spring.boot.webmvc;
     requires spring.boot.starter.jetty;
     requires org.eclipse.jetty.jndi;

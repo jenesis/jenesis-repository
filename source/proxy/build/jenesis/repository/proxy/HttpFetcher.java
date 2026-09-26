@@ -2,6 +2,7 @@ package build.jenesis.repository.proxy;
 
 import module java.base;
 import module java.net.http;
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.store.Durations;
@@ -41,7 +42,8 @@ import build.jenesis.repository.store.Durations;
  * unique-local host is refused with an {@link IOException} rather than fetched: the request never reaches that host,
  * and the caller sees a visible failure rather than a silently proxied internal response. The initial URL is not
  * re-judged here - that is the trigger's job for an import, and a proxy upstream is operator-configured - so only the
- * upstream-chosen hops are screened.
+ * upstream-chosen hops are screened. Every hop is fetched through the product's HTTP client, which connects a host a
+ * screen admitted only at a public address, so a name that rebinds after the screen is refused rather than fetched.
  */
 public final class HttpFetcher implements ProxyFormat.Fetcher {
 
@@ -61,7 +63,7 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
      *  (it copies network-to-store without buffering). */
     private static final int MAX_FETCH_BODY = 64 * 1024 * 1024;
 
-    private final HttpClient client = HttpClient.newBuilder()
+    private final HttpClient client = ScreenedHttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .followRedirects(HttpClient.Redirect.NEVER)
             .build();

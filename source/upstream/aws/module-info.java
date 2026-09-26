@@ -19,7 +19,7 @@ module build.jenesis.repository.upstream.aws {
     requires software.amazon.awssdk.core;
     requires software.amazon.awssdk.regions;
     requires software.amazon.awssdk.auth;
-    requires software.amazon.awssdk.http.urlconnection;
+    requires build.jenesis.repository.net.http.aws;
     exports build.jenesis.repository.upstream.aws to build.jenesis.repository.upstream.aws.test;
     provides build.jenesis.repository.upstream.UpstreamTokenIssuer
             with build.jenesis.repository.upstream.aws.AwsTokenIssuer;

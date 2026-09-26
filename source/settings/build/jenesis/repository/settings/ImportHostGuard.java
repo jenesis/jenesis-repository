@@ -2,6 +2,8 @@ package build.jenesis.repository.settings;
 
 import module java.base;
 
+import build.jenesis.repository.net.PrivateHosts;
+
 /**
  * The single, fail-closed decision behind the {@code block-private-import-hosts} guard, shared by both import
  * legs so they cannot drift to divergent defaults. A repository-migration URL is fetched server-side <em>with the
@@ -124,7 +126,7 @@ public final class ImportHostGuard {
         }
         InetAddress[] addresses;
         try {
-            addresses = InetAddress.getAllByName(host);
+            addresses = PrivateHosts.addresses(host);
         } catch (UnknownHostException _) {
             // A host that does not resolve cannot be reached, so it is not an SSRF vector; let the import source's own
             // probe reject it (the documented "host that cannot answer" 400) rather than masking that here.

@@ -13,6 +13,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.proxy {
+    requires build.jenesis.repository.net.http;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.observation;
     requires java.net.http;

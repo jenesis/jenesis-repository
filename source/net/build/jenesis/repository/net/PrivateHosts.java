@@ -12,6 +12,15 @@ import module java.base;
  * reached, so it is no SSRF vector, and the caller's own connection attempt then fails naturally rather than this
  * screen masking an honest "no such host".
  *
+ * <p><b>What a screen admitted, the connect holds.</b> A screen resolves a name and a client resolves it again when it
+ * connects, and a name that rebinds between the two - public for the screen, private a moment later - reaches the
+ * address the screen refused. So every screen resolves through {@link #addresses}, which remembers a host whose every
+ * address was public, and the product's HTTP client asks {@link #connectable} when it connects: a host admitted in the
+ * last {@value #HELD_MINUTES} minutes is held to its public addresses, and one that now answers only private ones is
+ * not connected to at all. A host no screen admitted - an operator's own upstream, which may well be internal - is
+ * left as it resolves. The memory is JVM-wide because DNS is: an admission made anywhere is a claim about the name
+ * everywhere, and it is bounded to the most recent {@value #REMEMBERED} hosts.
+ *
  * <p><b>The table is here; the policy is not.</b> This module carries nothing but {@code java.base}, deliberately,
  * so that anything above it may require it - which is the point: the classifier previously lived in the format SPI,
  * and a caller that could not reach that SPI kept a second copy of the same ranges instead. What each caller does
@@ -21,15 +30,62 @@ import module java.base;
  */
 public final class PrivateHosts {
 
+    /** How long an admission holds a host to public addresses: far longer than any screen-to-connect gap. */
+    static final int HELD_MINUTES = 10;
+
+    /** How many admitted hosts are remembered, the least recently admitted forgotten first. */
+    static final int REMEMBERED = 65_536;
+
+    private static final Map<String, Instant> ADMITTED = Collections.synchronizedMap(
+            new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Instant> eldest) {
+                    return size() > REMEMBERED;
+                }
+            });
+
     private PrivateHosts() {
+    }
+
+    /**
+     * Resolve {@code host} for a screen, remembering it as admitted when every address it resolves to is public - the
+     * one resolution every private-address screen goes through, so the connect can hold what the screen saw.
+     *
+     * @throws UnknownHostException when the host does not resolve
+     */
+    public static InetAddress[] addresses(String host) throws UnknownHostException {
+        InetAddress[] addresses = InetAddress.getAllByName(host);
+        if (addresses.length > 0 && Arrays.stream(addresses).noneMatch(PrivateHosts::isPrivate)) {
+            ADMITTED.put(key(host), Instant.now());
+        }
+        return addresses;
+    }
+
+    /**
+     * The addresses a connection to {@code host} may use, of the ones it resolved to now: all of them for a host no
+     * screen admitted recently, and only the public ones for a host one did - which is empty when the name has
+     * rebound to private addresses since, and the caller then refuses the connection.
+     */
+    public static List<InetAddress> connectable(String host, List<InetAddress> resolved) {
+        Instant admitted = ADMITTED.get(key(host));
+        if (admitted == null || admitted.plus(Duration.ofMinutes(HELD_MINUTES)).isBefore(Instant.now())) {
+            return resolved;
+        }
+        return resolved.stream().filter(address -> !isPrivate(address)).toList();
+    }
+
+    /** A host as the memory keys it: lower case, an IPv6 literal without its brackets. */
+    private static String key(String host) {
+        String bare = host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
+        return bare.toLowerCase(Locale.ROOT);
     }
 
     /**
      * Whether {@code host} resolves to any address an SSRF screen must refuse. {@code true} when at least one of the
      * host's resolved addresses is {@link #isPrivate private}; {@code false} for a {@code null}/blank host or one
-     * that does not resolve (unreachable, so not a vector - a caller lets the natural failure surface). DNS
-     * rebinding is out of scope: a caller that follows the fetch after this check races the record, which is why the
-     * screen is one guard among the deployment's defaults rather than the only one.
+     * that does not resolve (unreachable, so not a vector - a caller lets the natural failure surface). A host this
+     * answers {@code false} for is {@linkplain #addresses admitted}, so a client connecting through
+     * {@link #connectable} cannot be rebound onto a private address afterwards.
      */
     public static boolean resolvesToPrivate(String host) {
         if (host == null || host.isBlank()) {
@@ -37,7 +93,7 @@ public final class PrivateHosts {
         }
         InetAddress[] addresses;
         try {
-            addresses = InetAddress.getAllByName(host);
+            addresses = addresses(host);
         } catch (UnknownHostException _) {
             return false;
         }

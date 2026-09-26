@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.signatures;
 
 import module java.base;
 import module java.net.http;
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.compliance.SignatureScheme;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.maintenance.IntervalSetting;
@@ -227,7 +228,7 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
     }
 
     private static HttpClient client() {
-        return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
+        return ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(HttpClient.Redirect.NORMAL).build();
     }
 

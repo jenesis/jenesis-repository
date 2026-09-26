@@ -2,6 +2,7 @@ package build.jenesis.repository.export;
 
 import module java.base;
 import module java.net.http;
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.format.ExportTarget;
 
 /**
@@ -24,7 +25,7 @@ public final class HttpExportTarget implements ExportTarget {
         String text = url.toString();
         this.base = URI.create(text.endsWith("/") ? text : text + "/");
         this.credential = credential;
-        this.client = HttpClient.newBuilder()
+        this.client = ScreenedHttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();

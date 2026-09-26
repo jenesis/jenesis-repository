@@ -40,6 +40,8 @@
  * @jenesis.exclude com.google.api.services.storage com.google.http-client/google-http-client-apache-v2 org.apache.httpcomponents/httpclient org.apache.httpcomponents/httpcore com.google.auto.value/auto-value-annotations javax.annotation/javax.annotation-api
  */
 module build.jenesis.repository.store.gcs {
+    // The storage client speaks over the product's own HTTP client, not a URL connection.
+    requires build.jenesis.repository.net.http;
     exports build.jenesis.repository.store.gcs to build.jenesis.repository.store.gcs.test,
             build.jenesis.repository.store.backends.e2e;
     requires build.jenesis.repository.store;

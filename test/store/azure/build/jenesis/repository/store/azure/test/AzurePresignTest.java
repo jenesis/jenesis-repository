@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.store.azure.AzureArtifactStore;
 import build.jenesis.repository.store.ArtifactStore;
 import com.azure.storage.blob.BlobContainerClient;
+import build.jenesis.repository.store.azure.AzureTransport;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,7 +35,7 @@ class AzurePresignTest {
     void presign_mints_a_read_only_sas_over_the_fully_qualified_scoped_key() {
         String connectionString = "DefaultEndpointsProtocol=https;AccountName=" + ACCOUNT
                 + ";AccountKey=" + KEY + ";EndpointSuffix=core.windows.net";
-        BlobContainerClient container = new BlobServiceClientBuilder()
+        BlobContainerClient container = new BlobServiceClientBuilder().httpClient(new AzureTransport())
                 .connectionString(connectionString).buildClient().getBlobContainerClient("repo");
         ArtifactStore store = new AzureArtifactStore(container).scope("acme");
 
@@ -53,7 +54,7 @@ class AzurePresignTest {
         // A client built from only an endpoint carries no shared-key credential, so generateSas cannot sign a
         // service SAS. Under azure-storage-blob 12.35.0 that surfaces as a NullPointerException rather than an
         // IllegalStateException; presign must catch it and fall back to streaming (empty), not propagate.
-        BlobContainerClient container = new BlobServiceClientBuilder()
+        BlobContainerClient container = new BlobServiceClientBuilder().httpClient(new AzureTransport())
                 .endpoint("https://" + ACCOUNT + ".blob.core.windows.net")
                 .buildClient().getBlobContainerClient("repo");
         ArtifactStore store = new AzureArtifactStore(container).scope("acme");

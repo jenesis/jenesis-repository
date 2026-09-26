@@ -5,7 +5,7 @@ import build.jenesis.repository.upstream.UpstreamTokenIssuer;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkException;
-import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
+import build.jenesis.repository.net.http.aws.AwsHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.codeartifact.CodeartifactClient;
 import software.amazon.awssdk.services.ecr.EcrClient;
@@ -78,7 +78,7 @@ public final class AwsTokenIssuer implements UpstreamTokenIssuer {
     private Token ecr(String account, String region) throws IOException {
         EcrClient client = ecr.computeIfAbsent(region, _ -> {
             var builder = EcrClient.builder().region(Region.of(region)).credentialsProvider(identity)
-                    .httpClient(UrlConnectionHttpClient.create());
+                    .httpClient(new AwsHttpClient());
             endpoints.apply(region).ifPresent(builder::endpointOverride);
             return builder.build();
         });
@@ -94,7 +94,7 @@ public final class AwsTokenIssuer implements UpstreamTokenIssuer {
     private Token codeartifact(String domain, String owner, String region) {
         CodeartifactClient client = codeartifact.computeIfAbsent(region, _ -> {
             var builder = CodeartifactClient.builder().region(Region.of(region)).credentialsProvider(identity)
-                    .httpClient(UrlConnectionHttpClient.create());
+                    .httpClient(new AwsHttpClient());
             endpoints.apply(region).ifPresent(builder::endpointOverride);
             return builder.build();
         });

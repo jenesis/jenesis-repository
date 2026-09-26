@@ -2,6 +2,7 @@ package build.jenesis.repository.webhook;
 
 import module java.base;
 import module java.net.http;
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -9,7 +10,7 @@ import tools.jackson.databind.node.ObjectNode;
  * Delivers one queued webhook to one endpoint: it builds the small JSON payload from the outbox entry and the pass
  * context (stamping the authoritative {@code tenant} and {@code repository}, which are not trusted from the
  * producer), signs it with HMAC-SHA256 when the endpoint carries a shared secret, and POSTs it. The wire hop is a
- * pluggable {@link Sender} - the live one is {@code java.net.http}, a test one records without a socket - so the
+ * pluggable {@link Sender} - the live one is the product's HTTP client, a test one records without a socket - so the
  * payload, headers and signature are asserted without a live receiver. The body is small metadata, so it is sent as
  * one byte array; no artifact ever flows through a webhook. A non-2xx status or an I/O error is a failure the drain
  * retries with backoff.
@@ -43,10 +44,10 @@ public final class WebhookDelivery {
         this.sender = sender;
     }
 
-    /** A delivery over a real {@code java.net.http} client with a bounded connect/response timeout, so a hung
+    /** A delivery over the product's HTTP client with a bounded connect/response timeout, so a hung
      *  receiver fails the attempt (to be retried) rather than blocking the drain. */
     public static WebhookDelivery live() {
-        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        HttpClient client = ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
         return new WebhookDelivery((url, body, headers) -> {
             HttpRequest.Builder request = HttpRequest.newBuilder(url)
                     .timeout(Duration.ofSeconds(30))
@@ -69,11 +70,9 @@ public final class WebhookDelivery {
      *  the transport must be {@code https} and the host must not resolve internally. This is the single choke point
      *  every delivered byte passes, which is why the screen lives here and not only in the drain's filter: no caller
      *  can assemble a delivery that leaves in cleartext or reaches loopback/metadata/a private host, whatever it
-     *  filtered beforehand. The host half must be re-run last regardless, because the underlying
-     *  {@code java.net.http} client re-resolves the name at connect time, so a DNS answer that has flipped to an
-     *  internal address since (a rebinding / TOCTOU SSRF against a per-tenant dial) would otherwise slip through;
-     *  full connection-pinning to the vetted literal is impractical over {@code java.net.http} without dropping SNI,
-     *  so re-running the screen last narrows the exposure to the client's own resolve-to-connect gap.
+     *  filtered beforehand. The host half is re-run last, and the client it sends through holds the connect to what
+     *  it admitted, so a DNS answer that has flipped to an internal address since - a rebinding SSRF against a
+     *  per-tenant dial - is refused at the connect rather than delivered to.
      *
      *  <p>A refusal is an {@link IOException} like any other delivery failure on purpose: the drain records it as the
      *  entry's last error and retries it to the attempt cap, so it lands on the {@code GET /api/webhook} status

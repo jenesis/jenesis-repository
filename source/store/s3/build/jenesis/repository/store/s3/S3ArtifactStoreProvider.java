@@ -7,11 +7,11 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.ConditionalWrites;
 import build.jenesis.repository.store.Endpoints;
 import build.jenesis.repository.store.Features;
+import build.jenesis.repository.net.http.aws.AwsHttpClient;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
@@ -97,7 +97,7 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
         }
         S3ClientBuilder builder = S3Client.builder()
                 .region(Region.of(region))
-                .httpClient(UrlConnectionHttpClient.create())
+                .httpClient(new AwsHttpClient())
                 .credentialsProvider(credentials(config));
         // The presigner mints direct-fetch GET URLs (ArtifactStore.presign); it must sign against the same region,
         // credentials and endpoint/path-style as the client, or a presigned URL would point at the wrong host.

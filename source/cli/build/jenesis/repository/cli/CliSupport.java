@@ -1,6 +1,8 @@
 package build.jenesis.repository.cli;
 
 import module java.base;
+
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import module java.net.http;
 
 /**
@@ -20,7 +22,7 @@ final class CliSupport {
             throw new IllegalArgumentException("Not logged in; run 'login <url> --key <key>' first.");
         }
         return new RepositoryClient(session.url(), session.key(),
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
+                ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
     }
 
     /** The value following a flag at index {@code i}, or an error naming the flag when it is missing. */

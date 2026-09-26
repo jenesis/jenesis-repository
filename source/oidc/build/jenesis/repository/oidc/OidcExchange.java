@@ -6,15 +6,21 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.TokenExchange;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.RestTemplate;
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 
 /**
  * Exchanges a workload's OIDC id-token for a short-lived Jenesis credential, so a CI job authenticates with the token
  * its platform already issues - no static secret to store or leak. The token is validated against the tenant's trust
  * policy ({@link Authorization#trusts}): the issuer must name a configured trust, and the token must pass a per-issuer
- * decoder built by Spring Security's {@link JwtDecoders#fromIssuerLocation} - which performs OIDC discovery, verifies
- * the signature against the issuer's published JWKS (with caching and key rotation) and checks the issuer and expiry.
+ * decoder Spring Security builds from the issuer's location - OIDC discovery, the signature verified against the
+ * issuer's published JWKS (with caching and key rotation) in the algorithms that set holds, and the issuer and expiry
+ * checked - with discovery and the key set fetched over the product's own HTTP client rather than one of Spring's
+ * choosing, which would announce the runtime it runs on.
  * The decoder is the vetted Spring/Nimbus one, not hand-rolled crypto; only the trust's audience and subject (a glob)
  * matching stays here, since no library knows a deployment's trust store. On a match a new key is minted carrying the
  * trust's grant and expiring after the trust's ttl. An issuer is honoured only when a trust already names it, so a
@@ -29,6 +35,19 @@ public final class OidcExchange implements TokenExchange {
         this.authorization = authorization;
     }
 
+    /** The decoder for {@code issuer}: what {@code JwtDecoders.fromIssuerLocation} builds, over the product's client. */
+    private static JwtDecoder decoder(String issuer) {
+        JdkClientHttpRequestFactory requests = new JdkClientHttpRequestFactory(
+                ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
+        requests.setReadTimeout(Duration.ofSeconds(30));
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuer)
+                .discoverJwsAlgorithms()
+                .restOperations(new RestTemplate(requests))
+                .build();
+        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
+        return decoder;
+    }
+
     @Override
     public Exchanged exchange(String tenant, String token) throws IOException {
         if (token == null || token.isBlank()) {
@@ -37,7 +56,7 @@ public final class OidcExchange implements TokenExchange {
         for (Authorization.Trust trust : authorization.trusts(tenant)) {
             Jwt jwt;
             try {
-                jwt = decoders.computeIfAbsent(trust.issuer(), JwtDecoders::fromIssuerLocation).decode(token);
+                jwt = decoders.computeIfAbsent(trust.issuer(), OidcExchange::decoder).decode(token);
             } catch (JwtException notThisTrust) {
                 // The token itself did not verify against THIS issuer - wrong signature, wrong issuer, expired
                 // beyond the tolerated skew. That is a real answer about the token, so ask the next trust.

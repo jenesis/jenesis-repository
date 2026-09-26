@@ -6,14 +6,13 @@
  * {@code jenreg.store=azure-blob}. The version token is the blob ETag, giving a true
  * cross-node compare-and-set on conditional writes (see {@code AzureArtifactStore}).
  *
- * <p>Netty 4.2 split {@code netty-codec} into codecs, and {@code netty-codec-marshalling} declares
- * {@code requires org.jboss.marshalling} without {@code static} for a dependency its own POM marks optional, so a
- * module-path boot layer that carries it fails on the missing module (measured 2026-09-13: nine test JVMs).
- * {@code netty-codec-protobuf} has the same shape ({@code protobuf.javanano}). Nothing here marshals or speaks
- * protobuf; the exclusion below drops both codecs from what the Azure HTTP client pulls in.
+ * <p>The SDK's HTTP runs over the product's own client ({@code AzureTransport}), so its Netty client is excluded. A
+ * module that requires the blob client itself can still reach Netty through it, and Netty 4.2's
+ * {@code netty-codec-marshalling} and {@code netty-codec-protobuf} require optional peers without {@code static}, so
+ * a boot layer carrying them fails on the missing module; those two stay excluded for such a module's sake.
  *
  * @jenesis.release 25
- * @jenesis.exclude com.azure.storage.blob io.netty/netty-codec-marshalling io.netty/netty-codec-protobuf
+ * @jenesis.exclude com.azure.storage.blob com.azure/azure-core-http-netty io.netty/netty-codec-marshalling io.netty/netty-codec-protobuf
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
@@ -22,6 +21,9 @@ module build.jenesis.repository.store.azure {
             build.jenesis.repository.store.backends.e2e;
     requires build.jenesis.repository.store;
     requires com.azure.storage.blob;
+    requires com.azure.core;
+    requires reactor.core;
+    requires build.jenesis.repository.net.http;
     provides build.jenesis.repository.store.ArtifactStoreProvider
             with build.jenesis.repository.store.azure.AzureArtifactStoreProvider;
 }

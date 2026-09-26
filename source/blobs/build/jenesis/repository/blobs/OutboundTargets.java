@@ -108,8 +108,8 @@ public final class OutboundTargets {
      * <p><b>An unresolvable host stays admissible</b>, which is every leg's own long-standing host half and the reason
      * the three-argument {@link PrivateHostGuard#refusalReason(URI, boolean, Predicate)} form is used rather than the
      * composed one: a name that resolves nowhere is no internal-service target, and refusing it would take the offline
-     * {@code .example} fixtures with it. A resolve-then-fetch DNS rebind is out of scope here as it always was - the
-     * transport's redirect screen and the deployment's egress rules are the other guards.
+     * {@code .example} fixtures with it. A name this admits cannot be rebound onto a private address before the fetch
+     * connects: the screen remembers the admission, and the product's HTTP client holds the connect to it.
      *
      * @param advertised    the URL the upstream document named
      * @param upstream      the operator-configured upstream this leg is proxying, whose origin is exempt

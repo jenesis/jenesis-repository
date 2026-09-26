@@ -8,6 +8,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.cli {
+    requires build.jenesis.repository.net.http;
     requires java.net.http;
     requires build.jenesis.repository.scope;
     requires tools.jackson.databind;

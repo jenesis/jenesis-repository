@@ -82,6 +82,7 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
         }
         BlobServiceClient service = new BlobServiceClientBuilder()
                 .connectionString(connectionString)
+                .httpClient(new AzureTransport())
                 .buildClient();
         BlobContainerClient container = service.getBlobContainerClient(containerName);
         try {

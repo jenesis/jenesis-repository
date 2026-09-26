@@ -1,6 +1,8 @@
 package build.jenesis.repository.feed;
 
 import module java.base;
+
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import module java.net.http;
 
 /**
@@ -62,7 +64,7 @@ public interface FeedTransport {
      * RST) would otherwise park the refresh forever, and a refresh is single-flight.
      */
     static FeedTransport jdk(Duration connectTimeout) {
-        return jdk(HttpClient.newBuilder()
+        return jdk(ScreenedHttpClient.newBuilder()
                 .connectTimeout(Objects.requireNonNull(connectTimeout, "connectTimeout"))
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build());

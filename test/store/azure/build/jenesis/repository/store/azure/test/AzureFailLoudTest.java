@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.store.azure.AzureArtifactStore;
 import build.jenesis.repository.store.ArtifactStore;
 import com.azure.storage.blob.BlobContainerClient;
+import build.jenesis.repository.store.azure.AzureTransport;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -47,7 +48,7 @@ public class AzureFailLoudTest {
         String endpoint = "http://localhost:" + server.port() + "/" + ACCOUNT;
         String connectionString = "DefaultEndpointsProtocol=http;AccountName=" + ACCOUNT
                 + ";AccountKey=" + KEY + ";BlobEndpoint=" + endpoint + ";";
-        BlobContainerClient container = new BlobServiceClientBuilder()
+        BlobContainerClient container = new BlobServiceClientBuilder().httpClient(new AzureTransport())
                 .connectionString(connectionString).buildClient().getBlobContainerClient("repo");
         store = new AzureArtifactStore(container).scope("acme");
     }

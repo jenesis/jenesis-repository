@@ -9,7 +9,18 @@ import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.type.AnnotatedTypeMetadata;
+import org.springframework.security.oauth2.client.endpoint.OAuth2AccessTokenResponseClient;
+import org.springframework.security.oauth2.client.endpoint.OAuth2AuthorizationCodeGrantRequest;
+import org.springframework.security.oauth2.client.endpoint.RestClientAuthorizationCodeTokenResponseClient;
+import org.springframework.security.oauth2.client.oidc.authentication.OidcIdTokenValidator;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
+import org.springframework.security.oauth2.client.oidc.authentication.OidcIdTokenDecoderFactory;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.security.oauth2.core.converter.ClaimTypeConverter;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtDecoderFactory;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -65,12 +76,46 @@ public class OAuth2ClientConfig {
         return new OidcPrincipalService(authorities);
     }
 
+    /** The code-for-token exchange with the provider, over the product's own client ({@link ProviderRequests}). */
+    @Bean
+    @Conditional(AnyProviderConfigured.class)
+    public OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> accessTokenResponseClient() {
+        RestClientAuthorizationCodeTokenResponseClient client = new RestClientAuthorizationCodeTokenResponseClient();
+        client.setRestClient(ProviderRequests.tokens());
+        return client;
+    }
+
+    /**
+     * The decoder an OIDC id token is checked with, per registration: Spring Security's own - the id-token validators
+     * and claim conversions its default factory applies - with the provider's key set fetched over the product's
+     * client, which the default factory has no way to be told.
+     */
+    @Bean
+    @Conditional(AnyProviderConfigured.class)
+    public JwtDecoderFactory<ClientRegistration> idTokenDecoderFactory() {
+        Map<String, JwtDecoder> decoders = new ConcurrentHashMap<>();
+        return registration -> decoders.computeIfAbsent(registration.getRegistrationId(), _ -> {
+            NimbusJwtDecoder decoder = NimbusJwtDecoder
+                    .withJwkSetUri(registration.getProviderDetails().getJwkSetUri())
+                    .restOperations(ProviderRequests.rest())
+                    .build();
+            decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(new JwtTimestampValidator(),
+                    new OidcIdTokenValidator(registration)));
+            decoder.setClaimSetConverter(
+                    new ClaimTypeConverter(OidcIdTokenDecoderFactory.createDefaultClaimTypeConverters()));
+            return decoder;
+        });
+    }
+
     /** The OIDC/GitHub login, contributed to the core chain when a provider is configured. */
     @Bean
     @Conditional(AnyProviderConfigured.class)
-    public LoginContributor oauth2LoginContributor(OAuth2PrincipalService oauth2Users, OidcPrincipalService oidcUsers) {
+    public LoginContributor oauth2LoginContributor(OAuth2PrincipalService oauth2Users, OidcPrincipalService oidcUsers,
+                                                   OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest>
+                                                           tokens) {
         return http -> http.oauth2Login(oauth -> oauth
                 .loginPage("/ui/login")
+                .tokenEndpoint(token -> token.accessTokenResponseClient(tokens))
                 .userInfoEndpoint(userInfo -> userInfo
                         .userService(oauth2Users)
                         .oidcUserService(oidcUsers))

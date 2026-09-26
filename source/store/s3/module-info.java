@@ -27,7 +27,8 @@ module build.jenesis.repository.store.s3 {
     requires software.amazon.awssdk.core;
     requires software.amazon.awssdk.regions;
     requires software.amazon.awssdk.auth;
-    requires software.amazon.awssdk.http.urlconnection;
+    // The SDK's HTTP runs over the product's own client, not a URL connection.
+    requires build.jenesis.repository.net.http.aws;
     provides build.jenesis.repository.store.ArtifactStoreProvider
             with build.jenesis.repository.store.s3.S3ArtifactStoreProvider;
 }

@@ -8,11 +8,15 @@
  * from {@code test/store/contract}. The suite skips itself (JUnit assumptions) when no Docker daemon is reachable, so
  * a checkout without Docker still builds green.
  *
+ * <p>Its own blob clients speak through the store's {@code AzureTransport}, as the store does, so the SDK's Netty
+ * client is excluded here as well.
+ *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.store.azure
  * @jenesis.alias wiremock.core org.wiremock/wiremock-core
  * @jenesis.alias wiremock.jetty org.wiremock/wiremock-jetty
  * @jenesis.alias wiremock.httpclient org.wiremock/wiremock-httpclient-apache5
+ * @jenesis.exclude com.azure.storage.blob com.azure/azure-core-http-netty io.netty/netty-codec-marshalling io.netty/netty-codec-protobuf
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */

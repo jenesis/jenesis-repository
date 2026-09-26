@@ -15,6 +15,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.export {
+    requires build.jenesis.repository.net.http;
     exports build.jenesis.repository.export;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;

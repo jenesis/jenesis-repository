@@ -21,6 +21,7 @@
  * @jenesis.release 25
  */
 module build.jenesis.repository.webhook {
+    requires build.jenesis.repository.net.http;
     requires build.jenesis.repository.store;
     // transitive: this module's Outbox IS an outbox.Outbox, so its Queued and Window are the shared
     // module's nested types and every consumer that names them must read it.

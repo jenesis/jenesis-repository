@@ -26,6 +26,7 @@
  * @jenesis.release 25
  */
 module build.jenesis.repository.feed {
+    requires build.jenesis.repository.net.http;
     requires build.jenesis.repository.store;
     requires java.net.http;
     requires tools.jackson.databind;

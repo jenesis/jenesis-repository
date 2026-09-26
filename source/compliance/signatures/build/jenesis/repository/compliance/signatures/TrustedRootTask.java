@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.signatures;
 
 import module java.base;
 import module java.net.http;
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.compliance.SignatureScheme;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.maintenance.IntervalSetting;
@@ -140,7 +141,7 @@ public final class TrustedRootTask implements MaintenanceTask {
 
     /** The default fetch over the JDK's client; a {@code 404} is a host saying it has none, anything else a failure. */
     private static Optional<byte[]> download(URI url) throws IOException {
-        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
+        HttpClient client = ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(HttpClient.Redirect.NORMAL).build();
         HttpRequest request = HttpRequest.newBuilder(url)
                 .header("Accept", "application/json")

@@ -25,6 +25,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.compliance.signatures {
+    requires build.jenesis.repository.net.http;
     requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.compliance;

@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.azure.AzureArtifactStore;
 import com.azure.storage.blob.BlobContainerClient;
+import build.jenesis.repository.store.azure.AzureTransport;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,7 +32,7 @@ class AzureSpoolPermissionsTest {
         // A closed port: the spool is caught before any Azure call, and the never-reached upload fails fast, not hangs.
         String connectionString = "DefaultEndpointsProtocol=http;AccountName=" + ACCOUNT + ";AccountKey=" + KEY
                 + ";BlobEndpoint=http://localhost:1/" + ACCOUNT + ";";
-        BlobContainerClient container = new BlobServiceClientBuilder()
+        BlobContainerClient container = new BlobServiceClientBuilder().httpClient(new AzureTransport())
                 .connectionString(connectionString).buildClient().getBlobContainerClient("repo");
         ArtifactStore store = new AzureArtifactStore(container).scope("acme");
 

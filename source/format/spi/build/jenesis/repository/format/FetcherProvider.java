@@ -116,9 +116,8 @@ import build.jenesis.repository.store.Providers;
  *           (an absolute download URL taken off an upstream index) owns that screen and applies the same
  *           {@link PrivateHosts} classifier itself before handing the URL over;</li>
  *       <li>a host that does not resolve is <b>not</b> refused - it is unreachable, so it is no vector, and masking it
- *           would turn an honest "no such host" into a security error. DNS rebinding is explicitly out of scope: the
- *           connection races the record, which is why this screen is one of a deployment's defences and not the
- *           only one.</li>
+ *           would turn an honest "no such host" into a security error. A host the screen admits is held to its
+ *           public addresses when the shipped fetcher connects, so a name rebinding after the screen is refused.</li>
  *     </ul></li>
  * </ol>
  */

@@ -3,6 +3,7 @@ package build.jenesis.repository.ui;
 import module java.base;
 import module java.net.http;
 
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -83,7 +84,7 @@ public final class OidcDiscovery {
 
     private static Optional<JsonNode> fetch(URI location, List<String> failures) {
         try {
-            HttpResponse<String> response = HttpClient.newBuilder()
+            HttpResponse<String> response = ScreenedHttpClient.newBuilder()
                     .connectTimeout(TIMEOUT)
                     .followRedirects(HttpClient.Redirect.NORMAL)
                     .build()

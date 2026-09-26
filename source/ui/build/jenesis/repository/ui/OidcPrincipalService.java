@@ -5,6 +5,7 @@ import module java.base;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
+import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
@@ -23,6 +24,10 @@ public class OidcPrincipalService extends OidcUserService {
 
     public OidcPrincipalService(LoginAuthorities authorities) {
         this.authorities = authorities;
+        // The user-info read goes over the product's own client, as every other call to the provider does.
+        DefaultOAuth2UserService userInfo = new DefaultOAuth2UserService();
+        userInfo.setRestOperations(ProviderRequests.rest());
+        setOauth2UserService(userInfo);
     }
 
     @Override

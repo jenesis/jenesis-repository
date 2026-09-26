@@ -67,9 +67,8 @@ public record WebhookEndpoint(URI url, Set<EventType> events, String secret) {
     /**
      * Whether the host of {@code url} resolves (right now) to an internal / non-public target - the same screen {@link
      * #internal()} runs over a configured endpoint, exposed static so the live delivery can re-run it immediately
-     * before it connects. A plain {@link java.net.http.HttpClient} re-resolves the host at connect time, so an endpoint
-     * that passed the drain's filter can still rebind its DNS name to an internal address between the check and the
-     * connect (a TOCTOU / DNS-rebinding SSRF); re-running this last closes that window. Delegates to the shared {@link
+     * before it connects, which the product's HTTP client then holds: a host this admits is connected to only at a
+     * public address, so a name that rebinds between the check and the connect is refused. Delegates to the shared {@link
      * PrivateHostGuard#internal(URI)} predicate - the one home the import and forwarding legs screen against too, so
      * the blocked ranges cannot drift; a host that cannot be resolved is treated as internal.
      */

@@ -27,6 +27,7 @@ public class OAuth2PrincipalService extends DefaultOAuth2UserService {
 
     public OAuth2PrincipalService(LoginAuthorities authorities) {
         this.authorities = authorities;
+        setRestOperations(ProviderRequests.rest());
     }
 
     @Override

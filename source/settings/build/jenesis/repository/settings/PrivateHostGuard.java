@@ -146,7 +146,8 @@ public final class PrivateHostGuard {
      * {@code 169.254.169.254} cloud-metadata address), private/site-local, IPv6 unique-local, carrier-grade-NAT
      * ({@code 100.64.0.0/10}) or multicast address, or a host that cannot be resolved at all (so an unverifiable
      * target is refused rather than risked). Resolution is by name, so a DNS answer of an internal address is caught
-     * too; a caller re-runs this immediately before it connects to close the DNS-rebinding / TOCTOU window.
+     * too, and a host this admits is held to its public addresses when the product's HTTP client connects to it
+     * ({@link PrivateHosts#connectable}), which is what closes the DNS-rebinding window.
      */
     public static boolean internal(URI url) {
         String host = url.getHost();
@@ -154,7 +155,7 @@ public final class PrivateHostGuard {
             return true;
         }
         try {
-            InetAddress[] addresses = InetAddress.getAllByName(host);
+            InetAddress[] addresses = PrivateHosts.addresses(host);
             if (addresses.length == 0) {
                 return true;
             }

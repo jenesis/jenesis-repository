@@ -1,6 +1,8 @@
 package build.jenesis.repository.cli;
 
 import module java.base;
+
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import module java.net.http;
 
 /**
@@ -62,7 +64,7 @@ final class AuthCommands {
         String state;
         try {
             state = new RepositoryClient(session.url(), session.key(),
-                    HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build())
+                    ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build())
                     .licenseState().orElse("").split(";")[0].trim();
         } catch (Exception unreachable) {
             return;

@@ -20,7 +20,6 @@ import com.google.api.client.http.HttpBackOffUnsuccessfulResponseHandler;
 import com.google.api.client.http.HttpRequest;
 import com.google.api.client.http.HttpRequestInitializer;
 import com.google.api.client.http.HttpUnsuccessfulResponseHandler;
-import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.util.ExponentialBackOff;
 import com.google.api.services.storage.Storage;
@@ -115,7 +114,7 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
         URI root = secureEndpoint(endpoint, config.apply(ALLOW_INSECURE_KEY));
         GoogleCredentials credentials = credentials(config.apply(CREDENTIALS_KEY));
         String rootUrl = root.toString().endsWith("/") ? root.toString() : root + "/";
-        Storage storage = new Storage.Builder(new NetHttpTransport(), GsonFactory.getDefaultInstance(), new Requests(credentials))
+        Storage storage = new Storage.Builder(new GcsTransport(), GsonFactory.getDefaultInstance(), new Requests(credentials))
                 .setApplicationName("jenesis-repository")
                 .setRootUrl(rootUrl)
                 .build();
@@ -159,10 +158,11 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
         GoogleCredentials credentials;
         try {
             if (setting == null || setting.isBlank()) {
-                credentials = GoogleCredentials.getApplicationDefault();
+                // The token exchange goes over the product's client as well, not the library's URL connection.
+                credentials = GoogleCredentials.getApplicationDefault(GcsTransport::new);
             } else {
                 try (InputStream in = Files.newInputStream(Path.of(setting))) {
-                    credentials = GoogleCredentials.fromStream(in);
+                    credentials = GoogleCredentials.fromStream(in, GcsTransport::new);
                 }
             }
         } catch (IOException e) {

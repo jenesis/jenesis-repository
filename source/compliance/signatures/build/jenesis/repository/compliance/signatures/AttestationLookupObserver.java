@@ -1,5 +1,6 @@
 package build.jenesis.repository.compliance.signatures;
 
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.compliance.ComplianceSettings;
 import module java.base;
 import java.net.http.HttpClient;
@@ -168,7 +169,7 @@ public final class AttestationLookupObserver implements PublicationObserver {
     }
 
     private static Optional<byte[]> http(URI url) throws IOException {
-        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
+        HttpClient client = ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(HttpClient.Redirect.NORMAL).build();
         HttpRequest request = HttpRequest.newBuilder(url)
                 .header("Accept", "application/vnd.github+json, application/json")

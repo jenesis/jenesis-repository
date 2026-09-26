@@ -15,6 +15,8 @@ module build.jenesis.repository.oidc {
     requires build.jenesis.repository.server.spi;
     requires spring.security.oauth2.core;
     requires spring.security.oauth2.jose;
+    requires spring.web;
+    requires build.jenesis.repository.net.http;
     exports build.jenesis.repository.oidc to build.jenesis.repository.test,
             build.jenesis.repository.server.e2e;
     provides build.jenesis.repository.server.spi.TokenExchangeProvider
