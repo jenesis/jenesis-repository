@@ -68,6 +68,11 @@ final class ApkListings {
         return "apk/" + repo + "/" + architecture + "/" + file;
     }
 
+    /** The container of one repository and architecture's rendered blocks: empty until something is published. */
+    static String blocks(String repo, String architecture) {
+        return "apk/" + repo + "/" + architecture + "/index";
+    }
+
     /** Where a package's rendered block is stored, so a later transition can re-decide it without the archive. */
     static String blockKey(String repo, String architecture, String file) {
         return "apk/" + repo + "/" + architecture + "/index/" + file;

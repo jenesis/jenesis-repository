@@ -8,6 +8,12 @@ import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
+import build.jenesis.repository.blobs.ProxyLeg;
+import build.jenesis.repository.blobs.ProxyRelay;
+import build.jenesis.repository.format.ProxyFormat;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ArtifactSignatures;
@@ -47,7 +53,9 @@ import build.jenesis.repository.format.Listings;
  * {@link ApkSigner} for the scheme and how each part of it was measured.
  */
 public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures, RepositoryExporter,
-        RepositoryImporter {
+        RepositoryImporter, ProxyLeg {
+
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(ApkFormat.class);
 
     /** The package-ecosystem name apk coordinates report. */
     public static final String ECOSYSTEM = "Alpine";
@@ -209,8 +217,20 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
 
     // ---- the read path ----
 
+    /** Whether nothing was ever published under this repository and architecture, so a read of its index is a local
+     *  miss - which is what lets a proxy repository fetch the upstream's - rather than an empty document materialised
+     *  for it. The structural probe is paid only until the index exists. */
+    private static boolean unpublished(Blobs blobs, String repo, String architecture) throws IOException {
+        return !StoredListing.present(blobs.store(), ApkListings.index(repo, architecture))
+                && blobs.isEmpty(ApkListings.blocks(repo, architecture));
+    }
+
     private void serveArchive(FormatExchange exchange, Blobs blobs, String repo, String architecture)
             throws IOException {
+        if (unpublished(blobs, repo, architecture)) {
+            exchange.respond(404);
+            return;
+        }
         ApkListings listings = new ApkListings(blobs);
         // The archive is derived off the index write; a read compares its sequence with the index's (one header
         // read) and derives it itself, once, when it arrived inside that window.
@@ -266,6 +286,10 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
     /** The index as plain text, streamed from the stored document the archive is derived from. */
     private void serveIndex(FormatExchange exchange, Blobs blobs, String repo, String architecture)
             throws IOException {
+        if (unpublished(blobs, repo, architecture)) {
+            exchange.respond(404);
+            return;
+        }
         Optional<StoredListing.Served> served =
                 StoredListing.open(blobs.store(), new ApkListings(blobs).indexSpec(repo, architecture));
         if (served.isEmpty()) {
@@ -302,6 +326,147 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
             return;
         }
         blobs.serve(located.get(), exchange);
+    }
+
+
+    // ---- proxy ----
+
+    /**
+     * Proxy a miss to an upstream Alpine repository, the directory one {@code /etc/apk/repositories} line names -
+     * {@code https://dl-cdn.alpinelinux.org/alpine/v3.20/main}, say. The local repository name is a deployment's alias
+     * for it, so a request {@code /apk/<repo>/<architecture>/<file>} maps to {@code <upstream>/<architecture>/<file>}.
+     * Every target is composed that way, so nothing an upstream advertises is followed.
+     *
+     * <p>{@code APKINDEX.tar.gz} is an ENUMERATION - every package a client can install - so it is fetched fresh on
+     * each read and only an upstream that answered 404/410 reaches the client as a 404. It is relayed as it is: it
+     * names no URLs, and it is signed with the upstream's key, which is the key a client of that upstream trusts.
+     *
+     * <p>A package is PINNED, and held to what that index declares for it - a separate document. Its {@code C:} is a
+     * checksum of the package's control member only, so a package is checked twice: the control member against
+     * {@code C:}, and the data member against the {@code datahash} the control member carries. Together they cover
+     * every byte a client installs. An index this repository could not read declines the fill; one that answered
+     * without listing the package leaves it unverified, as a package the index does not name is one no client
+     * resolves to; a mismatch is refused. The bytes are stored as they stream and linked only once they pass.
+     *
+     * <p>A proxied package does not join this repository's index, so the index a client reads through a proxy stays
+     * the upstream's.
+     */
+    @Override
+    public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
+                               ProxyFormat.Fetcher fetcher) throws IOException {
+        String[] segments = exchange.path().substring(PREFIX.length()).split("/");
+        if (segments.length != 3) {
+            return false;
+        }
+        String repo = segments[0], architecture = segments[1], file = segments[2];
+        String root = upstream.toString().endsWith("/") ? upstream.toString() : upstream + "/";
+        URI index = URI.create(root + architecture + "/" + ARCHIVE);
+        if (file.equals(ARCHIVE)) {
+            return ProxyRelay.streamFresh(fetcher, index, "application/gzip", exchange,
+                    ProxyRelay.Document.ENUMERATION);
+        }
+        if (!file.endsWith(APK)) {
+            return false;
+        }
+        URI target = URI.create(root + architecture + "/" + file);
+        Optional<String> declared;
+        try (ProxyFormat.Download document = fetcher.download(index, Map.of()).orElse(null)) {
+            if (document == null) {
+                return ProxyRelay.unverifiable(target, ProxyRelay.Declared.unreachable(index));
+            }
+            if (document.status() != 200) {
+                ProxyRelay.Declared verdict = ProxyRelay.declaration(index, document.status());
+                if (!verdict.readable()) {
+                    return ProxyRelay.unverifiable(target, verdict);
+                }
+                declared = Optional.empty();
+            } else {
+                try {
+                    declared = indexChecksum(document.body(), file);
+                } catch (IOException | RuntimeException unreadable) {
+                    return ProxyRelay.unverifiable(target, ProxyRelay.Declared.unreadable(
+                            "the index at " + index + " is not an APKINDEX archive"));
+                }
+            }
+        }
+        Blobs blobs = new Blobs(store);
+        String hash;
+        try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+            if (download == null || download.status() != 200) {
+                return false;
+            }
+            hash = blobs.store(download.body());
+        }
+        if (declared.isPresent() && !intact(blobs, hash, declared.get())) {
+            LOGGER.warn("Refusing to cache the proxied Alpine package {}: it does not match the checksum {} the "
+                    + "upstream index declares for it, or its data does not match its own datahash. Nothing was "
+                    + "cached or served.", target, declared.get());
+            return false;
+        }
+        blobs.link(ApkListings.packageKey(repo, architecture, file), hash);
+        servePackage(exchange, blobs, repo, architecture, file);
+        return true;
+    }
+
+    /** The {@code C:} an upstream index declares for {@code file}, or empty when it lists no such package. */
+    private static Optional<String> indexChecksum(InputStream archive, String file) throws IOException {
+        try (GzipCompressorInputStream gzip = new GzipCompressorInputStream(archive, true);
+             TarArchiveInputStream tar = new TarArchiveInputStream(gzip, "UTF-8")) {
+            for (TarArchiveEntry entry = tar.getNextEntry(); entry != null; entry = tar.getNextEntry()) {
+                if (!entry.getName().equals(INDEX)) {
+                    continue;
+                }
+                BufferedReader lines = new BufferedReader(new InputStreamReader(tar, StandardCharsets.UTF_8));
+                String checksum = null, name = null, version = null;
+                for (String line = lines.readLine(); ; line = lines.readLine()) {
+                    if (line == null || line.isEmpty()) {
+                        if (checksum != null && file.equals(name + "-" + version + APK)) {
+                            return Optional.of(checksum);
+                        }
+                        if (line == null) {
+                            return Optional.empty();
+                        }
+                        checksum = name = version = null;
+                    } else if (line.startsWith("C:")) {
+                        checksum = line.substring(2);
+                    } else if (line.startsWith("P:")) {
+                        name = line.substring(2);
+                    } else if (line.startsWith("V:")) {
+                        version = line.substring(2);
+                    }
+                }
+            }
+        }
+        throw new IOException("no APKINDEX member");
+    }
+
+    /** Whether a stored package's control member is the one {@code checksum} names and its data member the one the
+     *  control member's {@code datahash} names. */
+    private static boolean intact(Blobs blobs, String hash, String checksum) throws IOException {
+        Optional<ApkPackage> read;
+        try (InputStream stored = blobs.open(hash)) {
+            read = ApkPackage.of(stored.readNBytes(CONTROL_PREFIX));
+        } catch (RuntimeException malformed) {
+            return false;
+        }
+        if (read.isEmpty() || !read.get().checksum().equals(checksum)) {
+            return false;
+        }
+        Optional<String> datahash = read.get().field("datahash");
+        if (datahash.isEmpty()) {
+            return false;
+        }
+        MessageDigest sha256;
+        try {
+            sha256 = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is required of every JVM", e);
+        }
+        try (InputStream stored = blobs.open(hash)) {
+            stored.skipNBytes(read.get().dataOffset());
+            stored.transferTo(new DigestOutputStream(OutputStream.nullOutputStream(), sha256));
+        }
+        return HexFormat.of().formatHex(sha256.digest()).equalsIgnoreCase(datahash.get());
     }
 
     // ---- layout ----

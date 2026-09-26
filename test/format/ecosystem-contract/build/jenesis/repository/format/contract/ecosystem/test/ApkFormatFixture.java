@@ -1,7 +1,9 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.store.ArtifactStore;
@@ -118,9 +120,14 @@ final class ApkFormatFixture implements EcosystemFormatFixture {
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
 
-                FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY, PROXY,
-                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE, PROXY,
-                FormatContract.Property.PROXY_STREAMS_UPSTREAM_BODY, PROXY,
+                FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
+                "an index's C: is a checksum of a package's control member, and the data is held to the datahash "
+                        + "that member carries - so an arbitrary body has no checksum an index could declare for it. "
+                        + "Restated, not dropped: ApkProxyTest runs the property over real packages, a checksum and a "
+                        + "datahash mismatch each refused",
+                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
+                "every path this leg proxies is one a miss on fails the install: APKINDEX.tar.gz is an ENUMERATION, "
+                        + "refused as a 502 rather than answered empty, and a package is the file the index named",
                 FormatContract.Property.PUBLISH_PATHS_ARE_DESCRIBED,
                 "same protocol reason as PUBLISH_SERVES_EXACT_BYTES: the kit's arbitrary body publishes nowhere here. "
                         + "Restated, not dropped: PackagedArtifactContract records where a real package publish "
@@ -152,10 +159,33 @@ final class ApkFormatFixture implements EcosystemFormatFixture {
 
     /** This entry serves the repository; a pull-through against an upstream Alpine mirror is a separate change, so
      *  these three rows have no subject rather than a failing one. */
-    private static final String PROXY =
-            "apk has no proxy leg: this format is scoped to serving a hosted repository - the APKINDEX and the .apk "
-                    + "packages beside it - and pulling through an upstream Alpine mirror is a separate change that "
-                    + "these rows arrive with";
+    /** An upstream whose index answers without listing the package, the one case a fill streams unverified - which
+     *  is what lets an arbitrary body stand in for a package here. */
+    @Override
+    public Optional<Upstream> upstream(GeneratedBody body) {
+        URI root = URI.create("https://alpine.invalid/v3.20/main/");
+        String file = "proxied-9.9.9-r0.apk";
+        String index = root + ARCHITECTURE + "/APKINDEX.tar.gz";
+        String artifact = root + ARCHITECTURE + "/" + file;
+        return Optional.of(new Upstream(BASE + "/" + file, root, new ProxyFormat.Fetcher.Buffered() {
+
+            @Override
+            public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
+                return Optional.of(new ProxyFormat.Fetched(404, new byte[0], Map.of()));
+            }
+
+            @Override
+            public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) {
+                if (url.toString().equals(index)) {
+                    return Optional.of(new ProxyFormat.Download(200,
+                            new ByteArrayInputStream(ApkProxyTest.index("")), Map.of()));
+                }
+                return url.toString().equals(artifact)
+                        ? Optional.of(new ProxyFormat.Download(200, body.open(), Map.of()))
+                        : Optional.of(new ProxyFormat.Download(404, InputStream.nullInputStream(), Map.of()));
+            }
+        }));
+    }
 
     private static String download(String version) {
         return BASE + "/" + PACKAGE + "-" + version + ".apk";

@@ -41,10 +41,12 @@ final class ApkPackage {
 
     private final Map<String, List<String>> fields;
     private final String checksum;
+    private final int dataOffset;
 
-    private ApkPackage(Map<String, List<String>> fields, String checksum) {
+    private ApkPackage(Map<String, List<String>> fields, String checksum, int dataOffset) {
         this.fields = fields;
         this.checksum = checksum;
+        this.dataOffset = dataOffset;
     }
 
     /** The package's own {@code .PKGINFO} value for {@code key}, or empty when it declares none. */
@@ -61,6 +63,12 @@ final class ApkPackage {
     /** The {@code C:} an index entry carries for this package. */
     String checksum() {
         return checksum;
+    }
+
+    /** Where the data member starts: the byte after the control member, from which to the end of the package the
+     *  {@code datahash} of {@code .PKGINFO} is computed. */
+    int dataOffset() {
+        return dataOffset;
     }
 
     /**
@@ -85,7 +93,7 @@ final class ApkPackage {
             }
             Map<String, List<String>> info = pkginfo(bytes, offset, consumed);
             if (!info.isEmpty()) {
-                return Optional.of(new ApkPackage(info, checksumOf(bytes, offset, consumed)));
+                return Optional.of(new ApkPackage(info, checksumOf(bytes, offset, consumed), offset + consumed));
             }
             offset += consumed;
         }
