@@ -195,7 +195,7 @@ public class RepositoryController {
             // Each exploded entry is screened at the same ingress edge a single deploy uses (the shared
             // ScreenedDispatch, carrying this controller's EdgeHooks), so a batch upload is screened exactly like a
             // series of individual deploys - one screening implementation, EdgeHooks and all.
-            batch.explode(exchange, route.store(), screened);
+            batch.explode(exchange, route.tenant(), route.store(), screened);
             return;
         }
         // A read of a routed repository (a proxy of an upstream, or a group view over members) is served across its
@@ -204,7 +204,7 @@ public class RepositoryController {
         // hosted repository (the common case, and the only case the core binds) declines the seam and
         // dispatches over its own store, keeping the deployment-wide format-level pull-through. Writes are never
         // routed here: a routed group deploy lands in its push-target member on the write path.
-        if (isRead(request.getMethod()) && routed.routes(route.repository())) {
+        if (isRead(request.getMethod()) && routed.routes(route.tenant(), route.repository())) {
             Optional<RepositoryFormat> claiming = held.get().claiming();
             if (claiming.isPresent()) {
                 routed.serve(route.tenant(), route.repository(), claiming.get(), exchange);
@@ -218,7 +218,7 @@ public class RepositoryController {
         // blob is restreamed into the format for pure layout (QUARANTINE -> 202, REJECT -> 422). An unscreened format
         // (OCI) and every read/delete dispatch through the normal loop untouched. With the core's empty chain
         // this is byte-for-byte a direct dispatch; it carries the full ComplianceScreen chain under fixed tenancy.
-        if (!screened.dispatch(exchange, route.store())) {
+        if (!screened.dispatch(route.tenant(), exchange, route.store())) {
             response.setStatus(404);
         }
     }
@@ -263,7 +263,7 @@ public class RepositoryController {
             return 405;
         }
         CapturingExchange exchange = new CapturingExchange(held.get().path(), body);
-        if (!screened(held.get().type()).dispatch(exchange, route.store())) {
+        if (!screened(held.get().type()).dispatch(route.tenant(), exchange, route.store())) {
             return 404;
         }
         return exchange.status();

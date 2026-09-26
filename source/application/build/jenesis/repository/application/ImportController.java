@@ -203,7 +203,7 @@ public class ImportController {
      *  {@code writable} ({@code writeTarget} is writable-only, and no definition delegates its writes), or {@code 405}
      *  when it is a read-only proxy/group. An unconfigured name is a plain writable repository. */
     private ArtifactStore importStore(String repo, String tenant, HttpServletResponse response) {
-        String target = router.writeTarget(repo);
+        String target = router.writeTarget(tenant, repo);
         if (target == null) {
             response.setStatus(405);
             return null;

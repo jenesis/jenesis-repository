@@ -79,6 +79,10 @@ final class ConsoleAuthorization {
                 .requestMatchers("/ui/repositories/*/deploy").access(tenants.require(UserDirectory.Role.ADMIN))
                 .requestMatchers(HttpMethod.POST, "/ui/repositories/quota", "/ui/repositories/rate-limit")
                         .access(tenants.require(UserDirectory.Role.ADMIN))
+                // A repository's routing names the upstreams it fetches from, which is the operator's decision on every
+                // surface - the API takes an operator key for it - so a tenant's own definition is a super-admin's.
+                .requestMatchers(HttpMethod.POST, "/ui/repositories/*/routing", "/ui/repositories/*/routing/remove")
+                        .hasRole("SUPERADMIN")
                 // Deleting a repository removes everything it holds, for everyone - admin-grade, like the limits.
                 .requestMatchers(HttpMethod.POST, "/ui/repositories/*/delete")
                         .access(tenants.require(UserDirectory.Role.ADMIN))

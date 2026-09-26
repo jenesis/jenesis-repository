@@ -16,24 +16,44 @@ import io.micrometer.observation.ObservationRegistry;
  * (or servlet) type, so both the Spring MVC {@link RepositoryController} and any other dispatcher (a multi-tenant
  * controller, a JDK-httpserver embedder) reuse the same loop rather than re-implementing it. The store
  * and the {@link FormatExchange#path() path} it matches on are already tenant-and-repository scoped by the caller (see
- * {@link RepositoryRouting}); this component only picks the format and drives it.
+ * {@link RepositoryRouting}); this component only picks the format and drives it. The upstream a format pulls through
+ * is the serving tenant's, since a tenant pulls through its own upstreams.
  */
 public final class FormatDispatcher {
 
+    /** The upstream each format pulls its local misses through, as one tenant sees it. */
+    @FunctionalInterface
+    public interface Upstreams {
+
+        /** The upstream {@code tenant}'s {@code format} pulls through, or {@code null} when it fetches from nowhere.
+         *  A {@code null} tenant asks for the deployment's. */
+        URI upstream(String tenant, String format);
+
+        /** The same upstreams for every tenant. */
+        static Upstreams of(Map<String, URI> upstreams) {
+            return (_, format) -> upstreams.get(format);
+        }
+    }
+
     private final List<RepositoryFormat> formats;
-    private final Map<String, URI> upstreams;
+    private final Upstreams upstreams;
     private final ProxyFormat.Fetcher fetcher;
     private final ObservationRegistry observations;
     private final PullThroughHooks hooks;
     private final Map<String, FormatDispatcher> restricted = new ConcurrentHashMap<>();
 
     public FormatDispatcher(List<RepositoryFormat> formats, Map<String, URI> upstreams, ProxyFormat.Fetcher fetcher) {
-        this(formats, upstreams, fetcher, ObservationRegistry.NOOP);
+        this(formats, Upstreams.of(upstreams), fetcher, ObservationRegistry.NOOP, PullThroughHooks.NONE);
     }
 
     public FormatDispatcher(List<RepositoryFormat> formats, Map<String, URI> upstreams, ProxyFormat.Fetcher fetcher,
                             ObservationRegistry observations) {
-        this(formats, upstreams, fetcher, observations, PullThroughHooks.NONE);
+        this(formats, Upstreams.of(upstreams), fetcher, observations, PullThroughHooks.NONE);
+    }
+
+    public FormatDispatcher(List<RepositoryFormat> formats, Map<String, URI> upstreams, ProxyFormat.Fetcher fetcher,
+                            ObservationRegistry observations, PullThroughHooks hooks) {
+        this(formats, Upstreams.of(upstreams), fetcher, observations, hooks);
     }
 
     /**
@@ -41,7 +61,7 @@ public final class FormatDispatcher {
      * here with {@link PullThroughHooks#NONE}, so an existing call site is unchanged and its proxy legs serve exactly as
      * before.
      */
-    public FormatDispatcher(List<RepositoryFormat> formats, Map<String, URI> upstreams, ProxyFormat.Fetcher fetcher,
+    public FormatDispatcher(List<RepositoryFormat> formats, Upstreams upstreams, ProxyFormat.Fetcher fetcher,
                             ObservationRegistry observations, PullThroughHooks hooks) {
         this.formats = formats;
         this.upstreams = upstreams;
@@ -52,15 +72,16 @@ public final class FormatDispatcher {
 
     /**
      * Offer the exchange to the first format that claims its {@link FormatExchange#path() path}, serving or accepting
-     * the request against the scoped store. A format with a configured upstream that is a {@link ProxyFormat} serves a
-     * local miss through the {@link PullThroughCache}. Returns {@code true} when a format claimed the path (the caller
-     * has its response), or {@code false} when none did, so the caller answers a {@code 404}.
+     * the request against the scoped store. A format with an upstream {@code tenant} pulls through that is a
+     * {@link ProxyFormat} serves a local miss through the {@link PullThroughCache}. Returns {@code true} when a format
+     * claimed the path (the caller has its response), or {@code false} when none did, so the caller answers a
+     * {@code 404}.
      */
-    public boolean dispatch(FormatExchange exchange, ArtifactStore store) throws IOException {
+    public boolean dispatch(String tenant, FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
         for (RepositoryFormat format : formats) {
             if (format.handles(path)) {
-                URI base = upstreams.get(format.name());
+                URI base = upstreams.upstream(tenant, format.name());
                 if (base != null && fetcher != ProxyFormat.Fetcher.NONE && format instanceof ProxyFormat proxy) {
                     new PullThroughCache(fetcher, observations, hooks).serve(format, proxy, base, exchange, store);
                 } else {

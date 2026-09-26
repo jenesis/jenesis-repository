@@ -141,7 +141,7 @@ public class ScreenedDispatchTest {
         SpyFormat spy = new SpyFormat("spyscreened", "/spyscreened/", true);
         FakeExchange put = new FakeExchange("PUT", "/spyscreened/count-me/thing", "payload".getBytes(StandardCharsets.UTF_8));
 
-        assertThat(edge(spy).dispatch(put, store)).isTrue();
+        assertThat(edge(spy).dispatch("acme", put, store)).isTrue();
 
         assertThat(put.status).as("the format laid the accepted body out and set its own 201").isEqualTo(201);
         assertThat(spy.writes).as("the format's handle ran exactly once, over the restreamed blob").isEqualTo(1);
@@ -186,7 +186,7 @@ public class ScreenedDispatchTest {
             }
         };
 
-        assertThat(edge(format).dispatch(put, store)).isTrue();
+        assertThat(edge(format).dispatch("acme", put, store)).isTrue();
 
         assertThat(seenInsideLayout[0]).as("the format's answer had not reached the client while its layout ran")
                 .isEqualTo(-1);
@@ -202,7 +202,7 @@ public class ScreenedDispatchTest {
         FakeExchange put = new FakeExchange("PUT", "/spyscreened/count-me/gate-reject/x",
                 "bad".getBytes(StandardCharsets.UTF_8));
 
-        assertThat(edge(spy).dispatch(put, store)).isTrue();
+        assertThat(edge(spy).dispatch("acme", put, store)).isTrue();
 
         assertThat(put.status).as("a rejected body is 422 at the edge").isEqualTo(422);
         assertThat(spy.writes).as("the format is never handed a rejected body - the edge screened before layout")
@@ -215,7 +215,7 @@ public class ScreenedDispatchTest {
         FakeExchange put = new FakeExchange("PUT", "/spyscreened/count-me/gate-quarantine/y",
                 "hold".getBytes(StandardCharsets.UTF_8));
 
-        assertThat(edge(spy).dispatch(put, store)).isTrue();
+        assertThat(edge(spy).dispatch("acme", put, store)).isTrue();
 
         assertThat(put.status).as("a quarantined body is 202 at the edge").isEqualTo(202);
         assertThat(spy.writes).as("a quarantined body is held, never laid out").isZero();
@@ -227,7 +227,7 @@ public class ScreenedDispatchTest {
         FakeExchange put = new FakeExchange("PUT", "/spybypass/count-me/thing",
                 "layer".getBytes(StandardCharsets.UTF_8));
 
-        assertThat(edge(oci).dispatch(put, store)).isTrue();
+        assertThat(edge(oci).dispatch("acme", put, store)).isTrue();
 
         assertThat(put.status).as("the format handled its own write").isEqualTo(201);
         assertThat(oci.writes).as("the format handled the write directly, unscreened").isEqualTo(1);
@@ -240,7 +240,7 @@ public class ScreenedDispatchTest {
         SpyFormat spy = new SpyFormat("spyscreened", "/spyscreened/", true);
         FakeExchange get = new FakeExchange("GET", "/spyscreened/count-me/thing", new byte[0]);
 
-        assertThat(edge(spy).dispatch(get, store)).isTrue();
+        assertThat(edge(spy).dispatch("acme", get, store)).isTrue();
 
         assertThat(CountingInterceptor.count()).as("a read carries no body to screen").isZero();
         assertThat(spy.writes).isZero();
@@ -251,7 +251,8 @@ public class ScreenedDispatchTest {
         SpyFormat spy = new SpyFormat("spyscreened", "/spyscreened/", true);
         FakeExchange put = new FakeExchange("PUT", "/nobody/claims/this", "x".getBytes(StandardCharsets.UTF_8));
 
-        assertThat(edge(spy).dispatch(put, store)).as("no format claimed the path, so the caller answers 404").isFalse();
+        assertThat(edge(spy).dispatch("acme", put, store)).as("no format claimed the path, so the caller answers 404")
+                .isFalse();
         assertThat(spy.writes).isZero();
     }
 

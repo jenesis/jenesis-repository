@@ -108,7 +108,7 @@ final class RegistryCatalog {
                     resume = names.getLast();       // a further repository holds images past the full page
                     break repositories;
                 }
-                Page page = page(type.get(), root.scope(tenant).scope(repository), limit - names.size(),
+                Page page = page(tenant, type.get(), root.scope(tenant).scope(repository), limit - names.size(),
                         repository.equals(afterRepository) ? afterImage : "");
                 for (String image : page.names()) {
                     names.add(tenant + "/" + repository + "/" + image);
@@ -141,9 +141,10 @@ final class RegistryCatalog {
     }
 
     /** One repository's catalog window, asked of the format that holds it. */
-    private Page page(RepositoryType type, ArtifactStore store, int limit, String after) throws IOException {
+    private Page page(String tenant, RepositoryType type, ArtifactStore store, int limit, String after)
+            throws IOException {
         Listing exchange = new Listing(limit, after);
-        if (!dispatcher.only(type.formats()).dispatch(exchange, store) || exchange.status != 200) {
+        if (!dispatcher.only(type.formats()).dispatch(tenant, exchange, store) || exchange.status != 200) {
             return new Page(List.of(), false);
         }
         List<String> names = new ArrayList<>();

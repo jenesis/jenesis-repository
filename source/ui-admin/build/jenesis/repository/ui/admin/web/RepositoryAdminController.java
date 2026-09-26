@@ -17,6 +17,7 @@ import build.jenesis.repository.ui.store.SettingsAdmin;
 import build.jenesis.repository.ui.store.TenantLimits;
 import build.jenesis.repository.cleanup.StoredReport;
 import build.jenesis.repository.ui.BrowseRow;
+import build.jenesis.repository.ui.CurrentTenant;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -55,12 +56,14 @@ public class RepositoryAdminController {
     private final RepositoryLifecycle lifecycle;
     private final SettingsAdmin settings;
     private final FormatMarks marks;
+    private final CurrentTenant tenant;
 
     public RepositoryAdminController(RepositoryAdmin repositories, RepositoryBrowse browse,
                                      TenantLimits limits, RepositoryImports migrations, RepositoryLifecycle lifecycle,
                                      SettingsAdmin settings, FormatMarks marks,
-                                     ObjectProvider<DownloadTracker> downloads) {
+                                     ObjectProvider<DownloadTracker> downloads, CurrentTenant tenant) {
         this.downloads = downloads;
+        this.tenant = tenant;
         this.repositories = repositories;
         this.browse = browse;
         this.limits = limits;
@@ -74,7 +77,11 @@ public class RepositoryAdminController {
     public String list(Model model) throws IOException {
         List<RepositoryRow> rows = new ArrayList<>();
         List<RepositoryWarning> warnings = new ArrayList<>();
-        Map<String, String> definitions = settings.repositories();   // the settings once, not once per row
+        // The settings once, not once per row: the deployment's definitions, with this tenant's own over them.
+        Map<String, String> definitions = new LinkedHashMap<>(settings.repositories());
+        if (tenant.name() != null) {
+            definitions.putAll(settings.repositories(tenant.name()));
+        }
         for (String name : repositories.repositories()) {
             // The parsed shape drives the per-repository badges (item 2): writable vs read-only, and per-fallback
             // store/no-store + screen strength, from the one Definition the router routes on. Its valid-but-risky
@@ -202,7 +209,8 @@ public class RepositoryAdminController {
     }
 
     /**
-     * Delete a repository and everything it holds, and forget what it was defined as. Only through the deletion
+     * Delete a repository and everything it holds, and forget the tenant's own definition of it - the deployment's is
+     * every tenant's, so it stays. Only through the deletion
      * dialog: the request must carry the phrase the dialog has the reader type, {@code delete <name>}, so a form
      * posted without it - or for another name - deletes nothing. The objects go off the request path; the list shows
      * the repository as being deleted until they are gone.
@@ -210,6 +218,35 @@ public class RepositoryAdminController {
      * <p>Forgetting the definition reads the settings document - one object per module under a constant prefix, as
      * every settings handler does - and nothing on the request path reads the repository's objects.
      */
+    /**
+     * Route this tenant's repository: store a definition of the tenant's own, which routes the repository over the
+     * deployment's, validated exactly as the deployment's are. A super-admin's act, as the API's is - repointing an
+     * upstream is the operator's decision, not a tenant administrator's.
+     *
+     * <p>It reads the settings documents - one object per module under a constant prefix, as every settings handler
+     * does - and nothing that grows with the repository.
+     */
+    @PostMapping("/ui/repositories/{repo}/routing")
+    public String route(@PathVariable("repo") String repo, @RequestParam("definition") String definition,
+                        RedirectAttributes redirect) throws IOException {
+        try {
+            settings.setRepository(tenant.name(), repo, definition);
+            redirect.addFlashAttribute("message", "Routed '" + repo + "' for this tenant.");
+        } catch (IllegalArgumentException refused) {
+            redirect.addFlashAttribute("error", refused.getMessage());
+        }
+        return "redirect:/ui/repositories/" + repo;
+    }
+
+    /** Remove this tenant's own definition, after which the repository routes as the deployment defines it. Reads what
+     *  {@link #route} reads. */
+    @PostMapping("/ui/repositories/{repo}/routing/remove")
+    public String unroute(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
+        settings.removeRepository(tenant.name(), repo);
+        redirect.addFlashAttribute("message", "'" + repo + "' routes as the deployment defines it again.");
+        return "redirect:/ui/repositories/" + repo;
+    }
+
     @PostMapping("/ui/repositories/{repo}/delete")
     public String delete(@PathVariable("repo") String name,
                          @RequestParam(name = "confirm", defaultValue = "") String confirm,
@@ -218,8 +255,9 @@ public class RepositoryAdminController {
             redirect.addFlashAttribute("error", "Nothing was deleted: type \"delete " + name + "\" to confirm.");
             return "redirect:/ui/repositories";
         }
-        if (settings.repositories().containsKey(name)) {
-            settings.removeRepository(name);
+        // The tenant's own definition goes with its repository; the deployment's is every tenant's and stays.
+        if (tenant.name() != null && settings.repositories(tenant.name()).containsKey(name)) {
+            settings.removeRepository(tenant.name(), name);
         }
         switch (lifecycle.delete(name)) {
             case ABSENT -> redirect.addFlashAttribute("error", "There is no repository '" + name + "'.");
@@ -283,8 +321,12 @@ public class RepositoryAdminController {
         model.addAttribute("releasesMore", releases.more());
         // The hardened proxy leg: whether this repository screens every upstream body in full. Its typed structural
         // refusals are rows of the Refused page rather than a list of their own.
-        model.addAttribute("hardened", settings.hardened(repo));
-        model.addAttribute("shape", settings.shape(repo));
+        // The routing in force for this tenant - its own definition, else the deployment's - and which of the two it
+        // is, so the overview can say whether editing it changes this tenant alone.
+        SettingsAdmin.Routing routing = settings.routing(tenant.name(), repo);
+        model.addAttribute("routing", routing);
+        model.addAttribute("hardened", SettingsAdmin.hardenedDefinition(routing.specification()));
+        model.addAttribute("shape", routing.shape());
         // The ecosystems this repository records that no installed format can place - what stands between the
         // repository and its collector - named with the explicit way out, and what the last retirement of each did,
         // since a retirement runs off the request and the button would otherwise look as though it did nothing.

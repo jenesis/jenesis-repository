@@ -54,13 +54,14 @@ public interface RoutingContext {
     ArtifactStore store(String tenant, String repository) throws IOException;
 
     /**
-     * Whether a repository accepts writes. {@code true} for a repository this deployment holds no definition for,
+     * Whether {@code tenant}'s repository accepts writes, as that tenant's definitions say - a tenant routes its own
+     * repositories. {@code true} for a repository this deployment holds no definition for,
      * which is the hosted default; {@code false} only when something says otherwise (a proxy, a group view, one
      * marked read-only). Deliberately a boolean rather than the definition itself: that is all any routing asks,
      * and a repository definition is a type contributed by whatever supplies the routing, which this seam must
      * not name.
      */
-    boolean writable(String repository);
+    boolean writable(String tenant, String repository);
 
     /** The document of {@code tenant}'s {@code repository}, read through the node's cache over {@link #root()}. */
     default Optional<RepositoryDocument> document(String tenant, String repository) throws IOException {
@@ -98,7 +99,7 @@ public interface RoutingContext {
         }
         try {
             return new RepositoryRouting.Route(tenant, repository, store(tenant, repository), target.path(),
-                    writable(repository));
+                    writable(tenant, repository));
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }

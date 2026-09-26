@@ -1078,9 +1078,15 @@ public final class RepositoryClient {
         return value == null ? "" : value;
     }
 
-    /** The repositories defined at runtime: each name with its routing specification. */
-    public List<NamedValue> repositories() throws IOException, InterruptedException {
-        return named("/api/repositories");
+    /** The repositories defined at runtime: each name with its routing specification - the deployment's, or with a
+     *  {@code tenant} the ones that tenant set for itself. */
+    public List<NamedValue> repositories(String tenant) throws IOException, InterruptedException {
+        return named("/api/repositories" + tenantQuery(tenant));
+    }
+
+    /** {@code ?tenant=<name>} for a tenant's own routing, or nothing for the deployment's. */
+    private static String tenantQuery(String tenant) {
+        return tenant == null ? "" : "?tenant=" + enc(tenant);
     }
 
     /**
@@ -1158,27 +1164,31 @@ public final class RepositoryClient {
     public record TenantList(List<String> tenants) {
     }
 
-    public void setRepository(String name, String specification) throws IOException, InterruptedException {
-        require(send("PUT", "/api/repositories/" + name, body(Map.of("value", specification)), "application/json"),
-                200, "set repository " + name);
+    public void setRepository(String tenant, String name, String specification)
+            throws IOException, InterruptedException {
+        require(send("PUT", "/api/repositories/" + name + tenantQuery(tenant), body(Map.of("value", specification)),
+                "application/json"), 200, "set repository " + name);
     }
 
-    public void removeRepository(String name) throws IOException, InterruptedException {
-        require(send("DELETE", "/api/repositories/" + name, null, null), 200, "remove repository " + name);
+    public void removeRepository(String tenant, String name) throws IOException, InterruptedException {
+        require(send("DELETE", "/api/repositories/" + name + tenantQuery(tenant), null, null), 200,
+                "remove repository " + name);
     }
 
-    /** The per-format proxy upstreams set at runtime: each format with its upstream URL. */
-    public List<NamedValue> upstreams() throws IOException, InterruptedException {
-        return named("/api/upstreams");
+    /** The per-format proxy upstreams set at runtime: each format with its upstream URL - the deployment's, or with a
+     *  {@code tenant} the ones that tenant set for itself. */
+    public List<NamedValue> upstreams(String tenant) throws IOException, InterruptedException {
+        return named("/api/upstreams" + tenantQuery(tenant));
     }
 
-    public void setUpstream(String format, String url) throws IOException, InterruptedException {
-        require(send("PUT", "/api/upstreams/" + format, body(Map.of("value", url)), "application/json"),
-                200, "set upstream " + format);
+    public void setUpstream(String tenant, String format, String url) throws IOException, InterruptedException {
+        require(send("PUT", "/api/upstreams/" + format + tenantQuery(tenant), body(Map.of("value", url)),
+                "application/json"), 200, "set upstream " + format);
     }
 
-    public void removeUpstream(String format) throws IOException, InterruptedException {
-        require(send("DELETE", "/api/upstreams/" + format, null, null), 200, "remove upstream " + format);
+    public void removeUpstream(String tenant, String format) throws IOException, InterruptedException {
+        require(send("DELETE", "/api/upstreams/" + format + tenantQuery(tenant), null, null), 200,
+                "remove upstream " + format);
     }
 
     /** The upstream hosts that carry a proxy credential (a private-registry login); the credentials are write-only,

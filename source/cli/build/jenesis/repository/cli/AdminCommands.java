@@ -572,10 +572,38 @@ final class AdminCommands {
         return typed != null && typed.trim().equals("delete " + name);
     }
 
-    static int repos(String[] args, Path home) throws Exception {
+    /** A verb's line with any {@code --tenant <name>} taken out, and the tenant it named - which scopes a routing verb
+     *  to that tenant's own definitions or upstreams, the ones that route its repositories over the deployment's. */
+    private record Scoped(String[] args, String tenant) {
+
+        static Scoped of(String[] args) {
+            String tenant = null;
+            List<String> rest = new ArrayList<>();
+            for (int i = 0; i < args.length; i++) {
+                if (args[i].equals("--tenant") && i + 1 < args.length) {
+                    tenant = args[++i];
+                } else {
+                    rest.add(args[i]);
+                }
+            }
+            return new Scoped(rest.toArray(String[]::new), tenant);
+        }
+
+        /** Refuse {@code --tenant} on a verb it does not scope, rather than dropping it silently. */
+        void unscoped(String usage) {
+            if (tenant != null) {
+                throw new IllegalArgumentException("--tenant does not apply here. Usage: " + usage);
+            }
+        }
+    }
+
+    static int repos(String[] line, Path home) throws Exception {
+        Scoped scoped = Scoped.of(line);
+        String[] args = scoped.args();
+        String tenant = scoped.tenant();
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
-            List<RepositoryClient.NamedValue> repos = client.repositories();
+            List<RepositoryClient.NamedValue> repos = client.repositories(tenant);
             for (RepositoryClient.NamedValue repo : repos) {
                 System.out.printf("%-20s %s%n", repo.name(), repo.value());
             }
@@ -586,6 +614,7 @@ final class AdminCommands {
         }
         switch (args[1]) {
             case "create" -> {
+                scoped.unscoped("repos create <name> <format> [description]");
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: repos create <name> <format> [description]");
                 }
@@ -596,6 +625,7 @@ final class AdminCommands {
                         : "Repository " + args[2] + " already holds " + args[3] + ".");
             }
             case "describe" -> {
+                scoped.unscoped("repos describe <name> <description>");
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: repos describe <name> <description>");
                 }
@@ -603,6 +633,7 @@ final class AdminCommands {
                 System.out.println("Described repository " + args[2] + ".");
             }
             case "delete" -> {
+                scoped.unscoped("repos delete <name> [--yes]");
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: repos delete <name> [--yes]");
                 }
@@ -617,16 +648,16 @@ final class AdminCommands {
             }
             case "set" -> {
                 if (args.length < 4) {
-                    throw new IllegalArgumentException("Usage: repos set <name> <definition>");
+                    throw new IllegalArgumentException("Usage: repos set <name> <definition> [--tenant N]");
                 }
-                client.setRepository(args[2], args[3]);
+                client.setRepository(tenant, args[2], args[3]);
                 System.out.println("Saved repository " + args[2] + ".");
             }
             case "remove" -> {
                 if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: repos remove <name>");
+                    throw new IllegalArgumentException("Usage: repos remove <name> [--tenant N]");
                 }
-                client.removeRepository(args[2]);
+                client.removeRepository(tenant, args[2]);
                 System.out.println("Removed repository " + args[2] + ".");
             }
             default -> throw new IllegalArgumentException("Unknown repos command '" + args[1] + "'");
@@ -634,13 +665,18 @@ final class AdminCommands {
         return 0;
     }
 
-    static int upstreams(String[] args, Path home) throws Exception {
+    static int upstreams(String[] line, Path home) throws Exception {
+        Scoped scoped = Scoped.of(line);
+        String[] args = scoped.args();
+        String tenant = scoped.tenant();
         if (args.length > 1 && args[1].equals("auth")) {
+            // A credential is keyed by the host it is sent to, whichever tenant's upstream names that host.
+            scoped.unscoped("upstreams auth [set|remove] ...");
             return upstreamAuth(args, home);
         }
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
-            List<RepositoryClient.NamedValue> upstreams = client.upstreams();
+            List<RepositoryClient.NamedValue> upstreams = client.upstreams(tenant);
             for (RepositoryClient.NamedValue upstream : upstreams) {
                 System.out.printf("%-12s %s%n", upstream.name(), upstream.value());
             }
@@ -652,16 +688,16 @@ final class AdminCommands {
         switch (args[1]) {
             case "set" -> {
                 if (args.length < 4) {
-                    throw new IllegalArgumentException("Usage: upstreams set <format> <url>");
+                    throw new IllegalArgumentException("Usage: upstreams set <format> <url> [--tenant N]");
                 }
-                client.setUpstream(args[2], args[3]);
+                client.setUpstream(tenant, args[2], args[3]);
                 System.out.println("Saved upstream for " + args[2] + ".");
             }
             case "remove" -> {
                 if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: upstreams remove <format>");
+                    throw new IllegalArgumentException("Usage: upstreams remove <format> [--tenant N]");
                 }
-                client.removeUpstream(args[2]);
+                client.removeUpstream(tenant, args[2]);
                 System.out.println("Removed upstream for " + args[2] + ".");
             }
             default -> throw new IllegalArgumentException("Unknown upstreams command '" + args[1] + "'");

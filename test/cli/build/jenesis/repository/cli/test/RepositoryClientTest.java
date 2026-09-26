@@ -393,29 +393,29 @@ public class RepositoryClientTest {
 
     @Test
     void repository_definitions_are_listed_set_and_removed() throws IOException, InterruptedException {
-        List<RepositoryClient.NamedValue> repos = client.repositories();
+        List<RepositoryClient.NamedValue> repos = client.repositories(null);
         assertThat(repos).hasSize(1);
         assertThat(repos.get(0).name()).isEqualTo("mirror");
         assertThat(repos.get(0).value()).isEqualTo("fallback https://repo1.maven.org/maven2/");
 
-        client.setRepository("mirror", "writable");
+        client.setRepository(null, "mirror", "writable");
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/repositories/mirror");
         assertThat(lastBody).isEqualTo("{\"value\":\"writable\"}");
 
-        client.removeRepository("mirror");
+        client.removeRepository(null, "mirror");
         assertThat(lastMethod).isEqualTo("DELETE");
         assertThat(lastPath).isEqualTo("/api/repositories/mirror");
     }
 
     @Test
     void format_upstreams_are_listed_and_set() throws IOException, InterruptedException {
-        List<RepositoryClient.NamedValue> upstreams = client.upstreams();
+        List<RepositoryClient.NamedValue> upstreams = client.upstreams(null);
         assertThat(upstreams).hasSize(1);
         assertThat(upstreams.get(0).name()).isEqualTo("npm");
         assertThat(upstreams.get(0).value()).isEqualTo("https://npm.internal/");
 
-        client.setUpstream("npm", "https://npm.internal/");
+        client.setUpstream(null, "npm", "https://npm.internal/");
         assertThat(lastPath).isEqualTo("/api/upstreams/npm");
         assertThat(lastBody).isEqualTo("{\"value\":\"https://npm.internal/\"}");
     }

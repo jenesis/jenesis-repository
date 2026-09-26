@@ -354,6 +354,12 @@ public final class LiveConfig {
         return effective(SettingsScopes.upstreamKey(format), fileDefaults.apply("proxy." + format));
     }
 
+    /** {@link #formatUpstream(String)} for one tenant: the tenant's own upstream for the format where it set one, over
+     *  the deployment's - a tenant pulls through its own upstream. */
+    public String formatUpstream(String tenant, String format) {
+        return effective(tenant, SettingsScopes.upstreamKey(format), fileDefaults.apply("proxy." + format));
+    }
+
     /** The effective value of a key: an operator's pin from a higher-precedence source wins outright (the store is
      *  inert for a pinned key); otherwise the stored override, otherwise the file/env fallback. Public because the
      *  router's live definitions read their {@code repositories.<name>} keys through exactly this precedence, and a
@@ -361,6 +367,14 @@ public final class LiveConfig {
     public String effective(String key, String fallback) {
         Optional<String> pin = pinned.apply(key);
         return pin.isPresent() ? pin.get() : settings.getOrDefault(key, fallback);
+    }
+
+    /** {@link #effective(String, String)} for one tenant: a pin still wins outright, then the tenant's own stored value
+     *  where the key is tenant-overridable, then the deployment's, then {@code fallback}. A {@code null} tenant reads
+     *  the deployment alone. */
+    public String effective(String tenant, String key, String fallback) {
+        Optional<String> pin = pinned.apply(key);
+        return pin.isPresent() ? pin.get() : settings.getOrDefault(tenant, key, fallback);
     }
 
     private ComplianceGate gate(Severity threshold, Verdict vulnerable, Verdict malware, List<String> denied,

@@ -79,9 +79,10 @@ public class RepositoryRouterTest {
         assertThat(fetches.get()).as("nothing was cached - fetched again").isEqualTo(before + 2);
 
         // a write lands in the repository's OWN store iff writable; a proxy and a view are read-only
-        assertThat(router.writeTarget("releases")).as("a writable repo is its own write target").isEqualTo("releases");
-        assertThat(router.writeTarget("public")).as("a view is read-only, and delegates no write").isNull();
-        assertThat(router.writeTarget("central")).as("a proxy is read-only").isNull();
+        assertThat(router.writeTarget("acme", "releases")).as("a writable repo is its own write target")
+                .isEqualTo("releases");
+        assertThat(router.writeTarget("acme", "public")).as("a view is read-only, and delegates no write").isNull();
+        assertThat(router.writeTarget("acme", "central")).as("a proxy is read-only").isNull();
 
         // a first-party upload into the writable member is served back through the view, local-first over the member
         put("releases", "/t/pushed.txt", "pushed through");

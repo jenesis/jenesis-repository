@@ -132,7 +132,8 @@ public final class DemoSeeder {
             for (String path : suggestions) {
                 try {
                     SeedExchange exchange = new SeedExchange(path);
-                    boolean claimed = only.dispatch(exchange, store);
+                    // The seeder's own dispatcher pulls through each format's public registry, which is no tenant's.
+                    boolean claimed = only.dispatch(null, exchange, store);
                     if (!claimed) {
                         unavailable++;
                         LOGGER.info("Demo suggestion claimed by no installed format: {}", path);

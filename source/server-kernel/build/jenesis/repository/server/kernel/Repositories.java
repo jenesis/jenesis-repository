@@ -140,8 +140,8 @@ public final class Repositories {
      *  that spools and fully screens every fetched body before releasing a byte. Drives the console's "hardened" badge
      *  and gates the hardened verdict/refusal/drift panel. A repository with no definition, or with no hardened
      *  upstream fallback, is not hardened. */
-    public boolean hardened(String repository) {
-        return definitions.hardened(repository);
+    public boolean hardened(String tenant, String repository) {
+        return definitions.hardened(tenant, repository);
     }
 
 

@@ -206,14 +206,14 @@ public class ServingConfig {
         // The read side of the router: the serving controller consults this on a GET/HEAD, so a routed
         // repository (a per-repository proxy of an upstream, or a group view over members) serves across its
         // backings behind the path - retiring the interim where a routed read served only its own hosted
-        // space. A repository with no definition declines (routes() == false), leaving the free FormatDispatcher to
-        // dispatch it over its own store with the deployment-wide format-level pull-through intact. The router is the
-        // gating() one, so a routed proxy fetch is screened by the same compliance gate a direct proxy is, and the
+        // space. A repository with no definition in the serving tenant declines (routes() == false), leaving the free
+        // FormatDispatcher to dispatch it over its own store with the format-level pull-through intact. The router is
+        // the gating() one, so a routed proxy fetch is screened by the same compliance gate a direct proxy is, and the
         // withheld() read guard still bites on the hosted/group legs through each format's own handle.
         return new RoutedServing() {
             @Override
-            public boolean routes(String repository) {
-                return repositoryRouter.definition(repository) != null;
+            public boolean routes(String tenant, String repository) {
+                return repositoryRouter.definition(tenant, repository) != null;
             }
 
             @Override
@@ -271,10 +271,12 @@ public class ServingConfig {
         // The routed gateway's legs were screened and the demo seeder's was; this one was not, which is the
         // reachability shape: both contracts held and the wiring between them was the hole.
         //
-        // The DEPLOYMENT-WIDE gate is the right one here rather than a tenant's: this leg exists for the
-        // deployment-wide upstream map, and the dispatcher is one singleton across every tenant. The store the screen
-        // records into arrives per call, which is what lets a singleton carry a screen at all.
-        return new FormatDispatcher(formats, new LiveUpstreams(liveConfig, formats), upstreamFetcher, observations,
+        // The upstream each fetch pulls through is the serving tenant's (LiveUpstreams), but the screen is still the
+        // DEPLOYMENT-WIDE gate: the hooks are one singleton and PullThroughHooks carries no tenant yet, so a tenant's
+        // stricter proxy policy does not reach this leg. The store the screen records into arrives per call, which is
+        // what lets a singleton carry a screen at all.
+        FormatDispatcher.Upstreams upstreams = new LiveUpstreams(liveConfig, formats);
+        return new FormatDispatcher(formats, upstreams, upstreamFetcher, observations,
                 new ProxyScreenHooks(liveConfig::proxyGate, liveConfig.holdDays(),
                         liveConfig.withholdIncompleteScreens()));
     }

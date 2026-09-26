@@ -292,16 +292,16 @@ public final class Commands {
                             act("settings export [file] [--tenant N]", "dump the settings as a JSON bundle"),
                             act("settings import <file> [--tenant N]", "restore a bundle, validated first")),
                     noun("repos", "the repositories and their runtime definitions", null, AdminCommands::repos,
-                            act("repos", "list the definitions"),
+                            act("repos [--tenant N]", "list the definitions - the deployment's, or a tenant's own"),
                             act("repos create <name> <format> [description]",
                                     "create a repository holding one format, optionally described"),
                             act("repos describe <name> <description>", "describe a repository; an empty one clears it"),
                             act("repos delete <name> [--yes]", "delete a repository and everything it holds, after "
                                     + "typing 'delete <name>' - or --yes, for a script"),
-                            act("repos set <name> <definition>",
+                            act("repos set <name> <definition> [--tenant N]",
                                     "define a repository in clauses (writable, fallback <url> [nocache] [harden], "
-                                            + "fallback <repository>)"),
-                            act("repos remove <name>", "remove a definition")),
+                                            + "fallback <repository>); with a tenant, that tenant's own"),
+                            act("repos remove <name> [--tenant N]", "remove a definition")),
                     noun("tenants", "the deployment's tenants (an operator key's)", "build.jenesis.repository.ui.admin",
                             AdminCommands::tenants,
                             act("tenants", "list the tenants"),
@@ -309,9 +309,9 @@ public final class Commands {
                             act("tenants delete <name> [--yes]", "delete a tenant and everything it owns, after "
                                     + "typing 'delete <name>' - or --yes, for a script")),
                     noun("upstreams", "the per-format proxy upstreams", null, AdminCommands::upstreams,
-                            act("upstreams", "list the upstreams"),
-                            act("upstreams set <format> <url>", "set a format's upstream"),
-                            act("upstreams remove <format>", "remove a format's upstream"),
+                            act("upstreams [--tenant N]", "list the upstreams - the deployment's, or a tenant's own"),
+                            act("upstreams set <format> <url> [--tenant N]", "set a format's upstream"),
+                            act("upstreams remove <format> [--tenant N]", "remove a format's upstream"),
                             act("upstreams auth", "hosts holding a private-upstream credential"),
                             act("upstreams auth set <host> <bearer|basic|header|aws> ...", "store a credential; aws mints "
                                     + "ECR and CodeArtifact tokens from the server's own AWS identity"),

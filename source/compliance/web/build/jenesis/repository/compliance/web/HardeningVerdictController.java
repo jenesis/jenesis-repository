@@ -48,7 +48,7 @@ public class HardeningVerdictController {
         if (tenant == null) {
             return null;
         }
-        boolean hardened = repositories.hardened(repo);
+        boolean hardened = repositories.hardened(tenant, repo);
         // Reuse the durable read paths only: the consolidated metadata document (the recorded verdict) and the
         // QuarantineLog (the recorded refusals), plus the gateway-wide drift counter. No screen, no fetch.
         HardeningVerdicts verdicts = HardeningVerdicts.over(repositories.store(tenant, repo));

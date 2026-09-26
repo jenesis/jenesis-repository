@@ -121,7 +121,7 @@ public final class RepositoryRouter {
                 + "refused at parse. Install the 'redirect-directory' module, or drop 'redirect' from the definition.");
     };
 
-    private final Function<String, RepositoryDefinition> definitions;
+    private final BiFunction<String, String, RepositoryDefinition> definitions;
     private final BiFunction<String, String, ArtifactStore> stores;
     private final ProxyFormat.Fetcher fetcher;
     private final BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gate;
@@ -149,7 +149,17 @@ public final class RepositoryRouter {
      *  by the distinct coordinates served in a day, not everything ever served. */
     private final Map<String, LocalDate> originRefreshed = new ConcurrentHashMap<>();
 
+    /** A router over definitions that are the same in every tenant - a fixed set, looked up by repository name. */
     public RepositoryRouter(Function<String, RepositoryDefinition> definitions,
+                            BiFunction<String, String, ArtifactStore> stores,
+                            ProxyFormat.Fetcher fetcher) {
+        this((BiFunction<String, String, RepositoryDefinition>) (_, repository) -> definitions.apply(repository),
+                stores, fetcher);
+    }
+
+    /** A router over each tenant's definitions: {@code definitions} answers a repository's definition as the tenant
+     *  serving the request sees it, which is how a tenant routes its own repositories. */
+    public RepositoryRouter(BiFunction<String, String, RepositoryDefinition> definitions,
                             BiFunction<String, String, ArtifactStore> stores,
                             ProxyFormat.Fetcher fetcher) {
         // The default pass-through scratch is a budgeted SpoolStore on the standard budget, so an out-of-the-box
@@ -170,7 +180,7 @@ public final class RepositoryRouter {
     private static final Function<ArtifactStore, MetadataStore> INSTALLED_METADATA =
             store -> MetadataProvider.installed().over(store);
 
-    private RepositoryRouter(Function<String, RepositoryDefinition> definitions,
+    private RepositoryRouter(BiFunction<String, String, RepositoryDefinition> definitions,
                              BiFunction<String, String, ArtifactStore> stores,
                              ProxyFormat.Fetcher fetcher,
                              BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gate,
@@ -264,16 +274,17 @@ public final class RepositoryRouter {
                 withheld, metadataOver, redirect);
     }
 
-    /** The explicit definition of a repository, or {@code null} when it is not configured (a plain hosted repo). */
-    public RepositoryDefinition definition(String repository) {
-        return definitions.apply(repository);
+    /** The explicit definition of a repository as {@code tenant} sees it, or {@code null} when it is not configured
+     *  (a plain hosted repo). */
+    public RepositoryDefinition definition(String tenant, String repository) {
+        return definitions.apply(tenant, repository);
     }
 
     /** The repository a write to {@code repository} lands in - <b>itself</b> when it is {@code writable}, else
      *  {@code null} (it is read-only and a publish answers {@code 405}). An unconfigured name is a plain writable
      *  repository: writability is a repository's own property, so a proxy or a grouped view is read-only. */
-    public String writeTarget(String repository) {
-        RepositoryDefinition definition = definitions.apply(repository);
+    public String writeTarget(String tenant, String repository) {
+        RepositoryDefinition definition = definitions.apply(tenant, repository);
         if (definition == null) {
             return repository;
         }
@@ -319,7 +330,7 @@ public final class RepositoryRouter {
             exchange.respond(508);   // a fallback cycle: a structural refusal committed to the wire (ERROR), never a miss
             return Outcome.ERROR;
         }
-        RepositoryDefinition definition = definitions.apply(repository);
+        RepositoryDefinition definition = definitions.apply(tenant, repository);
         if (definition == null) {
             definition = UNDEFINED;
         }

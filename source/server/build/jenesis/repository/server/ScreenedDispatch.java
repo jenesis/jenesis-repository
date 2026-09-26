@@ -64,7 +64,7 @@ public final class ScreenedDispatch {
      * {@code false} when none did, so the caller answers a {@code 404} - the same contract as
      * {@link FormatDispatcher#dispatch}.
      */
-    public boolean dispatch(FormatExchange exchange, ArtifactStore store) throws IOException {
+    public boolean dispatch(String tenant, FormatExchange exchange, ArtifactStore store) throws IOException {
         Optional<RepositoryFormat> owner = dispatcher.owner(exchange.path());
         if (owner.isEmpty()) {
             return false;
@@ -77,7 +77,7 @@ public final class ScreenedDispatch {
             screen(format, exchange, ReadMemo.over(store));
             return true;
         }
-        return dispatcher.dispatch(exchange, store);
+        return dispatcher.dispatch(tenant, exchange, store);
     }
 
     /** Store-and-screen the body once at the edge, then route by the chain's verdict: lay out on {@code ACCEPT},

@@ -654,19 +654,23 @@ public class SettingsAdmin {
         return entries(SettingsScopes.REPOSITORY_PREFIX);
     }
 
-    /** Whether a repository is defined at runtime with a hardened upstream ({@code fallback <url> harden}) - an
-     *  untrusted-upstream leg that spools and fully screens every fetched body before releasing a byte. The
-     *  console reads this to badge such repositories in the list and gate the hardened verdict/refusal/drift panel. Only
-     *  the runtime {@code repositories.<name>} definitions are visible to the console (the same set {@link #repositories}
-     *  lists); a repository defined only in the server's file/env config, or one with no hardened upstream fallback,
-     *  reads as not hardened. A malformed stored specification degrades to not hardened rather than
-     *  throwing out of a list render. */
-    public boolean hardened(String name) throws IOException {
-        return hardenedDefinition(repositories().get(name));
+    /** The definitions {@code tenant} set for itself (name to routing spec), which route its repositories of those
+     *  names over the deployment's. */
+    public Map<String, String> repositories(String tenant) throws IOException {
+        Properties own = StoredConfig.load(root, tenant);
+        Map<String, String> entries = new LinkedHashMap<>();
+        for (String key : own.stringPropertyNames()) {
+            if (key.startsWith(SettingsScopes.REPOSITORY_PREFIX)) {
+                entries.put(key.substring(SettingsScopes.REPOSITORY_PREFIX.length()), own.getProperty(key));
+            }
+        }
+        return entries;
     }
 
-    /** {@link #hardened(String)} over a definition already read ({@link #repositories}), for a listing that reads
-     *  the settings once rather than once per repository. */
+    /** Whether a definition has a hardened upstream fallback ({@code fallback <url> harden}): an untrusted-upstream leg
+     *  that spools and fully screens every fetched body before releasing a byte. The console badges such repositories
+     *  and gates the hardened verdict panel on it. A malformed specification degrades to not hardened rather than
+     *  throwing out of a list render. */
     public static boolean hardenedDefinition(String specification) {
         if (specification == null || specification.isBlank()) {
             return false;
@@ -679,22 +683,16 @@ public class SettingsAdmin {
     }
 
     /**
-     * The parsed <em>shape</em> of a repository's runtime definition for the console badges: whether it accepts
-     * uploads ({@code writable}) and, per fallback, an upstream's copy ({@code store}) and screen strength or an
+     * The parsed <em>shape</em> of a repository's definition for the console badges: whether it accepts uploads
+     * ({@code writable}) and, per fallback, an upstream's copy ({@code store}) and screen strength or an
      * inner-repository reference - rendered from the one {@link RepositoryDefinition} the router routes on, so the
-     * badges never drift from what actually serves. Only the runtime {@code repositories.<name>} definitions the console
-     * manages are visible (as {@link #hardened} notes); an unconfigured repository is the default shape - writable, with
-     * no fallbacks - and a malformed stored specification degrades to that same neutral shape rather than throwing
-     * out of a list render (§10 render-what-you-have). {@link RepositoryShape#warnings} carries the valid-but-risky
+     * badges never drift from what actually serves. The caller has read the {@code specification} once - the listing
+     * for every row, {@link #routing} for one - so this reads nothing. An unconfigured repository is the default shape
+     * - writable, with no fallbacks - and a malformed specification degrades to that same neutral shape rather than
+     * throwing out of a render (§10 render-what-you-have). {@link RepositoryShape#warnings} carries the valid-but-risky
      * flags (mixed screening strength, an unscreened or plaintext upstream) the parse logs loudly - surfaced by the
-     * console as a non-blocking notice, not a refusal (item 4).
+     * console as a non-blocking notice, not a refusal.
      */
-    public RepositoryShape shape(String name) throws IOException {
-        return shape(name, repositories().get(name));
-    }
-
-    /** {@link #shape(String)} over a specification already read ({@link #repositories}), for a listing that reads
-     *  the settings once rather than once per repository. */
     public RepositoryShape shape(String name, String specification) {
         if (specification == null || specification.isBlank()) {
             return new RepositoryShape(false, true, List.of(), List.of());
@@ -793,8 +791,39 @@ public class SettingsAdmin {
     public record FallbackBadge(boolean upstream, String source, boolean store, String screening, String repository) {
     }
 
-    /** Store a repository definition, validated as the boot sweep validates it. */
-    public void setRepository(String name, String specification) throws IOException {
+    /** Where a repository's definition comes from, as one tenant sees it. */
+    public enum Layer {
+        /** Nothing defines it: a plain hosted repository. */
+        NONE,
+        /** The deployment's definition, which every tenant inherits. */
+        DEPLOYMENT,
+        /** The tenant's own, which routes its repository of this name over the deployment's. */
+        TENANT
+    }
+
+    /** A repository's routing as one tenant sees it: the specification in force, the layer it comes from, and the shape
+     *  it parses to. */
+    public record Routing(String specification, Layer layer, RepositoryShape shape) {
+    }
+
+    /** {@code tenant}'s view of a repository's routing: its own definition where it set one, else the deployment's.
+     *  Only the runtime definitions are visible, as {@link #repositories()} notes. */
+    public Routing routing(String tenant, String name) throws IOException {
+        if (tenant != null) {
+            String own = StoredConfig.load(root, tenant).getProperty(SettingsScopes.repositoryKey(name));
+            if (own != null && !own.isBlank()) {
+                return new Routing(own, Layer.TENANT, shape(name, own));
+            }
+        }
+        String deployment = repositories().get(name);
+        return deployment == null || deployment.isBlank()
+                ? new Routing("", Layer.NONE, shape(name, null))
+                : new Routing(deployment, Layer.DEPLOYMENT, shape(name, deployment));
+    }
+
+    /** Store a repository definition, validated as the boot sweep validates it: the deployment's, or with a
+     *  {@code tenant} that tenant's own, which routes its repository of this name over the deployment's. */
+    public void setRepository(String tenant, String name, String specification) throws IOException {
         if (!NAME.matcher(name).matches()) {
             throw new IllegalArgumentException("Invalid repository name '" + name + "'.");
         }
@@ -820,13 +849,24 @@ public class SettingsAdmin {
             throw new IllegalArgumentException("Repository '" + name + "' has a refused definition '" + specification
                     + "': " + refused + "." + RepositoryDefinition.upstreamRemedy());
         }
-        put(SettingsScopes.repositoryKey(name), specification);
-        audit(AuditActions.REPOSITORY_SET, name);
+        store(tenant, SettingsScopes.repositoryKey(name), specification);
+        audit(AuditActions.REPOSITORY_SET, tenant == null ? name : tenant + "/" + name);
     }
 
-    public void removeRepository(String name) throws IOException {
-        put(SettingsScopes.repositoryKey(name), null);
-        audit(AuditActions.REPOSITORY_REMOVE, name);
+    /** Remove a repository definition: the deployment's, or with a {@code tenant} that tenant's own, after which the
+     *  tenant inherits the deployment's again. */
+    public void removeRepository(String tenant, String name) throws IOException {
+        store(tenant, SettingsScopes.repositoryKey(name), null);
+        audit(AuditActions.REPOSITORY_REMOVE, tenant == null ? name : tenant + "/" + name);
+    }
+
+    /** A routing entry into the deployment's settings, or into {@code tenant}'s own. */
+    private void store(String tenant, String key, String value) throws IOException {
+        if (tenant == null) {
+            put(key, value);
+        } else {
+            StoredConfig.put(root, tenant, key, value);
+        }
     }
 
     /** The per-format proxy upstreams set at runtime (format to upstream URL). */
@@ -853,7 +893,9 @@ public class SettingsAdmin {
         return suggested;
     }
 
-    public void setUpstream(String format, String url) throws IOException {
+    /** A format's upstream: the deployment's, or with a {@code tenant} that tenant's own, which its repositories pull
+     *  through instead. Refused as the deployment's is refused - the outbound screen is the deployment's either way. */
+    public void setUpstream(String tenant, String format, String url) throws IOException {
         if (!NAME.matcher(format).matches()) {
             throw new IllegalArgumentException("Invalid format name '" + format + "'.");
         }
@@ -863,13 +905,26 @@ public class SettingsAdmin {
             throw new IllegalArgumentException("The '" + format + "' upstream '" + url + "' is refused: " + refused
                     + "." + RepositoryDefinition.upstreamRemedy());
         }
-        put(SettingsScopes.upstreamKey(format), url);
-        audit(AuditActions.UPSTREAM_SET, format);
+        store(tenant, SettingsScopes.upstreamKey(format), url);
+        audit(AuditActions.UPSTREAM_SET, tenant == null ? format : tenant + "/" + format);
     }
 
-    public void removeUpstream(String format) throws IOException {
-        put(SettingsScopes.upstreamKey(format), null);
-        audit(AuditActions.UPSTREAM_REMOVE, format);
+    public void removeUpstream(String tenant, String format) throws IOException {
+        store(tenant, SettingsScopes.upstreamKey(format), null);
+        audit(AuditActions.UPSTREAM_REMOVE, tenant == null ? format : tenant + "/" + format);
+    }
+
+    /** The upstreams {@code tenant} set for itself (format to URL), which its repositories pull through over the
+     *  deployment's. */
+    public Map<String, String> upstreams(String tenant) throws IOException {
+        Properties own = StoredConfig.load(root, tenant);
+        Map<String, String> entries = new LinkedHashMap<>();
+        for (String key : own.stringPropertyNames()) {
+            if (key.startsWith(SettingsScopes.UPSTREAM_PREFIX)) {
+                entries.put(key.substring(SettingsScopes.UPSTREAM_PREFIX.length()), own.getProperty(key));
+            }
+        }
+        return entries;
     }
 
     private Map<String, String> entries(String prefix) throws IOException {

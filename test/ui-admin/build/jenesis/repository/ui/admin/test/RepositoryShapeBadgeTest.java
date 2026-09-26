@@ -34,8 +34,8 @@ public class RepositoryShapeBadgeTest {
 
     @Test
     void a_writable_repository_has_no_fallbacks() throws IOException {
-        settings.setRepository("releases", "writable");
-        SettingsAdmin.RepositoryShape shape = settings.shape("releases");
+        settings.setRepository(null, "releases", "writable");
+        SettingsAdmin.RepositoryShape shape = settings.routing(null, "releases").shape();
         assertThat(shape.configured()).isTrue();
         assertThat(shape.writable()).as("writable accepts uploads").isTrue();
         assertThat(shape.readOnly()).isFalse();
@@ -46,8 +46,8 @@ public class RepositoryShapeBadgeTest {
 
     @Test
     void a_caching_proxy_shows_a_stored_default_screened_upstream_fallback() throws IOException {
-        settings.setRepository("central", "fallback https://repo1.maven.org/maven2");
-        SettingsAdmin.RepositoryShape shape = settings.shape("central");
+        settings.setRepository(null, "central", "fallback https://repo1.maven.org/maven2");
+        SettingsAdmin.RepositoryShape shape = settings.routing(null, "central").shape();
         assertThat(shape.writable()).as("a proxy is read-only").isFalse();
         assertThat(shape.readOnly()).isTrue();
         assertThat(shape.fallbacks()).singleElement().satisfies(fallback -> {
@@ -61,8 +61,8 @@ public class RepositoryShapeBadgeTest {
 
     @Test
     void a_nocache_proxy_shows_a_pass_through_upstream_fallback() throws IOException {
-        settings.setRepository("lite", "fallback https://repo1.maven.org/maven2 nocache");
-        SettingsAdmin.RepositoryShape shape = settings.shape("lite");
+        settings.setRepository(null, "lite", "fallback https://repo1.maven.org/maven2 nocache");
+        SettingsAdmin.RepositoryShape shape = settings.routing(null, "lite").shape();
         assertThat(shape.fallbacks()).singleElement().satisfies(fallback -> {
             assertThat(fallback.store()).as("nocache is a pass-through").isFalse();
             assertThat(fallback.screening()).isEqualTo("default");
@@ -71,16 +71,16 @@ public class RepositoryShapeBadgeTest {
 
     @Test
     void a_harden_proxy_shows_a_hardened_upstream_fallback() throws IOException {
-        settings.setRepository("hard", "fallback https://untrusted.example/repo harden");
-        SettingsAdmin.RepositoryShape shape = settings.shape("hard");
+        settings.setRepository(null, "hard", "fallback https://untrusted.example/repo harden");
+        SettingsAdmin.RepositoryShape shape = settings.routing(null, "hard").shape();
         assertThat(shape.fallbacks()).singleElement().satisfies(fallback ->
                 assertThat(fallback.screening()).isEqualTo("harden"));
     }
 
     @Test
     void a_view_shows_inner_repository_references_in_order() throws IOException {
-        settings.setRepository("all", "fallback releases fallback central");
-        SettingsAdmin.RepositoryShape shape = settings.shape("all");
+        settings.setRepository(null, "all", "fallback releases fallback central");
+        SettingsAdmin.RepositoryShape shape = settings.routing(null, "all").shape();
         assertThat(shape.writable()).isFalse();
         assertThat(shape.fallbacks()).hasSize(2);
         assertThat(shape.fallbacks().get(0).upstream()).isFalse();
@@ -90,8 +90,9 @@ public class RepositoryShapeBadgeTest {
 
     @Test
     void a_writable_hybrid_shows_writable_and_its_fallbacks() throws IOException {
-        settings.setRepository("frontdoor", "writable fallback releases fallback https://repo1.maven.org/maven2 harden");
-        SettingsAdmin.RepositoryShape shape = settings.shape("frontdoor");
+        settings.setRepository(null, "frontdoor",
+                "writable fallback releases fallback https://repo1.maven.org/maven2 harden");
+        SettingsAdmin.RepositoryShape shape = settings.routing(null, "frontdoor").shape();
         assertThat(shape.writable()).as("the hybrid accepts uploads").isTrue();
         assertThat(shape.hybrid()).as("writable AND fallbacked is the host+proxy hybrid").isTrue();
         assertThat(shape.fallbacks()).hasSize(2);
@@ -102,7 +103,7 @@ public class RepositoryShapeBadgeTest {
 
     @Test
     void a_definition_outside_the_clause_grammar_is_refused_naming_the_clause_to_write() throws IOException {
-        assertThatThrownBy(() -> settings.setRepository("releases", "hosted"))
+        assertThatThrownBy(() -> settings.setRepository(null, "releases", "hosted"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Repository 'releases' has an invalid definition 'hosted'")
                 .hasMessageContaining("write 'writable'");
@@ -113,9 +114,9 @@ public class RepositoryShapeBadgeTest {
     void a_mixed_strength_definition_surfaces_a_warning_but_is_not_refused() throws IOException {
         // A harden upstream beside a weaker (default) upstream: valid (ordering is operator expressiveness) but flagged
         // The definition is STORED (not refused) and its warning is surfaced.
-        settings.setRepository("mixed",
+        settings.setRepository(null, "mixed",
                 "fallback https://a.example/repo fallback https://b.example/repo harden");
-        SettingsAdmin.RepositoryShape shape = settings.shape("mixed");
+        SettingsAdmin.RepositoryShape shape = settings.routing(null, "mixed").shape();
         assertThat(shape.configured()).as("the risky-but-valid definition was stored, not refused").isTrue();
         assertThat(shape.warnings()).anySatisfy(warning ->
                 assertThat(warning).contains("mixed screening strength"));
@@ -123,8 +124,8 @@ public class RepositoryShapeBadgeTest {
 
     @Test
     void an_unscreened_definition_surfaces_a_warning_but_is_not_refused() throws IOException {
-        settings.setRepository("open", "fallback https://a.example/repo unscreened");
-        SettingsAdmin.RepositoryShape shape = settings.shape("open");
+        settings.setRepository(null, "open", "fallback https://a.example/repo unscreened");
+        SettingsAdmin.RepositoryShape shape = settings.routing(null, "open").shape();
         assertThat(shape.fallbacks()).singleElement().satisfies(fallback ->
                 assertThat(fallback.screening()).isEqualTo("unscreened"));
         assertThat(shape.warnings()).anySatisfy(warning -> assertThat(warning).contains("unscreened"));
@@ -134,7 +135,7 @@ public class RepositoryShapeBadgeTest {
     void a_plaintext_upstream_is_refused_and_only_warned_about_once_the_dial_admits_it() throws IOException {
         // A plaintext upstream is refused like every other operator-configured outbound target (the webhook, forward,
         // emulator, redirect and import targets all decline one), and the message names the hazard and the opt-out.
-        assertThatThrownBy(() -> settings.setRepository("plain", "fallback http://a.example/repo"))
+        assertThatThrownBy(() -> settings.setRepository(null, "plain", "fallback http://a.example/repo"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("not https")
                 .hasMessageContaining("upstream credential")
@@ -144,14 +145,14 @@ public class RepositoryShapeBadgeTest {
         // With the dial taken - the deployment that really does pull from a plaintext internal mirror - the value is
         // storable again and the console notice is what remains: an accepted risk, still stated loudly (§9).
         settings.save("proxy-allow-internal", "true");
-        settings.setRepository("plain", "fallback http://a.example/repo");
-        SettingsAdmin.RepositoryShape shape = settings.shape("plain");
+        settings.setRepository(null, "plain", "fallback http://a.example/repo");
+        SettingsAdmin.RepositoryShape shape = settings.routing(null, "plain").shape();
         assertThat(shape.warnings()).anySatisfy(warning -> assertThat(warning).contains("plaintext"));
     }
 
     @Test
     void an_unconfigured_repository_is_the_neutral_default_shape() throws IOException {
-        SettingsAdmin.RepositoryShape shape = settings.shape("never-defined");
+        SettingsAdmin.RepositoryShape shape = settings.routing(null, "never-defined").shape();
         assertThat(shape.configured()).isFalse();
         assertThat(shape.writable()).isTrue();
         assertThat(shape.fallbacks()).isEmpty();

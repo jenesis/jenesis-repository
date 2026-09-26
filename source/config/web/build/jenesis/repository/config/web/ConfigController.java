@@ -448,19 +448,22 @@ public class ConfigController {
     /** The repositories defined at runtime ({@code repositories.<name>} in the settings store): each name with its
      *  routing specification (one or more {@code writable} / {@code fallback <source> [options]} clauses). They add to
      *  or override the deployment's file-configured repositories ({@code jenreg.repositories.<name>}) and
-     *  route on the next request. */
+     *  route on the next request. With {@code ?tenant=}, the ones that tenant set for itself, which route its
+     *  repositories over the deployment's. Either way it reads settings documents - one object per module under a
+     *  constant prefix - and nothing that grows with what the repositories hold. */
     @GetMapping("/api/repositories")
     @ResponseBody
-    public List<NamedValue> repositoryDefinitions() {
-        return stored(SettingsScopes.REPOSITORY_PREFIX);
+    public List<NamedValue> repositoryDefinitions(@RequestParam(value = "tenant", required = false) String tenant) {
+        return stored(tenant, SettingsScopes.REPOSITORY_PREFIX);
     }
 
     @PutMapping("/api/repositories/{name}")
     public void setRepositoryDefinition(@PathVariable("name") String name,
                                         @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                        @RequestParam(value = "tenant", required = false) String tenant,
                                         @RequestBody NamedValueRequest request,
                                         HttpServletResponse response) throws IOException {
-        if (!Repositories.valid(name) || request == null || request.value() == null) {
+        if (!Repositories.valid(name) || request == null || request.value() == null || !tenantName(tenant)) {
             response.setStatus(400);
             return;
         }
@@ -496,8 +499,10 @@ public class ConfigController {
                     + "': " + refused + "." + RepositoryDefinition.upstreamRemedy());
             return;
         }
-        settings.set(SettingsScopes.repositoryKey(name), request.value());
-        audit(key, AuditActions.REPOSITORY_SET, name);
+        // With a tenant, the definition is that tenant's own and routes its repository of this name over the
+        // deployment's; the checks above are the same either way.
+        store(tenant, SettingsScopes.repositoryKey(name), request.value());
+        audit(key, AuditActions.REPOSITORY_SET, scoped(tenant, name));
         response.setStatus(200);
     }
 
@@ -586,8 +591,9 @@ public class ConfigController {
     }
 
     /**
-     * Delete a repository and everything it holds - {@code DELETE /repository/<tenant>/<name>} - and forget what it
-     * was defined as, through the one removal every surface makes ({@link RepositoryRemoval}). The repository stops
+     * Delete a repository and everything it holds - {@code DELETE /repository/<tenant>/<name>} - and forget the
+     * tenant's own definition of it (the deployment's is every tenant's, so it stays), through the one removal every
+     * surface makes ({@link RepositoryRemoval}). The repository stops
      * answering before this returns; its objects are removed off the request path, so the answer is {@code 202}, and a
      * repository already being deleted - one a node stopped part way - is resumed. {@code 404} when there is none.
      *
@@ -610,7 +616,8 @@ public class ConfigController {
             text(response, 404, "There is no repository '" + repository + "'.");
             return;
         }
-        settings.set(SettingsScopes.repositoryKey(repository), null);
+        // The tenant's own definition goes with its repository; the deployment's is every tenant's and stays.
+        settings.set(route.tenant(), SettingsScopes.repositoryKey(repository), null);
         RepositoryDocument.forget(repositories.root(), route.tenant(), repository);
         audit(route.tenant(), key, AuditActions.REPOSITORY_DELETE, repository);
         RepositoryRemoval.purgeInBackground(repositories.tenantScope(route.tenant()), repository,
@@ -630,26 +637,34 @@ public class ConfigController {
     @DeleteMapping("/api/repositories/{name}")
     public void removeRepositoryDefinition(@PathVariable("name") String name,
                                            @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                           @RequestParam(value = "tenant", required = false) String tenant,
                                            HttpServletResponse response) throws IOException {
-        settings.set(SettingsScopes.repositoryKey(name), null);
-        audit(key, AuditActions.REPOSITORY_REMOVE, name);
+        if (!tenantName(tenant)) {
+            response.setStatus(400);
+            return;
+        }
+        store(tenant, SettingsScopes.repositoryKey(name), null);
+        audit(key, AuditActions.REPOSITORY_REMOVE, scoped(tenant, name));
         response.setStatus(200);
     }
 
     /** The per-format proxy upstreams set at runtime ({@code format-upstream.<format>}): each language format with the
-     *  upstream URL its local misses pull through, over the deployment's file-configured default. */
+     *  upstream URL its local misses pull through, over the deployment's file-configured default. With
+     *  {@code ?tenant=}, the ones that tenant set for itself, which its repositories pull through instead. It reads
+     *  settings documents - one object per module under a constant prefix - as the list above does. */
     @GetMapping("/api/upstreams")
     @ResponseBody
-    public List<NamedValue> upstreams() {
-        return stored(SettingsScopes.UPSTREAM_PREFIX);
+    public List<NamedValue> upstreams(@RequestParam(value = "tenant", required = false) String tenant) {
+        return stored(tenant, SettingsScopes.UPSTREAM_PREFIX);
     }
 
     @PutMapping("/api/upstreams/{format}")
     public void setUpstream(@PathVariable("format") String format,
                             @RequestHeader(value = Repositories.KEY, required = false) String key,
+                            @RequestParam(value = "tenant", required = false) String tenant,
                             @RequestBody NamedValueRequest request,
                             HttpServletResponse response) throws IOException {
-        if (request == null || request.value() == null || request.value().isBlank()) {
+        if (request == null || request.value() == null || request.value().isBlank() || !tenantName(tenant)) {
             response.setStatus(400);
             return;
         }
@@ -671,24 +686,55 @@ public class ConfigController {
                     + refused + "." + RepositoryDefinition.upstreamRemedy());
             return;
         }
-        settings.set(SettingsScopes.upstreamKey(format), request.value());
-        audit(key, AuditActions.UPSTREAM_SET, format);
+        store(tenant, SettingsScopes.upstreamKey(format), request.value());
+        audit(key, AuditActions.UPSTREAM_SET, scoped(tenant, format));
         response.setStatus(200);
     }
 
     @DeleteMapping("/api/upstreams/{format}")
     public void removeUpstream(@PathVariable("format") String format,
                                @RequestHeader(value = Repositories.KEY, required = false) String key,
+                               @RequestParam(value = "tenant", required = false) String tenant,
                                HttpServletResponse response) throws IOException {
-        settings.set(SettingsScopes.upstreamKey(format), null);
-        audit(key, AuditActions.UPSTREAM_REMOVE, format);
+        if (!tenantName(tenant)) {
+            response.setStatus(400);
+            return;
+        }
+        store(tenant, SettingsScopes.upstreamKey(format), null);
+        audit(key, AuditActions.UPSTREAM_REMOVE, scoped(tenant, format));
         response.setStatus(200);
     }
 
-    /** The stored settings whose key carries a prefix (a map entry), as name (prefix stripped) to value. */
-    private List<NamedValue> stored(String prefix) {
+    /** Store a routing entry in the deployment's settings, or - with a tenant - in that tenant's own, where it routes
+     *  that tenant's repositories over the deployment's. A {@code null} value clears it. */
+    private void store(String tenant, String key, String value) throws IOException {
+        if (tenant == null || tenant.isBlank()) {
+            settings.set(key, value);
+        } else {
+            settings.set(tenant, key, value);
+        }
+    }
+
+    /** Whether a routing write's {@code tenant} is absent (the deployment's) or a name a tenant can have. */
+    private static boolean tenantName(String tenant) {
+        return tenant == null || tenant.isBlank() || SettingsDocuments.validTenant(tenant);
+    }
+
+    /** An audit target naming the tenant a routing entry was set for, the way the tenant settings writes do. */
+    private static String scoped(String tenant, String name) {
+        return tenant == null || tenant.isBlank() ? name : tenant + "/" + name;
+    }
+
+    /** The stored settings whose key carries a prefix (a map entry), as name (prefix stripped) to value: the
+     *  deployment's, or with a tenant the ones that tenant set for itself. */
+    private List<NamedValue> stored(String tenant, String prefix) {
         List<NamedValue> entries = new ArrayList<>();
-        settings.overrides().forEach((key, value) -> {
+        if (!tenantName(tenant)) {
+            return entries;
+        }
+        Map<String, String> overrides = tenant == null || tenant.isBlank()
+                ? settings.overrides() : settings.overrides(tenant);
+        overrides.forEach((key, value) -> {
             if (key.startsWith(prefix)) {
                 entries.add(new NamedValue(key.substring(prefix.length()), value));
             }

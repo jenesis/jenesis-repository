@@ -57,9 +57,9 @@ public final class RepositoriesRoutingContext implements RoutingContext {
     }
 
     @Override
-    public boolean writable(String repository) {
+    public boolean writable(String tenant, String repository) {
         // Undefined means hosted, which is writable; only a definition can say otherwise - a proxy, a group view,
         // or one marked read-only.
-        return repositories.definitions().writable(repository);
+        return repositories.definitions().writable(tenant, repository);
     }
 }

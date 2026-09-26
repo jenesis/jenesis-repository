@@ -102,8 +102,9 @@ public final class BatchIngestion {
      * the screen and dispatches as before. A write never proxies (see {@link PullThroughCache}), so an entry whose
      * format has an upstream configured still publishes locally.
      */
-    public void explode(FormatExchange outer, ArtifactStore store, ScreenedDispatch screened) throws IOException {
-        explode(outer, (path, body) -> dispatch(screened, path, body, store));
+    public void explode(FormatExchange outer, String tenant, ArtifactStore store, ScreenedDispatch screened)
+            throws IOException {
+        explode(outer, (path, body) -> dispatch(screened, tenant, path, body, store));
     }
 
     /**
@@ -263,10 +264,10 @@ public final class BatchIngestion {
      *  is restreamed into its format's layout ({@code 2xx} &rarr; stored), a held one answers {@code 202} (quarantined)
      *  and a rejected one {@code 422} (rejected), all off the same {@link ScreenedDispatch} choreography a single deploy
      *  runs; a path no format claims is unclaimed. */
-    private static Outcome dispatch(ScreenedDispatch screened, String path, InputStream body, ArtifactStore store)
-            throws IOException {
+    private static Outcome dispatch(ScreenedDispatch screened, String tenant, String path, InputStream body,
+                                    ArtifactStore store) throws IOException {
         CapturingExchange exchange = new CapturingExchange(path, body);
-        if (!screened.dispatch(exchange, store)) {
+        if (!screened.dispatch(tenant, exchange, store)) {
             return Outcome.UNCLAIMED;
         }
         return switch (exchange.status()) {

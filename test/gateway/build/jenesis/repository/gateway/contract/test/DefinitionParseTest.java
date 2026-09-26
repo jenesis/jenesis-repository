@@ -238,7 +238,7 @@ public class DefinitionParseTest {
         assertThat(fetches.get()).as("served from the cache, no second fetch").isEqualTo(1);
 
         // a non-writable single upstream is read-only
-        assertThat(router.writeTarget("sugar")).isNull();
+        assertThat(router.writeTarget("acme", "sugar")).isNull();
 
         // `fallback http://up/ nocache` streams without storing: each read fetches again
         int before = fetches.get();

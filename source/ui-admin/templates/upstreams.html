@@ -155,6 +155,56 @@
         </form>
     </article>
 
+
+    <!--/* The selected tenant's own layer over everything above: the upstreams its repositories pull through instead
+         of the deployment's, and the repositories it routes itself - each edited on its own overview. */-->
+    <section th:if="${routedTenant != null}" class="app-divide" aria-labelledby="tenant-routing">
+        <h2 id="tenant-routing">For tenant <span th:text="${routedTenant}">acme</span></h2>
+        <p><small>What this tenant uses instead of the deployment's above. The outbound screen is the deployment's
+            either way.</small></p>
+        <div class="app-panels">
+            <article>
+                <h3>Format upstreams</h3>
+                <figure th:if="${!tenantUpstreams.isEmpty()}">
+                    <table class="app-list">
+                        <thead><tr><th scope="col">Format</th><th scope="col">Upstream</th>
+                            <th scope="col"><span class="app-sr-only">Actions</span></th></tr></thead>
+                        <tbody>
+                        <tr th:each="e : ${tenantUpstreams}">
+                            <td><code th:text="${e.key}">format</code></td>
+                            <td><code th:text="${e.value}">url</code></td>
+                            <td>
+                                <form method="post" th:action="@{/ui/settings/upstreams/remove}" style="margin:0">
+                                    <input type="hidden" name="format" th:value="${e.key}">
+                                    <input type="hidden" name="forTenant" value="true">
+                                    <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The tenant pulls this format through the deployment upstream again.')}">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </figure>
+                <p th:if="${tenantUpstreams.isEmpty()}"><small>None: this tenant pulls through the deployment's
+                    upstreams.</small></p>
+                <form method="post" th:action="@{/ui/settings/upstreams}">
+                    <input type="hidden" name="forTenant" value="true">
+                    <label>Format <input name="format" required pattern="[A-Za-z0-9_-]+" placeholder="maven"></label>
+                    <label>Upstream URL <input name="url" required placeholder="https://mirror.example/maven2/"></label>
+                    <button type="submit">Save for this tenant</button>
+                </form>
+            </article>
+            <article>
+                <h3>Repositories routed for this tenant</h3>
+                <ul th:if="${!tenantRepositories.isEmpty()}">
+                    <li th:each="e : ${tenantRepositories}"><a th:href="@{'/ui/repositories/' + ${e.key}}"
+                            th:text="${e.key}">name</a> <code th:text="${e.value}">spec</code></li>
+                </ul>
+                <p th:if="${tenantRepositories.isEmpty()}"><small>None: every repository routes as the deployment
+                    defines it.</small></p>
+                <p><small>A repository's routing for this tenant is set on the repository's own page.</small></p>
+            </article>
+        </div>
+    </section>
 </main>
 </body>
 </html>

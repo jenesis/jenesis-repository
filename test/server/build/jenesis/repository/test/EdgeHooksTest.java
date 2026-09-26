@@ -168,7 +168,7 @@ public class EdgeHooksTest {
         SpyHooks hooks = new SpyHooks(spy);
         FakeExchange put = new FakeExchange("PUT", "/spyscreened/thing", "payload".getBytes(StandardCharsets.UTF_8));
 
-        assertThat(edge(spy, hooks).dispatch(put, store)).isTrue();
+        assertThat(edge(spy, hooks).dispatch("acme", put, store)).isTrue();
 
         assertThat(put.status).as("the format laid the accepted body out").isEqualTo(201);
         assertThat(spy.writes).as("the format's handle ran once").isEqualTo(1);
@@ -185,7 +185,7 @@ public class EdgeHooksTest {
         hooks.refuseWith = new EdgeHooks.Refusal(409, "release is immutable");
         FakeExchange put = new FakeExchange("PUT", "/spyscreened/thing", "payload".getBytes(StandardCharsets.UTF_8));
 
-        assertThat(edge(spy, hooks).dispatch(put, store)).isTrue();
+        assertThat(edge(spy, hooks).dispatch("acme", put, store)).isTrue();
 
         assertThat(put.status).as("the refusal status is returned").isEqualTo(409);
         assertThat(new String(put.responseBody, StandardCharsets.UTF_8)).isEqualTo("release is immutable");
@@ -201,7 +201,7 @@ public class EdgeHooksTest {
         FakeExchange put = new FakeExchange("PUT", "/spyscreened/gate-quarantine/y",
                 "hold".getBytes(StandardCharsets.UTF_8));
 
-        assertThat(edge(spy, hooks).dispatch(put, store)).isTrue();
+        assertThat(edge(spy, hooks).dispatch("acme", put, store)).isTrue();
 
         assertThat(put.status).as("a quarantined body is 202 at the edge").isEqualTo(202);
         assertThat(spy.writes).as("a quarantined body is not laid out").isZero();
@@ -218,7 +218,7 @@ public class EdgeHooksTest {
         SpyHooks hooks = new SpyHooks(spy);
         FakeExchange put = new FakeExchange("PUT", "/spyscreened/gate-reject/x", "bad".getBytes(StandardCharsets.UTF_8));
 
-        assertThat(edge(spy, hooks).dispatch(put, store)).isTrue();
+        assertThat(edge(spy, hooks).dispatch("acme", put, store)).isTrue();
 
         assertThat(put.status).as("a rejected body is 422 at the edge").isEqualTo(422);
         assertThat(spy.writes).isZero();

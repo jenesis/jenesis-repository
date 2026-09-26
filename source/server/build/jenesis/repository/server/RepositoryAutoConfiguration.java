@@ -383,7 +383,7 @@ public class RepositoryAutoConfiguration {
                     }
 
                     @Override
-                    public boolean writable(String repository) {
+                    public boolean writable(String tenant, String repository) {
                         return true;   // this core holds no repository definitions, so nothing says otherwise
                     }
                 });

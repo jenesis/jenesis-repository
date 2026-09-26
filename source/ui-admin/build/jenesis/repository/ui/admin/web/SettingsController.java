@@ -53,12 +53,20 @@ public class SettingsController {
     }
 
     /** Where the deployment fetches what it does not hold: the format upstreams, the credentials sent to private
-     *  ones and the repository routing that names them. A page of its own rather than panels under the settings
-     *  catalogue, because naming an upstream is a step every proxying deployment takes. */
+     *  ones and the repository routing that names them, with the selected tenant's own layer over them. A page of its
+     *  own rather than panels under the settings catalogue, because naming an upstream is a step every proxying
+     *  deployment takes. It reads the settings documents - one object per module under a constant prefix - and
+     *  nothing that grows with what the repositories hold. */
     @GetMapping("/ui/settings/upstreams")
     public String upstreams(Model model) throws IOException {
         model.addAttribute("repositories", settings.repositories());
         model.addAttribute("upstreams", settings.upstreams());
+        // The selected tenant's own layer over these, when a tenant is selected: its upstreams and the repositories it
+        // routes itself, each of which the repository's own overview edits.
+        String tenant = current.name();
+        model.addAttribute("routedTenant", tenant);
+        model.addAttribute("tenantUpstreams", tenant == null ? Map.of() : settings.upstreams(tenant));
+        model.addAttribute("tenantRepositories", tenant == null ? Map.of() : settings.repositories(tenant));
         model.addAttribute("suggestedUpstreams", settings.suggestedUpstreams());
         model.addAttribute("upstreamAuthHosts", settings.upstreamCredentialHosts());
         return "upstreams";
@@ -252,32 +260,38 @@ public class SettingsController {
     public String setRepository(@RequestParam("name") String name,
                                 @RequestParam("definition") String definition,
                                 RedirectAttributes redirect) throws IOException {
-        settings.setRepository(name, definition);
+        settings.setRepository(null, name, definition);
         redirect.addFlashAttribute("message", "Saved repository '" + name + "'.");
         return "redirect:/ui/settings/upstreams";
     }
 
     @PostMapping("/ui/settings/repositories/remove")
     public String removeRepository(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
-        settings.removeRepository(name);
+        settings.removeRepository(null, name);
         redirect.addFlashAttribute("message", "Removed repository '" + name + "'.");
         return "redirect:/ui/settings/upstreams";
     }
 
+    /** A format's upstream - the deployment's, or with {@code forTenant} the selected tenant's own. The form names no
+     *  tenant: the session's is the one a super-admin chose to work in. */
     @PostMapping("/ui/settings/upstreams")
     public String setUpstream(@RequestParam("format") String format,
                               @RequestParam("url") String url,
+                              @RequestParam(name = "forTenant", defaultValue = "false") boolean forTenant,
                               RedirectAttributes redirect) throws IOException {
-        settings.setUpstream(format, url);
-        redirect.addFlashAttribute("message", "Saved upstream for '" + format + "'.");
+        settings.setUpstream(forTenant ? current.name() : null, format, url);
+        redirect.addFlashAttribute("message", "Saved upstream for '" + format + "'"
+                + (forTenant ? " for tenant '" + current.name() + "'." : "."));
         return "redirect:/ui/settings/upstreams";
     }
 
     @PostMapping("/ui/settings/upstreams/remove")
-    public String removeUpstream(@RequestParam("format") String format, RedirectAttributes redirect)
-            throws IOException {
-        settings.removeUpstream(format);
-        redirect.addFlashAttribute("message", "Removed upstream for '" + format + "'.");
+    public String removeUpstream(@RequestParam("format") String format,
+                                 @RequestParam(name = "forTenant", defaultValue = "false") boolean forTenant,
+                                 RedirectAttributes redirect) throws IOException {
+        settings.removeUpstream(forTenant ? current.name() : null, format);
+        redirect.addFlashAttribute("message", "Removed upstream for '" + format + "'"
+                + (forTenant ? " for tenant '" + current.name() + "'." : "."));
         return "redirect:/ui/settings/upstreams";
     }
 

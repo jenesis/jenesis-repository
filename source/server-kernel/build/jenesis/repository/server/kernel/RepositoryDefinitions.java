@@ -2,7 +2,8 @@ package build.jenesis.repository.server.kernel;
 
 /**
  * What the kernel needs to know about a named repository's definition, and nothing more: whether a write may land
- * in it, and whether its proxy leg is hardened. The definitions themselves - writability, the fallbacks and their
+ * in it, and whether its proxy leg is hardened - each as one tenant sees it, since a tenant routes its own
+ * repositories. The definitions themselves - writability, the fallbacks and their
  * screening - are the router's model, and the router is a feature the kernel does not require; the boot module
  * hands the kernel an implementation the router's live definitions answer, and a composition without the router
  * answers {@link #HOSTED}, which is what a repository with no definition has always meant.
@@ -14,22 +15,22 @@ package build.jenesis.repository.server.kernel;
  */
 public interface RepositoryDefinitions {
 
-    /** Whether {@code repository} accepts uploads into its own store. Undefined means writable; only a definition
-     *  can say otherwise - one that is not {@code writable}, such as a proxy or a grouped view. */
-    boolean writable(String repository);
+    /** Whether {@code tenant}'s {@code repository} accepts uploads into its own store. Undefined means writable; only
+     *  a definition can say otherwise - one that is not {@code writable}, such as a proxy or a grouped view. */
+    boolean writable(String tenant, String repository);
 
-    /** Whether {@code repository}'s proxy leg screens the whole body of what it fetches. */
-    boolean hardened(String repository);
+    /** Whether {@code tenant}'s {@code repository} has a proxy leg that screens the whole body of what it fetches. */
+    boolean hardened(String tenant, String repository);
 
     /** Every repository hosted and none hardened - a deployment with no definitions at all. */
     RepositoryDefinitions HOSTED = new RepositoryDefinitions() {
         @Override
-        public boolean writable(String repository) {
+        public boolean writable(String tenant, String repository) {
             return true;
         }
 
         @Override
-        public boolean hardened(String repository) {
+        public boolean hardened(String tenant, String repository) {
             return false;
         }
     };
