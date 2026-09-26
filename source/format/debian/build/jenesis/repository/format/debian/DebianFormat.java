@@ -377,7 +377,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
 
     @Override
     public Optional<URI> defaultUpstream() {
-        return Optional.of(URI.create("http://deb.debian.org/debian/"));
+        return Optional.of(URI.create("https://deb.debian.org/debian/"));
     }
 
     @Override

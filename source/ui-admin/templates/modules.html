@@ -61,7 +61,7 @@
                 <strong th:text="${m.orphanBytes}">0</strong> byte(s) across this module's declared key-spaces. It is
                 never removed automatically — an incomplete image or a mid-rolling deploy looks the same as an
                 intentional removal. If the removal was intentional, purge here (the counts above are the blast
-                radius), or script it: <code>jenesis purge <span th:text="${m.module}">module</span></code> /
+                radius), or script it: <code>jenesis-repo purge <span th:text="${m.module}">module</span></code> /
                 <code>POST /api/admin/purge?namespace=<span th:text="${m.module}">module</span></code>.</small>
                 <form method="post" th:action="@{/ui/settings/modules/purge}" class="module-toggle">
                     <input type="hidden" name="module" th:value="${m.module}">

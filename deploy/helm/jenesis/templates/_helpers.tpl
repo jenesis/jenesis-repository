@@ -87,8 +87,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/* Console / SSO settings (JENREG_UI_*), read by the console the image runs in-process. */}}
 {{- define "jenreg.uiEnv" -}}
-- name: JENREG_UI_SECURE_COOKIE
-  value: {{ .Values.ui.secureCookie | quote }}
 {{- with .Values.ui.admins }}
 - name: JENREG_UI_ADMINS
   value: {{ . | quote }}

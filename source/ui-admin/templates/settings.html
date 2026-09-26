@@ -63,8 +63,8 @@
 
     <article>
         <h2>Format upstreams</h2>
-        <p><small>The proxy upstream each format pulls its local misses through, over the format's own default and
-            the deployment default.</small></p>
+        <p><small>The proxy upstream each format pulls its local misses through. A format fetches nothing from
+            anywhere until one is named here.</small></p>
         <figure th:if="${!upstreams.isEmpty()}">
         <table class="app-list">
             <thead>
@@ -82,6 +82,33 @@
                     <form method="post" th:action="@{/ui/settings/upstreams/remove}" style="margin:0">
                         <input type="hidden" name="format" th:value="${e.key}">
                         <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The proxy upstream is removed; misses stop being pulled through until it is set again.')}">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+        <figure th:if="${!suggestedUpstreams.isEmpty()}">
+        <table class="app-list">
+            <caption><small>Public registries the installed formats know - none is fetched from until it is used
+                here.</small></caption>
+            <thead>
+            <tr>
+                <th scope="col">Format</th>
+                <th scope="col">Public registry</th>
+                <th scope="col"><span class="app-sr-only">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${suggestedUpstreams}">
+                <td><code th:text="${e.key}">format</code></td>
+                <td><code th:text="${e.value}">url</code></td>
+                <td>
+                    <form method="post" th:action="@{/ui/settings/upstreams}" style="margin:0">
+                        <input type="hidden" name="format" th:value="${e.key}">
+                        <input type="hidden" name="url" th:value="${e.value}">
+                        <button type="submit" class="secondary"
+                                th:attr="aria-label='Use ' + ${e.value} + ' for ' + ${e.key}">Use</button>
                     </form>
                 </td>
             </tr>

@@ -144,10 +144,11 @@ public interface ProxyFormat {
     boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, Fetcher fetcher) throws IOException;
 
     /**
-     * The canonical public upstream this format mirrors when a deployment enables proxying without naming one - the
-     * Maven format's Maven Central, an npm format's registry.npmjs.org. A distribution takes its default upstream from
-     * the format itself, so it needs no table of format names to know where each format proxies. Empty when the format
-     * has no single well-known upstream; a deployment can always set one explicitly per format or per repository.
+     * The canonical public upstream of this format - the Maven format's Maven Central, an npm format's
+     * registry.npmjs.org - which an operator is offered as the upstream to name. It is never fetched from until one
+     * does: nothing reaches a third party because a format was installed. The format knows it so nothing else needs a
+     * table of format names to know where each format's public registry is. Empty when the format has no single
+     * well-known upstream.
      */
     default Optional<URI> defaultUpstream() {
         return Optional.empty();

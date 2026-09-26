@@ -51,6 +51,7 @@ public class SettingsController {
         model.addAttribute("groups", settings.groups());
         model.addAttribute("repositories", settings.repositories());
         model.addAttribute("upstreams", settings.upstreams());
+        model.addAttribute("suggestedUpstreams", settings.suggestedUpstreams());
         model.addAttribute("upstreamAuthHosts", settings.upstreamCredentialHosts());
         return "settings";
     }
@@ -70,7 +71,7 @@ public class SettingsController {
     }
 
     /** Purge one absent module's orphaned data - the button beside the modules screen's orphaned-data badge, driving
-     *  the same manifest primitive as {@code jenesis purge} / {@code POST /api/admin/purge} and audited the same way.
+     *  the same manifest primitive as {@code jenesis-repo purge} / {@code POST /api/admin/purge} and audited the same way.
      *  The screen already shows the dry-run counts, so this is the confirmed second step; a module no manifest entry
      *  names answers with a flash message rather than a error page. Super-admin, under {@code /settings/**}. */
     @PostMapping("/ui/settings/modules/purge")

@@ -20,6 +20,8 @@ import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.settings.SettingsScopes;
 import build.jenesis.repository.settings.TenantPosture;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.upstream.UpstreamCredential;
 import build.jenesis.repository.upstream.UpstreamCredentialSource;
 import build.jenesis.repository.upstream.UpstreamCredentialSourceProvider;
@@ -840,6 +842,25 @@ public class SettingsAdmin {
     /** The per-format proxy upstreams set at runtime (format to upstream URL). */
     public Map<String, String> upstreams() throws IOException {
         return entries(SettingsScopes.UPSTREAM_PREFIX);
+    }
+
+    /** Every installed format's public registry ({@link ProxyFormat#defaultUpstream}), by format name, held once. */
+    private static final Map<String, String> PUBLIC_REGISTRIES = RepositoryFormat.installed().stream()
+            .filter(format -> format instanceof ProxyFormat)
+            .flatMap(format -> ((ProxyFormat) format).defaultUpstream().stream()
+                    .map(upstream -> Map.entry(format.name(), upstream.toString())))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (first, _) -> first, TreeMap::new));
+
+    /**
+     * The public registries of the installed formats that have no upstream named yet - what the console offers to
+     * name in one click. A format fetches nothing from its public registry until someone does, so this is the whole
+     * of the distance between an installed format and one that pulls through.
+     */
+    public Map<String, String> suggestedUpstreams() throws IOException {
+        Map<String, String> named = upstreams();
+        Map<String, String> suggested = new TreeMap<>(PUBLIC_REGISTRIES);
+        suggested.keySet().removeAll(named.keySet());
+        return suggested;
     }
 
     public void setUpstream(String format, String url) throws IOException {
