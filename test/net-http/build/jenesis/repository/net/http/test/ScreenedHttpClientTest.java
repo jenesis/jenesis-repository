@@ -244,6 +244,42 @@ class ScreenedHttpClientTest {
         }
     }
 
+    /**
+     * A peer answering a byte at a time resets the idle timeout with every byte, so silence never ends it; the
+     * throughput floor does. Here a byte arrives every tenth of a second, well inside a half-second idle timeout,
+     * against a floor of a hundred bytes a second: the call is abandoned by name about a second in.
+     */
+    @Test
+    void a_body_trickling_below_the_throughput_floor_fails_by_name() throws Exception {
+        try (ServerSocket trickling = new ServerSocket(0, 50, InetAddress.getLoopbackAddress())) {
+            Thread.ofVirtual().start(() -> {
+                try (Socket socket = trickling.accept()) {
+                    socket.getInputStream().read(new byte[8192]);
+                    OutputStream out = socket.getOutputStream();
+                    out.write("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+                    for (int sent = 0; sent < 1000; sent++) {
+                        out.write('x');
+                        out.flush();
+                        Thread.sleep(Duration.ofMillis(100));
+                    }
+                } catch (IOException | InterruptedException _) {
+                    // the client abandons the connection, which is what is being waited for
+                }
+            });
+            HttpClient client = ScreenedHttpClient.newBuilder().idleTimeout(Duration.ofMillis(500))
+                    .throughputFloor(() -> 100, Duration.ofSeconds(1)).build();
+            long started = System.nanoTime();
+
+            assertThatThrownBy(() -> client.send(HttpRequest.newBuilder(
+                            URI.create("http://127.0.0.1:" + trickling.getLocalPort() + "/trickle")).build(),
+                    HttpResponse.BodyHandlers.ofString()))
+                    .isInstanceOf(HttpTimeoutException.class)
+                    .hasMessageContaining("throughput floor");
+            assertThat(Duration.ofNanos(System.nanoTime() - started)).as("given up on at the first window, not at the "
+                    + "hundred seconds the body would take").isLessThan(Duration.ofSeconds(10));
+        }
+    }
+
     @Test
     void an_exchange_that_keeps_moving_outlasts_the_idle_timeout() throws Exception {
         HttpClient client = ScreenedHttpClient.newBuilder().idleTimeout(Duration.ofMillis(400)).build();

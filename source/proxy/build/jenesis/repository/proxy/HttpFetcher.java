@@ -3,6 +3,7 @@ package build.jenesis.repository.proxy;
 import module java.base;
 import module java.net.http;
 import build.jenesis.repository.net.http.ScreenedHttpClient;
+import build.jenesis.repository.store.Features;
 import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.store.Durations;
@@ -66,6 +67,7 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
     private final HttpClient client = ScreenedHttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .followRedirects(HttpClient.Redirect.NEVER)
+            .throughputFloor(HttpFetcher::throughputFloor, ScreenedHttpClient.FLOOR_WINDOW)
             .build();
     private final Duration requestTimeout;
     /** The SSRF screen applied to each redirect target's host: {@code true} refuses the hop. The shipped screen is
@@ -248,6 +250,22 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
 
     /** The configured per-request timeout: {@code jenreg.proxy.request-timeout} ({@code PT30S}, {@code 30s}), or a
      *  minute. */
+    /** The throughput floor an upstream fetch is held to, as the operator set it now: {@link
+     *  ProxySettingsContributor#FLOOR_KEY}, else the client's own; a value that does not parse, or is negative, is the
+     *  client's own rather than none. */
+    static long throughputFloor() {
+        String configured = Features.lookup().apply("jenreg." + ProxySettingsContributor.FLOOR_KEY);
+        if (configured == null || configured.isBlank()) {
+            return ScreenedHttpClient.THROUGHPUT_FLOOR;
+        }
+        try {
+            long floor = Long.parseLong(configured.trim());
+            return floor < 0 ? ScreenedHttpClient.THROUGHPUT_FLOOR : floor;
+        } catch (NumberFormatException notANumber) {
+            return ScreenedHttpClient.THROUGHPUT_FLOOR;
+        }
+    }
+
     private static Duration requestTimeout() {
         String value = System.getProperty("jenreg.proxy.request-timeout");
         return value == null || value.isBlank() ? Duration.ofSeconds(60) : Durations.parse(value);

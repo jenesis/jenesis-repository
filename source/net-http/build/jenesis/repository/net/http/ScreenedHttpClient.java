@@ -54,7 +54,10 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
  * when that is longer), answering {@link HttpTimeoutException} naming the address:
  * an upstream that accepts and never answers, or stops half way through a body, fails the call rather than holding
  * it. The bound is on silence rather than on the whole call, so an upload or a download that keeps moving is never
- * cut short however long it takes - which a total bound would do to a large blob written to an object store.
+ * cut short however long it takes - which a total bound would do to a large blob written to an object store. What
+ * silence cannot catch is a peer answering a byte at a time, which resets it with every byte: a download must also
+ * move {@link #THROUGHPUT_FLOOR} bytes over each {@link #FLOOR_WINDOW} of reading ({@link Builder#throughputFloor}),
+ * or it is abandoned the same way - a floor on the rate, so a large blob on a slow but steady link still lands.
  *
  * <p>Everything else is the JDK's contract: {@link HttpRequest#timeout()} bounds the wait for the response's
  * headers from the moment the request is sent and answers {@link HttpTimeoutException}, and a body the handler reads
@@ -90,21 +93,40 @@ public final class ScreenedHttpClient extends HttpClient {
      *  {@linkplain Builder#idleTimeout other}. */
     public static final Duration IDLE_TIMEOUT = Duration.ofMinutes(1);
 
+    /** The least a response body must move over {@link #FLOOR_WINDOW} of reading, in bytes, when the builder names
+     *  no {@linkplain Builder#throughputFloor other}: sixteen kibibytes a minute, far below any link a download is
+     *  worth finishing over, and far above a peer that answers a byte at a time to keep the idle timeout from
+     *  firing. Spelled as text, since a settings catalogue publishes it as its default. */
+    public static final String THROUGHPUT_FLOOR_TEXT = "16384";
+
+    /** {@link #THROUGHPUT_FLOOR_TEXT} as the number the client applies. */
+    public static final long THROUGHPUT_FLOOR = Long.parseLong(THROUGHPUT_FLOOR_TEXT);
+
+    /** The span of reading a {@linkplain #THROUGHPUT_FLOOR throughput floor} is measured over. */
+    public static final Duration FLOOR_WINDOW = Duration.ofMinutes(1);
+
     private static final Map<Engine.Key, Engine> ENGINES = new ConcurrentHashMap<>();
 
     private final Engine engine;
     private final Duration connectTimeout;
     private final Duration idleTimeout;
+    private final Floor floor;
     private final Redirect redirect;
     private final SSLContext sslContext;
 
-    private ScreenedHttpClient(Engine engine, Duration connectTimeout, Duration idleTimeout, Redirect redirect,
-                               SSLContext sslContext) {
+    private ScreenedHttpClient(Engine engine, Duration connectTimeout, Duration idleTimeout, Floor floor,
+                               Redirect redirect, SSLContext sslContext) {
         this.engine = engine;
         this.connectTimeout = connectTimeout;
         this.idleTimeout = idleTimeout;
+        this.floor = floor;
         this.redirect = redirect;
         this.sslContext = sslContext;
+    }
+
+    /** The least a body must move per window of reading, the bytes read afresh for each exchange so a live setting
+     *  behind them is honoured; {@code 0} bytes lifts it. */
+    private record Floor(LongSupplier bytes, Duration window) {
     }
 
     /** A builder in place of {@code HttpClient.newBuilder()}. */
@@ -289,7 +311,7 @@ public final class ScreenedHttpClient extends HttpClient {
             Response response = request.timeout().isPresent()
                     ? listener.get(request.timeout().get().toMillis(), TimeUnit.MILLISECONDS)
                     : listener.get(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-            return new Exchange(response, listener, request.uri(), idle);
+            return new Exchange(response, listener, request.uri(), idle, floor.bytes().getAsLong(), floor.window());
         } catch (TimeoutException timedOut) {
             HttpTimeoutException failure = new HttpTimeoutException("request timed out: " + request.uri());
             outbound.abort(failure);
@@ -383,7 +405,8 @@ public final class ScreenedHttpClient extends HttpClient {
     // ---- the exchange and its body ----
 
     /** A response whose headers have arrived and whose body is still to be read. */
-    private record Exchange(Response response, InputStreamResponseListener listener, URI uri, Duration idle) {
+    private record Exchange(Response response, InputStreamResponseListener listener, URI uri, Duration idle,
+                            long floor, Duration window) {
 
         /** Close the body unread: the response is a redirect the chain goes past. */
         void discard() throws IOException {
@@ -411,7 +434,7 @@ public final class ScreenedHttpClient extends HttpClient {
                     return Version.HTTP_1_1;
                 }
             });
-            Download download = new Download(listener.getInputStream(), subscriber, uri, idle);
+            Download download = new Download(listener.getInputStream(), subscriber, uri, idle, floor, window);
             subscriber.onSubscribe(download);
             Thread.ofVirtual().name("jenesis-http-body").start(download);
             T body;
@@ -433,22 +456,34 @@ public final class ScreenedHttpClient extends HttpClient {
         }
     }
 
-    /** A response body read off Jetty's stream and handed to the caller's subscriber as it asks for it. */
+    /**
+     * A response body read off Jetty's stream and handed to the caller's subscriber as it asks for it.
+     *
+     * <p>It is read in whatever pieces arrive rather than in whole chunks, so the throughput floor is judged as the
+     * bytes come: a peer answering a byte at a time resets the idle timeout with every byte and would otherwise hold
+     * the read, and the thread, for as long as it chose. Only time spent waiting on the peer counts towards a window -
+     * a caller slow to ask for more is applying backpressure, not starving the read.
+     */
     private static final class Download implements Flow.Subscription, Runnable {
 
         private final InputStream in;
         private final HttpResponse.BodySubscriber<?> subscriber;
         private final URI uri;
         private final Duration idle;
+        private final long floor;
+        private final long window;
         private final Object lock = new Object();
         private long demand;
         private boolean cancelled;
 
-        Download(InputStream in, HttpResponse.BodySubscriber<?> subscriber, URI uri, Duration idle) {
+        Download(InputStream in, HttpResponse.BodySubscriber<?> subscriber, URI uri, Duration idle, long floor,
+                 Duration window) {
             this.in = in;
             this.subscriber = subscriber;
             this.uri = uri;
             this.idle = idle;
+            this.floor = floor;
+            this.window = window.toNanos();
         }
 
         @Override
@@ -474,6 +509,9 @@ public final class ScreenedHttpClient extends HttpClient {
 
         @Override
         public void run() {
+            byte[] buffer = new byte[CHUNK];
+            long waited = 0;
+            long moved = 0;
             try (in) {
                 while (true) {
                     synchronized (lock) {
@@ -487,14 +525,25 @@ public final class ScreenedHttpClient extends HttpClient {
                             demand--;
                         }
                     }
-                    byte[] chunk = in.readNBytes(CHUNK);
-                    if (chunk.length > 0) {
-                        subscriber.onNext(List.of(ByteBuffer.wrap(chunk)));
-                    }
-                    if (chunk.length < CHUNK) {
+                    long started = System.nanoTime();
+                    int read = in.read(buffer, 0, CHUNK);
+                    if (read < 0) {
                         subscriber.onComplete();
                         return;
                     }
+                    waited += System.nanoTime() - started;
+                    moved += read;
+                    if (waited >= window) {
+                        if (moved < floor) {
+                            throw new HttpTimeoutException(uri + " moved " + moved + " bytes in "
+                                    + Duration.ofNanos(waited).toSeconds() + " s of reading, below the throughput "
+                                    + "floor of " + floor + " bytes a " + Duration.ofNanos(window).toSeconds()
+                                    + " s, so the call was abandoned");
+                        }
+                        waited = 0;
+                        moved = 0;
+                    }
+                    subscriber.onNext(List.of(ByteBuffer.wrap(Arrays.copyOf(buffer, read))));
                 }
             } catch (IOException | RuntimeException failure) {
                 if (!cancelled) {
@@ -640,6 +689,7 @@ public final class ScreenedHttpClient extends HttpClient {
 
         private Duration connectTimeout = CONNECT_TIMEOUT;
         private Duration idleTimeout = IDLE_TIMEOUT;
+        private Floor floor = new Floor(() -> THROUGHPUT_FLOOR, FLOOR_WINDOW);
         private Redirect redirect = Redirect.NEVER;
         private SSLContext sslContext;
         private Resolver resolver = Resolver.SYSTEM;
@@ -666,6 +716,20 @@ public final class ScreenedHttpClient extends HttpClient {
                 throw new IllegalArgumentException("an idle timeout is positive: " + duration);
             }
             this.idleTimeout = duration;
+            return this;
+        }
+
+        /**
+         * The least a response body must move over {@code window} of reading before the call is abandoned with an
+         * {@link HttpTimeoutException}; {@link #THROUGHPUT_FLOOR} over {@link #FLOOR_WINDOW} unless named. The idle
+         * timeout ends a peer that goes silent; this ends one that answers slowly enough to keep it from firing. The
+         * bytes are read at the start of each exchange, so a caller may hand a live setting; {@code 0} lifts the floor.
+         */
+        public Builder throughputFloor(LongSupplier bytes, Duration window) {
+            if (window.isNegative() || window.isZero()) {
+                throw new IllegalArgumentException("a throughput window is positive: " + window);
+            }
+            this.floor = new Floor(Objects.requireNonNull(bytes, "bytes"), window);
             return this;
         }
 
@@ -733,7 +797,7 @@ public final class ScreenedHttpClient extends HttpClient {
                     throw new IllegalStateException("the default TLS context is unavailable", unavailable);
                 }
             }
-            return new ScreenedHttpClient(Engine.of(connectTimeout, tls, resolver), connectTimeout, idleTimeout,
+            return new ScreenedHttpClient(Engine.of(connectTimeout, tls, resolver), connectTimeout, idleTimeout, floor,
                     redirect, tls);
         }
     }

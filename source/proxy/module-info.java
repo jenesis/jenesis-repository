@@ -6,7 +6,8 @@
  * a deployment without this module serves local content only (a proxy upstream is never consulted, an import is
  * refused). The composed caches are their own {@code ObservabilitySource}s reporting their bounded {@code
  * jenreg.proxy.*} used-vs-available signals, so it {@code requires} the equally minimal, registry-free
- * {@code build.jenesis.repository.observation} SPI beside the format SPI and {@code java.net.http}.
+ * {@code build.jenesis.repository.observation} SPI beside the format SPI and {@code java.net.http}, and the settings
+ * SPI for the one dial it reads, the upstream throughput floor.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -16,8 +17,11 @@ module build.jenesis.repository.proxy {
     requires build.jenesis.repository.net.http;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.observation;
+    requires build.jenesis.repository.settings;
     requires java.net.http;
     exports build.jenesis.repository.proxy;
     provides build.jenesis.repository.format.FetcherProvider
             with build.jenesis.repository.proxy.HttpFetcherProvider;
+    provides build.jenesis.repository.settings.SettingsContributor
+            with build.jenesis.repository.proxy.ProxySettingsContributor;
 }
