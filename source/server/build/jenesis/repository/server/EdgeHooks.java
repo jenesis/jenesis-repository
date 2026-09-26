@@ -53,6 +53,17 @@ public interface EdgeHooks {
         return Optional.empty();
     }
 
+    /**
+     * Whether the layout of an accepted write to {@code path} is held to the pointer it is about to replace: run
+     * through {@link build.jenesis.repository.store.Publication#guarded}, so a link of that path meeting a pointer that
+     * names other bytes is refused inside its own compare-and-set. A refusal {@link #beforeLayout} returns is decided
+     * over the pointer as it stood when the hook read it; this is what keeps that decision true when a concurrent
+     * write lands between the read and the layout. Guards nothing by default.
+     */
+    default boolean guardsLayout(RepositoryFormat format, ArtifactStore store, String path) throws IOException {
+        return false;
+    }
+
     /** Called on the {@code QUARANTINE} branch (the body is stored for review, not laid out), around the edge's
      *  {@code 202}, so an edition can record the held body's replay context - {@code path} is the request path and
      *  {@code hash} the stored blob. No-op by default. */

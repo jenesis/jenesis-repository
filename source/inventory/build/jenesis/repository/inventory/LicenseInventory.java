@@ -3,6 +3,7 @@ package build.jenesis.repository.inventory;
 import module java.base;
 import build.jenesis.repository.store.Clocks;
 import build.jenesis.repository.metadata.MetadataDocument;
+import build.jenesis.repository.metadata.DocumentTurns;
 import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
@@ -74,7 +75,8 @@ public final class LicenseInventory {
         }
         Instant now = Clocks.now();
         // The transition the landing try made, or null when the union added nothing already recorded.
-        Transition made = Retries.decide(store, MetadataKey.version(ecosystem, coordinate, version), current -> {
+        String key = MetadataKey.version(ecosystem, coordinate, version);
+        Transition made = DocumentTurns.take(store, key, () -> Retries.decide(store, key, current -> {
             MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
                     .orElseGet(MetadataDocument::empty);
             Optional<Section> before = document.section(LicenseSection.TAG);
@@ -88,7 +90,7 @@ public final class LicenseInventory {
             }
             return Retries.Verdict.write(next.serialize(), new Transition(before.map(_ -> beforeDeclared),
                     afterDeclared, PublishedSection.facts(next.section(PublishedSection.TAG))));
-        });
+        }));
         if (made != null) {
             refold(ecosystem, coordinate, version, made);
         }

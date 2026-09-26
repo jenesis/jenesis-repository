@@ -74,6 +74,14 @@ public final class DeployEdgeHooks implements EdgeHooks {
         return Optional.empty();
     }
 
+    /** An immutable release's layout is held to the pointer it replaces, so the check above cannot be raced by a
+     *  concurrent first publish of the same release: the loser meets the winner's pointer at its own write and is
+     *  answered {@code 409}. */
+    @Override
+    public boolean guardsLayout(RepositoryFormat format, ArtifactStore store, String path) throws IOException {
+        return immutability.guards(format, PublishTenant.current(), path);
+    }
+
     /**
      * The gate held this upload before the format laid it out, so the stored blob is the raw publish envelope (an npm
      * packument, a NuGet/PyPI multipart), never the served artifact. Record the dispatch context beside the hold - the

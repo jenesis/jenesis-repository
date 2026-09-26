@@ -73,14 +73,21 @@ public final class ReleaseImmutability {
      */
     public boolean refusesRepoint(RepositoryFormat plugin, ArtifactStore store, String tenant, String path,
                                   String screenedHash) throws IOException {
-        if (live.allowRedeploy(tenant)) {
-            return false;
-        }
-        if (!immutableReleaseArtifact(plugin, path)) {
+        if (!guards(plugin, tenant, path)) {
             return false;
         }
         Optional<String> incumbent = new Publication(store).blob(path);
         return incumbent.isPresent() && !incumbent.get().equals(screenedHash);
+    }
+
+    /**
+     * Whether {@code path} is an immutable release in {@code tenant}'s store - the coordinate class this guard
+     * protects, whatever stands there now. The deploy edge refuses a visible re-point with {@link #refusesRepoint}
+     * and holds the layout to the same question inside the pointer's compare-and-set, so two first publishes that
+     * both found the path empty cannot both land.
+     */
+    public boolean guards(RepositoryFormat plugin, String tenant, String path) throws IOException {
+        return !live.allowRedeploy(tenant) && immutableReleaseArtifact(plugin, path);
     }
 
     /** Record and log the loud, named refusal (§9), returning the client-facing message. Called by the deploy path

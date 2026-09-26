@@ -340,6 +340,27 @@ public final class Publication {
         }
     }
 
+    /** The request path whose serving pointer a layout in progress may write only where it stands empty or already
+     *  names the bytes being linked - see {@link #guarded}. */
+    private static final ScopedValue<String> GUARD = ScopedValue.newInstance();
+
+    /**
+     * Run {@code layout} with {@code requestPath}'s serving pointer guarded: a {@link #link} of that path which finds
+     * the pointer naming other bytes raises {@link RepublishConflict} instead of replacing it, and the decision is
+     * taken inside the link's own compare-and-set, over the pointer the write would replace.
+     *
+     * <p>It is what makes an ingress edge's immutability check hold under concurrency. The edge reads the pointer
+     * before the layout runs and refuses a re-point it can see; two first publishes of one release both see nothing
+     * there, both pass, and without this the second pointer write silently replaced the first while both answered
+     * {@code 201}. With it the loser meets the winner's pointer at its own write and is refused, the winner's bytes
+     * are what serves, and a re-publish of identical bytes still converges. A link of any other path, and a
+     * {@code /quarantine} review link, is not guarded.
+     */
+    public static <T> T guarded(String requestPath, ScopedValue.CallableOp<T, IOException> layout)
+            throws IOException {
+        return ScopedValue.where(GUARD, Objects.requireNonNull(requestPath, "requestPath")).call(layout);
+    }
+
     /** Point a request path at an already-stored blob - the primitive promotion and cross-publishing use to publish a
      *  blob under another view without re-uploading it. The pointer is the product's most load-bearing small object,
      *  so a compare-and-set conflict re-reads the token and retries (the bounded idiom every other load-bearing
@@ -393,7 +414,16 @@ public final class Publication {
             // between the two writes would lift the marker this hold is about to need with nothing to say so.
             HeldBy.record(store, hash, requestPath.substring(QUARANTINE_PATH.length()));
         }
+        boolean guarded = !quarantine && GUARD.isBound() && GUARD.get().equals(requestPath);
         Optional<ArtifactStore.Versioned> prior = Retries.decide(store, key, current -> {
+            if (guarded && current.isPresent()) {
+                // Decided inside the compare-and-set, over the pointer this write would replace, so a rival that
+                // landed after the edge's check is met here rather than overwritten.
+                String standing = ServableNames.parse(current.get().content()).hash();
+                if (!standing.equals(hash)) {
+                    throw new RepublishConflict(key, standing, hash);
+                }
+            }
             boolean held = !quarantine && (current.isPresent()
                     ? ServableNames.parse(current.get().content()).held()
                     : reviewPending(store, requestPath));

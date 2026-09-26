@@ -2,6 +2,7 @@ package build.jenesis.repository.metadata.store;
 
 import module java.base;
 import build.jenesis.repository.metadata.MetadataDocument;
+import build.jenesis.repository.metadata.DocumentTurns;
 import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.metadata.Section;
@@ -92,6 +93,13 @@ public final class StoreMetadata implements MetadataStore {
      *  {@link MetadataKey#COORDINATE} documents differ only in their key, never in their reader-tolerance, format guard
      *  or bounded-retry mutate. */
     private void mutateKey(String key, SequencedMap<String, SectionMutation> mutations) throws IOException {
+        DocumentTurns.take(store, key, () -> {
+            mutateTurn(key, mutations);
+            return null;
+        });
+    }
+
+    private void mutateTurn(String key, SequencedMap<String, SectionMutation> mutations) throws IOException {
         int[] asked = new int[1];
         try {
             Retries.update(store, key, current -> {

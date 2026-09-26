@@ -10,6 +10,7 @@ import build.jenesis.repository.store.Known;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.metadata.MetadataDocument;
+import build.jenesis.repository.metadata.DocumentTurns;
 import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.metadata.Section;
@@ -131,8 +132,9 @@ final class InventoryRecording {
             return;
         }
         Instant now = Clocks.now();
-        Committed committed = Retries.decide(store,
-                MetadataKey.version(recording.ecosystem, recording.coordinate, recording.version), current -> {
+        String documentKey = MetadataKey.version(recording.ecosystem, recording.coordinate, recording.version);
+        Committed committed = DocumentTurns.take(store, documentKey,
+                () -> Retries.decide(store, documentKey, current -> {
             MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
                     .orElseGet(MetadataDocument::empty);
             boolean firstPublish = !PublishedSection.published(document.section(PublishedSection.TAG));
@@ -164,7 +166,7 @@ final class InventoryRecording {
                     : !new LinkedHashSet<>(before.get()).equals(new LinkedHashSet<>(after.orElse(List.of())));
             return Retries.Verdict.write(next.serialize(), new Committed(firstPublish, before, after, licensesChanged,
                     PublishedSection.facts(next.section(PublishedSection.TAG))));
-        });
+        }));
         if (committed.firstPublish()) {
             identity.foldIn(InventoryIdentity.member(recording.ecosystem, recording.coordinate, recording.version,
                     LicenseSection.fingerprintOf(committed.licensesAfter())), recording.published);
@@ -254,7 +256,8 @@ final class InventoryRecording {
     private boolean recordPublishedSection(String ecosystem, String coordinate, String version, boolean prerelease,
                                            Instant published, String originSha256) throws IOException {
         // The document as the landing try wrote it, or null when the member was already published.
-        MetadataDocument committed = Retries.decide(store, MetadataKey.version(ecosystem, coordinate, version), current -> {
+        String key = MetadataKey.version(ecosystem, coordinate, version);
+        MetadataDocument committed = DocumentTurns.take(store, key, () -> Retries.decide(store, key, current -> {
             MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
                     .orElseGet(MetadataDocument::empty);
             boolean firstPublish = !PublishedSection.published(document.section(PublishedSection.TAG));
@@ -267,7 +270,7 @@ final class InventoryRecording {
             }
             MetadataDocument next = document.mutate(mutations);
             return Retries.Verdict.write(next.serialize(), firstPublish ? next : null);
-        });
+        }));
         if (committed == null) {
             return false;
         }
