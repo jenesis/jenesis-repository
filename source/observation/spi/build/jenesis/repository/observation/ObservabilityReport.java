@@ -86,6 +86,31 @@ public record ObservabilityReport(List<HealthCheck> healthChecks, List<Metric> m
                            String outcome) {
     }
 
+    /**
+     * Collect the signals of the discovered sources and of the sources among {@code owned} - the objects a running
+     * context has built, of which every {@link ObservabilitySource} is one it owns. A context passes what it holds
+     * (its created singletons) and this keeps the sources, so asking never makes a context build anything. A
+     * discovered source of the same class as an owned one gives way to it, so a context reports its own instance and
+     * never a second, unconnected one.
+     */
+    public static ObservabilityReport of(Collection<?> owned) {
+        Set<Class<?>> ownedClasses = new HashSet<>();
+        List<ObservabilitySource> sources = new ArrayList<>();
+        for (Object candidate : owned) {
+            if (candidate instanceof ObservabilitySource source
+                    && sources.stream().noneMatch(existing -> existing == source)) {
+                sources.add(source);
+                ownedClasses.add(source.getClass());
+            }
+        }
+        for (ObservabilitySource discovered : Installed.SOURCES) {
+            if (!ownedClasses.contains(discovered.getClass())) {
+                sources.add(discovered);
+            }
+        }
+        return from(sources);
+    }
+
     /** Collect the signals of every {@link ServiceLoader}-discovered {@link ObservabilitySource}. */
     public static ObservabilityReport discover() {
         return from(Installed.SOURCES);

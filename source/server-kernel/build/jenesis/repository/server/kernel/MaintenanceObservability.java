@@ -7,27 +7,16 @@ import build.jenesis.repository.observation.Signals;
 import build.jenesis.repository.observation.TaskStatus;
 
 /**
- * The discovered {@link ObservabilitySource} for the maintenance scheduler's {@code ServiceLoader}-discovered
- * background passes (GC / reclamation, the sizes and dependents sweeps, the scheduled scan and cleanup, the forwarding
- * watermark, the continuous re-analysis sweep, ...): a thin, {@link ServiceLoader}-instantiated adapter that reports one
- * {@link TaskStatus} per <em>enabled</em> task of the {@linkplain #install(MaintenanceScheduler) installed} live
- * {@link MaintenanceScheduler}, so an operator - or a headless agent following the console - sees each background
- * sweep's last-run and outcome rather than trusting the worker thread to stay up unnoticed. Because the scheduler owns
- * every task's execution, this one adapter surfaces the status of them all; the individual {@code MaintenanceTask}
- * plugins are untouched.
+ * The maintenance scheduler's signals: one {@link TaskStatus} per <em>enabled</em> background pass the scheduler runs
+ * (GC and reclamation, the sizes and dependents sweeps, the scheduled scan and cleanup, the forwarding watermark, the
+ * continuous re-analysis sweep, ...), so an operator - or a headless agent following the console - sees each pass's
+ * last run and outcome rather than trusting the worker thread to stay up unnoticed. Because the scheduler owns every
+ * task's execution, this one source reports them all; the individual {@code MaintenanceTask} plugins are untouched.
  *
- * <p>Kept separate from the scheduler (which has no no-arg constructor - it needs its repositories, store and lease
- * ttl) so the {@link ServiceLoader} entry has no state of its own and simply forwards to the one live scheduler the
- * running server holds. It differs from {@code SpoolObservability} in one way that matters: there the installed
- * subject is an SPI with its own {@code SpoolStore.installed()} discovery static, so the adapter is a separate class
- * reading it, whereas here the subject is a single registered instance and {@link #taskStatuses()} reads the field
- * directly. It carried a package-private {@code installed()} accessor whose javadoc named {@code taskStatuses()} as
- * its reader while {@code taskStatuses()} read the field around it - a dead accessor with a false reader, removed by
- * the earlier census; there is no discovery here to have a capability signal about. With no
- * scheduler installed - never wired, or a deployment with the kernel absent - it contributes nothing, so the overview
- * never lists a maintenance signal for something that is not running.
+ * <p>It is the scheduler's own face, built beside it by the context that built the scheduler and reported from that
+ * context, so a report always describes the scheduler that is running there.
  *
- * <p>A scheduler that <em>is</em> installed always contributes one row for the worker loop itself
+ * <p>The scheduler always contributes one row for the worker loop itself
  * ({@code jenreg.maintenance.worker}), even with no pass enabled, which is a deliberate change of that rule:
  * "no maintenance pass is enabled" and "the worker died and every pass stopped" are the two readings this surface
  * exists to separate, and a missing row cannot say either. The per-task rows below it remain exactly as they were -
@@ -38,26 +27,14 @@ public final class MaintenanceObservability implements ObservabilitySource {
     /** The maintenance feature name every task's signal is composed under ({@code jenreg.maintenance.<task>}). */
     private static final String FEATURE = "maintenance";
 
-    /** The live scheduler the running server holds, so the stateless {@link ServiceLoader} adapter reports its enabled
-     *  tasks' last-run / status; empty until {@link #install(MaintenanceScheduler)} runs (a deployment that never wires
-     *  the maintenance kernel reports nothing, degrading gracefully). */
-    private static final AtomicReference<MaintenanceScheduler> INSTALLED = new AtomicReference<>();
+    private final MaintenanceScheduler scheduler;
 
-    public MaintenanceObservability() {
-    }
-
-    /** Register {@code scheduler} as the live maintenance scheduler this adapter reports; the last registration wins
-     *  (there is one scheduler per running server). */
-    public static void install(MaintenanceScheduler scheduler) {
-        INSTALLED.set(Objects.requireNonNull(scheduler, "scheduler"));
+    public MaintenanceObservability(MaintenanceScheduler scheduler) {
+        this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
     }
 
     @Override
     public List<TaskStatus> taskStatuses() {
-        MaintenanceScheduler scheduler = INSTALLED.get();
-        if (scheduler == null) {
-            return List.of();
-        }
         Map<String, TaskSchedule.TaskRun> runs = scheduler.taskRuns();
         List<TaskStatus> statuses = new ArrayList<>();
         // The worker loop itself, before any pass: a task that has never been due reports UNKNOWN whether the worker
@@ -72,7 +49,7 @@ public final class MaintenanceObservability implements ObservabilitySource {
         // contained pass must be reported FAILED, not silently absent from a shorter list, or the containment would
         // trade a loud failure for exactly the silently-incomplete state §5 forbids. (At boot there is nothing to
         // report: MaintenanceTaskProvider.resolve is strict, so a provider that cannot build fails the context.)
-        MaintenanceTaskProvider.unavailable().forEach((task, cause) -> statuses.add(unavailable(task, cause)));
+        scheduler.unavailable().forEach((task, cause) -> statuses.add(unavailable(task, cause)));
         return statuses;
     }
 

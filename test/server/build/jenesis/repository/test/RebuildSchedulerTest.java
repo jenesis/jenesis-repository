@@ -43,8 +43,8 @@ class RebuildSchedulerTest {
                     + "crash asks for its walk").isEqualTo(Duration.ofDays(7));
             scheduler.start();
             assertThat(scheduler.status().name()).isEqualTo("jenreg.rebuild.pass");
-            assertThat(new RebuildScheduler.Observability().taskStatuses())
-                    .as("the discovered observability reports the started driver").hasSize(1);
+            assertThat(scheduler.taskStatuses())
+                    .as("the started driver reports its own status").hasSize(1);
         }
     }
 

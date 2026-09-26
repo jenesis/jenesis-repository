@@ -76,8 +76,6 @@ open module build.jenesis.repository.server.kernel {
     requires spring.security.core;
     requires spring.security.web;
     exports build.jenesis.repository.server.kernel;
-    provides build.jenesis.repository.observation.ObservabilitySource
-            with build.jenesis.repository.server.kernel.MaintenanceObservability;
     provides build.jenesis.repository.maintenance.StorageNamespace
             with build.jenesis.repository.server.kernel.SettingsStorageNamespace;
     provides build.jenesis.repository.settings.SettingsContributor

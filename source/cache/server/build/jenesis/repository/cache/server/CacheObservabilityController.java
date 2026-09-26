@@ -3,6 +3,7 @@ package build.jenesis.repository.cache.server;
 import module java.base;
 
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,9 +25,11 @@ import build.jenesis.repository.observation.ObservabilityReport;
 public class CacheObservabilityController {
 
     private final Cache cache;
+    private final ConfigurableListableBeanFactory beans;
 
-    public CacheObservabilityController(Cache cache) {
+    public CacheObservabilityController(Cache cache, ConfigurableListableBeanFactory beans) {
         this.cache = cache;
+        this.beans = beans;
     }
 
     @GetMapping("/api/admin/observability")
@@ -41,6 +44,7 @@ public class CacheObservabilityController {
             }
             return null;
         }
-        return ObservabilityReport.discover().view();
+        // This context's report: the discovered sources and every source among the singletons it has built.
+        return ObservabilityReport.of(Arrays.stream(beans.getSingletonNames()).map(beans::getSingleton).filter(Objects::nonNull).toList()).view();
     }
 }

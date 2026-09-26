@@ -55,10 +55,17 @@ import module java.base;
  *       secret, a credential or a tenant's artifact content. An {@link Error} is <em>not</em> contained: a
  *       {@link LinkageError} from a half-installed plugin is a broken module graph, not a source failing to answer,
  *       and reporting it as one unknown row on an otherwise healthy page would misreport it.</li>
- *   <li><b>Lifecycle / ownership.</b> The distribution owns the lifecycle: {@link ObservabilityReport#discover()}
- *       loads the sources through {@link ServiceLoader} each time, so instances are created, read and discarded -
- *       never cached, never closed. A source must not own a thread, a client or a scheduler; it observes something
- *       else's.</li>
+ *   <li><b>Lifecycle / ownership.</b> A discovered source's lifecycle is the distribution's: the report loads it
+ *       through {@link ServiceLoader} and reads it, and never closes it, so a discovered source must not own a thread,
+ *       a client or a scheduler - it observes something else's. An owned source is the component itself, and its
+ *       context closes it with everything else it built.</li>
+ *   <li><b>Where the state comes from.</b> A source is one of two things, and never a third. A <em>discovered</em>
+ *       source is stateless and reads what this node has recorded - an accumulator every instance of a component
+ *       adds to, such as the store's operation counts or the collector's reclaimed blobs. An <em>owned</em> source is
+ *       an object a running context built, and it is reported from the context that built it
+ *       ({@link ObservabilityReport#of}). Nothing hands an instance to a discovered source through a static: two
+ *       contexts in one JVM would report each other's, and a component resolved only to ask whether it is installed
+ *       would replace the one that is running.</li>
  *   <li><b>Ordering / concurrency.</b> Results must be deterministic and independent of discovery order:
  *       {@link ObservabilityReport} concatenates the sources and sorts by signal name, so two deployments with the
  *       same plugins render the same report whatever order the module path yields. Signal names are stable and unique

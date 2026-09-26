@@ -41,19 +41,6 @@ import build.jenesis.repository.observation.ObservabilitySource;
  */
 public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySource {
 
-    private static final AtomicReference<QuotaArtifactStore> INSTALLED = new AtomicReference<>();
-
-    /** Register {@code instance} as the live one the discovered {@link QuotaObservability} reports from; the production
-     *  construction site calls this once, and the last registration wins. */
-    public static void install(QuotaArtifactStore instance) {
-        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
-    }
-
-    /** The installed live instance, if any - what {@link QuotaObservability} reports; empty before one is installed. */
-    static Optional<QuotaArtifactStore> installed() {
-        return Optional.ofNullable(INSTALLED.get());
-    }
-
     private static final Logger LOGGER = LoggerFactory.getLogger(QuotaArtifactStore.class);
 
     private static final String BLOBS = "blobs/";

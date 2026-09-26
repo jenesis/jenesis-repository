@@ -86,7 +86,4 @@ open module build.jenesis.repository.server {
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.server.ConsistencySettingsContributor,
                  build.jenesis.repository.server.LogsSettingsContributor;
-    provides build.jenesis.repository.observation.ObservabilitySource
-            with build.jenesis.repository.server.NodeConsistencyObservability,
-                 build.jenesis.repository.server.RebuildScheduler.Observability;
 }

@@ -3,6 +3,7 @@ package build.jenesis.repository.server.kernel;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.maintenance.MaintenanceTask;
+import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.UnitFailures;
 import build.jenesis.repository.maintenance.TenantContext;
@@ -89,7 +90,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
 
     private final Repositories repositories;
     private final ArtifactStore root;
-    private final Supplier<List<MaintenanceTask>> resolver;
+    private final Supplier<MaintenanceTaskProvider.Contained> resolver;
     /** The enabled passes, each paired with the name and cadence read off it <em>once</em> when this list was
      *  resolved ({@link ScheduledTask}). Nothing downstream re-enters a task to ask what it is called, which is what
      *  makes the containment below unbreakable from inside a broken task's own handler. */
@@ -129,10 +130,19 @@ public final class MaintenanceScheduler implements AutoCloseable {
      *  default uncaught-exception handler. */
     private volatile String stopped = "not started";
 
+    /** The passes the last {@link #refresh()} could not build, by name with a one-line cause - reported as failed by
+     *  this scheduler's observability rather than left to vanish from a shorter task list. */
+    private volatile Map<String, String> unavailable = Map.of();
+
+    /** The passes the last {@link #refresh()} could not build, by name with a one-line cause. */
+    public Map<String, String> unavailable() {
+        return unavailable;
+    }
+
     /** A fixed task list (a test or a single-shot pass); the list never re-resolves, so {@link #refresh()} is a no-op. */
     public MaintenanceScheduler(Repositories repositories, ArtifactStore root, List<MaintenanceTask> tasks,
                                 UnaryOperator<String> config, Duration leaseTtl, MeterRegistry registry) {
-        this(repositories, root, tasks, () -> tasks, config, (tenant, key) -> config.apply(key),
+        this(repositories, root, tasks, () -> MaintenanceTaskProvider.Contained.of(tasks), config, (tenant, key) -> config.apply(key),
                 leaseTtl, registry, DEFAULT_WORKERS);
     }
 
@@ -140,7 +150,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
      *  parallel processing of a repository set. */
     public MaintenanceScheduler(Repositories repositories, ArtifactStore root, List<MaintenanceTask> tasks,
                                 UnaryOperator<String> config, Duration leaseTtl, MeterRegistry registry, int workers) {
-        this(repositories, root, tasks, () -> tasks, config, (tenant, key) -> config.apply(key),
+        this(repositories, root, tasks, () -> MaintenanceTaskProvider.Contained.of(tasks), config, (tenant, key) -> config.apply(key),
                 leaseTtl, registry, workers);
     }
 
@@ -151,7 +161,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
     public MaintenanceScheduler(Repositories repositories, ArtifactStore root, List<MaintenanceTask> tasks,
                                 UnaryOperator<String> config, BiFunction<String, String, String> tenantConfig,
                                 Duration leaseTtl, MeterRegistry registry, int workers) {
-        this(repositories, root, tasks, () -> tasks, config, tenantConfig, leaseTtl, registry, workers);
+        this(repositories, root, tasks, () -> MaintenanceTaskProvider.Contained.of(tasks), config, tenantConfig, leaseTtl, registry, workers);
     }
 
     /** A live task list: {@code booted} is the list this scheduler starts with - resolved by the <em>caller</em>, which
@@ -163,7 +173,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
      *  (deployment-global), so a tenant override never takes effect - the eight-argument overload wires a
      *  tenant-scoped resolver for that. */
     public MaintenanceScheduler(Repositories repositories, ArtifactStore root, List<MaintenanceTask> booted,
-                                Supplier<List<MaintenanceTask>> resolver,
+                                Supplier<MaintenanceTaskProvider.Contained> resolver,
                                 UnaryOperator<String> config, Duration leaseTtl, MeterRegistry registry) {
         this(repositories, root, booted, resolver, config, (tenant, key) -> config.apply(key),
                 leaseTtl, registry, DEFAULT_WORKERS);
@@ -176,14 +186,14 @@ public final class MaintenanceScheduler implements AutoCloseable {
      *  deployment knob. This is the wiring the live deployment uses; the plain overloads keep the global-only behavior
      *  for tests that do not exercise per-tenant overrides. */
     public MaintenanceScheduler(Repositories repositories, ArtifactStore root, List<MaintenanceTask> booted,
-                                Supplier<List<MaintenanceTask>> resolver, UnaryOperator<String> config,
+                                Supplier<MaintenanceTaskProvider.Contained> resolver, UnaryOperator<String> config,
                                 BiFunction<String, String, String> tenantConfig,
                                 Duration leaseTtl, MeterRegistry registry) {
         this(repositories, root, booted, resolver, config, tenantConfig, leaseTtl, registry, DEFAULT_WORKERS);
     }
 
     private MaintenanceScheduler(Repositories repositories, ArtifactStore root, List<MaintenanceTask> booted,
-                                 Supplier<List<MaintenanceTask>> resolver, UnaryOperator<String> config,
+                                 Supplier<MaintenanceTaskProvider.Contained> resolver, UnaryOperator<String> config,
                                  BiFunction<String, String, String> tenantConfig,
                                  Duration leaseTtl, MeterRegistry registry, int workers) {
         this.repositories = repositories;
@@ -299,7 +309,9 @@ public final class MaintenanceScheduler implements AutoCloseable {
         // The re-read of every task's name and cadence happens here too, and it is deliberately allowed to throw: on
         // a convergence tick SettingsRefresh contains it and keeps the last resolved list whole, so a task that has
         // stopped being able to name itself neither replaces a working schedule nor takes a serving node down.
-        this.tasks = scheduled(resolver.get());
+        MaintenanceTaskProvider.Contained resolved = resolver.get();
+        this.tasks = scheduled(resolved.tasks());
+        this.unavailable = resolved.unavailable();
         if (running && !tasks.isEmpty()) {
             startWorker();
         }

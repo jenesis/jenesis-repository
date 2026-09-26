@@ -2,9 +2,6 @@ package build.jenesis.repository.walk.store;
 
 import module java.base;
 
-import build.jenesis.repository.observation.Metric;
-import build.jenesis.repository.observation.ObservabilitySource;
-import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.walk.ArtifactWalk;
@@ -43,31 +40,14 @@ import build.jenesis.repository.walk.WalkSegment;
  * one segment. Adaptive mid-pass splitting is deliberately out of scope: splitting a claimed range safely needs a
  * two-object CAS the store does not have.
  *
- * <p>A running walk is its own {@link ObservabilitySource}: it reports the current (or last) pass this instance
- * drove as {@code jenreg.walk.segments} - a bounded gauge of the pass's done segments against its segment count,
- * so the overview shows how far the pass has converged (its {@code usage()} the convergence fraction) - the
- * {@code jenreg.walk.resumes} counter of segments this instance reclaimed from an expired (dead) holder's cursor
- * (takeovers, the multi-node health signal a steadily climbing count exposes), and a {@code jenreg.walk.pass}
- * task status carrying the pass generation and started stamp, {@code RUNNING} while segments are still claimed and
- * {@code IDLE} once it completed. The pass and segment counts are read off the live pass this instance last saw
- * (pass state itself stays durable in the walked store); the resume count is this node's own view of takeovers,
- * held on the instance so it survives a pass turnover. A walk that has <em>never run</em> - a fresh instance no
- * one has driven - reports nothing at all, the same disabled-or-absent rule the other adopters follow.
+ * <p>What a walk sees is recorded node-wide ({@code WalkRecord}), not on the instance, and the discovered
+ * {@code ArtifactWalkObservability} reports it: {@code jenreg.walk.segments}, the pass last joined or finished as done
+ * segments against its segment count; {@code jenreg.walk.resumes}, the segments this node took over from an expired
+ * holder; and {@code jenreg.walk.pass}, that pass's generation and state. A walk is resolved wherever one is asked
+ * for, so an instance's own figures would restart at every resolve. Pass state itself stays durable in the walked
+ * store; a node that has never walked reports nothing.
  */
-public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySource {
-
-    private static final AtomicReference<StoreArtifactWalk> INSTALLED = new AtomicReference<>();
-
-    /** Register {@code instance} as the live one the discovered {@link ArtifactWalkObservability} reports from; the production
-     *  construction site calls this once, and the last registration wins. */
-    public static void install(StoreArtifactWalk instance) {
-        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
-    }
-
-    /** The installed live instance, if any - what {@link ArtifactWalkObservability} reports; empty before one is installed. */
-    static Optional<StoreArtifactWalk> installed() {
-        return Optional.ofNullable(INSTALLED.get());
-    }
+public final class StoreArtifactWalk implements ArtifactWalk {
 
     private final int checkpoint;
     private final int segments;
@@ -76,13 +56,6 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
     /** This instance's identity inside segment claims; each {@link #walk} call suffixes a worker counter. */
     private final String node = UUID.randomUUID().toString().substring(0, 8);
     private final AtomicLong workers = new AtomicLong();
-    /** Segments this instance has reclaimed from an expired holder's cursor - takeovers, the {@code
-     *  jenreg.walk.resumes} multi-node-health counter. Held on the instance (never a static) so it survives a pass
-     *  turnover; a per-node view, since a takeover is inherently the reclaiming node's observation. */
-    private final AtomicLong resumes = new AtomicLong();
-    /** The pass this instance last drove to a {@link #walk} return, or {@code null} until it has run once - the live
-     *  read the {@code jenreg.walk.*} signals surface, so a never-run walk contributes nothing. */
-    private volatile WalkPass observed;
 
     public StoreArtifactWalk(int checkpoint, int segments, Duration ttl, Clock clock) {
         if (checkpoint < 1 || segments < 1 || ttl.isNegative() || ttl.isZero()) {
@@ -95,56 +68,19 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
     }
 
     @Override
-    public List<Metric> metrics() {
-        WalkPass pass = observed;
-        if (pass == null) {
-            return List.of(); // never driven: a disabled-or-absent walk lists nothing
-        }
-        return List.of(
-                Metric.bounded("jenreg.walk.segments",
-                        "Segments done against the current shared-walk pass's segment count - the used-vs-available "
-                                + "shape, so the overview shows how far the running pass has converged without "
-                                + "pre-computing a percentage.",
-                        pass.done(), pass.segments(), "segments"),
-                Metric.counter("jenreg.walk.resumes",
-                        "Segments this node reclaimed from an expired (dead) holder's cursor - takeovers, the "
-                                + "multi-node health signal a steadily climbing count exposes (workers dying "
-                                + "mid-segment).",
-                        resumes.get(), "segments"));
-    }
-
-    @Override
-    public List<TaskStatus> taskStatuses() {
-        WalkPass pass = observed;
-        if (pass == null) {
-            return List.of();
-        }
-        boolean running = !pass.complete();
-        return List.of(TaskStatus.ran("jenreg.walk.pass",
-                "The current (or last completed) shared-walk pass - its generation and started stamp, RUNNING "
-                        + "while segments are still claimed and IDLE once every segment is done.",
-                running ? TaskStatus.State.RUNNING : TaskStatus.State.IDLE, pass.started(), null,
-                "generation " + pass.generation() + ", " + pass.done() + " of " + pass.segments()
-                        + " segments done" + (running ? " (segments still claimed)" : " (pass complete)")));
-    }
-
-    @Override
     public WalkPass walk(ArtifactStore store, String consumer, List<String> roots, KeyVisitor visitor)
             throws IOException {
         String scope = ArtifactStore.segment(consumer);
         String holder = node + "/" + workers.incrementAndGet();
         Manifest manifest = manifest(store, scope, roots);
-        // The instance that walks is the instance the observability reports, and it reports the pass from the moment
-        // it is joined: a provider re-resolved on a settings-convergence tick installs a fresh instance the scheduler
-        // may or may not drive, and a pass recorded only on completion is never seen RUNNING - two nodes' fleet view
-        // read no walk at all while one of them walked.
-        install(this);
-        observed = pass(store, scope, manifest);
+        // The pass is recorded from the moment it is joined, not only on completion: a pass recorded only when it
+        // finished is never seen RUNNING, and two nodes' fleet view read no walk at all while one of them walked.
+        WalkRecord.observed(pass(store, scope, manifest));
         while (true) {
             Claimed claimed = claim(store, scope, manifest, holder);
             if (claimed == null) {
                 WalkPass pass = finish(store, scope, manifest);
-                observed = pass;
+                WalkRecord.observed(pass);
                 return pass;
             }
             new Worker(store, scope, manifest, claimed, holder, visitor).run();
@@ -342,7 +278,7 @@ public final class StoreArtifactWalk implements ArtifactWalk, ObservabilitySourc
                 continue; // taken over before the token read - treat as a lost race
             }
             if (takeover) {
-                resumes.incrementAndGet();
+                WalkRecord.resumed();
             }
             return new Claimed(index, manifest.ranges().get(index), cursor, won.get().token());
         }

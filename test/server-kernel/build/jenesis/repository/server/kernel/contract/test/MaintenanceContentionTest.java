@@ -16,6 +16,7 @@ import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.TaskSchedule;
 import build.jenesis.repository.maintenance.MaintenanceTask;
+import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.staging.StagingProvider;
 import build.jenesis.repository.store.ArtifactStore;
@@ -102,7 +103,7 @@ class MaintenanceContentionTest {
         int before = workerLoops();
         List<MaintenanceTask> enabled = new ArrayList<>();
         try (MaintenanceScheduler scheduler = new MaintenanceScheduler(repositories, store,
-                List.copyOf(enabled), () -> List.copyOf(enabled), key -> null, Duration.ofMinutes(10), null)) {
+                List.copyOf(enabled), () -> MaintenanceTaskProvider.Contained.of(List.copyOf(enabled)), key -> null, Duration.ofMinutes(10), null)) {
             scheduler.start();
             assertThat(scheduler.alive()).as("nothing is enabled, so no loop runs yet").isFalse();
 

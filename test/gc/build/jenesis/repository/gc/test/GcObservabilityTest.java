@@ -2,7 +2,8 @@ package build.jenesis.repository.gc.test;
 
 import module org.junit.jupiter.api;
 import module java.base;
-
+import build.jenesis.repository.gc.GarbageCollectorProvider;
+import build.jenesis.repository.gc.store.GarbageCollectorObservability;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilityReport;
@@ -15,10 +16,11 @@ import build.jenesis.repository.walk.store.StoreArtifactWalk;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The mark-sweep collector is its own {@link build.jenesis.repository.observation.ObservabilitySource}: once it has
- * run a {@code collect} it reports {@code jenreg.gc.condemned} (the in-flight condemned set), the
- * {@code jenreg.gc.collected} counter and a {@code jenreg.gc.lastrun} task status; a collector that has not run
- * (as with no collector installed or selected at all - the no-op default) reports nothing. Exercised against a real
+ * The collector's signals are what this node's collections have done, whichever collector instance did it: every
+ * {@code collect} adds to one record, and the discovered {@link GarbageCollectorObservability} reports it -
+ * {@code jenreg.gc.condemned} (the in-flight condemned set the last sweep left), the {@code jenreg.gc.collected}
+ * counter and a {@code jenreg.gc.lastrun} task status. The record is the node's, and the suites of this module share
+ * one JVM, so each test reads what its own collects changed rather than a count from zero. Exercised against a real
  * filesystem store, without the server or Micrometer.
  */
 class GcObservabilityTest {
@@ -27,6 +29,8 @@ class GcObservabilityTest {
     Path root;
 
     private final MutableClock clock = new MutableClock();
+
+    private final GarbageCollectorObservability signals = new GarbageCollectorObservability();
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve(
@@ -41,27 +45,24 @@ class GcObservabilityTest {
         return new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
     }
 
-    @Test
-    void a_collector_that_has_never_run_reports_nothing() {
-        MarkSweepGarbageCollector collector = collector();
-
-        assertThat(collector.metrics()).isEmpty();
-        assertThat(collector.taskStatuses()).isEmpty();
-        assertThat(collector.healthChecks()).isEmpty();
+    private double metric(String name) {
+        return signals.metrics().stream().filter(metric -> metric.name().equals(name)).findFirst()
+                .map(Metric::value).orElse(0.0);
     }
 
     @Test
-    void the_first_collect_condemns_and_the_signals_report_the_in_flight_set() throws IOException {
+    void a_collect_reports_the_in_flight_set_it_left_and_when_it_ran() throws IOException {
         ArtifactStore store = store();
         Publication publication = new Publication(store);
         String kept = publication.storeBlob(bytes("kept"));
         publication.link("/maven/kept.jar", kept);
         var _ = publication.storeBlob(bytes("orphan"));
+        double before = metric("jenreg.gc.collected");
+        Instant ran = Instant.parse("2026-09-26T10:00:00Z");
 
-        MarkSweepGarbageCollector collector = collector();
-        collector.collect(store, Known.known(List.of("publish")), clock.instant());
+        collector().collect(store, Known.known(List.of("publish")), ran);
 
-        assertThat(collector.metrics()).satisfiesExactlyInAnyOrder(
+        assertThat(signals.metrics()).satisfiesExactlyInAnyOrder(
                 condemned -> {
                     assertThat(condemned.name()).isEqualTo("jenreg.gc.condemned");
                     assertThat(condemned.kind()).isEqualTo(Metric.Kind.GAUGE);
@@ -71,46 +72,55 @@ class GcObservabilityTest {
                 collected -> {
                     assertThat(collected.name()).isEqualTo("jenreg.gc.collected");
                     assertThat(collected.kind()).isEqualTo(Metric.Kind.COUNTER);
-                    assertThat(collected.value()).isZero();
+                    assertThat(collected.value()).as("a first pass condemns and reclaims nothing").isEqualTo(before);
                     assertThat(collected.description()).isNotBlank();
                 });
-
-        assertThat(collector.taskStatuses()).singleElement().satisfies(lastrun -> {
+        assertThat(signals.taskStatuses()).singleElement().satisfies(lastrun -> {
             assertThat(lastrun.name()).isEqualTo("jenreg.gc.lastrun");
             assertThat(lastrun.state()).isEqualTo(TaskStatus.State.IDLE);
-            assertThat(lastrun.lastRun()).isNotNull();
+            assertThat(lastrun.lastRun()).isEqualTo(ran);
             assertThat(lastrun.description()).isNotBlank();
         });
     }
 
     @Test
-    void a_second_collect_reclaims_the_orphan_and_climbs_the_collected_counter() throws IOException {
+    void the_reclaimed_counter_climbs_across_collector_instances() throws IOException {
         ArtifactStore store = store();
-        Publication publication = new Publication(store);
-        var _ = publication.storeBlob(bytes("orphan"));
+        var _ = new Publication(store).storeBlob(bytes("orphan"));
+        double before = metric("jenreg.gc.collected");
 
-        MarkSweepGarbageCollector collector = collector();
-        collector.collect(store, Known.known(List.of("publish")), clock.instant()); // condemn
-        collector.collect(store, Known.known(List.of("publish")), clock.instant()); // collect
+        collector().collect(store, Known.known(List.of("publish")), clock.instant()); // condemns
+        collector().collect(store, Known.known(List.of("publish")), clock.instant()); // another instance collects
 
-        assertThat(collector.metrics())
-                .filteredOn(metric -> metric.name().equals("jenreg.gc.collected"))
-                .singleElement().extracting(Metric::value).isEqualTo(1.0);
-        assertThat(collector.metrics())
-                .filteredOn(metric -> metric.name().equals("jenreg.gc.condemned"))
-                .singleElement().extracting(Metric::value)
-                .as("the orphan was reclaimed, so nothing is left condemned").isEqualTo(0.0);
+        assertThat(metric("jenreg.gc.collected")).as("a fresh collector adds to the node's count, never restarts it")
+                .isEqualTo(before + 1);
+        assertThat(metric("jenreg.gc.condemned")).as("the orphan was reclaimed, so nothing is left condemned")
+                .isEqualTo(0.0);
+    }
+
+    @Test
+    void resolving_a_collector_that_never_runs_changes_nothing_the_signals_say() throws IOException {
+        ArtifactStore store = store();
+        var _ = new Publication(store).storeBlob(bytes("orphan"));
+        Instant ran = Instant.parse("2026-09-26T11:00:00Z");
+        collector().collect(store, Known.known(List.of("publish")), ran);
+        List<Metric> metrics = signals.metrics();
+
+        // What the capabilities answer and the maintenance screen do on every request: resolve one to ask.
+        var _ = GarbageCollectorProvider.resolve(key -> "gc".equals(key) ? "mark-sweep" : null);
+        var _ = collector();
+
+        assertThat(signals.metrics()).isEqualTo(metrics);
+        assertThat(signals.taskStatuses()).singleElement().extracting(TaskStatus::lastRun).isEqualTo(ran);
     }
 
     @Test
     void every_signal_name_follows_the_jenesis_gc_grammar() throws IOException {
-        ArtifactStore store = store();
-        MarkSweepGarbageCollector collector = collector();
-        collector.collect(store, Known.known(List.of("publish")), clock.instant());
+        collector().collect(store(), Known.known(List.of("publish")), clock.instant());
 
-        assertThat(collector.metrics()).extracting(Metric::name)
+        assertThat(signals.metrics()).extracting(Metric::name)
                 .allSatisfy(name -> assertThat(name).matches("jenreg\\.gc\\..+"));
-        assertThat(collector.taskStatuses()).extracting(TaskStatus::name)
+        assertThat(signals.taskStatuses()).extracting(TaskStatus::name)
                 .allSatisfy(name -> assertThat(name).matches("jenreg\\.gc\\..+"));
     }
 
@@ -118,10 +128,9 @@ class GcObservabilityTest {
     void the_signals_collect_into_the_report_the_consumers_read() throws IOException {
         ArtifactStore store = store();
         var _ = new Publication(store).storeBlob(bytes("orphan"));
-        MarkSweepGarbageCollector collector = collector();
-        collector.collect(store, Known.known(List.of("publish")), clock.instant());
+        collector().collect(store, Known.known(List.of("publish")), clock.instant());
 
-        ObservabilityReport report = ObservabilityReport.from(List.of(collector));
+        ObservabilityReport report = ObservabilityReport.from(List.of(signals));
 
         assertThat(report.metrics()).extracting(Metric::name)
                 .containsExactly("jenreg.gc.collected", "jenreg.gc.condemned"); // name-sorted

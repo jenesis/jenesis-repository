@@ -34,8 +34,7 @@ module build.jenesis.repository.store {
     uses build.jenesis.repository.store.PublicationObserver;
     uses build.jenesis.repository.store.TenantsProvider;
     provides build.jenesis.repository.observation.ObservabilitySource
-            with build.jenesis.repository.store.QuotaObservability,
-                 build.jenesis.repository.store.StoredListing.Observability,
+            with build.jenesis.repository.store.StoredListing.Observability,
             build.jenesis.repository.store.StoreCacheObservability;
 
     // The family extends IconContributor, so every implementation gains the optional mark seam and

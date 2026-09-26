@@ -87,20 +87,23 @@ public class ServingConfig {
                 : new AuthFetcher(resolved, upstreamCredentials);
     }
 
+    /** The pre-verdict spool store, sized from {@code jenreg.spool.*} ({@code max-bytes}, {@code max-spools}): the
+     *  nocache pass-through leg spools each untrusted upstream body through it and refuses with {@code 503} when a
+     *  budget is exhausted, rather than growing unbounded. A bean so its budget gauges are reported from this context. */
+    @Bean
+    public SpoolStore spoolStore(Environment environment) {
+        return SpoolStore.fromConfig(Features.namespaced(environment::getProperty));
+    }
+
     @Bean
     public RepositoryRouter repositoryRouter(LiveDefinitions definitions, LiveConfig liveConfig, Repositories repositories,
                                              ProxyFormat.Fetcher upstreamFetcher, Environment environment,
+                                             SpoolStore spool,
                                              ObjectProvider<UpstreamCredentialSource> credentials,
                                              ObjectProvider<DownloadTracker> downloads) {
         // liveConfig::proxyGate binds the tenant-aware proxyGate(String) overload, so a routed proxy fetch is screened
         // by the serving tenant's own gate; liveConfig::holdDays stays the deployment-wide immaturity window.
-        // The pre-verdict spool store is sized from jenreg.spool.* (max-bytes, max-spools) and
-        // installed as the live observability source so its bounded budget gauges surface; the nocache pass-through
-        // leg spools each untrusted upstream body through it and refuses with 503 when a budget is exhausted, rather
-        // than growing unbounded.
         UnaryOperator<String> config = Features.namespaced(environment::getProperty);
-        SpoolStore spool = SpoolStore.fromConfig(config);
-        SpoolStore.install(spool);
         // The hardened leg's untrusted-upstream fetch bounds are sized from jenreg.spool.*
         // (max-artifact-bytes, fetch-timeout-millis, fetch-min-throughput-bytes) - deploy-time resource dials sized to
         // the node's disk and links, like the spool budget - so an oversize or slow-loris upstream is refused rather

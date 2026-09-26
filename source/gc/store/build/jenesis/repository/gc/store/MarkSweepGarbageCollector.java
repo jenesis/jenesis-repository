@@ -5,9 +5,6 @@ import module java.base;
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GarbageCollector;
 import build.jenesis.repository.gc.GcPlan;
-import build.jenesis.repository.observation.Metric;
-import build.jenesis.repository.observation.ObservabilitySource;
-import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Names;
 import build.jenesis.repository.store.Known;
@@ -64,31 +61,11 @@ import build.jenesis.repository.walk.WalkPass;
  * unions what the owning format tells it with the hash it read itself. Handing it no lenders (the core's own
  * shape, and every existing test) leaves the mark byte-for-byte what it was.
  *
- * <p>An installed collector is its own {@link ObservabilitySource}: once it has run a {@link #collect} it reports
- * {@code jenreg.gc.condemned} - a gauge of the blobs currently condemned ({@code gc/condemned/}) awaiting the
- * confirming pass, the in-flight condemn-then-collect set the last sweep left standing - the
- * {@code jenreg.gc.collected} counter of blobs reclaimed (accumulated across collects), and a
- * {@code jenreg.gc.lastrun} task status stamped with the last collect. Because garbage collection is <em>no-op by
- * absence</em> (with no collector installed or selected there is no source at all), a deployment with GC off
- * contributes nothing here - GC-off is visible on the capabilities surface, not as a silent signal - and a
- * collector that has never run a pass likewise reports nothing until its first {@code collect}. The counts are read
- * off the collector's own last-pass bookkeeping, held on the instance (never a static) so they survive a pass
- * turnover; {@code plan} is a dry run and never touches them.
+ * <p>What a collect does is recorded node-wide ({@code CollectionRecord}), not on the instance, and the discovered
+ * {@code GarbageCollectorObservability} reports it: a collector is resolved wherever one is asked for, so an
+ * instance's own figures would restart at every resolve. {@code plan} is a dry run and records nothing.
  */
-public final class MarkSweepGarbageCollector implements GarbageCollector, ObservabilitySource {
-
-    private static final AtomicReference<MarkSweepGarbageCollector> INSTALLED = new AtomicReference<>();
-
-    /** Register {@code instance} as the live one the discovered {@link GarbageCollectorObservability} reports from; the production
-     *  construction site calls this once, and the last registration wins. */
-    public static void install(MarkSweepGarbageCollector instance) {
-        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
-    }
-
-    /** The installed live instance, if any - what {@link GarbageCollectorObservability} reports; empty before one is installed. */
-    static Optional<MarkSweepGarbageCollector> installed() {
-        return Optional.ofNullable(INSTALLED.get());
-    }
+public final class MarkSweepGarbageCollector implements GarbageCollector {
 
     /** The two walk consumers, whose pass state a console reads back through {@code ArtifactWalk.pass}. */
     static final String MARK = "gc-mark", SWEEP = "gc-sweep";
@@ -127,19 +104,6 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
     /** This collector's identity inside reference-batch names, so concurrent collectors never contend on a key. */
     private final String collector = UUID.randomUUID().toString().substring(0, 8);
     private final AtomicLong batches = new AtomicLong();
-
-    /** Blobs reclaimed across every {@link #collect} this instance ran - the monotonic {@code jenreg.gc.collected}
-     *  counter, held on the instance (never a static) so it survives a pass turnover. */
-    private final AtomicLong collectedTotal = new AtomicLong();
-    /** Blobs left condemned ({@code gc/condemned/}) awaiting the confirming pass, as the last completed-or-partial
-     *  sweep counted them - the {@code jenreg.gc.condemned} in-flight gauge. */
-    private volatile long condemnedStanding;
-    /** When this instance last ran a {@code collect}, or {@code null} until it has - the gate that keeps a never-run
-     *  (or GC-off, absent) collector reporting nothing. */
-    private volatile Instant lastCollect;
-    /** Whether that last collect completed both walk passes ({@code true}) or was partial because another node still
-     *  held the shared enumeration ({@code false}). */
-    private volatile boolean lastComplete;
 
     public MarkSweepGarbageCollector(ArtifactWalk walk) {
         this(walk, Duration.ZERO);
@@ -250,62 +214,20 @@ public final class MarkSweepGarbageCollector implements GarbageCollector, Observ
             // Another node still holds mark segments: the reference shards are not yet complete, and judging
             // blobs against an incomplete mark could condemn (though never delete) everything it missed. Report
             // the partial pass and let the next interval - or the node that finishes - do the judging.
-            observe(now, false);
+            CollectionRecord.collected(now, 0, -1, false);
             return GcPlan.of(false, 0, 0, 0, List.of());
         }
         Sweep sweep = new Sweep(store, marked.generation(), now);
         WalkPass swept = walk.walk(store, SWEEP, List.of("blobs"), sweep);
-        collectedTotal.addAndGet(sweep.collected);
-        condemnedStanding = sweep.standing;
         if (!swept.complete()) {
-            observe(now, false);
+            CollectionRecord.collected(now, sweep.collected, sweep.standing, false);
             return GcPlan.of(false, sweep.condemned, sweep.spared, sweep.collected, sweep.sample);
         }
         converge(store, marked.generation());
-        observe(now, true);
+        CollectionRecord.collected(now, sweep.collected, sweep.standing, true);
         return GcPlan.of(true, sweep.condemned, sweep.spared, sweep.collected, sweep.sample);
     }
 
-    /** Stamp the {@code jenreg.gc.*} observability state after a collect pass: the last-run instant the {@code
-     *  jenreg.gc.lastrun} task status carries and whether it completed both walk passes. The condemned gauge and
-     *  collected counter are updated at the sweep in {@link #collect} itself. */
-    private void observe(Instant now, boolean complete) {
-        lastComplete = complete;
-        lastCollect = now;
-    }
-
-    @Override
-    public List<Metric> metrics() {
-        if (lastCollect == null) {
-            return List.of(); // installed but never run - like a disabled plugin, lists nothing until first collect
-        }
-        return List.of(
-                Metric.gauge("jenreg.gc.condemned",
-                        "Blobs currently condemned (gc/condemned/) awaiting the confirming pass - the "
-                                + "condemn-then-collect in-flight set the last sweep left standing.",
-                        condemnedStanding, "blobs"),
-                Metric.counter("jenreg.gc.collected",
-                        "Blobs reclaimed by the mark-sweep collector, accumulated across collect passes - a "
-                                + "monotonic count that climbs by what each collect deletes.",
-                        collectedTotal.get(), "blobs"));
-    }
-
-    @Override
-    public List<TaskStatus> taskStatuses() {
-        Instant ran = lastCollect;
-        if (ran == null) {
-            // No collect has run - and with no collector installed or selected there is no source at all, so GC-off
-            // is visible on the capabilities surface, never as a silent signal here.
-            return List.of();
-        }
-        return List.of(TaskStatus.ran("jenreg.gc.lastrun",
-                "The garbage-collection pass, stamped with its last collect - the mark-then-sweep that condemns "
-                        + "unreferenced blobs and reclaims those an earlier pass already condemned.",
-                TaskStatus.State.IDLE, ran, null,
-                "reclaimed " + collectedTotal.get() + " blob(s), " + condemnedStanding + " condemned awaiting the "
-                        + "next pass" + (lastComplete ? "" : " (partial: the shared walk still had segments held "
-                        + "by another node)")));
-    }
 
     /** The bookkeeping convergence after a completed sweep: a marker whose blob is gone (the residue of a crash
      *  between the blob and marker deletes, or of an already-collected blob) is removed, and the reference shards

@@ -39,8 +39,7 @@ module build.jenesis.repository.gateway {
     exports build.jenesis.repository.gateway;
     uses build.jenesis.repository.gateway.RedirectHandlerProvider;
     provides build.jenesis.repository.observation.ObservabilitySource
-            with build.jenesis.repository.gateway.SpoolObservability,
-                    build.jenesis.repository.gateway.HardeningObservability;
+            with build.jenesis.repository.gateway.HardeningObservability;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.gateway.MigrationRescreenTaskProvider;
     provides build.jenesis.repository.settings.SettingsContributor

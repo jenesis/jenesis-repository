@@ -129,6 +129,23 @@ class ProxyCacheObservabilityTest {
     }
 
     @Test
+    void the_chain_a_context_holds_reports_every_cache_in_it() throws IOException {
+        // The context holds the outermost fetcher alone, as the server's fetcher bean does: the negative cache wraps
+        // the revalidation cache, and what the inner one reports is reported through the outer.
+        RevalidatingFetcher revalidating = new RevalidatingFetcher(validated("\"v1\"", "body".getBytes(StandardCharsets.UTF_8)));
+        NegativeCachingFetcher chain = new NegativeCachingFetcher(revalidating, Duration.ofSeconds(60));
+        chain.fetch(INDEX, Map.of());
+
+        ObservabilityReport report = ObservabilityReport.of(List.of(chain));
+
+        assertThat(report.metrics()).extracting(Metric::name).contains(
+                "jenreg.proxy.negativecache.entries", "jenreg.proxy.revalidation.bytes",
+                "jenreg.proxy.revalidation.entries");
+        assertThat(report.healthChecks()).extracting(HealthCheck::name)
+                .contains("jenreg.proxy.negativecache", "jenreg.proxy.revalidation");
+    }
+
+    @Test
     void every_signal_name_follows_the_jenesis_proxy_grammar() {
         List<NegativeCachingFetcher> negatives = List.of(new NegativeCachingFetcher(status(404), Duration.ofSeconds(60)));
         RevalidatingFetcher revalidating = new RevalidatingFetcher(status(200));

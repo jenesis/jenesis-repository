@@ -7,8 +7,8 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.gateway.RepositoryRouter;
 import build.jenesis.repository.definitions.RepositoryDefinition;
-import build.jenesis.repository.gateway.SpoolObservability;
 import build.jenesis.repository.gateway.SpoolStore;
+import build.jenesis.repository.observation.ObservabilityReport;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -139,11 +139,11 @@ class SpoolStoreTest {
         assertThat(byName(spool.metrics()).get("jenreg.gateway.spool.exhausted").value())
                 .as("the exhaustion counter moved").isEqualTo(1d);
 
-        // The ServiceLoader adapter reports the installed live store's signals through the observability seam.
-        SpoolStore.install(spool);
-        assertThat(byName(new SpoolObservability().metrics())).containsKeys("jenreg.gateway.spool.bytes",
+        // The store is its own source: a context that built it reports its signals.
+        ObservabilityReport report = ObservabilityReport.of(List.of(spool));
+        assertThat(report.metrics()).extracting(Metric::name).contains("jenreg.gateway.spool.bytes",
                 "jenreg.gateway.spool.count", "jenreg.gateway.spool.exhausted");
-        assertThat(new SpoolObservability().healthChecks()).extracting("name").contains("jenreg.gateway.spool");
+        assertThat(report.healthChecks()).extracting("name").contains("jenreg.gateway.spool");
     }
 
     private static RepositoryRouter passThroughRouter(SpoolStore spool, String body) {

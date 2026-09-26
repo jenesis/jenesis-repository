@@ -25,10 +25,10 @@ import build.jenesis.repository.store.Durations;
  * default, matching {@link #DEFAULT_INTERVAL}; {@code off} or {@code 0} switches the driver off), the first pass runs a minute after boot. The driver is
  * inert - it logs one line and schedules nothing - when there is no walk with a consumer and no listing to repair, so
  * a deployment without either is byte-for-byte unchanged. One pass at a time: a cadence tick that finds the previous
- * pass still running is skipped, never stacked. Its status is reported through {@link Observability}, the discovered
- * {@link ObservabilitySource} the report lists it under.
+ * pass still running is skipped, never stacked. It is its own {@link ObservabilitySource}: once started, its status is
+ * reported from the context that runs it.
  */
-public final class RebuildScheduler implements AutoCloseable {
+public final class RebuildScheduler implements AutoCloseable, ObservabilitySource {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RebuildScheduler.class);
 
@@ -48,7 +48,8 @@ public final class RebuildScheduler implements AutoCloseable {
 
     private static final String TASK = "jenreg.rebuild.pass";
 
-    private static final AtomicReference<RebuildScheduler> INSTALLED = new AtomicReference<>();
+    /** Whether {@link #start} has run, so a driver that was built and never started reports nothing. */
+    private volatile boolean started;
 
     /** The deployment root: the running marker and the standing requests live under its {@code .system}. */
     private final ArtifactStore root;
@@ -115,7 +116,7 @@ public final class RebuildScheduler implements AutoCloseable {
     }
 
     public void start() {
-        INSTALLED.set(this);
+        started = true;
         // This node's driver is where a request can reach the root: install it, and ask for a walk ourselves when
         // the marker says the previous run of this node never shut down cleanly.
         Requests.installRoot(root);
@@ -262,16 +263,9 @@ public final class RebuildScheduler implements AutoCloseable {
         }
     }
 
-    /** The discovered observability face: the driver's task status, reported from the started instance. */
-    public static final class Observability implements ObservabilitySource {
-
-        public Observability() {
-        }
-
-        @Override
-        public List<TaskStatus> taskStatuses() {
-            RebuildScheduler installed = INSTALLED.get();
-            return installed == null ? List.of() : List.of(installed.status());
-        }
+    /** The driver's task status, once it is started - reported from the context that runs it. */
+    @Override
+    public List<TaskStatus> taskStatuses() {
+        return started ? List.of(status()) : List.of();
     }
 }

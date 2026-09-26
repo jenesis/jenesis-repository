@@ -2,6 +2,11 @@ package build.jenesis.repository.store;
 
 import module java.base;
 
+import build.jenesis.repository.observation.HealthCheck;
+import build.jenesis.repository.observation.Metric;
+import build.jenesis.repository.observation.ObservabilitySource;
+import build.jenesis.repository.observation.TaskStatus;
+
 /**
  * An {@link ArtifactStore} decorator that refuses every write, so a deployment configured read-only
  * ({@code jenreg.read-only=true}) serves reads normally while every mutation - a hosted publish, a
@@ -17,12 +22,28 @@ import module java.base;
  * a server maps to HTTP {@code 403}. This wrapper is applied only when the deployment opts in, so an ordinary
  * read-write deployment never pays for it.
  */
-public final class ReadOnlyArtifactStore implements ArtifactStore {
+public final class ReadOnlyArtifactStore implements ArtifactStore, ObservabilitySource {
 
     private final ArtifactStore delegate;
 
     public ReadOnlyArtifactStore(ArtifactStore delegate) {
         this.delegate = delegate;
+    }
+
+    /** The wrapped store's signals - a quota's usage, say - since the context holds only this, the outermost store. */
+    @Override
+    public List<Metric> metrics() {
+        return delegate instanceof ObservabilitySource wrapped ? wrapped.metrics() : List.of();
+    }
+
+    @Override
+    public List<HealthCheck> healthChecks() {
+        return delegate instanceof ObservabilitySource wrapped ? wrapped.healthChecks() : List.of();
+    }
+
+    @Override
+    public List<TaskStatus> taskStatuses() {
+        return delegate instanceof ObservabilitySource wrapped ? wrapped.taskStatuses() : List.of();
     }
 
     @Override

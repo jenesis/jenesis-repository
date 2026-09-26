@@ -5,6 +5,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
+import build.jenesis.repository.observation.TaskStatus;
 
 /**
  * A {@link ProxyFormat.Fetcher} decorator that remembers an upstream {@code 404} for a short window, so the flood of
@@ -28,19 +29,6 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * path), so {@link #taskStatuses()} stays empty.
  */
 public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, ObservabilitySource {
-
-    private static final AtomicReference<NegativeCachingFetcher> INSTALLED = new AtomicReference<>();
-
-    /** Register {@code instance} as the live one the discovered {@link NegativeCacheObservability} reports from; the production
-     *  construction site calls this once, and the last registration wins. */
-    public static void install(NegativeCachingFetcher instance) {
-        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
-    }
-
-    /** The installed live instance, if any - what {@link NegativeCacheObservability} reports; empty before one is installed. */
-    static Optional<NegativeCachingFetcher> installed() {
-        return Optional.ofNullable(INSTALLED.get());
-    }
 
     private static final int MAX_ENTRIES = 16_384;
 
@@ -99,21 +87,32 @@ public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, Observ
         return head;
     }
 
+    /** This cache's signals and the fetcher's it wraps: the context holds only the outermost fetcher, so what the
+     *  chain beneath it reports is reported through it. */
     @Override
     public List<Metric> metrics() {
-        return List.of(Metric.bounded("jenreg.proxy.negativecache.entries",
+        return Stream.concat(Stream.of(Metric.bounded("jenreg.proxy.negativecache.entries",
                 "Upstream 404s currently remembered, so a build tool's re-probes for a missing artifact are answered "
                         + "from memory rather than re-hitting the upstream, against the bounded map size past which a "
                         + "fresh miss first sweeps expired entries - a used-vs-available signal on the very "
                         + "memory-exhaustion vector the bound is there to cap.",
-                misses.size(), MAX_ENTRIES, ""));
+                misses.size(), MAX_ENTRIES, "")),
+                delegate instanceof ObservabilitySource wrapped ? wrapped.metrics().stream() : Stream.empty())
+                .toList();
     }
 
     @Override
     public List<HealthCheck> healthChecks() {
-        return List.of(HealthCheck.up("jenreg.proxy.negativecache",
+        return Stream.concat(Stream.of(HealthCheck.up("jenreg.proxy.negativecache",
                 "The negative cache is installed and remembering upstream misses so repeated probes are answered "
-                        + "from memory."));
+                        + "from memory.")),
+                delegate instanceof ObservabilitySource wrapped ? wrapped.healthChecks().stream() : Stream.empty())
+                .toList();
+    }
+
+    @Override
+    public List<TaskStatus> taskStatuses() {
+        return delegate instanceof ObservabilitySource wrapped ? wrapped.taskStatuses() : List.of();
     }
 
     private boolean cached(URI url) {

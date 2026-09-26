@@ -106,9 +106,7 @@ public class RepositoryAutoConfiguration {
         long quota = properties.quotaBytes();
         ArtifactStore quotaed = store;
         if (quota > 0) {
-            QuotaArtifactStore metered = new QuotaArtifactStore(store, quota);
-            QuotaArtifactStore.install(metered);                // the discovered observability reads this one
-            quotaed = metered;
+            quotaed = new QuotaArtifactStore(store, quota);
         }
         // Read-only is the outermost wrapper, so every write - through the quota meter or straight to the backend, at
         // an HTTP endpoint or an internal path - is refused at this one choke point before it reaches the delegate.
@@ -521,7 +519,6 @@ public class RepositoryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public NodeConsistencyObservability nodeConsistencyObservability(NodeConsistency consistency) {
-        NodeConsistencyObservability.install(consistency);      // the discovered, no-argument form reads this one
         return new NodeConsistencyObservability(consistency);
     }
 

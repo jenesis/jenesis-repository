@@ -116,17 +116,10 @@ public final class GcConsumer implements WalkConsumer {
         riding.add(store.identity());
     }
 
-    /** The collector, resolved once: its reclaimed counter lives on the instance the observability report reads, so
-     *  resolving a fresh one per pass would report zero however much was reclaimed. */
-    private volatile Optional<GarbageCollector> collector;
-
-    private Optional<GarbageCollector> collector() {
-        Optional<GarbageCollector> resolved = collector;
-        if (resolved == null) {
-            resolved = GarbageCollectorProvider.resolve(Features.settings());
-            collector = resolved;
-        }
-        return resolved;
+    /** The collector for this pass, resolved from the settings as they are now: what it reclaims is recorded for
+     *  the node rather than on the instance, so a fresh one per pass loses nothing and follows a changed dial. */
+    private static Optional<GarbageCollector> collector() {
+        return GarbageCollectorProvider.resolve(Features.settings());
     }
 
     @Override

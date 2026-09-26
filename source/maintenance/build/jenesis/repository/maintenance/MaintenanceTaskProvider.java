@@ -52,7 +52,8 @@ import build.jenesis.repository.icon.IconContributor;
  *       exist" must never degrade into a silent fallback, on any path, and a duplicate-name packaging error is not
  *       something a convergence tick can heal.</li>
  *   <li><b>Error visibility (&sect;9).</b> A contained failure is never silent. It is logged at {@code WARNING} naming
- *       the provider and the cause, and the provider is listed by {@link #unavailable()} so the observability surface
+ *       the provider and the cause, and the provider is listed in the resolve's {@link Contained#unavailable()}, so
+ *       the scheduler that resolved it
  *       reports the pass as <em>failed</em> rather than letting it vanish from a silently shorter task list. The
  *       report is the <em>last</em> resolve's, replaced wholesale, so a provider that starts resolving again drops out
  *       of it on the next convergence tick.</li>
@@ -116,9 +117,6 @@ public interface MaintenanceTaskProvider extends IconContributor {
                     + "pass would stay unscheduled until a restart. Fix the setting it reads, or disable the pass "
                     + "explicitly with jenreg." + provider.name() + "=false.", misconfigured);
         });
-        // Nothing failed - a strict resolve either returns every enabled pass or throws - so the failure report this
-        // deployment shows is cleared, not left carrying an earlier resolve's.
-        MaintenanceResolution.record(Map.of());
         return tasks;
     }
 
@@ -128,8 +126,9 @@ public interface MaintenanceTaskProvider extends IconContributor {
      * <em>running</em> deployment re-resolves through on each settings-convergence tick, where the trade is the
      * opposite of {@link #resolve}'s: the server is already serving, so a settings edit must not take it down, and
      * per-provider containment lets the other toggles in the same write converge instead of being held hostage by one
-     * bad provider. The failure is not silent - it is logged at {@code WARNING} and listed by {@link #unavailable()},
-     * so the observability surface reports the pass as failed rather than letting it vanish from a shorter list.
+     * bad provider. The failure is not silent - it is logged at {@code WARNING} and listed in the returned
+     * {@link Contained#unavailable()}, so the scheduler that asked reports the pass as failed rather than letting it
+     * vanish from a shorter list.
      *
      * <p>Containment covers a provider's own value or construction failure, including one that originates in another
      * repository's code - a malformed {@code jenreg.gc.grace} reaching the garbage collector through the
@@ -141,7 +140,7 @@ public interface MaintenanceTaskProvider extends IconContributor {
      * disabling one pass, so the caller keeps its last good task list whole instead of converging half of a
      * deployment mistake.
      */
-    static List<MaintenanceTask> resolveContained(UnaryOperator<String> config) {
+    static Contained resolveContained(UnaryOperator<String> config) {
         Map<String, String> unavailable = new TreeMap<>();
         List<MaintenanceTask> tasks = discover(config, (provider, misconfigured) -> {
             String cause = cause(misconfigured);
@@ -152,8 +151,26 @@ public interface MaintenanceTaskProvider extends IconContributor {
                             + ". Every other maintenance pass is unaffected; fix the setting this provider reads "
                             + "and the pass is picked up on the next settings-convergence tick.", misconfigured);
         });
-        MaintenanceResolution.record(unavailable);
-        return tasks;
+        return new Contained(tasks, unavailable);
+    }
+
+    /**
+     * What a {@linkplain #resolveContained contained resolve} built, and the providers it had to leave out, by name
+     * with a one-line cause - so whoever resolved can report a misconfigured pass as <em>failed</em> rather than
+     * silently absent. It belongs to the resolve and to whoever asked for it: a static "last resolve" would make two
+     * schedulers in one JVM report each other's failures.
+     */
+    record Contained(List<MaintenanceTask> tasks, Map<String, String> unavailable) {
+
+        public Contained {
+            tasks = List.copyOf(tasks);
+            unavailable = Map.copyOf(unavailable);
+        }
+
+        /** A fixed task list, which leaves nothing out. */
+        public static Contained of(List<MaintenanceTask> tasks) {
+            return new Contained(tasks, Map.of());
+        }
     }
 
     /** The one discovery loop both entry points run; {@code onFailure} is the <em>only</em> difference between them -
@@ -221,14 +238,6 @@ public interface MaintenanceTaskProvider extends IconContributor {
     private static String cause(RuntimeException failure) {
         return failure.getClass().getSimpleName()
                 + (failure.getMessage() == null ? "" : ": " + failure.getMessage());
-    }
-
-    /** The providers whose {@code create} failed on the last {@link #resolveContained}, keyed by name, with a one-line
-     *  cause - the read side an observability or capability surface reports "not scheduled" from, so a misconfigured
-     *  pass is visibly <em>failed</em> rather than silently absent. Always empty after a {@link #resolve}, which
-     *  refuses to return with a provider unresolved. */
-    static Map<String, String> unavailable() {
-        return MaintenanceResolution.unavailable();
     }
 
     /** The provider names installed on this deployment, regardless of enablement - the capability signal a console

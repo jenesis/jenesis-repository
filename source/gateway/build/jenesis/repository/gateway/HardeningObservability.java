@@ -12,9 +12,8 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * visible signal (§9 fail-fast, errors visible). A re-fetch of an <em>immutable</em> coordinate whose bytes drifted
  * from the previously screened, digest-pinned verdict is upstream tampering: it is refused and logged loudly, and the
  * count of such alarms is reported here as {@code jenreg.gateway.hardened.drift} so an operator sees the alarm on the
- * overview, not only in a log line. Stateless - it forwards to the static drift counter, exactly as
- * {@link SpoolObservability} forwards to the installed spool store - so a deployment that never sets {@code harden}
- * simply reports a zero counter.
+ * overview, not only in a log line. Stateless - it reads the node-wide drift counter, what this node's screens have
+ * recorded - so a deployment that never sets {@code harden} simply reports a zero counter.
  *
  * <p>It reports the screens' other quiet fact beside it: {@code jenreg.gateway.screen.incomplete}, the artifacts
  * served on a screen a bound stopped short of the whole body. That one is not hardened-only - both proxy legs

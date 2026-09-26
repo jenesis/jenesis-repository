@@ -1,5 +1,7 @@
 package build.jenesis.repository.management.web;
 
+import java.util.Objects;
+import java.util.Arrays;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.CredentialContext;
@@ -12,6 +14,7 @@ import build.jenesis.repository.observation.ObservabilityReport;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Tenants;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -54,10 +57,10 @@ public class ManagementWebConfig {
     }
 
     @Bean
-    public ObservabilityAdminController observabilityAdminController() {
-        // The running server renders the ServiceLoader-discovered sources; a disabled/absent source contributes
-        // nothing, so the read degrades to whatever is actually installed - the same seam /actuator/observability uses.
-        return new ObservabilityAdminController(ObservabilityReport::discover);
+    public ObservabilityAdminController observabilityAdminController(ConfigurableListableBeanFactory beans) {
+        // This context's report: the discovered sources and every source among the singletons it has built; a
+        // disabled or absent source contributes nothing - the same seam /actuator/observability uses.
+        return new ObservabilityAdminController(() -> ObservabilityReport.of(Arrays.stream(beans.getSingletonNames()).map(beans::getSingleton).filter(Objects::nonNull).toList()));
     }
 
     @Bean

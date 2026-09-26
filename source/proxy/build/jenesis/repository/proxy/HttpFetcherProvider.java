@@ -21,12 +21,9 @@ public final class HttpFetcherProvider implements FetcherProvider {
     @Override
     public Optional<ProxyFormat.Fetcher> create(UnaryOperator<String> config) {
         RevalidatingFetcher revalidating = new RevalidatingFetcher(new HttpFetcher());
-        RevalidatingFetcher.install(revalidating);              // the discovered observability reads these
         Duration missTtl = missTtl(config.apply("proxy-miss-ttl"));
         if (missTtl.compareTo(Duration.ZERO) > 0) {
-            NegativeCachingFetcher caching = new NegativeCachingFetcher(revalidating, missTtl);
-            NegativeCachingFetcher.install(caching);
-            return Optional.of(caching);
+            return Optional.of(new NegativeCachingFetcher(revalidating, missTtl));
         }
         return Optional.of(revalidating);
     }

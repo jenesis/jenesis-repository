@@ -9,7 +9,6 @@ import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.maintenance.StorageNamespaces;
-import build.jenesis.repository.observation.ObservabilityReport;
 import build.jenesis.repository.observation.SpiCatalog;
 import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.PostureReport;
@@ -290,15 +289,6 @@ public class SettingsAdmin {
         return ModuleCapability.catalog(effective, storedModules);
     }
 
-    /** The whole collected observability report - every self-describing health check, metric and background-task
-     *  status a {@code ServiceLoader}-discovered {@code ObservabilitySource} reports, name-sorted and each carrying its
-     *  registration description - the plain, no-graphs overview the metrics-overview page renders and the same document
-     *  the {@code /api/admin/observability} admin API returns. Collected once through {@link
-     *  ObservabilityReport#discover()}; a disabled or absent source contributes nothing, so the report degrades
-     *  gracefully to whatever is installed. Super-admin, alongside the modules and SPI-catalogue screens. */
-    public ObservabilityReport observability() {
-        return ObservabilityReport.discover();
-    }
 
     /** The security-posture screen's model for a named tenant: every potentially-unsafe configuration a
      *  {@code ServiceLoader}-discovered {@code SafetyAdvisor} raises against the effective configuration, each naming

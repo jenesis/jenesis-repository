@@ -23,23 +23,10 @@ import build.jenesis.repository.observation.ObservabilitySource;
  */
 public final class NodeConsistencyObservability implements ObservabilitySource {
 
-    private static final AtomicReference<NodeConsistency> INSTALLED = new AtomicReference<>();
-
     private final NodeConsistency check;
 
     public NodeConsistencyObservability(NodeConsistency check) {
         this.check = Objects.requireNonNull(check, "check");
-    }
-
-    /** The discovered, no-argument form the report loads through {@code ServiceLoader}: reports from the
-     *  {@linkplain #install installed} check, and nothing before one is installed. */
-    public NodeConsistencyObservability() {
-        this.check = null;
-    }
-
-    /** Register the live consistency check the discovered form reports from; the last registration wins. */
-    public static void install(NodeConsistency check) {
-        INSTALLED.set(Objects.requireNonNull(check, "check"));
     }
 
     @Override
@@ -79,12 +66,8 @@ public final class NodeConsistencyObservability implements ObservabilitySource {
     /** The current report, or {@code null} when the store cannot be read - the graceful "report nothing" path that
      *  keeps the overview from failing on a transient store error. */
     private ConsistencyReport report() {
-        NodeConsistency live = check != null ? check : INSTALLED.get();
-        if (live == null) {
-            return null;                                        // nothing installed: no signal, not a healthy one
-        }
         try {
-            return live.report(System.currentTimeMillis());
+            return check.report(System.currentTimeMillis());
         } catch (RuntimeException unavailable) {
             return null;
         }

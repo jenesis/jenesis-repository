@@ -145,4 +145,47 @@ class ObservabilityReportTest {
         assertThat(report.tasks()).extracting(TaskStatus::name).contains("jenreg.gc.sweep");
         assertThat(report.overall()).isEqualTo(Health.DEGRADED);
     }
+
+    /** A source a context owns, reporting one gauge at the value it was built with. */
+    private record Owned(double value) implements ObservabilitySource {
+
+        @Override
+        public List<Metric> metrics() {
+            return List.of(Metric.gauge("jenreg.owned.value", "The value this instance was built with", value, ""));
+        }
+    }
+
+    @Test
+    void a_context_reports_the_sources_it_owns_beside_the_discovered_ones_and_ignores_everything_else() {
+        Owned owned = new Owned(7);
+
+        ObservabilityReport report = ObservabilityReport.of(List.of(owned, "a bean that is no source", owned));
+
+        assertThat(report.metrics()).extracting(Metric::name)
+                .as("its own source once, however often it holds it, and the discovered ones beside it")
+                .containsOnlyOnce("jenreg.owned.value")
+                .contains("jenreg.quota.used.bytes");
+    }
+
+    @Test
+    void two_contexts_in_one_jvm_each_report_their_own_instance() {
+        assertThat(ObservabilityReport.of(List.of(new Owned(1))).metrics())
+                .filteredOn(metric -> metric.name().equals("jenreg.owned.value"))
+                .singleElement().extracting(Metric::value).isEqualTo(1.0);
+        assertThat(ObservabilityReport.of(List.of(new Owned(2))).metrics())
+                .filteredOn(metric -> metric.name().equals("jenreg.owned.value"))
+                .singleElement().extracting(Metric::value).isEqualTo(2.0);
+    }
+
+    @Test
+    void an_owned_source_takes_the_place_of_a_discovered_one_of_its_class() {
+        SampleObservabilitySource owned = new SampleObservabilitySource();
+
+        ObservabilityReport report = ObservabilityReport.of(List.of(owned));
+
+        assertThat(report.healthChecks()).extracting(HealthCheck::name)
+                .as("the context's own instance reports, and the discovered one of the same class does not report "
+                        + "a second time")
+                .containsOnlyOnce("jenreg.gc.worker");
+    }
 }

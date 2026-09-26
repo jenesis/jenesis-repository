@@ -35,10 +35,8 @@ import build.jenesis.repository.store.OwnerOnly;
  *   <li><b>Metrics.</b> It is its own {@link ObservabilitySource}: a bounded {@code jenreg.gateway.spool.bytes} gauge
  *       (spooled bytes vs the size budget - a used-vs-available signal), a bounded {@code jenreg.gateway.spool.count}
  *       gauge (spools in flight vs the concurrency budget) and a {@code jenreg.gateway.spool.exhausted} counter
- *       (budget-exhaustion events, each a 503). The live instance the distribution holds is {@linkplain
- *       #install(SpoolStore) installed} so the ServiceLoader-discovered {@link SpoolObservability} adapter reports its
- *       live gauges without the store touching a meter registry, exactly as {@code RevalidatingFetcher} reports its
- *       cache gauge.</li>
+ *       (budget-exhaustion events, each a 503). The store is its own source, reported from the context that built
+ *       it, without touching a meter registry - as {@code RevalidatingFetcher} reports its cache gauge.</li>
  * </ul>
  *
  * <p><b>Threading and state.</b> The budget counters ({@link #bytesInFlight}, {@link #activeSpools},
@@ -52,11 +50,6 @@ public final class SpoolStore implements ObservabilitySource {
 
     private static final String TEMP_PREFIX = "jenesis-spool-";
     private static final int COPY_BUFFER = 64 * 1024;
-
-    /** The live budgeted spool the distribution holds, so the stateless ServiceLoader {@link SpoolObservability}
-     *  adapter reports its live gauges; empty until {@link #install(SpoolStore)} runs (a deployment with no hardening
-     *  proxy wired reports nothing, degrading gracefully). */
-    private static final AtomicReference<SpoolStore> INSTALLED = new AtomicReference<>();
 
     /**
      * The resource budget a {@link SpoolStore} spends: the total bytes it may hold spooled to temp files across every
@@ -151,17 +144,6 @@ public final class SpoolStore implements ObservabilitySource {
         } catch (NumberFormatException malformed) {
             return fallback;
         }
-    }
-
-    /** Register {@code store} as the live spool the {@link SpoolObservability} adapter reports; the last registration
-     *  wins (there is one spool store per running gateway). */
-    public static void install(SpoolStore store) {
-        INSTALLED.set(Objects.requireNonNull(store, "store"));
-    }
-
-    /** The installed live spool store, if any - the source {@link SpoolObservability} reports from. */
-    static Optional<SpoolStore> installed() {
-        return Optional.ofNullable(INSTALLED.get());
     }
 
     /** The budget this store spends against. */

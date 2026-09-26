@@ -17,8 +17,6 @@ module build.jenesis.repository.usage {
             build.jenesis.repository.server.e2e, build.jenesis.repository.usage.test;
     provides build.jenesis.repository.server.spi.KeyUsageTrackerProvider
             with build.jenesis.repository.usage.BatchingKeyUsageTrackerProvider;
-    provides build.jenesis.repository.observation.ObservabilitySource
-            with build.jenesis.repository.usage.KeyUsageObservability;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.usage.UsageSettingsContributor;
 }

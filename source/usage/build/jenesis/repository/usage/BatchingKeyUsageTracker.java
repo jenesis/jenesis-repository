@@ -34,16 +34,6 @@ import build.jenesis.repository.server.spi.KeyUsageTracker;
 public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsageTracker.Hit>
         implements KeyUsageTracker, ObservabilitySource {
 
-    private static final AtomicReference<BatchingKeyUsageTracker> INSTALLED = new AtomicReference<>();
-
-    public static void install(BatchingKeyUsageTracker instance) {
-        INSTALLED.set(Objects.requireNonNull(instance, "instance"));
-    }
-
-    static Optional<BatchingKeyUsageTracker> installed() {
-        return Optional.ofNullable(INSTALLED.get());
-    }
-
     public record Hit(String tenant, String hash, String address) {
     }
 

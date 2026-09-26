@@ -107,13 +107,16 @@ public class WorkersConfig {
         // (resolveContained) and the other toggles in the same settings write still converge.
         MaintenanceScheduler scheduler = new MaintenanceScheduler(repositories, store,
                 properties.isReadOnly() ? List.of() : MaintenanceTaskProvider.resolve(config),
-                () -> properties.isReadOnly() ? List.of() : MaintenanceTaskProvider.resolveContained(config), config,
+                () -> properties.isReadOnly() ? MaintenanceTaskProvider.Contained.of(List.of())
+                        : MaintenanceTaskProvider.resolveContained(config), config,
                 tenantConfig, leaseTtl(properties.getCleanupLease()), meterRegistry);
-        // Install the live scheduler as the source the discovered MaintenanceObservability adapter reports each enabled
-        // task's last-run / status from - the same install/installed static-holder seam the spool store uses, so the
-        // observation report degrades gracefully to nothing when no scheduler is wired.
-        MaintenanceObservability.install(scheduler);
         return scheduler;
+    }
+
+    /** Each enabled maintenance pass's last run and outcome, reported from the scheduler this context runs. */
+    @Bean
+    public MaintenanceObservability maintenanceObservability(MaintenanceScheduler maintenanceScheduler) {
+        return new MaintenanceObservability(maintenanceScheduler);
     }
 
     /**

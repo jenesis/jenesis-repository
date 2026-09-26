@@ -8,15 +8,17 @@ import build.jenesis.repository.observation.ObservabilityReport;
 import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.walk.store.ArtifactWalkObservability;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The shared-walk engine is its own {@link build.jenesis.repository.observation.ObservabilitySource}: once it has
- * driven a pass it reports {@code jenreg.walk.segments} (a bounded gauge of the pass's done segments against its
- * segment count), {@code jenreg.walk.resumes} (a counter of segments this node reclaimed from an expired holder)
- * and a {@code jenreg.walk.pass} task status; a never-run walk reports nothing at all. Exercised against a real
+ * The shared walk's signals are what this node's walks have seen, whichever walk instance saw it: every walk records
+ * into one node-wide record, and the discovered {@link ArtifactWalkObservability} reports {@code jenreg.walk.segments}
+ * (a bounded gauge of the pass's done segments against its segment count), {@code jenreg.walk.resumes} (a counter of
+ * segments this node reclaimed from an expired holder) and a {@code jenreg.walk.pass} task status. The suites of this
+ * module share one JVM, so a counter is read as what this test's walks added. Exercised against a real
  * {@code FilesystemArtifactStore}, without the server or Micrometer.
  */
 class WalkObservabilityTest {
@@ -25,6 +27,13 @@ class WalkObservabilityTest {
     Path root;
 
     private final MutableClock clock = new MutableClock();
+
+    private final ArtifactWalkObservability signals = new ArtifactWalkObservability();
+
+    private double resumes() {
+        return signals.metrics().stream().filter(metric -> metric.name().equals("jenreg.walk.resumes")).findFirst()
+                .map(Metric::value).orElse(0.0);
+    }
 
     private ArtifactStore store(String name) {
         Path scoped = root.resolve(name);
@@ -39,12 +48,16 @@ class WalkObservabilityTest {
     }
 
     @Test
-    void a_never_run_walk_reports_nothing() {
-        StoreArtifactWalk walk = new StoreArtifactWalk(1000, 32, Duration.ofMinutes(15), clock);
+    void a_walk_that_is_only_resolved_changes_nothing_the_signals_say() throws IOException {
+        ArtifactStore store = store("resolved");
+        seed(store, "a");
+        new StoreArtifactWalk(1000, 1, Duration.ofMinutes(15), clock).walk(store, "test", List.of("publish"), key -> { });
+        List<TaskStatus> statuses = signals.taskStatuses();
 
-        assertThat(walk.metrics()).isEmpty();
-        assertThat(walk.taskStatuses()).isEmpty();
-        assertThat(walk.healthChecks()).isEmpty();
+        // What the capabilities answer does on every request: build one to ask whether it is installed.
+        var _ = new StoreArtifactWalk(1000, 32, Duration.ofMinutes(15), clock);
+
+        assertThat(signals.taskStatuses()).isEqualTo(statuses);
     }
 
     @Test
@@ -52,12 +65,13 @@ class WalkObservabilityTest {
         ArtifactStore store = store("done");
         seed(store, "a", "b", "c");
         StoreArtifactWalk walk = new StoreArtifactWalk(1000, 1, Duration.ofMinutes(15), clock);
+        double resumed = resumes();
 
         List<String> visited = new ArrayList<>();
         walk.walk(store, "test", List.of("publish"), visited::add);
         assertThat(visited).hasSize(3);
 
-        assertThat(walk.metrics()).satisfiesExactlyInAnyOrder(
+        assertThat(signals.metrics()).satisfiesExactlyInAnyOrder(
                 segments -> {
                     assertThat(segments.name()).isEqualTo("jenreg.walk.segments");
                     assertThat(segments.kind()).isEqualTo(Metric.Kind.GAUGE);
@@ -69,12 +83,12 @@ class WalkObservabilityTest {
                 resumes -> {
                     assertThat(resumes.name()).isEqualTo("jenreg.walk.resumes");
                     assertThat(resumes.kind()).isEqualTo(Metric.Kind.COUNTER);
-                    assertThat(resumes.value()).isZero();
+                    assertThat(resumes.value()).as("a clean pass takes nothing over").isEqualTo(resumed);
                     assertThat(resumes.limit()).isEmpty();
                     assertThat(resumes.description()).isNotBlank();
                 });
 
-        assertThat(walk.taskStatuses()).singleElement().satisfies(pass -> {
+        assertThat(signals.taskStatuses()).singleElement().satisfies(pass -> {
             assertThat(pass.name()).isEqualTo("jenreg.walk.pass");
             assertThat(pass.state()).isEqualTo(TaskStatus.State.IDLE);
             assertThat(pass.lastRun()).isNotNull();
@@ -90,9 +104,9 @@ class WalkObservabilityTest {
         StoreArtifactWalk walk = new StoreArtifactWalk(1000, 1, Duration.ofMinutes(15), clock);
         walk.walk(store, "test", List.of("publish"), key -> { });
 
-        assertThat(walk.metrics()).extracting(Metric::name)
+        assertThat(signals.metrics()).extracting(Metric::name)
                 .allSatisfy(name -> assertThat(name).matches("jenreg\\.walk\\..+"));
-        assertThat(walk.taskStatuses()).extracting(TaskStatus::name)
+        assertThat(signals.taskStatuses()).extracting(TaskStatus::name)
                 .allSatisfy(name -> assertThat(name).matches("jenreg\\.walk\\..+"));
     }
 
@@ -103,6 +117,7 @@ class WalkObservabilityTest {
         // checkpoint 1 commits a cursor per key; a crash mid-segment leaves it CLAIMED and expiring, so the same
         // instance's next walk takes the expired segment over from the last committed cursor - a resume.
         StoreArtifactWalk walk = new StoreArtifactWalk(1, 1, Duration.ofMinutes(10), clock);
+        double resumed = resumes();
 
         List<String> before = new ArrayList<>();
         assertThatThrownBy(() -> walk.walk(store, "test", List.of("publish"), key -> {
@@ -111,22 +126,17 @@ class WalkObservabilityTest {
                 throw new IOException("crash mid-segment");
             }
         })).hasMessageContaining("crash mid-segment");
-        assertThat(walk.metrics()).as("the pass is observed from the moment it is joined, crash or not: a reader of "
-                        + "the fleet sees the walk that is under way, not only the one that returned")
-                .filteredOn(metric -> metric.name().equals("jenreg.walk.resumes"))
-                .singleElement().extracting(Metric::value).isEqualTo(0.0);
-        assertThat(walk.taskStatuses()).as("and the pass reads as still running, its segment still claimed")
+        assertThat(resumes()).as("the pass is observed from the moment it is joined, crash or not: a reader of the "
+                        + "fleet sees the walk that is under way, not only the one that returned").isEqualTo(resumed);
+        assertThat(signals.taskStatuses()).as("and the pass reads as still running, its segment still claimed")
                 .singleElement().extracting(TaskStatus::state).isEqualTo(TaskStatus.State.RUNNING);
 
         clock.advance(Duration.ofMinutes(11)); // let the abandoned claim expire
         List<String> after = new ArrayList<>();
-        walk.walk(store, "test", List.of("publish"), after::add);
+        new StoreArtifactWalk(1, 1, Duration.ofMinutes(10), clock).walk(store, "test", List.of("publish"), after::add);
 
-        assertThat(walk.metrics())
-                .filteredOn(metric -> metric.name().equals("jenreg.walk.resumes"))
-                .singleElement()
-                .extracting(Metric::value)
-                .isEqualTo(1.0);
+        assertThat(resumes()).as("a takeover by another walk instance adds to the node's count")
+                .isEqualTo(resumed + 1);
     }
 
     @Test
@@ -136,7 +146,7 @@ class WalkObservabilityTest {
         StoreArtifactWalk walk = new StoreArtifactWalk(1000, 1, Duration.ofMinutes(15), clock);
         walk.walk(store, "test", List.of("publish"), key -> { });
 
-        ObservabilityReport report = ObservabilityReport.from(List.of(walk));
+        ObservabilityReport report = ObservabilityReport.from(List.of(signals));
 
         assertThat(report.metrics()).extracting(Metric::name)
                 .containsExactly("jenreg.walk.resumes", "jenreg.walk.segments"); // name-sorted

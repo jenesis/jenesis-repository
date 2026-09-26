@@ -40,7 +40,6 @@ public final class StoreWalkProvider implements WalkProvider {
                 integer(config, "walk.segments", 32),
                 Duration.ofSeconds(integer(config, "walk.ttl", 900)),
                 Clock.systemUTC());
-        StoreArtifactWalk.install(walk);                        // the discovered observability reads this one
         return Optional.of(walk);
     }
 

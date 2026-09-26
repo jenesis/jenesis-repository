@@ -3,6 +3,7 @@ package build.jenesis.repository.ui;
 import module java.base;
 
 import build.jenesis.repository.observation.ObservabilityReport;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,9 +20,16 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class ObservabilityScreenController {
 
+    private final ConfigurableListableBeanFactory beans;
+
+    public ObservabilityScreenController(ConfigurableListableBeanFactory beans) {
+        this.beans = beans;
+    }
+
+    /** The report of this context: the discovered sources and every source among the singletons it has built. */
     @GetMapping("/ui/observability")
     public String observability(Model model) throws IOException {
-        model.addAttribute("report", ObservabilityReport.discover());
+        model.addAttribute("report", ObservabilityReport.of(Arrays.stream(beans.getSingletonNames()).map(beans::getSingleton).filter(Objects::nonNull).toList()));
         return "console/observability";
     }
 }
