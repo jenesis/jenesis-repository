@@ -900,9 +900,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return false;                                       // a traversal-laced image name is no proxy target: the
                                                                 // same in-format guard the direct manifest/tags/upload
         }                                                       // legs carry, so the proxy leg never leans on the firewall alone
-        String root = upstream.toString();
-        URI url = URI.create((root.endsWith("/") ? root : root + "/") + "v2/" + name
-                + (manifest ? "/manifests/" : "/blobs/") + reference);
+        URI url = upstreamUrl(upstream, name, (manifest ? "/manifests/" : "/blobs/") + reference);
         if (manifest) {
             return proxyManifest(name, reference, accept, exchange, store, url, fetcher);
         }
@@ -929,6 +927,25 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         handle(exchange, store);
         return true;
+    }
+
+    /**
+     * Where an image path is asked for upstream: the registry API at the upstream's root, with the upstream's own path
+     * as a namespace ahead of the image's name. {@code https://ghcr.io/homebrew/core} proxies ghcr.io's
+     * {@code homebrew/core/<name>} - which is what lets Homebrew's bottles, stored there as OCI blobs, pull through a
+     * repository whose images are named by formula alone. A leading {@code v2} segment is the API's own prefix written
+     * into the URL rather than a namespace, and is dropped, so {@code https://registry/v2/acme} names {@code acme}; an
+     * upstream at the root names none, as it always did.
+     */
+    static URI upstreamUrl(URI upstream, String name, String rest) {
+        String namespace = upstream.getRawPath() == null ? "" : upstream.getRawPath().replaceAll("^/+|/+$", "");
+        if (namespace.equals("v2")) {
+            namespace = "";
+        } else if (namespace.startsWith("v2/")) {
+            namespace = namespace.substring("v2/".length());
+        }
+        return URI.create(upstream.getScheme() + "://" + upstream.getRawAuthority() + "/v2/"
+                + (namespace.isEmpty() ? "" : namespace + "/") + name + rest);
     }
 
     /** A manifest is small and its media type comes from the response headers, so it is fetched buffered (not

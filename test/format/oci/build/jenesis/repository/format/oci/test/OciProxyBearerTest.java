@@ -71,6 +71,26 @@ class OciProxyBearerTest {
     }
 
     @Test
+    void an_upstream_path_names_a_namespace_ahead_of_the_image() throws IOException {
+        String type = "application/vnd.oci.image.manifest.v1+json";
+        byte[] manifest = ("{\"mediaType\":\"" + type + "\"}").getBytes(StandardCharsets.UTF_8);
+        for (String upstream : List.of("https://ghcr.example/homebrew/core", "https://ghcr.example/homebrew/core/",
+                "https://ghcr.example/v2/homebrew/core")) {
+            List<String> asked = new ArrayList<>();
+            ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
+                asked.add(url.toString());
+                return Optional.of(new ProxyFormat.Fetched(200, manifest, Map.of("Content-Type", type)));
+            };
+            FakeExchange get = new FakeExchange("GET", "/v2/openssl/3/manifests/3.5.0", new byte[0],
+                    Map.of(), Map.of("Accept", type));
+
+            assertThat(format.proxy(get, store, URI.create(upstream), fetcher)).isTrue();
+            assertThat(asked).as("%s asks for the image inside its namespace", upstream)
+                    .containsExactly("https://ghcr.example/v2/homebrew/core/openssl/3/manifests/3.5.0");
+        }
+    }
+
+    @Test
     void a_401_bearer_realm_pointing_at_a_private_host_is_refused_and_never_fetched() throws IOException {
         String type = "application/vnd.oci.image.manifest.v1+json";
         byte[] manifest = ("{\"mediaType\":\"" + type + "\"}").getBytes(StandardCharsets.UTF_8);

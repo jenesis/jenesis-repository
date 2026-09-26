@@ -40,9 +40,9 @@
  * license and malicious-package screening still key on the coordinate.
  *
  * <p><b>No proxy leg, deliberately.</b> The default community source is not the REST protocol at all - it is a
- * pre-built index package the client downloads - so there is no upstream speaking these routes to pull through. A
- * pull-through against a REST-speaking source is possible and is a separate change; until then this format is hosted
- * only, and its ecosystem fixture declares the proxy rows inapplicable with that reason rather than omitting them.
+ * pre-built, signed index package the client downloads, whose installers live on each vendor's own host - so there is
+ * no upstream speaking these routes to pull through, and no artifact manager proxies it. This format is hosted only by
+ * decision, and its ecosystem fixture declares the proxy rows inapplicable with that reason rather than omitting them.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

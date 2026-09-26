@@ -11,6 +11,15 @@
  * from Homebrew's own hosting, which does use OCI. See {@code HomebrewFormat} for what {@code brew} actually
  * requests and what it does when the answer is a {@code 404}.
  *
+ * <p><b>homebrew-core's own bottles are OCI blobs, and pull through the OCI format rather than this one.</b> brew
+ * replaces ghcr.io's domain in every homebrew-core bottle URL with {@code HOMEBREW_ARTIFACT_DOMAIN}, so with that set
+ * to this repository's base a bottle is asked for at {@code /v2/homebrew/core/<formula>/blobs/sha256:<digest>}: a
+ * repository {@code core} in the tenant {@code homebrew}, defined as {@code proxy https://ghcr.io/homebrew/core},
+ * holds each bottle to its digest and serves it from its store after the first install. brew sends ghcr.io's
+ * anonymous {@code Bearer QQ==} when nothing else is configured, which reaches the repository as a keyless request -
+ * answered for the default tenant alone, so an anonymous mirror makes {@code homebrew} that tenant - and
+ * {@code HOMEBREW_DOCKER_REGISTRY_TOKEN} presents a key instead. The formula API stays where it is.
+ *
  * <p><b>No stored listing, because there is nothing to list.</b> The formula names the file, its checksum and its
  * platform, and the formula lives in a tap - so a bottle domain is asked for one file at a time and never asked
  * what it holds. This is the only format here with no index to maintain.
