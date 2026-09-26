@@ -43,7 +43,10 @@ final class ConsoleAuthorization {
                 .requestMatchers(HttpMethod.POST, "/ui/logout").permitAll()
                 // The destination of the floor at the bottom of this matrix, so it cannot itself be behind it.
                 .requestMatchers("/ui/no-access").authenticated()
-                .requestMatchers("/ui/instances/create", "/ui/instances/delete", "/ui/instances/reclaim").hasRole("SUPERADMIN")
+                .requestMatchers("/ui/instances/create", "/ui/instances/delete").hasRole("SUPERADMIN")
+                // The reclaim sweeps every tenant's build-cache projects, so it is the super-admin's whatever the
+                // project rules below grant a tenant's editors.
+                .requestMatchers(HttpMethod.POST, "/ui/projects/volume-reclaim").hasRole("SUPERADMIN")
                 // Tenant-agnostic - the picker is how a tenant gets selected, so it cannot require one to be
                 // selected already - but NOT merely authenticated. It is the console's front door, and a principal
                 // that is a member nowhere must meet the floor here as it does everywhere else; a rule ahead of
@@ -60,6 +63,8 @@ final class ConsoleAuthorization {
                 // must not become easier to reach by moving, and the route no longer carries the prefix that gated
                 // it. Named one by one so a move is a deliberate decision about access, not a side effect.
                 .requestMatchers("/ui/observability", "/ui/catalog", "/ui/posture").hasRole("SUPERADMIN")
+                // Every tenant's cached reads on the node, and every node's grants: nothing about it is a tenant's.
+                .requestMatchers("/ui/caches", "/ui/caches/**").hasRole("SUPERADMIN")
                 .requestMatchers("/ui/admin/**").access(tenants.require(UserDirectory.Role.ADMIN))
                 // Credential administration (minting keys, OIDC trusts, the lifetime policy) and the
                 // deployment/tenant quota + rate-limit levers are admin-grade, matching the API's manage:write

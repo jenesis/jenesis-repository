@@ -6,8 +6,7 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Administration')}"></header>
-    <p>Console members of tenant <strong th:text="${tenant}">default</strong>.
-        <a href="/ui/projects">&larr; Projects</a></p>
+    <p>Console members of tenant <strong th:text="${tenant}">default</strong>.</p>
 
     <article>
         <h2>Console members</h2>
@@ -172,32 +171,6 @@
         </div>
     </article>
 
-    <article th:if="${isAdmin}">
-        <h2>Read caches on this node</h2>
-        <p><small>Credentials, settings, ceilings and the tenant list are read through a time-bounded cache on each
-            node, so a request pays for nothing twice; a write on this node is seen here at once, and another node's
-            within the ttl. This node is <strong th:text="${node}">node</strong>; every other node keeps its own
-            caches until their ttl.</small></p>
-        <figure th:if="${!caches.isEmpty()}">
-            <table class="app-list">
-                <thead><tr><th scope="col">Cache</th><th scope="col">ttl</th><th scope="col">hits</th>
-                    <th scope="col">misses</th><th scope="col">entries</th></tr></thead>
-                <tbody>
-                <tr th:each="cache : ${caches}">
-                    <td th:text="${cache.name()}">authorization</td>
-                    <td th:text="${cache.ttl()}">PT5M</td>
-                    <td th:text="${cache.hits()}">0</td>
-                    <td th:text="${cache.misses()}">0</td>
-                    <td th:text="${cache.entries()}">0</td>
-                </tr>
-                </tbody>
-            </table>
-        </figure>
-        <form method="post" th:action="@{/ui/admin/caches/clear}"
-              onsubmit="return confirm('Drop every cached entry on this node?');">
-            <button class="secondary outline" type="submit">Clear caches on this node</button>
-        </form>
-    </article>
 </main>
 </body>
 </html>

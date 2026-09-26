@@ -11,6 +11,7 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.format.FormatMarks;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.ui.store.CacheClear;
 import build.jenesis.repository.ui.store.CacheService;
 import build.jenesis.repository.ui.store.ConsoleActor;
 import build.jenesis.repository.ui.store.CredentialService;
@@ -103,12 +104,20 @@ public class DomainConfig {
         return new VolumeReclaim(cacheRootStorage, audit, actor, operatorTenant(environment));
     }
 
+    @Bean
+    public CacheClear cacheClear(Authorization authorization, AuditTrail audit, ConsoleActor actor,
+                                 ConfigurableEnvironment environment) {
+        // What a clear drops belongs to no tenant - every tenant's cached reads on this node, every node's grants -
+        // so it is recorded in the operator scope, as the API's clear is.
+        return new CacheClear(authorization, audit, actor, operatorTenant(environment));
+    }
+
     /**
      * A fixed deployment's one tenant, created at boot when the store does not hold it yet.
      *
      * <p>A fixed deployment serves exactly one tenant, named by {@code jenreg.default-tenant}, and the console lists
      * tenants from the store - where a tenant appears only once something is written under it. On a fresh store the
-     * console therefore listed none, and an operator signing in for the first time was sent to the instances screen
+     * console therefore listed none, and an operator signing in for the first time was sent to the tenants screen
      * to create the one tenant the deployment already serves, before any other screen would open. Creating it here
      * makes a fresh deployment's console usable on first sign-in. A deployment of several tenants names its own,
      * and a read-only one writes nothing, so both are left alone. Its repositories are created by an operator, each
@@ -155,7 +164,8 @@ public class DomainConfig {
 
     /** The deployment-wide operator tenant (operator-tenant, else default-tenant, else
      *  {@link Scopes#DEFAULT_TENANT}): the scope where cross-tenant privileged mutations that belong to no single
-     *  tenant are audited. Shared by the tenant purge and the volume reclaim so the two apply one rule. */
+     *  tenant are audited. Shared by the tenant purge, the volume reclaim and the cache clear so they apply one
+     *  rule. */
     private static String operatorTenant(ConfigurableEnvironment environment) {
         String operatorTenant = environment.getProperty("jenreg.operator-tenant", "");
         return operatorTenant.isBlank()

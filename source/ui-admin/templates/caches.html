@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Caches')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Caches')}"></header>
+    <p><small>Credentials, settings, ceilings and the tenant list are read through a time-bounded cache on each node,
+        so a request pays for nothing twice; a write on this node is seen here at once, and another node's within the
+        ttl. This node is <strong th:text="${node}">node</strong>; every other node keeps its own caches until their
+        ttl.</small></p>
+    <figure th:if="${!caches.isEmpty()}">
+        <table class="app-list">
+            <thead><tr><th scope="col">Cache</th><th scope="col">ttl</th><th scope="col" class="app-list__num">Hits</th>
+                <th scope="col" class="app-list__num">Misses</th><th scope="col" class="app-list__num">Entries</th></tr></thead>
+            <tbody>
+            <tr th:each="cache : ${caches}">
+                <td th:text="${cache.name()}">authorization</td>
+                <td th:text="${cache.ttl()}">PT5M</td>
+                <td class="app-list__num" th:text="${cache.hits()}">0</td>
+                <td class="app-list__num" th:text="${cache.misses()}">0</td>
+                <td class="app-list__num" th:text="${cache.entries()}">0</td>
+            </tr>
+            </tbody>
+        </table>
+    </figure>
+    <th:block th:if="${caches.isEmpty()}">
+        <div th:replace="~{base :: empty('No read cache is open on this node yet.')}"></div>
+    </th:block>
+    <form method="post" th:action="@{/ui/caches/clear}">
+        <button th:replace="~{base :: dangerButton('Clear caches on this node', 'Drop every cached entry on this node, and the cached grants on every node?')}">Clear caches on this node</button>
+    </form>
+</main>
+</body>
+</html>

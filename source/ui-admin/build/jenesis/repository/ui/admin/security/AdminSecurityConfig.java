@@ -20,12 +20,12 @@ import org.springframework.security.web.authentication.LoginUrlAuthenticationEnt
  * enabled), with the login <em>mechanism</em> kept out of this chain. This config owns the authorization rules, the
  * entry point and logout, and applies every {@link LoginContributor} bean on the shared {@code HttpSecurity} - so a
  * mechanism (OAuth2/OIDC via {@code OAuth2ClientConfig}, SAML, key-login) plugs its own login in rather than being
- * wired here. Tenant lifecycle ({@code /instances/create}, {@code /delete}, {@code /reclaim}) needs an env
- * super-admin; the per-tenant admin area ({@code /admin/**}) needs admin in the selected tenant; other mutations need
- * editor; the tenant-scoped console reads (the repository and project pages) need viewer in the selected tenant, so an
- * offboarded member with a live session loses read access on the next request rather than keeping it until the session
- * expires; the tenant-agnostic reads (the instance picker, login) need only authentication. The per-tenant decisions
- * are made by {@link TenantAuthorization}
+ * wired here. Tenant lifecycle ({@code /instances/create}, {@code /delete}) and the reclaim across every tenant's
+ * build cache ({@code /projects/volume-reclaim}) need an env super-admin; the per-tenant admin area ({@code /admin/**})
+ * needs admin in the selected tenant; other mutations need editor; the tenant-scoped console reads (the repository and
+ * project pages) need viewer in the selected tenant, so an offboarded member with a live session loses read access on
+ * the next request rather than keeping it until the session expires; the tenant-agnostic reads (the instance picker,
+ * login) need only authentication. The per-tenant decisions are made by {@link TenantAuthorization}
  * against the tenant the session has selected. With no contributor present, login is disabled - the app still starts
  * and shows a "not configured" notice on {@code /login}.
  */

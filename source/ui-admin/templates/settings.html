@@ -26,187 +26,17 @@
         </th:block>
     </article>
 
-    <article>
-        <h2>Repository definitions</h2>
-        <p><small>Named repositories routed at runtime, written in clauses: <code>writable</code> accepts uploads,
-            and each <code>fallback &lt;url&gt; [nocache] [harden] [unscreened]</code> or
-            <code>fallback &lt;repository&gt;</code> is consulted in order on a local miss. They add to or override
-            the deployment's file-configured repositories and route on the next request.</small></p>
-        <figure th:if="${!repositories.isEmpty()}">
-        <table class="app-list">
-            <thead>
-            <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Definition</th>
-                <th scope="col"><span class="app-sr-only">Actions</span></th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="e : ${repositories}">
-                <td><code th:text="${e.key}">name</code></td>
-                <td><code th:text="${e.value}">spec</code></td>
-                <td>
-                    <form method="post" th:action="@{/ui/settings/repositories/remove}" style="margin:0">
-                        <input type="hidden" name="name" th:value="${e.key}">
-                        <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The definition is removed; requests routed through it stop resolving until it is defined again.')}">Remove</button>
-                    </form>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-        </figure>
-        <form method="post" th:action="@{/ui/settings/repositories}" class="grid">
-            <input name="name" placeholder="name" required pattern="[A-Za-z0-9_-]+">
-            <input name="definition" placeholder="writable | fallback <url> | fallback a fallback b" required>
-            <button type="submit">Save</button>
-        </form>
-    </article>
-
-    <article>
-        <h2>Format upstreams</h2>
-        <p><small>The proxy upstream each format pulls its local misses through. A format fetches nothing from
-            anywhere until one is named here.</small></p>
-        <figure th:if="${!upstreams.isEmpty()}">
-        <table class="app-list">
-            <thead>
-            <tr>
-                <th scope="col">Format</th>
-                <th scope="col">Upstream</th>
-                <th scope="col"><span class="app-sr-only">Actions</span></th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="e : ${upstreams}">
-                <td><code th:text="${e.key}">format</code></td>
-                <td><code th:text="${e.value}">url</code></td>
-                <td>
-                    <form method="post" th:action="@{/ui/settings/upstreams/remove}" style="margin:0">
-                        <input type="hidden" name="format" th:value="${e.key}">
-                        <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The proxy upstream is removed; misses stop being pulled through until it is set again.')}">Remove</button>
-                    </form>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-        </figure>
-        <figure th:if="${!suggestedUpstreams.isEmpty()}">
-        <table class="app-list">
-            <caption><small>Public registries the installed formats know - none is fetched from until it is used
-                here.</small></caption>
-            <thead>
-            <tr>
-                <th scope="col">Format</th>
-                <th scope="col">Public registry</th>
-                <th scope="col"><span class="app-sr-only">Actions</span></th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="e : ${suggestedUpstreams}">
-                <td><code th:text="${e.key}">format</code></td>
-                <td><code th:text="${e.value}">url</code></td>
-                <td>
-                    <form method="post" th:action="@{/ui/settings/upstreams}" style="margin:0">
-                        <input type="hidden" name="format" th:value="${e.key}">
-                        <input type="hidden" name="url" th:value="${e.value}">
-                        <button type="submit" class="secondary"
-                                th:attr="aria-label='Use ' + ${e.value} + ' for ' + ${e.key}">Use</button>
-                    </form>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-        </figure>
-        <form method="post" th:action="@{/ui/settings/upstreams}" class="grid">
-            <input name="format" placeholder="format name" required pattern="[A-Za-z0-9_-]+">
-            <input name="url" placeholder="upstream URL" required>
-            <button type="submit">Save</button>
-        </form>
-    </article>
-
-    <article th:if="${capabilities.upstreamCredentials()}">
-        <h2>Upstream credentials</h2>
-        <p><small>Credentials the pull-through proxies send to a private upstream (an internal registry or an
-            authenticated mirror), keyed by host. The secret is write-only - only the hosts are listed, never the
-            credential.</small></p>
-        <figure th:if="${!upstreamAuthHosts.isEmpty()}">
-        <table class="app-list">
-            <thead>
-            <tr>
-                <th scope="col">Host</th>
-                <th scope="col"><span class="app-sr-only">Actions</span></th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="h : ${upstreamAuthHosts}">
-                <td><code th:text="${h}">registry.internal</code></td>
-                <td>
-                    <form method="post" th:action="@{/ui/settings/upstream-auth/remove}" style="margin:0">
-                        <input type="hidden" name="host" th:value="${h}">
-                        <button th:replace="~{base :: deleteButton('Remove', ${h}, 'The stored credential for this host is removed; the secret is not recoverable and must be entered again.')}">Remove</button>
-                    </form>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-        </figure>
-        <form method="post" th:action="@{/ui/settings/upstream-auth}">
-            <div class="grid">
-                <input name="host" placeholder="registry.internal" required pattern="[A-Za-z0-9.-]+">
-                <select name="scheme" aria-label="Authentication scheme">
-                    <option value="basic">basic (username + password)</option>
-                    <option value="bearer">bearer (token)</option>
-                    <option value="header">header (custom name + value)</option>
-                    <option value="aws">aws (ECR or CodeArtifact, issued to this deployment's AWS identity)</option>
-                </select>
-            </div>
-            <div class="grid">
-                <input name="username" placeholder="username (basic)" autocomplete="off">
-                <input name="password" type="password" placeholder="password (basic)" autocomplete="off">
-            </div>
-            <div class="grid">
-                <input name="header" placeholder="header name (header)">
-                <input name="token" type="password" placeholder="token (bearer) or header value" autocomplete="off">
-            </div>
-            <button type="submit">Save credential</button>
-        </form>
-    </article>
-
-    <article>
-        <h2>Backup &amp; restore</h2>
-        <p><small>Download every stored setting as one JSON bundle, or restore one - the same bundle the
-            <code>/api/settings/export</code> endpoint and the CLI produce. The bundle is credential-free by
-            construction - every secret-kind setting is excluded, so a stored secret never travels in the backup. An
-            import is validated first and refused whole if any value would not resolve, then it replaces the current
-            stored settings.</small></p>
-        <a class="secondary" role="button" th:href="@{/ui/settings/export}" download="jenesis-settings.json">Download
-            settings bundle</a>
-        <!--/* The CSRF token rides in the action URL, not only in the body: this is the one multipart form in the
-             console, and with Spring's multipart resolver deliberately off everywhere (it would drain an artifact
-             upload body before a format read it) nothing parses the body before the CsrfFilter runs, so a
-             token hidden in the body would never be seen. The body is read by the product's own bounded multipart
-             reader in SettingsController instead. */-->
-        <form method="post" th:action="@{/ui/settings/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
-              onsubmit="return window.confirm('Restore settings from this bundle? It replaces the current stored settings.');">
-            <input type="file" name="bundle" accept="application/json,.json" required
-                   aria-label="Settings bundle to import">
-            <button type="submit">Import bundle</button>
-        </form>
-    </article>
-
     <script>
         // In-memory option search: a client-side filter matching each knob's key *and* its
         // documentation text, so a setting is found by what it does, not only its name. Purely on the
         // catalogue already rendered - no request, no server round-trip. Each `.setting` carries a
         // `data-search` string of its key + label + description; a group collapses when all its knobs
-        // are filtered out, and the management panels below the catalogue (repositories, upstreams,
-        // credentials - not documented option knobs) step aside while a filter is active, so the
-        // result stays focused on matching options.
+        // are filtered out.
         (function () {
             var input = document.getElementById('setting-filter');
             if (!input) return;
             var settings = Array.prototype.slice.call(document.querySelectorAll('.setting'));
             var groups = Array.prototype.slice.call(document.querySelectorAll('.setting-group'));
-            var others = Array.prototype.slice.call(document.querySelectorAll('main > article:not(.setting-group)'));
             var noMatch = document.getElementById('setting-nomatch');
             function apply() {
                 var query = input.value.trim().toLowerCase();
@@ -220,7 +50,6 @@
                 groups.forEach(function (group) {
                     group.hidden = !group.querySelector('.setting:not([hidden])');
                 });
-                others.forEach(function (panel) { panel.hidden = query !== ''; });
                 if (noMatch) noMatch.hidden = query === '' || anyVisible;
             }
             input.addEventListener('input', apply);

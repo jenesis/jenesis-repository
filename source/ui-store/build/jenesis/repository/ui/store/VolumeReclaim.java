@@ -4,9 +4,9 @@ import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.audit.AuditTrail;
 
 /**
- * The super-admin, volume-wide disk reclaim behind the instances screen: a least-recently-used sweep across every
- * tenant's cache on the shared root storage until the free-space target is met - the cross-tenant counterpart of the
- * per-project {@link CacheService} eviction, which the instances screen owns precisely because it spans tenants (see
+ * The super-admin, volume-wide disk reclaim behind the projects screen's cache-volume section: a least-recently-used
+ * sweep across every tenant's cache on the shared root storage until the free-space target is met - the cross-tenant
+ * counterpart of the per-project {@link CacheService} eviction, kept apart from it because it spans tenants (see
  * {@link CacheService}'s note that cross-tenant reclaim lives here, not in the tenant-confined cache service). It runs
  * the shared {@link Eviction#reclaim} policy and, because a reclaim is a privileged destructive mutation that deletes
  * cache entries across every tenant, writes an audit event (§6).

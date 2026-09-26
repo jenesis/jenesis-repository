@@ -49,11 +49,25 @@ public class SettingsController {
     @GetMapping("/ui/settings")
     public String list(Model model) throws IOException {
         model.addAttribute("groups", settings.groups());
+        return "settings";
+    }
+
+    /** Where the deployment fetches what it does not hold: the format upstreams, the credentials sent to private
+     *  ones and the repository routing that names them. A page of its own rather than panels under the settings
+     *  catalogue, because naming an upstream is a step every proxying deployment takes. */
+    @GetMapping("/ui/settings/upstreams")
+    public String upstreams(Model model) throws IOException {
         model.addAttribute("repositories", settings.repositories());
         model.addAttribute("upstreams", settings.upstreams());
         model.addAttribute("suggestedUpstreams", settings.suggestedUpstreams());
         model.addAttribute("upstreamAuthHosts", settings.upstreamCredentialHosts());
-        return "settings";
+        return "upstreams";
+    }
+
+    /** The deployment settings bundle: its download and the restore that replaces every stored setting. */
+    @GetMapping("/ui/settings/backup")
+    public String backup() {
+        return "backup";
     }
 
     /** The modules console: the installed and enabled state of every discovered module, its contributed settings beneath
@@ -173,7 +187,7 @@ public class SettingsController {
         } catch (IOException | RuntimeException e) {
             redirect.addFlashAttribute("error", "Could not import the settings bundle: " + e.getMessage());
         }
-        return "redirect:/ui/settings";
+        return "redirect:/ui/settings/backup";
     }
 
     /**
@@ -240,14 +254,14 @@ public class SettingsController {
                                 RedirectAttributes redirect) throws IOException {
         settings.setRepository(name, definition);
         redirect.addFlashAttribute("message", "Saved repository '" + name + "'.");
-        return "redirect:/ui/settings";
+        return "redirect:/ui/settings/upstreams";
     }
 
     @PostMapping("/ui/settings/repositories/remove")
     public String removeRepository(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
         settings.removeRepository(name);
         redirect.addFlashAttribute("message", "Removed repository '" + name + "'.");
-        return "redirect:/ui/settings";
+        return "redirect:/ui/settings/upstreams";
     }
 
     @PostMapping("/ui/settings/upstreams")
@@ -256,7 +270,7 @@ public class SettingsController {
                               RedirectAttributes redirect) throws IOException {
         settings.setUpstream(format, url);
         redirect.addFlashAttribute("message", "Saved upstream for '" + format + "'.");
-        return "redirect:/ui/settings";
+        return "redirect:/ui/settings/upstreams";
     }
 
     @PostMapping("/ui/settings/upstreams/remove")
@@ -264,7 +278,7 @@ public class SettingsController {
             throws IOException {
         settings.removeUpstream(format);
         redirect.addFlashAttribute("message", "Removed upstream for '" + format + "'.");
-        return "redirect:/ui/settings";
+        return "redirect:/ui/settings/upstreams";
     }
 
     @PostMapping("/ui/settings/upstream-auth")
@@ -277,7 +291,7 @@ public class SettingsController {
                                         RedirectAttributes redirect) throws IOException {
         settings.setUpstreamCredential(host, scheme, username, password, token, header);
         redirect.addFlashAttribute("message", "Stored an upstream credential for '" + host + "'.");
-        return "redirect:/ui/settings";
+        return "redirect:/ui/settings/upstreams";
     }
 
     @PostMapping("/ui/settings/upstream-auth/remove")
@@ -285,6 +299,6 @@ public class SettingsController {
             throws IOException {
         settings.removeUpstreamCredential(host);
         redirect.addFlashAttribute("message", "Removed the upstream credential for '" + host + "'.");
-        return "redirect:/ui/settings";
+        return "redirect:/ui/settings/upstreams";
     }
 }

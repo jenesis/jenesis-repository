@@ -14,7 +14,7 @@ import build.jenesis.repository.walk.Traversal;
  * selected tenant, so this service simply lists projects with their stats, creates a project, edits
  * its {@code cache.properties} (size / lru / ttl), and runs per-project eviction - all within that one
  * tenant. Access control is not per project: credentials live under {@code .users/} and grant projects
- * by role. Cross-tenant disk reclaim is a super-admin concern and lives with the instances screen.
+ * by role. Cross-tenant disk reclaim is a super-admin concern and lives in {@link VolumeReclaim}.
  */
 public class CacheService {
 

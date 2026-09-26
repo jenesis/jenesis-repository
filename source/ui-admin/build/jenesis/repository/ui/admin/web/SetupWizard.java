@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
  * The first-run setup guide's decisions: whether a session is sent to it, and what it renders.
  *
  * <p><b>The redirect keys on the starter credential, not on the store.</b> A super-admin whose session is on the
- * starter credential ({@link StarterCredential}) lands on {@code /setup} instead of the instances screen - once per
+ * starter credential ({@link StarterCredential}) lands on {@code /setup} instead of the tenants screen - once per
  * session, since the screen is skippable and the skip is remembered for the session - for as long as the
  * {@value #SETTING} dial is on. It deliberately does not key on "no runtime configuration stored yet": that state
  * is what the boot log's hardening advice reads, and a dial that also meant it would be a second source of truth for

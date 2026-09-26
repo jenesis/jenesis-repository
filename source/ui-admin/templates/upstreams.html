@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Upstreams')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Upstreams')}"></header>
+    <p><small>Where the deployment fetches what it does not hold. Nothing is proxied from anywhere until an upstream
+        is named here, so this is a step every proxying deployment takes.</small></p>
+
+    <article>
+        <h2>Format upstreams</h2>
+        <p><small>The proxy upstream each format pulls its local misses through. A format fetches nothing from
+            anywhere until one is named here.</small></p>
+        <figure th:if="${!upstreams.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Format</th>
+                <th scope="col">Upstream</th>
+                <th scope="col"><span class="app-sr-only">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${upstreams}">
+                <td><code th:text="${e.key}">format</code></td>
+                <td><code th:text="${e.value}">url</code></td>
+                <td>
+                    <form method="post" th:action="@{/ui/settings/upstreams/remove}" style="margin:0">
+                        <input type="hidden" name="format" th:value="${e.key}">
+                        <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The proxy upstream is removed; misses stop being pulled through until it is set again.')}">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+        <figure th:if="${!suggestedUpstreams.isEmpty()}">
+        <table class="app-list">
+            <caption><small>Public registries the installed formats know - none is fetched from until it is used
+                here.</small></caption>
+            <thead>
+            <tr>
+                <th scope="col">Format</th>
+                <th scope="col">Public registry</th>
+                <th scope="col"><span class="app-sr-only">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${suggestedUpstreams}">
+                <td><code th:text="${e.key}">format</code></td>
+                <td><code th:text="${e.value}">url</code></td>
+                <td>
+                    <form method="post" th:action="@{/ui/settings/upstreams}" style="margin:0">
+                        <input type="hidden" name="format" th:value="${e.key}">
+                        <input type="hidden" name="url" th:value="${e.value}">
+                        <button type="submit" class="secondary"
+                                th:attr="aria-label='Use ' + ${e.value} + ' for ' + ${e.key}">Use</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+        <form method="post" th:action="@{/ui/settings/upstreams}" class="grid">
+            <input name="format" placeholder="format name" required pattern="[A-Za-z0-9_-]+">
+            <input name="url" placeholder="upstream URL" required>
+            <button type="submit">Save</button>
+        </form>
+    </article>
+
+    <article th:if="${capabilities.upstreamCredentials()}">
+        <h2>Upstream credentials</h2>
+        <p><small>Credentials the pull-through proxies send to a private upstream (an internal registry or an
+            authenticated mirror), keyed by host. The secret is write-only - only the hosts are listed, never the
+            credential.</small></p>
+        <figure th:if="${!upstreamAuthHosts.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Host</th>
+                <th scope="col"><span class="app-sr-only">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="h : ${upstreamAuthHosts}">
+                <td><code th:text="${h}">registry.internal</code></td>
+                <td>
+                    <form method="post" th:action="@{/ui/settings/upstream-auth/remove}" style="margin:0">
+                        <input type="hidden" name="host" th:value="${h}">
+                        <button th:replace="~{base :: deleteButton('Remove', ${h}, 'The stored credential for this host is removed; the secret is not recoverable and must be entered again.')}">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+        <form method="post" th:action="@{/ui/settings/upstream-auth}">
+            <div class="grid">
+                <input name="host" placeholder="registry.internal" required pattern="[A-Za-z0-9.-]+">
+                <select name="scheme" aria-label="Authentication scheme">
+                    <option value="basic">basic (username + password)</option>
+                    <option value="bearer">bearer (token)</option>
+                    <option value="header">header (custom name + value)</option>
+                    <option value="aws">aws (ECR or CodeArtifact, issued to this deployment's AWS identity)</option>
+                </select>
+            </div>
+            <div class="grid">
+                <input name="username" placeholder="username (basic)" autocomplete="off">
+                <input name="password" type="password" placeholder="password (basic)" autocomplete="off">
+            </div>
+            <div class="grid">
+                <input name="header" placeholder="header name (header)">
+                <input name="token" type="password" placeholder="token (bearer) or header value" autocomplete="off">
+            </div>
+            <button type="submit">Save credential</button>
+        </form>
+    </article>
+
+    <article>
+        <h2>Repository routing</h2>
+        <p><small>How a repository answers a local miss, written in clauses: <code>writable</code> accepts uploads,
+            and each <code>fallback &lt;url&gt; [nocache] [harden] [unscreened]</code> or
+            <code>fallback &lt;repository&gt;</code> is consulted in order. A definition is the deployment's and is
+            keyed by name, so it routes the repository of that name in every tenant; it adds to or overrides the
+            file-configured repositories and routes on the next request.</small></p>
+        <figure th:if="${!repositories.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Definition</th>
+                <th scope="col"><span class="app-sr-only">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${repositories}">
+                <td><code th:text="${e.key}">name</code></td>
+                <td><code th:text="${e.value}">spec</code></td>
+                <td>
+                    <form method="post" th:action="@{/ui/settings/repositories/remove}" style="margin:0">
+                        <input type="hidden" name="name" th:value="${e.key}">
+                        <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The definition is removed; requests routed through it stop resolving until it is defined again.')}">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+        <form method="post" th:action="@{/ui/settings/repositories}" class="grid">
+            <input name="name" placeholder="name" required pattern="[A-Za-z0-9_-]+">
+            <input name="definition" placeholder="writable | fallback <url> | fallback a fallback b" required>
+            <button type="submit">Save</button>
+        </form>
+    </article>
+
+</main>
+</body>
+</html>

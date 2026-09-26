@@ -36,7 +36,7 @@ public class TenantService {
 
     /** A read-only / audit-free view: the audit seam stands in as the no-op trail and a neutral actor, for the browse
      *  and membership-resolution callers ({@code Memberships}, the login authorization) that only ever list or check
-     *  existence and never create a tenant. A mutating caller (the console's instances screen) uses the audited
+     *  existence and never create a tenant. A mutating caller (the console's tenants screen) uses the audited
      *  constructor below so {@link #create} records the creation. */
     public TenantService(Documents rootStorage) {
         this(rootStorage, AuditTrail.none(), () -> "console");
@@ -55,7 +55,7 @@ public class TenantService {
      *
      * <p>The root listing is paged and its remainder is followed to exhaustion rather than reported: a tenant is
      * provisioned by an env super-admin, the set is not client-inflatable, and every caller of this method - the
-     * instances screen, the accessible-tenants answer, the membership walk - needs all of them or none. The bound
+     * tenants screen, the accessible-tenants answer, the membership walk - needs all of them or none. The bound
      * that matters is the one below it: {@link #exists} no longer lists a scope's children to find out whether any
      * exist.
      */

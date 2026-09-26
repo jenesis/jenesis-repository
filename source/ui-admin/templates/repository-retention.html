@@ -61,12 +61,17 @@
         </th:block>
         <p th:unless="${capabilities.gc()}"><small>Garbage collection is off - no collector module is installed
             or selected, so a cleanup evicts versions but reclaims no storage.</small></p>
+        <!--/* The preview is the everyday action and leads; the run evicts, so it is the danger control and its
+             confirmation says what the last finished preview found - or that there is none to go by. */-->
         <div th:if="${isEditor}" style="display:flex; gap:0.5em">
             <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/cleanup/preview'}">
-                <button class="secondary" type="submit">Preview cleanup</button>
+                <button type="submit">Preview cleanup</button>
             </form>
-            <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/cleanup'}">
-                <button type="submit">Run cleanup now</button>
+            <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/cleanup'}"
+                  th:with="previewed=${plan != null and !plan.running() and plan.failure() == null}">
+                <button th:replace="~{base :: dangerButton('Run cleanup now', ${previewed}
+                        ? |Evict now? The last preview, as of ${plan.finishedAt()}, found ${plan.count()} version(s) to evict.|
+                        : 'Evict now? No finished preview says what this cleanup would evict.')}">Run cleanup now</button>
             </form>
         </div>
     </article>

@@ -216,16 +216,21 @@ public class GlobalControllerAdvice {
         entries.add(new NavEntry("Audit trail", "/ui/admin/audit", Access.ADMIN, Group.ACCESS, "audit"));
         entries.add(new NavEntry("Metrics", "/ui/observability", Access.SUPERADMIN, Group.OPERATIONS));
         entries.add(new NavEntry("Security posture", "/ui/posture", Access.SUPERADMIN, Group.OPERATIONS));
-        entries.add(new NavEntry("Setup", "/ui/setup", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Caches", "/ui/caches", Access.SUPERADMIN, Group.OPERATIONS));
+        // The group's header link opens its first entry, so the everyday catalogue leads and the first-run guide -
+        // reached by the landing redirect until it is done - comes last.
         entries.add(new NavEntry("Settings", "/ui/settings", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Upstreams", "/ui/settings/upstreams", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Tenant settings", "/ui/settings/tenant", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Modules", "/ui/settings/modules", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Installed providers", "/ui/catalog", Access.SUPERADMIN, Group.SETTINGS));
         // Picking a tenant is meaningful only where there is more than one to pick, and the header's tenant name
         // links here too, so a member of several tenants reaches it without the Settings group being theirs.
         if (showInstances(authentication)) {
-            entries.add(new NavEntry("Instances", "/ui/instances", Group.SETTINGS));
+            entries.add(new NavEntry("Tenants", "/ui/instances", Group.SETTINGS));
         }
+        entries.add(new NavEntry("Backup & restore", "/ui/settings/backup", Access.SUPERADMIN, Group.SETTINGS));
+        entries.add(new NavEntry("Setup", "/ui/setup", Access.SUPERADMIN, Group.SETTINGS));
         entries.addAll(capabilities.moduleNav());
         List<RepositoryPage> pages = new ArrayList<>();
         pages.add(new RepositoryPage("Overview", "", Topic.CONTENTS));

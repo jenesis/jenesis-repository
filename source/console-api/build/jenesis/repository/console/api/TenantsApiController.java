@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The deployment's tenants over the API - {@code GET /api/admin/tenants}, and {@code PUT} and {@code DELETE} on
- * {@code /api/admin/tenants/{name}} - which the console's instances screen offered and nothing else did, so creating
+ * {@code /api/admin/tenants/{name}} - which the console's tenants screen offered and nothing else did, so creating
  * a tenant was the one thing only possible by clicking.
  *
  * <p><b>The same implementation as the screen.</b> A creation is {@link TenantService#create} and a deletion is

@@ -6,38 +6,42 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Projects')}"></header>
-    <figure th:unless="${projects.isEmpty()}">
-        <table class="app-list">
-            <thead>
-            <tr>
-                <th scope="col">Name</th>
-                <th scope="col" class="app-list__num">Entries</th>
-                <th scope="col" class="app-list__num">Size on disk</th>
-                <th scope="col">Counted</th>
-                <th scope="col">Size cap</th>
-                <th scope="col">TTL</th>
-            </tr>
-            </thead>
-            <tbody>
-            <!--/* The entries and bytes are the figure the last pass stored, never a sweep of the cache per row:
-                   a project that has never been counted says so, and its page offers the count. */-->
-            <tr th:each="p : ${projects}">
-                <td><a th:href="@{'/ui/projects/' + ${p.name}}" th:text="${p.name}">name</a></td>
-                <td class="app-list__num" th:text="${p.stats.known()} ? ${p.entryCount} : '?'">0</td>
-                <td class="app-list__num" th:text="${p.stats.known()} ? ${@format.bytes(p.totalBytes)} : '?'">0 B</td>
-                <td><small th:if="${p.stats.counting()}">counting&hellip;</small>
-                    <small th:if="${!p.stats.counting() and p.stats.known()}" th:text="${p.stats.countedAt()}">time</small>
-                    <small th:if="${!p.stats.counting() and !p.stats.known()}">never</small></td>
-                <td th:text="${#strings.isEmpty(p.sizeCap)} ? '-' : ${p.sizeCap}">-</td>
-                <td th:text="${#strings.isEmpty(p.ttl)} ? '-' : ${p.ttl}">-</td>
-            </tr>
-            </tbody>
-        </table>
-    </figure>
-    <th:block th:if="${projects.isEmpty()}">
-        <div th:replace="~{base :: empty('No projects yet. Create one below to start caching builds.')}"></div>
-    </th:block>
-
+    <!--/* The projects and the way to add one, side by side like the repositories. */-->
+    <div class="app-panels app-panels--lead">
+    <article>
+        <h2>Current projects</h2>
+        <figure th:unless="${projects.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col" class="app-list__num">Entries</th>
+                    <th scope="col" class="app-list__num">Size on disk</th>
+                    <th scope="col">Counted</th>
+                    <th scope="col">Size cap</th>
+                    <th scope="col">TTL</th>
+                </tr>
+                </thead>
+                <tbody>
+                <!--/* The entries and bytes are the figure the last pass stored, never a sweep of the cache per row:
+                       a project that has never been counted says so, and its page offers the count. */-->
+                <tr th:each="p : ${projects}">
+                    <td><a th:href="@{'/ui/projects/' + ${p.name}}" th:text="${p.name}">name</a></td>
+                    <td class="app-list__num" th:text="${p.stats.known()} ? ${p.entryCount} : '?'">0</td>
+                    <td class="app-list__num" th:text="${p.stats.known()} ? ${@format.bytes(p.totalBytes)} : '?'">0 B</td>
+                    <td><small th:if="${p.stats.counting()}">counting&hellip;</small>
+                        <small th:if="${!p.stats.counting() and p.stats.known()}" th:text="${p.stats.countedAt()}">time</small>
+                        <small th:if="${!p.stats.counting() and !p.stats.known()}">never</small></td>
+                    <td th:text="${#strings.isEmpty(p.sizeCap)} ? '-' : ${p.sizeCap}">-</td>
+                    <td th:text="${#strings.isEmpty(p.ttl)} ? '-' : ${p.ttl}">-</td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <th:block th:if="${projects.isEmpty()}">
+            <div th:replace="~{base :: empty('No projects yet. Create one to start caching builds.')}"></div>
+        </th:block>
+    </article>
     <article th:if="${isEditor}">
         <h2>New project</h2>
         <form method="post" th:action="@{/ui/projects}">
@@ -47,6 +51,32 @@
             <button type="submit">Create project</button>
         </form>
     </article>
+    </div>
+
+    <!--/* The volume every tenant's projects share: a super-admin's, set apart under a rule of its own because what it
+         reclaims crosses every tenant rather than belonging to the projects listed above. */-->
+    <section class="app-divide" th:if="${superadmin}" aria-labelledby="volume">
+        <h2 id="volume">Cache volume</h2>
+        <p>
+            <strong th:text="${@format.bytes(usableSpace)}">0 B</strong> free of
+            <strong th:text="${@format.bytes(totalSpace)}">0 B</strong>.
+            Configured target: <span th:text="${minFreeBytes}">0</span> bytes /
+            <span th:text="${minFreePercent}">0</span>%.
+        </p>
+        <p><small>A reclaim runs a least-recently-used sweep across every tenant's projects until the target is
+            met.</small></p>
+        <form method="post" th:action="@{/ui/projects/volume-reclaim}">
+            <div class="grid">
+                <label>Min free bytes <small>(blank = configured)</small>
+                    <input name="minFreeBytes" inputmode="numeric">
+                </label>
+                <label>Min free percent <small>(blank = configured)</small>
+                    <input name="minFreePercent" inputmode="numeric">
+                </label>
+            </div>
+            <button th:replace="~{base :: dangerButton('Reclaim now', 'Evict the least recently used cache entries across every tenant until the target is met?')}">Reclaim now</button>
+        </form>
+    </section>
 </main>
 </body>
 </html>

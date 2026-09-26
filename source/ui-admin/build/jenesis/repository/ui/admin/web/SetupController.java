@@ -45,7 +45,7 @@ public class SetupController {
         return "setup";
     }
 
-    /** Skip the guide for this session and land where the console would have: the instances screen. */
+    /** Skip the guide for this session and land where the console would have: the tenants screen. */
     @PostMapping("/ui/setup/skip")
     public String skip(HttpSession session) {
         SetupWizard.skip(session);

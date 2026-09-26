@@ -3,8 +3,6 @@ package build.jenesis.repository.ui.admin.web;
 import module java.base;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.audit.AuditTrail;
-import build.jenesis.repository.store.StoreCache;
-import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.ui.KnownPrincipals;
 import build.jenesis.repository.ui.identity.UserDirectory;
 import build.jenesis.repository.ui.store.ConsoleActor;
@@ -25,8 +23,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * The per-tenant admin screen: manage the current tenant's console members (add/remove viewers,
  * editors and admins, including promoting other admins). The whole screen requires admin in the
  * selected tenant (see the security config): the GET page and the mutating routes alike.
- * Tenant lifecycle and the volume-wide disk reclaim are super-admin concerns and live on the
- * instances screen. Binding names are explicit because the Jenesis javac step does not emit
+ * Tenant lifecycle is a super-admin concern and lives on the tenants screen, the reclaim across every tenant's build
+ * cache on the projects screen. Binding names are explicit because the Jenesis javac step does not emit
  * {@code -parameters}.
  */
 @Controller
@@ -93,8 +91,6 @@ public class AdminController {
         // deployment has never seen: the sign-in is what produces the id to grant to.
         model.addAttribute("knownPrincipals", known.page(null, KNOWN_PAGE));
         model.addAttribute("scimConfigured", new ScimTokens(tenantDocuments()).configured());
-        model.addAttribute("caches", caches());
-        model.addAttribute("node", node());
         return "admin";
     }
 
@@ -179,43 +175,6 @@ public class AdminController {
         audit("group.remove", name);
         redirect.addFlashAttribute("message", "Removed group " + name + " and everything it granted.");
         return "redirect:/ui/admin";
-    }
-
-    /** Drop every read cache on the node that served this request, and every node's authorization cache - the
-     *  console's reach into the same pair the API's {@code POST /api/admin/caches/clear} and the CLI's
-     *  {@code caches clear} make. The listings stay node-local; the grants do not, because the reason to press
-     *  this is usually a revoked credential a peer is still honouring. */
-    @PostMapping("/caches/clear")
-    public String clearCaches(RedirectAttributes redirect) throws IOException {
-        int cleared = StoreCache.clearAll();
-        boolean grants = authorization.invalidateAcrossNodes();
-        audit(AuditActions.CACHES_CLEAR, node() + " (" + cleared + " entries)");
-        redirect.addFlashAttribute("message", "Dropped " + cleared + " cached entries on " + node() + "."
-                + (grants ? " Every node's authorization cache follows within seconds;" : " This deployment enforces"
-                        + " no authorization, so there were no grants to drop;")
-                + " their other caches keep their own until each entry's ttl.");
-        return "redirect:/ui/admin";
-    }
-
-    /** Every read cache on this node, for the screen: name, ttl, hits, misses, entries. */
-    public record CacheRow(String name, String ttl, long hits, long misses, int entries) {
-    }
-
-    private static List<CacheRow> caches() {
-        List<CacheRow> rows = new ArrayList<>();
-        for (StoreCache cache : StoreCache.caches()) {
-            rows.add(new CacheRow(cache.name(), cache.ttl().toString(), cache.hits(), cache.misses(), cache.size()));
-        }
-        rows.sort(Comparator.comparing(CacheRow::name));
-        return rows;
-    }
-
-    private static String node() {
-        try {
-            return InetAddress.getLocalHost().getHostName();
-        } catch (IOException | RuntimeException unknown) {
-            return "this node";
-        }
     }
 
     /**

@@ -53,8 +53,10 @@ public class InstancesControllerTest {
                 selected = tenant;
             }
         };
-        controller = new InstancesController(tenants, purge, new Memberships(rootStorage, Authorization.enforcing(rootStorage.store()), tenants, new MembershipCache()), current,
-                rootStorage, null, null, null);
+        controller = new InstancesController(tenants, purge,
+                new Memberships(rootStorage, Authorization.enforcing(rootStorage.store()), tenants,
+                        new MembershipCache()),
+                current);
     }
 
     @Test

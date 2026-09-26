@@ -7,27 +7,66 @@
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader(${repo})}"></header>
     <p th:replace="~{fragments :: repositoryIdentity(${identity})}"></p>
-    <p><small>What this repository serves, how it is routed and what it published most recently. Everything else about
-        it - its contents, what the gate decided, how long it keeps what it holds - is a page of its own in the
+    <p><small>What this repository serves, what it published most recently and how it is routed. Everything else
+        about it - its contents, what the gate decided, how long it keeps what it holds - is a page of its own in the
         sidebar.</small></p>
 
-    <article id="description">
-        <h2>Description</h2>
-        <p th:unless="${isEditor}" th:text="${description.isEmpty()} ? 'No description.' : ${description}">text</p>
-        <form th:if="${isEditor}" class="setting-edit" method="post"
-              th:action="@{'/ui/repositories/' + ${repo} + '/describe'}">
+    <!--/* The description is what the repository is for, so it reads as text; an editor changes it behind a
+         disclosure rather than meeting an input field as the first thing on the page. */-->
+    <p id="description" th:text="${description.isEmpty()} ? 'No description.' : ${description}">text</p>
+    <details th:if="${isEditor}">
+        <summary>Edit description</summary>
+        <form class="setting-edit" method="post" th:action="@{'/ui/repositories/' + ${repo} + '/describe'}">
             <input name="description" maxlength="280" th:value="${description}" aria-label="Description"
                    placeholder="What this repository is for">
             <button type="submit">Save</button>
         </form>
-    </article>
+    </details>
+    <th:block th:if="${unplaceable != null and !unplaceable.isEmpty()}">
+        <p th:replace="~{base :: alert('Garbage collection refuses this repository: it records ecosystems no installed format can place. See Absent formats below.', 'warn')}"></p>
+    </th:block>
 
+    <article>
+        <h2>Releases</h2>
+        <figure th:unless="${releases.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Coordinate</th>
+                    <th scope="col">Version</th>
+                    <th scope="col">Pinned</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="r : ${releases}">
+                    <!--/* Every release has a screen of its own, whichever way its format stores: the coordinate page
+                         lists the versions and the paths each is served at, for the blobs-namespace formats that have
+                         no folder in the browse tree as much as for the ones that do. */-->
+                    <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem()},coordinate=${r.coordinate()})}"
+                           th:text="${r.coordinate()}">group:artifact</a></td>
+                    <td th:text="${r.version}">1.0.0</td>
+                    <td th:text="${r.pinned} ? 'yes' : ''">yes</td>
+                </tr>
+                </tbody>
+            </table>
+            <!--/* A bounded recent slice of the published set (newest first), never the whole set - the detail hub is an
+                 overview. When more releases exist than this page shows, the count says so and links to the browse page,
+                 which pages the full list; nothing is silently dropped. */-->
+            <p th:if="${releasesMore}"><small>The <span th:text="${releases.size()}">0</span> most recent
+                releases. <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo})}">Browse all &rarr;</a></small></p>
+        </figure>
+        <th:block th:if="${releases.isEmpty()}">
+            <div th:replace="~{base :: empty('No published releases yet.')}"></div>
+        </th:block>
+    </article>
     <article th:if="${shape.configured()}" id="shape">
         <h2>Shape</h2>
         <p><small>How this repository is routed, from its <code>repositories.<span th:text="${repo}">name</span></code>
             definition: whether it accepts uploads and its ordered fallbacks with each one's copy and screening
             policy.</small></p>
         <p><span th:replace="~{fragments :: shapeBadges(${shape})}"></span></p>
+        <p th:if="${isSuperadmin}"><small>Edited on <a th:href="@{/ui/settings/upstreams}">Upstreams</a>. A definition
+            is the deployment's and keyed by name, so it routes the repository of this name in every tenant.</small></p>
         <ul th:if="${!shape.warnings().isEmpty()}" class="app-subsection-error" role="alert" aria-live="polite">
             <li th:each="w : ${shape.warnings()}">⚑ <span th:text="${w}">warning</span></li>
         </ul>
@@ -39,37 +78,6 @@
         <p><small>This repository is a hardening proxy: every untrusted upstream body is spooled and fully screened
             before a byte is released. A body that could not be screened (oversize, stalled, drifted, unparseable, or
             one an inspector failed on) is refused, and appears on the Refused page.</small></p>
-    </article>
-
-    <article th:if="${unplaceable != null and !unplaceable.isEmpty()}">
-        <h2>Absent formats</h2>
-        <!--/* The ecosystems this repository records that no installed format can place. Nothing is ever deleted on
-               absence alone: retention refuses their evictions and the collector refuses the whole repository, so
-               garbage collection stands still until the format returns - or until an operator retires the records
-               here, explicitly. Forgetting makes the collector judge the repository again; the format's unreferenced
-               content becomes ordinary garbage it reclaims, and the format module's orphaned pointers are purged
-               from the Modules screen. */-->
-        <p><small>This repository records data for ecosystem(s) no installed format can place. Their artifacts are
-            unreachable but kept - nothing is deleted on absence - and garbage collection refuses this repository
-            until each is resolved: reinstall (or re-enable) the format, or retire its records here. Retiring lets
-            the collector reclaim the ecosystem's content on its next pass; purge the format module's remaining
-            pointers on the <a th:href="@{/ui/settings/modules}">Modules</a> screen.</small></p>
-        <div th:each="eco : ${unplaceable}" class="app-actions">
-            <code th:text="${eco}">ecosystem</code>
-            <!--/* The retirement runs off the request, so the row says what its last (or current) pass did rather
-                 than leaving a button that appears to do nothing. */-->
-            <small th:if="${retirements != null and retirements.containsKey(eco) and retirements.get(eco).running()}">
-                Retiring now&hellip;</small>
-            <small th:if="${retirements != null and retirements.containsKey(eco) and !retirements.get(eco).running()}"
-                   th:text="${retirements.get(eco).sample().isEmpty()} ? 'Retired.' : ${retirements.get(eco).sample()[0]}">
-                retired</small>
-            <form th:if="${isEditor and (retirements == null or !retirements.containsKey(eco) or !retirements.get(eco).running())}"
-                  method="post" style="display:inline; margin:0" class="app-actions__danger"
-                  th:action="@{'/ui/repositories/' + ${repo} + '/forget-ecosystem'}">
-                <input type="hidden" name="ecosystem" th:value="${eco}">
-                <button th:replace="~{base :: deleteButton('Forget ecosystem', ${eco}, 'Every record of this ecosystem in this repository is retired, and the collector reclaims its content.')}">Forget ecosystem</button>
-            </form>
-        </div>
     </article>
 
     <article th:if="${capabilities.index()}">
@@ -107,46 +115,50 @@
         </th:block>
     </article>
 
-    <article>
-        <h2>Releases</h2>
-        <figure th:unless="${releases.isEmpty()}">
-            <table class="app-list">
-                <thead>
-                <tr>
-                    <th scope="col">Coordinate</th>
-                    <th scope="col">Version</th>
-                    <th scope="col">Pinned</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr th:each="r : ${releases}">
-                    <!--/* Every release has a screen of its own, whichever way its format stores: the coordinate page
-                         lists the versions and the paths each is served at, for the blobs-namespace formats that have
-                         no folder in the browse tree as much as for the ones that do. */-->
-                    <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem()},coordinate=${r.coordinate()})}"
-                           th:text="${r.coordinate()}">group:artifact</a></td>
-                    <td th:text="${r.version}">1.0.0</td>
-                    <td th:text="${r.pinned} ? 'yes' : ''">yes</td>
-                </tr>
-                </tbody>
-            </table>
-            <!--/* A bounded recent slice of the published set (newest first), never the whole set - the detail hub is an
-                 overview. When more releases exist than this page shows, the count says so and links to the browse page,
-                 which pages the full list; nothing is silently dropped. */-->
-            <p th:if="${releasesMore}"><small>The <span th:text="${releases.size()}">0</span> most recent
-                releases. <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo})}">Browse all &rarr;</a></small></p>
-        </figure>
-        <th:block th:if="${releases.isEmpty()}">
-            <div th:replace="~{base :: empty('No published releases yet.')}"></div>
-        </th:block>
-    </article>
-    <section th:if="${isAdmin}" class="app-divide" aria-labelledby="delete-repository">
-        <h2 id="delete-repository">Delete repository</h2>
-        <p><small>Deletes this repository and everything it holds - every artifact, index, staged upload and pin, and
-            what it is defined as. It stops answering at once; the rest is removed in the background.</small></p>
-        <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/delete'}">
-            <button th:replace="~{base :: deleteButton('Delete repository', ${repo}, 'Everything this repository holds is deleted: every artifact, index, staged upload and pin, and what it is defined as.')}">Delete repository</button>
-        </form>
+    <!--/* What ends something: retiring an absent format's records and deleting the repository, together under a
+         rule of their own and below everything the page shows. */-->
+    <section th:if="${isAdmin or (isEditor and unplaceable != null and !unplaceable.isEmpty())}" class="app-divide"
+             aria-labelledby="retire-delete">
+        <h2 id="retire-delete">Retire and delete</h2>
+        <article th:if="${unplaceable != null and !unplaceable.isEmpty()}" id="absent">
+            <h3>Absent formats</h3>
+            <!--/* The ecosystems this repository records that no installed format can place. Nothing is ever deleted on
+                   absence alone: retention refuses their evictions and the collector refuses the whole repository, so
+                   garbage collection stands still until the format returns - or until an operator retires the records
+                   here, explicitly. Forgetting makes the collector judge the repository again; the format's unreferenced
+                   content becomes ordinary garbage it reclaims, and the format module's orphaned pointers are purged
+                   from the Modules screen. */-->
+            <p><small>This repository records data for ecosystem(s) no installed format can place. Their artifacts are
+                unreachable but kept - nothing is deleted on absence - and garbage collection refuses this repository
+                until each is resolved: reinstall (or re-enable) the format, or retire its records here. Retiring lets
+                the collector reclaim the ecosystem's content on its next pass; purge the format module's remaining
+                pointers on the <a th:href="@{/ui/settings/modules}">Modules</a> screen.</small></p>
+            <div th:each="eco : ${unplaceable}" class="app-actions">
+                <code th:text="${eco}">ecosystem</code>
+                <!--/* The retirement runs off the request, so the row says what its last (or current) pass did rather
+                     than leaving a button that appears to do nothing. */-->
+                <small th:if="${retirements != null and retirements.containsKey(eco) and retirements.get(eco).running()}">
+                    Retiring now&hellip;</small>
+                <small th:if="${retirements != null and retirements.containsKey(eco) and !retirements.get(eco).running()}"
+                       th:text="${retirements.get(eco).sample().isEmpty()} ? 'Retired.' : ${retirements.get(eco).sample()[0]}">
+                    retired</small>
+                <form th:if="${isEditor and (retirements == null or !retirements.containsKey(eco) or !retirements.get(eco).running())}"
+                      method="post" style="display:inline; margin:0" class="app-actions__danger"
+                      th:action="@{'/ui/repositories/' + ${repo} + '/forget-ecosystem'}">
+                    <input type="hidden" name="ecosystem" th:value="${eco}">
+                    <button th:replace="~{base :: deleteButton('Forget ecosystem', ${eco}, 'Every record of this ecosystem in this repository is retired, and the collector reclaims its content.')}">Forget ecosystem</button>
+                </form>
+            </div>
+        </article>
+
+        <article th:if="${isAdmin}">
+            <h3>Delete repository</h3>
+            <p><small>Deletes this repository and everything it holds - every artifact, index, staged upload and pin, and
+                what it is defined as. It stops answering at once; the rest is removed in the background.</small></p>
+            <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/delete'}">
+                <button th:replace="~{base :: deleteButton('Delete repository', ${repo}, 'Everything this repository holds is deleted: every artifact, index, staged upload and pin, and what it is defined as.')}">Delete repository</button>
+            </form>
+        </article>
     </section>
 </main>
 </body>

@@ -27,12 +27,13 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
     public Set<String> fragments() {
         // What these templates reach for directly. The brand, the module links and the theme switch are no
         // longer among them: they moved inside the shared shell, so this console asks for the shell and gets them.
-        // Nor is the alert: the sign-in page was the last screen here to render one itself, and that page is now
-        // the shared one. This console still shows alerts - through `messages`, which renders them - but it no
-        // longer reaches for the fragment, and the census is what noticed.
+        // The alert is: the repository overview warns inline when garbage collection refuses the repository.
         return Set.of(ConsoleLayout.HEAD_CONTENTS, ConsoleLayout.SHELL, ConsoleLayout.PAGE_HEADER,
-                ConsoleLayout.MESSAGES, ConsoleLayout.SUBSECTION_ERROR,
+                ConsoleLayout.MESSAGES, ConsoleLayout.SUBSECTION_ERROR, ConsoleLayout.ALERT,
                 ConsoleLayout.EMPTY, ConsoleLayout.DELETE_BUTTON,
+                // A consequential act that is not a deletion - a restore, a reclaim, a cache clear, a cleanup run -
+                // asks through this rather than through a hand-written confirm.
+                ConsoleLayout.DANGER_BUTTON,
                 ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP,
                 // Every screen that starts work off the request path renders this instead of telling the reader to
                 // reload: the rescans, the blast radius, the project count, both cleanup notices and the migration.
