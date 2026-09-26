@@ -69,30 +69,46 @@ public final class CacheConfig {
         }
     }
 
-    /** The configured size cap in bytes (0 = no cap), tolerant of a malformed value like the server. */
+    /** The configured size cap in bytes, 0 when none is set. A value {@link #apply} would have refused - one written
+     *  into the file by hand - is refused here too, naming it, rather than read as "no cap" and left to grow. */
     public static long sizeBytes(Properties properties) {
         String value = properties.getProperty("size");
         if (value == null || value.isBlank()) {
             return 0;
         }
+        long parsed;
         try {
-            return Long.parseLong(value.trim());
+            parsed = Long.parseLong(value.trim());
         } catch (NumberFormatException _) {
-            return 0;
+            throw new IllegalArgumentException(FILE + " sets size=" + value.trim() + ", which is not a whole number "
+                    + "of bytes; the size cap is not enforced until it is fixed");
         }
+        if (parsed < 0) {
+            throw new IllegalArgumentException(FILE + " sets size=" + value.trim() + ", which is negative; the size "
+                    + "cap is not enforced until it is fixed");
+        }
+        return parsed;
     }
 
-    /** The configured ttl as a positive Duration, or null when unset/invalid (mirrors Cache.ttl). */
+    /** The configured ttl, or {@code null} when none is set. A value {@link #apply} would have refused - one written
+     *  into the file by hand - is refused here too, naming it: read as "unset" it silently switched stale-entry
+     *  expiry off, and a typo became the default with nothing said. */
     public static Duration ttlDuration(Properties properties) {
         String value = properties.getProperty("ttl");
         if (value == null || value.isBlank()) {
             return null;
         }
+        Duration duration;
         try {
-            Duration duration = Durations.parse(value);
-            return duration.isZero() || duration.isNegative() ? null : duration;
+            duration = Durations.parse(value);
         } catch (RuntimeException _) {
-            return null;
+            throw new IllegalArgumentException(FILE + " sets ttl=" + value.trim() + ", which is not a duration "
+                    + "(P30D, 30d, PT12H); stale entries are not expired until it is fixed");
         }
+        if (duration.isZero() || duration.isNegative()) {
+            throw new IllegalArgumentException(FILE + " sets ttl=" + value.trim() + ", which is not a positive "
+                    + "duration; stale entries are not expired until it is fixed");
+        }
+        return duration;
     }
 }

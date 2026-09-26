@@ -661,7 +661,7 @@ public class Cache {
                     continue;
                 }
                 Properties config = store.readConfig(name, "cache.properties");
-                Duration ttl = ttl(config);
+                Duration ttl = ttl(config, name);
                 if (ttl != null) {
                     expire(store, name, ttl);
                 }
@@ -688,17 +688,25 @@ public class Cache {
         });
     }
 
-    private static Duration ttl(Properties cache) {
+    private static Duration ttl(Properties cache, String project) {
         String value = cache.getProperty("ttl");
         if (value == null || value.isBlank()) {
             return null;
         }
+        Duration duration;
         try {
-            Duration duration = Durations.parse(value);
-            return duration.isZero() || duration.isNegative() ? null : duration;
+            duration = Durations.parse(value);
         } catch (RuntimeException _) {
+            duration = null;
+        }
+        if (duration == null || duration.isZero() || duration.isNegative()) {
+            // As a malformed size: the reaper sweeps every project in one pass, so one project's typo is said out
+            // loud and that project's expiry is skipped, rather than read as "no ttl" in silence.
+            LOGGER.log(System.Logger.Level.WARNING, "unparseable ttl '" + value + "' for cache project " + project
+                    + "; stale entries are not expired until the value is fixed");
             return null;
         }
+        return duration;
     }
 
     private static long parseSize(String value, String project) {
