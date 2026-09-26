@@ -375,7 +375,7 @@ public final class ImportContract {
             // ... and it must SAY it dropped them. Refusing the row is only half: a walk that silently discards
             // every entry finishes indistinguishable from one over an empty source, so an operator reading
             // "completed, imported: 0" cannot tell a hostile listing from nothing to migrate. A traversal-laced path
-            // is the one signal that a source is hostile, and it was the thing being discarded in silence (D-155).
+            // is the one signal that a source is hostile, and it was the thing being discarded in silence.
             isTrue(!laced.dropped().isEmpty(), fixture,
                     "this connector skipped the laced entries without reporting one of them through "
                             + "ImportSource.Asset.dropped, so nothing downstream can count them: the job's status, "

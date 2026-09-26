@@ -399,7 +399,7 @@ public final class HardenedScreen {
      * request path</em> and is looked up before anything is inspected, so a path-derived key is the right one and is
      * the only one available that early. An origin row is about <em>this artifact</em>, and a hand upload has always
      * folded its {@code local-upload} row under the format coordinate - so keying the {@code fallback} row by the
-     * path split one artifact's acquisition history across two documents (D-245). One artifact, one origin document.
+     * path split one artifact's acquisition history across two documents. One artifact, one origin document.
      *
      * <p>It lives here rather than being derived at each caller because there are three - the router that writes the
      * row, the 409 message that reads it, and the console panel - and the last two used to <em>restate</em> the

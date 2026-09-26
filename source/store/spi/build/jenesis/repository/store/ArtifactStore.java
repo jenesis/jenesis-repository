@@ -299,8 +299,7 @@ public interface ArtifactStore {
      * the rule being lifted would be a second, unproven change riding a first.
      *
      * <p>The name is now narrower than the question. A backslash was already not a traversal, and a control character
-     * plainly is not; what every caller actually asks here is "may this path be stored and routed" - see the naming
-     * note on D-288 in the hardening plan.
+     * plainly is not; what every caller actually asks here is "may this path be stored and routed".
      *
      * <p>An empty segment is not a traversal (a trailing slash on a directory listing request, a doubled separator)
      * and a percent-encoded {@code %2e%2e} is not one either: it is a literal name until something decodes it, and

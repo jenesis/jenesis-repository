@@ -439,7 +439,7 @@ public class RepositoryBrowse extends TenantScope {
                 collectOrigin(metadata.section(ecosystem, coordinate, version, OriginSection.TAG), rows, seen);
             }
             // (2) The path-derived document. A fallback fetch used to record its origin here and no longer does
-            // (D-245: one artifact, one origin document, and it is the format-coordinate one above). Still read,
+            // (one artifact, one origin document, and it is the format-coordinate one above). Still read,
             // for the two cases where it is the only key there is: a path no installed format describes - where
             // HardenedScreen.originCoordinate falls back to this same derivation, so this IS where the row is - and a
             // no-store fallback's row, which survives durably beside transient bytes that never landed (§6.2).

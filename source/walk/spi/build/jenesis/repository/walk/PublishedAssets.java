@@ -80,7 +80,7 @@ public final class PublishedAssets {
      * why: {@code PagedTreeWalk} "cannot be reached from here", because {@code build.jenesis.repository.walk}
      * requires the store module and a dependency the other way is a module cycle. So the one enumeration of the
      * {@code publish/} tree was the second implementation of the primitive built to have exactly one of. The fix was
-     * never a better copy; it was moving this class into the walk module, which is what D-227 did, and this call is
+     * never a better copy; it was moving this class into the walk module, and this call is
      * what the move was for.
      *
      * <p>The {@code quarantine} review subtree is declined through {@link PagedTreeWalk.Prune} rather than filtered

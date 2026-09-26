@@ -79,7 +79,7 @@ class BlobsProxyRelayTest {
 
     @Test
     void an_enumeration_refuses_rather_than_letting_the_local_404_stand() throws IOException {
-        //. The same two upstream outcomes over an ENUMERATION: the local 404 that would stand is not "the leg
+        // The same two upstream outcomes over an ENUMERATION: the local 404 that would stand is not "the leg
         // served nothing", it is the upstream's own answer that the enumeration is empty - a fact a build resolves
         // against - so a question this repository could not put to its upstream must not be answered at all.
         for (ProxyFormat.Fetcher fetcher : List.of(unreachable(), answering(503), answering(429), answering(500))) {

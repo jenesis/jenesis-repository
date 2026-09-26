@@ -84,7 +84,7 @@ public class ComplianceWebConfig {
         // explicit refresh=true. The same shared source instance the publish screen and sweep probe, injected by type.
         //
         // The scheduler rides in so refresh=true can build the ranking under the health-rank-index lease rather than
-        // leaving a deployment with scheduled-scan off reading "not yet ranked" forever (D-138). ObjectProvider, not a
+        // leaving a deployment with scheduled-scan off reading "not yet ranked" forever. ObjectProvider, not a
         // hard dependency: a read-only or embedding deployment runs no scheduler, and the refresh must still persist
         // there - it simply leaves the ranking to whatever does run one. Passed as a SUPPLIER, not resolved here:
         // the scheduler bean is initMethod="start", so pulling it while this bean is built would start its workers

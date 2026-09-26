@@ -95,7 +95,7 @@ interface EcosystemFormatFixture extends FormatFixture {
      *
      * <p><b>The audit ran on 2026-08-24 and this is now down to one fixture.</b> Eleven formats replaced it with a
      * reason of their own; PyPI replaced it with a real {@link FormatFixture#elective} leg, the PEP 658 sidecar,
-     * which was found to HAVE the defect and was fixed (D-290, then D-289's 502 split). What the audit established,
+     * which was found to HAVE the defect and was fixed, and then split its 502 from its 404. What the audit established,
      * and what a later fixture should reason with rather than rediscover: a path classified
      * {@code ProxyRelay.Document.ENUMERATION} already refuses with a {@code 502} and misses with a {@code 404}, so
      * the two are distinguishable by construction and the property holds without a fixture proving it. The shape can

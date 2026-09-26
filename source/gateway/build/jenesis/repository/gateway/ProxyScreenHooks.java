@@ -26,7 +26,7 @@ public final class ProxyScreenHooks implements PullThroughHooks {
     private final Supplier<ComplianceGate> gate;
     private final int holdDays;
 
-    /** D-246: whether an incomplete screen withholds rather than serving with the fact recorded. */
+    /** whether an incomplete screen withholds rather than serving with the fact recorded. */
     private final boolean withholdIncomplete;
 
     /** @param gate the live gate resolved per request (so a gate armed just before a seed is the one that screens)

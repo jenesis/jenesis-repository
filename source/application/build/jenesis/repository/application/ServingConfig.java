@@ -266,7 +266,7 @@ public class ServingConfig {
         // inspector, no licence or advisory dimension, no operator deny-list and no quarantine ran on it. A format's
         // proxy() caches the fetched body through Publication.storeBlob + link, and neither runs the
         // PublishInterceptor chain (only Publication.commit does), so there was no gate anywhere on this path
-        // (D-208). The routed gateway's legs were screened and the demo seeder's was; this one was not, which is the
+        // The routed gateway's legs were screened and the demo seeder's was; this one was not, which is the
         // reachability shape: both contracts held and the wiring between them was the hole.
         //
         // The DEPLOYMENT-WIDE gate is the right one here rather than a tenant's: this leg exists for the

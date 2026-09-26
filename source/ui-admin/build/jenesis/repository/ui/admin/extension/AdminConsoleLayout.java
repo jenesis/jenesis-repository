@@ -7,7 +7,7 @@ import java.util.Set;
 /**
  * The admin console's declaration that it is built on the base console's layout.
  *
- * <p>This is the whole of the D-281 fix, and it is deliberately small. The dependency it declares was already real -
+ * <p>This is the whole of the fix, and it is deliberately small. The dependency it declares was already real -
  * every one of this console's templates renders through {@code base.html} - but it existed only as a Thymeleaf
  * fragment reference and a {@code requires} clause with no Java behind it. A module-graph tool saw an unused edge; a
  * reader saw a {@code requires} nothing seemed to need. Referencing {@link ConsoleLayout} here means removing that

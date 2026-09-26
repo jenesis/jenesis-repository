@@ -103,7 +103,7 @@ public class RepositoryShapeBadgeTest {
     @Test
     void a_mixed_strength_definition_surfaces_a_warning_but_is_not_refused() throws IOException {
         // A harden upstream beside a weaker (default) upstream: valid (ordering is operator expressiveness) but flagged
-        //. The definition is STORED (not refused) and its warning is surfaced.
+        // The definition is STORED (not refused) and its warning is surfaced.
         settings.setRepository("mixed",
                 "fallback https://a.example/repo fallback https://b.example/repo harden");
         SettingsAdmin.RepositoryShape shape = settings.shape("mixed");

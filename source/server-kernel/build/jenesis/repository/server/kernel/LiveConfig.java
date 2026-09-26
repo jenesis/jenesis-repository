@@ -166,7 +166,7 @@ public final class LiveConfig {
         // DoS publishes - and flipped on in every test config so a broken mapping fails on the first publish in CI. Read
         // through the same store-over-file/env effective lookup the discovered gate dimensions use.
         boolean strictHoldMapping = Boolean.parseBoolean(config.apply("strict-hold-mapping"));
-        // D-246: whether a screen that reached ALLOW over a body it could not finish reading WITHHOLDS, or only says
+        // whether a screen that reached ALLOW over a body it could not finish reading WITHHOLDS, or only says
         // so. Off by default, deliberately: the kit's CONTENT_FINDINGS reading is a declared, reviewed fail-open -
         // an inspector stopped by a bound may only UNDER-declare - so withholding every artifact a scanner could not
         // finish would hold the repository closed on ordinary large ones. The blast radius is size-dependent and
@@ -251,8 +251,8 @@ public final class LiveConfig {
         return resolve((key, fallback) -> settings.getOrDefault(tenant, key, fallback));
     }
 
-    /** Whether a screen that could not read the whole artifact withholds rather than serving with the fact recorded
-     *  (D-246). False by default - the reviewed fail-open. */
+    /** Whether a screen that could not read the whole artifact withholds rather than serving with the fact recorded.
+     *  False by default - the reviewed fail-open. */
     public boolean withholdIncompleteScreens() {
         return withholdIncompleteScreens;
     }

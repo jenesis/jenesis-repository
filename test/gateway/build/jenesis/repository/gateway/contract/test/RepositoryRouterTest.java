@@ -148,7 +148,7 @@ public class RepositoryRouterTest {
 
     @Test
     public void an_operator_configured_plaintext_upstream_is_refused_unless_the_deployment_takes_the_dial() {
-        //. Every peer operator-configured outbound target refuses a cleartext one - the webhook endpoint, the
+        // Every peer operator-configured outbound target refuses a cleartext one - the webhook endpoint, the
         // forwarding target, the emulator target, the redirect directory and the import guard all run the shared
         // screen - and the proxy upstream was the only one that merely warned, while carrying a per-host upstream
         // credential to whatever host is named.

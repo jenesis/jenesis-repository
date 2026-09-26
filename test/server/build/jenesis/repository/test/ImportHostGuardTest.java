@@ -89,7 +89,7 @@ public class ImportHostGuardTest {
 
     @Test
     public void a_plaintext_import_url_is_refused_by_default_even_to_a_public_host() throws Exception {
-        //. The host half has nothing to say about incumbent.example, and the request below would have carried
+        // The host half has nothing to say about incumbent.example, and the request below would have carried
         // the operator's upstream password to it in the clear. The refusal names the transport, so an operator whose
         // source is plaintext on a public host is not sent to go and look at its host.
         System.setProperty(GUARD, "true");

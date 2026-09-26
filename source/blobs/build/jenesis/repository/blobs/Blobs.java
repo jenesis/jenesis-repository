@@ -438,8 +438,8 @@ public final class Blobs {
      * <p>This is a derived fact, not a swallowed failure, and the distinction is the whole reason it is written here
      * rather than as a {@code catch}. Asking the backend about an unnameable prefix gets a different answer from each
      * one: an object store pages nothing, while a filesystem raises {@code ENAMETOOLONG} - which the default store
-     * used to answer as an empty listing along with every other {@code IOException}, and which since 0.13.0
-     * it correctly raises, because "I could not look" is not "there is nothing here". Neither answer belongs at a
+     * used to answer as an empty listing along with every other {@code IOException}, and which it now
+     * correctly raises, because "I could not look" is not "there is nothing here". Neither answer belongs at a
      * request seam: the correct one is knowable without the round trip, so it is taken before it.
      *
      * <p>Deliberately only the byte cap, and not {@link ArtifactStore#key}'s full screen. The segment and

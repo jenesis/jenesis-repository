@@ -117,7 +117,7 @@ public final class ReleaseImmutability {
      * lookup asks {@link HardenedScreen#originCoordinate} for the key rather than deriving one, so it cannot fall
      * behind the writer: this javadoc used to say it was "keyed exactly as the fallback-fetch path records it" and
      * then restate that derivation, which stopped being true the moment the row moved to the format coordinate
-     * (D-245) - the clause would have gone quietly missing from every 409 on a format-claimed path. Best-effort read
+     * - the clause would have gone quietly missing from every 409 on a format-claimed path. Best-effort read
      * (&sect;10): never fails the already-decided 409.
      */
     private String incumbentOrigin(ArtifactStore store, String path) {

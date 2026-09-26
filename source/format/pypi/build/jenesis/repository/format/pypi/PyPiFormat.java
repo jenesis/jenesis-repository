@@ -508,7 +508,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                 // downloads the whole wheel and reads METADATA out of it, and reports success. Spelling a refusal the
                 // same way therefore does not withhold the sidecar, it substitutes a different resolution for it
                 // silently - the repository detected a corrupted document and the build went green over it (§9).
-                // Exactly the Maven .module split (D-210), on the one PyPI path with the same property.
+                // Exactly the Maven .module split, on the one PyPI path with the same property.
                 //
                 // The distribution keeps the plain decline: a wheel's absence is a loud answer that fails an install,
                 // so nothing resolves around it and a miss cannot be mistaken for a decision.
@@ -547,7 +547,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
      * @param metadataSha256 the PEP 658 sidecar's OWN digest, off the anchor's {@code data-core-metadata} /
      *                       {@code data-dist-info-metadata} attribute - a different file and therefore a different
      *                       hash, which is why one cannot stand in for the other and why the sidecar went unverified
-     *                       while the fragment was the only digest read (D-290)
+     *                       while the fragment was the only digest read
      */
     private record Located(String location, String sha256, String metadataSha256) {
     }

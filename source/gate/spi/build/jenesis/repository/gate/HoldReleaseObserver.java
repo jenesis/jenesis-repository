@@ -361,7 +361,7 @@ public interface HoldReleaseObserver {
         // Through the shared primitive, which is what makes a duplicate kind a packaging error rather than a silent
         // winner. A kind is not a label: it names the hook's own holds/<kind>/ and overrides/<kind>/ key space, so two
         // observers answering to one kind make ONE HOOK'S RELEASE CLEAR ANOTHER'S HOLD - the fail-open direction
-        // D-095 closed from the removed-provider side and this reached from the duplicated-provider side (D-163b).
+        // once closed from the removed-provider side and reachable again from the duplicated-provider side.
         //
         // Sorting by kind is a side effect and a welcome one. The ordering clause below says fan-out order is
         // discovery order and is deliberately NOT part of the contract, precisely because hooks must be mutually

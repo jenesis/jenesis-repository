@@ -371,7 +371,7 @@ public final class ServableNames {
                 return false;
             }
             for (String leaf : leaves) {
-                // held(), not publication.withheld(): both halves of a hold, which is what D-251 made state() and
+                // held(), not publication.withheld(): both halves of a hold, which is what state() and
                 // disclosable() do and left this face without. The chain alone screens every hold a writer places
                 // today, because each retroactive sweep links a /quarantine<path> review pointer beside the marker -
                 // so leg (a) above already catches those. What it misses is a byte-identical SIBLING coordinate:

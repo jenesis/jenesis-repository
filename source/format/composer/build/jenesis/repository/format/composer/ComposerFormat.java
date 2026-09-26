@@ -359,7 +359,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         }
         try (StoredListing.Served document = served.get()) {
             // A repository with nothing to list answers 404, not 200 with an empty array. This route is addressed by
-            // the REPOSITORY's own name rather than a package's, which is the half D-044 left open: there, an empty
+            // the REPOSITORY's own name rather than a package's, which is the half the container fix left open: there, an empty
             // document discloses nothing a client did not already supply, but here it asserts "this repository exists
             // and is barren" - and on a proxy that assertion is load-bearing the wrong way, because it is the 404
             // that sends the pull-through to the upstream root. A 200 would shadow Packagist rather than proxy it.

@@ -7,7 +7,7 @@ jenesis-repository
 > ### [Jenesis](https://jenesis.build) - a modern Java build tool
 > _Java-native config, plugin-free, with `module-info.java` treated as a feature, not an afterthought._
 
-**An artifact repository for twenty-five package formats.** npm, PyPI, Go, Cargo, NuGet, RubyGems, Debian,
+**An artifact repository for twenty-four package formats.** npm, PyPI, Go, Cargo, NuGet, RubyGems, Debian,
 RPM, apk, Conda, Conan, CocoaPods, Composer, Swift, Helm, Homebrew, Hugging Face, Terraform, winget, Ivy -
 and Maven, OCI, raw and the Jenesis module layout.
 
@@ -113,7 +113,7 @@ seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by 
 |------|--------|
 | `source/server`, `source/server-spi` | The format-neutral dispatcher: routing, auth, the publish edge, the pull-through serve loop, and the `/api` surface. Knows no layout. |
 | `source/store/{spi,filesystem,s3,gcs,azure}` | The content-addressed store and its backends. |
-| `source/format/*` | Twenty-five layouts, each a plugin. `{spi,maven,java,oci,raw,jenesis,lifecycle}` are the published-tree ones; the rest - npm, PyPI, Go, Cargo, NuGet, gems, Debian, RPM, apk, Conda, Conan, CocoaPods, Composer, Swift, Helm, Homebrew, Hugging Face, Terraform, winget, Ivy - keep their bytes in the shared `blobs/` namespace. `signing` is the OpenPGP release signing three of them share. |
+| `source/format/*` | Twenty-four formats, each a plugin, and the `java` repository type, which composes Maven's layout with the module layout. `{spi,maven,java,oci,raw,jenesis,lifecycle}` are the published-tree ones; the rest - npm, PyPI, Go, Cargo, NuGet, gems, Debian, RPM, apk, Conda, Conan, CocoaPods, Composer, Swift, Helm, Homebrew, Hugging Face, Terraform, winget, Ivy - keep their bytes in the shared `blobs/` namespace. `signing` is the OpenPGP release signing three of them share. |
 | `source/importer/*`, and an importer inside fifteen formats | Migration connectors that walk another repository and replay each asset through the owning format's real publish path. |
 | `source/proxy` | The upstream fetcher behind pull-through caching, with revalidation and a negative cache. |
 | `source/walk/{spi,store}`, `source/gc/{spi,store}` | The resumable artifact walk, and mark-sweep garbage collection over it. |

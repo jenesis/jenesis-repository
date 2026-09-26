@@ -419,7 +419,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
      * disclosable child, but the children there are component <em>containers</em>, not pointers, so there is no
      * {@code withheld/<hash>} marker for the screen to find and the answer degrades to "does this suite carry an index
      * at all". A suite whose every package is held therefore still listed, and its own {@code Release} then announced
-     * no components (D-262).
+     * no components.
      *
      * <p>The manifest answers it exactly, and for free: it holds one line per component/architecture index that
      * carries <b>at least one servable package</b> - {@code generateManifest} skips an index whose {@code Packages}

@@ -183,7 +183,7 @@ class ServableNamesTest {
     @Test
     void a_marker_on_the_hash_a_publish_pointer_names_withholds_it_with_no_quarantine_pointer_anywhere()
             throws IOException {
-        //. The publish/ face used to consult only the interceptor chain, so the content half of a hold - the
+        // The publish/ face used to consult only the interceptor chain, so the content half of a hold - the
         // withheld/<hash> marker, keyed by content precisely so ONE hold retracts the bytes wherever served - reached
         // only the blobs/ face. Any publish/-namespace alias the hold writer's path enumeration did not name therefore
         // kept serving held bytes; the Maven cross-publish's /module/<name>/<name>.jar "latest" view is the driven

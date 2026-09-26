@@ -89,7 +89,7 @@ public interface ArtifactLayout extends EcosystemLayout {
      *
      * <p><b>It says "the same rule" and now asks for it</b>, rather than restating it. It used to spell out
      * {@code .}, {@code ..} and {@code \} here, which is the same rule only for as long as nobody adds to the
-     * original - and something did: the store's screen grew the C0 control characters (D-288), and this copy did not,
+     * original - and something did: the store's screen grew the C0 control characters, and this copy did not,
      * so a tab-bearing coordinate was addressable here and refused at the key screen. That gap is not merely
      * cosmetic, because the keys {@link #paths} composes are handed to eviction, and a delete is not screened the way
      * a write is: the composing seam is the one that has to refuse. A guard that describes itself as a copy of

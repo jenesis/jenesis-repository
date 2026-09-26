@@ -605,7 +605,7 @@ public final class ComplianceScreen implements PublishInterceptor {
                             + " - " + FEED_FAILED_CLOSED + ": " + feedFailed);
                 }
                 // The path a reviewer will meet this hold at, which is not always the path the screen was handed
-                //. A format whose coordinate lives INSIDE the artifact commits under the only descriptor it
+                // A format whose coordinate lives INSIDE the artifact commits under the only descriptor it
                 // can build before the bytes are down - its push endpoint, one path every push of that format shares
                 // - and re-keys the /quarantine review handle onto the package once the coordinate is readable. The
                 // audit row and the held-subject record follow the handle, or the reviewer's reasons and their handle

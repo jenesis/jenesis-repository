@@ -275,7 +275,7 @@ public final class ReanalysisTask implements MaintenanceTask {
             Optional<String> hash = publication.blob("/quarantine" + path);
             if (hash.isEmpty()) {
                 publication.unpublish("/quarantine" + path);
-                HeldSubjects.forget(store, path);   // the subject record goes with the hold it described (D-103)
+                HeldSubjects.forget(store, path);   // the subject record goes with the hold it described
                 continue;
             }
             HoldClears.clearReleased(store, hash.get(), ownPaths, "kev-auto-release", released.withPath(path));

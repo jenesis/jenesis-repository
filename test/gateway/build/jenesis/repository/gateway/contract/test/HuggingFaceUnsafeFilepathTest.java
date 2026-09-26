@@ -23,7 +23,7 @@ import static build.jenesis.repository.gateway.testkit.FormatDrive.format;
  * with contract clause 6's {@code 404}; it grew the backslash for the reason a {@code \} is a separator on a
  * Windows-hosted filesystem backend and a literal character on the three object stores; and it has now grown the C0
  * control characters for the same kind of reason - a {@code NUL} truncates the key at the first C API that touches it
- * and a newline forges a line in every log record and index the key reaches (D-288).
+ * and a newline forges a line in every log record and index the key reaches.
  *
  * <p><b>The control-character cell asserted {@code 400} until then, and that difference was an accident of which
  * layer caught the shape</b> rather than a decision about what a hostile publish deserves. This class's own argument
@@ -64,8 +64,8 @@ class HuggingFaceUnsafeFilepathTest {
     }
 
     /** A backslash used to be answered by this format's own filepath guard, because the shared screen split on
-     *  {@code /} alone and read {@code weights\evil} as one long, harmless leaf name. Release 0.17.0 closed
-     *  that: {@code ArtifactStore.traversalFree} now refuses a {@code \} anywhere, since a backslash is a real
+     *  {@code /} alone and read {@code weights\evil} as one long, harmless leaf name. The shared screen
+     *  closed that: {@code ArtifactStore.traversalFree} now refuses a {@code \} anywhere, since a backslash is a real
      *  separator on a Windows-hosted filesystem backend and a literal character on the three object stores - one
      *  publish, three placements, and on the first of them a real traversal. So a backslash joined the {@code ..}
      *  family above rather than staying a format-local hostile character, and it takes that family's status: contract
@@ -77,7 +77,7 @@ class HuggingFaceUnsafeFilepathTest {
         assertHostilePutRefused("weights\\evil", 404);
     }
 
-    /** The third shape, answered by the shared screen since D-288 rather than by {@code unsafeFilepath} - so it is
+    /** The third shape, answered by the shared screen rather than by {@code unsafeFilepath} - so it is
      *  now a cell about the <em>format staying consistent with its peers</em>, not about this format's own guard.
      *  {@code unsafeFilepath} is still reached for what the shared screen deliberately allows (an empty segment) and
      *  is still what stops a hostile filepath reaching {@code Blobs.write}, whose {@code requireSafeKey} would throw

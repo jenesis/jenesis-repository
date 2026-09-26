@@ -112,7 +112,7 @@ public interface BlobLayout extends BlobRoots {
 
     /** One name part: a single addressable path segment by the shared rule, which is the whole rule. It used to add
      *  {@code && !Keys.unsafe(part)} because the shared screen said nothing about control characters and this one
-     *  did; the shared screen carries them now (D-288), so the second half was the same question asked twice - and
+     *  did; the shared screen carries them now, so the second half was the same question asked twice - and
      *  keeping it would have hidden the gap in the shared screen rather than closed it, which is exactly what it had been
      *  doing. */
     private static boolean addressablePart(String part) {

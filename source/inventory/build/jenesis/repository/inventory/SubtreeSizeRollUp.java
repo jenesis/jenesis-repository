@@ -144,7 +144,7 @@ final class SubtreeSizeRollUp {
      * pointer</b>, so for the life of the hold the same bytes sit under two {@code publish/} keys and were counted
      * twice in every ancestor total, the repository root included. Invisibly, too: the console hides the
      * {@code quarantine} subtree from browse, so the inflation had no row an operator could open to explain it
-     * (D-090). A review handle is how a held artifact stays reachable to a reviewer; nothing serves from it, so it
+     *. A review handle is how a held artifact stays reachable to a reviewer; nothing serves from it, so it
      * contributes no bytes to a total exactly as it contributes no row to a listing.
      */
     static boolean underReview(String publishKey) {
@@ -160,7 +160,7 @@ final class SubtreeSizeRollUp {
             String path = name.equals("~") ? "" : StoreRepositoryInventory.decode(name);
             String key = path.isEmpty() ? "publish" : "publish/" + path;
             // A row under the review subtree is dropped whether or not its folder still exists: the fold stopped
-            // creating them, so any that remain were written before D-090 and would otherwise stand until the hold
+            // creating them, so any that remain were written before it stopped and would otherwise stand until the hold
             // ended - a cached total for a folder browse does not show.
             if (underReview(key) || store.isEmpty(key)) {
                 new StoredCounter(store, ROOT + "/" + name).delete();

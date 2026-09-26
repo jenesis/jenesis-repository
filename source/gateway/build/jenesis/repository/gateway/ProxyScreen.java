@@ -90,7 +90,7 @@ public final class ProxyScreen {
     private final Publication publication;
     private final int holdDays;
 
-    /** D-246: withhold on an incomplete screen rather than serving with the fact recorded. */
+    /** withhold on an incomplete screen rather than serving with the fact recorded. */
     private final boolean withholdIncomplete;
     private final QualityInspector.Lookup siblings = new SiblingLookup();
 
@@ -99,7 +99,7 @@ public final class ProxyScreen {
     private Map<String, byte[]> companions = Map.of();
 
     /** The reviewed-fail-open form: an incomplete screen serves and says so. Every caller that has no opinion gets
-     *  this, which is the D-246 default rather than an oversight. */
+     *  this, which is the reviewed default rather than an oversight. */
     public ProxyScreen(ComplianceGate gate, ArtifactStore store, int holdDays) {
         this(gate, store, holdDays, false);
     }
@@ -374,7 +374,7 @@ public final class ProxyScreen {
             reasons.add(INCOMPLETE_SCREEN_REASON);
             if (verdict == Verdict.ALLOW) {
                 if (withholdIncomplete) {
-                    // The strict posture (D-246): an ALLOW the inspectors could not stand behind over the whole body
+                    // The strict posture: an ALLOW the inspectors could not stand behind over the whole body
                     // is held for review rather than served with a note. Deliberately a QUARANTINE and not a REJECT -
                     // nothing was found wrong, only unread, so this is a decision waiting on a human rather than a
                     // verdict against the artifact, and a reviewer can release it.

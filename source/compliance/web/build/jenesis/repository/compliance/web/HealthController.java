@@ -170,7 +170,7 @@ public class HealthController {
 
     /**
      * Build the ranking on an explicit refresh - the answer to "a deployment with {@code scheduled-scan} off reads
-     * <em>not yet ranked</em> permanently" (D-138).
+     * <em>not yet ranked</em> permanently".
      *
      * <p>This used to be left to the scheduled pass on purpose, and the reason still holds: the rank index mutates
      * shared durable state and must stay on {@code HealthRankIndexTask}'s single-writer lease rather than racing a

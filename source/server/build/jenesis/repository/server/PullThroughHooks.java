@@ -64,7 +64,7 @@ public interface PullThroughHooks {
      * log row - and it must write into the same store the bytes land in. An implementation that captured one at
      * construction could only ever be installed where that store is fixed, which is a seeder or a single repository;
      * the serving dispatcher is a singleton over every tenant's store, so it could not install a screen at all. That
-     * is why the deployment-wide upstream map's leg ran unscreened (D-208).
+     * is why the deployment-wide upstream map's leg ran unscreened.
      */
     default ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream, ArtifactStore store) {
         return upstream;

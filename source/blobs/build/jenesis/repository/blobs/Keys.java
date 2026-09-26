@@ -25,7 +25,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p><b>This class used to carry its own copy of the character rule</b>, because the core screened neither the
  * backslash nor the control characters when it was written. The core has both now, so the copy was two statements of
  * one rule that could only drift - the &sect;2 shape - and the front door and the store boundary would then have
- * disagreed about which publishes are legal, each believing the other agreed (D-288).
+ * disagreed about which publishes are legal, each believing the other agreed.
  */
 public final class Keys {
 

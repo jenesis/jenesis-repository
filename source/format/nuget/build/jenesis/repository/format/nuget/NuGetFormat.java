@@ -221,7 +221,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         String rest = exchange.path().substring("/nuget/".length());
         if (exchange.method().equals("PUT")) {
             // A push goes to the one resource the service index advertises as PackagePublish/2.0.0, and nowhere else
-            //. The coordinate comes from the.nuspec rather than from the path, so this branch used to take
+            // The coordinate comes from the .nuspec rather than from the path, so this branch used to take
             // EVERY PUT under /nuget/ as a package push - one at a mistyped or invented endpoint, and one at a read
             // address like v3/index.json or a flat-container file, all published and all answered 201. None of them
             // is a traversal (those are 404'd above since) and none of them lands a wrong key either, because

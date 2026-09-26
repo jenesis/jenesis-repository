@@ -170,7 +170,7 @@ public final class ArtifactorySource implements ImportSource {
             } else {
                 // name() folds two refusals into one null - an entry carrying no uri at all, and one whose uri is not
                 // a single traversal-free segment - so they are separated here rather than there: the first is a
-                // broken listing, the second is a hostile one, and only the second is an attack indicator (D-155).
+                // broken listing, the second is a hostile one, and only the second is an attack indicator.
                 String uri = child.path("uri").asString(null);
                 consumer.dropped(uri == null ? "<no uri>" : uri,
                         uri == null ? ImportSource.Reason.INCOMPLETE_ENTRY : ImportSource.Reason.UNSAFE_PATH);

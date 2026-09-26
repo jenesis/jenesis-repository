@@ -593,7 +593,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * {@link #blobKeys} composed a live pointer key out of it. That key is handed to <b>eviction, which deletes</b>,
      * and {@code delete} is not screened by {@link ArtifactStore#key} the way a write is, so the one seam that had to
      * refuse the name was this one. Two copies of a security rule is the &sect;2 shape, and this is what it costs when
-     * the copies drift (D-288).
+     * the copies drift.
      */
     private static boolean isImageName(String name) {
         if (name.isEmpty() || !ArtifactStore.traversalFree(name)) {

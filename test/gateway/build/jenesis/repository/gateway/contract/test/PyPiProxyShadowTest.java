@@ -64,7 +64,7 @@ class PyPiProxyShadowTest {
         // through to proxy(). It used to treat the empty project name as a project - fetching <upstream>simple// and
         // handing the body to the index rewriter, which reduces every href to the text after its last '/'. PyPI's
         // root links are /simple/<project>/ and END in '/', so every rewritten link came out empty: a 200 carrying a
-        // page of links to nowhere (D-218). A store-backed repository never saw it, because handle() splits the
+        // page of links to nowhere. A store-backed repository never saw it, because handle() splits the
         // empty case off to projects() and answers locally - which is why this drives proxy() directly.
         Set<String> fetched = new LinkedHashSet<>();
         ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {

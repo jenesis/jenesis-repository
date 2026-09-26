@@ -50,7 +50,7 @@ import build.jenesis.repository.walk.Traversal;
  * module survives. A path a format placed but that names no versioned artifact (a checksum, generated metadata, a raw
  * upload) is recorded too, with a null coordinate: <em>"asked, and the answer is: no coordinate"</em> is a fact a
  * reader needs, and it is not the same fact as an absent row. The three-valued shape is the theme's own idiom -
- * spelled, since 0.13.0, as the one {@link build.jenesis.repository.store.Known} type the reconcile
+ * spelled as the one {@link build.jenesis.repository.store.Known} type the reconcile
  * sweep's liveness, {@code knownPaths} and the reclaiming pass's pointer roots all answer in - applied to the one
  * question this space answers.
  *

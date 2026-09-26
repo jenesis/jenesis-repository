@@ -146,7 +146,7 @@ class HealthRankIndexTest {
 
     @Test
     void an_index_no_pass_has_committed_reports_not_built_and_recomputes_nothing() throws IOException {
-        //. Records exist and are perfectly sortable - which is exactly why this used to buffer and sort them into
+        // Records exist and are perfectly sortable - which is exactly why this used to buffer and sort them into
         // a "weakest first" page. It must not: a ranking derived on the request thread claims to be the worst of the
         // repository while being whatever the ledger answered, and an operator reading it concludes nothing worse
         // exists. The honest answer is the state itself, carrying the ledger's last sweep so the panel can say "scored
