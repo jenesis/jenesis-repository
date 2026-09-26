@@ -155,7 +155,7 @@ public final class JavaLayout {
 
     /** The module name declared inside an already-bounded jar stream, or null when it declares none. */
     private static String declaredModule(InputStream jar) throws IOException {
-        try (ZipInputStream in = new ZipInputStream(jar)) {
+        try (ZipInputStream in = ArchiveWalk.zip(jar)) {
             String automatic = null;
             for (ZipEntry entry; (entry = in.getNextEntry()) != null; ) {
                 if (entry.getName().equals("module-info.class")) {

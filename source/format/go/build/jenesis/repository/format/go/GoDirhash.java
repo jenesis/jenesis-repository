@@ -86,11 +86,11 @@ public final class GoDirhash {
         long ceiling = ArchiveWalk.largestWalk(storedLength, INFLATION_RATIO);
         // Names order the digest, so they are held; the content is not - only its 32 bytes of digest survive an entry.
         SortedMap<String, byte[]> entries = new TreeMap<>(GoDirhash::compareUtf8);
-        long[] inflatable = {ceiling};
         ArchiveWalk.Found<Boolean> walked = ArchiveWalk.walk(archive, ceiling, screened -> {
             // Deliberately not closed: closing this would close the screened view and with it the caller's archive,
-            // which ArchiveWalk documents as the walker's own business, and the caller owns the blob stream.
-            ZipInputStream zip = new ZipInputStream(screened);
+            // which ArchiveWalk documents as the walker's own business, and the caller owns the blob stream. The zip
+            // it opens counts what the entries inflate to against the same ceiling, since a zip chooses its ratio.
+            ZipInputStream zip = ArchiveWalk.zip(screened);
             byte[] buffer = new byte[8192];
             for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
                 if (entries.size() >= MAX_ENTRIES || entry.getName().indexOf('\n') >= 0) {
@@ -98,12 +98,6 @@ public final class GoDirhash {
                 }
                 MessageDigest content = sha256();
                 for (int read; (read = zip.read(buffer)) >= 0; ) {
-                    inflatable[0] -= read;
-                    if (inflatable[0] < 0) {
-                        // The decompressed dimension of the same ceiling - the one the walk's own screen cannot see,
-                        // because a zip chooses its ratio. Answered as nothing found, never as a partial digest.
-                        return null;
-                    }
                     content.update(buffer, 0, read);
                 }
                 // A directory entry is hashed as the empty file it reads as, exactly as Go's own walk over the central

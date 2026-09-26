@@ -12,8 +12,9 @@ import module java.base;
  * <p><strong>What it bounds, and why one number is not enough on its own.</strong> {@link ArchiveInflation} answers
  * "how big may the manifest be"; a hostile archive answers that by putting a one-byte manifest behind a hundred
  * gigabytes of payload. The bound here is the bytes fed <em>into</em> the walk, which is the archive's own footprint:
- * for a zip walked entry by entry that is the stored body, and for a tar read through a decompressor it is the
- * decompressed stream - deliberately the same ceiling in both roles, because it is the "how much of this artifact may
+ * for a zip walked entry by entry that is the stored body, and - through {@link #zip} - what its entries inflate
+ * to as well, and for a tar read through a decompressor it is the decompressed stream - deliberately the same ceiling
+ * in every role, because it is the "how much of this artifact may
  * one read chew through to find one member" budget rather than a claim about compression ratios. A format whose
  * member legitimately sits behind a large payload derives a body-relative ceiling with
  * {@link #largestWalk(long, long)} and states its ratio at its own call site.
@@ -165,6 +166,40 @@ public final class ArchiveWalk {
                 : new Found<>(value, ArchiveInflation.Outcome.EXHAUSTED, screen.consumed);
     }
 
+    /**
+     * A zip reader over a walk's screened view whose <em>decompressed</em> side counts against the walk's ceiling too -
+     * every byte an entry inflates to, the ones it skips past on its way to the next entry included.
+     *
+     * <p>A zip decompresses inside the reader, so the screen, which sits under it, sees only the stored bytes: a
+     * kilobyte entry that inflates to gigabytes costs the screen a kilobyte and the node the gigabytes, since moving
+     * to the next entry inflates the rest of this one. A tar walk has no such gap - it reads a decompressor's output,
+     * which is what its screen counts - so the ceiling means decompressed bytes there already, and this makes it mean
+     * the same for a zip. Past it the reader answers end-of-entry and no further entry, and the walk reports the
+     * truncation it is; the value the walker returns is dropped, as for any truncated walk.
+     *
+     * <p>{@code screened} is the view {@link #walk} hands its walker. Over any other stream the reader is an ordinary
+     * one, since there is then no walk to count against.
+     */
+    public static ZipInputStream zip(InputStream screened) {
+        Screen screen = screened instanceof Screen walked ? walked : null;
+        return new ZipInputStream(screened) {
+
+            @Override
+            public ZipEntry getNextEntry() throws IOException {
+                return screen != null && screen.stopped ? null : super.getNextEntry();
+            }
+
+            @Override
+            public int read(byte[] bytes, int offset, int length) throws IOException {
+                if (screen != null && screen.stopped) {
+                    return -1;
+                }
+                int read = super.read(bytes, offset, length);
+                return read > 0 && screen != null && !screen.inflated(read) ? -1 : read;
+            }
+        };
+    }
+
     /** Reads an archive that has already been bounded, and answers the declaration it carries - or {@code null} when
      *  it carries none. The container is the walker's to choose; the budget is not. */
     @FunctionalInterface
@@ -262,6 +297,7 @@ public final class ArchiveWalk {
         private final long limit;
 
         private long consumed;
+        private long inflated;
         private boolean stopped;
         private boolean ended;
 
@@ -324,6 +360,16 @@ public final class ArchiveWalk {
             // A reset would rewind the archive without rewinding the budget, which is a bound a caller can spend
             // twice. No container this walk serves needs one.
             return false;
+        }
+
+        /** Count {@code count} bytes a container decompressed from this view against the same ceiling, and whether the
+         *  walk may go on; past it the walk has stopped. */
+        private boolean inflated(int count) {
+            inflated += count;
+            if (inflated > limit) {
+                stopped = true;
+            }
+            return !stopped;
         }
 
         /** At the budget: one byte of look-ahead decides whether the archive ended exactly here (exhausted) or had

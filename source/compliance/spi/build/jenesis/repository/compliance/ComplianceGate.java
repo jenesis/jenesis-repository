@@ -743,7 +743,7 @@ public final class ComplianceGate {
 
     /** The {@code Bundle-License} of an already-bounded jar stream, or null when it declares none. */
     private static DeclaredLicense declaredBundleLicense(InputStream jar) throws IOException {
-        try (ZipInputStream zip = new ZipInputStream(jar)) {
+        try (ZipInputStream zip = ArchiveWalk.zip(jar)) {
             for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
                 if (entry.isDirectory()) {
                     continue;                              // the META-INF/ directory entry precedes the manifest

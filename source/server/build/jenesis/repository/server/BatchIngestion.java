@@ -129,13 +129,20 @@ public final class BatchIngestion {
         int processed = 0;
         Inflation inflation = new Inflation(outer.requestStream(), Math.max(1, maxBytes.getAsLong()),
                 Math.max(1, maxRatio.getAsInt()));
-        try (ZipInputStream zip = new ZipInputStream(inflation.compressed)) {
+        try (ZipInputStream zip = inflation.zip()) {
             while (true) {
                 ZipEntry entry;
                 try {
                     entry = zip.getNextEntry();
                 } catch (ZipException _) {
                     malformed = true;
+                    break;
+                } catch (IOException bound) {
+                    if (inflation.exceeded == null) {
+                        throw bound;
+                    }
+                    // Moving past the previous entry inflates what was left of it, and that crossed a bound.
+                    tooLarge = inflation.exceeded;
                     break;
                 }
                 if (entry == null) {
@@ -223,18 +230,14 @@ public final class BatchIngestion {
             };
         }
 
-        /** The current entry's body, counted against the bounds and kept open for the walk. */
-        private InputStream entry(ZipInputStream zip) {
-            return new Unclosable(zip) {
-                @Override
-                public int read() throws IOException {
-                    int one = super.read();
-                    if (one >= 0) {
-                        inflated(1);
-                    }
-                    return one;
-                }
-
+        /**
+         * The archive's reader, counting every byte its entries inflate to against the bounds - the ones an entry's
+         * publish reads, and the ones moving to the next entry inflates to pass over what was left unread of this one,
+         * which a rejected entry is entirely. A reader passes over an entry through its own {@code read}, so counting
+         * there counts both.
+         */
+        private ZipInputStream zip() {
+            return new ZipInputStream(compressed) {
                 @Override
                 public int read(byte[] buffer, int offset, int length) throws IOException {
                     int read = super.read(buffer, offset, length);
@@ -244,6 +247,11 @@ public final class BatchIngestion {
                     return read;
                 }
             };
+        }
+
+        /** The current entry's body, kept open for the walk; the reader it comes from counts it. */
+        private InputStream entry(ZipInputStream zip) {
+            return new Unclosable(zip);
         }
 
         private void inflated(long bytes) throws IOException {

@@ -104,6 +104,52 @@ class ArchiveWalkTest {
         assertThat(found.consumed()).isEqualTo(64);
     }
 
+    /**
+     * A zip decompresses inside its reader, below which the screen sees only stored bytes - so a small entry that
+     * inflates vastly costs the screen little and the node everything, since moving past it inflates it. The walk's
+     * zip reader counts what entries inflate to, the ones passed over included, against the same ceiling: a bomb
+     * entry ahead of the manifest stops the walk as a truncation, while the same archive without it finds the
+     * manifest.
+     */
+    @Test
+    void a_zip_entry_passed_over_counts_what_it_inflates_to_against_the_ceiling() throws IOException {
+        byte[] bomb = zip("payload.bin", new byte[64 * 1024 * 1024],
+                "MANIFEST", "declared".getBytes(StandardCharsets.UTF_8));
+        assertThat(bomb.length).as("the payload is stored small, so the stored bytes alone never reach the ceiling")
+                .isLessThan(1024 * 1024);
+
+        ArchiveWalk.Found<String> passed = ArchiveWalk.walk(new ByteArrayInputStream(bomb), 1024 * 1024,
+                ArchiveWalkTest::manifest);
+        assertThat(passed.truncated()).as("passing over the payload inflated it past the ceiling").isTrue();
+
+        byte[] plain = zip("MANIFEST", "declared".getBytes(StandardCharsets.UTF_8));
+        assertThat(ArchiveWalk.walk(new ByteArrayInputStream(plain), 1024 * 1024, ArchiveWalkTest::manifest).orNull())
+                .isEqualTo("declared");
+    }
+
+    /** The {@code MANIFEST} entry's text, reached by passing over every entry before it unread. */
+    private static String manifest(InputStream screened) throws IOException {
+        ZipInputStream zip = ArchiveWalk.zip(screened);
+        for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
+            if (entry.getName().equals("MANIFEST")) {
+                return new String(zip.readAllBytes(), StandardCharsets.UTF_8);
+            }
+        }
+        return null;
+    }
+
+    private static byte[] zip(Object... members) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream out = new ZipOutputStream(bytes)) {
+            for (int index = 0; index < members.length; index += 2) {
+                out.putNextEntry(new ZipEntry((String) members[index]));
+                out.write((byte[]) members[index + 1]);
+                out.closeEntry();
+            }
+        }
+        return bytes.toByteArray();
+    }
+
     @Test
     void the_two_roles_are_the_two_accessors_and_a_bound_stopped_walk_never_reads_as_an_empty_archive() {
         ArchiveWalk.Found<String> truncated =

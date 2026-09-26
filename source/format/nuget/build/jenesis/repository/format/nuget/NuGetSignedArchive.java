@@ -3,6 +3,7 @@ package build.jenesis.repository.format.nuget;
 import module java.base;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.store.ArchiveInflation;
+import build.jenesis.repository.store.ArchiveWalk;
 
 /**
  * The two things a signed {@code .nupkg} needs before the shared PKCS#7 verifier can judge it: the signature the
@@ -47,19 +48,22 @@ final class NuGetSignedArchive {
 
     /**
      * The signature entry's bytes, read under the seam's signature bound, or empty for an unsigned package. The walk is
-     * the archive's own order, so the signature - last by NuGet's rule - is found after every other entry's header has
-     * been skipped, never inflated.
+     * the archive's own order, so the signature - last by NuGet's rule - is reached only after every other entry has
+     * been passed over, and passing over an entry inflates it: the walk runs under the shared archive-walk bound,
+     * which counts those inflated bytes too, so a package cannot spend a decompressor's whole output on the way. A
+     * walk the bound stops reads as carrying no signature evidence, as any optional declaration past the bound does.
      */
     static Optional<byte[]> signature(InputStream nupkg) throws IOException {
-        try (ZipInputStream zip = new ZipInputStream(nupkg)) {
+        return Optional.ofNullable(ArchiveWalk.walk(nupkg, screened -> {
+            ZipInputStream zip = ArchiveWalk.zip(screened);
             for (ZipEntry entry; (entry = zip.getNextEntry()) != null; ) {
                 if (entry.getName().equals(SIGNATURE_ENTRY)) {
-                    return Optional.of(ArchiveInflation.entry(zip, ArtifactSignatures.Material.LARGEST_SIGNATURE)
-                            .required("NuGet package", SIGNATURE_ENTRY));
+                    return ArchiveInflation.entry(zip, ArtifactSignatures.Material.LARGEST_SIGNATURE)
+                            .required("NuGet package", SIGNATURE_ENTRY);
                 }
             }
-        }
-        return Optional.empty();
+            return null;
+        }).orNull());
     }
 
     /** The package as it was before signing, rebuilt on each open as the class comment describes. */

@@ -105,7 +105,7 @@ public final class BoundedArchive {
         ArchiveWalk.Found<T> found;
         try {
             found = ArchiveWalk.walk(body, walkLimit, screened -> {
-                ZipInputStream zip = new ZipInputStream(screened);
+                ZipInputStream zip = ArchiveWalk.zip(screened);
                 ZipEntry first;
                 try {
                     first = zip.getNextEntry();

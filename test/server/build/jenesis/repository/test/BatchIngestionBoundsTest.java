@@ -51,6 +51,20 @@ class BatchIngestionBoundsTest {
         assertThat(store.list("blobs")).as("nothing of a refused entry is kept").isEmpty();
     }
 
+    /** An entry refused for its name is passed over unread, and passing over it inflates it - so it counts against the
+     *  same bounds as an entry that is published, and a bomb under a traversal name is refused at the cap rather than
+     *  inflated whole for nothing. */
+    @Test
+    void an_entry_passed_over_unread_counts_against_the_bounds_too() throws IOException {
+        Exchange upload = explode(zip("../escape.bin", new byte[8 * MIB], "after.txt",
+                "never reached".getBytes(StandardCharsets.UTF_8)), bounds(MIB, 1_000));
+
+        assertThat(upload.status).isEqualTo(413);
+        assertThat(upload.body()).contains("\"reason\":\"path-traversal\"").contains("\"error\":\"archive-bytes\"")
+                .doesNotContain("after.txt");
+        assertThat(store.list("blobs")).as("nothing was kept").isEmpty();
+    }
+
     @Test
     void an_ordinary_archive_under_both_bounds_explodes_as_before() throws IOException {
         byte[] noise = new byte[2 * MIB];

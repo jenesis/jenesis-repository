@@ -691,7 +691,7 @@ public final class MavenQualityInspector implements QualityInspector {
 
     /** The named descriptor entry of an already-bounded jar stream, or null when the archive carries no such entry. */
     private static byte[] descriptorEntry(InputStream jar, String descriptor) throws IOException {
-        try (ZipInputStream zip = new ZipInputStream(jar)) {
+        try (ZipInputStream zip = ArchiveWalk.zip(jar)) {
             for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
                 if (!entry.isDirectory() && entry.getName().equals(descriptor)) {
                     // An OPTIONAL declaration: a descriptor the inflation ceiling stopped degrades to "declares

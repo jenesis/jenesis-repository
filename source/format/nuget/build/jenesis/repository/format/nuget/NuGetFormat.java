@@ -826,7 +826,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
     /** The parsed {@code .nuspec} inside an already-bounded {@code .nupkg} stream, or {@code null} when it carries
      *  none. */
     private static Document declaredNuspec(InputStream nupkg) throws IOException {
-        try (ZipInputStream zip = new ZipInputStream(nupkg)) {
+        try (ZipInputStream zip = ArchiveWalk.zip(nupkg)) {
             for (ZipEntry entry; (entry = zip.getNextEntry()) != null; ) {
                 if (entry.getName().endsWith(".nuspec")) {
                     // The .nuspec carries the package's id/version, so it is the fail-closed side of the shared bound:

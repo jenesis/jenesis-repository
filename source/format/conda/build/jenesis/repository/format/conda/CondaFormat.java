@@ -360,7 +360,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
      *  inflates to many GB (a deflate bomb with no {@code info/index.json} to stop the walk early) would otherwise
      *  drive unbounded inflation on the publish thread even though the compressed bytes it drew were bounded. */
     private static ObjectNode infoMember(InputStream archive) throws IOException {
-        ZipInputStream zip = new ZipInputStream(archive);
+        ZipInputStream zip = ArchiveWalk.zip(archive);
         for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
             String name = entry.getName();
             if (name.startsWith("info-") && (name.endsWith(".tar.zst") || name.endsWith(".tar.zstd"))) {

@@ -728,7 +728,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
 
     /** The podspec inside an already-bounded archive stream, or {@code null} when it carries none. */
     private static ObjectNode declaredPodspec(InputStream archive) throws IOException {
-        ZipInputStream zip = new ZipInputStream(archive);
+        ZipInputStream zip = ArchiveWalk.zip(archive);
         ObjectNode nested = null;
         for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
             if (entry.isDirectory()) {
