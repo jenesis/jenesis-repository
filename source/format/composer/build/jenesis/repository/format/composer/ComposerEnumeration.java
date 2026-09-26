@@ -32,7 +32,7 @@ public final class ComposerEnumeration {
     /**
      * @param allowInternal the deployment's {@link build.jenesis.repository.blobs.ProxyLeg#ALLOW_INTERNAL} dial - the
      *                      same one the proxy leg reads, so a walk and a pull-through of the same {@code dist.url}
-     *                      cannot answer differently, and since the earlier work/the one screen they both call is
+     *                      cannot answer differently, and the one screen they both call is
      *                      {@link build.jenesis.repository.blobs.OutboundTargets}. Off means a cross-origin dist must
      *                      be {@code https} and public; one on the submitted upstream's own ORIGIN (scheme and
      *                      authority) is operator-trusted either way, because it reaches no host, port or scheme the
@@ -119,10 +119,10 @@ public final class ComposerEnumeration {
             } catch (IllegalArgumentException invalid) {
                 continue;
             }
-            // the earlier sharpest instance was here: this walk exempted a dist on the submitted upstream's own authority
-            // while ComposerFormat.distUrl - eighty lines away, over the same dist.url field of the same document -
-            // refused exactly that. Same format, same field, two answers, neither aware of the other. Both now ask
-            // OutboundTargets, so there is one answer and it is the exempting one (see that class for why).
+            // The sharpest instance of the two policies was here: this walk exempted a dist on the submitted upstream's
+            // own authority while ComposerFormat.distUrl - eighty lines away, over the same dist.url field of the same
+            // document - refused exactly that. Same format, same field, two answers, neither aware of the other. Both
+            // now ask OutboundTargets, so there is one answer and it is the exempting one (see that class for why).
             if (OutboundTargets.mayFollow(target, root, allowInternal)) {
                 entries.add(Map.entry(plain + "/" + version + ".zip", target));
             }

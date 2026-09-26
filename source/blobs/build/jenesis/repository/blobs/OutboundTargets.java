@@ -7,7 +7,7 @@ import build.jenesis.repository.settings.PrivateHostGuard;
 
 /**
  * The outbound-target screen a proxy leg owes the URL it is about to fetch, held once for the whole product - the
- * wrapper found copied seven times and found copied into <em>two contradictory policies</em>.
+ * wrapper that had been copied seven times, into <em>two contradictory policies</em>.
  *
  * <p>The dangerous half was never the copied part: the blocked address ranges have always come from
  * {@link PrivateHosts}, and the transport half and the dial from {@link PrivateHostGuard}. What each leg still
@@ -24,8 +24,8 @@ import build.jenesis.repository.settings.PrivateHostGuard;
  * <ul>
  *   <li>{@link #configuredRefusal(URI, boolean)} - an <b>operator-configured</b> root: the proxy upstream itself and
  *       the Go checksum database ({@code jenreg.go.sumdb}). The operator chose the address, so the question is only
- *       what this deployment will put on the wire to reach it. <b>The transport half only</b>, which is the earlier ruling
- *       and its reasoning, unchanged: an internal, privately-addressed mirror is a legitimate and common deployment,
+ *       what this deployment will put on the wire to reach it. <b>The transport half only</b>, for a reason
+ *       that has not changed: an internal, privately-addressed mirror is a legitimate and common deployment,
  *       and this value is also rendered on console GET paths where resolving a host would be an external lookup on a
  *       read path (&sect;10).</li>
  *   <li>{@link #advertisedRefusal(URI, URI, boolean)} - a URL an <b>upstream document</b> chose. The far side picked
@@ -35,7 +35,7 @@ import build.jenesis.repository.settings.PrivateHostGuard;
  * <h2>Which of the two host policies won, and why it is the exempting one</h2>
  * <b>A target on the configured upstream's own origin is admitted; everything cross-origin runs the full shared
  * screen.</b> The argument is not that the exemption is convenient - it is that absolute-refuse is <em>incoherent</em>
- * with the screen the product applies one layer up. Since the operator-configured upstream is judged on its
+ * with the screen the product applies one layer up. The operator-configured upstream is judged on its
  * <b>transport half only</b>: {@code https://mirror.internal/} is deliberately admitted with no dial, because the
  * operator chose it and an internal mirror is a normal deployment. A leg that then absolute-refuses an advertised URL
  * applies a <em>stricter</em> rule to the upstream's second path than the product applies to the upstream itself - it
@@ -45,11 +45,11 @@ import build.jenesis.repository.settings.PrivateHostGuard;
  * host, no port and no scheme the leg was not already reaching; the marginal SSRF surface of the exemption is exactly
  * zero, while the cost of dropping it is that proxying an internal mirror breaks on every format.
  *
- * <p>The escape hatch proposed instead - "let {@link ProxyLeg#ALLOW_INTERNAL} serve that case" - would have made
+ * <p>The escape hatch once proposed instead - "let {@link ProxyLeg#ALLOW_INTERNAL} serve that case" - would have made
  * it worse rather than uniform. The dial lifts <b>both halves for every target on all fourteen legs</b>, so a
  * deployment whose only unusual property is a private IP would have to accept cleartext everywhere and let a hostile
  * <em>public</em> upstream aim a {@code dl} template at {@code 169.254.169.254}. The exemption is strictly narrower
- * than the dial and strictly safer than turning it on, so it stays and the dial keeps meaning what gave it.
+ * than the dial and strictly safer than turning it on, so it stays and the dial keeps its one meaning.
  *
  * <p><b>And this class does not get to invent that rule.</b> It is already stated, argued, for the leg with the
  * same shape - {@code ImportScreen.refusalReason(authorised, url)}, "exactly where the operator pointed the

@@ -648,7 +648,7 @@ public final class ComplianceScreen implements PublishInterceptor {
     }
 
     /**
-     * The publish-time hold-mapping round-trip check (CEP-P2 / C1-A2): once an accepted publish has been laid out in
+     * The publish-time hold-mapping round-trip check: once an accepted publish has been laid out in
      * its format's namespace, verify the format's REVERSE mapping resolves the very artifact just served. This is the
      * one after-commit hook that runs <em>after</em> the format links its served pointers (the interceptor
      * {@link #committed} runs before layout, when nothing the format serves exists yet), so it is where the pointers
@@ -785,16 +785,15 @@ public final class ComplianceScreen implements PublishInterceptor {
      * {@code servedPaths} maps the coordinate version back to, and the stored content hash is one its
      * {@code blobHashes} resolves. A format whose {@code describe} emits a coordinate (so a retroactive KEV/license
      * sweep enumerates the version) but whose {@code blobKeys}/{@code servedPaths} resolve NOTHING back would hold
-     * un-retractably - the RPM/conda/conan class that shipped five times and surfaced only in a later audit (a27/a6
-     * Finding 1). Caught here it fails on the FIRST publish. On a break: emit
-     * {@code jenreg.publish.holdmapping.broken{eco}} + one WARN, and {@code throw} only when
-     * {@code jenreg.strict-hold-mapping} is on (every test config sets it) - production stays
-     * alarm-not-abort, since a broken format must not DoS publishes (the {@code hold.unenforceable} gauge reasoning of
-     * #204). Scoped strictly to the JUST-published path/hash, which the format just wrote, so an evicted-but-still-
-     * enumerated sibling version - which legitimately resolves to nothing at describe time - never false-positives.
-     * Only blobs-namespace ecosystems are checked: a {@code publish/}-namespace layout (Maven) or a non-blobs upload
-     * has no such reverse mapping to verify, and a path that names no versioned artifact (an index, a packument, a
-     * versionless envelope endpoint) is skipped exactly as the {@code published/} sidecar write is.
+     * un-retractably - the RPM/conda/conan class that shipped five times and surfaced only in a later audit. Caught
+     * here it fails on the FIRST publish. On a break: emit {@code jenreg.publish.holdmapping.broken{eco}} + one WARN,
+     * and {@code throw} only when {@code jenreg.strict-hold-mapping} is on (every test config sets it) - production
+     * stays alarm-not-abort, since a broken format must not DoS publishes (the {@code hold.unenforceable} gauge
+     * reasoning of #204). Scoped strictly to the JUST-published path/hash, which the format just wrote, so an
+     * evicted-but-still- enumerated sibling version - which legitimately resolves to nothing at describe time - never
+     * false-positives. Only blobs-namespace ecosystems are checked: a {@code publish/}-namespace layout (Maven) or a
+     * non-blobs upload has no such reverse mapping to verify, and a path that names no versioned artifact (an index, a
+     * packument, a versionless envelope endpoint) is skipped exactly as the {@code published/} sidecar write is.
      */
     private static void verifyHoldMapping(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
@@ -1187,7 +1186,7 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  record and let an unprivileged re-upload launder a human-review hold (before this only the KEV kind was
      *  consulted, so a re-publish declaring clean metadata cleared a license-retro hold). The check reads the durable
      *  {@link HoldRecords} and then the discovered {@link HoldReleaseObserver}s, so a new hold kind joins by writing a
-     *  record, never an edit here - and, since the earlier work, a kind whose module has been UNINSTALLED still counts, so
+     *  record, never an edit here - and a kind whose module has been UNINSTALLED still counts, so
      *  uninstalling a compliance module cannot turn an ordinary re-upload into a laundering channel for the holds it
      *  had placed. A path a format DID place and that no sweep holds is not sweep-owned, so a plain publish-time gate
      *  hold is cleared as before.
@@ -1485,14 +1484,14 @@ public final class ComplianceScreen implements PublishInterceptor {
      * the publication seam's <em>own</em> two sibling reads, one compliance leg delegating to one store leg.
      *
      * <p><b>Each leg delegates to its counterpart; neither is derived from the other.</b> That is the whole content of
-     * the earlier fix. Before it, this screen handed inspectors {@code content::sibling} - a method reference
+     * the fix. Before it, this screen handed inspectors {@code content::sibling} - a method reference
      * that supplied only the whole-document read and let {@link QualityInspector.Lookup}'s since-deleted default
      * synthesise the bounded one from it. The synthesis inherited the whole-document ceiling, so
      * {@code AttestationInspector}, which asks for a 32 MiB bounded read of the artifact its referrer names, got an
      * exception above {@link PublishInterceptor.Content#LARGEST_SIBLING} (8 MiB) here while the proxy leg - which
      * overrode the default and streams - answered {@code truncated} for the very same sibling. An 8-32 MiB companion
-     * therefore degraded on one leg and raised on the other. The publication seam has offered a real bounded read since
-     * 0.10.0 ({@link PublishInterceptor.Content#sibling(String, int)}, capped at the store), so the screen now hands
+     * therefore degraded on one leg and raised on the other. The publication seam has offered a real bounded read
+     * ({@link PublishInterceptor.Content#sibling(String, int)}, capped at the store), so the screen now hands
      * that through unchanged and the two legs agree.
      *
      * <p>The two {@code Bounded} records are the same pair of values in two SPIs (the store contract and the

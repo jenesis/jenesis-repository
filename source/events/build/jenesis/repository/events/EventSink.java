@@ -92,15 +92,15 @@ import build.jenesis.repository.store.Providers;
  *         {@link #accept} says the JVM or the module graph is broken, not that a notification could not be queued;
  *         containing it would let a deployment run on serving artifacts while its heap or its module path is gone,
  *         reporting nothing worse than a queued webhook. So it is logged at {@code ERROR}, attributed to the sink
- *         that raised it, and rethrown - the same ruling reached for a contract kit, where an {@code Error} is
- *         reported as the harness breaking rather than filed as the subject's answer, and the same shape 
- *         found on the interceptor legs. It fails the observed mutation and starves the sinks after it, deliberately:
+ *         that raised it, and rethrown - the same ruling a contract kit follows, where an {@code Error} is
+ *         reported as the harness breaking rather than filed as the subject's answer, and the shape the
+ *         interceptor legs already have. It fails the observed mutation and starves the sinks after it, deliberately:
  *         there is no useful fan-out left to continue.</li>
  *     <li><b>A packaging error is refused before any sink is called.</b> A duplicate sink name (clause 4), a
  *         {@code null} or blank {@link #name()}, a {@link #name()} that throws, and a
  *         {@link ServiceConfigurationError} from a provider module that cannot be instantiated all arise while
- *         {@link Providers#all} is resolving, and all propagate out of {@link #emit} uncontained. This is the
- *         &sect;10b behaviour change lands: a deployment that ships two sinks under one name, or a sink that
+ *         {@link Providers#all} is resolving, and all propagate out of {@link #emit} uncontained. This is a
+ *         deliberate behaviour change: a deployment that ships two sinks under one name, or a sink that
  *         cannot be constructed, now fails the mutation it was observing instead of quietly notifying an
  *         unenumerable set of subscribers. It is loud on purpose - the diagnostic names both provider classes and
  *         the shared name - and it is a build-time or deploy-time defect, never a runtime condition a healthy
@@ -174,7 +174,7 @@ public interface EventSink {
     String SPI = "event-sink";
 
     /** Names the notification a best-effort {@link #emit} contained, so a store/sink outage dropping a publish /
-     *  unpublish / quarantine / finding / promotion is visible rather than silent (PRINCIPLES §9). */
+     *  unpublish / quarantine / finding / promotion is visible rather than silent (§9). */
     Logger LOGGER = LoggerFactory.getLogger(EventSink.class);
 
     /** Observe one event that occurred in {@code store} (a tenant-and-repository scoped store). Best-effort and
@@ -214,7 +214,7 @@ public interface EventSink {
             } catch (Throwable failure) {
                 // Best-effort: a notification is never allowed to fail the operation it observes - so the failure is
                 // contained here, never rethrown to the caller. But containing it silently would lose a publish /
-                // quarantine / finding / promotion notification with zero diagnostic (PRINCIPLES §9: a fail-soft
+                // quarantine / finding / promotion notification with zero diagnostic (§9: a fail-soft
                 // still emits a diagnostic), so name the lost event - its kind and coordinate/path - and the sink
                 // that dropped it at WARNING, so an operator can see a store/sink outage swallowing notifications
                 // instead of guessing. The sink's name is the one resolution captured: re-asking a broken sink for
@@ -269,14 +269,14 @@ public interface EventSink {
      *  collapsing two of them into one entry.
      *
      *  <p><b>No production surface reads this</b>, and this javadoc asserted that a console and an API gated their
-     *  surfaces on it for as long as neither did -. There is no console screen for sinks, and the console is a
+     *  surfaces on it for as long as neither did. There is no console screen for sinks, and the console is a
      *  separate node carrying no plugin runtime, so it could not resolve the events module if there were one;
      *  {@code /api/capabilities} reports the {@code webhook} <em>web module</em>, which is a different thing. Wiring
      *  this into the capabilities body would move the dead leg to the wire rather than close it, because a JSON field
      *  no client reads is the same defect one layer out. Its real readers are
      *  {@code test/events} and {@code test/webhook}, which is what keeps the duplicate-name refusal of clause 4
      *  asserted: {@link #emit} would fan out to two sinks named {@code webhook} where this reported one, and that
-     *  divergence is what closed. this note and the call graph are held to
+     *  divergence is what the duplicate-name refusal closed. This note and the call graph are held to
      *  each other. */
     static Set<String> installed() {
         return Providers.installedNames(SPI,

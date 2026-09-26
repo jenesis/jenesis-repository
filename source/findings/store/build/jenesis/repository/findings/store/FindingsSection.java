@@ -10,7 +10,7 @@ import build.jenesis.repository.metadata.SectionMutation;
 import build.jenesis.repository.metadata.Signal;
 
 /**
- * The {@code findings} section codec of the consolidated metadata document (§5.1): a coordinate version's
+ * The {@code findings} section codec of the consolidated metadata document: a coordinate version's
  * findings rows, keyed {@code (source, id)}, unioned across every writer exactly as the {@code findings/} sidecar this
  * section replaces did. This is the section-scoped form of {@link StoreFindings}' row model - the same
  * categorize-never-discard merge (a re-record refreshes a row's facts and {@code lastSeen} while keeping its

@@ -46,7 +46,7 @@ public final class EventPublicationObserver implements PublicationObserver {
 
     /**
      * The delete counterpart of {@link #onPublished}, so a subscriber that reacted to the publish is told the
-     * coordinate stopped serving. The CDN-origin purge trigger of EPIC 29 (RD-6): an edge cache that cached the
+     * coordinate stopped serving. It is the CDN-origin purge trigger: an edge cache that cached the
      * artifact under its own URL subscribes to {@code unpublish} and purges it, so a serve plane that just stopped
      * honouring a redirect target does not keep serving it from the edge.
      */

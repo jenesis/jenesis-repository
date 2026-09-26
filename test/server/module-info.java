@@ -87,7 +87,7 @@ open module build.jenesis.repository.test {
                     build.jenesis.repository.test.MarkerInterceptor,
                     build.jenesis.repository.test.CountingInterceptor,
                     build.jenesis.repository.test.CensusObserver;
-    // register a test ImportEdgeProvider so the running free server discovers it via ServiceLoader exactly as a
+    // Register a test ImportEdgeProvider so the running free server discovers it via ServiceLoader exactly as a
     // richer distribution would, proving the free import edge yields (its mapping is not registered) when a distribution
     // owns the edge - no WebMvcRegistrations suppression. Inert by default (a required-config gate), activated only by
     // the yield test, so every other import test still sees the free edge served.

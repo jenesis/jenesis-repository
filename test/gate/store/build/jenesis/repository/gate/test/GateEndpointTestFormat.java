@@ -8,8 +8,8 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * A test-only blobs-namespace {@link BlobLayout} standing in for the shape is about: a format whose coordinate
- * lives <em>inside</em> the artifact, so it screens under a push ENDPOINT that names no coordinate and serves the
+ * A test-only blobs-namespace {@link BlobLayout} standing in for a format whose coordinate
+ * lives <em>inside</em> the artifact: it screens under a push ENDPOINT that names no coordinate and serves the
  * artifact somewhere else entirely.
  *
  * <p>It exists to give {@code ComplianceScreen} an installed layout that answers the store-free

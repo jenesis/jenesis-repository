@@ -10,7 +10,7 @@ import build.jenesis.repository.metadata.Section;
 
 /**
  * The pin subsystem extracted from {@link StoreRepositoryInventory}: force-keep markers that make a coordinate version
- * immune to every retention rule. As of a pin is a field of the document's {@code published} section (preserving
+ * immune to every retention rule. A pin is a field of the document's {@code published} section (preserving
  * the publish instant/prerelease), so it evicts with the version's document instead of dangling as its own
  * {@code pinned/} sidecar; with no metadata store installed it stays the legacy {@code pinned/} sidecar. The facade owns
  * the seam - {@code pin}/{@code unpin}/{@code pins}/{@code pinned} delegate here - and this class shares the facade's

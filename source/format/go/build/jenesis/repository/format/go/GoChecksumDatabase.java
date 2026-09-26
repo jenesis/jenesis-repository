@@ -40,19 +40,19 @@ import build.jenesis.repository.store.Features;
  * deployment may reach is an egress decision made where the process is started, not a runtime dial, and an air-gapped
  * deployment sets it {@code off} so no fill waits on a name that cannot resolve.
  *
- * <p>It was also, until, the last <b>operator-configured outbound target in the product with no screen at all</b>.
- * {@link #base(boolean)} did the &sect;9 half well - a value that is not an http(s) base URL throws at read, naming the
- * key, so an operator who misspelt it is not left believing verification is running - and then admitted plain
- * {@code http}. No credential rides to the checksum database, so this is not the earlier credential-in-cleartext hazard;
- * it is the other one, and on this leg it is sharper. A cleartext {@code lookup} is an active intermediary's
- * opportunity to answer <em>every</em> integrity question itself, and this repository then holds a proxied {@code .zip}
- * to whatever that answer said - so one attacker on the path chooses both the module bytes (from a cleartext GOPROXY)
- * and the digest they are checked against, and the check reports success. The screen is therefore
- * {@link OutboundTargets#configuredRefusal}, the <em>same</em> rule the proxy upstream runs under the
- * <em>same</em> {@link ProxyLeg#ALLOW_INTERNAL} dial, rather than a second spelling of it.
+ * <p>It was also, until it was given one, the last <b>operator-configured outbound target in the product with no screen
+ * at all</b>. {@link #base(boolean)} did the &sect;9 half well - a value that is not an http(s) base URL throws at
+ * read, naming the key, so an operator who misspelt it is not left believing verification is running - and then
+ * admitted plain {@code http}. No credential rides to the checksum database, so this is not the credential-in-cleartext
+ * hazard of a proxy upstream; it is the other one, and on this leg it is sharper. A cleartext {@code lookup} is an
+ * active intermediary's opportunity to answer <em>every</em> integrity question itself, and this repository then holds
+ * a proxied {@code .zip} to whatever that answer said - so one attacker on the path chooses both the module bytes (from
+ * a cleartext GOPROXY) and the digest they are checked against, and the check reports success. The screen is therefore
+ * {@link OutboundTargets#configuredRefusal}, the <em>same</em> rule the proxy upstream runs under the <em>same</em>
+ * {@link ProxyLeg#ALLOW_INTERNAL} dial, rather than a second spelling of it.
  *
- * <p><b>The transport half only, for the earlier reason and one of this leg's own.</b> An operator running their own
- * checksum database on an internal address is a legitimate deployment - the same judgement made about an
+ * <p><b>The transport half only, for the proxy upstream's reason and one of this leg's own.</b> An operator running
+ * their own checksum database on an internal address is a legitimate deployment - the same judgement made about an
  * internal upstream mirror - and the host half would put a DNS resolution on the path of every {@code lookup} to
  * re-decide a value that was fixed when the process started. The capability floor beneath it is not a policy question
  * and the dial does not lift it.
@@ -114,7 +114,7 @@ public final class GoChecksumDatabase {
             throw new IllegalArgumentException(DATABASE_KEY + " must be an http(s) base URL of a Go checksum database "
                     + "(or 'off'), not '" + configured + "'");
         }
-        // the screen this operator-configured outbound target never had, and it is the proxy upstream's screen
+        // The screen this operator-configured outbound target never had, and it is the proxy upstream's screen
         // rather than a private one - one rule, one wording, one dial for both of the edition's configured roots.
         String refusal = OutboundTargets.configuredRefusal(base, allowInternal);
         if (refusal != null) {

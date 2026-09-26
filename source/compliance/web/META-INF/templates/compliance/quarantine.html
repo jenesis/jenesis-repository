@@ -33,7 +33,7 @@
                         <small><code th:text="${q.path}">/path/...</code></small>
                     </td>
                     <td><span class="app-badge app-badge--warn" th:text="${q.verdict}">QUARANTINE</span></td>
-                    <!--/* D-095: the retroactive hold kinds standing on this coordinate, read from the durable
+                    <!--/* The retroactive hold kinds standing on this coordinate, read from the durable
                            holds/ records rather than from the installed providers. A kind whose module has been
                            uninstalled still holds, and is drawn here exactly as an orphaned finding source is - the
                            same dashed tile and the same words - so an operator releasing it knows no installed module

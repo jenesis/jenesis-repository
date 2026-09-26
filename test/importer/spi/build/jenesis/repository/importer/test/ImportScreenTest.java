@@ -16,8 +16,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * The one import screen, in both its shapes. The <em>edge</em> shape judges the URL an operator submitted under the
  * {@code block-private-import-hosts} dial; the <em>fetch</em> shape judges every URL a source then hands back, against
  * the URL that dial admitted, and it needs no dial of its own because the authorisation level is already stated by the
- * submitted URL. The fetch shape is the one was missing: a screen that judges only what the operator typed
- * judges the one URL a hostile source does not control.
+ * submitted URL. The fetch shape is the one a screen of the typed URL alone misses: a screen that judges only what the
+ * operator typed judges the one URL a hostile source does not control.
  */
 class ImportScreenTest {
 
@@ -53,7 +53,7 @@ class ImportScreenTest {
 
     @Test
     void a_plaintext_url_under_an_https_migration_is_refused_even_on_the_very_same_host() {
-        // the earlier vector. The scheme is part of the origin, so this URL is cross-origin and the credential half
+        // The cleartext vector. The scheme is part of the origin, so this URL is cross-origin and the credential half
         // correctly withheld the password - nothing leaks. What travels in the clear is the artifact body, which is
         // then written into the hosted store, and no integrity check stands behind it: the checksums a migration can
         // see are served by the same party that serves the bytes.

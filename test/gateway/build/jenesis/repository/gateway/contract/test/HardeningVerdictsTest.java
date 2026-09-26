@@ -15,7 +15,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The read-only hardening console surface (EPIC 23): {@link HardeningVerdicts} assembles what the hardened leg
+ * The read-only hardening console surface: {@link HardeningVerdicts} assembles what the hardened leg
  * durably recorded - the digest-pinned {@link VerdictSection verdict}, the typed {@link QuarantineLog} refusals and the
  * drift alarm - for a coordinate, over a seeded meta doc and quarantine ledger, <em>without</em> re-screening or
  * fetching a byte (there is no {@code ComplianceGate}, spool or fetcher in play here - the read cannot screen). Proves:

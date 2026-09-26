@@ -10,7 +10,7 @@
  * wherever the resolver was off.
  *
  * <p>Hence a module of its own rather than a home inside one of them: a {@code format/*} module must require only its
- * SPI and never a peer or the console (PRINCIPLES &sect;2), and the console must not pull a format in. The module is
+ * SPI and never a peer or the console (&sect;2), and the console must not pull a format in. The module is
  * deliberately weightless - {@code java.base} plus the single already-pinned, permissively licensed boundary parser
  * both formats were already using ({@code org.apache.commons.fileupload2.core}; &sect;8 says reach for the library
  * rather than hand-scan a binary body) - so requiring it costs a caller nothing it did not already carry.

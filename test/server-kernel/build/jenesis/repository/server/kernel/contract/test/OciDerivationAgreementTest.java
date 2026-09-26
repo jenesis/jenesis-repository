@@ -49,14 +49,14 @@ class OciDerivationAgreementTest {
 
     /**
      * The installed lender for the {@code oci/} root - resolved through {@link BlobReferences#installed()},
-     * the same static {@code MarkSweepGarbageCollectorProvider} resolves its lenders with, and since the earlier work the
+     * the same static {@code MarkSweepGarbageCollectorProvider} resolves its lenders with, and the
      * same static (and the same filter) {@code OciBlobLayout} itself resolves its lender with, so this suite measures
      * the object the hold side really asks and not a hand-built stand-in.
      *
      * <p>Its absence is itself a failure worth naming: with no lender owning {@code oci/}, a mark pass sees only what
      * a tag pointer's body spells and every live image's config and layers are condemned and deleted - and the
      * hold side degrades to manifest-only. That layout is filtered out by its type: it declares the same
-     * root, and since the earlier work it is a lender too, but it lends nothing because the free format owns the manifest dialect.
+     * root, and it is a lender too, but it lends nothing because the free format owns the manifest dialect.
      */
     private static final BlobReferences FREE_OCI = BlobReferences.installed().stream()
             .filter(lender -> lender.blobRoots().contains("oci") && !(lender instanceof BlobRoots))
@@ -287,7 +287,7 @@ class OciDerivationAgreementTest {
 
     @Test
     void a_digest_rooted_unparseable_manifest_degrades_out_loud_too() throws IOException {
-        // The degrade is SYMMETRIC since the earlier work, and it was not before. The hand-rolled walk WARNed only when the root
+        // The degrade is SYMMETRIC now, and it was not before. The hand-rolled walk WARNed only when the root
         // had been resolved from a TAG pointer, on the argument that only a tag pointer's target is contractually a
         // manifest; an image pulled by digest whose manifest no longer parses lost its layers from every hold and
         // enumeration in silence. The oci/types/<hex> sidecar is written for EVERY accepted manifest, so its target is

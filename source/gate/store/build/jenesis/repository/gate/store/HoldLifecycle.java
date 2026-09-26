@@ -83,7 +83,7 @@ public final class HoldLifecycle {
         // Both are pure reads of small objects, and no hook may write either key space (contract clause 8).
         Optional<QuarantineDispatch> dispatch = QuarantineDispatch.read(store, path);
         Optional<String> current = publication.blob(path);
-        // a release that can neither link a pointer nor prove it must not is refused, and refused here - before
+        // A release that can neither link a pointer nor prove it must not is refused, and refused here - before
         // anything is mutated. With the owning format's module off the graph describe() answers nothing, the
         // two-valued blobs-namespace question read that silence as "not blobs-namespace", and the release synthesized a
         // publish/<path> pointer for a version whose format may never serve through one: a phantom entry no format
@@ -229,7 +229,7 @@ public final class HoldLifecycle {
         // Resolve the coordinate for the resolution event BEFORE the reap below destroys the version's state; the
         // path stays the stable identifier if it no longer maps to a coordinate.
         Optional<ArtifactDescriptor> discarded = new StoreRepositoryInventory(store).describe(path);
-        // (2), and refused HERE - before anything is mutated - for the reason refused the eviction. A
+        // A discard is refused HERE too - before anything is mutated - for the reason an eviction is. A
         // discard's destroy intent has two halves: clear the review handle, and stop the bytes serving. With the owning
         // format's module off the graph the second half silently does nothing (discardBlobs is a no-op for an ecosystem
         // no installed BlobLayout owns, and there is no publish/ pointer for a blobs-namespace version to unpublish)
@@ -391,15 +391,15 @@ public final class HoldLifecycle {
     }
 
     /**
-     * The refusal a screen-quarantined release raises when the module that would materialise it is gone ((3)),
+     * The refusal a screen-quarantined release raises when the module that would materialise it is gone,
      * naming the held coordinate from the durable {@link HeldSubjects} record where one was written.
      *
      * <p>The replay legs used to degrade to {@code Publication.link(path, hash)} - "so the hold still resolves" - and
      * that was wrong twice over. The held blob of an envelope-bodied format is the publish <em>envelope</em> (an npm
      * packument, a NuGet/PyPI multipart), so linking it materialises no version at all: nothing is installable and the
-     * release reports success. And for a blobs-namespace format it strands the phantom {@code publish/} pointer 
-     * closed on the sibling branch - an entry no format serves and retention's layout reverse-mapping never reclaims.
-     * The release surface is a human's decision about a review item, so the honest answer is the one already
+     * release reports success. And for a blobs-namespace format it strands the phantom {@code publish/} pointer
+     * already closed on the sibling branch - an entry no format serves and retention's layout reverse-mapping never
+     * reclaims. The release surface is a human's decision about a review item, so the honest answer is the one already
      * settled for the other branch: keep the hold, say why, and let reinstalling the module make the release exact.
      * Nothing has been mutated at this point beyond the pre-commit override promotion, which a re-run converges on.
      */

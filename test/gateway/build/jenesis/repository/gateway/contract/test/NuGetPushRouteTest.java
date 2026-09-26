@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * path, so the format used to read <em>every</em> {@code PUT} under {@code /nuget/} as a push - including one aimed at
  * a read address such as {@code v3/index.json} or a flat-container file, and one aimed at an endpoint that has never
  * existed. Each published and each answered {@code 201}. Nothing landed at a wrong key and nothing traversed (a
- * {@code.}/{@code ..} path is a 404 here since); what was lost is the refusal, so a client configured against
+ * {@code .}/{@code ..} path is a 404 here); what was lost is the refusal, so a client configured against
  * an endpoint this repository never offered was told its pushes had succeeded.
  *
  * <p>The positive leg is the load-bearing half: a route screen that refused the real push endpoint too would satisfy

@@ -10,13 +10,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * items 2/4 at the model level: the console reads a repository's parsed {@link SettingsAdmin.RepositoryShape}
- * straight from the one {@code Definition} the router routes on, so the list/detail badges render the right shape for
- * each of the generalized model's cells - hosted, caching proxy, {@code nocache} pass-through, {@code harden}, a group,
- * and the writable-plus-fallbacks host+proxy hybrid the old three-type model could not name - and a valid-but-risky
- * definition ({@code unscreened}, plaintext, mixed screening strength) surfaces its warning as a non-blocking notice
- * (not a refusal). Drives the deployment-wide {@link SettingsAdmin} over a real store, no Spring context, the sibling of
- * {@code SettingsAdminTest}.
+ * The shape badges and risk notices at the model level: the console reads a repository's parsed {@link
+ * SettingsAdmin.RepositoryShape} straight from the one {@code Definition} the router routes on, so the list/detail
+ * badges render the right shape for each of the generalized model's cells - hosted, caching proxy, {@code nocache}
+ * pass-through, {@code harden}, a group, and the writable-plus-fallbacks host+proxy hybrid the old three-type model
+ * could not name - and a valid-but-risky definition ({@code unscreened}, plaintext, mixed screening strength) surfaces
+ * its warning as a non-blocking notice (not a refusal). Drives the deployment-wide {@link SettingsAdmin} over a real
+ * store, no Spring context, the sibling of {@code SettingsAdminTest}.
  */
 public class RepositoryShapeBadgeTest {
 
@@ -123,7 +123,7 @@ public class RepositoryShapeBadgeTest {
 
     @Test
     void a_plaintext_upstream_is_refused_and_only_warned_about_once_the_dial_admits_it() throws IOException {
-        // the proxy upstream used to be the one operator-configured outbound target that was warned about
+        // The proxy upstream used to be the one operator-configured outbound target that was warned about
         // rather than refused, while the webhook, forward, emulator, redirect and import targets all decline one.
         // It is refused now, and the message names the hazard and the deliberate opt-out.
         assertThatThrownBy(() -> settings.setRepository("plain", "proxy http://a.example/repo"))
@@ -134,7 +134,7 @@ public class RepositoryShapeBadgeTest {
         assertThat(settings.repositories()).as("nothing was stored").doesNotContainKey("plain");
 
         // With the dial taken - the deployment that really does pull from a plaintext internal mirror - the value is
-        // storable again and the console notice is what remains: an accepted risk, still stated loudly (PRINCIPLES §9).
+        // storable again and the console notice is what remains: an accepted risk, still stated loudly (§9).
         settings.save("proxy-allow-internal", "true");
         settings.setRepository("plain", "proxy http://a.example/repo");
         SettingsAdmin.RepositoryShape shape = settings.shape("plain");

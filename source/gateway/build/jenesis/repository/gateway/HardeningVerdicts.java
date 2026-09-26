@@ -7,14 +7,14 @@ import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The read-only console surface of the hardened proxy leg (EPIC 23): what the now-invisible full-body screening
+ * The read-only console surface of the hardened proxy leg: what the now-invisible full-body screening
  * leg has durably decided, assembled for an operator without re-screening or re-fetching a single byte. It reads only
  * what the leg already persisted - the digest-pinned {@link VerdictSection verdict} record in the consolidated metadata
  * document ({@link HardenedScreen} writes it on every screen), the typed structural refusals in the durable
  * {@link QuarantineLog} (the leg records each {@link HardenedScreen.Refusal} as a {@code REJECT} row prefixed
  * {@link HardenedScreen#REFUSAL_REASON_PREFIX}), and the gateway-wide drift alarm counter
  * ({@link HardenedScreen#driftEvents()}, the same count {@link HardeningObservability} reports) - so the read stands
- * when the upstream is down and never pays for a screen (PRINCIPLES §10 reads render, §7 the reader pays for nothing).
+ * when the upstream is down and never pays for a screen (§10 reads render, §7 the reader pays for nothing).
  *
  * <p>Every accessor is a pure durable-state read: {@link #view(String, int)} looks the coordinate's recorded verdict up
  * by a single metadata section read (the same {@link HardenedScreen.Coordinate coordinate derivation} the leg keys its

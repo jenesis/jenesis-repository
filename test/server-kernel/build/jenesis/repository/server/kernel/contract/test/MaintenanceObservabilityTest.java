@@ -116,7 +116,7 @@ class MaintenanceObservabilityTest {
 
     @Test
     void the_worker_row_tells_a_stopped_loop_from_an_idle_one() throws IOException, InterruptedException {
-        // the earlier operator question, on the one surface built to answer it: an enabled task that has never been due
+        // The operator's question, on the one surface built to answer it: an enabled task that has never been due
         // reports UNKNOWN whether the worker is iterating every idle-poll window or died an hour ago, so the loop's
         // own liveness has to be a row of its own.
         MaintenanceScheduler scheduler = schedulerWith(task("reanalyze", false));

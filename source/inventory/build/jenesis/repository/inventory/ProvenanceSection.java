@@ -8,7 +8,7 @@ import build.jenesis.repository.metadata.SectionMutation;
 import build.jenesis.repository.metadata.Signal;
 
 /**
- * The {@code provenance} summary section codec of the consolidated metadata document (§5.1): the per-coordinate
+ * The {@code provenance} summary section codec of the consolidated metadata document: the per-coordinate
  * <em>summary</em> of a version's provenance - whether its attestation verified against a trusted signer and the
  * SHA-256 of the subject it bound - pointing at, but never duplicating, the content-keyed attestation cache
  * ({@code provenance-attestation/<sha256>/<path digest>}) that stays separate by design (§8). Unlike the {@code licenses} and

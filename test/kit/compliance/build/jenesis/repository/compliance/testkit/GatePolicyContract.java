@@ -24,7 +24,7 @@ import build.jenesis.repository.compliance.Verdict;
  * halves of the screen are contracted the same way.
  *
  * <h2>What the symmetry check actually proves</h2>
- * made the publish/proxy asymmetry <em>data</em> - {@link Symmetry}, honoured by both {@code GateDimension.of}
+ * The publish/proxy asymmetry is <em>data</em> - {@link Symmetry}, honoured by both {@code GateDimension.of}
  * and {@link GatePolicyProvider#resolve} - so that a dimension excluded from a flavor cannot be built for it. That
  * closes one direction. {@link Property#SYMMETRY_MATCHES_BEHAVIOUR} closes the other, which no amount of plumbing can:
  * a dimension declaring {@link Symmetry#SYMMETRIC} and then softening itself on the proxy, or one declaring
@@ -60,7 +60,7 @@ import build.jenesis.repository.compliance.Verdict;
  *
  * <p>So the substitution is on the resolved {@link GatePolicy} instead: {@link GatePolicyMutant} is applied to every
  * policy this kit obtains, whichever entry point produced it. A probe therefore cannot be green here for the sole
- * reason that it was never driven, which is the contamination reproduced (an inert dimension substituted at the
+ * reason that it was never driven, which is the contamination once reproduced (an inert dimension substituted at the
  * fixture's provider passed <b>64 of 64</b> checks with all <b>8</b> fixtures wholly satisfied - the signature of a
  * mutant nothing ran, not a vacuity measurement).
  *
@@ -130,10 +130,10 @@ public final class GatePolicyContract {
          *  at least one left alone, so none of the comparisons above is between two empty lists. */
         FINDINGS_ARE_WELL_FORMED,
 
-        /** an {@code <dim>-action} of {@link Verdict#ALLOW} makes the dimension <em>evaluate and permit</em>,
+        /** An {@code <dim>-action} of {@link Verdict#ALLOW} makes the dimension <em>evaluate and permit</em>,
          *  it does not withdraw it from the gate. The dial decides what the dimension reports - every verdict it names
          *  is the verdict reported - and never whether the gate carries it; an unconfigured dimension stays absent
-         *  whatever the dial says. an earlier change settled what permitting looks like: the dimension assesses the subject and
+         *  whatever the dial says. What permitting looks like is settled: the dimension assesses the subject and
          *  records a {@code Finding(ALLOW, <why>)}, so a permitted artifact is distinguishable from one the dimension
          *  had nothing against. */
         ACTION_DECIDES_THE_REPORT_NOT_THE_PRESENCE
@@ -394,7 +394,7 @@ public final class GatePolicyContract {
                             + " leg with \"" + message + "\", which never names the key. On the boot and "
                             + "scheduled-re-read path there is no settings-write context to add it back, so an "
                             + "operator with several dials learns only that SOME value somewhere is unreadable "
-                            + "(PRINCIPLES §9).");
+                            + "(§9).");
                 }
             }
             // The way out: a dimension switched off is not asked to create anything, so an unparseable dial on it must

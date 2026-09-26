@@ -108,12 +108,12 @@ class OrphanedHoldTest {
     }
 
     /**
-     * the earlier half of the same asymmetry, one layer down. {@link OrphanedHoldTest} above is about a hold whose
+     * The other half of the same asymmetry, one layer down. {@link OrphanedHoldTest} above is about a hold whose
      * <em>kind</em> has no installed module; this is about a hold whose <em>format</em> has none - the path the record
      * is keyed against can no longer be turned into a coordinate, so the kind-neutral reads had nothing to look under
      * and answered "nothing holds this" for a hold that was standing. Same fail-open shape, same two permissive
-     * consumers, and it survived because the record itself was never the problem: the route from the request
-     * path to it was.
+     * consumers, and it survived the first fix because the record itself was never the problem: the route from the
+     * request path to it was.
      *
      * <p>The path below is deliberately one {@link HookTestFormat} does not claim, which is what a deployment that has
      * removed a format module looks like from the store's side. The durable {@code subjects/} record - written where

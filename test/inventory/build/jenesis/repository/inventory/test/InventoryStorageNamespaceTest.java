@@ -38,7 +38,7 @@ class InventoryStorageNamespaceTest {
                         + "build.jenesis.repository.metadata.store, so that is the case asserted below")
                 .isPresent();
         assertThat(new InventoryStorageNamespace().repositoryPrefixes())
-                .as("licenses/ moved onto the metadata document (§5.4) and nothing reads the sidecar once the "
+                .as("licenses/ moved onto the metadata document and nothing reads the sidecar once the "
                         + "module is installed - LicenseInventory.record takes that branch only with no metadata "
                         + "store bound - so a leftover row is unreachable and must surface as an orphan rather "
                         + "than hide under a manifest entry")

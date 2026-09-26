@@ -175,8 +175,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     }
 
     /**
-     * An {@code npm publish} wraps its artifact in a JSON document, so this format is <b>not</b> edge-screened
-     * ((a)): the request body is an <em>envelope</em> - a packument carrying the tarball base64-encoded under
+     * An {@code npm publish} wraps its artifact in a JSON document, so this format is <b>not</b> edge-screened:
+     * the request body is an <em>envelope</em> - a packument carrying the tarball base64-encoded under
      * {@code _attachments} - and gating it at the shared single-body edge would hash and assess that document while the
      * bytes that later serve are the {@code .tgz} inside it, a second content-addressed object under a hash no
      * interceptor ever saw. That is {@code RepositoryFormat} clause 14's fail-open direction: "we screened the request
@@ -274,7 +274,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
      * shared commit operation's hash-on-write ({@link #commitTarball}), never held whole. A multi-gigabyte tarball
      * therefore publishes in bounded heap, with no size cap.
      *
-     * <h2>The tarball is the screened body, and it is written once ((a))</h2>
+     * <h2>The tarball is the screened body, and it is written once</h2>
      * Each attachment's {@code data} is base64-decoded <em>through</em> the shared hosted-publish operation
      * ({@code Publication.commit}): the decoded stream is the operation's accepted body, so the tarball flows through
      * {@code writeBlob} exactly once and <b>the hash the interceptor chain assesses is the hash {@code npm install}
@@ -876,7 +876,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             case Error error -> throw error;
             default -> throw new IOException("could not store the npm tarball", failed);
         }
-        // the held tarball's layout, written here because the operation's accepted layout above never runs on a
+        // The held tarball's layout, written here because the operation's accepted layout above never runs on a
         // non-ACCEPT verdict. It comes AFTER the decode outcome is checked, for the reason the accepted layout joins
         // the decoder before it declares: a base64 run that broke mid-stream stored a self-consistent TRUNCATED tarball,
         // and laying that out - even withheld - would give a reviewer a release that materialises the wrong bytes.

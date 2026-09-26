@@ -74,7 +74,7 @@ public interface AdvisorySignal extends SignalSource {
     /** The signal names installed on this deployment, regardless of enablement.
      *
      *  <p><b>No production surface reads this</b>, and this javadoc asserted that a console and an API gated their
-     *  surfaces on it for as long as neither did -. It is superseded rather than missing:
+     *  surfaces on it for as long as neither did. It is superseded rather than missing:
      *  {@code /api/capabilities} already serves the richer {@code signals} view, a name <em>and</em> label per
      *  installed signal off the Spring-injected list, so a name-only set has no surface left to gate. Its reader is
      *  the signal-consolidation suite, which drives every family through the one shared primitive. */

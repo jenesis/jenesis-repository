@@ -1,7 +1,7 @@
 /**
  * The store-backed repository inventory in isolation over a real filesystem artifact store, with the consolidated
  * metadata document ({@code metadata.store}) installed so the enumeration, reconcile and per-coordinate section reads
- * run over the EPIC 20 {@code meta} doc rather than the legacy sidecars. Five behaviours are pinned. First, the
+ * run over the {@code meta} doc rather than the legacy sidecars. Five behaviours are pinned. First, the
  * reconciled view: {@link build.jenesis.repository.inventory.StoreRepositoryInventory#coordinates coordinates()} and
  * {@link build.jenesis.repository.inventory.StoreRepositoryInventory#releases() releases()} enumerate exactly what was
  * recorded, a newly published version appears, an evicted one disappears, and the publish facts (instant, prerelease,

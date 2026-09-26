@@ -161,7 +161,7 @@ class MultiNodeConsistencyTest {
 
     @Test
     void two_nodes_with_the_same_config_and_tenant_set_agree() {
-        // the tenant set is folded into the generation, but two nodes over the same config AND the same tenant
+        // The tenant set is folded into the generation, but two nodes over the same config AND the same tenant
         // directory still land on one value - order-independent, so a set discovered in any order agrees.
         Map<String, String> config = Map.of("jenreg.store", "filesystem");
         long a = NodeFingerprint.configGeneration(config, List.of("acme", "globex"));

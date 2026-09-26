@@ -122,7 +122,7 @@ public class RepositoryAutoConfiguration {
         // GET /api/posture - one source of truth, no divergent second list.
         String anonymousRights = properties.getAnonymousRights().strip();
         if (!properties.isAuth()) {
-            // WANON.1 guardrail: anonymous-rights is only meaningful under an enforcing deployment. Under auth=false the
+            // Guardrail: anonymous-rights is only meaningful under an enforcing deployment. Under auth=false the
             // instance is ALREADY fully open, so a configured anonymous-rights is redundant and ignored - warn so the
             // operator is not misled into thinking it is narrowing an open deployment.
             if (!anonymousRights.isEmpty()) {
@@ -133,7 +133,7 @@ public class RepositoryAutoConfiguration {
             }
             return Authorization.anonymous();
         }
-        // WANON.1 guardrail 2: a loud startup WARN naming exactly what a keyless caller may do, escalated for
+        // Second guardrail: a loud startup WARN naming exactly what a keyless caller may do, escalated for
         // write/admin. This names the exact grant (the posture surface names the risk, never the value); the
         // jenreg.anonymous.* security-posture advisories carry the governance escalation onto the console and
         // GET /api/posture. Default (empty) => no anonymous access and no warning, byte-for-byte today's behaviour.

@@ -7,11 +7,11 @@ import build.jenesis.repository.compliance.QualityInspector;
 
 /**
  * One deliberately broken substitution for the inspector an {@link InspectorContract.Property} is about - the
- * falsification half of the inspector kit (carrying the earlier mechanism to the one kit in this family that had
+ * falsification half of the inspector kit (carrying the mutation mechanism to the one kit in this family that had
  * none).
  *
  * <p><b>Why the kit needs one at all.</b> Every check in {@link InspectorContract} states what an inspector must do;
- * nothing states that the check <em>could have said otherwise</em>. an earlier change measured that gap without closing it: an
+ * nothing states that the check <em>could have said otherwise</em>. That gap was measured before it was closed: an
  * inspector that claims every artifact and reports no subject about any of them passed a third of the kit. The
  * survivors were counted and printed but not argued, so it was not knowable which of them were legitimate - a check
  * whose whole expectation is "the answer is empty" is satisfied by an inert inspector by construction - and which were

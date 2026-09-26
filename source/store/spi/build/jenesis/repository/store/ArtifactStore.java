@@ -18,7 +18,7 @@ import module java.base;
  * Most clauses below are executable: {@code StoreContract} in the store testkit states one once and each backend runs
  * it through a fixture, so it is proven on the filesystem and on containerised S3 / GCS / Azure alike rather than
  * being re-interpreted per backend. The enforcement is named per clause, because it is not uniform, and a clause is
- * <em>not</em> weaker for being unproven - it is an audit item (the earlier residue) rather than a build guard:
+ * <em>not</em> weaker for being unproven - it is an audit item rather than a build guard:
  * <ul>
  *   <li><b>kit-proven</b> - clause 2 ({@code CONTENT_ADDRESSED_WRITE}, {@code KEYED_BLOB_ROUND_TRIP}'s repeated
  *       delete, {@code VERSIONED_UPDATE_IF_UNCHANGED}), clause 3 ({@code KEYED_BLOB_ROUND_TRIP},

@@ -82,7 +82,7 @@ public class ImportController {
      * repository is read-only - {@code 405}). The importers on this edition's module path decide coverage: every
      * installed format carrying the importer capability; an asset whose format has no importer is reported
      * skipped. A {@code resume} naming a prior job continues its walk from the recorded continuation token and
-     * counts. Each asset is screened INLINE at the import edge (EPIC 26): the walk screens every asset against its
+     * counts. Each asset is screened INLINE at the import edge: the walk screens every asset against its
      * target coordinate before the layout-only importer lays it out, so a migration lands the same compliance gate a
      * deploy or batch upload passes - an accepted asset is laid out from the screened blob, a quarantined one is
      * counted {@code held} (its replay context recorded beside the hold so a review release materialises it), and a
@@ -135,7 +135,7 @@ public class ImportController {
             // The import job runs on a fresh unbound virtual thread (ImportJobs.submit -> Thread.ofVirtual), where
             // PublishTenant.current() is null and the discovered gate would resolve the DEPLOYMENT-wide policy instead
             // of this tenant's. Bind the tenant around the whole job body through the job-scope seam, so the screen
-            // on the job thread resolves the tenant's own policy (Q3 subtlety, /).
+            // on the job thread resolves the tenant's own policy.
             UnaryOperator<Runnable> jobScope = body -> () -> {
                 try (PublishTenant.Scope scope = PublishTenant.open(tenant)) {
                     body.run();
@@ -200,7 +200,7 @@ public class ImportController {
     }
 
     /** The store a migration into {@code repo} writes to and reads its jobs from: the repository's OWN store when it is
-     *  {@code writable} (EPIC 25 §2.3 - {@code writeTarget} is writable-only, no push-delegation), or {@code 405} when
+     *  {@code writable} ({@code writeTarget} is writable-only; there is no push-delegation), or {@code 405} when
      *  it is a read-only proxy/group. An unconfigured name is a plain writable repository. */
     private ArtifactStore importStore(String repo, String tenant, HttpServletResponse response) {
         String target = router.writeTarget(repo);

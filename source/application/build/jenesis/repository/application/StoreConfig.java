@@ -92,7 +92,7 @@ public class StoreConfig {
 
     @Bean
     public Authorization authorization(RepositoryProperties properties, ArtifactStore store) throws IOException {
-        // WANON.1: the strictly-opt-in anonymous role, read the same way this bean reads auth/read-only - off the
+        // The strictly-opt-in anonymous role, read the same way this bean reads auth/read-only - off the
         // @ConfigurationProperties-bound RepositoryProperties (jenreg.anonymous-rights), not an ad-hoc
         // config.apply, as isAuth()/isReadOnly() do. Default empty ⇒ no anonymous
         // access whatsoever, byte-for-byte today's keyless rejection.
@@ -106,7 +106,7 @@ public class StoreConfig {
                     + "repository is running ANONYMOUS/OPEN and every request is served without a credential. This is "
                     + "an explicit opt-out; unset it or set jenreg.auth=true (the default) to enforce "
                     + "authorization.");
-            // WANON.1 guardrail: anonymous-rights is only meaningful under an enforcing deployment. Under auth=false the
+            // Guardrail: anonymous-rights is only meaningful under an enforcing deployment. Under auth=false the
             // instance is ALREADY fully open, so a configured anonymous-rights is redundant and ignored - warn so the
             // operator is not misled into thinking it is narrowing an open deployment (mirrors the autoconfig).
             if (!anonymousRights.isEmpty()) {
@@ -117,7 +117,7 @@ public class StoreConfig {
             }
             return Authorization.anonymous();
         }
-        // WANON.1 guardrail 2: a loud startup WARN naming exactly what a keyless caller may do, escalated for
+        // Second guardrail: a loud startup WARN naming exactly what a keyless caller may do, escalated for
         // write/admin - the mirror of the free RepositoryAutoConfiguration WARN (this bean wins over the free
         // @ConditionalOnMissingBean authorization bean, so the free WARN never fires here). The
         // jenreg.anonymous.* security-posture advisories (logged by the logSecurityPosture at boot, which runs in

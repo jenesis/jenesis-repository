@@ -863,7 +863,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             // consumer that fetches a pool URL without apt (a script, a container build step).
             //
             // Where no record exists yet, the fill still declares NONE and the bytes are served unverified, exactly
-            // as before. That is the earlier third case stated out loud: not "the document declares no digest" and not
+            // as before. That is the third state stated out loud: not "the document declares no digest" and not
             // "the document could not be read", but "no index has told us yet".
             // A .deb is an immutable artifact of unbounded size: stream it from the network straight into the
             // content-addressed store rather than buffering the whole body, then re-serve it locally.
@@ -885,13 +885,14 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         // client's conditional-request validators so a 304-capable apt's revalidation reaches the upstream, and relay
         // the upstream's validators back so its next refresh can revalidate rather than re-pulling the whole index.
         //
-        // The one streaming leg carries both of the earlier classes, so it is split by the archive layout that separates
-        // them. Under dists/ live the documents apt RESOLVES against - InRelease/Release name the components and their
-        // index digests, Packages lists every package and version in a component, Contents-* lists their files - and
-        // there an absence is an answer ("this suite has no such component", "this component is empty") that apt acts
-        // on, so a fetch this repository could not make must not be rendered as one. Under pool/ live already-resolved
-        // bodies apt reached BY name out of one of those indexes (a source .orig.tar.gz, a .dsc, a .diff.gz), and there
-        // the contract's 404 keeps its "not cached here, re-pull" meaning exactly as it does for the .deb above.
+        // The one streaming leg carries both classes of document - enumerations and pinned files - so it is split by
+        // the archive layout that separates them. Under dists/ live the documents apt RESOLVES against -
+        // InRelease/Release name the components and their index digests, Packages lists every package and version in a
+        // component, Contents-* lists their files - and there an absence is an answer ("this suite has no such
+        // component", "this component is empty") that apt acts on, so a fetch this repository could not make must not
+        // be rendered as one. Under pool/ live already-resolved bodies apt reached BY name out of one of those indexes
+        // (a source .orig.tar.gz, a .dsc, a .diff.gz), and there the contract's 404 keeps its "not cached here,
+        // re-pull" meaning exactly as it does for the .deb above.
         ProxyRelay.Document document = rest.startsWith("pool/")
                 ? ProxyRelay.Document.PINNED
                 : ProxyRelay.Document.ENUMERATION;
@@ -1113,7 +1114,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
 
     // The decompressed control.tar is attacker-supplied, so its ./control member is read under the product's one
     // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenreg.archive.largest-entry - not
-    // under a private constant of this format's (RepositoryFormat contract clause 15 /).
+    // under a private constant of this format's (RepositoryFormat contract clause 15).
 
     // How far the decompressed control.tar is walked to reach ./control is the product's one archive-walk bound,
     // ArchiveWalk.largestWalk(), settable at jenreg.archive.largest-walk. It is a different bound from the inflation
@@ -1132,7 +1133,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
                 if (entry.getName().equals("./control") || entry.getName().equals("control")) {
                     // The stanza carries the .deb's coordinate and every field the generated Packages index echoes,
                     // so a read the ceiling stopped fails closed (the caller's 400) and SAYS SO, rather than being
-                    // returned as the same null a.deb with no control member yields - the conflation.
+                    // returned as the same null a .deb with no control member yields, which would conflate the two.
                     return new String(ArchiveInflation.entry(tar).required("Debian .deb", "./control stanza"),
                             StandardCharsets.UTF_8);
                 }

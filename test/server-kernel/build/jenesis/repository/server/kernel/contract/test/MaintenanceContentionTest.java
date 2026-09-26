@@ -76,7 +76,7 @@ class MaintenanceContentionTest {
 
     @Test
     void c1_a_second_start_does_not_create_a_second_worker_loop() throws IOException {
-        // BEFORE start() called startWorker() unconditionally while refresh() guarded on
+        // Before the fix, start() called startWorker() unconditionally while refresh() guarded on
         // `thread == null || !thread.isAlive()`. A second start() therefore overwrote the thread field while the first
         // loop kept running against a `running` flag that was still true - two loops on one node, each taking and
         // releasing the same leases and each re-arming its own due map. Latent (only Spring's initMethod calls start),
@@ -202,7 +202,7 @@ class MaintenanceContentionTest {
 
     @Test
     void c5_a_lease_lost_mid_pass_fails_the_pass_and_stops_further_units() throws IOException {
-        // BEFORE renew() logged a WARNING and nothing else. The pass ran to completion over every remaining
+        // Before the fix, renew() logged a WARNING and nothing else. The pass ran to completion over every remaining
         // (tenant, repository) unit, its failure counter and its TaskRun.failed flag untouched - so the dashboard
         // reported a clean sweep while two nodes swept the same store. Both halves are asserted here.
         for (String repository : List.of("a-first", "b-second", "c-third")) {
@@ -378,7 +378,7 @@ class MaintenanceContentionTest {
 
     @Test
     void c9_a_degenerate_lease_ttl_is_refused_at_construction_naming_cleanup_lease() {
-        // BEFORE cleanup-lease=PT0S was accepted. It made every acquire immediately steal-able (so there was
+        // Before the fix, cleanup-lease=PT0S was accepted. It made every acquire immediately steal-able (so there was
         // no single-writer exclusion at all) AND made renewInterval = ttl/2 = 0, so scheduleAtFixedRate threw
         // IllegalArgumentException on every exclusive pass - which the worker loop then counted as a task failure.
         // One operator-reachable DURATION setting, two silent degradations, and no message naming the dial.

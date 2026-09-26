@@ -66,7 +66,7 @@ import build.jenesis.repository.dependency.DependencyLicense;
  * {@code Bundle-License} is one free-text OSGi header describing the bundle, frequently absent and never
  * policy-comparable.
  *
- * <p><b>Every SBOM read is optional-degrading</b>, exactly as settled for the POM: for Maven the archive is not
+ * <p><b>Every SBOM read is optional-degrading</b>, exactly as the POM read is: for Maven the archive is not
  * the manifest source (the coordinate comes from the request path), so an attachment that is not there, one past the
  * bounded-read ceiling, a jar whose prefix does not reach its SBOM entry, and a document that will not parse all
  * degrade to "this source declares nothing" and hand over to the next one. None of them fails a publish.

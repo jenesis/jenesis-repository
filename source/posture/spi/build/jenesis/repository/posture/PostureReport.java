@@ -31,7 +31,7 @@ import build.jenesis.repository.observation.Contributions;
  * several tenants at once, which is why a row's scope is the only thing a tenant-facing consumer may route on -
  * {@link #forTenant} and {@link #scoped} here, the console's {@code ScopedPosture} and {@code GET /api/admin/posture}
  * downstream - and a deployment-wide row that interpolates one tenant's name defeats every one of them at once
- * (PRINCIPLES &sect;6). Filing it at tenant scope keeps it diagnosable where it can be acted on and routable everywhere
+ * (&sect;6). Filing it at tenant scope keeps it diagnosable where it can be acted on and routable everywhere
  * else. (The deployment-wide {@code GET /api/posture} renders whatever the report holds without scoping it, so it
  * shows a {@code TENANT} row to any {@code repository:read} caller - true of every tenant-scoped advisory, not of this
  * one in particular, and a property of that endpoint rather than of the collection.)
@@ -96,7 +96,7 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
      * carries the tenant in {@link SecurityAdvisory#tenant()} and names it nowhere in its text. The alternative - the
      * single deployment-wide row this used to emit, whose message interpolated {@code "<id> (tenant <name>)"} - is a
      * tenant name and an advisory id handed to every other tenant's viewer by a fan-out that is explicitly allowed to
-     * return rows for more than one tenant (PRINCIPLES &sect;6). Keying without the tenant instead would have kept one
+     * return rows for more than one tenant (&sect;6). Keying without the tenant instead would have kept one
      * row at the price of the diagnosis: an id that legitimately holds for several tenants would report a clash with
      * no way to tell which tenant's rows actually duplicated it.
      *

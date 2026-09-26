@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatIOException;
  * non-200/non-304 - under <em>both</em> {@link ProxyRelay.Document} classifications.
  *
  * <p>The two {@code streamFresh} cells that used to live here asserted that a transport failure and a {@code 500} both
- * left the exchange unserved, which is what changed: on a {@link ProxyRelay.Document#ENUMERATION} the local
+ * left the exchange unserved, which is what has changed: on a {@link ProxyRelay.Document#ENUMERATION} the local
  * {@code 404} that would then stand is not "the leg served nothing" but the upstream's own answer, so those two
  * outcomes now answer {@code 502}. The claim is not dropped, it is split by classification - the old assertion is
  * exactly what the {@link ProxyRelay.Document#PINNED} cells below still make - and the upstream-miss leg, which nothing

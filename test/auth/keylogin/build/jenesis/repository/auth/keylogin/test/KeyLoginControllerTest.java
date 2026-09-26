@@ -39,8 +39,8 @@ public class KeyLoginControllerTest {
         audit = new RecordingAuditTrail();
         controller = new KeyLoginController(keys, rootStorage,
                 Authorization.enforcing(rootStorage.store()), audit);
-        // Materialise the tenant so its marker object exists (a real tenant would be created by the console). Since
-        // the marker is a separate object from the membership, which is a key space of one object per member -
+        // Materialise the tenant so its marker object exists (a real tenant would be created by the console). The
+        // marker is a separate object from the membership, which is a key space of one object per member -
         // so provisioning a member no longer conjures a tenant, which is what the existence guard always meant.
         materialiseTenant("acme");
     }
@@ -160,7 +160,7 @@ public class KeyLoginControllerTest {
                 .contains("keylogin/alice");
     }
     /** Write the object whose presence IS the tenant, then seed one member - what the console's tenant creation
-     *  does, split into its two halves since the earlier work. */
+     *  does, split into its two halves. */
     private void materialiseTenant(String tenant) throws IOException {
         rootStorage.scope(tenant).writeVersioned(UserDirectory.TENANT_FILE, new Properties(), null);
         new UserDirectory(Authorization.enforcing(rootStorage.store()), tenant).put("keylogin/seed", UserDirectory.Role.VIEWER, "seed");

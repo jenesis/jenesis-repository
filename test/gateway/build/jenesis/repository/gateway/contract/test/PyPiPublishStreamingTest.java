@@ -205,8 +205,8 @@ class PyPiPublishStreamingTest {
             throw new UnsupportedOperationException();
         }
 
-        /** The discovered publish-interceptor chain re-opens the stored blob to assess it ((a) moved the screen
-         *  onto the distribution itself), so this double must answer rather than throw. It answers with an empty
+        /** The discovered publish-interceptor chain re-opens the stored blob to assess it (the screen runs on
+         *  the distribution itself), so this double must answer rather than throw. It answers with an empty
          *  stream, never the multi-gigabyte body: a screen reads a bounded window, and materialising the artifact here
          *  would defeat the very property this test proves. The write accounting above is untouched, so
          *  {@code artifactWrites() == 1} still pins "streamed through the store exactly once, never re-read". */

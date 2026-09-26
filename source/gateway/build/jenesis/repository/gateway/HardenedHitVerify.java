@@ -17,7 +17,7 @@ import build.jenesis.repository.store.Publication;
 
 /**
  * The {@link PullThroughHooks} that closes the #79 cache-HIT bypass for a HARDEN serving posture: a locally
- * cached hardened artifact is decided against the current gate <em>before</em> any hit byte is served (EPIC 28),
+ * cached hardened artifact is decided against the current gate <em>before</em> any hit byte is served,
  * the request-time fail-closed complement of the {@link MigrationRescreenTask} bulk amortizer. It is the hit-verify twin
  * of the miss-leg {@link HardenedScreen} - both funnel the identical screening mechanism, never a second one.
  *
@@ -61,10 +61,11 @@ import build.jenesis.repository.store.Publication;
  * with no verdict record to dedup against), so no per-hit store read is added there.
  *
  * <p><b>The flavour is the artifact's.</b> This leg is reached for every hit in a repository whose
- * {@link RepositoryDefinition#harden()} is set, and since EPIC 25 that includes the hybrid {@code writable} + hardened-fallback shape, whose store holds
- * uploads beside cached fetches. So the gate is not "the proxy gate" but the flavour {@link RescreenFlavor} reads off
- * the artifact's own durable {@code origin} trail - the same one decision {@link MigrationRescreenTask} makes, so the
- * verdict the sweep pre-records and the verdict this leg would reach cannot disagree.
+ * {@link RepositoryDefinition#harden()} is set, and that includes the hybrid {@code writable} + hardened-fallback
+ * shape, whose store holds uploads beside cached fetches. So the gate is not "the proxy gate" but the flavour {@link
+ * RescreenFlavor} reads off the artifact's own durable {@code origin} trail - the same one decision {@link
+ * MigrationRescreenTask} makes, so the verdict the sweep pre-records and the verdict this leg would reach cannot
+ * disagree.
  */
 public final class HardenedHitVerify implements PullThroughHooks {
 

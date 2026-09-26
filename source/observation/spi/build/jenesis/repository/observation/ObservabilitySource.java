@@ -34,7 +34,7 @@ import module java.base;
  *       tenant's artifact content and no per-tenant identifier. A plugin whose state is per-tenant reports the
  *       deployment-level roll-up here (a count, a worst-of health) and leaves the per-tenant breakdown to a
  *       tenant-scoped surface.</li>
- *   <li><b>Read purity.</b> These are read-path methods (PRINCIPLES §10): they render state the plugin has already
+ *   <li><b>Read purity.</b> These are read-path methods (§10): they render state the plugin has already
  *       computed and must perform no external fetch, no scan, no store write and no blocking I/O. A health check
  *       reports what the last refresh recorded, so the overview still stands when the source it describes is down.</li>
  *   <li><b>Staleness.</b> A signal derived from a periodic refresh carries its own freshness rather than leaving an

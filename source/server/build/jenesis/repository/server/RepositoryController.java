@@ -414,7 +414,7 @@ public class RepositoryController {
         Map<String, Object> base = new LinkedHashMap<>();
         base.put("readOnly", readOnly());
         base.put("auth", Boolean.parseBoolean(settings.apply("auth")));
-        // WANON.1: advertise the strictly-opt-in anonymous role so a console shows an explicit "Anonymous access"
+        // Advertise the strictly-opt-in anonymous role so a console shows an explicit "Anonymous access"
         // banner and a client knows keyless reads are served. Empty (the default) means no anonymous access. Read off
         // the same jenreg.* settings the other flags read, so no extra dependency is threaded in.
         base.put("anonymousRights", anonymousRights());
@@ -451,7 +451,7 @@ public class RepositoryController {
         return Boolean.parseBoolean(settings.apply("read-only"));
     }
 
-    /** The strictly-opt-in anonymous-role grant (WANON.1) advertised on {@code /api/capabilities}, read off the same
+    /** The strictly-opt-in anonymous-role grant advertised on {@code /api/capabilities}, read off the same
      *  {@code jenreg.*} settings; empty (the default) means no anonymous access. */
     private String anonymousRights() {
         String value = settings.apply("anonymous-rights");

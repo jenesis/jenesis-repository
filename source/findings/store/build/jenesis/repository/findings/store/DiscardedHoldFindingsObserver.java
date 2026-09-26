@@ -20,7 +20,7 @@ import build.jenesis.repository.gate.HeldElsewhere;
  * ledger, and its rows are reclaimed with the artifact when it is eventually evicted. A path the layout cannot map
  * back to a coordinate is left alone - better a bounded stray document than a delete against a guessed key.
  *
- * <p>Since (§5.4) the findings live in the {@code findings} section of the consolidated metadata document, so a
+ * <p>The findings live in the {@code findings} section of the consolidated metadata document, so a
  * discard drops just that section - surgically, so a coordinate whose document also carries other sections (declared
  * licenses read at inspection) keeps them; when the findings section was the document's only content the whole
  * document goes. The {@code findings/} sidecar of a graceful-absence deployment is removed too. With no metadata store installed the

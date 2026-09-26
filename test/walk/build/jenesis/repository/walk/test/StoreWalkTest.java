@@ -152,7 +152,7 @@ class StoreWalkTest {
         }
     }
 
-    /** Audit-27 A3-F1: the reference walk's depth descent used to self-recurse one call frame per key path segment,
+    /** The reference walk's depth descent used to self-recurse one call frame per key path segment,
      *  so a single deep publish key (a many-segment Maven groupId, a multi-segment OCI name - depth is client-planted
      *  and uncapped at the routing edge) overflowed the stack with a {@link StackOverflowError}, aborting the shared
      *  walk every background sweep drives (reconcile, inventory rebuild, retroactive-hold enforcement). The descent is
@@ -179,7 +179,7 @@ class StoreWalkTest {
                 .containsExactly(deepKey);
     }
 
-    /** Audit-27 A3-F1 order-equivalence: the iterative descent must visit exactly the keys, in exactly the path order,
+    /** Order-equivalence: the iterative descent must visit exactly the keys, in exactly the path order,
      *  the former recursion produced. This mixed fixture stresses depth (a deep chain), width (a > {@code PAGE}
      *  sibling fan-out that forces multi-page paging inside one container) and multiple roots at once, and asserts the
      *  visited sequence is the one total path order - run under several segment counts, since the static range plan

@@ -10,7 +10,7 @@ import build.jenesis.repository.metadata.Signal;
 import build.jenesis.repository.metadata.State;
 
 /**
- * The {@code verdict} section codec of the consolidated metadata document (EPIC 23, §5.1): the durable,
+ * The {@code verdict} section codec of the consolidated metadata document: the durable,
  * <b>digest-pinned</b> record of what the hardened proxy leg ({@link HardenedScreen}) decided over a fully-spooled
  * upstream body. Where the {@code published}/{@code licenses}/{@code provenance} sections are per coordinate version,
  * this section is bound to the artifact's <em>content digest</em> (SHA-256): the recorded verdict applies only to the
@@ -32,7 +32,7 @@ import build.jenesis.repository.metadata.State;
  * withholding or a refusal carries a {@link Severity#HIGH} signal so a consumer that does not parse {@code data} still
  * sees the coordinate was withheld.
  *
- * <p><b>Composition with the {@code origin} section (EPIC 25, §6.2).</b> The verdict record and the
+ * <p><b>Composition with the {@code origin} section.</b> The verdict record and the
  * {@code OriginSection origin} acquisition rows are siblings in the same document: the verdict answers "what the screen
  * decided about digest D", origin answers "where D came from". They are reconciled - not duplicated - by the
  * <em>digest</em>: this record's {@code digest} ({@code sha256:<hex>}) names the same bytes an origin {@code fallback}

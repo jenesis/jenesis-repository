@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <em>unscreened</em> (it is never screened, so it is never quarantined, so {@code HoldLifecycle.replayImport} is never
  * reached for it) - so "no importer matches on release, degrading to a raw linked blob missing from the flat-container
  * index" cannot occur. What is real is a compliance-screen <em>bypass</em>: a flat single-file {@code .nupkg} is
- * imported without the EPIC 26 inline screen yet is still correctly laid out and indexed in the flat container (the
+ * imported without the inline import screen yet is still correctly laid out and indexed in the flat container (the
  * embedded {@code .nuspec} keys it), so it is NOT missing from the index. A deep-prefixed source path exposes a second,
  * milder gap: a deep-prefixed path once screened under a wrong coordinate taken from the FIRST two path segments;
  * {@code importTarget} now derives the coordinate from the TRAILING {@code <id>/<version>/<file>} segments (the

@@ -17,14 +17,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * have.
  *
  * <p>{@code FormatContract.COORDINATE_TRAVERSAL_REFUSED} is stated over {@code ArtifactLayout} - the
- * {@code publish/}-namespace coordinate mapping Maven and the Jenesis module layout carry - and fixed a real
- * escape there with {@link ArtifactLayout#addressable}, on the reasoning that a coordinate arrives from a published
- * name, an advisory feed or a console form and that the paths it composes are handed to eviction, <em>which deletes
- * under them</em>. An ecosystem format serves out of the shared {@code blobs/} namespace instead, so its
+ * {@code publish/}-namespace coordinate mapping Maven and the Jenesis module layout carry - and a real
+ * escape there was fixed with {@link ArtifactLayout#addressable}, on the reasoning that a coordinate arrives from a
+ * published name, an advisory feed or a console form and that the paths it composes are handed to eviction, <em>which
+ * deletes under them</em>. An ecosystem format serves out of the shared {@code blobs/} namespace instead, so its
  * coordinate mapping is {@link BlobLayout}, whose {@code blobKeys} is literally the list of pointer keys a retention
  * eviction deletes - and {@code ArtifactStore.delete} is not screened, only writes are. The property therefore has to
- * be proven <em>here</em>, or it is proven for the four {@code publish/} layouts and for none of the fourteen
- * that serve from {@code blobs/}.
+ * be proven <em>here</em>, or it is proven for the four {@code publish/} layouts and for none of the fourteen that
+ * serve from {@code blobs/}.
  *
  * <p>Two halves, deliberately separated:
  * <ul>

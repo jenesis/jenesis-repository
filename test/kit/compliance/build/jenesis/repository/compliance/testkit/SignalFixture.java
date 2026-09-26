@@ -274,8 +274,8 @@ public interface SignalFixture extends AutoCloseable {
      * consulted for {@link Reads#WARM_THEN_RENDERS} and {@link Reads#SNAPSHOT_WITH_LAZY_REFRESH}, and held to on
      * <em>both</em> sides, so it cannot be a comfortable over-estimate: half of it in, the feed must still answer
      * without a request; past it, the feed must ask the vendor again. That makes the window a product fact the kit
-     * can falsify rather than a constant buried in a source, and it is what lets the aged-answer leg reach the case
-     * is about without waiting six hours for it.
+     * can falsify rather than a constant buried in a source, and it is what lets the aged-answer leg reach the
+     * aged-answer case without waiting six hours for it.
      */
     default Duration warmWindow() {
         throw new UnsupportedOperationException(signal() + " declares " + reads()

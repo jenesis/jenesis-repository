@@ -74,7 +74,7 @@ public interface GarbageCollectorProvider {
      * Whether a garbage collector is installed and not switched off.
      *
      * <p><b>No production surface reads this</b>, and this javadoc asserted that a console and a maintenance surface
-     * gated on it for as long as neither did -. The reader that exists is the reclamation module's
+     * gated on it for as long as neither did. The reader that exists is the reclamation module's
      * {@code CapabilityContributor}, which reports the {@code gc} flag from
      * {@link #resolve resolve(config).isPresent()}.
      *

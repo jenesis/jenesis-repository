@@ -106,10 +106,10 @@ public final class SignalRefreshTask implements MaintenanceTask {
                 // Throwable rather than IOException | RuntimeException. An Error out of one mirror is the
                 // likeliest failure a plugged-in feed module actually produces - a NoClassDefFoundError from a
                 // half-installed optional dependency - and it used to leave this loop, so the mirrors sorted after
-                // it never drew at all. an earlier change means the scheduler survives that, which is precisely what made it
+                // it never drew at all. The scheduler now survives that, which is precisely what made it
                 // quiet: the pass was counted as failing without ever naming which signal, and every OTHER signal's
                 // catalogue stayed undrawn for the life of the process while the gate kept screening against it.
-                // Containing it here is not swallowing it - the earlier ruling is that an Error is attributed rather
+                // Containing it here is not swallowing it - the product's rule is that an Error is attributed rather
                 // than filed as the guest's answer, and the escalation question is decided by who the caller is:
                 // this method's caller is the maintenance worker, which has none, so the escalation goes to the
                 // operator through the named failure below exactly as the scheduler's own does. The name is the map

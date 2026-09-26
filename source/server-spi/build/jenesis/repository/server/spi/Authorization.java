@@ -58,7 +58,7 @@ public final class Authorization {
     private final StoreCache cache;
     private final Duration defaultLifetime;
     private final Duration maxLifetime;
-    // The strictly-opt-in anonymous role (WANON.1): the rights a keyless caller is granted, as scope -> tokens, exactly
+    // The strictly-opt-in anonymous role: the rights a keyless caller is granted, as scope -> tokens, exactly
     // the shape a minted credential's grants object has. Empty (the default) means no anonymous access: a keyless
     // request is rejected byte-for-byte as an enforcing deployment rejects it today. Immutable instance state (never a
     // mutable static), parsed once from jenreg.anonymous-rights at bean creation.
@@ -116,7 +116,7 @@ public final class Authorization {
         return new Authorization(store);
     }
 
-    /** The strictly-opt-in anonymous role (WANON.1): return a copy of this authorization that grants a keyless caller
+    /** The strictly-opt-in anonymous role: return a copy of this authorization that grants a keyless caller
      *  the rights in {@code rights} (a comma-list in the existing grant grammar - a bare {@code <surface>:<verb>} token
      *  granted on every repository, or a {@code <repository>=<token>} entry scoped to one named repository, or the
      *  all-privileges {@code *}). A blank value grants nothing, so a keyless request is rejected exactly as it is today.
@@ -156,7 +156,7 @@ public final class Authorization {
 
     /** Whether an {@code anonymous-rights} value would let a keyless caller write or administer - it grants the
      *  all-privileges {@code *}, any {@code <surface>:write} (or a {@code <surface>:*} wildcard covering write), or any
-     *  {@code manage:<verb>} admin right. The loud-warning escalation (WANON.1 guardrail 2): anonymous read is a WARN,
+     *  {@code manage:<verb>} admin right. The loud-warning escalation (the second guardrail): anonymous read is a WARN,
      *  anonymous write/admin a governance-level CRITICAL. Mirrored by the posture seeder (which cannot depend on this
      *  module). */
     public static boolean grantsWriteOrAdmin(String rights) {
@@ -656,7 +656,7 @@ public final class Authorization {
             return Decision.ALLOWED;
         }
         freshen();   // another node's grant or revocation, at most EPOCH_TTL old - see freshen()
-        // WANON.1 - the one choke-point: an enforcing deployment that sees a request with NO credential decides it
+        // The one choke-point: an enforcing deployment that sees a request with NO credential decides it
         // against the strictly-opt-in anonymous grant set, reusing the exact covers()/grantedBy() matching a minted
         // credential uses (no second code path). Default (empty grants) => UNAUTHORIZED, byte-for-byte today's keyless
         // rejection. A present-but-malformed key is NOT keyless: it stays a failed authentication attempt below.
@@ -718,7 +718,7 @@ public final class Authorization {
         return read(grantsPath(tenant, hash)) == null ? Decision.FORBIDDEN : Decision.ALLOWED;
     }
 
-    /** The verdict for a keyless (no-credential) request under an enforcing deployment (WANON.1): {@code ALLOWED} iff
+    /** The verdict for a keyless (no-credential) request under an enforcing deployment: {@code ALLOWED} iff
      *  the strictly-opt-in anonymous grant set covers the required {@code <surface>:<verb>} for {@code repository} on
      *  {@code path}, reusing the same {@link #covers}/{@link #grantedBy} logic a minted credential is matched by; else
      *  {@code UNAUTHORIZED} - exactly the {@code 401} a keyless request takes today. Empty grants (the default) cover

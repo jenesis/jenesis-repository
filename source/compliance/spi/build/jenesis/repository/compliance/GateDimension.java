@@ -9,8 +9,8 @@ import module java.base;
  * the {@code config} lookup, yield {@linkplain Optional#empty() nothing} when the deployment has not configured the
  * dimension, and throw when it configured it wrongly. The eight dimensions carried seven copies of the
  * verdict-with-a-default parse, five copies of the comma-separated-list parse and a null-or-blank guard on every
- * single read; those are stated once here, so a ninth dimension arrives at parity with its peers (PRINCIPLES
- * &sect;13) instead of re-deriving them.
+ * single read; those are stated once here, so a ninth dimension arrives at parity with its peers (&sect;13) instead of
+ * re-deriving them.
  *
  * <p>This is composition, not a base class: a provider still implements {@link GatePolicyProvider} directly and
  * still owns every decision that is genuinely its own - which keys it reads, what "nothing to gate on" means for
@@ -24,7 +24,7 @@ import module java.base;
  * a bare {@code Verdict.valueOf} that says only <em>"No enum constant Verdict.MAYBE"</em>, that failure told an
  * operator nothing about <em>which</em> of the deployment's dials to fix - and on the boot / scheduled-re-read path
  * there is no settings-write context to add it back. Every read here therefore fails with the offending key in the
- * message (PRINCIPLES &sect;9). Reaching for a default instead is never an option: silently gating on
+ * message (&sect;9). Reaching for a default instead is never an option: silently gating on
  * {@code QUARANTINE} when the operator asked for {@code REJECT} loosens the gate without saying so.
  *
  * <h2>Nothing configured is an absent dimension, never an inert one</h2>

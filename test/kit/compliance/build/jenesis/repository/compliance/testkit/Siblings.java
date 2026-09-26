@@ -24,7 +24,8 @@ import build.jenesis.repository.store.PublishInterceptor;
  *       {@code >}: a sibling of exactly {@code limit} bytes comes back whole, because every byte of it is in hand.</li>
  * </ul>
  * Both legs stream from the recorded body rather than handing the stored array out and trimming it, so the code here
- * is the same shape the screens' own lookups have and cannot drift into the read-whole-then-trim shape removed.
+ * is the same shape the screens' own lookups have and cannot drift into the read-whole-then-trim shape that was
+ * removed.
  *
  * <p>A fixture whose bounded leg must prove that an over-window sibling is never <em>materialised</em> (rather than
  * merely reported truncated) supplies its own lookup over a generated stream instead: this one holds its bodies in

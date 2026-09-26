@@ -123,9 +123,10 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         // retroactive KEV/license hold marks those hashes - the file serve and the revision's files listing both gate on
         // the marker - and an eviction deletes these exact keys; before this the empty return made a hold a silent no-op
         // (no marker, no review handle) and a KEV-listed recipe/package kept serving. Every level under the version is
-        // attacker-publishable, so it is PAGED a page at a time (store.page), never list()ed whole (the Audit-26 DoS
-        // lesson); the tree depth is fixed (user/channel/rrev[/pkg/pid/prev]/files), so the walk is bounded, not
-        // recursive over an attacker-controlled depth.
+        // attacker-publishable, so it is PAGED a page at a time (store.page), never list()ed whole (a whole
+        // listing there is a denial-of-service lever); the tree depth is fixed
+        // (user/channel/rrev[/pkg/pid/prev]/files), so the walk is bounded, not recursive over an attacker-controlled
+        // depth.
         List<ConanFile> files = conanFiles(coordinate, version, store);
         List<String> keys = new ArrayList<>(files.size());
         for (ConanFile file : files) {

@@ -169,7 +169,7 @@ class StagingReapTest {
 
     @Test
     void a_rival_that_steals_the_lapsed_lease_mid_reap_is_not_wiped_by_the_reap() throws IOException {
-        // Audit-28 A5-F2: the reap acquires the id's lease, then unpublishes each staged pointer and deletes the state
+        // The reap acquires the id's lease, then unpublishes each staged pointer and deletes the state
         // marker. If that loop outruns the lease TTL (a large abandoned tree), a rival stage() steals the lapsed lease
         // and re-stamps a fresh OPEN marker + links a new pointer; a reap that ran its mutations UNCONDITIONALLY would
         // then drop the rival's fresh pointer and delete its just-written marker (silent loss of an accepted deploy).

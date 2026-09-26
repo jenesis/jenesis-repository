@@ -108,7 +108,7 @@ public class TenantService {
         if (!rootStorage.scope(name).writeVersioned(TENANT_FILE, new Properties(), null)) {
             throw new IllegalArgumentException("Tenant already exists: " + tenant);
         }
-        // A tenant creation is a privileged super-admin mutation, so it writes an audit event (PRINCIPLES §6) - in the
+        // A tenant creation is a privileged super-admin mutation, so it writes an audit event (§6) - in the
         // new tenant's own scope (audit/<name>/), the scope every other per-tenant mutation records in, attributed to
         // the acting member. Its counterpart, TenantPurge's delete, must instead record in the operator scope because
         // the purge deletes the tenant's own audit space; a create has no such constraint, so it records where it

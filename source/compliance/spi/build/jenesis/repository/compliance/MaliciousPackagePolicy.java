@@ -21,8 +21,8 @@ import build.jenesis.repository.settings.CoreDefaults;
  * them the gate doing exactly what the operator's dial says. A default belongs with the code that reads it;
  * {@code MalwareActionDefaultTest} now holds the three places to one value.
  *
- * <p><b>{@link Verdict#ALLOW} evaluates and permits; it does not switch the dimension off</b> (the ruling
- * settled for the seven discovered {@link GatePolicyProvider} dimensions and this core one was outside the
+ * <p><b>{@link Verdict#ALLOW} evaluates and permits; it does not switch the dimension off</b> (the rule
+ * already settled for the seven discovered {@link GatePolicyProvider} dimensions, which this core one was outside the
  * reach of - it is not a discovered provider, so no fixture and no census covered it). A flagged advisory is still
  * matched and still reported, as {@code Finding(ALLOW, "Malicious package: <id>")} - the shape
  * {@link ComplianceGate} already uses for a VEX-suppressed or waived advisory. Returning before looking at the

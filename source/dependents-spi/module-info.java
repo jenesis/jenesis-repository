@@ -13,7 +13,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.dependents.spi {
-    // The shared ceiling the paged default refuses past (the earlier ruling, one call).
+    // The shared ceiling the paged default refuses past, applied through one call.
     requires build.jenesis.repository.bounds;
     requires transitive build.jenesis.repository.store;
     exports build.jenesis.repository.dependents.spi;

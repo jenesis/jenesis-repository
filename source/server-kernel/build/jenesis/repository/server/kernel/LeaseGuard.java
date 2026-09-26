@@ -20,7 +20,7 @@ import build.jenesis.repository.store.Lease;
  *
  * <h2>What a lost lease means</h2>
  * A renewal that returns {@code false} means this node stalled past its own ttl and a rival legitimately took the lock:
- * two sweepers are now live over one store. Before that was <em>logged only</em> - the pass ran to completion,
+ * two sweepers are now live over one store. That used to be <em>logged only</em> - the pass ran to completion,
  * its failure counter and task status untouched, so the dashboard showed a clean sweep while the fleet double-swept.
  * The semantics chosen here, and the reason:
  * <ol>

@@ -15,7 +15,7 @@ import build.jenesis.repository.net.PrivateHosts;
  * <p>{@link #refusalReason(URI, boolean)} is the whole outbound-target screen rather than only the host half: an
  * operator-supplied callback URL must be {@code https} <em>and</em> must not resolve internally. The two halves belong
  * together because they answer one question - "may this deployment send to this URL" - and splitting them is how the
- * webhook leg came to run the host half alone while its forwarding peer ran both (PRINCIPLES &sect;13: a guard one
+ * webhook leg came to run the host half alone while its forwarding peer ran both (&sect;13: a guard one
  * feature applies to a shared concern is applied by every peer with that concern).
  *
  * <h2>Four shapes of the same screen, one statement of each rule</h2>
@@ -32,12 +32,12 @@ import build.jenesis.repository.net.PrivateHosts;
  *   <li>{@link #cleartextRefusal(URI)} - the transport half alone. It performs <b>no I/O</b>, which is what lets a
  *       leg with a different host policy reuse the rule verbatim ({@link ImportHostGuard}, whose unresolvable host is
  *       admissible where this class's is not) and lets a <em>read</em> surface state a standing refusal without an
- *       external fetch on a GET (PRINCIPLES &sect;10).</li>
+ *       external fetch on a GET (&sect;10).</li>
  *   <li>{@link #unfetchableRefusal(URI)} - the capability floor <em>underneath</em> the screen, and the one piece the
  *       {@code allowInternal} dial does not lift.</li>
  * </ul>
  * Both the rule and its wording live in one place, so a leg cannot end up refusing cleartext in different words -
- * or, as found in two legs at once, not refusing it at all.
+ * or, as was once found in two legs at once, not refusing it at all.
  */
 public final class PrivateHostGuard {
 
@@ -89,10 +89,10 @@ public final class PrivateHostGuard {
     /**
      * The transport half alone: the reason {@code url} would put everything sent to it in front of any network
      * observer, or {@code null} when it is {@code https}. Nothing is resolved and nothing is fetched - the scheme is
-     * <em>stated by the URL</em>, so this side can judge it from the configuration alone. That is the property the two
-     * hazards separated turn on (a transport is judgeable and therefore refusable; "does this receiver verify
-     * signatures" is not, and was only reported), and it is what lets this rule be applied by a leg whose host policy
-     * differs and by a read surface that must not perform I/O.
+     * <em>stated by the URL</em>, so this side can judge it from the configuration alone. That is the property the
+     * separation of the two hazards turns on (a transport is judgeable and therefore refusable; "does this receiver
+     * verify signatures" is not, and was only reported), and it is what lets this rule be applied by a leg whose host
+     * policy differs and by a read surface that must not perform I/O.
      *
      * <p>Note the asymmetry with the host half. An internal-resolving host is a hazard about <em>where</em> the request
      * goes; cleartext is a hazard about <em>who else sees it</em> - so it bites hardest exactly where the host half is
@@ -117,10 +117,10 @@ public final class PrivateHostGuard {
      *
      * <p><b>The host is part of the floor, not part of the host half</b>. {@code HttpRequest.newBuilder}
      * rejects {@code https:///path} for exactly the same reason it rejects {@code gopher://cdn.example/} - it cannot
-     * address a connection - yet pinned only the scheme, so five legs whose host half answered "not private"
-     * for a {@code null} host emitted such a URL and threw out of the fetch. Whether a URL <em>names</em> a host is a
-     * capability fact this class can state once; whether the host it names is internal is the policy question the
-     * legs differ on, and only that second one is a screen.
+     * address a connection - yet the floor once pinned only the scheme, so five legs whose host half answered "not
+     * private" for a {@code null} host emitted such a URL and threw out of the fetch. Whether a URL <em>names</em> a
+     * host is a capability fact this class can state once; whether the host it names is internal is the policy question
+     * the legs differ on, and only that second one is a screen.
      *
      * <p><b>Deliberately not part of {@link #refusalReason(URI, boolean, Predicate)}, and deliberately not lifted by
      * {@code allowInternal}.</b> The dial says "this deployment trusts an internal or plaintext target"; it cannot say

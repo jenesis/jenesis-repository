@@ -62,7 +62,7 @@ public class RepositoryProperties {
      */
     private String bootstrapKey = "";
 
-    /** The strictly-opt-in anonymous role (WANON.1): the rights a keyless (no-credential) caller is granted under an
+    /** The strictly-opt-in anonymous role: the rights a keyless (no-credential) caller is granted under an
      *  enforcing deployment ({@code auth=true}). <em>Empty by default</em> - a keyless caller is then rejected exactly
      *  as enforcing does today. A non-empty value is a comma-list in the existing grant grammar: a bare
      *  {@code <surface>:<verb>} token ({@code repository:read}, {@code repository:write}, {@code manage:read},
@@ -130,10 +130,10 @@ public class RepositoryProperties {
      *  {@code proxy} key). */
     private boolean proxyEnabled = Boolean.parseBoolean(CoreDefaults.PROXY_ENABLED);
 
-    /** Per-repository backing definitions, by name. The generalized grammar (EPIC 25) is
+    /** Per-repository backing definitions, by name. The generalized grammar is
      *  {@code ( writable | fallback <source> [nocache] [harden] [unscreened] )*}; the old spellings {@code hosted} |
      *  {@code proxy <url> [nocache] [harden]} | {@code group a,b} desugar to it. Write-delegation ({@code group … push=x})
-     *  is a hard parse refusal now (§2.3): declare the front repository {@code writable} instead. Named
+     *  is a hard parse refusal now: declare the front repository {@code writable} instead. Named
      *  {@code repositories} rather than {@code repository} because a scalar of that name used to hold the
      *  fixed-space name, and one prefix cannot be both a string and a map; the scalar is gone and the plural
      *  stays, since renaming a live key to reclaim a dead one would move every deployment's configuration. */
@@ -328,7 +328,7 @@ public class RepositoryProperties {
         this.credentialMaxLifetime = credentialMaxLifetime;
     }
 
-    /** The strictly-opt-in anonymous-role grant (WANON.1), empty by default (no anonymous access whatsoever). See the
+    /** The strictly-opt-in anonymous-role grant, empty by default (no anonymous access whatsoever). See the
      *  field javadoc for the grammar. Read by the composition that builds the
      *  {@link Authorization} a keyless request is decided against, so the routed path honours the anonymous role
      *  identically to the keyless branch. */

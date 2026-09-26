@@ -127,10 +127,10 @@ class IntervalSettingTest {
 
     @Test
     void a_dial_with_a_ceiling_clamps_a_value_above_it_rather_than_falling_back() {
-        // P3650D is exactly: it parses cleanly, so nothing rejected it, and it removed the only repair behind a
-        // lost withhold transition. The clamp keeps the operator's intent (as infrequent as possible) at the least
-        // frequent value that still bounds the exposure - falling back to the weekly default would override an intent
-        // that is legitimate right up to the maximum.
+        // P3650D is exactly that defect: it parses cleanly, so nothing rejected it, and it removed the only repair
+        // behind a lost withhold transition. The clamp keeps the operator's intent (as infrequent as possible) at the
+        // least frequent value that still bounds the exposure - falling back to the weekly default would override an
+        // intent that is legitimate right up to the maximum.
         assertThat(BOUNDED.resolve(rebase("P3650D"))).isEqualTo(Duration.ofDays(30));
         assertThat(BOUNDED.resolve(rebase("100d"))).isEqualTo(Duration.ofDays(30));
         assertThat(BOUNDED.resolve(rebase("PT9000H"))).isEqualTo(Duration.ofDays(30));
@@ -150,7 +150,7 @@ class IntervalSettingTest {
 
     @Test
     void a_ceiling_is_opt_in_and_an_ordinary_cadence_keeps_the_operators_decision() {
-        // The negative control for the leg above, and the rule settled: a sweep an operator wants to run yearly
+        // The negative control for the leg above, and the settled rule: a sweep an operator wants to run yearly
         // is a slow sweep, and slow is their call. Only a cadence whose extreme value removes a bound gets a maximum.
         assertThat(CADENCE.resolve(config("P3650D"))).isEqualTo(Duration.ofDays(3650));
         assertThat(CADENCE.ceiling()).isEmpty();

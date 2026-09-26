@@ -19,12 +19,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * EPIC 30 DF-6 (design §7.2): the {@code dns} source keyword the RD-5 grammar grew - a third {@link Source} variant,
+ * The {@code dns} source keyword the definition grammar grew - a third {@link Source} variant,
  * {@link Source.DnsDirectory}, that makes DNS forwarding definition-native. Proves, hermetically over the gateway with
  * no network and no {@code redirect-dns} module on the classpath (the DNS routing is stubbed at the
  * {@link RepositoryRouter.RedirectHandler} seam):
  * <ul>
- *   <li>{@code fallback dns redirect} and {@code writable fallback dns redirect} (the §5.2 storage-backed shape) parse
+ *   <li>{@code fallback dns redirect} and {@code writable fallback dns redirect} (the storage-backed shape) parse
  *       to a {@link Source.DnsDirectory} leg served as a {@link Serve#REDIRECT} - only with the module installed;</li>
  *   <li>the keyword {@code dns} takes precedence over a repository literally named {@code dns}: a bare {@code fallback
  *       dns} (the reserved-keyword collision) is a fail-loud rename-ask refusal, consistent with the grammar's other
@@ -74,7 +74,7 @@ public class DnsSourceTest {
         RepositoryDefinition.dnsDirectoryInstalled(true);
 
         RepositoryDefinition storageBacked = RepositoryDefinition.parse("writable fallback dns redirect");
-        assertThat(storageBacked.writable()).as("the §5.2 storage-backed shape: local store first, DNS on miss").isTrue();
+        assertThat(storageBacked.writable()).as("the storage-backed shape: local store first, DNS on miss").isTrue();
         assertThat(storageBacked.fallbacks()).hasSize(1);
         assertThat(storageBacked.fallbacks().getFirst().source()).isInstanceOf(Source.DnsDirectory.class);
         assertThat(storageBacked.fallbacks().getFirst().serve()).isEqualTo(Serve.REDIRECT);
@@ -137,7 +137,7 @@ public class DnsSourceTest {
         assertThat(exchange.header("Location")).isEqualTo("https://repo.acme/maven/com/acme/lib/1.0/lib-1.0.jar");
         assertThat(handler.calls).hasSize(1);
         RecordingDnsRedirect.Call call = handler.calls.getFirst();
-        assertThat(call.upstream).as("a dns leg carries no clause-literal upstream (§7.2)").isNull();
+        assertThat(call.upstream).as("a dns leg carries no clause-literal upstream").isNull();
         assertThat(call.source).as("the handler sees the DnsDirectory source").isInstanceOf(Source.DnsDirectory.class);
         assertThat(call.path).isEqualTo("/maven/com/acme/lib/1.0/lib-1.0.jar");
     }

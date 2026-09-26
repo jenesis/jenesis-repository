@@ -45,7 +45,7 @@ import module java.base;
  *     declare a key the core classification already claims.</li>
  * <li><b>Value validity.</b> A declared {@code defaultValue} is either blank ("unset", the cleared state every write
  *     path short-circuits) or a value {@link Setting#parses} accepts for its kind, and a {@link Setting.Kind#CHOICE}
- *     offers exactly the values its code honours, in both directions ((c)): a value the code honours but
+ *     offers exactly the values its code honours, in both directions: a value the code honours but
  *     the list omits is reachable only by environment variable, and one the list offers that the code refuses fails
  *     the operator's write on a value the product itself listed.</li>
  * <li><b>Error visibility (&sect;9).</b> None of the failures above degrade. A duplicate key, like a contributor

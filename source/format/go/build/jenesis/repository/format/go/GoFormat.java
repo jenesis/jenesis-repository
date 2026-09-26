@@ -479,7 +479,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
     /**
      * The GOPROXY version query {@code GET /go/<module>/@v/list}: the module's disclosable versions, one per line.
      *
-     * <p><b>Two absences, and only one of them is a 404 (beside /).</b> This route's {@code 404}
+     * <p><b>Two absences, and only one of them is a 404.</b> This route's {@code 404}
      * already carries a second meaning - "not hosted here, ask the upstream" - which is what makes a pull-through
      * proxy's version discovery reach the authoritative list instead of the locally cached trio. That meaning is
      * carried entirely by the {@link #hosted} marker, which a {@code PUT} (or an import) stamps and a proxy fill never

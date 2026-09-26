@@ -55,12 +55,12 @@ public final class LiveDefinitions implements RepositoryDefinitions {
     }
 
     /**
-     * The boot-time definition sweep (PRINCIPLES §9, EPIC 25): parse EVERY configured repository definition and
+     * The boot-time definition sweep (§9): parse EVERY configured repository definition and
      * fail the boot LOUD, naming the offending repository and the remedy, on any one that does not parse. The swept set
      * is every {@code repositories.<name>} the deployment names - the file-configured
      * {@code jenreg.repositories.<name>} defaults and the runtime-stored {@code repositories.<name>}
      * overrides layered over them, resolved through the same effective lookup {@link #definition} uses - so a broken
-     * definition is caught wherever it was written. An invalid clause, a {@code push=} directive (now refused, §2.3), a
+     * definition is caught wherever it was written. An invalid clause, a {@code push=} directive (now refused), a
      * policy option on a repository-name fallback, a {@code !writable}-with-no-fallbacks shape, or an unknown token
      * throws here at startup rather than being silently ignored while the repository serves the deployment's default
      * path - the same {@code store=s3}-with-the-s3-module-off fail-fast posture, applied to repository definitions. A
@@ -84,7 +84,7 @@ public final class LiveDefinitions implements RepositoryDefinitions {
                         + name + " (or the stored repositories." + name + " override), or remove it - a selected "
                         + "repository definition that cannot be parsed must never be silently ignored.", invalid);
             }
-            // the outbound screen on the operator-configured upstream, applied here as well as at every write
+            // The outbound screen on the operator-configured upstream, applied here as well as at every write
             // surface. This is the backstop that makes the refusal structural rather than a habit: a definition
             // written straight into the file configuration, or one stored before this shipped, never passes through a
             // write API - and it must not serve a credentialed pull-through in cleartext because of that.

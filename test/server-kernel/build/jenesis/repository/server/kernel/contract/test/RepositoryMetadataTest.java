@@ -61,7 +61,7 @@ class RepositoryMetadataTest {
 
     @Test
     void opt_in_computation_reconciles_a_stored_document_and_derives_when_absent_scoped() throws IOException {
-        // with the computation opt-in, a stored document has only its <versions> list reconciled against the
+        // With the computation opt-in, a stored document has only its <versions> list reconciled against the
         // stored folders (every other field preserved), and a coordinate that never had a document uploaded falls
         // back to a full derivation. Driven over the tenant-and-repo scoped store the format serves from, so it also
         // holds the computed metadata to its repository - a sibling repository sees nothing.

@@ -48,7 +48,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     only that format has; the rule above is not. It is what {@code versions()}-style local enumerations already do
  *     one layer down, where a scan that stopped at its bound refuses rather than serving a prefix of the versions
  *     (&sect;5, &sect;9) - a list incomplete because the store could not be walked and one empty because the upstream
- *     could not be reached are the same failure wearing different clothes. an earlier change is what it costs when they are not:
+ *     could not be reached are the same failure wearing different clothes. This is what it costs when they are not:
  *     a five-second connect timeout served {@code github.com/pkg/errors} as a module with no versions, and the
  *     {@code 404} was investigated for a day as an enumeration regression in this core's paged asset walk.</li>
  * <li><b>Streaming (&sect;1).</b> An artifact is copied from the network into the content-addressed store through
@@ -71,8 +71,8 @@ import build.jenesis.repository.store.ArtifactStore;
  *     serving bytes it has not verified, a failure part-way through the undoing leaves them served for good, and
  *     there is no repair route on this leg at all, because the pointer it failed to remove is exactly what stops the
  *     next pull from being a miss (clause "Read purity": a local hit never touches the upstream). Every leg in this
- *     repository is in that order - OCI always was, Maven since the earlier work - and an adapter in another edition that still
- *     links first and undoes it is a defect against this clause rather than a variation of it.
+ *     repository is in that order - OCI always was, Maven since it was reordered - and an adapter in another edition
+ *     that still links first and undoes it is a defect against this clause rather than a variation of it.
  *     <p><b>"We could not read the digest" is not "the upstream publishes none", and this clause used to leave that
  *     open.</b> The unverified fall-back above is written for the upstream having <em>published nothing</em> - Maven
  *     serves jars whose {@code .sha1} sibling is missing, Packagist leaves {@code shasum} blank for a VCS-sourced dist

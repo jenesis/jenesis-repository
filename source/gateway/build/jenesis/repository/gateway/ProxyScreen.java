@@ -60,7 +60,7 @@ public final class ProxyScreen {
      *  <p>It <em>is</em> the sibling cap rather than a copy of the same number. This constant used to hold
      *  its own {@code 8 * 1024 * 1024} and a comment saying it "mirrors" free {@code Publication.LARGEST_SIBLING},
      *  which was all the equality could ever be while the constant was private - two numbers that had to be kept
-     *  equal by hand across two repositories. the earlier free half published it, so the publish leg (which reads through
+     *  equal by hand across two repositories. The free core now publishes it, so the publish leg (which reads through
      *  {@link build.jenesis.repository.store.PublishInterceptor.Content#sibling(String)}, capped there) and this proxy
      *  leg now cannot drift on what "too large to read whole" means. */
     static final int SIBLING_LIMIT = PublishInterceptor.Content.LARGEST_SIBLING;
@@ -90,7 +90,7 @@ public final class ProxyScreen {
     private final Publication publication;
     private final int holdDays;
 
-    /** withhold on an incomplete screen rather than serving with the fact recorded. */
+    /** Whether to withhold on an incomplete screen rather than serve with the fact recorded. */
     private final boolean withholdIncomplete;
     private final QualityInspector.Lookup siblings = new SiblingLookup();
 
@@ -287,7 +287,7 @@ public final class ProxyScreen {
             subjects = inspect(path, body);
         } catch (MalformedArtifactException malformed) {
             // A proxied artifact an inspector claimed but could not parse (a corrupt .nupkg/.gem/.rpm/.deb pulled from
-            // upstream) must never 500 the fetch nor be served silently (PRINCIPLES 5/10, §9). Screen it from its
+            // upstream) must never 500 the fetch nor be served silently (§5, §9, §10). Screen it from its
             // path-derived coordinate against the operator deny-list (so a deny-listed coordinate delivered as a corrupt
             // body is still withheld), with the immaturity hold on top, and log the failure - never a silent serve.
             // (The hardened proxy leg is stricter: it REFUSES an unparseable body rather than falling back - see
@@ -370,7 +370,7 @@ public final class ProxyScreen {
             // a clean whole-body screen (§9: a fact that would change what a reviewer concludes is never swallowed).
             // It deliberately does not change the verdict: an inspector whose bound was reached may only under-declare
             // (the CONTENT_FINDINGS reading), so withholding every artifact a scanner could not finish would hold the
-            // repository closed on ordinary large ones - see the earlier work.
+            // repository closed on ordinary large ones.
             reasons.add(INCOMPLETE_SCREEN_REASON);
             if (verdict == Verdict.ALLOW) {
                 if (withholdIncomplete) {

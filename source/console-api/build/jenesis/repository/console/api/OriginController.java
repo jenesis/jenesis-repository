@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The machine-readable <em>origin</em> (provenance-of-source) audit-export API (EPIC 25 §6.2): the {@code origin}
+ * The machine-readable <em>origin</em> (provenance-of-source) audit-export API: the {@code origin}
  * acquisition rows of a published or fallback-fetched artifact path over a tenant's named repository - where <em>this</em>
  * deployment's bytes for the coordinate version came from (a hand upload, or which fallback fetched them, when, stored or
  * passed through). It is the key-header-authenticated twin of the console's session-scoped origin panel

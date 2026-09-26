@@ -17,7 +17,7 @@ import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.walk.BoundedChildren;
 
 /**
- * The findings ledger over one repository's scoped store, consolidated by into the {@code findings} section of
+ * The findings ledger over one repository's scoped store, consolidated into the {@code findings} section of
  * the unified per-coordinate metadata document ({@link MetadataKey#version}) that replaces the standalone
  * {@code findings/} sidecar. Each coordinate version's findings are one tagged section of its document - a version's
  * whole record is still a point lookup, the repository-wide view still walks a name tree (now {@code meta/}, never an

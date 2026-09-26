@@ -38,9 +38,9 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
  * from durable state that the crash landed where it says. A point that stopped biting fails rather than passing
  * vacuously.
  *
- * <p><b>Every falsifiable property also declares what must break it</b> (carrying the earlier mechanism here).
+ * <p><b>Every falsifiable property also declares what must break it</b>.
  * A check states what a hook must do; nothing in a check states that it <em>could have said otherwise</em>, and
- * the earlier hold-release legs would have passed against a hook that was a no-op from end to end. So each
+ * the first hold-release legs would have passed against a hook that was a no-op from end to end. So each
  * {@link Property} the hook actually owns names one or more {@link Mutation}s - a {@link Mutant} that removes exactly
  * the behaviour the property is about - and the JUnit driver runs the same check body a second time against each,
  * requiring an {@link AssertionError}. A check that survives its property's mutation does not measure that property
@@ -64,8 +64,8 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
  * <h2>Clauses this kit discharges</h2>
  * restating the
  * clause numbers each {@link Property}'s javadoc already opens with. The interceptor half reaches <b>all thirteen</b>
- * {@code PublishInterceptor} clauses - which is the burn-down predicted, since it recorded all thirteen as
- * residue while nothing yet drove that chain. The after-commit half reaches four of {@code PublicationObserver}'s
+ * {@code PublishInterceptor} clauses - which is the burn-down a contract survey predicted when it recorded all thirteen
+ * as residue while nothing yet drove that chain. The after-commit half reaches four of {@code PublicationObserver}'s
  * eleven (2, 6, 7, 11); the remaining seven - thread-safety, the absence sentinel, selection, streaming, read purity,
  * lifecycle and ordering - carry no property here and stay checkup rows.
  *
@@ -144,7 +144,7 @@ public final class PublicationHookContract {
         THE_CONTENT_VIEW_RESTREAMS_THE_BLOB_UNDER_TWO_DIFFERENT_BOUNDS(Role.PUBLISH_INTERCEPTOR),
         /** Clause 6, in both directions. {@code Content.store()} and the stores handed to {@code committed} and
          *  {@code withheld} are the one doubly-scoped view the publication routed through - <em>and</em> the screen's
-         *  own derived rows land inside it, never one scope up. The second half was added by this check drove
+         *  own derived rows land inside it, never one scope up. The second half was added when this check drove
          *  a real screen under a real scope and read only the kit's probe, so a screen recording its verdict against
          *  the deployment root passed the whole kit. */
         THE_VERDICT_LEGS_RECEIVE_THE_PUBLICATIONS_OWN_SCOPED_STORE(Role.PUBLISH_INTERCEPTOR),
@@ -439,7 +439,7 @@ public final class PublicationHookContract {
                         "the observer-facing half of the blast radius is that the surface is demonstrably STALE after "
                                 + "a lost call. A fixture whose declared converged view the untouched store already "
                                 + "satisfies makes that unprovable while the check still passes - the "
-                                + "converged-over-an-empty-answer shape hit by hand")));
+                                + "converged-over-an-empty-answer shape once hit by hand")));
         mutations.put(Property.THE_COMMIT_TO_CALLBACK_WINDOW_LOSES_THE_CALL, List.of(
                 new Mutation(Mutant.A_CONVERGENCE_THE_SEEDED_STORE_ALREADY_HAS,
                         "same shape, and it matters more here: this leg is what refuses a fixture the "
@@ -636,7 +636,7 @@ public final class PublicationHookContract {
                     + observer.delivery() + ", which this seam does not provide. Publication makes the artifact "
                     + "visible and only THEN calls the observer, so a crash in that window loses the call whatever "
                     + "the callback writes once invoked; an outbox written inside the callback buys "
-                    + Delivery.DURABLE_AFTER_ENQUEUE + ", not at-least-once observation. Only the earlier pre-commit "
+                    + Delivery.DURABLE_AFTER_ENQUEUE + ", not at-least-once observation. Only a pre-commit "
                     + "intent/state machine, proven at every injected crash point, could raise the class - and "
                     + "has not landed.");
         }

@@ -13,7 +13,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * source), the gated publish path, the store-backed staging and inventory, and the retention policy. Every bean is
  * plain domain code reused as-is; Spring only assembles them.
  *
- * <p>split the former monolith into five focused, same-package {@code @Configuration} classes,
+ * <p>The former monolith is split into five focused, same-package {@code @Configuration} classes,
  * grouped by concern - this class is now the thin shell that carries the context-level annotations
  * ({@link EnableConfigurationProperties}, {@link EnableScheduling}) and {@link Import}s the groups. The split is a
  * pure mechanical, behaviour-preserving extraction (mirror): every bean keeps the same name, type,
@@ -23,7 +23,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * method-parameter injected, so Spring supplies the one singleton across the new config-class boundaries exactly as
  * it did within the one class, and no bean is defined twice ({@code @Import} and the same-package component scan
  * dedupe configuration classes by class name). In particular the metering / read-only artifact-store wrap order
- * (§2.4) is applied where the store is declared, which this composition layers into, and the demo seed still depends
+ * is applied where the store is declared, which this composition layers into, and the demo seed still depends
  * on every {@link build.jenesis.repository.store.PublishPathWiring} bean by parameter so the publish path is armed
  * before the seed publishes.
  *

@@ -83,7 +83,7 @@ public final class AzureArtifactStore implements ArtifactStore {
             // SDK signals the missing key inconsistently across builds (IllegalStateException in some, a
             // NullPointerException dereferencing the absent credential in azure-storage-blob 12.35.0), so catch any
             // RuntimeException from the signing attempt rather than a single subtype. A user-delegation-key SAS for
-            // AAD-authenticated deployments is a wave-2 follow-up.
+            // AAD-authenticated deployments is not implemented.
             return Optional.empty();
         }
     }

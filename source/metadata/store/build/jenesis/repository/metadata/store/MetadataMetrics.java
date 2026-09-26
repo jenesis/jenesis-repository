@@ -14,8 +14,8 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * <ul>
  *   <li><strong>{@code jenreg.metadata.document.bytes}</strong> - the largest document observed on a write,
  *       measured against a soft ceiling ({@link #SOFT_SIZE_LIMIT}) past which a mutate logs a WARNING. The document
- *       rewrites whole on every CAS, so growth costs latency and CPU, never billed request-bytes (§3.1) - the
- *       §7.3 doc-growth guard, a signal not an enforced limit.</li>
+ *       rewrites whole on every CAS, so growth costs latency and CPU, never billed request-bytes - a
+ *       doc-growth guard, a signal not an enforced limit.</li>
  *   <li><strong>{@code jenreg.metadata.cas.retries}</strong> - section-scoped CAS commits re-read and retried
  *       after a concurrent writer won the token: contention on the shared per-version document, converged by
  *       re-applying the section transform.</li>
@@ -28,7 +28,7 @@ public final class MetadataMetrics implements ObservabilitySource {
     /** The process-wide instance {@link StoreMetadata} reports into by default. */
     public static final MetadataMetrics SHARED = new MetadataMetrics();
 
-    /** The soft ceiling (bytes) past which a mutate logs a WARNING - a guard signal, never enforced (§7.3). */
+    /** The soft ceiling (bytes) past which a mutate logs a WARNING - a guard signal, never enforced. */
     public static final int SOFT_SIZE_LIMIT = 64 * 1024;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MetadataMetrics.class);
@@ -58,7 +58,7 @@ public final class MetadataMetrics implements ObservabilitySource {
         if (bytes > SOFT_SIZE_LIMIT) {
             LOGGER.warn("Metadata document " + key + " is " + bytes + " bytes, past the " + SOFT_SIZE_LIMIT
                     + "-byte soft guard - every mutate rewrites it whole, so review whether a section is "
-                    + "accumulating unbounded rows (§7.3)");
+                    + "accumulating unbounded rows");
         }
     }
 

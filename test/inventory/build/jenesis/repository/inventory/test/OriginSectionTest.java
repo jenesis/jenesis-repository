@@ -17,7 +17,7 @@ import build.jenesis.repository.store.Publication;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The {@code origin} section (EPIC 25, §6.2): the provenance-of-source acquisition trail. This suite covers the
+ * The {@code origin} section: the provenance-of-source acquisition trail. This suite covers the
  * codec's one-row-per-{@code (source, sha256)} identity (an idempotent same-bytes converge, a new row on a digest
  * change, {@code serves}/{@code lastServed} update on a repeat fallback serve), the publish-path folding of a
  * {@code local-upload} row into the same doc mutate as the {@code published} section, and the eviction dividend: a
@@ -167,7 +167,7 @@ class OriginSectionTest {
         inventory().record(ECO, COORD, VERSION, false, NOW);                      // a published member (the caching leg)
         metadata.mutate(ECO, COORD, VERSION, OriginSection.TAG,
                 OriginSection.recordFallback("frontdoor", 0, "https://central/lib", hash, true, "harden", NOW));
-        metadata.mutate(ECO, COORD, VERSION, "verdict", verdictSection());        // the sibling T23.4 record
+        metadata.mutate(ECO, COORD, VERSION, "verdict", verdictSection());        // the sibling verdict record
 
         assertThat(publication.located(path)).as("the cached fallback blob is present before reclaim").isPresent();
 

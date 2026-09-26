@@ -166,7 +166,7 @@ class MavenFormatTest {
 
     @Test
     void layout_lays_out_a_modular_jar_and_cross_publishes_its_module_view() throws IOException {
-        // Drive the layout-only seam directly (EPIC 26: the ingress edge screens the body to ACCEPT and restreams the
+        // Drive the layout-only seam directly (the ingress edge screens the body to ACCEPT and restreams the
         // stored blob into layout, so layout never screens - it only lays out). A modular jar is stored, its /maven/
         // path linked, and its module name read back from the just-stored blob to cross-publish the module view. The
         // ModuleView provider (the Jenesis format) is not on this unit module's path, so the /module/ pointer is not
@@ -378,7 +378,7 @@ class MavenFormatTest {
         // ProxyFormat clause 2's split. maven-metadata.xml IS the <versions> list a range or a LATEST/RELEASE marker
         // resolves against, so a 404 here is not "not cached, re-pull" - it is the answer that the coordinate has no
         // versions, and a resolver acts on it (or, under a mirror list, moves on as though this repository had really
-        // answered). A fetch that never landed must therefore not wear that answer's clothes. This is the earlier defect,
+        // answered). A fetch that never landed must therefore not wear that answer's clothes. This is the defect
         // found on the Go leg's @v/list and retrofitted here for parity.
         for (Optional<build.jenesis.repository.format.ProxyFormat.Fetched> answer : List.of(
                 Optional.<build.jenesis.repository.format.ProxyFormat.Fetched>empty(),   // a transport failure

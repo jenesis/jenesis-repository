@@ -23,7 +23,7 @@ import build.jenesis.repository.walk.Traversal;
  * other per-version space is keyed <em>by</em> the triple with no reverse index. So the record had to be invented, and
  * this is it.
  *
- * <p><b>Why it is affordable: bounded by holds, not by artifacts.</b> The objection that kept open was that a
+ * <p><b>Why it is affordable: bounded by holds, not by artifacts.</b> The objection that kept this open was that a
  * path &rarr; coordinate index means a new durable key space written for every artifact. It does not, because every
  * consumer of it is a <em>hold</em> path. A row is written when a hold is placed - a screen-time QUARANTINE, a
  * retroactive enforcement sweep, a proxied body withheld for review - and never on an ordinary publish, so the space

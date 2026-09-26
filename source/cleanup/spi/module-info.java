@@ -11,7 +11,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.cleanup {
-    // The shared ceiling the grouped-stream default refuses past (the earlier ruling, one call).
+    // The shared ceiling the grouped-stream default refuses past, applied through one call.
     requires build.jenesis.repository.bounds;
     requires build.jenesis.repository.settings;
     // The java.base-light store contract, for the shared Providers resolution mechanism.

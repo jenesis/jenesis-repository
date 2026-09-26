@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
- * the inventory's subtree sweeps <b>page</b> every level instead of listing it whole.
+ * The inventory's subtree sweeps <b>page</b> every level instead of listing it whole.
  *
  * <p>Both sweeps under test used to descend by calling {@code ArtifactStore.list(level)} once per level - the release
  * enumeration through a self-recursive {@code walk}, the walk-less roll-up through a self-recursive {@code rollUp} -
@@ -88,7 +88,7 @@ class WideLevelWalkTest {
 
     @Test
     void the_browse_container_probe_asks_one_child_of_a_wide_level_rather_than_listing_it() throws IOException {
-        // the screened browse page is bounded everywhere except its container predicate, which was
+        // The screened browse page is bounded everywhere except its container predicate, which was
         // `!store.list(child).isEmpty()` - a whole-namespace listing to answer an emptiness question, run once per
         // ROW of the page. Browsing the coordinate's parent draws one folder row for `lib`, whose version level holds
         // more children than this store will hand back as one list: the old predicate is refused by name here, the

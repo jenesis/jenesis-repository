@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * caching proxy and a pass-through ({@code nocache}) proxy of a fixed upstream, and two groups over them - one a
  * caching front door, one a non-storing view. Asserts first-hit-wins read routing, that a caching proxy stores
  * the fetched bytes while a pass-through does not, that a write lands in a repository's own store iff writable
- * (a group and a proxy are read-only, EPIC 25 §2.3 - no push-delegation), and that {@code group … push=…} is a hard
+ * (a group and a proxy are read-only - there is no push-delegation), and that {@code group … push=…} is a hard
  * parse refusal.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -79,7 +79,7 @@ public class RepositoryRouterTest {
         assertThat(get("view", "/t/remote.txt")).isEqualTo("from the upstream");
         assertThat(fetches.get()).as("nothing was cached - fetched again").isEqualTo(before + 2);
 
-        // a write lands in the repository's OWN store iff writable; a proxy and a group are read-only (EPIC 25 §2.3,
+        // a write lands in the repository's OWN store iff writable; a proxy and a group are read-only (there is
         // no push-delegation)
         assertThat(router.writeTarget("releases")).as("a writable repo is its own write target").isEqualTo("releases");
         assertThat(router.writeTarget("public")).as("a group is read-only (no push-delegation)").isNull();
@@ -112,7 +112,7 @@ public class RepositoryRouterTest {
 
     @Test
     public void a_group_push_directive_is_refused_at_parse_naming_both_remedies() {
-        // EPIC 25 §2.3 hard cutover: `group … push=…` write-delegation is refused at parse (it no longer has an honest
+        // Hard cutover: `group … push=…` write-delegation is refused at parse (it no longer has an honest
         // meaning now that writability is a repository's own property), whatever the (former) target's shape.
         for (String specification : List.of("group releases,central push=releases",
                 "group releases,central push=central", "group releases,public push=public")) {
@@ -126,7 +126,7 @@ public class RepositoryRouterTest {
 
     @Test
     public void a_non_https_proxy_upstream_is_classified_through_the_one_shared_rule() {
-        // consolidation: this classifier no longer restates "is it https" - it delegates to the shared
+        // This classifier no longer restates "is it https" - it delegates to the shared
         // PrivateHostGuard.cleartextRefusal rule every other outbound leg reads, so the product cannot answer "is this
         // upstream's transport acceptable" in two implementations again (it did: this one, and the importer's
         // RepositoryAutoConfiguration.isInsecureUpstream, only one of which held the reasoning).
@@ -139,7 +139,7 @@ public class RepositoryRouterTest {
 
         // parse() stays a pure grammar parser with no configuration and no I/O: it still yields a usable PROXY
         // definition with the upstream intact, so a console READ can render a stored definition's shape without
-        // resolving anything (PRINCIPLES §10). Whether the deployment may PULL from that upstream is the separate,
+        // resolving anything (§10). Whether the deployment may PULL from that upstream is the separate,
         // dialled question below - asked where an operator configures it, not where a string is parsed.
         RepositoryDefinition proxy = RepositoryDefinition.parse("proxy http://up/");
         assertThat(proxy.writable()).as("a proxy is not writable").isFalse();
@@ -257,7 +257,7 @@ public class RepositoryRouterTest {
 
     @Test
     public void a_harden_nocache_proxy_with_no_screening_installed_fails_loud() throws IOException {
-        // Fail-loud (PRINCIPLES §9) applies to `harden nocache` exactly as to `harden`: it is an explicit opt-in to
+        // Fail-loud (§9) applies to `harden nocache` exactly as to `harden`: it is an explicit opt-in to
         // full screening, so a router with no compliance gate wired must throw at resolution naming what is missing -
         // never a silent fallback to serving an untrusted upstream unscreened.
         Map<String, RepositoryDefinition> definitions = Map.of(
@@ -276,7 +276,7 @@ public class RepositoryRouterTest {
 
     @Test
     public void a_harden_proxy_with_no_screening_installed_fails_loud_rather_than_proxying_unscreened() {
-        // Selected-but-unsatisfiable stays loud (PRINCIPLES §9): a hardened proxy is an explicit opt-in to full
+        // Selected-but-unsatisfiable stays loud (§9): a hardened proxy is an explicit opt-in to full
         // screening, so a router with no compliance gate wired must throw at resolution naming what is missing - never
         // a silent fallback to serving an untrusted upstream unscreened (the store=s3-without-module precedent).
         Map<String, RepositoryDefinition> definitions = Map.of("hardened", RepositoryDefinition.parse("proxy http://up/ harden"));

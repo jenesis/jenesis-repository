@@ -51,7 +51,7 @@ final class InventoryRecording {
     }
 
     /** Record a published request path, folding a {@code local-upload} origin row for {@code originSha256} (the stored
-     *  blob's content hash) into the same publish-commit doc mutate (§6.2). A {@code null} sha records no origin
+     *  blob's content hash) into the same publish-commit doc mutate. A {@code null} sha records no origin
      *  row - the non-upload record paths (a hold release, a re-screen) pass {@code null}. */
     void record(String path, Instant published, String originSha256) throws IOException {
         Optional<ArtifactDescriptor> descriptor = resolve(path);
@@ -189,7 +189,7 @@ final class InventoryRecording {
         record(descriptor, published, null);
     }
 
-    /** Record a publish from the descriptor, folding a {@code local-upload} origin row for {@code originSha256} (§6.2). */
+    /** Record a publish from the descriptor, folding a {@code local-upload} origin row for {@code originSha256}. */
     void record(ArtifactDescriptor descriptor, Instant published, String originSha256) throws IOException {
         if (descriptor.coordinate() == null || descriptor.version() == null) {
             return;
@@ -211,14 +211,14 @@ final class InventoryRecording {
     }
 
     /** Record a publish, folding a {@code local-upload} origin row for {@code originSha256} into the same doc mutate as
-     *  the {@code published} section (§6.2) - one CAS, no extra round-trip. A {@code null} sha records no origin. */
+     *  the {@code published} section - one CAS, no extra round-trip. A {@code null} sha records no origin. */
     void record(String ecosystem, String coordinate, String version, boolean prerelease, Instant published,
                 String originSha256) throws IOException {
         boolean firstPublish;
         if (metadata != null) {
-            // the publish facts land in the document's published section (its presence is membership of the
+            // The publish facts land in the document's published section (its presence is membership of the
             // published set). Edge-triggered on the absent -> present transition, followed by the rollup fold-in on
-            // a first publish (§5.4). On a hand upload the local-upload origin row rides that SAME doc mutate (§6.2).
+            // a first publish. On a hand upload the local-upload origin row rides that SAME doc mutate.
             firstPublish = recordPublishedSection(ecosystem, coordinate, version, prerelease, published, originSha256);
             if (!firstPublish) {
                 return;
@@ -264,7 +264,7 @@ final class InventoryRecording {
             SequencedMap<String, build.jenesis.repository.metadata.SectionMutation> mutations = new LinkedHashMap<>();
             mutations.put(PublishedSection.TAG, PublishedSection.record(published, prerelease, published));
             if (originSha256 != null && !originSha256.isBlank()) {
-                // §6.2: the hand-upload local-upload origin row rides the SAME doc mutate as the publish
+                // The hand-upload local-upload origin row rides the SAME doc mutate as the publish
                 // commit's published section - one CAS, no extra round-trip. Idempotent (one row per (source, sha256)).
                 mutations.put(OriginSection.TAG, OriginSection.recordUpload(originSha256, published));
             }
@@ -408,9 +408,9 @@ final class InventoryRecording {
      * is - and never one falling through to the other, deliberately, so a document that legitimately carries no
      * published section is not answered from a stale key. That choice is a function of an installed module, so
      * uninstalling the metadata persistence module (or installing it over a store written without one) silently flips
-     * every version of the repository to "not a published member" - and the earlier guard covers the FORMAT leg only, so
-     * the reconcile sweep then judges those versions by liveness alone and reaps the derived rows of every one it can
-     * read as gone, while the forward leg re-records versions that were never lost. A record standing on the plane
+     * every version of the repository to "not a published member" - and the liveness guard covers the FORMAT leg only,
+     * so the reconcile sweep then judges those versions by liveness alone and reaps the derived rows of every one it
+     * can read as gone, while the forward leg re-records versions that were never lost. A record standing on the plane
      * this deployment does not read is not evidence of anything: nothing was asked of it.
      *
      * <p>So a version whose own plane says nothing, while the OTHER plane holds a record for it, is

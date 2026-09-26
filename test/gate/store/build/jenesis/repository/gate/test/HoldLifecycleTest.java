@@ -180,11 +180,11 @@ class HoldLifecycleTest {
     }
 
     /**
-     * on the second consumer of the kind-neutral read. {@link HoldClears#holder} is the predicate the
-     * {@code withheld/} reconcile backstop lifts a content-addressed marker on, and clause (b) of it is "no
-     * {@code holds/} record still covers a claimant". Asked through the provider registry that answer was an absence
-     * for an uninstalled kind, so the backstop lifted the very marker that kind's hold depends on and the withheld
-     * bytes served again. Asked through the record it is not.
+     * Holds that outlive their module, on the second consumer of the kind-neutral read. {@link HoldClears#holder} is
+     * the predicate the {@code withheld/} reconcile backstop lifts a content-addressed marker on, and clause (b) of it
+     * is "no {@code holds/} record still covers a claimant". Asked through the provider registry that answer was an
+     * absence for an uninstalled kind, so the backstop lifted the very marker that kind's hold depends on and the
+     * withheld bytes served again. Asked through the record it is not.
      */
     @Test
     void the_withhold_reconcile_backstop_keeps_an_uninstalled_kinds_marker_standing() throws IOException {
@@ -411,7 +411,7 @@ class HoldLifecycleTest {
     }
 
     /**
-     * the release's link decision is a choice between two namespaces, and there is a third state in which
+     * The release's link decision is a choice between two namespaces, and there is a third state in which
      * neither may be chosen. A publish-time hold whose release pointer was never linked gets one; a blobs-namespace
      * hold (npm/PyPI/NuGet/Cargo/RubyGems/Debian/Go) must NOT, because those formats never serve through a
      * {@code publish/} pointer and one left behind is a phantom that retention - reverse-mapping only through
@@ -583,8 +583,8 @@ class HoldLifecycleTest {
      * (3). A screen-quarantined upload's held blob is the publish <em>envelope</em>, not the served artifact, so
      * a release replays the format's own dispatch to materialise the version. With that format uninstalled the replay
      * used to degrade to linking the stored blob "so the hold still resolves" - which materialises no installable
-     * version at all and strands the phantom {@code publish/} pointer closed on the sibling branch. The honest
-     * answer is the earlier: keep the hold, say why, and let reinstalling the module make the release exact.
+     * version at all and strands the phantom {@code publish/} pointer already closed on the sibling branch. The honest
+     * answer is the same as there: keep the hold, say why, and let reinstalling the module make the release exact.
      */
     @Test
     void a_screen_quarantined_release_whose_dispatch_format_is_gone_is_refused_rather_than_linking_the_envelope()

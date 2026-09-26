@@ -98,7 +98,7 @@ public class GlobalControllerAdvice {
         return environment.getProperty("jenreg.read-only", Boolean.class, false);
     }
 
-    /** The strictly-opt-in anonymous-role grant (WANON.1, {@code jenreg.anonymous-rights}, env
+    /** The strictly-opt-in anonymous-role grant ({@code jenreg.anonymous-rights}, env
      *  {@code JENREG_ANONYMOUS_RIGHTS}), so every view shows an explicit "Anonymous access" banner when it
      *  is set - visible, never hidden. There was a second advice publishing this and every other attribute below,
      *  in the shell package, and the two were kept in step by hand until the node that registered it went. Read
@@ -113,7 +113,7 @@ public class GlobalControllerAdvice {
     /** The header's security-posture badge - the advisory count a super-admin sees on every view,
      *  linking to the Security-posture screen; a clean deployment renders no badge. It is derived from the very same
      *  collected report {@code /posture} renders, for the same session-selected tenant, so the number the
-     *  badge names is by construction the number of rows its own destination lists. Before it collected a
+     *  badge names is by construction the number of rows its own destination lists. It used to collect a
      *  second report over the <em>raw environment</em> while the screen read stored-settings-over-environment, so an
      *  advisory raised by a stored dial was listed on the screen and counted as zero here; see {@link PostureBadge}
      *  for why the tenant rows came with the fix rather than being kept out of it.

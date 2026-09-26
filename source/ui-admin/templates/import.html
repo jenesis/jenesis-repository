@@ -79,7 +79,7 @@
                     <!--/* Rendered as a warning when non-zero, and shown on every job rather than only failed ones:
                          a COMPLETED job with 0 imported and 0 dropped is an empty source, and one with 0 imported and
                          a non-zero count here is a source whose every row was refused. Those read identically without
-                         this column, which is the whole of D-155. */-->
+                         this column, which is why it exists. */-->
                     <td class="app-list__num">
                         <span th:if="${job.dropped > 0}" class="app-badge app-badge--danger"
                               th:text="${job.dropped}">0</span>

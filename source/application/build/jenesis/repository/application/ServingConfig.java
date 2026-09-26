@@ -51,15 +51,14 @@ import org.springframework.core.env.Environment;
  * bean with {@link DeployEdgeHooks} and {@link PublishTenantFilter} plugged in. Every bean is copied
  * verbatim from the former monolith; the split is behaviour-preserving.
  *
- * <p><b>import edge (no bean override).</b> The former {@code WebMvcRegistrations} mapping-suppression stopgap
- * that dropped the controller's import handlers is retired. In 0.8.0 those handlers moved out of
- * {@code RepositoryController} into the {@code ImportEdgeController}, a bean conditionally registered by
- * {@code FreeImportEdgeCondition} only when no {@code ImportEdgeProvider} is installed. This composition installs
- * {@link RoutedImportEdge} through that SPI (a hook, not a cross-layer bean override), so the server's own
- * import edge is never created and {@link ImportController} - the tenant-scoped
- * {@code /api/repository/import} with its {@code AuditTrail}, tenant-routed store and screening/SSRF
- * choreography - is the sole import edge, with no second mapping of the route left to shadow it and no mapping
- * override.
+ * <p><b>The import edge, without a bean override.</b> The former {@code WebMvcRegistrations} mapping-suppression
+ * stopgap that dropped the controller's import handlers is retired. Those handlers have moved out of {@code
+ * RepositoryController} into the {@code ImportEdgeController}, a bean conditionally registered by {@code
+ * FreeImportEdgeCondition} only when no {@code ImportEdgeProvider} is installed. This composition installs {@link
+ * RoutedImportEdge} through that SPI (a hook, not a cross-layer bean override), so the server's own import edge is
+ * never created and {@link ImportController} - the tenant-scoped {@code /api/repository/import} with its {@code
+ * AuditTrail}, tenant-routed store and screening/SSRF choreography - is the sole import edge, with no second mapping of
+ * the route left to shadow it and no mapping override.
  */
 @Configuration(proxyBeanMethods = false)
 public class ServingConfig {
@@ -111,7 +110,7 @@ public class ServingConfig {
         // per-artifact ceiling is only reachable at or below the shared in-flight budget the body is spooled through,
         // so a configured ceiling above it fails the boot here rather than never firing.
         HardenedScreen.Bounds hardeningBounds = HardenedScreen.Bounds.fromConfig(config, spool.budget());
-        // EPIC 25 §4.2: the read-side withheld guard is the core's discovered PublishInterceptor chain (the
+        // The read-side withheld guard is the core's discovered PublishInterceptor chain (the
         // staging withhold) plus the /quarantine review pointer itself, consumed read-only. A local 404 over a path
         // the gate has retracted is then a REFUSED that ends the walk rather than a MISS that falls through to a
         // weaker fallback - the closure for locally-withheld content. The review pointer is read HERE rather than by
@@ -133,7 +132,7 @@ public class ServingConfig {
     }
 
     /**
-     * The router-construction site of the redirect serve path (RD-5 / EPIC 30): every installed
+     * The router-construction site of the redirect serve path: every installed
      * {@link RedirectHandlerProvider} - the {@code redirect-directory} module's clause-literal handler, the
      * {@code redirect-dns} module's DNS-directory handler - is built from this deployment's configuration and the
      * guards this layer owns (the policy floor and withheld probe as the screen, the SSRF and credential guards, the

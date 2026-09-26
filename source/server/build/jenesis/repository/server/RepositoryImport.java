@@ -23,7 +23,7 @@ import build.jenesis.repository.store.Publication;
  * mixed-format source migrates the formats this deployment understands and reports the rest - the same listing then
  * drives a second pass once those formats are on the path.
  *
- * <p>The import walk is an ingress <em>edge</em> (EPIC 26): it screens each asset before the demoted, layout-only
+ * <p>The import walk is an ingress <em>edge</em>: it screens each asset before the demoted, layout-only
  * importer lays it out, so a migration off an incumbent lands the same {@link build.jenesis.repository.store.PublishInterceptor}
  * gate a deploy or batch upload passes - the deploy edge ({@link ScreenedDispatch}) and the import edge run the one
  * shared hosted-publish operation {@link Publication#commit}. For each asset the importer

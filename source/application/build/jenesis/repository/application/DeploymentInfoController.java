@@ -74,7 +74,7 @@ public class DeploymentInfoController {
         this.provenanceSigner = provenanceSigner;
         this.settings = settings;
         this.effective = pins.effective(settings, environment);
-        // bridge this Spring bean's live rich-capabilities view to the free-core CapabilityContributor SPI, which
+        // Bridge this Spring bean's live rich-capabilities view to the free-core CapabilityContributor SPI, which
         // is ServiceLoader-discovered (no Spring context) inside the free RepositoryController.capabilities(). The free
         // controller now serves the ONE /api/capabilities, merging this contribution onto its base map - retiring the
         // WebMvcRegistrations mapping-suppression stopgap that dropped the capabilities mapping so this controller

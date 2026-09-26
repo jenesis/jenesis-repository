@@ -26,8 +26,8 @@ import io.micrometer.core.instrument.MeterRegistry;
  * failing pass or unit is logged and counted ({@code jenreg.maintenance.failures}) rather than swallowed,
  * and the worker stays alive across it.
  *
- * <p>split the scheduler <strong>in place</strong> into three collaborators inside this module, rather than
- * wrapping it or extracting a second scheduler (SPI hardening plan gate 3): {@link TaskSchedule} owns the due-time
+ * <p>The scheduler is split <strong>in place</strong> into three collaborators inside this module, rather than
+ * wrapped or duplicated by a second scheduler: {@link TaskSchedule} owns the due-time
  * arithmetic and the per-task run bookkeeping, {@link LeaseGuard} owns the single-writer {@link Lease} a
  * {@link MaintenanceTask.Exclusion#LEASE lease-owned} pass locks on (keyed by the task's name, so the retention pass
  * keeps the {@code locks/cleanup} object a mixed-version fleet expects), and {@link PassMetrics} owns the Micrometer
@@ -103,7 +103,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
      *  {@link #config}, but resolved for the pass's own tenant so a tenant-overridable setting (a webhook endpoint, a
      *  gate policy, a retention age over a tenant's own telemetry space) actually takes effect in the sweep - a
      *  global-only key resolves deployment-wide exactly as before, so this is a no-op for every deployment knob. Both
-     *  hooks resolve through it since the earlier work; the deployment-global {@link #config()} accessor (the on-demand endpoints'
+     *  hooks resolve through it; the deployment-global {@link #config()} accessor (the on-demand endpoints'
      *  provider lookup) stays tenant-agnostic. */
     private final BiFunction<String, String, String> tenantConfig;
     /** The single-writer guard (R7): the one owner of {@code locks/<task>} for the whole deployment. */
@@ -118,8 +118,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
     private volatile boolean running;
     private Thread thread;
     /** When the worker last <em>completed</em> a scheduling iteration - stamped on every pass round the loop, whether
-     *  or not anything was due, so an idle deployment reads as running rather than as never having run (the earlier shape:
-     *  a liveness signal that stops instead of reading zero cannot distinguish "nothing to do" from "not running"). */
+     *  or not anything was due, so an idle deployment reads as running rather than as never having run (a
+     *  liveness signal that stops instead of reading zero cannot distinguish "nothing to do" from "not running"). */
     private volatile Instant lastIteration;
     /** How many scheduling iterations the worker has completed - a monotone counter an operator can watch advance
      *  without doing clock arithmetic on {@link #lastIteration}. */
@@ -250,7 +250,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
      * stopped.
      *
      * <p>This exists because "maintenance is not running" and "maintenance found nothing to do" were previously
-     * indistinguishable from outside (the earlier class, on the loop rather than on a drain's depth gauges): a task that
+     * indistinguishable from outside (the drain depth gauges' problem, on the loop): a task that
      * has never been due reports {@code UNKNOWN}/"has not completed a run yet" whether the worker is sweeping every
      * thirty seconds or died an hour ago, and the only signal that it died was one stack trace from the default
      * uncaught-exception handler. The iteration stamp advances on <em>every</em> pass round the loop, due work or not,
@@ -277,7 +277,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
 
     /**
      * Start the worker thread. <strong>Idempotent</strong>: a second call over a live worker is a no-op rather than a
-     * second loop. Before this method called {@code startWorker()} unconditionally while {@link #refresh()}
+     * second loop. This method once called {@code startWorker()} unconditionally while {@link #refresh()}
      * guarded, so a second {@code start()} overwrote the thread field while the old loop kept running against a
      * {@code running} flag that was still true - two worker loops on one node, each taking and releasing the same
      * leases.
@@ -488,8 +488,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
     }
 
     /**
-     * Where an {@link Error} raised by a discovered task goes. an earlier change settled the question for {@code EventSink} - an
-     * {@code Error} is the runtime or the module graph giving way rather than a unit of work failing, so it is
+     * Where an {@link Error} raised by a discovered task goes. The question was settled first for {@code EventSink} -
+     * an {@code Error} is the runtime or the module graph giving way rather than a unit of work failing, so it is
      * attributed and <em>rethrown</em> rather than filed as the subject's answer - and the ruling transfers here with
      * one deliberate refinement: <b>an {@code Error} is escalated to whoever can act on it, and rethrowing is only an
      * escalation where there is a caller to receive it.</b>
@@ -498,7 +498,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
 
         /**
          * To the caller - {@link #runNow(Instant)}. An admin or a test asked for this pass on its own thread, so
-         * applies verbatim: the {@code Error} propagates, the request fails loudly instead of reporting a
+         * the ruling applies verbatim: the {@code Error} propagates, the request fails loudly instead of reporting a
          * completed pass that did nothing, and the remaining tasks are starved exactly as {@code emit}'s later sinks
          * are. That trade was accepted there and is accepted here for the same reason.
          */
@@ -509,7 +509,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
          * "rethrow" means letting the {@code Error} out of {@code Thread.run()}, which kills the deployment's
          * <em>only</em> maintenance loop, stops every other sweep, drain and GC until a settings {@code refresh()} or
          * a restart, counts nothing, and reports itself as one stack trace on stderr from the default
-         * uncaught-exception handler. Measured against what actually wanted - the failure attributed rather
+         * uncaught-exception handler. Measured against what the ruling actually wanted - the failure attributed rather
          * than swallowed, and visible to whoever can act - that is strictly worse on every axis: <em>less</em>
          * visible than an ERROR through the configured appenders, uncounted, and with a blast radius thirty passes
          * wide for what is most often one plugin module's {@code NoClassDefFoundError}.

@@ -18,9 +18,9 @@ open module build.jenesis.repository.format.oci.test {
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
-    // is a claim about this format AND the pass that reclaims blobs, so the end-to-end leg drives the real
-    // mark-sweep collector over a real push: the reference set OciFormat lends is only worth what the sweep does with
-    // it, and the two halves asserted apart is exactly how a wiring gap survives.
+    // That a pushed image keeps its blobs is a claim about this format AND the pass that reclaims blobs, so the
+    // end-to-end leg drives the real mark-sweep collector over a real push: the reference set OciFormat lends is only
+    // worth what the sweep does with it, and the two halves asserted apart is exactly how a wiring gap survives.
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.gc.store;
     requires build.jenesis.repository.walk.store;

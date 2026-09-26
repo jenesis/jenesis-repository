@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * the blobs an OCI image keeps alive, and the garbage collection pass that would otherwise delete them.
+ * The blobs an OCI image keeps alive, and the garbage collection pass that would otherwise delete them.
  *
  * <p>The manifest is the only OCI blob a store key's <em>body</em> names (taught the mark phase to read that
  * body's {@code sha256:<hex>} dialect); an image's config and layer digests live inside the manifest document behind
@@ -330,7 +330,7 @@ class OciBlobReferencesTest {
         assertThat(pull.status()).isEqualTo(200);
         FakeExchange pullLayer = new FakeExchange("GET", "/v2/library/app/blobs/sha256:" + layer);
         format.handle(pullLayer, store);
-        assertThat(pullLayer.status()).as("the layer still pulls - the 404 reported is closed").isEqualTo(200);
+        assertThat(pullLayer.status()).as("the layer still pulls - the 404 once reported is closed").isEqualTo(200);
         FakeExchange pullConfig = new FakeExchange("GET", "/v2/library/app/blobs/sha256:" + config);
         format.handle(pullConfig, store);
         assertThat(pullConfig.status()).isEqualTo(200);

@@ -101,7 +101,7 @@ public class ComplianceReview extends TenantScope {
      *       and its findings draw the generated figure.</li>
      *   <li>The <b>publish screen's two stage names</b> come in as names too, taken from the module that writes them
      *       rather than copied: they are installed wherever the gate is, so they must never read as orphaned, and
-     *       they name a stage rather than a plug-in, which is the gap records.</li>
+     *       they name a stage rather than a plug-in, so no plug-in family would supply them.</li>
      * </ul>
      * Anything else a ledger holds - a source from a module this deployment no longer has - is by construction not in
      * here, which is exactly the orphan the screen shows.

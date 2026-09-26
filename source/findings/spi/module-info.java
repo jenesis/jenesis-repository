@@ -18,7 +18,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.findings {
-    // The shared ceiling the paged and streaming defaults refuse past (the earlier ruling, one call).
+    // The shared ceiling the paged and streaming defaults refuse past, applied through one call.
     requires build.jenesis.repository.bounds;
     requires transitive build.jenesis.repository.store;
     requires transitive build.jenesis.repository.compliance;

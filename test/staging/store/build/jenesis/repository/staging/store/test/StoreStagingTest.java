@@ -309,7 +309,7 @@ class StoreStagingTest {
     @Test
     void a_handle_failure_after_the_lease_is_lost_mid_pass_skips_rollback_so_the_rivals_sealed_release_survives()
             throws IOException {
-        // Audit-27 A5-F1 (HIGH): the losing interleaving. A promotes P1 (released), then enters P2's unbounded
+        // The losing interleaving. A promotes P1 (released), then enters P2's unbounded
         // format.handle. DURING that handle A's lease lapses and a rival acquires it, re-links the same
         // content-addressed release and SEALS the promotion (marks PROMOTED). A's handle then throws IOException.
         // The general exception catch used to call rollback(released) unconditionally, retracting P1 - the very
@@ -624,7 +624,7 @@ class StoreStagingTest {
     }
 }
 
-    /** Build a {@link RacingStore} reproducing the Audit-27 A5-F1 losing interleaving (#212): the FIRST staged release
+    /** Build a {@link RacingStore} reproducing the losing interleaving: the FIRST staged release
      *  link records {@code firstReleased}, then the SECOND path's slow {@code format.handle} fails - and, when
      *  {@code stealLeaseAndSeal}, only after a rival has acquired the lapsed lease and SEALED the promotion, so the
      *  losing node's rollback (if it ran unfenced) would retract the rival's committed release. Keying on "the second

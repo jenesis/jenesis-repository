@@ -16,7 +16,7 @@ import build.jenesis.repository.server.kernel.LiveConfig;
  * Release-version immutability, enforced on the deploy path <em>before</em> a screened upload is
  * laid out. A re-publish of an immutable RELEASE coordinate whose bytes DIFFER from the incumbent is refused with a
  * loud, named {@code 409} (§9) rather than silently re-pointing the {@code publish/<path>} pointer at the new
- * content - the supply-chain / dependency-confusion hazard closes. Default-ON; an operator relaxes it per
+ * content - the supply-chain / dependency-confusion hazard this closes. Default-ON; an operator relaxes it per
  * tenant with {@code allow-redeploy=true} ({@link LiveConfig#allowRedeploy}).
  *
  * <p><b>Streaming (§1).</b> The check never materialises the body: it reads the incumbent's <em>pointer</em> - the
@@ -25,7 +25,7 @@ import build.jenesis.repository.server.kernel.LiveConfig;
  *
  * <p><b>Origin-blind.</b> The guard keys off the existing pointer's hash, not how the incumbent arrived. So it fires
  * identically whether the incumbent was directly uploaded OR written by a caching/fallback leg (both write the same
- * {@code publish/<path>} pointer) - which is exactly what lets EPIC 25 §7.1 reuse it for the caching legs with
+ * {@code publish/<path>} pointer) - which is exactly what lets the caching legs reuse it with
  * no new mechanism.
  *
  * <p><b>What counts as an immutable release.</b> The predicate {@link #immutableReleaseArtifact} reuses two existing
@@ -91,7 +91,7 @@ public final class ReleaseImmutability {
     }
 
     /** Record and log the loud, named refusal (§9), returning the client-facing message. Called by the deploy path
-     *  once it has decided to answer {@code 409}. The {@code store} is read for the incumbent's ORIGIN (§7.1):
+     *  once it has decided to answer {@code 409}. The {@code store} is read for the incumbent's ORIGIN:
      *  the incumbent pointer's hash keys the {@link OriginSection origin} record, so the message can name whether the
      *  colliding version arrived by a hand upload or was cached from a named fallback - the audit fact the operator
      *  needs to choose the remedy (evict the cached copy, or {@code allow-redeploy}). Both reads are of tiny pointer
@@ -107,18 +107,18 @@ public final class ReleaseImmutability {
     }
 
     /**
-     * The origin clause naming <em>how the incumbent arrived</em> (§7.1, resolved to owner option (a)) - the seam
-     * left here. The guard itself stays origin-blind (it still refuses {@code 409} regardless); this only makes
-     * the MESSAGE origin-aware. It joins the {@link OriginSection origin} record by the incumbent {@code publish/<path>}
-     * pointer's hash: a {@code fallback} row whose bytes match the incumbent yields "cached from fallback '&lt;target&gt;'
-     * at &lt;instant&gt;" (so the operator learns the colliding version was a cached-fallback copy, not a hand upload - the
-     * hybrid host+proxy's sharp edge), a {@code local-upload} row yields "uploaded at &lt;instant&gt;", and an unrecorded
-     * or unreadable origin yields the empty clause (the message then degrades to the plain wording). The origin
-     * lookup asks {@link HardenedScreen#originCoordinate} for the key rather than deriving one, so it cannot fall
-     * behind the writer: this javadoc used to say it was "keyed exactly as the fallback-fetch path records it" and
-     * then restate that derivation, which stopped being true the moment the row moved to the format coordinate
-     * - the clause would have gone quietly missing from every 409 on a format-claimed path. Best-effort read
-     * (&sect;10): never fails the already-decided 409.
+     * The origin clause naming <em>how the incumbent arrived</em>. The guard itself stays origin-blind (it still
+     * refuses {@code 409} regardless); this only makes the MESSAGE origin-aware. It joins the {@link OriginSection
+     * origin} record by the incumbent {@code publish/<path>} pointer's hash: a {@code fallback} row whose bytes match
+     * the incumbent yields "cached from fallback '&lt;target&gt;' at &lt;instant&gt;" (so the operator learns the
+     * colliding version was a cached-fallback copy, not a hand upload - the hybrid host+proxy's sharp edge), a {@code
+     * local-upload} row yields "uploaded at &lt;instant&gt;", and an unrecorded or unreadable origin yields the empty
+     * clause (the message then degrades to the plain wording). The origin lookup asks {@link
+     * HardenedScreen#originCoordinate} for the key rather than deriving one, so it cannot fall behind the writer: this
+     * javadoc used to say it was "keyed exactly as the fallback-fetch path records it" and then restate that
+     * derivation, which stopped being true the moment the row moved to the format coordinate - the clause would have
+     * gone quietly missing from every 409 on a format-claimed path. Best-effort read (&sect;10): never fails the
+     * already-decided 409.
      */
     private String incumbentOrigin(ArtifactStore store, String path) {
         Optional<MetadataProvider> provider = MetadataProvider.installed();
@@ -153,7 +153,7 @@ public final class ReleaseImmutability {
         }
     }
 
-    /** The loud, named {@code 409} message (§9), now origin-aware (§7.1): {@code originClause} names how the
+    /** The loud, named {@code 409} message (§9), now origin-aware: {@code originClause} names how the
      *  incumbent arrived (a cached fallback copy vs a hand upload) when the origin record has it, or is empty (the plain
      *  wording) when it does not. Origin-blind by construction - the message is richer, the refusal unchanged. */
     private static String message(String coordinate, String path, String originClause) {

@@ -14,26 +14,27 @@ import org.apache.commons.fileupload2.core.ParameterParser;
  * quality inspector, the PyPI (twine) upload and its quality inspector, and the console's settings import - and it used
  * to do so with four private copies of the same walk ({@code NuGetFormat.firstFilePart}, {@code PyPiFormat.Form},
  * {@code NuGetQualityInspector.multipart} and {@code PyPiQualityInspector.fields}) plus, for the console, Spring's
- * {@code MultipartResolver}. an earlier change retired the first two; the last two, which had also each hand-derived the
- * boundary from the body's own leading delimiter - see {@link #declaredBoundary(byte[])}. The resolver is deliberately switched off in every app
- * ({@code spring.servlet.multipart.enabled=false}), because it - and {@code FormContentFilter} - would drain an
- * <em>artifact</em> request body before the format handler ever read it: twine's upload and {@code dotnet nuget push}
- * are both {@code multipart/form-data}. So the console cannot use the resolver, and the two formats already could not.
- * One reader, in a module of its own, is what lets all five share the mechanism (PRINCIPLES &sect;2: shared mechanism
- * is reused, never copied) without the console reaching a format module or a format reaching the console.
+ * {@code MultipartResolver}. The two format copies went first and the two inspector copies after them; those had also
+ * each hand-derived the boundary from the body's own leading delimiter - see {@link #declaredBoundary(byte[])}. The
+ * resolver is deliberately switched off in every app ({@code spring.servlet.multipart.enabled=false}), because it - and
+ * {@code FormContentFilter} - would drain an <em>artifact</em> request body before the format handler ever read it:
+ * twine's upload and {@code dotnet nuget push} are both {@code multipart/form-data}. So the console cannot use the
+ * resolver, and the two formats already could not. One reader, in a module of its own, is what lets all five share the
+ * mechanism (&sect;2: shared mechanism is reused, never copied) without the console reaching a format module or a
+ * format reaching the console.
  *
  * <p>The module stays {@code java.base}-light on purpose: {@code java.base} plus the one already-pinned, permissively
- * licensed parser both formats were using ({@code org.apache.commons.fileupload2.core}, PRINCIPLES &sect;8 - the
+ * licensed parser both formats were using ({@code org.apache.commons.fileupload2.core}, &sect;8 - the
  * boundary scan is not something to hand-roll over binary bodies), and nothing else. It names no format, no server, no
  * Spring type and no store.
  *
- * <h2>Streaming (PRINCIPLES &sect;1)</h2>
+ * <h2>Streaming (&sect;1)</h2>
  * {@link Part#stream()} returns {@link MultipartInput#newInputStream() the part's own bounded view} of the request
  * body, so an uploaded artifact is copied network-to-store in bounded chunks and is never materialised. Nothing here
  * ever holds a file part; the only heap read is {@link Part#bytes(int)}, and it is bounded by a limit the caller
  * states.
  *
- * <h2>Bounds, and what happens at one (PRINCIPLES &sect;1, Contract clause 12)</h2>
+ * <h2>Bounds, and what happens at one (&sect;1, Contract clause 12)</h2>
  * <ul>
  *   <li><b>A file part is unbounded, deliberately.</b> A {@code .nupkg} or a wheel has no size cap - a multi-gigabyte
  *       package that no heap could hold still publishes, because it only ever streams. That is what the publish paths
@@ -116,7 +117,7 @@ public final class MultipartBody {
      * {@code dotnet nuget push} envelope are both recognised from the delimiter the sender wrote into the body. Both
      * derived it by hand, with two different answers for the same question: one accepted a bare {@code LF} where the
      * other demanded {@code CRLF}, and one required a non-empty boundary where the other did not. That is a shared
-     * concern answered twice (&sect;13), and the third copy of the same hand-scan removed two of.
+     * concern answered twice (&sect;13), and the third copy of a hand-scan whose other two copies were already removed.
      *
      * <p>The boundary must be non-empty, as RFC 2046 requires (1-70 characters): a body whose first line is exactly
      * {@code --} announces no envelope, and is an ordinary body that happens to begin with two dashes rather than a

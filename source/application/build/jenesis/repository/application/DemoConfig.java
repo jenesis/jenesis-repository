@@ -53,7 +53,7 @@ public class DemoConfig {
         // is never read - asking for it is the whole point, because the container builds it first.
         ArtifactStore store = repositories.tenantScope(properties.getDefaultTenant());
         // #79: the demo proxy leg is dispatcher-direct - it does NOT pass through the routed gateway's own
-        // screening() decoration - so since EPIC 26 demoted the embedded per-format publish screen it pulled through
+        // screening() decoration - so once the embedded per-format publish screen was demoted it pulled through
         // unscreened. Hand the free DemoSeeder a PullThroughHooks whose screenFetch is the SAME DEFAULT-strength
         // ProxyScreen the router's DEFAULT fallbacks use, over the serving tenant's live gate (resolved lazily, so the
         // demo gate config armed just before the seed is the one that screens) and the seed target store - so the demo

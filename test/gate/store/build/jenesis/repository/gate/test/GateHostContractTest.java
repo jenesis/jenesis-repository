@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * <b>What the ingestion gate promises its guests, driven by hostile ones.</b>
  *
- * <p>the earlier census asked, for every SPI with a contract kit, what <em>drives</em> it and whether anything asserts the
+ * <p>A census asked, for every SPI with a contract kit, what <em>drives</em> it and whether anything asserts the
  * driver's side of the bargain. Three kits point at this host: {@code InspectorContract} over the seventeen
  * {@link build.jenesis.repository.compliance.QualityInspector}s, {@code GatePolicyContract} over the eight discovered
  * {@link build.jenesis.repository.compliance.GatePolicy} dimensions, and {@code SignalContract} over the twelve feeds
@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       is never admitted and never served, whichever of the failure shapes its SPI permits it raised.</li>
  *   <li><b>Every failure shape the SPI permits lands on the same leg.</b> {@code QualityInspector.inspect} declares
  *       {@code throws IOException}, so a plain {@link IOException} is as legal a guest failure as a
- *       {@link RuntimeException} or a {@code MalformedArtifactException}. Before the host caught the first and
+ *       {@link RuntimeException} or a {@code MalformedArtifactException}. The host once caught the first and
  *       the third and nothing in between: a {@code ZipException} off a truncated central directory reached the
  *       publisher as a raw 500 with no hold, no recorded finding and no diagnostic, while the same inspector raising
  *       an {@code IllegalStateException} over the same bytes was held with a legible reason.</li>
@@ -54,11 +54,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       {@link AdvisorySource} merge, and an empty answer and a failed one mean opposite things about an artifact.</li>
  *   <li><b>An {@link Error} is not filed as the gate's verdict.</b> It is the runtime or the module graph giving way
  *       under one guest, not that guest answering, and the artifact must not be admitted on the strength of it.
- *       <b>Who the caller is decides the escalation</b>, which is the part that does not transfer from the earlier work by
- *       convention: this host runs on the publisher's own request thread, so there IS a caller, and the {@code Error}
- *       reaches it rather than being converted into a hold. That is the opposite of {@code MaintenanceScheduler}'s
- *       ruling, and deliberately so - the worker loop has no caller, so rethrowing there would kill the deployment's
- *       only maintenance loop, while rethrowing here fails one publish and nothing else.</li>
+ *       <b>Who the caller is decides the escalation</b>, which is the part that does not transfer from the {@code
+ *       EventSink} ruling by convention: this host runs on the publisher's own request thread, so there IS a caller,
+ *       and the {@code Error} reaches it rather than being converted into a hold. That is the opposite of {@code
+ *       MaintenanceScheduler}'s ruling, and deliberately so - the worker loop has no caller, so rethrowing there would
+ *       kill the deployment's only maintenance loop, while rethrowing here fails one publish and nothing else.</li>
  * </ol>
  *
  * <h2>Negative control, run against the real tree and reverted</h2>
@@ -144,8 +144,9 @@ class GateHostContractTest {
     @Test
     void the_attribution_survives_an_inspector_that_cannot_be_asked_anything() throws IOException {
         // The identity is read off the guest's CLASS before the call, so there is no second call into a guest that
-        // has already given way - which is what the handler used to need, and what and both closed one
-        // host up. Driven with the Error route because an Error is the most complete way a guest can stop answering.
+        // has already given way - which is what the handler used to need, and what the event sink and the scheduler
+        // both closed one host up. Driven with the Error route because an Error is the most complete way a guest can
+        // stop answering.
         String path = "/gatetest/inspectorbroken/lib-1.0.jar";
 
         assertThatThrownBy(() -> publish(gate(AdvisorySource.none()), path, "bytes on a broken runtime"))

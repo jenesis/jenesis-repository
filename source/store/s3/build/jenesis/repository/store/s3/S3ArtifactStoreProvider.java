@@ -121,7 +121,7 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
         }
         // Server-side encryption is always on: SSE-S3 (AES256) by default, upgraded to aws:kms with the operator's
         // key when s3.sse-kms-key-id is supplied. There is no key that turns encryption off. The presigner
-        // rides alongside so this store can also mint direct-fetch GET URLs (RD-1 presign).
+        // rides alongside so this store can also mint direct-fetch GET URLs.
         String kmsKeyId = config.apply(Features.key("s3.sse-kms-key-id"));
         S3ArtifactStore store = new S3ArtifactStore(s3, presigner, bucket, kmsKeyId,
                 !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)));

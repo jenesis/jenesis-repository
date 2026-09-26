@@ -110,7 +110,7 @@ public class SignalsConfig {
         VexProvider vexProvider = VexProvider.resolve();
         liveConfig.vex(tenant -> tenantVex(vexProvider, store, pinnedSettings.effective(settings, environment),
                 properties, tenant));
-        // EPIC 25 §9 boot-time definition sweep: parse every configured repository definition up front and fail the
+        // The boot-time definition sweep: parse every configured repository definition up front and fail the
         // boot LOUD (naming the repository and the remedy) on a broken one, rather than booting with it silently
         // ignored while the repository serves the deployment's default path - the store=s3-with-the-module-off posture
         // applied to repository definitions. A valid definition carrying only a warn condition (unscreened / mixed

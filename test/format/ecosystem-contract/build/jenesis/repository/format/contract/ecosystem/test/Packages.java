@@ -448,7 +448,7 @@ final class Packages {
 
     /** A zip of the named members, written with java.base's own {@code ZipOutputStream} - the reader every zip-cracking
      *  format here uses. Entry times are pinned rather than defaulted to <em>now</em>, so two "identical" archives
-     *  built a second apart do not differ byte for byte (and with them every content address) - the flake hit
+     *  built a second apart do not differ byte for byte (and with them every content address) - a flake that was hit
      *  through {@code TarArchiveEntry}'s defaulted mtime, one container over. */
     static byte[] zip(Map<String, byte[]> members) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();

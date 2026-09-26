@@ -16,11 +16,11 @@ import module org.slf4j;
  * envelope {@link JsonNode}; a reader parses only the sections it asks for ({@link #section}), and a mutator
  * ({@link #mutate}) re-parses only the tags it transforms and re-serialises every other section's raw node
  * verbatim. Unknown and newer-tagged sections therefore survive every writer <em>by construction</em>, so an older
- * node never eats a newer node's section (the property, now format-wide).
+ * node never eats a newer node's section (the row-carry property, now format-wide).
  *
  * <p><strong>Format guard.</strong> A reader whose known {@link #FORMAT} is older than the document's renders what
  * it recognises but {@link #mutate} refuses to write (fails loudly), never downgrade-rewriting the envelope - the
- * lossless-downgrade half of the versioning rules (§5.3).
+ * lossless-downgrade half of the versioning rules.
  *
  * <p>Instances are immutable; {@link #mutate} returns a new document. Two writers on <em>different</em> sections
  * conflict only on the store's CAS token and converge on retry (each re-reads and re-applies its own section);
@@ -29,7 +29,7 @@ import module org.slf4j;
 public final class MetadataDocument {
 
     /** This reader's known envelope format version. A document whose {@code format} exceeds this is rendered but
-     *  not mutated ({@link #mutate} fails loudly). Bumped only on a breaking <em>envelope</em> change (§5.3). */
+     *  not mutated ({@link #mutate} fails loudly). Bumped only on a breaking <em>envelope</em> change. */
     public static final int FORMAT = 1;
 
     private static final String FORMAT_FIELD = "format";

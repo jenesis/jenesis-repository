@@ -283,8 +283,8 @@ public interface BlobLayout extends BlobRoots {
      * owes the two forms agreement: for a version that IS live, this must be exactly what the store-backed overload
      * enumerates. An override that drifted would key a hold's records at a path nothing serves, which is worse than
      * the endpoint they used to sit at. {@code FormatHoldContractTest} holds every layout to that agreement, so the
-     * cheapest safe answer - not overriding at all - stays the default and costs a format only the symptom it
-     * may not have.
+     * cheapest safe answer - not overriding at all - stays the default and costs a format at most a hold recorded under
+     * its push endpoint rather than under the package.
      */
     default List<String> servedPaths(String coordinate, String version) {
         return List.of();

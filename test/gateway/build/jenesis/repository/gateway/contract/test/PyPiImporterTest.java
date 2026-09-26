@@ -60,7 +60,7 @@ class PyPiImporterTest {
         // A directory-shaped row (a trailing slash, so an empty last segment) is refused BY NAME, not declined with
         // an empty answer: RepositoryImporter clause 3 reads empty as "this format screens elsewhere, lay the asset
         // out unscreened", which is the opposite of what a malformed path deserves. It was declined here before this
-        // importer screened its source path through the shared RepositoryImporter.importablePath (the earlier retrofit).
+        // importer screened its source path through the shared RepositoryImporter.importablePath.
         // A conforming source never reports one - ImportSource.safePath refuses exactly the same shapes - so this is
         // the belt behind that brace.
         assertThatExceptionOfType(IllegalArgumentException.class)

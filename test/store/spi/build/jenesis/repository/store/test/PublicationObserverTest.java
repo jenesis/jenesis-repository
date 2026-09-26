@@ -267,11 +267,11 @@ class PublicationObserverTest {
     }
 
     /**
-     * The host promise the leg above stops one shape short of (found by the earlier census). The containment is
-     * for a notification that could not be filed; an {@link Error} is not that. It is the runtime or the module
-     * graph giving way - a {@link NoClassDefFoundError} out of an observer whose optional dependency is missing is
-     * the everyday instance - and filing it as one observer's contained failure would leave a deployment serving
-     * artifacts on a broken runtime with a WARNING to show for it.
+     * The host promise the leg above stops one shape short of (found by a census of the contract kits). The containment
+     * is for a notification that could not be filed; an {@link Error} is not that. It is the runtime or the module
+     * graph giving way - a {@link NoClassDefFoundError} out of an observer whose optional dependency is missing is the
+     * everyday instance - and filing it as one observer's contained failure would leave a deployment serving artifacts
+     * on a broken runtime with a WARNING to show for it.
      *
      * <p>What the caller receives must be the {@code Error} the observer raised, unchanged: the fan-out now names
      * the observer's class on its way past, and an attribution that <em>replaced</em> the failure it attributes

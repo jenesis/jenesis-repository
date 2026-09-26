@@ -7,7 +7,7 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 
 /**
- * The discovered {@link ObservabilitySource} for the hardening proxy leg's untrusted-upstream alarms (EPIC 23): a
+ * The discovered {@link ObservabilitySource} for the hardening proxy leg's untrusted-upstream alarms: a
  * thin, ServiceLoader-instantiated adapter that surfaces {@link HardenedScreen}'s gateway-wide drift counter as a
  * visible signal (§9 fail-fast, errors visible). A re-fetch of an <em>immutable</em> coordinate whose bytes drifted
  * from the previously screened, digest-pinned verdict is upstream tampering: it is refused and logged loudly, and the

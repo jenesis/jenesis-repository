@@ -161,12 +161,12 @@ public final class LiveConfig {
         boolean proxy = Boolean.parseBoolean(get.apply("proxy-enabled", Boolean.toString(defaults.isProxyEnabled())));
         String defaultTenant = get.apply("default-tenant", defaults.getDefaultTenant());
         RetentionPolicy retention = buildRetention(get);
-        // CEP-P2 (C1-A2): whether the publish-time hold-mapping round-trip check throws on a break (failing the publish)
+        // Whether the publish-time hold-mapping round-trip check throws on a break (failing the publish)
         // or only alarms. Off by default - production stays alarm-not-abort so one broken blobs-namespace format cannot
         // DoS publishes - and flipped on in every test config so a broken mapping fails on the first publish in CI. Read
         // through the same store-over-file/env effective lookup the discovered gate dimensions use.
         boolean strictHoldMapping = Boolean.parseBoolean(config.apply("strict-hold-mapping"));
-        // whether a screen that reached ALLOW over a body it could not finish reading WITHHOLDS, or only says
+        // Whether a screen that reached ALLOW over a body it could not finish reading WITHHOLDS, or only says
         // so. Off by default, deliberately: the kit's CONTENT_FINDINGS reading is a declared, reviewed fail-open -
         // an inspector stopped by a bound may only UNDER-declare - so withholding every artifact a scanner could not
         // finish would hold the repository closed on ordinary large ones. The blast radius is size-dependent and

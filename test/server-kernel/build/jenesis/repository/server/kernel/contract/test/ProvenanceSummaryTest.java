@@ -14,7 +14,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The provenance summary section the accepted-publish path writes (§5.1/§6), over the real consolidated metadata
+ * The provenance summary section the accepted-publish path writes, over the real consolidated metadata
  * store: a verified summary is neutral, an unverified one carries the non-blocking WARNING signal, and both round-trip
  * as {@code {verified, sha256}}. Drives the {@link StoreRepositoryInventory#recordProvenance} seam
  * {@code ComplianceScreen} calls from the attestation verdict, so it exercises the codec, the signal mapping and the

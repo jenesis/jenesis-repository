@@ -17,10 +17,10 @@ import build.jenesis.repository.store.SingleFlight;
  * <h2>The single flight is per key, and that is the shape of an outage</h2>
  * The flight is keyed because the answers are: coordinate A's refresh has nothing to do with coordinate B's, and a
  * lock over the whole cache made B's cold lookup queue behind A's. That was merely slow until a failing refresh
- * stopped being cheap: since the earlier work a fail-closed feed past its window <em>re-asks the vendor</em>, so during an outage
- * every gate thread queued on one monitor and each paid the full feed policy budget in turn - three attempts and up to
- * a five-minute whole-fetch deadline, serially, for coordinates that had nothing to do with each other. An outage that
- * should cost one slow request per coordinate cost the whole gate.
+ * stopped being cheap, when a fail-closed feed past its window began to <em>re-ask the vendor</em>: during an
+ * outage every gate thread queued on one monitor and each paid the full feed policy budget in turn - three attempts and
+ * up to a five-minute whole-fetch deadline, serially, for coordinates that had nothing to do with each other. An outage
+ * that should cost one slow request per coordinate cost the whole gate.
  *
  * <p>So a refresh registers a {@link CompletableFuture} under its key: the first caller for a key does the upstream
  * work, any concurrent caller <em>for that same key</em> waits on its result rather than issuing a second query, and a

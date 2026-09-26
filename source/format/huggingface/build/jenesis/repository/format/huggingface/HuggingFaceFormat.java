@@ -139,8 +139,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         // markers live OUTSIDE files/ and are never collected). A retroactive hold marks those hashes - the resolve
         // serve, the repo-info siblings list and the file tree all gate on the marker - and an eviction deletes these
         // exact keys; before this the empty return made a hold a silent no-op and a KEV-listed model/dataset kept
-        // serving. The files listing is attacker-publishable, so it is PAGED, never list()ed whole (the Audit-26 DoS
-        // lesson).
+        // serving. The files listing is attacker-publishable, so it is PAGED, never list()ed whole (a whole
+        // listing there is a denial-of-service lever).
         List<HuggingFaceFile> files = huggingFaceFiles(coordinate, version, store);
         List<String> keys = new ArrayList<>(files.size());
         for (HuggingFaceFile file : files) {
@@ -563,8 +563,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
      *  ({@link #file}) on EVERY read, and its only question of a revision is "does it hold any file?"; the former
      *  {@code store.isEmpty(...)} materialised the revision's ENTIRE (attacker-publishable) file listing just to
      *  test emptiness, so a revision with many thousands of files heap-blew on each download. This answers the same
-     *  question in O(1) by paging at most one child, the paged existence idiom the Audit-26 DoS sweep applied across the
-     *  store walks; the branch/commit resolution semantics are unchanged (empty revision -&gt; null -&gt; 404). */
+     *  question in O(1) by paging at most one child, the paged existence idiom the store walks use
+     *  against that denial of service; the branch/commit resolution semantics are unchanged (empty revision -&gt; null
+     *  -&gt; 404). */
     private static boolean hasStoredFiles(ArtifactStore store, String filesPrefix) {
         if (!Blobs.nameable(filesPrefix)) {
             // A prefix composed from a client-shaped model/revision name can exceed the store's key cap, and nothing
@@ -758,10 +759,10 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 // checksum parity the Maven proxy leg has. A non-LFS file's ETag is a git-blob sha1 (not a raw-content
                 // digest), so it is not a verifiable point checksum and the file falls back to plain caching.
                 //
-                // This is the one leg with no declaring DOCUMENT at all, so the earlier split cannot arise here: the digest
-                // rides on the artifact's own response headers, and a response this repository could not read is
-                // already the `download == null || status != 200` decline two lines above. There is no second fetch to
-                // drop.
+                // This is the one leg with no declaring DOCUMENT at all, so the unreadable-versus-undeclared split
+                // cannot arise here: the digest rides on the artifact's own response headers, and a response this
+                // repository could not read is already the `download == null || status != 200` decline two lines above.
+                // There is no second fetch to drop.
                 byte[] expected = lfsSha256(download);
                 if (!ProxyRelay.fill(blobs, fileKey, fileUrl, download.body(),
                         expected == null ? ProxyRelay.Declared.NONE : ProxyRelay.Declared.of("SHA-256", expected))) {

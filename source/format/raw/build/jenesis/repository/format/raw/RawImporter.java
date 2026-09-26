@@ -37,7 +37,7 @@ public final class RawImporter implements RepositoryImporter {
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         String relative = RepositoryImporter.importablePath(path, "raw");
         Publication publication = new Publication(store);
-        // Layout-only (EPIC 26): screening rides the ingress edge (the import walk screens each asset before handing it
+        // Layout-only: screening rides the ingress edge (the import walk screens each asset before handing it
         // here), so this lays the asset out - store it content-addressed (streamed, never buffered) and link its
         // /raw/ path.
         Publication.Blob blob = publication.stored(content);

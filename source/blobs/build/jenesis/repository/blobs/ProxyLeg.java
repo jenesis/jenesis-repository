@@ -12,7 +12,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * implements this rather than {@link ProxyFormat} directly, so the screen a proxy leg owes its request
  * path is a property of <em>the seam</em> instead of a line each of the fourteen legs had to remember to write.
  *
- * <p>It exists because they did not all remember. an earlier change found the request-path screen split two ways: every leg
+ * <p>It exists because they did not all remember. The request-path screen was found split two ways: every leg
  * refused a {@code .}/{@code ..} segment through {@link ArtifactStore#traversalFree}, but only four of them
  * additionally refused a {@code \} or a control character through {@link Keys#unsafe} - a divergence on a shared
  * concern, which &sect;13 calls a bug even when no leg is exploitable today, and one the store boundary below does not
@@ -52,8 +52,9 @@ import build.jenesis.repository.store.ArtifactStore;
  *     client re-pulls, and nothing about a build's resolution is decided by the absence. On an <em>enumeration</em> -
  *     a packument, a PEP 503 simple index, a {@code repodata} / {@code Packages} index, a versions endpoint - it is
  *     not: there the {@code 404} <b>is</b> the answer, an empty enumeration a build resolves against, so a network
- *     blip reaches the client as the fact that a package has no versions, indistinguishable from the truth (,
- *     where exactly that was investigated for a day as an enumeration regression).
+ *     blip reaches the client as the fact that a package has no versions, indistinguishable from the truth. A Go
+ *     version list that answered empty this way under load was once investigated for a day as an enumeration
+ *     regression.
  *     <p><b>So every relay names which of the two it is</b>, as
  *     {@link ProxyRelay.Document#ENUMERATION} or {@link ProxyRelay.Document#PINNED}, and the <em>rule</em> - upstream
  *     {@code 404}/{@code 410} is a real miss and the local {@code 404} stands; a transport failure or any other
@@ -122,25 +123,24 @@ import build.jenesis.repository.store.ArtifactStore;
  *     deployment's credentials and inside its network. A redirect <em>hop</em> is not a leg's to screen at all: the
  *     transport owns it ({@code FetcherProvider}'s redirect-policy and SSRF clauses). A leg that composes every target
  *     and follows nothing advertised satisfies this clause by construction and says so.
- *     <p><b>The screen is two halves and a floor</b>, and found only the host half in place on every leg. The
+ *     <p><b>The screen is two halves and a floor</b>, and only the host half used to be in place on every leg. The
  *     <em>transport</em> half ({@code https}) and the <em>host</em> half (not internal) are run in one call under one
  *     dial - {@link #ALLOW_INTERNAL}, read through {@link #allowInternalTargets(FormatExchange)}. Underneath both sits
  *     the capability floor the dial does not lift: an advertised URL naming no http(s) transport, or no host at all, is
  *     not a policy question but an {@code HttpRequest.newBuilder} {@code IllegalArgumentException}, i.e. a {@code 500}
  *     where clause 2 says {@code 404}. The blocked host ranges themselves stay the shared free
  *     {@code build.jenesis.repository.net.PrivateHosts} classifier - never a private copy.
- *     <p><b>The whole screen is {@link OutboundTargets}, and there is exactly one of it</b>. an earlier change left
- *     two shapes of the host half in use and disagreeing - <em>same-origin-exempt</em> (NuGet, Cargo, rpm) versus
- *     <em>absolute-refuse</em> (Composer, PyPI, CocoaPods) - deliberately, so that a security fix could not silently
- *     change fourteen legs' reachability at the same time. an earlier change settled it on the exempting side, tightened to the
- *     upstream's <em>origin</em> rather than its bare host name: a target at the scheme-and-authority the operator
- *     configured is admitted, everything cross-origin runs the full screen. The argument is
- *     {@link OutboundTargets}'s - since the earlier work the configured upstream itself is judged on its transport half alone, so
- *     absolute-refuse was applying a stricter rule to the upstream's second path than the product applies to the
- *     upstream, and the exempting rule is already stated for the leg with this shape
- *     ({@code ImportScreen.refusalReason}). Both directions are ratcheted by
- *     the proxy contract kit: a leg that refuses its own upstream's origin fails, and so does one
- *     that follows a private target off it.</li>
+ *     <p><b>The whole screen is {@link OutboundTargets}, and there is exactly one of it</b>. Two disagreeing shapes of
+ *     the host half - <em>same-origin-exempt</em> (NuGet, Cargo, rpm) versus <em>absolute-refuse</em> (Composer, PyPI,
+ *     CocoaPods) - were once left in use deliberately, so that a security fix could not silently change fourteen legs'
+ *     reachability at the same time. The question was then settled on the exempting side, tightened to the upstream's
+ *     <em>origin</em> rather than its bare host name: a target at the scheme-and-authority the operator configured is
+ *     admitted, everything cross-origin runs the full screen. The argument is {@link OutboundTargets}'s - the
+ *     configured upstream itself is judged on its transport half alone, so absolute-refuse was applying a stricter rule
+ *     to the upstream's second path than the product applies to the upstream, and the exempting rule is already stated
+ *     for the leg with this shape ({@code ImportScreen.refusalReason}). Both directions are ratcheted by the proxy
+ *     contract kit: a leg that refuses its own upstream's origin fails, and so does one that follows a private target
+ *     off it.</li>
  * <li><b>Rewrite fidelity.</b> A leg that serves an upstream <em>document</em> rather than an artifact either rewrites
  *     the download URLs inside it to point back through this repository (npm's packument {@code dist.tarball}) or
  *     leaves the document alone because it carries no absolute URLs (Conan's index reads, HuggingFace's tree API).

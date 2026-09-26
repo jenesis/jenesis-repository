@@ -346,7 +346,7 @@ public final class ServableNames {
      *  is not a gap for any hold a writer places today - every retroactive sweep links a {@code /quarantine<path>}
      *  pointer beside the marker for a path that carries a {@code publish/} pointer, so leg (a) already screens the
      *  folder - but it is a genuine residual disagreement for a byte-identical SIBLING coordinate, whose version name
-     *  keeps listing while its download now 404s on the marker. Filed as with the cost that decides it, rather
+     *  keeps listing while its download now 404s on the marker. Left open, with the cost that decides it, rather
      *  than paid here unmeasured. */
     public boolean disclosableVersionFolder(String folder) throws IOException {
         try {
@@ -372,7 +372,7 @@ public final class ServableNames {
             }
             for (String leaf : leaves) {
                 // held(), not publication.withheld(): both halves of a hold, which is what state() and
-                // disclosable() do and left this face without. The chain alone screens every hold a writer places
+                // disclosable() do and what this face used to lack. The chain alone screens every hold a writer places
                 // today, because each retroactive sweep links a /quarantine<path> review pointer beside the marker -
                 // so leg (a) above already catches those. What it misses is a byte-identical SIBLING coordinate:
                 // g:b:1.0 publishing the same bytes as a held g:a:1.0 carries no review pointer of its own and no

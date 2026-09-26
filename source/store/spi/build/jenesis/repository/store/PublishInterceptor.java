@@ -39,10 +39,10 @@ import module java.base;
  * this type inherits</b>, and the clauses below state what the verdict role adds or reverses. Where the two disagree -
  * clause 7 above all - this contract wins for {@link #assess}, {@link #withheld} and {@link #committed}, and the base
  * contract wins for {@link #onPublished}, {@link #onDeleted}, {@link PublicationObserver#onWithheld} and
- * {@link PublicationObserver#onWithholdCleared}. No contract kit drives this chain yet: the earlier interceptor kit is
- * what will, and the clauses are written first so that kit asserts a stated contract instead of inventing one. The
- * core ships no interceptor, so every clause below is a rule for a downstream implementor, and the choreography
- * every clause is stated against is {@link Publication#commit}'s.
+ * {@link PublicationObserver#onWithholdCleared}. The store test kit's {@code InterceptorContract} drives this chain,
+ * and the clauses were written first so that kit asserts a stated contract instead of inventing one. The core ships no
+ * interceptor, so every clause below is a rule for a downstream implementor, and the choreography every clause is
+ * stated against is {@link Publication#commit}'s.
  * <ol>
  * <li><b>Thread-safety.</b> One discovered instance serves the whole process and is called from every request thread
  *     that publishes <em>and</em> from every request thread that reads - {@link #withheld} rides
@@ -181,7 +181,7 @@ public interface PublishInterceptor extends PublicationObserver {
      *       envelope). It has no caller-supplied bound because the caller has no useful answer for a partial read - so
      *       it carries the seam's own ceiling, {@link #LARGEST_SIBLING}, and past it it <b>throws</b>. That is the only
      *       honest outcome: silently handing back a prefix the caller believes is whole is the silently-incomplete view
-     *       PRINCIPLES &sect;5 and &sect;9 forbid, and reading without a ceiling turns a gate into an out-of-memory
+     *       &sect;5 and &sect;9 forbid, and reading without a ceiling turns a gate into an out-of-memory
      *       lever (&sect;1).</li>
      *   <li>{@link #sibling(String, int)} is the <em>bounded-fact</em> read: give me at most this many bytes and tell
      *       me whether there were more, because the caller only needs a bounded fact off the companion (a digest, a

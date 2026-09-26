@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * and enabled; a disabled feature or an absent walk resolves to empty - and empty means <em>nothing is ever
  * reclaimed</em>, the SPI's default for the one unrecoverable operation.
  *
- * <p>Since the seam resolves through the shared {@code Providers.optionalUnique} primitive, so the empty
+ * <p>The seam resolves through the shared {@code Providers.optionalUnique} primitive, so the empty
  * outcome is reserved for genuine <em>unselected</em> absence: an operator who explicitly names a collector - or a
  * walk for the collector to ride - that nothing answers to gets a loud failure instead, because a silent no-op would
  * read as a healthy idle system while storage grows without bound (&sect;9).

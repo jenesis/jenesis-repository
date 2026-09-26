@@ -133,9 +133,10 @@ public interface DependentsQuery {
      * <p><strong>There is deliberately no {@code default}, and that is the contract.</strong> A default could
      * only be written over {@link #coordinates()} - the whole reverse-dependency key set, neutralised and filtered -
      * so an implementation that said nothing would inherit a whole-graph materialisation on a <em>request-path
-     * render</em>, which is the earlier "the default IS the defect" one seam over. An implementation must therefore say
-     * how it answers a bounded question boundedly; the store-backed reader shards on the neutral spelling and reads
-     * only the {@code min(k, 256)} shards the query set addresses, and an in-memory index answers from its own map.
+     * render</em>, which is the "the default IS the defect" shape already found once, one seam over. An implementation
+     * must therefore say how it answers a bounded question boundedly; the store-backed reader shards on the neutral
+     * spelling and reads only the {@code min(k, 256)} shards the query set addresses, and an in-memory index answers
+     * from its own map.
      *
      * <p>The caller's coordinates are neutral by construction, but an implementation must still put each through
      * {@link #neutralise} rather than trusting the spelling: it is total and idempotent, so a caller that hands in a

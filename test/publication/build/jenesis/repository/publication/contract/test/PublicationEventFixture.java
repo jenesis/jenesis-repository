@@ -32,8 +32,8 @@ import build.jenesis.repository.webhook.Webhooks;
  * than about the test.</b> A publish webhook is <em>not re-derivable</em>. The store retains "this path is published";
  * it never retains "a publish occurred at T that was not announced". There is no {@code WalkConsumer}, no sweep and no
  * pass that could rebuild the missed event, so {@code A_DROPPED_CALL_IS_HEALED_BY_AN_EXECUTABLE_REPAIR} is excluded
- * with that reason rather than satisfied by a {@code repair} that quietly re-derives something else. §3.4
- * measured the alternative and refused it: a drain that re-delivered from a pre-commit intent could not tell an orphan
+ * with that reason rather than satisfied by a {@code repair} that quietly re-derives something else. The
+ * alternative was measured and refused: a drain that re-delivered from a pre-commit intent could not tell an orphan
  * intent from a real one for a {@code laidOut} publish, so guaranteeing delivery would also manufacture webhooks for
  * artifacts that never became visible - and a false webhook drives CDN purges and downstream builds. The documented
  * answer for a subscriber that cannot miss one is the reconciliation route: every event type has a durable, queryable
@@ -69,7 +69,7 @@ final class PublicationEventFixture implements PublicationHookFixture.Observer, 
             "an event is a point-in-time observation and the store retains no record that one was owed: it holds "
                     + "\"this path is published\", never \"a publish occurred at T that was not announced\". No walk, "
                     + "sweep or pass can rebuild it, so a repair leg here could only be a vacuous pass - and "
-                    + "§3.4 refused the alternative (a pre-commit intent whose drain cannot tell an orphan from a "
+                    + "the alternative was refused (a pre-commit intent whose drain cannot tell an orphan from a "
                     + "real one would manufacture webhooks for publishes that never became visible). The "
                     + "reconciliation route is the documented answer: every event type has a durable, queryable "
                     + "counterpart to poll (§9 D-6).";

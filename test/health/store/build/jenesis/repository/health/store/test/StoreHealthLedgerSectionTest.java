@@ -14,7 +14,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The /§5.4 cutover: with a metadata store installed, {@link StoreHealthLedger} records into the {@code health}
+ * The health cutover: with a metadata store installed, {@link StoreHealthLedger} records into the {@code health}
  * section of the consolidated per-coordinate document ({@code meta/<eco>/<enc(coord)>/@coordinate}) rather than a
  * standalone {@code health/} sidecar - a recorded coordinate lands in and reads back from the section, never the
  * retired sidecar. There is no fall-through between the two layouts: a coordinate with no section is unscored here,

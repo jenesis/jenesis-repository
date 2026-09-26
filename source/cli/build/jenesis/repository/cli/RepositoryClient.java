@@ -1939,7 +1939,7 @@ public final class RepositoryClient {
     public record ImportSource(String name, String label, boolean requiresFormat) {
     }
 
-    /** One discovered module's state (the earlier module list): its JPMS module name, whether it is {@code installed} on
+    /** One discovered module's state (an entry of the module list): its JPMS module name, whether it is {@code installed} on
      *  this deployment's module path, the key of its enablement gate ({@code null} for an always-on module), whether
      *  that gate resolves to {@code enabled}, and whether toggling it applies {@code live} or only on the next
      *  restart. A module named only by a leftover stored settings document reports {@code installed == false}. */

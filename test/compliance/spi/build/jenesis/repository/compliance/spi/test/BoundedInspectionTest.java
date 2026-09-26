@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * nothing. These are the edge cases the sixteen hand-rolled copies each had to get right on their own; getting them
  * wrong here is what a truncated manifest parsed as a complete declaration, or an unbounded inflate, would look like.
  *
- * <p>The walk bound itself is {@link ArchiveWalk} since the earlier work, so what is pinned here is the gate's
+ * <p>The walk bound itself is {@link ArchiveWalk}, so what is pinned here is the gate's
  * ranking walk over it and the two behaviours the gate's own hand-rolled cap got wrong before it went:
  * a truncated walk that handed back the decoy it passed on the way, and a budget exactly spent that cried truncation
  * over an archive it had seen whole.
@@ -35,12 +35,12 @@ class BoundedInspectionTest {
     @Test
     void the_inspection_tiers_are_a_ladder_and_the_order_is_what_they_mean() {
         // Four constants that look independent are not: each pair below encodes a relationship the rest of the
-        // screening path relies on, and is what it costs when one of them is only implied. The full-body tier
+        // screening path relies on, and one of them being only implied has cost a defect before. The full-body tier
         // was the secret scanner's private 16 MiB budget - HALF the prefix tier - so the leg that exists to read past
         // the bounded prefix read a third as far as it, on both legs, and nothing caught the inversion.
         assertThat(ArchiveInflation.largestEntry())
                 .as("one embedded declaration cannot be larger than the prefix that is supposed to carry it. The "
-                        + "manifest tier is the shared archive-inflation ceiling since the earlier work, so this "
+                        + "manifest tier is the shared archive-inflation ceiling, so this "
                         + "rung is now a DEPLOYMENT fact rather than a compile-time one: an operator who raises %s "
                         + "past the prefix tier has bought reach the prefix cannot carry, and this is where they "
                         + "find out", ArchiveInflation.LARGEST_ENTRY_KEY)
@@ -48,7 +48,7 @@ class BoundedInspectionTest {
         assertThat(ArchiveWalk.largestWalk())
                 .as("an archive walk fed from a prefix-tier body must be allowed to consume at least that prefix, or "
                         + "the walk stops inside bytes the leg already holds. The walk tier is the shared "
-                        + "archive-walk bound since the earlier work, so this rung is a DEPLOYMENT fact too: an operator who "
+                        + "archive-walk bound, so this rung is a DEPLOYMENT fact too: an operator who "
                         + "lowered %s below the prefix tier has bought a walk that cannot cross what the leg holds",
                         ArchiveWalk.LARGEST_WALK_KEY)
                 .isGreaterThanOrEqualTo(QualityInspector.PREFIX_INSPECTION_LIMIT);
@@ -99,7 +99,7 @@ class BoundedInspectionTest {
 
     @Test
     void the_manifest_tier_an_inspector_reads_under_is_the_operator_settable_shared_ceiling() throws IOException {
-        // the inspectors' manifest tier used to be BoundedBodyReader's private 4 MiB constant, so an operator
+        // The inspectors' manifest tier used to be BoundedBodyReader's private 4 MiB constant, so an operator
         // who raised or lowered jenreg.archive.largest-entry moved the FORMATS' ceiling and not the GATE's - two
         // numbers that were only ever parallel by convention. One bound now answers for both.
         byte[] manifest = new byte[512];
@@ -184,7 +184,7 @@ class BoundedInspectionTest {
 
     @Test
     void the_walk_bound_is_the_operator_settable_shared_one() throws IOException {
-        // the gate's archive-walk ceiling used to be BoundedArchive's own 64 MiB constant and its own byte-
+        // The gate's archive-walk ceiling used to be BoundedArchive's own 64 MiB constant and its own byte-
         // counting stream, in parallel with a private copy of both in every archive-cracking FORMAT one repository
         // over. An operator who moved jenreg.archive.largest-walk moved neither. One bound answers for all of them
         // now, and the walk that applies it honours the key without any inspector knowing about it.
@@ -254,12 +254,12 @@ class BoundedInspectionTest {
 
     @Test
     void a_truncated_walk_carries_no_declaration_at_all_not_the_one_it_passed_on_the_way() throws IOException {
-        // the earlier first behaviour change, and the reason it is a change worth making: the gate's old walk handed back
-        // the best entry it had found WITH the truncation flag set, and every orNull() caller - Composer, CocoaPods,
-        // Conda, the Maven licence read - takes the value and drops the flag. So a crafted archive could file a decoy
-        // manifest at the front, bury the real one past the ceiling, and choose what the screen saw. Here the decoy
-        // is a fallback-ranked manifest (rank 1, so the walk keeps looking) sitting before an incompressible payload;
-        // the walk finds it, then the bound stops it, and the answer is NOTHING rather than the decoy.
+        // The shared walk's first behaviour change, and the reason it is a change worth making: the gate's old walk
+        // handed back the best entry it had found WITH the truncation flag set, and every orNull() caller - Composer,
+        // CocoaPods, Conda, the Maven licence read - takes the value and drops the flag. So a crafted archive could
+        // file a decoy manifest at the front, bury the real one past the ceiling, and choose what the screen saw. Here
+        // the decoy is a fallback-ranked manifest (rank 1, so the walk keeps looking) sitting before an incompressible
+        // payload; the walk finds it, then the bound stops it, and the answer is NOTHING rather than the decoy.
         Map<String, String> entries = new LinkedHashMap<>();
         entries.put("prefix/manifest", "decoy");
         entries.put("src/payload", incompressible(200_000));
@@ -274,12 +274,12 @@ class BoundedInspectionTest {
 
     @Test
     void an_archive_that_ends_exactly_on_the_bound_is_exhausted_rather_than_truncated() throws IOException {
-        // the earlier second behaviour change. The gate's old capped stream flipped its flag the moment a read was
-        // attempted with the budget spent - whether or not the source also ended right there - so an archive whose
-        // walk footprint was exactly the ceiling reported as cut off. An identity-bearing caller then refused a
-        // package it had in fact seen whole, and an optional one logged a truncation that never happened; a bound
-        // that cries wolf is one callers learn to ignore. The free screen looks exactly one byte ahead before it
-        // decides, so "the last byte I was allowed to read was the last byte there was" is a complete walk.
+        // The shared walk's second behaviour change. The gate's old capped stream flipped its flag the moment a read
+        // was attempted with the budget spent - whether or not the source also ended right there - so an archive whose
+        // walk footprint was exactly the ceiling reported as cut off. An identity-bearing caller then refused a package
+        // it had in fact seen whole, and an optional one logged a truncation that never happened; a bound that cries
+        // wolf is one callers learn to ignore. The free screen looks exactly one byte ahead before it decides, so "the
+        // last byte I was allowed to read was the last byte there was" is a complete walk.
         //
         // The fixture is an archive cut to exactly its entry data - the zip walk draws every one of those bytes and
         // then reaches for the next local header, which is the read that used to be misread as a truncation.

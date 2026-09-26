@@ -9,7 +9,7 @@ import build.jenesis.repository.metadata.Signal;
 import build.jenesis.repository.metadata.State;
 
 /**
- * The {@code health} section codec of the consolidated per-<em>coordinate</em> metadata document (§5.1): the
+ * The {@code health} section codec of the consolidated per-<em>coordinate</em> metadata document: the
  * maintainer-health a source scored for a coordinate's project - version-independent, so it lives in the
  * {@code @coordinate} document rather than a version document - consolidated out of the separate {@code health/}
  * sidecar this section replaces. The payload is exactly the fields the sidecar carried

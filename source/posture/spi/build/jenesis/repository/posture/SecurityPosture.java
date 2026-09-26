@@ -93,7 +93,7 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "jenreg.read-only", "true", DOCS + "#jenreg.demo.writable"));
         }
 
-        // 7. Anonymous role enabled (WANON.1): under an enforcing deployment a non-empty anonymous-rights grants a
+        // 7. Anonymous role enabled: under an enforcing deployment a non-empty anonymous-rights grants a
         //    keyless caller a defined set of rights instead of rejecting it. Read-only anonymous (the public-mirror
         //    pattern) is a WARN; anonymous write or any manage/admin right is a governance-level CRITICAL - a keyless
         //    caller that can mutate or administer. Silent when unset (the default) or under auth=false (already open,

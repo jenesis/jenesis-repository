@@ -75,12 +75,12 @@ public class RepositorySecurityConfig {
     }
 
     /**
-     * The CDN-cache precondition (EPIC 29, RD-3): insert the {@link CacheControlHeaderFilter} <em>after</em> Spring
+     * The CDN-cache precondition: insert the {@link CacheControlHeaderFilter} <em>after</em> Spring
      * Security's {@link AuthorizationFilter}, so it runs only for an authorized request (a denied request never reaches
      * it and keeps the default {@code no-store}) and wraps the response the format writes to. The filter stamps an
      * immutability-driven {@code Cache-Control} on artifact {@code GET}/{@code HEAD} reads only, overriding the default
      * {@code no-store} for exactly those responses while every other route (API, console, auth, actuator, admin) keeps
-     * it - the scoping lives in the filter's own path/method/status guard (design §8.1), never a global disable of
+     * it - the scoping lives in the filter's own path/method/status guard, never a global disable of
      * Spring's cache-control writer. Contributed as a separate customizer bean so the two concerns stay independent.
      */
     @Bean

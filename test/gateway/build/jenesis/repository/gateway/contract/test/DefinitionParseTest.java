@@ -18,11 +18,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * (EPIC 25) parse/model layer: the generalized {@link RepositoryDefinition} record - {@code writable} plus an ordered
+ * The parse/model layer: the generalized {@link RepositoryDefinition} record - {@code writable} plus an ordered
  * list of {@link Fallback}s (each an {@link Source.Upstream} URL or a {@link Source.Repository} name, with a
  * per-upstream {@code store} and {@link Screening} policy) - the clause grammar that produces it, the desugar of the
- * old {@code hosted}/{@code proxy}/{@code group} spellings into the same record (the §2.1 mapping table), the parse
- * refusals (fail-loud, PRINCIPLES §9), and the mixed-strength warn (⚑ warn, not refuse).
+ * old {@code hosted}/{@code proxy}/{@code group} spellings into the same record, the parse
+ * refusals (fail-loud, §9), and the mixed-strength warn (⚑ warn, not refuse).
  *
  * <p>These assertions are additive: the legacy routing/resolution behavior stays proven by the unchanged
  * {@code RepositoryRouterTest}/{@code MavenRouterTest}/{@code GatedRouterTest}/{@code PassThroughStreamingTest};
@@ -34,7 +34,7 @@ public class DefinitionParseTest {
     @TempDir
     Path root;
 
-    // ---- §2.1 mapping table: every old spelling desugars to the right generalized record ---------------------------
+    // ---- Mapping table: every old spelling desugars to the right generalized record ---------------------------
 
     @Test
     public void hosted_and_the_hosted_factory_desugar_to_writable_with_no_fallbacks() {
@@ -87,7 +87,7 @@ public class DefinitionParseTest {
         assertThat(group.members()).containsExactly("a", "b", "c");
     }
 
-    // ---- §1.2 the new clause grammar ------------------------------------------------------------------------------
+    // ---- The new clause grammar ------------------------------------------------------------------------------
 
     @Test
     public void writable_alone_parses_to_a_hosted_shaped_record() {
@@ -204,11 +204,11 @@ public class DefinitionParseTest {
                 .as("a lone hardened upstream is not mixed").isFalse();
     }
 
-    // ---- §2.3 push=: hard parse refusal (cutover) -----------------------------------------------------------
+    // ---- push=: hard parse refusal (cutover) -----------------------------------------------------------
 
     @Test
     public void a_group_push_directive_is_a_hard_parse_refusal_naming_both_remedies() {
-        // §2.3 hard cutover: `group … push=…` delegated a write into a member's store; writability is now a
+        // Hard cutover: `group … push=…` delegated a write into a member's store; writability is now a
         // repository's own property, so this spelling has no honest desugar (a silent rewrite would move where uploaded
         // bytes land - a §9 violation). It is refused at parse, naming both remedies: declare the front repository
         // writable, or point publishers at the member.

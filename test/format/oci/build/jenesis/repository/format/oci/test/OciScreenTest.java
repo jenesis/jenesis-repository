@@ -10,7 +10,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The OCI manifest choke point (EPIC 26): a manifest write - a push PUT, a pull-through proxy fetch, or an import -
+ * The OCI manifest choke point: a manifest write - a push PUT, a pull-through proxy fetch, or an import -
  * runs the same discovered {@link build.jenesis.repository.store.PublishInterceptor} screen a single-body publish does,
  * mapped onto OCI's native {@code withheld/<hex>} marker. The discovered {@link OciScreenInterceptor} rejects a
  * coordinate carrying {@code gate-reject} and quarantines one carrying {@code gate-quarantine}; every other coordinate

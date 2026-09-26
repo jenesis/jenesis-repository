@@ -19,18 +19,19 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The behavioural half of an SPI's paged or streaming {@code default} implemented over a whole-list abstract
- * sibling <b>fails visibly</b> at a stated ceiling instead of degrading silently on a deployment-sized ledger.
+ * The behavioural half of the inherited-bound rule: an SPI's paged or streaming {@code default} implemented over a
+ * whole-list abstract sibling <b>fails visibly</b> at a stated ceiling instead of degrading silently on a
+ * deployment-sized ledger.
  *
  * <p>Five SPIs shipped that shape - {@code Findings} (paged and Visitor), {@code HealthLedger},
  * {@code RepositoryInventory}, {@code DependentsQuery} and {@code AuditTrail} (paged and streaming) - each
- * documenting itself with the sentence was written about: "the default is correct for a simple implementation;
- * the store overrides it". That sentence describes an implementation nobody ships while the shipped one overrides, so
- * the default's cost is invisible until a plug-in author inherits it: every one of the seven legs below <em>silently
- * buffered the whole ledger and answered</em> before this test existed, and every one of these assertions fails on
- * that behaviour. They now refuse past {@link ArtifactStore#MAX_INHERITED_CHILDREN} - the one ceiling,
- * reused rather than restated - naming the inheriting class, the leg, the whole-list sibling, the size and
- * the override that fixes it.
+ * documenting itself with the sentence this rule was written about: "the default is correct for a simple
+ * implementation; the store overrides it". That sentence describes an implementation nobody ships while the shipped one
+ * overrides, so the default's cost is invisible until a plug-in author inherits it: every one of the seven legs below
+ * <em>silently buffered the whole ledger and answered</em> before this test existed, and every one of these assertions
+ * fails on that behaviour. They now refuse past {@link ArtifactStore#MAX_INHERITED_CHILDREN} - the one ceiling, reused
+ * rather than restated - naming the inheriting class, the leg, the whole-list sibling, the size and the override that
+ * fixes it.
  *
  * <p>Three properties are asserted at each leg, because a bound that only ever throws is as untrustworthy as one that
  * never does: it <b>serves</b> at the ceiling, it <b>refuses</b> one row past it, and the refusal <b>names</b> the
@@ -160,7 +161,7 @@ class InheritedBoundTest {
                 .as("at the ceiling the paged console read still answers").doesNotThrowAnyException();
 
         assertThatThrownBy(() -> trailOf(CEILING + 1).query("acme", null, null, null, 0, 25))
-                .as("byte-for-byte the earlier shape, one SPI over: a page served by materialising the whole trail")
+                .as("byte-for-byte the inherited-default shape, one SPI over: a page served by materialising the whole trail")
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("query(String, Instant, Instant, String, int, int)")
                 .hasMessageContaining("query(String, Instant, Instant, String)")

@@ -308,7 +308,7 @@ class AuthorizationTest {
                 .isEqualTo(Authorization.Decision.ALLOWED);
     }
 
-    // WANON.1 - the strictly-opt-in anonymous role at the enforcing choke-point.
+    // The strictly-opt-in anonymous role at the enforcing choke-point.
 
     @Test
     void the_anonymous_role_defaults_to_empty_and_rejects_a_keyless_request_exactly_as_enforcing_today()

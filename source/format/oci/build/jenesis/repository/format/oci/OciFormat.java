@@ -581,7 +581,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 exchange.respond(400);
                 return;
             }
-            // Route the manifest through the OCI choke point (EPIC 26): OciManifests.ingest screens it against its
+            // Route the manifest through the OCI choke point: OciManifests.ingest screens it against its
             // neutral oci coordinate and maps the verdict onto the native withheld/<hex> marker. Buffer it whole (it is
             // metadata, never a layer blob) to hand the same bytes to the screen - but BOUNDED: OCI opts out of the
             // ingress edge screen, so a manifest PUT reaches here with the raw request stream; an uncapped readAllBytes
@@ -979,7 +979,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         if (!reference.startsWith("sha256:") && !OciTags.isTag(reference)) {
             return false; // a non-tag reference must not become a tags/ store key - let the local 404 stand
         }
-        // Screen a proxied manifest through the same OCI choke point a push takes (EPIC 26): a withheld upstream
+        // Screen a proxied manifest through the same OCI choke point a push takes: a withheld upstream
         // manifest gets its withheld/<hex> marker set, so the handle() serve below 404s it by digest and by tag. There
         // is no separate proxy client response - the local serve is the response.
         try {

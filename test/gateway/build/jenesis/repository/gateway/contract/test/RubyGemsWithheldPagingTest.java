@@ -17,7 +17,7 @@ import static build.jenesis.repository.gateway.testkit.FormatDrive.format;
 import static build.jenesis.repository.gateway.testkit.FormatDrive.sha256;
 
 /**
- * The Audit-27 A3-F4 DoS fix for {@code RubyGemsFormat.versions} (the hottest bundler read): the compact-index
+ * The denial-of-service fix for {@code RubyGemsFormat.versions} (the hottest bundler read): the compact-index
  * {@code /versions} endpoint must decide "is any gem withheld?" - and fold the withheld set into its withheld-aware
  * cache fingerprint - by <em>paging</em> the flat, content-addressed {@code withheld/<hash>} namespace, never by
  * materialising the whole namespace as one {@code List} the way the old {@code blobs.list("withheld")} + {@code
@@ -161,7 +161,7 @@ public class RubyGemsWithheldPagingTest {
             if (prefix.equals("withheld") || prefix.startsWith("withheld/")) {
                 listWithheld++;
                 throw new AssertionError("the /versions read must not materialise the whole withheld namespace via "
-                        + "list(\"" + prefix + "\") - it must page it (Audit-27 A3-F4 DoS fix)");
+                        + "list(\"" + prefix + "\") - it must page it (the denial-of-service fix)");
             }
             return delegate.list(prefix);
         }

@@ -101,7 +101,7 @@ class ContributionsTest {
 
     @Test
     void an_error_is_attributed_on_its_way_out_and_never_replaced_by_its_attribution() {
-        // the propagation above was right and the silence around it was not. the earlier ruling is that an Error
+        // The propagation above was right and the silence around it was not. The product's rule is that an Error
         // is attributed AND escalated, and this class did the second half only - so an operator whose console 500ed
         // learned that something on the page had given way and nothing about which of N plugins it was. The log line
         // is what fixes that; what is assertable here is the rule that makes adding it safe, which is that the

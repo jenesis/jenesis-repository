@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The read-only hardening console API (EPIC 23): what the now-invisible hardened proxy leg has durably decided for
+ * The read-only hardening console API: what the now-invisible hardened proxy leg has durably decided for
  * a hardened repository, so an operator can see the full-body screening it enforces. For a coordinate it surfaces the
  * digest-pinned {@code verdict} record, the repository's recent typed {@code refusals} (oversize/stalled/drift/
  * unparseable/inspector-error) and the gateway-wide {@code drift} alarm - all assembled by {@link HardeningVerdicts}

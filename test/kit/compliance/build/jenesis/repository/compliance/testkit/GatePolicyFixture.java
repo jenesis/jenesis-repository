@@ -226,7 +226,7 @@ public interface GatePolicyFixture extends AutoCloseable {
     List<Misconfiguration> misconfigured();
 
     /**
-     * The dial whose verdict decides what this dimension <em>reports</em> - and, per the earlier work, never whether the gate
+     * The dial whose verdict decides what this dimension <em>reports</em> - and never whether the gate
      * carries it. Empty for a dimension that has none: the policy-as-code dimension carries its verdict on each rule
      * rather than on one dial, which is a real difference and is recorded as such in the census rather than papered
      * over with a synthetic key.

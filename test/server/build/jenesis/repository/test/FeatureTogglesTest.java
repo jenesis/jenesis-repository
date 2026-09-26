@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * ({@code jenreg.token-exchange=<name>}) - so one image carries every module and configuration decides
  * what runs.
  *
- * <p>Since the three {@code server-spi} singletons resolve through the shared
+ * <p>The three {@code server-spi} singletons resolve through the shared
  * {@code Providers.optionalUnique} primitive, and this suite pins the semantics that changed: a selection naming an
  * <em>uninstalled</em> implementation used to resolve to the SPI's {@code NONE} sentinel, so a deployment that asked
  * for rate limiting, workload-identity exchange or key-usage tracking and misspelled it - or forgot its module - came

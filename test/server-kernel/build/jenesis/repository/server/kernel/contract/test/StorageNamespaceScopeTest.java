@@ -28,11 +28,11 @@ class StorageNamespaceScopeTest {
      *  settings documents and the multi-node consistency fingerprints (both), all under {@code config/}, plus
      *  the console's issued-key index under {@code auth/}, since a login key spans tenants.
      *  Growing this set is a deliberate decision, not a default - a new entry must argue why its data is not
-     *  per-tenant; the two added argue it in {@code test/namespace}'s reviewed list, which carries the reasons.
+     *  per-tenant; the two added entries argue it in {@code test/namespace}'s reviewed list, which carries the reasons.
      *
      *  <p>This is the <em>runtime</em> half of the rule, over the modules this test module's graph resolves.
      *  {@code build.jenesis.repository.auth.keylogin} extends the console shell rather than the repository server and is not on
-     *  it, which is precisely why the earlier {@code test/namespace} carries the same list as a <em>static</em>
+     *  it, which is precisely why {@code test/namespace} carries the same list as a <em>static</em>
      *  scan of {@code source/}: a shared claim made by a module no test graph roots is invisible here, and this list
      *  was three entries long for exactly that reason until the static leg found the fourth. */
     private static final Set<String> SHARED_OWNERS = Set.of(

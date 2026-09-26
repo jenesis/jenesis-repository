@@ -9,7 +9,7 @@ import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Withheld;
 
 /**
- * The single guarded owner of every {@code withheld/<hash>} marker CLEAR (C4-A1). A blobs-namespace
+ * The single guarded owner of every {@code withheld/<hash>} marker CLEAR. A blobs-namespace
  * withhold marker is content-addressed - one marker withholds the bytes wherever they serve - and clearing one is the
  * TOCTOU-dangerous verb of the withhold gate: a reader decides a marker is safe to lift, then lifts it, while a
  * concurrent enforce (or a byte-identical sibling's release) changes the world between the read and the act. Four
@@ -29,8 +29,8 @@ import build.jenesis.repository.store.Withheld;
  *       {@code /quarantine} pointer while its own {@link Withheld#mark} no-ops on the still-present marker (the CAS mark
  *       is a silent no-op on a present marker), so the clear strands a <em>live</em> hold with its marker gone. After
  *       each page's clears this re-runs the {@code holder} predicate against FRESH truth for exactly the lifted hashes
- *       and re-marks any hash a LIVE holder now claims (Audit-26 F-7 / Audit-27 #214). This is the logic that landed in
- *       {@code WithheldReconcileConsumer} #207 and was refined #214, now owned here and reused, not reimplemented.</li>
+ *       and re-marks any hash a LIVE holder now claims. This is the logic that first lived in
+ *       {@code WithheldReconcileConsumer}, now owned here and reused, not reimplemented.</li>
  *   <li><b>Release ({@link #clearReleased}).</b> The operator/auto release sites ({@code HoldLifecycle},
  *       {@code ReanalysisTask}) clear the marker of a coordinate they are releasing, UNLESS a byte-identical sibling
  *       coordinate still holds the hash ({@code HoldLifecycle#withheldByAnotherAlias}). This applies the same skeleton
@@ -172,7 +172,7 @@ public final class HoldClears {
     }
 
     /**
-     * Close the reconcile-vs-enforce race (Audit-26 F-7, refined Audit-27 #214) for the markers a page just cleared:
+     * Close the reconcile-vs-enforce race for the markers a page just cleared:
      * re-run {@link #holder} against FRESH truth for exactly {@code lifted} and re-mark any hash a LIVE holder now
      * claims. It re-marks ONLY for a live holder - a coordinate that still resolves the hash among its current
      * {@code blobHashes} (a non-empty claimant list) AND that the fail-safe predicate does not answer holderless for.

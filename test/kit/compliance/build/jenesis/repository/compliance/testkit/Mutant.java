@@ -7,10 +7,10 @@ import build.jenesis.repository.compliance.SignalSource;
 /**
  * One deliberately broken substitution for the deployment object a {@link SignalContract.Property} is about, injected
  * at the four seams {@link SignalFixture} hands the kit one from - the falsification half of the kit (carrying
- * the earlier mechanism to this second kit).
+ * the mutation mechanism to this second kit).
  *
  * <p><b>Why the kit needs one at all.</b> Every check in {@link SignalContract} states what a feed must do; nothing
- * states that the check <em>could have said otherwise</em>. an earlier change found the sharpest instance in this very module:
+ * states that the check <em>could have said otherwise</em>. The sharpest instance was found in this very module:
  * the no-egress tripwire the read-purity leg measures with is only a complete record while the JDK's failed-lookup
  * cache is off, and with it on the leg answers "this query reached nothing" over a query that reached the vendor -
  * identically, whether or not the offence occurred. That was found by hand. {@link #A_QUERY_THAT_REACHES_A_HOST_ALREADY_REACHED}
@@ -99,7 +99,7 @@ public enum Mutant {
     A_QUERY_THAT_ANSWERS_FROM_MEMORY("the read behaviour - an answer already given is served again from memory"),
 
     /**
-     * <b>The instance found, as a mutation.</b> The query also resolves one host this JVM has <em>already</em>
+     * <b>That instance, as a mutation.</b> The query also resolves one host this JVM has <em>already</em>
      * resolved milliseconds earlier - the mutant resolves it once when it is built - so the read-purity leg's
      * "reached exactly the vendor" comparison must see a second host.
      *

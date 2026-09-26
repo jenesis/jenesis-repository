@@ -24,7 +24,7 @@ import build.jenesis.repository.store.ArchiveInflation;
  * archive to its end. A read that fails part way instead - a truncated or interrupted stream, a socket reset mid-jar -
  * throws the {@link IOException} rather than returning empty, so the caller can tell an incomplete read from an
  * authoritative "no SBOM" and skip/retry it rather than recording a transient failure as a permanent fact
- * (PRINCIPLES 5). Either way one bad artifact never derails the sweep that scans every blob.
+ * (§5). Either way one bad artifact never derails the sweep that scans every blob.
  *
  * <p>Reaching that SBOM entry means inflating every entry the jar places before it, so the hunt is bounded at
  * {@link #MAX_SCAN} inflated bytes: a max-ratio deflated ("deflate bomb") or arbitrarily large entry standing before
@@ -65,7 +65,7 @@ public final class ArtifactSbom {
      * a content-addressed blob. A read that fails part way - a truncated or interrupted stream, a socket reset mid-jar
      * - is <em>not</em> a negative: it throws the {@link IOException} rather than swallowing it into an empty result,
      * so the caller can tell an incomplete read from an authoritative "no SBOM" and skip/retry it rather than caching
-     * a transient failure as a permanent fact (PRINCIPLES 5). The caller owns {@code artifact} and closes it; this
+     * a transient failure as a permanent fact (§5). The caller owns {@code artifact} and closes it; this
      * method consumes only as far as the SBOM entry.
      */
     public static Optional<DependencyGraph> graph(InputStream artifact) throws IOException {

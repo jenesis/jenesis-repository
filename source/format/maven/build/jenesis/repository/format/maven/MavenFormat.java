@@ -245,7 +245,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         if (exchange.method().equals("PUT")) {
             // (1): a maven-metadata.xml (and its checksum siblings) is stored verbatim like any artifact rather
             // than dropped, so a publisher-authored document round-trips even when the server does not derive one.
-            // Screening rides the ingress edge now (EPIC 26): this branch only lays the body out and responds 201 -
+            // Screening rides the ingress edge now: this branch only lays the body out and responds 201 -
             // the body reaching here has already been screened to ACCEPT, so verdicts are no longer the format's call.
             layout(store, path, exchange.requestStream());
             if (metadataCompute(exchange)) {
@@ -317,7 +317,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
 
     /** Lay an already-screened body out into the Maven namespace: store it content-addressed ({@link
      *  Publication#storeBlob}, streamed straight to storage, never buffered whole) and then run the layout sequence
-     *  below over the stored blob. Screening no longer happens here (EPIC 26): the ingress edge screens the body to
+     *  below over the stored blob. Screening no longer happens here: the ingress edge screens the body to
      *  ACCEPT and restreams the stored blob into this layout, so a body reaching {@code layout} is already accepted and
      *  there is no verdict to map - the redundant format-embedded screen pass is dropped, the essential link (what
      *  {@link Publication#located} serves over) is kept. The restreamed body dedupes to the same {@code blobs/<hash>}, so reading
@@ -548,7 +548,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 URI sibling = URI.create(prefix + rest + ".sha1");
                 Sha1 expected = upstreamSha1(fetcher, sibling);
                 if (expected.unreadable() != null) {
-                    // Clause 5's split. "The upstream publishes no.sha1 for this artifact" is a fact about
+                    // Clause 5's split. "The upstream publishes no .sha1 for this artifact" is a fact about
                     // Maven repositories that is true often enough to be documented, and it is the ONLY thing that may
                     // downgrade a fill to unverified. A .sha1 fetch that never landed, or one answered by a 429 under a
                     // shared egress IP, is not that fact - it is this repository having failed to read what the

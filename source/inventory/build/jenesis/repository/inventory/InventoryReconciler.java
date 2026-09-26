@@ -14,7 +14,7 @@ import build.jenesis.repository.walk.ArtifactWalk;
 /**
  * The reconcile sweep extracted from {@link StoreRepositoryInventory}: the §4/§5 convergence backstop that rebuilds the
  * <em>publish facts</em> from the live {@code publish/} pointer tree in both directions and sweeps the derived
- * per-version key spaces of no-longer-published versions. As of the publish facts are the {@code published}
+ * per-version key spaces of no-longer-published versions. The publish facts are the {@code published}
  * section of the consolidated metadata document (its presence is membership of the published set), so the forward leg
  * restores a missing section and the reverse leg removes a section whose pointers are gone; with no metadata store
  * installed the legs fall back to the legacy {@code published/} sidecars, the pre-cutover behaviour. The inventory owns
@@ -77,7 +77,7 @@ final class InventoryReconciler {
      *  is deleted the same, and a replayed visit after a crash-resume finds the row already gone.
      *
      *  <p>Both halves of the judgment are three-valued, and for one reason: each is answered through a module that may
-     *  not be installed. an earlier change made the liveness half so; made the membership half so, because which plane
+     *  not be installed. The liveness half was made so first, then the membership half, because which plane
      *  carries the publish facts - the consolidated {@code meta} document or the legacy {@code published/} sidecar -
      *  is chosen by the installed metadata persistence, so removing that module (or installing it over a store written
      *  without one) flipped every version in the repository to "not a published member" and left this sweep judging
@@ -88,9 +88,9 @@ final class InventoryReconciler {
      *  {@code isLive} answer {@code false} for every one of its versions, and this sweep then deleted their
      *  {@code pinned/}, {@code overrides/}, {@code licenses/} and {@code downloaded/} rows - a human's force-keep and
      *  a human's clearance of a hold, deleted because a module was absent, which this product's standing rule forbids
-     *  and which had just closed one family over for {@code holds/}. A version whose format is gone is not dead;
-     *  it is unreadable by that format right now, and "I cannot tell" must never share an outcome with "it is gone".
-     *  The genuine orphan is still reaped, because it is still provable: an installed format that can place the
+     *  and which had just been enforced one family over, for {@code holds/}. A version whose format is gone is not
+     *  dead; it is unreadable by that format right now, and "I cannot tell" must never share an outcome with "it is
+     *  gone". The genuine orphan is still reaped, because it is still provable: an installed format that can place the
      *  coordinate and finds no pointer for it. */
     private int removeOrphanDerived(ArtifactWalk walk) throws IOException {
         int[] removed = {0};
@@ -115,7 +115,7 @@ final class InventoryReconciler {
             String version;
             if (OverrideRecords.ROOT.equals(parts[0])) {
                 // overrides/<kind>/<eco>/<coord>/<ver>, every segment encoded - parsed by the space's one owner
-                // rather than re-spelled here, which is exactly the drift closed.
+                // rather than re-spelled here, which is exactly the drift that was closed there.
                 Optional<OverrideRecords.Row> row = OverrideRecords.parse(key);
                 if (row.isEmpty()) {
                     return false;

@@ -162,11 +162,11 @@ public class WebhookRetryControllerTest {
     }
 
     /**
-     * The runtime half of the earlier route: an operator asking this surface why an event never arrived is told what to
-     * poll instead. The static half - that every {@link build.jenesis.repository.events.EventType} has a route at all
-     * - is asserted separately in {@code test/events}; this asserts the separate thing, that the route reaches a
-     * surface somebody reads. A route nothing renders is the dead leg removed, and the webhook module cannot
-     * reach the console's posture screen, so this endpoint is the surface it owns.
+     * The runtime half of the reconciliation route: an operator asking this surface why an event never arrived is told
+     * what to poll instead. The static half - that every {@link build.jenesis.repository.events.EventType} has a route
+     * at all - is asserted separately in {@code test/events}; this asserts the separate thing, that the route reaches a
+     * surface somebody reads. A route nothing renders would be a dead leg, and the webhook module cannot reach the
+     * console's posture screen, so this endpoint is the surface it owns.
      */
     @Test
     void the_status_read_carries_the_reconciliation_route_for_every_event_type() throws IOException {

@@ -181,8 +181,8 @@ class MarkSweepTest {
 
     @Test
     void a_tagged_images_config_and_layers_are_deleted_when_its_format_lends_nothing() throws IOException {
-        // The reproduction, and the negative control for every leg below. an earlier change made the MANIFEST reachable (its
-        // sha256:<hex> tag-pointer body now names it), but the manifest is the ONLY OCI blob any pointer body names:
+        // The reproduction, and the negative control for every leg below. The MANIFEST is reachable (its
+        // sha256:<hex> tag-pointer body names it), but the manifest is the ONLY OCI blob any pointer body names:
         // an image's config and layer digests live INSIDE the manifest document, behind no store key at all. With no
         // lender the mark counts them not at all, so one pass condemns them and the next DELETES them - leaving a
         // manifest that pulls 200 and layers that 404, which is what this asserts happens.
@@ -239,12 +239,13 @@ class MarkSweepTest {
 
     @Test
     void a_digest_only_manifest_and_its_layers_are_never_collected() throws IOException {
-        // The other half of a manifest pulled by digest and never tagged is a legitimate OCI state (the format
-        // serves /v2/<name>/manifests/sha256:<hex> straight out of blobs/, and its API has no DELETE to retire one),
-        // and it carries no tag pointer - so even after NOTHING named it and the sweep deleted the whole image,
-        // manifest included. The per-document sidecar oci/types/<hex> is the durable record that this hex is a manifest
-        // the registry ingested and serves; resolving the image from that key is what makes the untagged case reachable
-        // at all, and it is why a lender is asked about every key under its roots, not only pointer-shaped ones.
+        // The other half of the same defect: a manifest pulled by digest and never tagged is a legitimate OCI state
+        // (the format serves /v2/<name>/manifests/sha256:<hex> straight out of blobs/, and its API has no DELETE to
+        // retire one), and it carries no tag pointer - so even once tag pointers named their manifests, NOTHING named
+        // this one and the sweep deleted the whole image, manifest included. The per-document sidecar oci/types/<hex>
+        // is the durable record that this hex is a manifest the registry ingested and serves; resolving the image from
+        // that key is what makes the untagged case reachable at all, and it is why a lender is asked about every key
+        // under its roots, not only pointer-shaped ones.
         ArtifactStore store = store();
         Publication publication = new Publication(store);
         String config = publication.storeBlob(bytes("an untagged image config"));

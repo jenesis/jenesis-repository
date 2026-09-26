@@ -10,7 +10,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * XOR of a per-version member digest over the published coordinate set, each member folding that version's
  * declared-license fingerprint - that the whole-repository SBOM / attribution {@code NOTICE} exports derive their ETag
  * from, so an {@code If-None-Match} revalidation answers {@code 304} with ONE O(1) small-object read instead of the
- * O(#versions) coordinate walk that assembles the document (PRINCIPLES §4/§7: an ETag / identity must not be an
+ * O(#versions) coordinate walk that assembles the document (§4/§7: an ETag / identity must not be an
  * O(#versions) walk).
  *
  * <p>It is maintained incrementally at the mutation points that change the set - a publish folds a new member in

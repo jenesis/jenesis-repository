@@ -9,8 +9,8 @@ import build.jenesis.repository.store.Withheld;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The OCI choke point's migration to the {@code withheld/<hash>} marker idiom and the withhold-change feed (Audit-23,
- * phase P3). {@code OciManifests.ingest} now marks a held manifest through {@link Withheld#mark} (joining the feed and
+ * The OCI choke point's migration to the {@code withheld/<hash>} marker idiom and the withhold-change feed.
+ * {@code OciManifests.ingest} now marks a held manifest through {@link Withheld#mark} (joining the feed and
  * the one marker idiom) and, on an accepted push, clears through {@link Withheld#clear} - but only when no retroactive
  * hold's review pointer still stands on the manifest path (§6 Q-D). The standing hold is supplied here by the discovered
  * {@link OciHoldInterceptor}, which withholds any {@code retro-held} path exactly as a downstream {@code ComplianceScreen}

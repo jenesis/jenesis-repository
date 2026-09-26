@@ -49,7 +49,7 @@ public abstract class TenantScope {
      * failed write never fails the mutation it audits.
      *
      * <p>The console and its {@code /api} twin audit a privileged mutation under the same {@code action}
-     * (PRINCIPLES §9). This javadoc used to simply assert that, which is worth exactly what any restated rule is
+     * (§9). This javadoc used to simply assert that, which is worth exactly what any restated rule is
      * worth: the two names were separate literals in separate modules and nothing would have failed on the day
      * they diverged. They are now single values on
      * {@link build.jenesis.repository.audit.AuditActions}, and the build fails a module that spells one out for

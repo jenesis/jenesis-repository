@@ -62,7 +62,7 @@ public final class MaintenanceObservability implements ObservabilitySource {
      *       a different statement from a worker that should be running and is not.</li>
      *   <li>Enabled and the thread is alive: {@code IDLE}, stamped with the instant the loop last <em>completed</em> a
      *       scheduling iteration. That stamp advances every idle-poll window whether or not a pass was due, so it
-     *       reads as liveness rather than as work - the property records the drain depth gauges lacking.</li>
+     *       reads as liveness rather than as work - the property the drain depth gauges were found to lack.</li>
      *   <li>Enabled and the thread is not alive: {@code FAILED}, naming why it stopped. Every sweep, drain and GC on
      *       this node is stopped, and that is the sentence an operator needs to read.</li>
      * </ul>

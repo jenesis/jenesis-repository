@@ -97,7 +97,7 @@ public class CapabilityService {
             // populates, and a ledger with no source installed stays empty for ever, so the page is listed only where
             // something can score what the repository holds.
             HealthLedgerProvider.installed().isPresent() && !HealthSource.installed().isEmpty(),
-            // The hardening proxy leg (EPIC 23): present when the gateway's migration-rescreen maintenance task is
+            // The hardening proxy leg: present when the gateway's migration-rescreen maintenance task is
             // installed, so the console shows the hardened badge/verdict panel for a hardened repository and hides the
             // surface entirely on a deployment that carries no hardening leg. The per-repository gate stays the repo's
             // own harden flag; this is the module-presence signal, discovered like every other (§2).

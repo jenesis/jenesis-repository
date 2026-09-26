@@ -22,7 +22,7 @@
     <!--/* The browse's single navigation spine (UI.md §5): repositories list -> this repository's detail hub ->
          the browse root -> one crumb per path segment. It folds in the affordance that used to be a separate link
          back to the repository, so there is one trail rather than three overlapping "go up" controls. Rendered as
-         the shared .app-page-header markup (crumbs above the title, docs/DESIGN.md §3) on the ol.app-breadcrumb. */-->
+         the shared .app-page-header markup (crumbs above the title) on the ol.app-breadcrumb. */-->
     <header class="app-page-header">
         <hgroup class="app-page-header__heading">
             <nav aria-label="Breadcrumb" th:unless="${searching}">
@@ -73,7 +73,7 @@
             <tbody>
             <tr th:each="r : ${results}">
                 <td class="app-list__name">
-                    <!--/* The hit's ecosystem mark (W4.2b): the mark of the format that owns the coordinate, and a
+                    <!--/* The hit's ecosystem mark: the mark of the format that owns the coordinate, and a
                          DASHED orphan mark when no installed format declares the ecosystem it was published under -
                          the format module that served this content is gone, which the tile, the title and the
                          "not installed" note each say independently of colour. Inline so currentColor inverts with
@@ -109,7 +109,7 @@
         </table>
         </figure>
 
-        <!--/* The bound is visible (D-183): the search index and the no-index substring scan both answer a bounded
+        <!--/* The bound is visible: the search index and the no-index substring scan both answer a bounded
              window, so a clamped hit list says that more matches remain rather than reading as the whole set. */-->
         <p th:if="${truncated}"><small>Showing the first <span th:text="${results.size()}">1000</span> matches;
             more remain past this page. Narrow the query, or page the <code>/api/search</code> endpoint with its
@@ -124,7 +124,7 @@
         <figure th:unless="${entries.isEmpty()}">
         <table class="app-list">
             <thead>
-            <!--/* Sortable columns (W4.3b): each header re-requests this same level ordered by that column, toggling
+            <!--/* Sortable columns: each header re-requests this same level ordered by that column, toggling
                  direction when it is already the sort column. Size sorts on the raw byte count in the domain layer
                  (RepositoryBrowse.browseTree), so "9 B" sorts below "10 KB" rather than lexically; a folder's size is
                  its cached subtree roll-up. aria-sort marks the active column and the arrow shows its direction. */-->

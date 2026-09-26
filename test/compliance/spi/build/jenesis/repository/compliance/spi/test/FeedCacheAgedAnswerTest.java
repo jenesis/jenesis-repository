@@ -9,8 +9,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 /**
- * at the choke point: what a per-key feed cache does with an answer it already drew, once that answer has
- * outlived the window it was drawn for and the refresh that should have replaced it fails.
+ * The aged answer at the choke point: what a per-key feed cache does with an answer it already drew, once that answer
+ * has outlived the window it was drawn for and the refresh that should have replaced it fails.
  *
  * <p>There used to be one answer for every feed - keep serving the last good value and re-extend it by the retry
  * interval, indefinitely - which is why five fail-closed licensed feeds answered a stale advisory list for the whole

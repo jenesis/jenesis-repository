@@ -57,7 +57,7 @@ class SignalContextTest {
         SignalContext.Deployment bound = SignalContext.deployment(store(), Clock.systemUTC());
         bound.close();
         // A snapshot written nowhere would read back as a clean, empty catalogue - indistinguishable from "this CVE
-        // is not exploited". So a wiring error throws, naming the signal that asked (PRINCIPLES §9).
+        // is not exploited". So a wiring error throws, naming the signal that asked (§9).
         assertThatThrownBy(() -> SignalContext.of("kev", _ -> null).snapshots())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("kev");

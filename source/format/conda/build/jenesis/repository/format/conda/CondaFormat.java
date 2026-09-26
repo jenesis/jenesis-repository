@@ -91,7 +91,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
 
     // A hostile package cannot force a large allocation: the info/index.json read is bounded by the product's one
     // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenreg.archive.largest-entry - not by a
-    // private constant of this format's (RepositoryFormat contract clause 15 /). How far the WALK may run to
+    // private constant of this format's (RepositoryFormat contract clause 15). How far the WALK may run to
     // reach that member is the sibling bound one dimension over, ArchiveWalk.largestWalk(), settable at
     // jenreg.archive.largest-walk - also shared, and also not this format's to restate. What IS this format's is the
     // ratio below, which the legacy container needs and states at the call site that applies it.
@@ -173,8 +173,8 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     /** Every stored package file whose {@code coordinate(file)} equals {@code (coordinate, version)}, across all
      *  channels and subdirs - so a hold covers every build of the version. Channels and subdirs are operator/platform
      *  bounded (a bare list is right), but the per-subdir {@code pkgs} listing is attacker-publishable, so it is
-     *  enumerated through the shared bounded {@link #PKGS} scan - never {@code list()}ed whole (the Audit-26 DoS
-     *  lesson), and never a hand-rolled page loop either. */
+     *  enumerated through the shared bounded {@link #PKGS} scan - never {@code list()}ed whole (a whole
+     *  listing there is a denial-of-service lever), and never a hand-rolled page loop either. */
     private static List<Coordinate> keptPackages(String coordinate, String version, ArtifactStore store)
             throws IOException {
         List<Coordinate> kept = new ArrayList<>();
@@ -397,9 +397,9 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
      * enumeration, jenesis's own index walk included - discovers a channel's subdirs from without probing.
      *
      * <p><b>Screened: a subdir every package of which is held is not announced.</b> This is the half of the
-     * rule that enumerates names the client did not supply - it is handed a channel and answers with platform
-     * names - so a container with nothing servable is dropped, exactly as Composer's {@code list.json} drops a package
-     * and PyPI's Simple root drops a project. <b>The call, stated rather than inherited</b>, because a
+     * withhold-on-enumeration rule that enumerates names the client did not supply - it is handed a channel and answers
+     * with platform names - so a container with nothing servable is dropped, exactly as Composer's {@code list.json}
+     * drops a package and PyPI's Simple root drops a project. <b>The call, stated rather than inherited</b>, because a
      * {@code subdir} is a platform name one level of abstraction above a published coordinate and the question is a
      * real one: <em>a container name is screened on the same rule as a coordinate.</em> Three reasons.
      * <ul>
@@ -410,7 +410,8 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
      *       platforms can this channel resolve for". Announcing a platform whose every package is quarantined offers a
      *       view that is not merely stale but known-unservable - the &sect;5 "never serve a silently-incomplete view
      *       as if it were whole".</li>
-     *   <li><b>the earlier own criterion.</b> The disclosure that matters is servability, not whether the token looks like
+     *   <li><b>The rule's own criterion.</b> The disclosure that matters is servability, not whether the token looks
+     *   like
      *       a coordinate; a subdir with nothing servable is a container with nothing servable.</li>
      * </ul>
      * A subdir with no package at all stays listed - it names no withheld coordinate, and only a structural emptiness

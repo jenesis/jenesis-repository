@@ -68,7 +68,7 @@ public interface RetentionProvider {
 
     /** The configured engine, resolved through the shared {@link Providers#optionalUnique} policy: an explicit
      *  {@code jenreg.retention=<name>} selects one by name and a selection nothing can honour
-     *  <em>throws</em> rather than degrading to no-retention (PRINCIPLES §9), a
+     *  <em>throws</em> rather than degrading to no-retention (§9), a
      *  {@code jenreg.<name>=false} or an unset {@link #requiredConfig()} switches one off, more than one
      *  enabled engine is ambiguous rather than a discovery-order winner, and only an <em>unselected</em> deployment
      *  with nothing enabled degrades to empty. */

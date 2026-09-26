@@ -26,14 +26,14 @@ public final class KeyLoginMechanism implements ConsoleModuleProvider {
 
     /** The <b>operator</b> spelling: the module name, its {@code jenreg.<name>} toggle, the settings key
      *  {@link KeyLoginSettingsContributor} catalogues and the property {@link KeyLoginConfig.KeyLoginEnabled} reads.
-     *  Every one of those four is rendered from this constant, so the four cannot drift the way found them. */
+     *  Every one of those four is rendered from this constant, so the four cannot drift the way they once did. */
     public static final String NAME = "key-login";
 
     /** The <b>durable</b> spelling, and it is a different string on purpose. It qualifies a login principal
      *  ({@code ProviderPrincipal.qualifiedId}) into the user directory and the issued-key index, and it is the mechanism
      *  token on every {@code login} / {@code login.failed} / {@code login.throttled} / {@code keylogin.issue} audit
      *  row. Both are durable, so <b>this one may never be renamed</b>: changing it would orphan every issued key's
-     *  qualified principal id and split the audit trail into a before and an after. What fixed was the
+     *  qualified principal id and split the audit trail into a before and an after. What was fixed first was the
      *  <em>operator</em> spelling leaking into the toggle; what remained was that the two spellings sat in five files
      *  with nothing binding them, so a later rename of either could quietly take the other's sites with it. They are
      *  bound here, side by side, with the reason there are two. */

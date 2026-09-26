@@ -262,7 +262,7 @@ class InventoryDisclosureTest {
 
     @Test
     void a_colon_less_bare_name_display_fails_closed_by_throwing() throws IOException {
-        // a27/a2 F3: a colon-less display (a bare name with no :version) once fell through the right-to-left split loop
+        // A colon-less display (a bare name with no :version) once fell through the right-to-left split loop
         // to the ghost-coordinate `return true` and disclosed unconditionally - a fail-open on the one input the
         // coordinate:version face is not meant to take. It now fails CLOSED by throwing: a name-level surface must
         // screen through ServableNames, not this face. No live caller passes a bare name (every caller supplies a

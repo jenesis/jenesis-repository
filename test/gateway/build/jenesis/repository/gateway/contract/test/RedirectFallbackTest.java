@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * EPIC 29 RD-5 (stage 2): the two new fallback-clause grammar tokens the router grew - a {@code match=<ecosystem>:<glob>}
+ * The two fallback-clause grammar tokens the router grew - a {@code match=<ecosystem>:<glob>}
  * coordinate predicate that filters the fallback walk MISS-composably, and a {@code redirect} serve policy that
  * delegates a {@link Source.Upstream} leg to the injected {@link RepositoryRouter.RedirectHandler} (the
  * {@code redirect-directory} module) instead of fetch-screen-serving it. Proves, hermetically over a filesystem store

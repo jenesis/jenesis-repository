@@ -190,7 +190,7 @@ class QuarantineLogTest {
                     "org.lib" + index + ":1.0", Verdict.QUARANTINE, List.of("r" + index));
         }
 
-        // the object names sort newest-first by construction, so the bounded read is one forward page through
+        // The object names sort newest-first by construction, so the bounded read is one forward page through
         // the store's own ordering. A store that refuses list(ROOT) proves it: before the fix this leg materialised
         // and sorted the whole name list to serve five rows, so a page cost exactly what the unpaged events() does.
         assertThat(log.events(5)).extracting(QuarantineLog.Event::coordinate)

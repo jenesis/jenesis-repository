@@ -48,7 +48,7 @@ import build.jenesis.repository.store.Withheld;
  * <p>What it deliberately does <b>not</b> claim is {@code ProxyFormat} clause 9 - an upstream-supplied name is as
  * untrusted as a client-supplied one. This kit drives a scripted upstream it controls, so it can prove a leg refuses
  * a hostile <em>name</em>; it holds no reference for whether a leg's outbound <em>URL</em> handling is right, which
- * is a per-format question against that ecosystem's protocol and is the earlier first checkup theme.
+ * is a per-format question against that ecosystem's protocol and is a question for a principle checkup.
  *
  * @jenesis.covers build.jenesis.repository.format.RepositoryFormat 2, 4, 6, 7, 12
  * @jenesis.covers build.jenesis.repository.format.ArtifactLayout 3

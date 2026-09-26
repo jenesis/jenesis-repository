@@ -104,7 +104,7 @@ public final class HoldRecords {
     public static SortedSet<String> installedKinds() {
         // Through the primitive, not a TreeSet: a set MERGES two observers answering to one kind, so the capability
         // answer reported the pair as a single installed kind and looked right doing it. The shared validation
-        // refuses the clash instead (D-163b).
+        // refuses the clash instead.
         return Providers.installedNames("hold-release", ServiceLoader.load(HoldReleaseObserver.class),
                 HoldReleaseObserver::kind, _ -> true);
     }
@@ -122,8 +122,8 @@ public final class HoldRecords {
      * all - a checksum, generated metadata, a raw upload - which is a real answer: with no coordinate there is no
      * record key to look under, because there is no versioned artifact to hold.
      *
-     * <p><b>This used to be the one dependence on an installed format left standing, and it is closed
-     *.</b> The route from a request path to a coordinate is the owning format's layout reverse mapping, so
+     * <p><b>This used to be the last dependence on an installed format left standing, and it is
+     * closed.</b> The route from a request path to a coordinate is the owning format's layout reverse mapping, so
      * uninstalling a <em>format</em> module made this answer empty while the coordinate-keyed records it should have
      * found sat there intact - a hold that reads as released because a module is absent. Nothing already persisted
      * could stand in ({@code publish/<path>} is a bare content hash by design; {@code holds/dispatch<path>} carries a

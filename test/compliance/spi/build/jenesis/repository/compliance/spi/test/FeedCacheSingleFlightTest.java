@@ -8,14 +8,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 /**
- * at the choke point: <em>whose</em> refresh a cold lookup waits for.
+ * The single flight at the choke point: <em>whose</em> refresh a cold lookup waits for.
  *
  * <p>The cache's promise is that "a cold-cache burst collapses into single upstream calls in turn" - one query per
  * key, which is both what a consumer wants and the courtesy a metered vendor's rate limit asks for. The lock it was
  * implemented with was the cache's own monitor, which is a different promise: <em>one query at a time, full stop</em>.
  * Coordinate B's cold lookup queued behind coordinate A's although the two have nothing to do with each other.
  *
- * <p>That was merely slow until a failing refresh stopped being cheap. Since a fail-closed feed past its window
+ * <p>That was merely slow until a failing refresh stopped being cheap. A fail-closed feed past its window
  * re-asks the vendor rather than re-serving what it drew, so during a vendor outage every gate thread queued on the
  * one monitor and <b>each paid the whole feed-policy budget in turn</b> - three attempts, up to a five-minute
  * whole-fetch deadline - for coordinates that were never related. An outage that should cost one slow request per

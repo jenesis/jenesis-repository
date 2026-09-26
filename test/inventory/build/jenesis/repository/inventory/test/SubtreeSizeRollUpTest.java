@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * console reads a folder's size with one direct key lookup instead of re-walking the tree. Over a small publish tree
  * with blobs of known size, a folder's rolled-up total is the sum of every blob beneath it, the repository root total
  * is the whole sum (and the return value of the sweep), and a folder that was never rolled up reads empty rather than
- * zero (so a browse never confuses "not computed yet" with "empty"). Read-first (PRINCIPLES §7): the sweep does the
+ * zero (so a browse never confuses "not computed yet" with "empty"). Read-first (§7): the sweep does the
  * work, the reader recomputes nothing.
  */
 class SubtreeSizeRollUpTest {

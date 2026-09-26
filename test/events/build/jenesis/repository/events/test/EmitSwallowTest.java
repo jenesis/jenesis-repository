@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 /**
  * The best-effort {@link EventSink#emit} seam under a failing discovered sink: it must swallow the failure so the
  * observed operation never fails, but must not swallow it <em>silently</em> - a WARNING names the lost event
- * (PRINCIPLES §9: a fail-soft still emits a diagnostic). {@link FailingSink} always throws and {@link
+ * (§9: a fail-soft still emits a diagnostic). {@link FailingSink} always throws and {@link
  * CapturingLoggerFinder} captures the diagnostic, both discovered for this module only.
  */
 class EmitSwallowTest {

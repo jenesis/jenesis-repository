@@ -31,7 +31,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
  *
  * <p>For a plain {@code proxy <url> harden} repository the two readings agree with the old unconditional
  * {@code PROXY}: the repository accepts no upload, so every byte in its store was reached by the fallback. They part
- * company on the generalized hybrid the model has expressed since EPIC 25 - a {@code writable} repository carrying a
+ * company on the generalized hybrid the model expresses - a {@code writable} repository carrying a
  * hardened upstream fallback, which {@link RepositoryDefinition#harden()} (rightly) reports as a hardening
  * proxy. Its store holds <em>both</em> channels, and re-screening an upload through the proxy flavour is wrong in both
  * directions:
@@ -50,8 +50,8 @@ import build.jenesis.repository.store.ArtifactDescriptor;
  *
  * <h2>The evidence: the {@code origin} acquisition trail, not a guess</h2>
  *
- * The channel an artifact arrived through is already recorded durably, per digest, by {@link OriginSection} (
- * §6.2): a hand upload folds a {@code local-upload} row into the very CAS that commits the publish, and a fallback
+ * The channel an artifact arrived through is already recorded durably, per digest, by {@link OriginSection}:
+ * a hand upload folds a {@code local-upload} row into the very CAS that commits the publish, and a fallback
  * fetch appends a {@code fallback} row. So this reads the artifact's own coordinate document and answers
  * {@link GatePolicyProvider.Path#PUBLISH} exactly when a {@code local-upload} row names <em>these</em> bytes.
  *

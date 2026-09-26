@@ -33,7 +33,7 @@ import build.jenesis.repository.metadata.MetadataProvider;
  * that. The read stays and the claim widens, which trades an irreversible loss for a recoverable one: a genuinely
  * dead sidecar is no longer surfaced for reclamation, and an explicit operator purge still reaches it.
  *
- * <p><strong>{@code licenses} removed (§5.4), and {@code published}/{@code pinned} before it.</strong> The
+ * <p><strong>{@code licenses} removed, and {@code published}/{@code pinned} before it.</strong> The
  * declared-license facts were cut over into the {@code licenses} section of the consolidated metadata document
  * ({@code meta}, owned by {@code MetadataStorageNamespace}), as the publish facts were into its {@code published}
  * section (the pin a field of that section), so this manifest declares none of those three prefixes <em>while
@@ -42,7 +42,7 @@ import build.jenesis.repository.metadata.MetadataProvider;
  * it; reclaiming it is the operator's explicit purge - the "absence never deletes" posture surfacing what is
  * unreachable.
  *
- * <p><b>that reasoning does not survive the deployment which never installs the module at all.</b> This module
+ * <p><b>That reasoning does not survive the deployment which never installs the module at all.</b> This module
  * is the widest case of the shape, because all three of its cut-over spaces stay live together on the
  * graceful-absence layout: {@link StoreRepositoryInventory#publishedRoot()} <em>is</em> {@code published/} there and
  * the whole published-set enumeration walks it, {@link InventoryPins} keeps every pin - a human's explicit force-keep
@@ -75,7 +75,7 @@ public final class InventoryStorageNamespace implements StorageNamespace {
                     SubtreeSizeRollUp.ROOT, StoreRepositoryInventory.PINNED, RecentReleases.ROOT,
                     StoreRepositoryInventory.PUBLISHED);
         }
-        // with no metadata persistence module installed the inventory takes its graceful-absence layout, and there
+        // With no metadata persistence module installed the inventory takes its graceful-absence layout, and there
         // all three cut-over spaces are read as well as written - publishedRoot() resolves to published/ and every
         // membership question, enumeration and eviction goes through it, InventoryPins lists and clears pins out of
         // pinned/, and LicenseInventory.read answers from licenses/. That is this deployment's live publish ledger,

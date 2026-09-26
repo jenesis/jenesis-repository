@@ -10,13 +10,13 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
  * bookkeeping key, the {@code task} meter tag, the due-time arithmetic and every diagnostic - reads this record
  * rather than re-entering the task.
  *
- * <p><b>Why capture rather than call (the earlier ruling transferred).</b> A handler that asks a broken task what
- * it is called can be defeated from inside its own handler: the {@code MaintenanceScheduler} called
- * {@code task.name()} <em>twice</em> in each of four catch blocks (once to log, once to count), so a task whose
- * {@code name()} threw turned a contained pass failure into an exception escaping the bare
- * {@code jenesis-repository-maintenance} thread - and with it every sweep, drain and GC on the node. Capturing the
- * name at resolution is what makes containment unbreakable, exactly as {@code EventSink.emit} pairs each sink with
- * the name resolution read from it before any sink is called.
+ * <p><b>Why capture rather than call (the {@code EventSink} ruling transferred).</b> A handler that asks a broken task
+ * what it is called can be defeated from inside its own handler: the {@code MaintenanceScheduler} called {@code
+ * task.name()} <em>twice</em> in each of four catch blocks (once to log, once to count), so a task whose {@code name()}
+ * threw turned a contained pass failure into an exception escaping the bare {@code jenesis-repository-maintenance}
+ * thread - and with it every sweep, drain and GC on the node. Capturing the name at resolution is what makes
+ * containment unbreakable, exactly as {@code EventSink.emit} pairs each sink with the name resolution read from it
+ * before any sink is called.
  *
  * <p>The name is more than a diagnostic here, which is the second reason: it is the lease object an exclusive pass
  * locks on and the key the schedule and the failure counter are kept under, so a task that answered differently on

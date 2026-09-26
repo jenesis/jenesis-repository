@@ -42,17 +42,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * breaks its side.
  *
  * <h2>Where the rethrow question landed, and why it is not verbatim</h2>
- * ruled that an {@code Error} out of an {@code EventSink} is attributed and <em>rethrown</em>: it is the runtime
- * or the module graph giving way, not a notification failing to queue, and it must not be filed as the subject's
- * answer. The ruling transfers, but the escalation does not, and the difference is which thread the {@code Error} is
- * on. {@code emit} runs on the producer's thread, so rethrowing hands the failure to a caller who can fail the
- * publish. The worker loop has <em>no</em> caller: "rethrow" there means letting the {@code Error} out of
- * {@code Thread.run()}, which kills the deployment's only maintenance loop, reports itself as one stack trace on
- * stderr from the default uncaught-exception handler, and counts nothing. That is less visible than the ERROR line it
- * replaces, not more - so the loop keeps running and the escalation goes to the operator, through the log, the
- * failure counter and the task's reported status. {@link MaintenanceScheduler#runNow(Instant)} is the one entry point
- * with a caller and it keeps the earlier rethrow exactly. Both directions are pinned below, because the difference is a
- * decision rather than an accident.
+ * The rule for an {@code EventSink} is that an {@code Error} out of it is attributed and <em>rethrown</em>: it is the
+ * runtime or the module graph giving way, not a notification failing to queue, and it must not be filed as the
+ * subject's answer. The ruling transfers, but the escalation does not, and the difference is which thread the {@code
+ * Error} is on. {@code emit} runs on the producer's thread, so rethrowing hands the failure to a caller who can fail
+ * the publish. The worker loop has <em>no</em> caller: "rethrow" there means letting the {@code Error} out of {@code
+ * Thread.run()}, which kills the deployment's only maintenance loop, reports itself as one stack trace on stderr from
+ * the default uncaught-exception handler, and counts nothing. That is less visible than the ERROR line it replaces, not
+ * more - so the loop keeps running and the escalation goes to the operator, through the log, the failure counter and
+ * the task's reported status. {@link MaintenanceScheduler#runNow(Instant)} is the one entry point with a caller and it
+ * keeps that rethrow exactly. Both directions are pinned below, because the difference is a decision rather than an
+ * accident.
  *
  * <h2>Negative control, run against the real tree</h2>
  * Two plants, both reverted:
@@ -114,8 +114,8 @@ class SchedulerHostContractTest {
     @Test
     void an_error_raised_on_the_worker_thread_does_not_end_the_loop() {
         // exclusion() is called by the loop itself, OUTSIDE any unit - so an Error from here is the loop-level escape
-        // names, not a fan-out one. Before the fix it left the bare jenesis-repository-maintenance thread and
-        // every sweep, drain and GC on the node stopped until a settings refresh or a restart.
+        // the scheduler fix names, not a fan-out one. Before the fix it left the bare jenesis-repository-maintenance
+        // thread and every sweep, drain and GC on the node stopped until a settings refresh or a restart.
         AtomicInteger sane = new AtomicInteger();
         MaintenanceScheduler scheduler = scheduler(
                 new Hostile("hostile") {
@@ -219,8 +219,8 @@ class SchedulerHostContractTest {
 
     @Test
     void an_error_on_an_on_demand_run_reaches_the_caller_and_is_counted_first() {
-        // The one entry point with a caller keeps the earlier rethrow verbatim: an admin or a test asked for this pass on
-        // its own thread, so it must not be told the pass completed when the runtime gave way underneath it.
+        // The one entry point with a caller keeps the EventSink rethrow verbatim: an admin or a test asked for this
+        // pass on its own thread, so it must not be told the pass completed when the runtime gave way underneath it.
         MaintenanceScheduler scheduler = scheduler(new Hostile("on-demand") {
             @Override
             public Exclusion exclusion() {
@@ -256,9 +256,9 @@ class SchedulerHostContractTest {
 
     @Test
     void the_worker_reports_liveness_while_it_has_nothing_to_do() {
-        // the earlier class, applied to the loop: a signal that only moves when there is work cannot distinguish a
-        // deployment with nothing due from one whose worker has stopped. The iteration stamp advances on every pass
-        // round the loop, so an idle deployment reads as running.
+        // The drain depth gauges' problem, applied to the loop: a signal that only moves when there is work cannot
+        // distinguish a deployment with nothing due from one whose worker has stopped. The iteration stamp advances on
+        // every pass round the loop, so an idle deployment reads as running.
         MaintenanceScheduler scheduler = scheduler(new Hostile("quiet") {
             @Override
             public Duration interval() {

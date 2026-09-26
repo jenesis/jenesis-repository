@@ -10,8 +10,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * The {@link PullThroughHooks} for the dispatcher-direct proxy leg (demo seeding, the {@link
  * build.jenesis.repository.server.FormatDispatcher} loop) whose {@code screenFetch} decorates the miss-leg fetcher with
  * the DEFAULT-strength {@link ProxyScreen} over a supplied gate and store - the SAME decorator the router's DEFAULT
- * fallbacks screen through (EPIC 28). It closes the #79 gap that a demo/dispatcher-direct proxy leg pulls through
- * <em>unscreened</em> since EPIC 26 demoted the embedded per-format publish screen to layout-only: no screening code is
+ * fallbacks screen through. It closes the #79 gap that a demo/dispatcher-direct proxy leg pulls through
+ * <em>unscreened</em> since the embedded per-format publish screen was demoted to layout-only: no screening code is
  * added to {@code DemoSeeder}/{@code FormatDispatcher}, and no embedded per-format publish screen is
  * reintroduced - the compliance gate screens the proxy leg exactly like production.
  *
@@ -26,7 +26,7 @@ public final class ProxyScreenHooks implements PullThroughHooks {
     private final Supplier<ComplianceGate> gate;
     private final int holdDays;
 
-    /** whether an incomplete screen withholds rather than serving with the fact recorded. */
+    /** Whether an incomplete screen withholds rather than serving with the fact recorded. */
     private final boolean withholdIncomplete;
 
     /** @param gate the live gate resolved per request (so a gate armed just before a seed is the one that screens)

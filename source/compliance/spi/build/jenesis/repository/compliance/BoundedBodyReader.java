@@ -12,7 +12,7 @@ import build.jenesis.repository.store.ArchiveInflation;
  * This class used to own the manifest tier too - a private {@code MANIFEST_LIMIT} of 4 MiB and a {@code readComplete}
  * that applied it. That was a second copy of a bound that has since been given one home, one operator key
  * and one build guard: {@link ArchiveInflation}. Two shared per-member readers with the same never-a-prefix doctrine
- * and two different numbers is the shape removed, so the manifest tier is now
+ * and two different numbers is the shape that was removed, so the manifest tier is now
  * {@link ArchiveInflation#largestEntry()}, settable at {@link ArchiveInflation#LARGEST_ENTRY_KEY}, and an inspector
  * that reads one archive member calls {@link ArchiveInflation#entry(InputStream)} directly. What is left here is the
  * two <em>prefix-tier</em> helpers, which are about how much of the ARTIFACT an inspector sees rather than how far one

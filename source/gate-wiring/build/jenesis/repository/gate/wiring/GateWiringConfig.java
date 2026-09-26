@@ -76,7 +76,7 @@ public class GateWiringConfig {
 
     @Bean(destroyMethod = "close")
     public AutoCloseable complianceScreenStrictHoldMappingWiring(LiveConfig liveConfig) {
-        // CEP-P2 (C1-A2): whether the publish-time hold-mapping round-trip check throws (failing the publish) or only
+        // Whether the publish-time hold-mapping round-trip check throws (failing the publish) or only
         // alarms is jenreg.strict-hold-mapping, read through the same live effective config the gate dials
         // are, so it applies on the next settings re-read like every other dial. Off by default (production stays
         // alarm-not-abort - a broken blobs-namespace format must not DoS publishes); the test config flips it on.

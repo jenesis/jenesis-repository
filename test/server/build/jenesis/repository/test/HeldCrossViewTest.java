@@ -25,8 +25,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>The alias that only the content half can reach is the cross-publish's <b>"latest" view</b>,
  * {@code /module/<name>/<name>.jar}. It is not version-addressed, so no {@code paths} overload reports it for a
- * version and no hold writer ever links a review pointer at it - yet it points straight at the held blob. Before
- * the {@code publish/}-namespace read ({@code ServableNames.state}, which {@code Publication.located} and every
+ * version and no hold writer ever links a review pointer at it - yet it points straight at the held blob. Before the
+ * fix, the {@code publish/}-namespace read ({@code ServableNames.state}, which {@code Publication.located} and every
  * Maven/raw serve run through) consulted only the chain and never the marker, so a held modular jar kept serving under
  * that name: driven here end-to-end, and asserted the other way round below.
  *

@@ -243,7 +243,7 @@ public interface InspectorFixture extends AutoCloseable {
      *
      * <p>A fixture returning {@code false} declares that its inspector parses <em>any</em> claimed body on the publish
      * leg, so {@link #nothingToAssess()} is asserted on the fully-spooled leg only. That is a real cross-format
-     * divergence (PRINCIPLES &sect;13), not a fixture convenience: it is declared here so it shows up in a
+     * divergence (&sect;13), not a fixture convenience: it is declared here so it shows up in a
      * fixture review and in the census rather than being quietly dropped from the suite.
      */
     default boolean publishLegIsRouteGated() {
@@ -259,7 +259,7 @@ public interface InspectorFixture extends AutoCloseable {
      *
      * <p>A fixture returning {@code false} declares that its inspector <em>degrades</em> an unparseable claimed body to
      * its path-derived coordinate, and the kit then asserts that degradation instead - it does not skip the leg. That
-     * is a real cross-format divergence (PRINCIPLES &sect;13) between inspectors on the same side of the
+     * is a real cross-format divergence (&sect;13) between inspectors on the same side of the
      * identity-versus-optional criterion: Composer, CocoaPods and Conda crack an archive for an optional licence and
      * still refuse a body that is not that archive, so an inspector that admits one is diverging from its own peers,
      * not expressing a different criterion. Declared here, and listed with its reason in the census, so it shows up in

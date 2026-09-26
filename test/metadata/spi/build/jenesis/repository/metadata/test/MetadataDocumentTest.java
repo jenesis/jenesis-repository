@@ -14,10 +14,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The document value type's reader tolerance and section-level carry (§5.2): a total read never throws, an
- * unrecognised or newer section round-trips through a mutate byte-for-structure verbatim (the property at the
+ * The document value type's reader tolerance and section-level carry: a total read never throws, an
+ * unrecognised or newer section round-trips through a mutate byte-for-structure verbatim (the row-carry property at the
  * section level), the tri-state envelope serialises and re-reads, and a newer-format document is rendered but never
- * downgrade-rewritten (§5.3).
+ * downgrade-rewritten.
  */
 class MetadataDocumentTest {
 

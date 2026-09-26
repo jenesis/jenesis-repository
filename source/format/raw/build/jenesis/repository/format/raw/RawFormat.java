@@ -53,7 +53,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         Publication publication = new Publication(store);
         switch (exchange.method()) {
             case "PUT" -> {
-                // Layout-only (EPIC 26): screening rides the ingress edge, which screens the body to ACCEPT and
+                // Layout-only: screening rides the ingress edge, which screens the body to ACCEPT and
                 // restreams the stored blob into this format. Store content-addressed (streamed, never buffered) and
                 // link the path, then respond 201 - verdicts are the edge's business, not the format's.
                 Publication.Blob blob = publication.stored(exchange.requestStream());
@@ -136,7 +136,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
             if (download.status() != 200) {
                 return false;
             }
-            // Layout-only (EPIC 26): screening rides the ingress edge (under downstream the proxy ingress is already
+            // Layout-only: screening rides the ingress edge (under downstream the proxy ingress is already
             // screened by ProxyScreen/harden), so this lays the fetched body out - store it content-addressed
             // (streamed, never buffered) and link the path - and the handle() re-dispatch serves it.
             Publication.Blob blob = publication.stored(download.body());

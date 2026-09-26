@@ -99,7 +99,7 @@ public class WebhookTest {
                 .satisfies(entry -> assertThat(entry.type()).isEqualTo("quarantine"));
     }
 
-    /** the earlier runtime leg for PUBLISH: the producer no longer writes into this module's outbox, it emits, and the
+    /** The runtime leg for PUBLISH: the producer no longer writes into this module's outbox, it emits, and the
      *  note appears here only because this graph's discovered sink put it there. A second sink would see the publish
      *  too, which is the whole point of moving the producer beside the seam. */
     @Test

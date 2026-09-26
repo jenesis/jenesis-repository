@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <li>A checked exception a sink smuggles past its {@code throws} clause is a <em>delivery</em> failure like any
  *     other and is contained, with the WARN naming it - the old catch let it through untouched.</li>
  * <li>An {@link Error} is not a delivery failure at all. It says the JVM or the module graph gave way, so it is
- *     attributed to the sink and rethrown - the same ruling reached in a contract kit, where an {@code Error}
+ *     attributed to the sink and rethrown - the same ruling a contract kit follows, where an {@code Error}
  *     is reported as the harness breaking rather than filed as the subject's answer. Containing it would leave a
  *     deployment running on a broken runtime with a queued webhook as the only evidence.</li>
  * <li>A sink whose {@code name()} throws no longer defeats the containment: the fan-out reads every name at

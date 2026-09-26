@@ -90,7 +90,7 @@ final class InventoryEviction {
     }
 
     /** The named refusal both destroy legs raise, saying what could not be asked and what the operator can do about it -
-     *  never a reason to proceed. A destroy is the irreversible act (the earlier rule, per version), so "I could not tell
+     *  never a reason to proceed. A destroy is the irreversible act, decided per version, so "I could not tell
      *  which pointers this version occupies" is answered by touching nothing at all. */
     private static IOException refusal(String verb, String ecosystem, String coordinate, String version) {
         return new IOException(verb + " of " + ecosystem + " " + coordinate + ":" + version + " is refused: no "
@@ -166,9 +166,9 @@ final class InventoryEviction {
         // worse, silently auto-pin a later republish of the same version with no human decision behind it.
         deleteIfPresent(StoreRepositoryInventory.pinnedKey(
                 release.ecosystem(), release.coordinate(), release.version()));
-        // The version's consolidated metadata document goes with the artifact it describes: as of it carries the
+        // The version's consolidated metadata document goes with the artifact it describes: it carries the
         // licenses section (findings/publish-facts/health fold in with later cutovers), so evicting the version removes
-        // the whole per-version document - the eviction collapse the plan completes in. The licenses/ sidecar a
+        // the whole per-version document. The licenses/ sidecar a
         // no-persistence-module deployment writes instead is removed too, or it would dangle after the meta document
         // is gone.
         boolean versionDocGone = deleteIfPresent(
@@ -193,7 +193,7 @@ final class InventoryEviction {
         // The maintainer-health record is a per-COORDINATE fact (version-independent), so unlike the per-version
         // findings document it is reclaimed only when the coordinate's LAST published version goes. The version's
         // published/ marker was deleted just above, so an empty version listing means this eviction removed the last
-        // version. As of health lives in the @coordinate metadata document's health section, so the last-version
+        // version. Health lives in the @coordinate metadata document's health section, so the last-version
         // eviction deletes that document; the health/ sidecar a no-persistence-module deployment writes instead is
         // removed too, or it would dangle after the @coordinate document is gone (the same key shape the health SPI contract
         // fixes, so this works whether or not the health module is installed - an absent-key delete is a no-op). A
@@ -253,14 +253,14 @@ final class InventoryEviction {
         }
     }
 
-    /** The sections a cache-reclaim retains when it discards a re-heatable fallback blob (§6.2 dividend): the
+    /** The sections a cache-reclaim retains when it discards a re-heatable fallback blob: the
      *  {@code origin} trail ("where the bytes came from") and its sibling {@code verdict} record ("what the screen
      *  decided about digest D"). The {@code verdict} tag is owned by the gateway's {@code VerdictSection}; it is named
      *  here by its stable wire tag, since the inventory module does not depend on the gateway. */
     private static final Set<String> RETAINED_ON_RECLAIM = Set.of(OriginSection.TAG, "verdict");
 
     /**
-     * Reclaim a <em>re-heatable cached fallback</em> blob under quota/disk pressure (§6.2 eviction dividend):
+     * Reclaim a <em>re-heatable cached fallback</em> blob under quota/disk pressure:
      * discard the bytes (unpublish every pointer the version occupies so the now-unreferenced blob is garbage-collected)
      * but <b>retain the {@code origin} and {@code verdict} sections</b> of the meta document - the "durable records
      * beside transient bytes" spine, so audit survives the eviction and a pull-through can re-heat the entry (§5). The
@@ -280,7 +280,7 @@ final class InventoryEviction {
                 build.jenesis.repository.metadata.MetadataDocument.read(currentDoc.get().content());
         Optional<build.jenesis.repository.metadata.Section> origin = document.section(OriginSection.TAG);
         if (OriginSection.hasLocalUpload(origin)) {
-            return false;                       // system-of-record: a local-upload blob is never cache-evicted (§6.2)
+            return false;                       // system-of-record: a local-upload blob is never cache-evicted
         }
         if (!OriginSection.reheatableFallbackOnly(origin)) {
             return false;                       // nothing re-heatable recorded - do not reclaim a blob we cannot classify

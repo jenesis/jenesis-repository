@@ -48,7 +48,7 @@ public class SettingsAdmin {
     /** How long a computed orphaned-data snapshot is reused before the multi-tenant store walk is repeated. The
      *  diagnostic's walk scans every tenant's declared key-spaces for each not-installed module (potentially the
      *  whole store), so repeating it on every modules-screen render would make the reader pay a deployment-wide scan
-     *  (PRINCIPLES §7 read-first). The diagnostic tolerates a short staleness by its own contract - it only counts,
+     *  (§7 read-first). The diagnostic tolerates a short staleness by its own contract - it only counts,
      *  never acts, and reclaiming is an explicit operator purge - so the snapshot is memoised for this window and the
      *  walk runs at most once per window however often the screen is rendered. */
     private static final Duration ORPHAN_TTL = Duration.ofSeconds(60);
@@ -57,7 +57,7 @@ public class SettingsAdmin {
      * How long a collected {@link CollectedPosture} is reused before the effective-settings read behind it is
      * repeated. The header badge and the Security-posture screen now read <em>the same collected report</em>
      * rather than two differently-derived numbers, which means the collection rides <em>every</em> console view -
-     * and a per-view read of the deployment's and the tenant's settings documents is exactly the cost PRINCIPLES
+     * and a per-view read of the deployment's and the tenant's settings documents is exactly the cost
      * &sect;7 keeps off a reader. So it is collected at most once per tenant per window however often a page renders,
      * and the window is short (versus {@link #ORPHAN_TTL}'s minute) because this one is not a store walk but a
      * handful of small documents, and because posture is what an operator watches while changing settings.
@@ -655,7 +655,7 @@ public class SettingsAdmin {
     }
 
     /** Whether a repository is defined at runtime as a hardened proxy ({@code proxy <url> harden}) - an
-     *  untrusted-upstream leg that spools and fully screens every fetched body before releasing a byte (EPIC 23). The
+     *  untrusted-upstream leg that spools and fully screens every fetched body before releasing a byte. The
      *  console reads this to badge such repositories in the list and gate the hardened verdict/refusal/drift panel. Only
      *  the runtime {@code repositories.<name>} definitions are visible to the console (the same set {@link #repositories}
      *  lists); a repository defined only in the server's file/env config, or one that is hosted, a group or a plain
@@ -714,7 +714,7 @@ public class SettingsAdmin {
                 case RepositoryDefinition.Source.Repository repository ->
                         fallbacks.add(new FallbackBadge(false, repository.name(), false, "", repository.name()));
                 case RepositoryDefinition.Source.DnsDirectory dns ->
-                        // EPIC 30 DF-6: the DNS directory leg (a `fallback dns redirect`) - the upstream is resolved
+                        // The DNS directory leg (a `fallback dns redirect`) - the upstream is resolved
                         // per request by the DNS walk, so the badge names the `dns` source, stores nothing, and is not a
                         // repository-name view.
                         fallbacks.add(new FallbackBadge(false, "dns", false,
@@ -725,7 +725,7 @@ public class SettingsAdmin {
                 warnings(definition, specification));
     }
 
-    /** The valid-but-risky warnings a parsed definition carries (item 4): the mixed-strength flag (a
+    /** The valid-but-risky warnings a parsed definition carries: the mixed-strength flag (a
      *  hardened upstream beside a weaker one, via the {@link RepositoryDefinition#mixedStrength}
      *  classifier), an {@code unscreened} upstream, and a plaintext ({@code http://}) upstream (via the 
      *  {@link RepositoryDefinition#plaintextUpstream} classifier). Each is a non-blocking notice - the same loud
@@ -798,7 +798,7 @@ public class SettingsAdmin {
         if (!NAME.matcher(name).matches()) {
             throw new IllegalArgumentException("Invalid repository name '" + name + "'.");
         }
-        // Write-time validation (PRINCIPLES §9): run the SAME parser the boot sweep uses BEFORE the
+        // Write-time validation (§9): run the SAME parser the boot sweep uses BEFORE the
         // definition is stored, so a broken definition never reaches the store. A parse failure is refused LOUD and
         // NAMED - the repository name, what is wrong, and the fix - mirroring LiveConfig.sweepDefinitions so the
         // console write-surface refuses exactly what the boot sweep would. A valid-but-risky definition (unscreened,
@@ -813,7 +813,7 @@ public class SettingsAdmin {
                     + "[nocache|harden|unscreened], or a legacy hosted/proxy/group spelling), or remove it - a "
                     + "repository definition that cannot be parsed is refused rather than stored.", invalid);
         }
-        // a plaintext upstream is refused rather than stored with a console notice, exactly as the API write
+        // A plaintext upstream is refused rather than stored with a console notice, exactly as the API write
         // surface and the boot sweep refuse it. The console notice stays for a deployment that took the dial.
         String refused = RepositoryDefinition.upstreamRefusal(definition, allowInternal());
         if (refused != null) {
@@ -960,7 +960,7 @@ public class SettingsAdmin {
      * One collected security-posture view and the instant it was collected - what both the Security-posture screen
      * renders and the header badge counts, handed out as one value so the two can never be reading different
      * collections. {@code collectedAt} is the report's own as-of: the collection is memoised for
-     * {@link #POSTURE_TTL} so the badge does not make every console view pay a settings read, and PRINCIPLES &sect;10
+     * {@link #POSTURE_TTL} so the badge does not make every console view pay a settings read, and &sect;10
      * asks that a derived view state its freshness rather than pass a memoised number off as a live one.
      */
     public record CollectedPosture(ScopedPosture posture, Instant collectedAt) {

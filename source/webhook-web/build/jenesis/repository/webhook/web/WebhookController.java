@@ -63,7 +63,7 @@ public class WebhookController {
         if (tenant == null) {
             return null;
         }
-        // P-Q (plan §8 Q3/Q4): served-view parity - a withheld coordinate's name/path must not be disclosed on this
+        // Served-view parity: a withheld coordinate's name/path must not be disclosed on this
         // manage:read outbox listing, exactly as the sibling manage:read served-listings (/api/lifecycle,
         // /api/dependents) screen through the same seam at the same scope. Each parked/queued entry's coordinate:version
         // is routed through inventory.disclosableDisplay under HIDE_WITHHELD (the membership policy, resolving the

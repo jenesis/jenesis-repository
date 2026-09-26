@@ -165,7 +165,7 @@ public final class RecordedFeed implements AutoCloseable {
 
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
-            // A bounded read, not a slurp (PRINCIPLES §1): what arrives here is a feed's own query body - a JSON
+            // A bounded read, not a slurp (§1): what arrives here is a feed's own query body - a JSON
             // document of a few hundred bytes - and reading it whole is what lets a fixture assert the vendor's
             // spelling of an ecosystem reached the wire. Past the cap the recording refuses rather than buffering,
             // because a request body that large means this harness is being used for something it is not.

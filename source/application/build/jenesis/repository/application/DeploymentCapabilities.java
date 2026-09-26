@@ -25,13 +25,13 @@ import build.jenesis.repository.server.spi.CapabilityContributor;
  * contributes an empty map, so the base map is served byte-for-byte unchanged - the SPI's no-op-by-absence
  * contract.
  *
- * <p><b>The merge reports a collision now, so this side no longer refuses one</b> (then /). The free
+ * <p><b>The merge reports a collision now, so this side no longer refuses one</b>. The free
  * {@link CapabilityContributor#merge} used to fold a contribution in with {@code putIfAbsent}: a base key
  * <em>always</em> won, which protects the product's own flags but dropped the contributed value with nothing
- * logged, nothing thrown and nothing visible in the served body. an earlier change closed that from this side, by throwing at the
- * point the contribution is built. Free core 0.10.0 closed it properly and at the right end: the merge now
- * <em>names</em> every entry it refuses, in the returned {@link CapabilityContributor.Merged} report and in the served
- * body under {@value CapabilityContributor#CONFLICTS_KEY}.
+ * logged, nothing thrown and nothing visible in the served body. This class first closed that from its own side, by
+ * throwing at the point the contribution is built. The free core then closed it properly and at the right end: the
+ * merge now <em>names</em> every entry it refuses, in the returned {@link CapabilityContributor.Merged} report and in
+ * the served body under {@value CapabilityContributor#CONFLICTS_KEY}.
  *
  * <p>So the throw is gone, and its removal is a <em>fix</em> rather than a relaxation. It had become both redundant
  * and <b>coarser than the report it stood in for</b>: an exception out of {@link #capabilities} is contained by the
@@ -57,7 +57,7 @@ public final class DeploymentCapabilities implements CapabilityContributor {
 
     /**
      * The keys the {@code RepositoryController.capabilities} puts in its base map before merging contributions.
-     * A contribution may only <em>extend</em> that map: on a conflict the base wins - reported, since free 0.10.0, in
+     * A contribution may only <em>extend</em> that map: on a conflict the base wins - reported in
      * {@link CapabilityContributor.Merged#conflicts()} and under {@value CapabilityContributor#CONFLICTS_KEY} - so a
      * contributed key spelled like one of these is not served. Kept live by
      * {@code CoreControllerSplitE2ETest.the_console_shell_and_deployment_info_reads_serve},
@@ -93,7 +93,7 @@ public final class DeploymentCapabilities implements CapabilityContributor {
      * answer means the same (the SPI's absence sentinel).
      *
      * <p>It deliberately does <b>not</b> refuse a key {@link #FREE_BASE_KEYS the base map already owns} any more.
-     * Free core 0.10.0's merge names every refused entry in its {@link CapabilityContributor.Merged} report and in the
+     * The free core's merge names every refused entry in its {@link CapabilityContributor.Merged} report and in the
      * served body, so the silence this check existed to break is gone - and throwing here is strictly worse than the
      * report, because the merge contains the exception and drops this contribution WHOLE where the rule drops the
      * one colliding key. The rule itself is unchanged and is now enforced where a naming mistake can be fixed for

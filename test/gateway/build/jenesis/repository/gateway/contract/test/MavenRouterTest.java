@@ -70,7 +70,7 @@ public class MavenRouterTest {
         assertThat(get("central", JAR)).as("the proxy cached the jar").isEqualTo("the dependency jar");
         assertThat(fetches.get()).as("served from the cache").isEqualTo(4);
 
-        assertThat(router.writeTarget("public")).as("a group is read-only (EPIC 25 §2.3, no push-delegation)").isNull();
+        assertThat(router.writeTarget("public")).as("a group is read-only (no push-delegation)").isNull();
     }
 
     private String get(String repository, String path) throws IOException {

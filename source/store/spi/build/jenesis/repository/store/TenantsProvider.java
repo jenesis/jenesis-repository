@@ -91,7 +91,7 @@ public interface TenantsProvider {
      * Whether a tenants module is installed and not switched off.
      *
      * <p><b>No production surface reads this</b>, and this javadoc asserted that a console gated its tenant management
-     * on it for as long as none did -. The tenant kernel resolves a directory through
+     * on it for as long as none did. The tenant kernel resolves a directory through
      * {@link #resolve(ArtifactStore, UnaryOperator, String) resolve}, and the console's tenancy chrome follows the
      * resolved directory: with none resolved the directory is the fixed single tenant and the chrome is hidden,
      * which is the same decision taken one layer lower and against the stronger question.

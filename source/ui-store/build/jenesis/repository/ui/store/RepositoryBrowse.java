@@ -269,7 +269,7 @@ public class RepositoryBrowse extends TenantScope {
         // folder children unconditionally, suppresses the reserved quarantine review subtree at the root, and drops any
         // non-folder leaf a GET would 404 (withheld, retracted, or a blob a garbage collection reclaimed) - the same WG
         // serve-parity screen the retired deployment-wide browse applied, so this browse discloses exactly the paths a GET would.
-        // This replaces the former per-leaf located() screen (the Audit-22 fix) and gains the paging bound the unbounded
+        // This replaces the former per-leaf located() screen and gains the paging bound the unbounded
         // children(prefix) it called lacked - same disclosure result, now heap-bounded and routed through the one seam.
         StoreRepositoryInventory.ChildPage page =
                 inventory.children(safe, MAX_CHILDREN, ServableNames.Policy.HIDE_WITHHELD_AND_GONE);
@@ -429,7 +429,7 @@ public class RepositoryBrowse extends TenantScope {
         Set<String> seen = new LinkedHashSet<>();
         try {
             // (1) The format-coordinate document: a hand upload records its local-upload origin here, keyed by the
-            // coordinate the owning format describes for the path (§6.2) - the key the published/licenses sections and
+            // coordinate the owning format describes for the path - the key the published/licenses sections and
             // browse.artifact resolve the path to.
             Optional<ArtifactDescriptor> descriptor = new StoreRepositoryInventory(store).describe(safe);
             String ecosystem = descriptor.map(ArtifactDescriptor::ecosystem).filter(Objects::nonNull).orElse("");
@@ -442,7 +442,7 @@ public class RepositoryBrowse extends TenantScope {
             // (one artifact, one origin document, and it is the format-coordinate one above). Still read,
             // for the two cases where it is the only key there is: a path no installed format describes - where
             // HardenedScreen.originCoordinate falls back to this same derivation, so this IS where the row is - and a
-            // no-store fallback's row, which survives durably beside transient bytes that never landed (§6.2).
+            // no-store fallback's row, which survives durably beside transient bytes that never landed.
             // Deduped when the two derivations coincide, which they do for exactly those paths.
             HardenedScreen.Coordinate viaPath = HardenedScreen.coordinate(safe);
             if (!(viaPath.ecosystem().equals(ecosystem) && viaPath.coordinate().equals(coordinate)

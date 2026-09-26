@@ -88,7 +88,7 @@ final class MavenImportFixture implements ImportFixture {
     @Override
     public ScriptedUpstream failing(int status) {
         // Both enumeration surfaces refuse: the root autoindex and the repository index this connector falls back to.
-        // Until that pair collapsed into "the server exposes no directory listing" whatever the reason, so an
+        // That pair once collapsed into "the server exposes no directory listing" whatever the reason, so an
         // expired credential read as a misconfigured autoindex.
         return ScriptedUpstream.incumbent().refusing(ROOT, status).refusing(INDEX_PROBE, status);
     }

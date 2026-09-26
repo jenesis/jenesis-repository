@@ -11,7 +11,7 @@ import static build.jenesis.repository.gateway.testkit.FormatDrive.Call;
 import static build.jenesis.repository.gateway.testkit.FormatDrive.format;
 
 /**
- * The Audit-27 A3-F3 DoS fix for {@code HuggingFaceFormat.resolveRevision}: it is called from the hot single-file
+ * The denial-of-service fix for {@code HuggingFaceFormat.resolveRevision}: it is called from the hot single-file
  * download ({@code file()}) on EVERY read, and its only question of a revision is "does it hold any file?". The former
  * {@code store.list(base + "/revs/<rev>/files").isEmpty()} materialised the revision's ENTIRE (attacker-publishable)
  * file listing just to test emptiness, so a revision with many thousands of files heap-blew on each download. The fix
@@ -118,7 +118,7 @@ public class HuggingFaceResolveRevisionProbeTest {
         public List<String> list(String prefix) {
             if (forbidFileList && prefix.endsWith("/files")) {
                 throw new AssertionError("resolveRevision must not materialise a revision's whole file listing to "
-                        + "test existence - it must page one child (Audit-27 A3-F3 DoS fix): list(\"" + prefix + "\")");
+                        + "test existence - it must page one child (the denial-of-service fix): list(\"" + prefix + "\")");
             }
             return delegate.list(prefix);
         }

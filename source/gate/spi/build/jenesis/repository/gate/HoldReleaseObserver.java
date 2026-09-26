@@ -39,7 +39,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <h2>Contract</h2>
  *
  * <p>What the code honours today, read out of {@code HoldLifecycle} rather than out of an intention - the prose above
- * asserted the <em>opposite</em> ordering until corrected it, and believing it would have justified migrating
+ * asserted the <em>opposite</em> ordering until it was corrected, and believing it would have justified migrating
  * this role onto a contained after-commit delivery. Nine of the clauses below are executable:
  * {@code store.testkit}'s {@code PublicationHookContract} drives them through five release fixtures in
  * {@code test/hooks}, and each such clause names the property that proves it.
@@ -59,7 +59,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     Proven by {@code A_RELEASE_HOOK_IS_NOT_A_CONTAINED_PUBLICATION_OBSERVER} and
  *     {@code THE_ROLE_IS_DERIVED_FROM_THE_INSTANCE}, which derive the role from the instance a deployment actually
  *     resolves rather than from anything a fixture declares. <b>The role must never be moved onto a deferred or
- *     outbox-backed delivery</b> (&sect;3.3): containment would let a release become visible with its override
+ *     outbox-backed delivery</b>: containment would let a release become visible with its override
  *     marker unwritten, which is exactly the state the kev-/license-/reachability-enforce sweeps re-hold.</li>
  * <li><b>Thread-safety.</b> A hook is instantiated per fan-out and used by the one thread that drives that fan-out, so
  *     an implementation need not be thread-safe - but it must hold no mutable instance state, because it is never the
@@ -237,20 +237,19 @@ public interface HoldReleaseObserver {
      *
      * <p><b>The durable leg no longer needs an installed format.</b> It used to: with the owning format's
      * module off the graph nothing could turn the request path into a coordinate, so this answered {@code false} for a
-     * hold that was standing - the same dependence left behind. {@link HoldRecords#heldKinds(ArtifactStore,
-     * String)} now falls back to the durable {@code subjects/} record the hold wrote when it was placed, so an
-     * uninstalled format costs this guard nothing. The <em>provider</em> leg keeps the describe-dependence, because
-     * every observer's {@link #holds} is path-keyed and resolves its own coordinate; it only ever widens the answer,
-     * so what it loses is coverage of a hook keying on state other than its own record, never a record already found
-     * above. A path nothing can place at all - no format, no recorded subject - still answers {@code false} from both
-     * legs, and that answer is <em>"nothing could be asked"</em> which a consumer must never spend as <em>"no other
-     * kind holds"</em>: judged at the consumer, per site, exactly as {@link #anyHolds}' is, where
-     * {@code ComplianceScreen.sweepHeld} treats an unplaceable path as sweep-owned so an accepted re-publish cannot
-     * launder a hold, and the KEV auto-release refuses to release at all rather than release unguarded. An automated
-     * release site that HAS the coordinate - which every enforcement sweep does, since its records are
-     * coordinate-keyed - should ask
-     * {@link #heldByAnotherKind(ArtifactStore, String, String, String, Collection, String)} instead, whose durable leg
-     * needs no format at all.
+     * hold that was standing - the same dependence the hold records once had. {@link
+     * HoldRecords#heldKinds(ArtifactStore, String)} now falls back to the durable {@code subjects/} record the hold
+     * wrote when it was placed, so an uninstalled format costs this guard nothing. The <em>provider</em> leg keeps the
+     * describe-dependence, because every observer's {@link #holds} is path-keyed and resolves its own coordinate; it
+     * only ever widens the answer, so what it loses is coverage of a hook keying on state other than its own record,
+     * never a record already found above. A path nothing can place at all - no format, no recorded subject - still
+     * answers {@code false} from both legs, and that answer is <em>"nothing could be asked"</em> which a consumer must
+     * never spend as <em>"no other kind holds"</em>: judged at the consumer, per site, exactly as {@link #anyHolds}'
+     * is, where {@code ComplianceScreen.sweepHeld} treats an unplaceable path as sweep-owned so an accepted re-publish
+     * cannot launder a hold, and the KEV auto-release refuses to release at all rather than release unguarded. An
+     * automated release site that HAS the coordinate - which every enforcement sweep does, since its records are
+     * coordinate-keyed - should ask {@link #heldByAnotherKind(ArtifactStore, String, String, String, Collection,
+     * String)} instead, whose durable leg needs no format at all.
      */
     static boolean heldByAnotherKind(ArtifactStore store, String path, String releasingKind) throws IOException {
         return heldByAnotherKind(store, path, releasingKind, discovered());

@@ -17,7 +17,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * item 3 at the model level: the console reads the {@code origin} acquisition rows (the earlier {@link OriginSection})
+ * The origin panel at the model level: the console reads the {@code origin} acquisition rows ({@link OriginSection})
  * of a published coordinate version from its consolidated metadata document and surfaces them on the artifact detail and
  * through the origin API - a small bounded read of the one section, never the artifact body. A local-upload row reads as
  * "uploaded"; a fallback row reads as "via fallback X" with its store/screen policy and no-copy {@code serves} counter.

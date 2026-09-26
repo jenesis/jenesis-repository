@@ -4,7 +4,7 @@ import module java.base;
 import module tools.jackson.databind;
 
 /**
- * One contributor's tagged section envelope inside the consolidated document (§5.1): the uniform wrapper every
+ * One contributor's tagged section envelope inside the consolidated document: the uniform wrapper every
  * subsection shares - {@code schema} (the contributor-owned section version), {@code updated} (this section's own
  * freshness instant, replacing the scattered per-subsystem {@code lastScanned} stamps), {@code state}
  * ({@link State#DERIVED}/{@link State#EMPTY}/{@link State#ERROR}), an optional {@link SectionError} (present iff

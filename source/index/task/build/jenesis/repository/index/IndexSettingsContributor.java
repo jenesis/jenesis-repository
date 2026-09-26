@@ -10,7 +10,7 @@ import build.jenesis.repository.settings.SettingsContributor;
  *
  * <p>The two cadence entries render their key, default and (for the rebase) its maximum straight off
  * {@link PublishedIndexTaskProvider}'s {@code IntervalSetting} constants, so the catalogue and the code cannot drift.
- * The rebase's maximum is stated in its description for the same reason exists: an operator who types a
+ * The rebase's maximum is stated in its description because an operator who types a
  * ten-year rebase interval learns from a server log they may never read that it was capped, and the point of
  * configuration is where that belongs.
  */

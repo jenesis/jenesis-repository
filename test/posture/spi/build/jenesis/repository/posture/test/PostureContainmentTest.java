@@ -115,7 +115,7 @@ class PostureContainmentTest {
     }
 
     /**
-     * a clash between one tenant's rows is that tenant's row, not a deployment-wide row carrying its name.
+     * A clash between one tenant's rows is that tenant's row, not a deployment-wide row carrying its name.
      * Before this landed, {@code collisions} keyed a tenant row as {@code "<id> (tenant <name>)"} and interpolated
      * that key into a {@code SecurityAdvisory.deployment(...)} message - so a fan-out raising rows for two tenants
      * put one tenant's name and one advisory id into the deployment-wide row that {@code ScopedPosture} and

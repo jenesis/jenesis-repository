@@ -7,8 +7,8 @@ import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * A stand-in for the blobs-namespace format whose served blobs are reachable only through a stored <em>document</em> -
- * OCI's shape, kept format-neutral here so the collector's half of is asserted without the gc tests taking a
- * dependency on a format plugin or a JSON parser. It resolves the two key faces OCI has:
+ * OCI's shape, kept format-neutral here so the collector's half of keeping an image's blobs alive is asserted without
+ * the gc tests taking a dependency on a format plugin or a JSON parser. It resolves the two key faces OCI has:
  *
  * <ul>
  *   <li>{@code oci/<name>/tags/<tag>} - a pointer whose {@code sha256:<hex>} body names the document;</li>

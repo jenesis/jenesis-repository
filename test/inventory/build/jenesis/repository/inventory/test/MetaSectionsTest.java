@@ -18,7 +18,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The per-coordinate rolled-up section views of the consolidated {@code meta} document (EPIC 20): the {@code published}
+ * The per-coordinate rolled-up section views of the consolidated {@code meta} document: the {@code published}
  * section carries the publish facts a pin preserves, the {@code provenance} section carries the attestation summary and
  * its non-blocking WARNING signal on an unverified verdict, and the {@code licenses} section carries the declared set a
  * sibling publish only ever unions into (never replaces), with the load-bearing absent-versus-present-but-empty

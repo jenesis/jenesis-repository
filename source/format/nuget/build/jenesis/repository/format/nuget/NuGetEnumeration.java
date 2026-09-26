@@ -29,7 +29,7 @@ public final class NuGetEnumeration {
     /**
      * @param allowInternal the deployment's {@link build.jenesis.repository.blobs.ProxyLeg#ALLOW_INTERNAL} dial - the
      *                      same one the proxy leg reads, so a walk and a pull-through of the same advertised {@code
-     *                      @id} cannot answer differently, and since the earlier work/the one screen they both call
+     *                      @id} cannot answer differently, and the one screen they both call
      *                      is {@link build.jenesis.repository.blobs.OutboundTargets}. Off means a cross-origin hop must
      *                      be {@code https} and public; one on the submitted upstream's own ORIGIN (scheme and
      *                      authority) is operator-trusted either way, because it reaches no host, port or scheme the

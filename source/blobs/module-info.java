@@ -8,7 +8,7 @@
  * ({@link build.jenesis.repository.blobs.Keys#unsafePath}) is applied once for all of them rather than copied into
  * each leg - both live here because this is the one module every format module already requires. The same
  * argument puts {@link build.jenesis.repository.blobs.OutboundTargets} here: the screen a leg owes the
- * <em>outbound</em> URL it then fetches, which found written out seven times in two contradictory policies.
+ * <em>outbound</em> URL it then fetches, which had been written out seven times in two contradictory policies.
  * Pure JDK beyond the format and store SPIs and the shared settings guard the outbound screen delegates to.
  *
  * @jenesis.release 25
@@ -17,7 +17,8 @@
  */
 module build.jenesis.repository.blobs {
     // ProxyRelay's enumeration refusal says in the log which upstream target could not be asked and how, beside the
-    // 502 it answers the client - the operator-visible half of the earlier split, which a status code alone cannot carry.
+    // 502 it answers the client - the operator-visible half of the unreachable-versus-absent split, which a status code
+    // alone cannot carry.
     requires org.slf4j;
     // Transitive because BlobRoots EXTENDS BlobReferences: the supertype is part of this module's API, so every
     // module that reads a BlobRoots - to call blobRoots(), or to hand a format to the collector as a lender -

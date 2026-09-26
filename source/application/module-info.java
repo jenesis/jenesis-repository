@@ -44,7 +44,7 @@ open module build.jenesis.repository.application {
     // bean override).
     provides build.jenesis.repository.server.spi.CapabilityContributor
             with build.jenesis.repository.application.DeploymentCapabilities;
-    // claim the free-core import edge on module presence, so the free ImportEdgeController (conditionally
+    // Claim the free-core import edge on module presence, so the free ImportEdgeController (conditionally
     // registered by FreeImportEdgeCondition when no provider is installed) is never created and this composition's
     // tenant-scoped ImportController is the sole import edge - retiring the WebMvcRegistrations mapping-suppression
     // stopgap in favour of the free ImportEdgeProvider SPI.
@@ -79,15 +79,15 @@ open module build.jenesis.repository.application {
     requires spring.boot.starter.security;
     exports build.jenesis.repository.application to build.jenesis.repository.bundle.full,
             build.jenesis.repository.server.kernel.test, build.jenesis.repository.degraded.test,
-            // the server-module contract suite drives the real deferred import selector - the one place the
+            // The server-module contract suite drives the real deferred import selector - the one place the
             // "configured off degrades exactly like an absent module" contract is observable - over every declared
             // ServerModuleProvider. A test-only export, like the three above it.
-            // the ecosystem release-confidence harness boots this application (and not the free core's) so
+            // The ecosystem release-confidence harness boots this application (and not the free core's) so
             // the compliance, settings, lifecycle and maintenance wiring the feature matrix drives is present. It is
             // test support that no runtime module may require - EcosystemRunGraphTest enforces that - so the export
             // stays qualified rather than opening the composition root to the product.
             build.jenesis.repository.ecosystem.run,
-            // the Keycloak rig boots this application against a real realm; it left test/server for
+            // The Keycloak rig boots this application against a real realm; it left test/server for
             // test/server-docker so a change anywhere else stops paying for a container start.
             build.jenesis.repository.server.docker.test,
             // the publish cost probe boots the whole bundle in process over a tracing store and prints what one

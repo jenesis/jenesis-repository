@@ -293,7 +293,7 @@ class PublicationHookCensusTest {
                 .containsExactlyInAnyOrderElementsOf(EnumSet.allOf(Delivery.class).stream()
                         .filter(Delivery::supported).collect(Collectors.toSet()));
         assertThat(Delivery.COMMIT_COUPLED_AT_LEAST_ONCE.supported())
-                .as("and the unsupported class stays unsupported until proves a pre-commit intent machine at "
+                .as("and the unsupported class stays unsupported until a pre-commit intent machine is proven at "
                         + "every crash point - writing an outbox inside an after-commit callback is not that")
                 .isFalse();
     }
@@ -302,7 +302,7 @@ class PublicationHookCensusTest {
 
     /**
      * Which arranged commit choreography falsifies each clause that is about {@link Publication} rather than about a
-     * hook. This map is the answer to the finding recorded and was raised to close: twenty of the
+     * hook. This map answers the finding it was built to close: twenty of the
      * kit's forty-six clauses are the choreography's, the fixture's hook is a bystander in them, and until now
      * <b>the falsification leg proved things about implementations and said nothing about the choreography they plug
      * into</b> - which is where several of this plan's crash-window claims live.
@@ -317,7 +317,7 @@ class PublicationHookCensusTest {
      */
 
     /**
-     * The contract properties nothing this kit can substitute falsifies - <b>one, since the earlier work</b>, and it is the one
+     * The contract properties nothing this kit can substitute falsifies - <b>one</b>, and it is the one
      * where there is no observable to arrange because nothing the kit hands {@code Publication} is ever invoked.
      *
      * <p>The list used to hold twenty, all with the same reason: the clause is about {@link Publication}'s own commit
@@ -422,7 +422,7 @@ class PublicationHookCensusTest {
         choreography.addAll(PublicationHookContract.unfalsifiable().keySet());
         assertThat(undeclared)
                 .as("a property that names no mutation is a property nothing proves could have said otherwise - the "
-                        + "vacuity exists to close. It may only be left undeclared when the clause is about "
+                        + "vacuity the mutations exist to close. It may only be left undeclared when the clause is about "
                         + "Publication rather than about the hook, and then it owes either an arranged choreography "
                         + "that falsifies it (PublicationHookContract.choreography()) or a reason on the reviewed PublicationHookContract.unfalsifiable() list.")
                 .isEqualTo(choreography);
@@ -435,11 +435,12 @@ class PublicationHookCensusTest {
 
     @Test
     void every_choreography_clause_is_falsified_by_the_arrangement_it_names() throws Exception {
-        // the earlier leg. Each clause about Publication's own commit sequence is re-run under the arranged choreography
-        // it names - a chain that stops at the first REJECT, a committed that skips the neutral verdict, a review
-        // pointer that is gone when committed fires - and must say otherwise. It is run for EVERY fixture the clause
-        // binds to, not for one representative, because the checks divide the interceptor clauses between three screen
-        // archetypes and a pairing that only bites for one of them is a pairing that covers one third of the kit.
+        // The choreography leg. Each clause about Publication's own commit sequence is re-run under the arranged
+        // choreography it names - a chain that stops at the first REJECT, a committed that skips the neutral verdict, a
+        // review pointer that is gone when committed fires - and must say otherwise. It is run for EVERY fixture the
+        // clause binds to, not for one representative, because the checks divide the interceptor clauses between three
+        // screen archetypes and a pairing that only bites for one of them is a pairing that covers one third of the
+        // kit.
         List<String> survived = new ArrayList<>();
         for (PublicationHookFixture fixture : FIXTURES) {
             for (PublicationHookContract.Check check : PublicationHookContract.checks(fixture)) {
@@ -555,7 +556,7 @@ class PublicationHookCensusTest {
 
     /**
      * <b>The kit's own lens, executed rather than declared.</b> Every check of every fixture is run once more
-     * against a hook that is a no-op from end to end - the shape every hand-run mutation pass in this plan has found -
+     * against a hook that is a no-op from end to end - the shape every hand-run mutation pass has found -
      * and the survivors are required to be covered some other way: by a <em>targeted</em> mutation this fixture runs,
      * by one of the two reviewed lists above, or - where a targeted mutation exists but the driver cannot put it in
      * front of the hook - by the pinned count of those pairs.
@@ -597,7 +598,7 @@ class PublicationHookCensusTest {
         assertThat(unguarded)
                 .as("a hook that does nothing at all passes these checks, and no targeted mutation catches them "
                         + "either - so nothing in the kit distinguishes a compliant hook from one that never ran. "
-                        + "That is exactly the shape hit by hand. Give the property a mutation that removes "
+                        + "That is exactly the shape once hit by hand. Give the property a mutation that removes "
                         + "the behaviour it is really about, or argue the pair onto PublicationHookContract.unfalsifiable() / "
                         + "NOT_THIS_HOOKS_TO_FALSIFY.%n%s", String.join(System.lineSeparator(), unguarded))
                 .isEmpty();

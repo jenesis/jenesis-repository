@@ -17,13 +17,13 @@ import build.jenesis.repository.store.Retries;
  * retry, so disjoint-section writers (a publish, an advisory sweep, an AI labeler) converge on the union of their
  * sections instead of losing an update. This generalises {@code StoreFindings.mutate}/{@code Document} to the
  * section level: the mutation sees only the sections it names, every other section is carried through the CAS
- * commit verbatim (§5.2), and a whole batch of sections commits in one CAS cycle (§4a).
+ * commit verbatim, and a whole batch of sections commits in one CAS cycle.
  *
- * <p>The retry bound is 5 (raised from the findings ledger's 3, §5.2), since one CAS token now covers every
+ * <p>The retry bound is 5 (raised from the findings ledger's 3), since one CAS token now covers every
  * subsystem writing the coordinate. The read is total - a torn or foreign object reads as an empty document,
  * never throwing - and the format guard is loud: a mutation of a document a newer node wrote (a higher
  * {@code format}) fails rather than downgrade-rewriting the envelope. Doc size and CAS-retry counts are reported
- * through {@link MetadataMetrics} (registry-free), including the §7.3 soft-size WARNING for a pathologically large
+ * through {@link MetadataMetrics} (registry-free), including the soft-size WARNING for a pathologically large
  * document.
  */
 public final class StoreMetadata implements MetadataStore {

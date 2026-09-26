@@ -75,7 +75,7 @@ public interface WalkProvider {
      * Whether a walk implementation is installed and not switched off.
      *
      * <p><b>No production surface reads this</b>, and this javadoc asserted that a console and a walk-riding
-     * maintenance surface gated on it for as long as neither did -. The reader that exists is the reclamation
+     * maintenance surface gated on it for as long as neither did. The reader that exists is the reclamation
      * module's {@code CapabilityContributor}, which reports the {@code walk} flag from
      * {@link #resolve resolve(config).isPresent()}, and every walk-riding pass resolves the walk itself.
      *

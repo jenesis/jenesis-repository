@@ -18,7 +18,7 @@ public record RepositoryEvent(EventType type, String ecosystem, String coordinat
     public RepositoryEvent {
         // The type is what every sink dispatches on and what emit's own diagnostic renders, so a null one would
         // surface as a NullPointerException from inside the handler that exists to report failures - the containment
-        // defeated from within, which is the shape closed for a throwing name(). It is a producer bug either
+        // defeated from within, which is the shape already closed for a throwing name(). It is a producer bug either
         // way, so it fails here, at construction, where the producer can still be named by the stack.
         Objects.requireNonNull(type, "type");
         detail = detail == null ? Map.of() : Map.copyOf(detail);
@@ -82,7 +82,7 @@ public record RepositoryEvent(EventType type, String ecosystem, String coordinat
     }
 
     /** A previously-serving coordinate at {@code path} removed - the delete counterpart of {@link #publish}. A
-     *  CDN-origin edge cache (EPIC 29 RD-6) subscribes to this to purge the withdrawn or retro-screened artifact
+     *  CDN-origin edge cache subscribes to this to purge the withdrawn or retro-screened artifact
      *  from the edge, since a redirect target that a serve plane just stopped honouring must not keep serving from a
      *  cache. Fired from the store's after-delete hook, so it covers a reviewer discard's pointer removal, a
      *  retention sweep and a retro-screening withhold alike. */

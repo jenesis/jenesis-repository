@@ -11,11 +11,11 @@ import build.jenesis.repository.store.ArtifactStore;
  * live beside the repositories (the reserved dot-spaces).
  *
  * <p>It is deliberately the same lookup {@link RepositoryContext#config()} answers, resolved for the same tenant: the
- * two hooks differ in <em>which store</em> they sweep, never in which settings they can see. Until this
- * interface carried no lookup at all, so a tenant-hook pass had to read its dials from whatever the <em>provider</em>
- * captured at construction - deployment-global - and a tenant override silently no-opped for every per-tenant sweep
- * while its per-repository siblings honoured one. That is backwards for a product whose storage model is per-tenant
- * by default.
+ * two hooks differ in <em>which store</em> they sweep, never in which settings they can see. This
+ * interface once carried no lookup at all, so a tenant-hook pass had to read its dials from whatever the
+ * <em>provider</em> captured at construction - deployment-global - and a tenant override silently no-opped for every
+ * per-tenant sweep while its per-repository siblings honoured one. That is backwards for a product whose storage model
+ * is per-tenant by default.
  */
 public interface TenantContext {
 

@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <h2>Why every packaged source below is named after a real app</h2>
  * This suite used to spell the packaged source as {@code [application.properties]} - one fabricated name, exercised
  * against a matcher that required the substring {@code "application"}. No app has been configured by a file of that
- * name since the earlier work renamed all four ({@code repository}, {@code cache}, {@code combined}, {@code ui}) so no
+ * name since all four were renamed ({@code repository}, {@code cache}, {@code combined}, {@code ui}) so no
  * dependency's root {@code application.properties} could race them, so the matcher had matched nothing for a year -
  * every stored setting was layered at the <em>bottom</em> of the environment and {@link PinnedSettings} walked
  * straight past the shipped defaults - and this suite stayed green throughout, because the only packaged source it
@@ -116,7 +116,7 @@ class SettingsPrecedenceTest {
     }
 
     /**
-     * The concrete harm the earlier stale matcher did, as its own leg: the shipped defaults are written as environment
+     * The concrete harm the stale matcher did, as its own leg: the shipped defaults are written as environment
      * placeholders ({@code jenreg.auth=${JENREG_AUTH:true}}), and a {@code PropertySource}
      * hands back the <em>raw</em> text - only the {@code Environment} expands a placeholder. So a probe that walks past
      * the packaged defaults does not merely mis-attribute the origin; it reports the key as pinned to the literal

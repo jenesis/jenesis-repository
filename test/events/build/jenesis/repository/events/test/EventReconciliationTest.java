@@ -8,18 +8,18 @@ import build.jenesis.repository.events.EventType;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The static half of the earlier route: every {@link EventType} names the durable read a subscriber reconciles it
- * against, and the pairing is complete by construction rather than by maintenance.
+ * The static half of the reconciliation route: every {@link EventType} names the durable read a subscriber reconciles
+ * it against, and the pairing is complete by construction rather than by maintenance.
  *
  * <p>{@code EventSink}'s clause 12 already claimed that "every event type has a durable, queryable counterpart" and
- * named none of them, which is a true statement an integrator cannot act on - the defect records. The claim is
+ * named none of them, which is a true statement an integrator cannot act on - a defect in its own right. The claim is
  * now {@link EventReconciliation#of(EventType)}, a total switch with no {@code default}, so a new event kind does not
  * compile until its counterpart is answered. That is the mechanism; this suite is what stops the mechanism being
  * satisfied vacuously - by a blank string, a placeholder, or a route that promises more than the ledger behind it can
  * tell.
  *
  * <p>The runtime half - that an operator actually reaches this on a surface they read - is asserted separately, in
- * {@code test/webhook-web} against {@code GET /api/webhook}. A route nothing renders is the dead leg removed.
+ * {@code test/webhook-web} against {@code GET /api/webhook}. A route nothing renders would be a dead leg.
  */
 class EventReconciliationTest {
 

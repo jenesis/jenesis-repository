@@ -13,7 +13,7 @@ import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
  * siblings in this module are: those passes re-screen a repository's inventory, which is an opt-in cost, while this
  * one is what keeps an <em>enabled</em> signal's data present at all. Gating it on the re-scan switch would leave a
  * deployment that runs the gate with {@code scheduled-scan} off holding a signal source that renders a snapshot
- * nothing ever draws - the shape the earlier fix must not create.
+ * nothing ever draws - the shape that moving the draw off the query path must not create.
  *
  * <p>It is scoped by the signals themselves instead: {@link SignalSourceProvider#named} yields only the enabled
  * sources, and only those that mirror ({@link RefreshableSource}) have anything to refresh, so a deployment with no

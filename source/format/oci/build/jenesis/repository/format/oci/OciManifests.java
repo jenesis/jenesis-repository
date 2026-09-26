@@ -12,21 +12,21 @@ import build.jenesis.repository.store.Withheld;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The OCI manifest choke point (EPIC 26): the one place a manifest write - a {@code docker push} PUT, a pull-through
+ * The OCI manifest choke point: the one place a manifest write - a {@code docker push} PUT, a pull-through
  * proxy fetch, or an import walk - runs the same {@link PublishInterceptor} screen chain a single-body publish passes,
  * mapped onto OCI's native serving model rather than the {@code publish/} namespace.
  *
- * <p>OCI is EPIC 26's structural exception: it {@link OciFormat#screened() opts out} of the single-body ingress edge
- * ({@code ScreenedDispatch}) because a {@code /v2/} push is multi-request - a session of blob uploads then a manifest
- * that references them by digest - so no single request body reaches that edge, and OCI serves by digest straight from
- * {@code blobs/<hex>} and {@code oci/<name>/tags/<tag>}, never through a {@code publish/<path>} pointer the edge screen
- * gates. This helper is OCI's own manifest-level choke point: it runs the shared hosted-publish operation
- * {@link Publication#commit} (the very same {@code ComplianceScreen}/inspector chain, since the operation's one screen
- * discovers the identical interceptors) over the manifest and maps the verdict onto OCI's native
- * {@code withheld/<hex>} marker - the marker the serving path in {@link OciFormat} already reads on both the
- * blob-serve and manifest-serve paths. OCI's own layout is the operation's accepted-layout callback: the media-type
- * sidecar is written through the sidecar seam and the tag pointer and stale-hold clear are <em>declared</em> as the
- * commit's {@link Publication.Visibility}, so nothing OCI serves through exists before the sidecar does.
+ * <p>OCI is the structural exception to edge screening: it {@link OciFormat#screened() opts out} of the single-body
+ * ingress edge ({@code ScreenedDispatch}) because a {@code /v2/} push is multi-request - a session of blob uploads then
+ * a manifest that references them by digest - so no single request body reaches that edge, and OCI serves by digest
+ * straight from {@code blobs/<hex>} and {@code oci/<name>/tags/<tag>}, never through a {@code publish/<path>} pointer
+ * the edge screen gates. This helper is OCI's own manifest-level choke point: it runs the shared hosted-publish
+ * operation {@link Publication#commit} (the very same {@code ComplianceScreen}/inspector chain, since the operation's
+ * one screen discovers the identical interceptors) over the manifest and maps the verdict onto OCI's native {@code
+ * withheld/<hex>} marker - the marker the serving path in {@link OciFormat} already reads on both the blob-serve and
+ * manifest-serve paths. OCI's own layout is the operation's accepted-layout callback: the media-type sidecar is written
+ * through the sidecar seam and the tag pointer and stale-hold clear are <em>declared</em> as the commit's {@link
+ * Publication.Visibility}, so nothing OCI serves through exists before the sidecar does.
  *
  * <p>The operation's screen stores the manifest bytes content-addressed at the serving key {@code blobs/<hex>}
  * <em>before</em> the chain runs, so on a non-ACCEPT verdict the marker is load-bearing: without it a rejected manifest
@@ -192,7 +192,7 @@ final class OciManifests {
             //    the hash on ANY served path, including THIS manifest's own path. The earlier reverify re-ran the
             //    cross-alias probe with `path` EXCLUDED (Set.of(path)) - mirroring the guard, which relies on the
             //    interceptor face below to cover this path - so a same-path enforce that links /quarantine<path>
-            //    in the window was invisible to it and the marker stayed wrongly cleared (Audit-28 A5-F1). The
+            //    in the window was invisible to it and the marker stayed wrongly cleared. The
             //    empty exclusion catches the same-path pointer too, and it stays testable without an interceptor.
             //    (A clean ACCEPT writes no /quarantine<path> pointer, so the no-race case still finds nothing.)
             //  - the interceptor face (!disclosable(path)): a downstream deployment's hold interceptor withholds

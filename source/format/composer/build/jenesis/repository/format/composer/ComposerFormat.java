@@ -113,7 +113,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
 
     // A hostile archive cannot force a large allocation: the composer.json read is bounded by the product's one
     // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenreg.archive.largest-entry - not by a
-    // private constant of this format's (RepositoryFormat contract clause 15 /).
+    // private constant of this format's (RepositoryFormat contract clause 15).
 
     // How far the walk for the root composer.json may run is the product's one archive-walk bound,
     // ArchiveWalk.largestWalk(), settable at jenreg.archive.largest-walk - not a private constant of this format's

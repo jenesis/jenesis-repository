@@ -302,7 +302,7 @@ public class MaintenanceController {
         return new PinsView(new StoreRepositoryInventory(repositories.store(tenant, repo)).pins());
     }
 
-    /** The eviction rows for the report/dry-run, each screened for served-view parity (Audit-28 A2-F2). Retention
+    /** The eviction rows for the report/dry-run, each screened for served-view parity. Retention
      *  operates over EVERY published release - a withheld version still ages past the policy and enters the plan - so a
      *  withheld eviction candidate's {@code coordinate:version} would otherwise be disclosed here, and the dry-run
      *  ({@code GET /api/repository/cleanup/plan}) is served at {@code repository:read}, a normal-consumer scope. Each row's

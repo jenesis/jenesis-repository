@@ -7,7 +7,7 @@ import build.jenesis.repository.metadata.SectionMutation;
 import build.jenesis.repository.metadata.Signal;
 
 /**
- * The {@code licenses} section codec of the consolidated metadata document (§5.1): the licenses a coordinate
+ * The {@code licenses} section codec of the consolidated metadata document: the licenses a coordinate
  * version <em>declares</em>, unioned across the version's artifacts exactly as the {@code licenses/} sidecar this
  * section replaces did. This is the section-scoped form of {@link LicenseInventory}'s union-only merge - a sibling
  * publish only ever ADDS to the declared set, never replaces it, so a racing or withheld sibling whose metadata read
@@ -117,7 +117,7 @@ public final class LicenseSection {
 
     /**
      * The rollup-identity fingerprint of a licenses section - the bytes {@link InventoryIdentity#member} folds into the
-     * per-version member digest, re-pointed from the old {@code licenses/} sidecar bytes onto this section (§5.4). It is
+     * per-version member digest, re-pointed from the old {@code licenses/} sidecar bytes onto this section. It is
      * a <em>canonical</em>, order-independent encoding of the declared set (sorted, length-delimited), so an incremental
      * re-fold and a full {@link StoreRepositoryInventory#rebuildIdentity} agree on the member regardless of the order
      * two sibling publishes happened to union in. Returns empty for an absent section (never inspected), and a present

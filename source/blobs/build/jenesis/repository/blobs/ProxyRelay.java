@@ -78,7 +78,7 @@ public final class ProxyRelay {
      * version list and which is a version-pinned file is the protocol knowledge only the format has, and it is the one
      * input the shared decision below needs.
      *
-     * <p>The distinction is the earlier. {@link ProxyFormat} clause 2 makes a single {@code false} - "let the local
+     * <p>The distinction is needed because {@link ProxyFormat} clause 2 makes a single {@code false} - "let the local
      * {@code 404} stand" - the answer for an unproxyable path, an upstream miss, a transport failure and a refused body
      * alike, so a leg that could not reach its upstream answers exactly as a leg whose upstream said "no such thing".
      * On a {@link #PINNED} document that is right; on an {@link #ENUMERATION} it hands the client a wrong answer it
@@ -171,8 +171,8 @@ public final class ProxyRelay {
      * A packument fetch that timed out, a compact index behind a shared-egress {@code 429}, a registration leaf whose
      * advertised URL the outbound screen refuses - each of them returned "this ecosystem declares no checksum for this
      * artifact", and the artifact was then cached with an unverified write. Anyone who can drop the sidecar fetch turns
-     * integrity off for that pull, and clause 5's "held to it and a mismatch is refused" quietly does not run (,
-     * the one-layer-down twin of).
+     * integrity off for that pull, and clause 5's "held to it and a mismatch is refused" quietly does not run - the
+     * same conflation as an unreadable enumeration, one layer down.
      *
      * <p>So the three states are named and a leg returns one of them:
      * <ul>

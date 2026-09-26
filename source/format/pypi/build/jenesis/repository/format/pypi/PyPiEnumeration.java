@@ -25,7 +25,7 @@ public final class PyPiEnumeration {
     /**
      * @param allowInternal the deployment's {@link build.jenesis.repository.blobs.ProxyLeg#ALLOW_INTERNAL} dial - the
      *                      same one the proxy leg reads, so a walk and a pull-through of the same file href cannot
-     *                      answer differently, and since the earlier work/the one screen they both call is {@link
+     *                      answer differently, and the one screen they both call is {@link
      *                      build.jenesis.repository.blobs.OutboundTargets}. Off means a cross-origin file link must be
      *                      {@code https} and public; one on the submitted upstream's own ORIGIN (scheme and authority)
      *                      is operator-trusted either way, because it reaches no host, port or scheme the walk is not

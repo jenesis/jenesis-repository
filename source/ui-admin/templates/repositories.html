@@ -9,8 +9,8 @@
     <p><small>Named artifact repositories, each holding one format. Open one to browse its releases
         and manage staging, retention and pins.</small></p>
 
-    <!--/* T25.6 item 4: a non-blocking notice for every VALID-but-risky repository definition - a mixed screening
-         strength (a hardened upstream beside a weaker one, T23.5b), an unscreened upstream, or a plaintext upstream.
+    <!--/* A non-blocking notice for every VALID-but-risky repository definition - a mixed screening
+         strength (a hardened upstream beside a weaker one), an unscreened upstream, or a plaintext upstream.
          These parse (they are not refused - a broken definition is refused loud at write time and never stored), so
          the operator still sees the loud ⚑ the log emits, not just refusals. */-->
     <article th:if="${!definitionWarnings.isEmpty()}" class="app-subsection-error" aria-live="polite" role="alert">
@@ -41,7 +41,7 @@
                 <tbody>
                 <tr th:each="r : ${repositories}">
                     <td class="app-list__name">
-                        <!--/* The marks of the formats this repository holds (W4.2b), rendered inline so each mark's
+                        <!--/* The marks of the formats this repository holds, rendered inline so each mark's
                              stroke="currentColor" inherits the text colour and inverts with the theme; sized uniformly by
                              .format-icon. The SVG is a trusted document built from module-embedded constants and from
                              geometry - never from a name - so th:utext is safe here; the title/aria-label carry the
@@ -54,10 +54,10 @@
                               title="no installed format marks this repository" role="img"
                               aria-label="no installed format marks this repository" th:utext="${neutralMark}"></span>
                         <a th:href="@{'/ui/repositories/' + ${r.name}}" th:text="${r.name}">name</a>
-                        <!--/* EPIC 23: a hardened proxy enforces full-body screening of every untrusted upstream body
+                        <!--/* A hardened proxy enforces full-body screening of every untrusted upstream body
                              before releasing a byte. Badge it so an operator sees which repositories enforce it. */-->
                         <span th:if="${r.hardened}" class="app-badge" title="Hardening proxy - full upstream screening enforced">hardened</span>
-                        <!--/* T25.6 item 2: the repository's SHAPE from its parsed Definition - writable (accepts uploads)
+                        <!--/* The repository's SHAPE from its parsed Definition - writable (accepts uploads)
                              vs read-only, the host+proxy hybrid, and per-fallback badges (store/no-store + screen strength
                              for an upstream; an inner-repo reference for a repository fallback). */-->
                         <span th:replace="~{fragments :: shapeBadges(${r.shape})}"></span>

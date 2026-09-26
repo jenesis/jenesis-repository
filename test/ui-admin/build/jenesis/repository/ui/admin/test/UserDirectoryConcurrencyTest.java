@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the per-request SCIM instances. These tests drive the membership through <em>separate</em> {@link UserDirectory}
  * instances over one real {@link Documents} - the exact SCIM shape - and assert no member is lost.
  *
- * <p>Since each member is its own small object - a grant to that principal - two writes to two members do
+ * <p>Each member is its own small object - a grant to that principal - so two writes to two members do
  * not contend at all and the compare-and-set only ever arbitrates writes to the <em>same</em> member. That is what
  * these tests now pin: the property is unchanged (no member is lost), and the reason it holds is the storage shape
  * rather than sixteen retries over one shared document.

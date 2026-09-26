@@ -14,14 +14,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Unit guards for the capability-only {@link OciBlobLayout} (Audit-25 §6 landmines 3 &amp; 5): its {@code handles()}
+ * Unit guards for the capability-only {@link OciBlobLayout}: its {@code handles()}
  * must stay {@code false} forever (a future change to claim {@code /v2/} re-opens the first-match dispatch race with the
  * real, proxy-capable OCI format), and its {@code describe} must resolve ONLY a {@code /v2/<name>/manifests/<ref>} path,
- * to an {@code oci} descriptor - never a blob/catalog/tags path, and never a foreign ecosystem. Also pins the Audit-26
- * F-4, the layout's half: a root manifest that is present but unparseable/over-cap degrades {@code blobHashes} to
+ * to an {@code oci} descriptor - never a blob/catalog/tags path, and never a foreign ecosystem. Also pins the layout's
+ * half of manifest validation: a root manifest that is present but unparseable/over-cap degrades {@code blobHashes} to
  * manifest-only AND WARNs (the layers are no longer enumerable, so the operator must {@code discard}); a degraded
  * SUB-manifest of an index stays silent, because a hostile index entry may legitimately point at a layer blob, which
- * has no children to lose. Since the root case is symmetric - a digest-rooted one WARNs too, which
+ * has no children to lose. The root case is symmetric - a digest-rooted one WARNs too, which
  * {@code OciDerivationAgreementTest} pins beside the delegation that made it so.
  */
 class OciBlobLayoutTest {

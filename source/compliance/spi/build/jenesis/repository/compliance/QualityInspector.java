@@ -33,7 +33,7 @@ import build.jenesis.repository.store.Limits;
  * assess" (an index document, a checksum sibling, a non-publish request body). It is a positive claim that the
  * artifact was understood and declares nothing, so it must never be used to paper over a failed parse; see clause
  * 7 - <em>nor</em> a read a bound stopped, which is why the fully-spooled leg answers an {@link Inspection} that says
- * which of the two an empty list is (see clause 12, and a screen cannot tell "I looked and there is nothing
+ * which of the two an empty list is (see clause 12: a screen cannot tell "I looked and there is nothing
  * there" from "I could not look" by the emptiness of the answer, and the empty one is what gets ALLOWed). It is also
  * what a claimed path that is not one of the format's own publish or download <em>routes</em> answers:
  * an inspector re-derives the route from the path and returns the sentinel for anything else it claims, rather than
@@ -397,7 +397,7 @@ public interface QualityInspector {
 
     /**
      * The compliance subjects extracted from an artifact's FULLY-SPOOLED body - the full-body inspection tier the
-     * hardened proxy leg (EPIC 23) screens an untrusted upstream artifact through, so a secret-scan / integrity /
+     * hardened proxy leg screens an untrusted upstream artifact through, so a secret-scan / integrity /
      * attestation inspector sees the <em>whole</em> artifact rather than only a bounded prefix (that is the point of
      * spooling the body to completion before serving it). {@code body} is a re-openable handle to the complete artifact
      * on the spool (never a heap {@code byte[]}), streamable from its first byte as many times as an inspector needs.
@@ -540,7 +540,7 @@ public interface QualityInspector {
 
     /**
      * A re-openable handle to a fully-spooled artifact body - the whole artifact staged on the hardening proxy's spool,
-     * streamable from byte zero without ever being pulled whole into a heap {@code byte[]} (PRINCIPLES §1). The
+     * streamable from byte zero without ever being pulled whole into a heap {@code byte[]} (§1). The
      * full-body inspection tier reads through this rather than a bounded prefix.
      */
     interface Content {
@@ -570,7 +570,7 @@ public interface QualityInspector {
      *       entire, because half a POM or half an envelope is worthless. It takes no caller bound because the caller
      *       has no use for a partial answer, so it carries the supplier's own ceiling and past it it <b>throws</b>. It
      *       never returns a prefix: handing back part of a document the caller believes is whole is the
-     *       silently-incomplete answer PRINCIPLES &sect;5 and &sect;9 forbid, and reading with no ceiling at all turns
+     *       silently-incomplete answer &sect;5 and &sect;9 forbid, and reading with no ceiling at all turns
      *       an inspector into an out-of-memory lever (&sect;1). Both shipped screens key that ceiling to the free
      *       core's {@link build.jenesis.repository.store.PublishInterceptor.Content#LARGEST_SIBLING} rather than
      *       restating a number, so the publish and proxy legs cannot drift on what "too large to read whole" means.</li>

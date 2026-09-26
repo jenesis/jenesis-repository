@@ -37,8 +37,8 @@ public final class Falsification {
 
     /**
      * Run {@code check} over a fresh store whose publications all run under {@code mutant}'s arranged choreography -
-     * the leg. The fixture's hook is <em>not</em> substituted here: the subject of these clauses is the commit
-     * sequence, and the hook rides along exactly as it does on the ordinary leg.
+     * the choreography leg. The fixture's hook is <em>not</em> substituted here: the subject of these clauses is the
+     * commit sequence, and the hook rides along exactly as it does on the ordinary leg.
      */
     public static void run(PublicationHookFixture fixture, PublicationHookContract.Check check,
                            ChoreographyMutant mutant, Deployment deployment) throws Exception {

@@ -1,5 +1,5 @@
 /**
- * The consolidated metadata document contract (EPIC 20): the versioned, tagged, per-coordinate document that
+ * The consolidated metadata document contract: the versioned, tagged, per-coordinate document that
  * consolidates the derived per-coordinate(-version) metadata the audit found scattered across ~9-11 sidecars in
  * three incompatible key encodings and two serialization families. One JSON document per coordinate version keyed
  * {@code meta/<ecosystem>/<enc(coordinate)>/<version>} ({@link build.jenesis.repository.metadata.MetadataKey}, the

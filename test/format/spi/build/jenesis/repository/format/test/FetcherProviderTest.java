@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@link java.util.ServiceLoader} stub providers this module registers ({@code empty}, which always declines,
  * {@code alpha} answering {@code 201} and {@code beta} answering {@code 202}).
  *
- * <p>Since the seam resolves through the shared {@code Providers.optionalUnique} primitive, and this suite
+ * <p>The seam resolves through the shared {@code Providers.optionalUnique} primitive, and this suite
  * pins the two semantics that changed with it:
  *
  * <ul>
@@ -79,7 +79,7 @@ class FetcherProviderTest {
 
     @Test
     void two_enabled_fetchers_without_a_selection_are_ambiguous_rather_than_a_discovery_order_winner() {
-        // this used to answer alpha, purely because the module path happened to list it before beta. Which
+        // This used to answer alpha, purely because the module path happened to list it before beta. Which
         // transport a deployment proxies through is a configuration decision, never a packaging accident.
         UnaryOperator<String> ambiguous = configured(Map.of("jenreg.empty", "false"));
         assertThatThrownBy(() -> FetcherProvider.resolve(ambiguous))

@@ -46,7 +46,7 @@ module build.jenesis.repository.compliance.scan {
             // through the same service the API does rather than building a second report of its own
             build.jenesis.repository.ui.admin.installed.test,
             build.jenesis.repository.server.kernel.test, build.jenesis.repository.recovery.test,
-            // the maintenance-task contract kit reads the rank index back through the very Page record the
+            // The maintenance-task contract kit reads the rank index back through the very Page record the
             // /api/vulnerabilities surface renders, rather than restating the generation layout inside a fixture.
             build.jenesis.repository.maintenance.contract.test;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider

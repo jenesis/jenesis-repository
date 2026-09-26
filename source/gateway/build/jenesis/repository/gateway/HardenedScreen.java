@@ -14,22 +14,22 @@ import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The hardened proxy fetch firewall for a repository declared {@code proxy <url> harden}: the untrusted-upstream
- * strictening of {@link ProxyScreen}, the keystone of EPIC 23's hardening proxy. Where the ordinary proxy screen reads
+ * strictening of {@link ProxyScreen}, the keystone of the hardening proxy. Where the ordinary proxy screen reads
  * a bounded prefix and then streams the un-screened remainder straight to the client on {@code ALLOW}
  * ({@code prefix-screen-stream-through}, so the verdict is reached before the body has fully transited), the hardened
  * screen <b>spools the fetched body to completion, screens it, and only then releases a verified stream</b>
  * ({@code spool -> screen -> release-verified-stream}): the client's download is re-opened from the budgeted
  * {@link SpoolStore} spool - never the live upstream socket - and only after a verdict has been reached over the
- * materialised body, so no un-screened byte ever reaches the client (the hardening-plan §2 materialise -> screen ->
+ * materialised body, so no un-screened byte ever reaches the client (a materialise -> screen ->
  * decide -> serve lifecycle).
  *
- * <p><b>Bounded heap (PRINCIPLES §1).</b> The body streams into the {@link SpoolStore}'s bounded, owner-only temp file,
+ * <p><b>Bounded heap (§1).</b> The body streams into the {@link SpoolStore}'s bounded, owner-only temp file,
  * digested as it lands; it is never pulled whole into a {@code byte[]}. Only the bounded inspection prefix is read into
  * heap for the inspectors, exactly the cap the publish and ordinary proxy screens already apply. Disk - governed by the
  * spool budget - is the resource spent; a spool that exhausts its budget raises {@link SpoolStore.BudgetExhausted},
  * which the router answers as a {@code 503}.
  *
- * <p><b>Structural refusal set (PRINCIPLES §9).</b> When the hardened leg cannot screen a body it does not fall back to
+ * <p><b>Structural refusal set (§9).</b> When the hardened leg cannot screen a body it does not fall back to
  * serving it unscreened, nor swallow the failure into an anonymous error: the outcome is a typed, named {@link Refusal}
  * - the upstream fetch truncated ({@link Refusal#FETCH_INTERRUPTED}), the body grown past the per-artifact size
  * ceiling ({@link Refusal#OVERSIZE}), a stalled or over-long fetch ({@link Refusal#FETCH_TIMEOUT}), an inspector that
@@ -45,7 +45,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * streaming past the prefix window so a credential beyond 32 MiB is caught, a format inspector default-bridged to the
  * same front prefix it read before. Decompression/scan stays bounded by the shared
  * {@link QualityInspector#FULL_BODY_INSPECTION_LIMIT full-body tier} (and each inspector's own entry/finding/nesting
- * caps), so full-body is not unbounded (a decompression bomb cannot exhaust the node, PRINCIPLES §1). Every claiming
+ * caps), so full-body is not unbounded (a decompression bomb cannot exhaust the node, §1). Every claiming
  * inspector <em>reports</em> whether its own read reached the end of the body or one of those bounds
  * ({@link QualityInspector.Inspection#complete()}), and the screen is complete only if all of them were: an artifact
  * this leg could not screen whole is decided, recorded and counted as such rather than passing as a clean whole-body
@@ -63,7 +63,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * bytes are local, re-screens them from the local store and re-records the verdict (idempotent self-healing, §5), then
  * serves per the fresh verdict; when the bytes are not local it is a MISS that falls to the normal fetch+screen path.
  * With no metadata persistence module installed the {@link MetadataStore} is absent and the leg degrades to screening
- * every fetch (always safe, never a reuse), exactly the behaviour.
+ * every fetch (always safe, never a reuse).
  *
  * <p><b>Transient full-enforcement screen ({@code harden nocache}).</b> A hardened leg constructed with
  * verdict-reuse disabled fully screens <em>every</em> fetch and durably caches nothing: it still records the
@@ -123,7 +123,7 @@ public final class HardenedScreen {
 
     /**
      * The untrusted-upstream fetch bounds a hardened leg enforces while spooling a body, since a {@code harden} proxy
-     * pulls from an <em>untrusted</em> upstream (EPIC 23). Three defensive ceilings, all deploy-time resource
+     * pulls from an <em>untrusted</em> upstream. Three defensive ceilings, all deploy-time resource
      * dials sized to the node (like the {@link SpoolStore.Budget spool budget}), read from
      * {@code spool.max-artifact-bytes} / {@code spool.fetch-timeout-millis} / {@code spool.fetch-min-throughput-bytes}
      * (see {@link #fromConfig}):
@@ -446,7 +446,7 @@ public final class HardenedScreen {
      * durable {@code QuarantineLog} and {@code /quarantine}, holding upstream versions younger than {@code holdDays},
      * and spooling the pre-verdict body into the budgeted {@code spool} - a per-request {@link SpoolStore} scratch the
      * router reclaims once the request is served. With no consolidated metadata store the leg records no verdict and
-     * reuses none (the behaviour); the router binds one from the discovered persistence module. The
+     * reuses none; the router binds one from the discovered persistence module. The
      * untrusted-upstream fetch {@link Bounds} default to {@link Bounds#standard()}.
      */
     public HardenedScreen(ComplianceGate gate, ArtifactStore records, int holdDays, ArtifactStore spool) {
@@ -721,7 +721,7 @@ public final class HardenedScreen {
         return Optional.empty();
     }
 
-    /** Record the digest-pinned verdict into the coordinate's metadata document through the EPIC 20 section-scoped CAS
+    /** Record the digest-pinned verdict into the coordinate's metadata document through the section-scoped CAS
      *  mutate. Best-effort: the screen has already decided and the screened bytes are safe to serve, so a record
      *  failure is logged (never silent, §9) rather than failing the serve - it only costs a re-screen next time. */
     private void recordVerdict(Coordinate coordinate, String digest, Verdict verdict, Refusal refusal, String source,

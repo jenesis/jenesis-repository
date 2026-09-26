@@ -30,7 +30,7 @@ module build.jenesis.repository.format.oci.inventory {
     requires build.jenesis.repository.settings;
     requires org.slf4j;
     exports build.jenesis.repository.format.oci.inventory to build.jenesis.repository.server.kernel.test,
-            // the walk-consumer census and OciInventoryBackfillFixture, which names this module's consumer.
+            // The walk-consumer census and OciInventoryBackfillFixture, which names this module's consumer.
             build.jenesis.repository.server.principles.test,
             build.jenesis.repository.server.kernel.contract.test;
     provides build.jenesis.repository.format.RepositoryFormat

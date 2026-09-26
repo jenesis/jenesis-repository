@@ -94,7 +94,7 @@ class ComplianceScreenTest {
 
     @Test
     void a_claimed_artifact_that_parsed_empty_is_clean_but_one_that_could_not_parse_is_held() throws IOException {
-        // at the screen: "parsed fine, declares nothing" is NOT the same as "could not parse". The first admits
+        // At the screen: "parsed fine, declares nothing" is NOT the same as "could not parse". The first admits
         // (empty ⇒ clean); the second fails closed into quarantine with a legible reason (could-not-parse ⇒ not-clean).
         Publication.Published empty = publish(gate(AdvisorySource.none()), "/gatetest/empty/nothing-1.0.jar", "nothing");
         assertThat(empty.disposition())
@@ -164,7 +164,7 @@ class ComplianceScreenTest {
     }
 
     /**
-     * a hold's <em>reasons</em> are filed where its <em>handle</em> is, even when the screened descriptor is a
+     * A hold's <em>reasons</em> are filed where its <em>handle</em> is, even when the screened descriptor is a
      * push endpoint that names no coordinate.
      *
      * <p>A format whose coordinate lives inside the artifact commits under the only descriptor it can build before
@@ -321,8 +321,8 @@ class ComplianceScreenTest {
                 .malicious(new MaliciousPackagePolicy().action(malicious));
     }
 
-    /** The screen + layout the removed {@code Publication.publish} combined (EPIC 26 /): 0.5.0 split
-     *  screening from the accepted write, so this seam screens the upload and, on {@code ACCEPT}, links the serving
+    /** The screen + layout the removed {@code Publication.publish} combined, now split into
+     *  screening and the accepted write, so this seam screens the upload and, on {@code ACCEPT}, links the serving
      *  pointer - exactly what a single-body ingress deploy does at the edge. */
     private static Publication.Published publish(Publication publication, ArtifactDescriptor descriptor,
                                                  InputStream content) throws IOException {

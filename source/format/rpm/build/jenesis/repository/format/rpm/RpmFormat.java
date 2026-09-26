@@ -220,12 +220,12 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
      *
      * <p>This is the format's <em>only</em> descent of a pool tree. It has two consumers with nothing else in common -
      * the stanza back-fill, which re-reads each package's header, and the {@link BlobLayout} coordinate seam, which
-     * matches each filename's NEVRA - and found them as two descents of the same tree: the back-fill already ran
-     * on the shared {@link PagedTreeWalk} primitive while {@code blobKeys} still hand-rolled an explicit cursor stack
-     * over {@code store.page}. The hand-rolled one was bounded and paged, so it was never a correctness defect; it was
-     * a second implementation of a shared mechanism, and the bounds it did <em>not</em> have are the reason folding it
-     * in is worth doing - it had no step budget and no depth ceiling, so a pathological pool tree cost an unbounded
-     * number of store round-trips silently, where {@link #POOL} now refuses it by name.
+     * matches each filename's NEVRA - and they turned out to be two descents of the same tree: the back-fill already
+     * ran on the shared {@link PagedTreeWalk} primitive while {@code blobKeys} still hand-rolled an explicit cursor
+     * stack over {@code store.page}. The hand-rolled one was bounded and paged, so it was never a correctness defect;
+     * it was a second implementation of a shared mechanism, and the bounds it did <em>not</em> have are the reason
+     * folding it in is worth doing - it had no step budget and no depth ceiling, so a pathological pool tree cost an
+     * unbounded number of store round-trips silently, where {@link #POOL} now refuses it by name.
      *
      * <p>The pool tree is publish-plantable to arbitrary depth and width, so the descent stays the shared iterative,
      * paged one - never self-recursion over an unpaged {@code list()}. A caller accumulating what it is handed is
@@ -538,8 +538,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
                           ProxyFormat.Fetcher fetcher) throws IOException {
         Blobs blobs = new Blobs(store);
         int slash = rest.indexOf('/');
-        // gave this leg the refusal shape for one of the ways the declaring index cannot be read (an index URL
-        // the outbound screen rejects); makes every one of them reach it, so a repomd behind a shared-egress 429
+        // This leg first had the refusal shape for one of the ways the declaring index cannot be read (an index
+        // URL the outbound screen rejects); every one of them now reaches it, so a repomd behind a shared-egress 429
         // and a primary index past its decompression bound decline the fill exactly as a refused target does instead
         // of returning the "declares no checksum" that caches the package unverified.
         ProxyRelay.Declared declared = slash <= 0 || Keys.unsafe(rest.substring(0, slash))

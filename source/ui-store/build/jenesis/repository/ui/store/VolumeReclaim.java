@@ -9,7 +9,7 @@ import build.jenesis.repository.audit.AuditTrail;
  * per-project {@link CacheService} eviction, which the instances screen owns precisely because it spans tenants (see
  * {@link CacheService}'s note that cross-tenant reclaim lives here, not in the tenant-confined cache service). It runs
  * the shared {@link Eviction#reclaim} policy and, because a reclaim is a privileged destructive mutation that deletes
- * cache entries across every tenant, writes an audit event (PRINCIPLES §6).
+ * cache entries across every tenant, writes an audit event (§6).
  *
  * <p>The reclaim belongs to no single tenant, so - like the server's {@code StoragePurgeController} and
  * {@link TenantPurge} - it is audited in the deployment <em>operator</em> scope rather than any one tenant's,

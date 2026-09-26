@@ -10,7 +10,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Manifest validation at the {@code OciManifests.ingest} choke point (Audit-26 F4): a body that is not a servable
+ * Manifest validation at the {@code OciManifests.ingest} choke point: a body that is not a servable
  * manifest - larger than {@code MAX_MANIFEST} (4 MiB) or not parseable as a JSON object - must never be ingested as a
  * servable manifest, so it cannot later be laid out and then half-held (a malformed/over-cap manifest degrades
  * {@code OciBlobLayout.blobHashes} to manifest-only, leaving its named layers servable by digest under a standing hold).

@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The cutover: the store-backed findings ledger over the consolidated metadata document's {@code findings}
+ * The findings cutover: the store-backed findings ledger over the consolidated metadata document's {@code findings}
  * section - a recorded finding lands in the document, not a sidecar; the section's signal summarises the highest
  * severity; a sibling section on the same coordinate survives a findings mutate; a version with no findings section
  * reads as empty and its leftover {@code findings/} sidecar is neither consulted nor removed; the repository-wide walk

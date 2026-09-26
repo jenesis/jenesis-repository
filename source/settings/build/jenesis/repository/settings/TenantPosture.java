@@ -48,7 +48,7 @@ import build.jenesis.repository.posture.Severity;
  * risk and the key to change without ever repeating a read value. Bounded by construction, which is why the tenant
  * arrives as a value rather than as something to enumerate: {@link #advise} reads two keys whatever the deployment
  * looks like, and a caller renders one tenant's report, so neither the advisor nor the screen behind it grows a cost
- * with the number of tenants (the {@code SafetyAdvisor} contract's clause 12, and PRINCIPLES &sect;7).
+ * with the number of tenants (the {@code SafetyAdvisor} contract's clause 12, and &sect;7).
  */
 public final class TenantPosture implements SafetyAdvisor {
 

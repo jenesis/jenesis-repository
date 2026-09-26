@@ -11,7 +11,7 @@ import jakarta.servlet.http.HttpServletResponseWrapper;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * The CDN-cache precondition (EPIC 29, RD-3, design §8.1): give artifact {@code GET}/{@code HEAD} responses an
+ * The CDN-cache precondition: give artifact {@code GET}/{@code HEAD} responses an
  * immutability-driven {@code Cache-Control} so a CDN or proxy in front of the serve plane can actually cache them.
  *
  * <p><b>The problem this solves.</b> The security chain configures no {@code .headers()}, so Spring Security's
@@ -26,7 +26,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * path/method/status guard, not a global disable of the writer, so relaxed caching can never leak onto a non-artifact
  * route (proven in {@code CacheControlHeaderFilterTest}).
  *
- * <p><b>The policy (design §4, §5).</b> For a {@code GET}/{@code HEAD} under {@code /repository/} that answers a cacheable success ({@code 200}/{@code 206}/{@code 304}):
+ * <p><b>The policy.</b> For a {@code GET}/{@code HEAD} under {@code /repository/} that answers a cacheable success
+ * ({@code 200}/{@code 206}/{@code 304}):
  * <ul>
  *   <li>a released, frozen coordinate ({@link HardenedScreen#immutableCoordinate(String)} true, and a concrete
  *       versioned artifact file rather than a metadata/index/packument/dist-tag document) -&gt;
@@ -48,12 +49,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * format expects to be revalidated, and it gets {@code no-cache} whatever its name looks like. An artifact that
  * happens to carry an ETag merely loses a year of shared caching, which is the harmless direction to be wrong in.
  *
- * <p><b>RD3_NOTES (design §7 RD-3, part C) - streamed-body ETag deferred.</b> The design also lists
- * "ETag-from-blob-key on streamed bodies", but it is deliberately <em>out of scope</em> for RD-3 and is NOT built
+ * <p><b>No ETag on a streamed body.</b> An ETag derived from the blob key of a streamed body is deliberately not built
  * here: for immutable artifacts {@code Cache-Control: immutable} means clients never revalidate, so a streamed ETag is
- * moot; mutable indexes/metadata already get buffered ETags free-side (untouched here). Doing it properly needs a
- * free-core {@code ServletFormatExchange} change, which design §8.8 forbids for this wave. It is
- * recorded as a potential free-core follow-up, not a gap in this ticket.
+ * moot; mutable indexes/metadata already get buffered ETags free-side (untouched here). Doing it properly would be a
+ * change to the free core's {@code ServletFormatExchange}, not to this filter.
  */
 public final class CacheControlHeaderFilter extends OncePerRequestFilter {
 
@@ -100,8 +99,8 @@ public final class CacheControlHeaderFilter extends OncePerRequestFilter {
     /**
      * Whether {@code path} names a released, frozen artifact file (a year-cacheable immutable coordinate) rather than a
      * mutable document. Reuses the shared drift predicate {@link HardenedScreen#immutableCoordinate(String)} for
-     * the SNAPSHOT test - never a parallel heuristic - then excludes the mutable document families the design lists as
-     * {@code no-cache} (§4, §5): release-level {@code maven-metadata.*}, directory indexes, npm dist-tags, and any
+     * the SNAPSHOT test - never a parallel heuristic - then excludes the mutable document families that stay
+     * {@code no-cache}: release-level {@code maven-metadata.*}, directory indexes, npm dist-tags, and any
      * extensionless root (an npm packument, a listing). Errs to mutable when unsure.
      */
     static boolean immutableArtifact(String path) {

@@ -10,12 +10,12 @@ import build.jenesis.repository.store.Publication;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The reconcile's {@code <latest>}/{@code <release>} screen for a version named there but ABSENT from {@code <versions>}
- * (Audit-26 disclosure Finding 2). The versions-block loop only screens versions it lists, so a held version named in
- * {@code <latest>}/{@code <release>} but not in {@code <versions>} would otherwise survive verbatim in the served
- * document. The named value is now screened directly through the same withhold seam, so a withheld latest/release is
- * re-derived (or dropped) even when the {@code <versions>} block is unchanged - while a document with nothing withheld
- * is still served byte-for-byte.
+ * The reconcile's {@code <latest>}/{@code <release>} screen for a version named there but ABSENT from {@code
+ * <versions>}. The versions-block loop only screens versions it lists, so a held version named in {@code
+ * <latest>}/{@code <release>} but not in {@code <versions>} would otherwise survive verbatim in the served document.
+ * The named value is now screened directly through the same withhold seam, so a withheld latest/release is re-derived
+ * (or dropped) even when the {@code <versions>} block is unchanged - while a document with nothing withheld is still
+ * served byte-for-byte.
  */
 class MavenMetadataReconcileLatestTest {
 

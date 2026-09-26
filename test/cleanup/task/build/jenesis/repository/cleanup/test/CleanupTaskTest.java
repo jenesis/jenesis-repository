@@ -35,7 +35,7 @@ class CleanupTaskTest {
 
     @Test
     void an_explicitly_selected_retention_engine_that_no_module_answers_fails_fast() {
-        // PRINCIPLES §9: an operator who names a retention engine (jenreg.retention=<name>) has chosen
+        // §9: an operator who names a retention engine (jenreg.retention=<name>) has chosen
         // it; a name no installed engine answers to must stop the start, not degrade silently to no-retention -
         // which would leave the cleanup endpoints answering 501 while artifacts the operator meant to age out are
         // held forever with nothing said. The message names the unsatisfiable selection so an operator can fix it.
@@ -50,7 +50,7 @@ class CleanupTaskTest {
     void an_unselected_or_matching_selection_still_resolves_the_installed_engine() {
         // The fail-fast is scoped to an UNMATCHED explicit selection: an unset selection resolves the single enabled
         // engine, and a selection naming an installed engine resolves it - neither throws, so the §9 guard never
-        // fires on a satisfiable configuration. (This module installs the "cleaner" engine.) Since the
+        // fires on a satisfiable configuration. (This module installs the "cleaner" engine.) The
         // unselected leg is "the single enabled engine", not "the first in discovery order": two enabled engines
         // with no selection are ambiguous and throw rather than letting the module path decide.
         assertThat(RetentionProvider.resolve(key -> null)).isPresent();

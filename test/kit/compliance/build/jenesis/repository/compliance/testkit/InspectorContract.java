@@ -24,12 +24,12 @@ import build.jenesis.repository.compliance.QualityInspector;
  * costs the inspector's own budget and nothing else.
  *
  * <h2>What the criterion check actually proves</h2>
- * {@link Property#BOUND_DISPOSITION} is the leg that stops the next inspector getting the earlier criterion wrong. A
- * bound-stopped read is driven through the fixture's parsing leg and the disposition its declared
- * {@link InspectorFixture.Reading} owes is asserted: an identity-bearing read must refuse, an optional one must
- * degrade to the path-derived coordinate, a content scan must not fail the publish at all, and a path-only inspector
- * must answer what it answers over an empty body - the one reading for which no bound can bind, asserted positively so
- * it cannot become a way out of the other two. A fixture that declares one side and behaves like the other fails here,
+ * {@link Property#BOUND_DISPOSITION} is the leg that stops the next inspector getting the identity-versus-optional
+ * criterion wrong. A bound-stopped read is driven through the fixture's parsing leg and the disposition its declared
+ * {@link InspectorFixture.Reading} owes is asserted: an identity-bearing read must refuse, an optional one must degrade
+ * to the path-derived coordinate, a content scan must not fail the publish at all, and a path-only inspector must
+ * answer what it answers over an empty body - the one reading for which no bound can bind, asserted positively so it
+ * cannot become a way out of the other two. A fixture that declares one side and behaves like the other fails here,
  * which is the whole point of making the side a declaration.
  *
  * <h2>Clauses this kit discharges</h2>
@@ -123,10 +123,10 @@ public final class InspectorContract {
 
     /**
      * One deliberately broken substitution for the inspector a property's check <em>must</em> fail against, and why
-     * (carrying the earlier mechanism here). The predicate is the contract's, not the fixture's: a mutation whose
-     * removed behaviour an inspector's declared shape genuinely does not have - a spooled re-open for an inspector
-     * that does not own the spooled leg - is declared inapplicable here, in front of whoever reviews the kit, rather
-     * than waived inside the fixture it would excuse.
+     * (the mutation mechanism the other contract kits carry). The predicate is the contract's, not the fixture's: a
+     * mutation whose removed behaviour an inspector's declared shape genuinely does not have - a spooled re-open for an
+     * inspector that does not own the spooled leg - is declared inapplicable here, in front of whoever reviews the kit,
+     * rather than waived inside the fixture it would excuse.
      */
     public record Mutation(InspectorMutant mutant, Predicate<InspectorFixture> appliesTo, String why) {
 

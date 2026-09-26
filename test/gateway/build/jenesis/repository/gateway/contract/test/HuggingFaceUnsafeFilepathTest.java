@@ -54,8 +54,8 @@ class HuggingFaceUnsafeFilepathTest {
     }
 
     /** A {@code ..} segment is the one hostile shape {@code RepositoryFormat} contract clause 6 names explicitly, and
-     *  it prescribes the status: such a path "addresses nothing in this format's namespace and is answered 404". Since
-     *  every format screens it at the request seam through the shared {@code ArtifactStore.traversalFree}
+     *  it prescribes the status: such a path "addresses nothing in this format's namespace and is answered 404". Every
+     *  format screens it at the request seam through the shared {@code ArtifactStore.traversalFree}
      *  predicate, so all fourteen answer the same 404 rather than each format's own idea of a refusal - which is the
      *  point of a shared guard. The store-stays-empty half of the guard's contract is unchanged. */
     @Test

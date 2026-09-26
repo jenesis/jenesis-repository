@@ -9,14 +9,14 @@ import build.jenesis.repository.walk.Traversal;
  * The single owner of the durable {@code holds/<kind>/<eco>/<coord>/<ver>} key space, read <em>by coordinate</em> -
  * the half of the hold question that needs no installed format at all.
  *
- * <p><b>Why this half lives here.</b> made the record, not the provider list, the answer to "is this held", and
- * put that owner in the gate ({@code HoldReleaseObserver}'s home) because the gate is what writes and releases holds.
+ * <p><b>Why this half lives here.</b> The record, not the provider list, is the answer to "is this held", and
+ * its owner is the gate ({@code HoldReleaseObserver}'s home) because the gate is what writes and releases holds.
  * But the coordinate-keyed read has a second consumer one module down: the inventory's name-enumeration screen
  * ({@code InventoryBrowse.disclosable}) has to know whether a version is held for an ecosystem <em>no installed format
- * can place</em>, which is exactly when neither of its own withholding faces - both layout-resolved - can be asked
- *. The gate depends on the inventory, not the other way round, so the read had to come down; and it comes down
+ * can place</em>, which is exactly when neither of its own withholding faces - both layout-resolved - can be asked.
+ * The gate depends on the inventory, not the other way round, so the read had to come down; and it comes down
  * to the module that already owns every sibling per-version key space ({@code published/}, {@code downloaded/},
- * {@code pinned/}, {@code licenses/}, and - since the earlier work, for the same reason - the {@code overrides/} twin in
+ * {@code pinned/}, {@code licenses/}, and - for the same reason - the {@code overrides/} twin in
  * {@link OverrideRecords}). {@code HoldRecords} in the gate keeps its whole public surface and delegates its
  * coordinate-keyed reads here, so there is still exactly one construction of these keys and exactly one enumeration of
  * the kind index. What stays in the gate is everything that needs discovery: the path-keyed forms (which need a format
@@ -44,7 +44,7 @@ public final class HoldMarkers {
     public static final String DISPATCH = "dispatch";
 
     /** The squatter's whole root, {@code holds/dispatch}, composed here so the gate's {@code QuarantineDispatch}
-     *  builds it from this constant instead of re-spelling {@code "holds/"} beside it. Before only the second
+     *  builds it from this constant instead of re-spelling {@code "holds/"} beside it. Once only the second
      *  segment was shared, so renaming {@link #ROOT} would have left the squat writing under the old root while
      *  {@link #kinds} enumerated the new one - and the exclusion that keeps {@code dispatch} from reading as a hold
      *  kind would have stopped excluding anything. */

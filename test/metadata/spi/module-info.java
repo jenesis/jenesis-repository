@@ -1,7 +1,7 @@
 /**
  * The consolidated metadata document contract in isolation: the canonical key codec round-trips and guards, the
  * total reader tolerates torn/foreign bytes, the tri-state envelope serialises and re-reads, an unrecognised or
- * newer-tagged section is carried through a mutate byte-for-structure verbatim (the property at the section
+ * newer-tagged section is carried through a mutate byte-for-structure verbatim (the row-carry property at the section
  * level), and a newer-format document is rendered but refused for mutation.
  *
  * @jenesis.release 25

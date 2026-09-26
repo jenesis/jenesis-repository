@@ -20,11 +20,11 @@ import build.jenesis.repository.compliance.SignalSourceProvider;
  * documented contract clause; {@link #checks(SignalFixture)} binds them to a fixture's recordings.
  *
  * <h2>Every property also declares what must break it</h2>
- * A check states what a feed must do; nothing in a check states that it <em>could have said otherwise</em> (,
- * carrying the earlier mechanism here). So each {@link Property} names one or more {@link Mutation}s - a {@link Mutant}
+ * A check states what a feed must do; nothing in a check states that it <em>could have said otherwise</em>.
+ * So each {@link Property} names one or more {@link Mutation}s - a {@link Mutant}
  * that removes exactly the behaviour the property is about - and the JUnit driver runs the same check body a second
  * time against each, requiring an {@link AssertionError}. All thirteen carry one, so nothing here is exempt.
- * {@link Property#READ_PATH_EGRESS}'s mutation is the sharpest of them: it is the earlier own finding turned into a
+ * {@link Property#READ_PATH_EGRESS}'s mutation is the sharpest of them: it is a real finding turned into a
  * probe, and it goes red only while the {@link NoEgressResolver} record is complete rather than sampled.
  *
  * <p>Assertion-library-free on purpose: a check throws {@link AssertionError} naming the signal, the property and the
@@ -137,8 +137,8 @@ public final class SignalContract {
 
         /** An answer the feed has already drawn, past the window it declared for it, with the vendor no longer able
          *  to refresh it: the declared fail mode governs there too, and the reading never claims an aged answer was
-         *  just fetched. Gate 4 at the one moment {@link #WARM_READ_DECLARED} cannot reach, and the leg is
-         *  about. */
+         *  just fetched. Gate 4 at the one moment {@link #WARM_READ_DECLARED} cannot reach: the aged
+         *  answer. */
         AGED_ANSWER_TAKES_FAIL_MODE,
 
         /** A query against the production configuration reaches exactly what the fixture declared it reaches -
@@ -294,8 +294,8 @@ public final class SignalContract {
                         "the leg's whole premise is that the feed's own window LAPSES and it asks the vendor again. A "
                                 + "feed that answers from what it holds for ever never reaches the aged case at all, "
                                 + "and the check would then be comparing two answers drawn from the same fetch - "
-                                + "which is the 'keeps serving what it drew without ever re-asking' defect is "
-                                + "about, stated from the other side"),
+                                + "which is the 'keeps serving what it drew without ever re-asking' defect, "
+                                + "stated from the other side"),
                 new Mutation(Mutant.A_REJECTION_THE_FEED_ACCEPTS,
                         fixture -> fixture.reads() == SignalFixture.Reads.FETCHES_ON_QUERY,
                         "for a feed that holds nothing, the aged case IS the next query over a vendor that stopped "

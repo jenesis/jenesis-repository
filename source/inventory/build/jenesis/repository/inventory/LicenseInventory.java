@@ -15,7 +15,7 @@ import build.jenesis.repository.store.Known;
 
 /**
  * The per-coordinate declared-license facts: the licenses an artifact <em>declares</em> (a name and/or URL, exactly as
- * the publishing gate's quality inspector read them out of the artifact's own metadata), consolidated by into the
+ * the publishing gate's quality inspector read them out of the artifact's own metadata), consolidated into the
  * {@code licenses} section of the unified per-coordinate metadata document ({@link MetadataKey#version}) that replaces
  * the standalone {@code licenses/} sidecar. It records the <em>declared</em> form, not a resolved SPDX id, so the one
  * place that categorises (the search sweep's {@code License.identify}) stays authoritative and a later
@@ -82,7 +82,7 @@ public final class LicenseInventory {
             Optional<Section> before = document.section(LicenseSection.TAG);
             List<Declared> beforeDeclared = LicenseSection.declared(before);
             // doc.mutate applies the union and carries every other section verbatim; it throws loudly on a
-            // newer-format document rather than downgrade-rewriting it (§5.3), exactly as the store's mutate would.
+            // newer-format document rather than downgrade-rewriting it, exactly as the store's mutate would.
             MetadataDocument next = document.mutate(single(LicenseSection.union(licenses, now)));
             List<Declared> afterDeclared = LicenseSection.declared(next.section(LicenseSection.TAG));
             if (before.isPresent() && new LinkedHashSet<>(beforeDeclared).equals(new LinkedHashSet<>(afterDeclared))) {

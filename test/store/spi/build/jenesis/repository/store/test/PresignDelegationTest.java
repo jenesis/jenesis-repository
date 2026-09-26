@@ -10,7 +10,7 @@ import build.jenesis.repository.store.ReadOnlyArtifactStore;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The {@code presign} SPI seam (EPIC 29 RD-1): the default answers empty so a backend that cannot mint a direct-fetch
+ * The {@code presign} SPI seam: the default answers empty so a backend that cannot mint a direct-fetch
  * URL - the filesystem store - streams as today, and every read-only decorator delegates it, signing the
  * <em>fully-qualified</em> object key so a tenant-scoped presign carries the scope prefix down to the signing backend.
  * Hermetic: the signing backend is a recording stub that captures the key it was asked to sign, so no live object store

@@ -112,7 +112,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
 
     // A hostile archive cannot force a large allocation: the podspec read is bounded by the product's one
     // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenreg.archive.largest-entry - not by a
-    // private constant of this format's (RepositoryFormat contract clause 15 /).
+    // private constant of this format's (RepositoryFormat contract clause 15).
 
     // How far the walk for the podspec may run is the product's one archive-walk bound, ArchiveWalk.largestWalk(),
     // settable at jenreg.archive.largest-walk - not a private constant of this format's (RepositoryFormat contract

@@ -44,7 +44,7 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Selection failure.</b> Dimensions are an additive family: every enabled provider contributes, none is
  * selected by name, so there is no "selected but missing" resolution to fail. The corresponding fail-fast duty is
  * on configuration instead - a dial an operator <em>did</em> set that does not parse must throw out of
- * {@code create}, naming the offending key (PRINCIPLES &sect;9), so the settings writer rolls back to the last good
+ * {@code create}, naming the offending key (&sect;9), so the settings writer rolls back to the last good
  * gate and the boot / scheduled re-read refuses to run a gate the operator did not ask for. Falling back to a
  * default here would loosen the gate silently. Absence of configuration is not failure: it degrades to the clause-3
  * sentinel. A provider whose {@link #requiredConfig()} keys are unset self-disables with one log line rather than
@@ -90,7 +90,7 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Read purity.</b> {@code create} reads configuration only. {@link GatePolicy#assess} performs no I/O of its
  * own: it reads the subject, the advisories the gate looked up once for all dimensions, and any signal source it
  * was built with - and those sources answer from their persisted snapshot, so a screen renders stored state and
- * never fetches (PRINCIPLES &sect;10).</li>
+ * never fetches (&sect;10).</li>
  *
  * <li><b>Staleness.</b> A dimension holds no freshness of its own; where it reads an externally-sourced signal the
  * staleness is the source's and is surfaced there ({@link KnownExploitedSource}, {@link HealthSource}). A source

@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * {@link Publication#quarantineAlias} (Audit-26 F3, three-valued by): the free-store cross-alias scan an automated
+ * {@link Publication#quarantineAlias} (three-valued): the free-store cross-alias scan an automated
  * content-addressed marker clear runs before lifting the marker. It walks the {@code publish/quarantine} pointer subtree
  * for any live review pointer OUTSIDE the caller's own served paths whose body is the hash, short-circuiting on the
  * first, and propagating a genuine store {@link IOException} so the caller fails closed (does not clear).

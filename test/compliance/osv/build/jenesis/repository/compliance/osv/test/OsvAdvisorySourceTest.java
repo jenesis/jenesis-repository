@@ -75,7 +75,7 @@ class OsvAdvisorySourceTest {
     void scores_severity_from_a_cvss_v2_vector() {
         // The presence of an `Au:` metric selects the hand-rolled CVSS v2 base-score formula, distinct from the v3
         // path. Full network/low-complexity/complete-impact scores 10.0 -> CRITICAL; the classic partial-impact
-        // vector scores 7.5 -> HIGH. Pinning the formula to these reference scores is what PRINCIPLES §8 requires.
+        // vector scores 7.5 -> HIGH. Pinning the formula to these reference scores is what §8 requires.
         String response = """
                 {"vulns":[
                   {"id":"CVE-v2-crit","severity":[{"type":"CVSS_V2","score":"AV:N/AC:L/Au:N/C:C/I:C/A:C"}]},
@@ -264,7 +264,7 @@ class OsvAdvisorySourceTest {
 
     @Test
     void a_coordinate_this_feed_could_not_screen_is_not_laundered_by_the_next_coordinate_that_answered() {
-        // the earlier §13 retrofit to the fail-closed half. The raise is what a CALLER acts on here - this feed never
+        // The §13 retrofit to the fail-closed half. The raise is what a CALLER acts on here - this feed never
         // hands back a degraded value - but the reading is what a CONSOLE renders, and it used to record successes
         // only: an OSV that had failed every lookup for three days still read "authoritative", because the last
         // instant it managed to stamp was still the last thing it had stamped. It is now derived per coordinate,

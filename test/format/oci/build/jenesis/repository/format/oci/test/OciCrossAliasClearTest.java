@@ -9,7 +9,7 @@ import build.jenesis.repository.store.Withheld;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The OCI ACCEPT-clear cross-alias guard (Audit-26 F3): the manifest choke point's {@code Withheld.clear} on an accepted
+ * The OCI ACCEPT-clear cross-alias guard: the manifest choke point's {@code Withheld.clear} on an accepted
  * (re-)push must prove no OTHER alias still holds the content-addressed marker, not only that THIS path carries no
  * standing hold. The withhold marker is content-addressed (one {@code withheld/<hex>} withholds the bytes wherever
  * served) and the OCI serve gate keys on the marker, not the per-path {@code /quarantine} pointer - so clearing it while
@@ -101,8 +101,8 @@ class OciCrossAliasClearTest {
         assertThat(getStatus("/v2/liba/app/manifests/1.0")).as("A also stays 404 on the shared marker").isEqualTo(404);
     }
 
-    /** Audit-27 A5-F2: the ACCEPT-clear cross-alias guard is a read-THEN-clear, a TOCTOU twin of the reconcile-vs-
-     *  enforce race #207. A concurrent enforce sweep that links a byte-identical sibling's {@code /quarantine} pointer
+    /** The ACCEPT-clear cross-alias guard is a read-THEN-clear, a TOCTOU twin of the reconcile-vs-
+     *  enforce race. A concurrent enforce sweep that links a byte-identical sibling's {@code /quarantine} pointer
      *  in the window between the guard read and the clear would leave the still-live hold's content-addressed marker
      *  gone - and the OCI serve gate keys withheld on the MARKER - so the KEV-held sibling would disclose. This pins
      *  the post-clear re-verify: a delegating store injects sibling B's pointer at the exact instant the clear deletes
@@ -138,7 +138,7 @@ class OciCrossAliasClearTest {
                 .isEqualTo(404);
     }
 
-    /** Audit-28 A5-F1: the post-clear re-verify must re-run the FULL guard face, not only the cross-alias probe. The
+    /** The post-clear re-verify must re-run the FULL guard face, not only the cross-alias probe. The
      *  guard passes on two faces - the same-path chain probe (disclosable(path), THIS path carries no /quarantine
      *  pointer) AND the cross-alias scan (no OTHER alias holds the hash). The earlier re-verify re-ran only the
      *  cross-alias scan with {@code path} EXCLUDED, so an enforce that lands its hold on THIS SAME path in the clear

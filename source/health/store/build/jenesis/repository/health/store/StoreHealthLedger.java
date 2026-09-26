@@ -29,7 +29,7 @@ import build.jenesis.repository.walk.BoundedChildren;
  * vulnerability feed does. The only removals are the artifact lifecycle's own (the inventory's {@code evict}
  * takes a coordinate's record when its last published version goes); nothing in this class removes a record.
  *
- * <p><strong>Cut over into the {@code @coordinate} document (§5.4).</strong> Each coordinate's health now lives
+ * <p><strong>Cut over into the {@code @coordinate} document.</strong> Each coordinate's health now lives
  * in the {@code health} section of the consolidated per-coordinate metadata document
  * ({@code meta/<eco>/<enc(coord)>/@coordinate}, {@link HealthSection}) rather than a standalone {@code health/} sidecar,
  * and the monotonic-{@code scannedAt} guard becomes that section's merge semantics - a clean cutover, not an indefinite
@@ -48,7 +48,7 @@ public final class StoreHealthLedger implements HealthLedger {
 
     private final ArtifactStore store;
 
-    /** The consolidated metadata store the health facts live in (§5.4), or {@code null} when no
+    /** The consolidated metadata store the health facts live in, or {@code null} when no
      *  {@link MetadataProvider} is installed - the graceful-absence path stays on the {@code health/} sidecar. */
     private final MetadataStore metadata;
 
@@ -57,7 +57,7 @@ public final class StoreHealthLedger implements HealthLedger {
     }
 
     /** Bind an explicit metadata store - or {@code null} for the no-metadata-module deployment whose ledger stays on
-     *  the {@code health/} sidecar (§5.4). The primary constructor resolves the installed provider; this overload lets
+     *  the {@code health/} sidecar. The primary constructor resolves the installed provider; this overload lets
      *  a caller (a test, or a wiring that already holds the store) pin the graceful-absence path directly. */
     public StoreHealthLedger(ArtifactStore store, MetadataStore metadata) {
         this.store = store;

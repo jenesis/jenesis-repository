@@ -23,8 +23,8 @@ import build.jenesis.repository.compliance.QualityInspector;
  *   <li>{@code /gatetest/malformed/...}- a CLAIMED artifact whose parse genuinely failed
  *       ({@link MalformedArtifactException}: could-not-parse ⇒ NOT clean, the distinction the screen honours);
  *   <li>{@code /gatetest/endpoint/...}  - a coordinate the PATH does not carry ({@code com.endpoint:pkg}), stamped
- *       with the ecosystem {@link GateEndpointTestFormat} owns: the shape, where the screened descriptor is a
- *       shared push endpoint and the artifact is served somewhere the coordinate alone derives;
+ *       with the ecosystem {@link GateEndpointTestFormat} owns: the push-endpoint shape, where the screened descriptor
+ *       is a shared push endpoint and the artifact is served somewhere the coordinate alone derives;
  *   <li>{@code /gatetest/inspectorfault/...}- a CLAIMED artifact whose inspector throws a NON-Malformed runtime error
  *       (an unhandled edge over hostile content): the screen must fail closed, never letting the raw error escape.
  *   <li>{@code /gatetest/inspectorio/...}   - a CLAIMED artifact whose inspector throws a plain {@link IOException},

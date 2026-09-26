@@ -18,9 +18,9 @@ import build.jenesis.repository.format.Checksums;
 /**
  * The OCI inventory layout: a capability-only {@link RepositoryFormat} + {@link BlobLayout} that teaches the
  * store-backed inventory OCI's on-store conventions, so a retroactive KEV/license hold on an OCI image withholds every
- * served face (manifest by tag and digest, config, layers) and releases cleanly - the gap Audit-25 #9 flags (the free
+ * served face (manifest by tag and digest, config, layers) and releases cleanly. Without it, the free
  * {@code OciFormat} implements neither {@code ArtifactLayout} nor {@code BlobLayout}, so {@code inventory.paths("oci",…)}
- * / {@code blobHashes("oci",…)} were empty and every hold/release seam no-oped on OCI).
+ * / {@code blobHashes("oci",…)} were empty and every hold/release seam no-oped on OCI.
  *
  * <p><b>Never dispatches.</b> {@link #handles} is ALWAYS {@code false}: {@code FormatDispatcher} (and the redirect/
  * staging first-match idioms) serve the FIRST format whose {@code handles} matches in unspecified {@code ServiceLoader}
@@ -36,12 +36,12 @@ import build.jenesis.repository.format.Checksums;
  * The free <em>SPI</em> is a different matter and is used directly: the reference-scan seam this layout declares is the
  * free {@code BlobReferences}, inherited through {@code BlobRoots} rather than restated.
  *
- * <p><b>Cross-alias &amp; tag-mutability landmines (Audit-25 §6).</b> {@link #blobHashes} marks every referenced digest,
+ * <p><b>Cross-alias &amp; tag-mutability landmines.</b> {@link #blobHashes} marks every referenced digest,
  * the correct egress invariant (the bytes are what is held) - so a KEV hold on one image 404s a shared base layer for
  * every image referencing it while those images' manifests keep serving (a partly-pullable image). On release the
  * cross-alias guard ({@code HoldLifecycle.withheldByAnotherAlias}) consults each still-held sibling's FULL
  * {@link #blobHashes} set - not just its {@code /quarantine} pointer BODY, which for OCI is a manifest digest that never
- * carries a shared LAYER hash (Audit-27 A1-F1) - so releasing image A KEEPS a layer marker a concurrently-held image B
+ * carries a shared LAYER hash - so releasing image A KEEPS a layer marker a concurrently-held image B
  * still needs; the shared layer stays withheld (for A too, the content-addressed cost) until B releases, closing the
  * prior cross-alias disclosure where B's held layer briefly served. A version keyed by a tag resolves its digest set at
  * sweep/release time, so a corrected re-push to a held tag serves the new bytes until the next converge pass re-marks
@@ -65,7 +65,7 @@ import build.jenesis.repository.format.Checksums;
  *       own hash, an index's sub-manifests and each one's config, layer and legacy {@code fsLayers} digests. The
  *       collector still parses no format's document; it unions what the format lends into the same shards under the
  *       same bare-hex predicate.</li>
- *   <li><b>Sweep - what an eviction takes away.</b> {@link #blobKeys} is the handle, and since the earlier work it names the
+ *   <li><b>Sweep - what an eviction takes away.</b> {@link #blobKeys} is the handle, and it names the
  *       {@code oci/types/<hex>} sidecar as well as the tag pointer, guarded so a sibling tag on the same digest keeps
  *       it. That is what makes the two halves a cycle rather than a ratchet: without it the sidecar outlives the image
  *       and keeps lending its blobs for ever, so an evicted image is <em>retained</em> rather than reclaimed - the safe
@@ -77,7 +77,7 @@ import build.jenesis.repository.format.Checksums;
  *
  * <p><b>Why nothing here names a pinned version any more.</b> This paragraph was rewritten three times, each
  * time describing whichever gap happened to be open on the day - the pre-blanket exposure, then "configs and
- * layers remain outside the reference set", then "the pinned 0.8.0 core predates the lending seam" - and each rewrite
+ * layers remain outside the reference set", then "the pinned core predates the lending seam" - and each rewrite
  * went stale at the next bump, in both directions. A version number is the one fact a comment cannot keep. So the
  * mechanism above is stated as an invariant of the seams and the pin state is not stated at all: whether the installed
  * free core actually lends OCI's references is a <em>runtime</em> property of the deployment's module graph, not of
@@ -227,7 +227,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * Whether a live tag pointer OTHER than {@code own} resolves to the manifest {@code hex} - the cross-alias guard
      * that keeps {@code oci/types/<hex>} standing while any sibling tag still serves that manifest.
      *
-     * <p>The scan is the shared bounded tree walk over {@code oci/} (the earlier primitive, iterative and paged, so an
+     * <p>The scan is the shared bounded tree walk over {@code oci/} (iterative and paged, so an
      * attacker-shaped multi-segment image name cannot overflow a stack and a wide level is never listed whole),
      * following its own cursor to exhaustion and short-circuiting on the first alias found - the cancellation the
      * primitive documents. Only tag pointers are read, judged by {@link #tagPointer}, so the format's sidecar and
@@ -319,7 +319,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
-            return List.of();   // the shared per-part coordinate screen (T-202b), beside blobKeys' own name/tag screen
+            return List.of();   // the shared per-part coordinate screen, beside blobKeys' own name/tag screen
         }
         Optional<String> hex = manifestHex(coordinate, version, store);
         if (hex.isEmpty() || !store.exists("blobs/" + hex.get())) {

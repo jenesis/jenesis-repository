@@ -9,7 +9,7 @@ import build.jenesis.repository.metadata.MetadataProvider;
 /**
  * The health module's storage manifest.
  *
- * <p><strong>Records cut over into the {@code @coordinate} document (§5.4).</strong> Each coordinate's health now
+ * <p><strong>Records cut over into the {@code @coordinate} document.</strong> Each coordinate's health now
  * lives in the {@code health} section of the consolidated per-coordinate metadata document ({@code meta}, owned by
  * {@code MetadataStorageNamespace}), so this manifest no longer declares the whole {@code health/} prefix - only the
  * repo-level {@link build.jenesis.repository.health.HealthLedger#scanned health stamp} freshness singleton at {@code health/scanned}, which
@@ -20,7 +20,7 @@ import build.jenesis.repository.metadata.MetadataProvider;
  * key-space's own eviction (the inventory's {@code evict} deleting the {@code @coordinate} document on the last-version
  * eviction). Per-repository (never shared): two tenants never share a coordinate's health.
  *
- * <p><b>that reasoning does not survive the deployment which never installs the module at all.</b> There the
+ * <p><b>That reasoning does not survive the deployment which never installs the module at all.</b> There the
  * same prefix is not residue - {@link StoreHealthLedger} takes its graceful-absence layout and keeps both reads and
  * writes on the {@code health/} sidecar, with a documented point read and a repository-wide scan over it - so the
  * records are the deployment's live health ledger. Reported as orphans they read as reclaimable, which is an
@@ -41,7 +41,7 @@ public final class HealthStorageNamespace implements StorageNamespace {
         if (MetadataProvider.installed().isPresent()) {
             return Set.of(HealthLedger.SCANNED, HealthLedger.EVICTED, HealthRankIndex.PREFIX);
         }
-        // with no metadata persistence module installed, StoreHealthLedger takes its graceful-absence layout and both
+        // With no metadata persistence module installed, StoreHealthLedger takes its graceful-absence layout and both
         // reads AND writes stay on the health/<eco>/<coord> sidecar - a point read for one coordinate and a
         // repository-wide scan over the same subtree for the ledger walk, so this claims that root too - conditional
         // for the reason StorageNamespace states.

@@ -99,7 +99,7 @@
     <!--/* Quality-inspection subsection: a scoped error state, rendered on the shared subsectionError wrapper, only when
          this coordinate carries an inspection-failed finding (the compliance screen could not parse the artifact, so it
          was screened from its path coordinate alone). It errors JUST this panel - every sibling article above and below
-         renders normally, so one subsection's derive-failure never blanks the artifact view (PRINCIPLES 5/10). */-->
+         renders normally, so one subsection's derive-failure never blanks the artifact view (§5, §10). */-->
     <th:block th:if="${detail.inspection != null}">
         <div th:replace="~{fragments :: subsectionError('Quality inspection',
              'This artifact could not be fully parsed by its quality inspector, so it was screened only from its path coordinate - not fully screened.',
@@ -207,7 +207,7 @@
         <p th:unless="${detail.provenance}"><small>No provenance signer is configured on this deployment.</small></p>
     </article>
 
-    <!--/* T25.6 item 3 (over T25.4's OriginSection): the origin acquisition rows - where THIS deployment's bytes for
+    <!--/* The origin acquisition rows, read from the OriginSection - where THIS deployment's bytes for
          this coordinate version came from. Distinct from the provenance attestation ("who built it"): origin answers
          "which supply channel the operator acquired it through - a hand upload, or via which fallback". Origin is
          neutral - the gate does not consume it - so this is a plain display. Rendered from the durable metadata section

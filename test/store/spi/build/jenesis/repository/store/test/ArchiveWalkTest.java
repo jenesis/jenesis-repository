@@ -60,8 +60,8 @@ class ArchiveWalkTest {
 
     @Test
     void an_archive_that_declares_nothing_is_exhausted_not_truncated() throws IOException {
-        // The whole point of the outcome, and the conflation: an archive that carries no such member and one
-        // whose member sat past the bound must never answer the same way.
+        // The whole point of the outcome, and the conflation it prevents: an archive that carries no such member and
+        // one whose member sat past the bound must never answer the same way.
         ArchiveWalk.Found<String> nothing = ArchiveWalk.walk(archive(512), 1024, _ -> null);
 
         assertThat(nothing.exhausted()).isTrue();
@@ -115,9 +115,9 @@ class ArchiveWalkTest {
         assertThat(truncated.orNull()).isNull();
         assertThat(empty.orNull()).isNull();
 
-        // The artifact's identity, or a guard's only input, fails closed - and is exactly this: the refusal must
-        // say WHICH of the two happened, or an operator is told a .deb "carries no control stanza" when the walk never
-        // reached it.
+        // The artifact's identity, or a guard's only input, fails closed - and this is exactly that case: the refusal
+        // must say WHICH of the two happened, or an operator is told a .deb "carries no control stanza" when the walk
+        // never reached it.
         assertThatThrownBy(() -> truncated.required("Debian .deb", "control member"))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("Debian .deb")

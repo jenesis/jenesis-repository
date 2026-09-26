@@ -66,7 +66,7 @@ public class LifecycleController {
         if (tenant == null) {
             return null;
         }
-        // P-Q (plan §8 Q3): served-view parity - a withheld version's lifecycle mark must not be disclosed on this
+        // Served-view parity: a withheld version's lifecycle mark must not be disclosed on this
         // served listing. Each mark is routed through the servable-name enumeration seam
         // (inventory.disclosableDisplay under HIDE_WITHHELD: the membership policy, resolving the mark's ecosystem by
         // the shared bounded published/ probe, stats no blob), so a held coordinate:version's mark drops out while a

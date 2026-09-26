@@ -19,9 +19,9 @@ import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.Publication;
 
 /**
- * The late-enablement migration re-screen sweep for a hardening proxy (EPIC 23, PRINCIPLES §5 self-healing).
+ * The late-enablement migration re-screen sweep for a hardening proxy (§5 self-healing).
  *
- * <p><b>Amortizer, not sole defense (EPIC 28).</b> The request-time fail-closed <em>guarantee</em> now lives at
+ * <p><b>Amortizer, not sole defense.</b> The request-time fail-closed <em>guarantee</em> now lives at
  * the serve boundary: {@link HardenedHitVerify} verifies every hardened cache hit against the current gate BEFORE it
  * serves (the {@link build.jenesis.repository.server.PullThroughHooks} seam #79 closes), so an unverdicted or
  * stale-verdicted hit is never served unverified. This sweep is the §5 bulk <em>complement</em> - it pre-records the

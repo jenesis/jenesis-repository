@@ -497,7 +497,7 @@ public class RepositoryAdminController {
         model.addAttribute("detail", detail);
         // The API names an artifact by the path a client uses within the repository, so its links do too.
         model.addAttribute("servedPath", repositories.servedPath(repo, detail.path()));
-        // The origin acquisition rows (item 3, over the earlier OriginSection): where this deployment's bytes came
+        // The origin acquisition rows (read from the OriginSection): where this deployment's bytes came
         // from - uploaded vs via which fallback, stored/passed-through, screening, serves. A neutral display the gate
         // does not consume; empty when the coordinate carries no recorded origin (or no metadata module is installed).
         model.addAttribute("origin", browse.origin(repo, detail.path()));
@@ -676,7 +676,7 @@ public class RepositoryAdminController {
      *  repositories held a format, which answers nothing until it is given one), the marks of what it holds - the
      *  format's own, else one per format namespace, empty when the console can mark none (the view then draws the
      *  neutral mark) - and whether it is a
-     *  hardened proxy (EPIC 23), which the list badges so an operator sees at a glance which repositories enforce
+     *  hardened proxy, which the list badges so an operator sees at a glance which repositories enforce
      *  full-body upstream screening. */
     public record RepositoryRow(String name, String format, List<Mark> marks, boolean hardened,
                                 SettingsAdmin.RepositoryShape shape, String description, String created,

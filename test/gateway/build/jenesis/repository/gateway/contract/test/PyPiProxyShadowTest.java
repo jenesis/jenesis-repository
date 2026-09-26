@@ -12,7 +12,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Pins the index-shadowing fix (EPIC 4) for {@link build.jenesis.repository.format.pypi.PyPiFormat}: the PEP 503
+ * Pins the index-shadowing fix for {@link build.jenesis.repository.format.pypi.PyPiFormat}: the PEP 503
  * project index is derived from the very {@code pypi/<project>/files} namespace the pull-through proxy caches
  * distribution files into, so before the fix a single cached wheel made the index a local {@code 200} that shadowed the
  * upstream Simple index - an uncached version was no longer discoverable. The fix gates the derived index on a

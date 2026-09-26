@@ -206,7 +206,7 @@ public final class WebhookDeliveryTask implements MaintenanceTask {
                 // recoverable through /api/webhook/retry -> WebhookOutbox.unpark - the same park-and-recover semantics
                 // forwarding gives. Parking it out of the active queue is the unbounded-scan fix: the hot drain scan
                 // (outbox.active()) no longer re-lists and re-reads it every pass. The park transition is counted once.
-                // Gate the park-transition metric on the CAS result (Audit-28 A5-F4), exactly as ForwardingTask does:
+                // Gate the park-transition metric on the CAS result, exactly as ForwardingTask does:
                 // park() compare-and-sets on the read token, so a re-publish that replaced the entry mid-pass loses the
                 // CAS and nothing is parked - counting it then would over-report the transition. Only meter a park that
                 // actually landed (and only the first time this entry transitions to parked).
@@ -235,8 +235,8 @@ public final class WebhookDeliveryTask implements MaintenanceTask {
      *
      * <p>The peer of {@code ForwardingTask.depths}, and fixed with it because §13 makes them one mechanism. They
      * used to be written only where the pass found work, so each early return left the previous pass's numbers
-     * standing and a drained queue was indistinguishable from a module that had stopped running. an earlier change had already
-     * hoisted {@code jenreg.webhook.unsigned} above these very returns for the same reason - the pattern was
+     * standing and a drained queue was indistinguishable from a module that had stopped running. The same fix had
+     * already hoisted {@code jenreg.webhook.unsigned} above these very returns for the same reason - the pattern was
      * understood here and simply not applied to the depths.
      *
      * <p>What is true at each exit differs: the no-endpoint exit has just emptied the queue and reports nothing,

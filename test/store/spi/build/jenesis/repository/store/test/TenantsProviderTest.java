@@ -20,8 +20,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * multi-tenant edition's), exercised there; like the publish-interceptor chain, the core's discovery is
  * empty by design.
  *
- * <p>Since the seam resolves through the shared {@code Providers.optionalUnique} primitive, which fixes the
- * §9 defect the inventory pass found here: an <em>explicitly selected</em>
+ * <p>The seam resolves through the shared {@code Providers.optionalUnique} primitive, which fixes the
+ * §9 defect an inventory pass found here: an <em>explicitly selected</em>
  * {@code jenreg.tenants=<name>} that no provider answers to used to degrade silently to the fixed single
  * tenant, collapsing a multi-tenant deployment onto one tenant and hiding every other tenant's artifacts behind a
  * 404 that looks like an empty repository. It now throws, exactly as the store backend already did. Only

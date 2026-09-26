@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
- * The withhold-change feed (Audit-23, phase P3): the two durable withhold conventions - the {@code withheld/<hash>}
+ * The withhold-change feed: the two durable withhold conventions - the {@code withheld/<hash>}
  * marker and the {@code /quarantine<servedPath>} review pointer - fire a transition-only after-commit signal on their
  * one core choke points, so a durable derived-metadata consumer (a published index) can retract a retroactively
  * held coordinate rather than trusting only the emit-time screen. This pins the free half of that feed:

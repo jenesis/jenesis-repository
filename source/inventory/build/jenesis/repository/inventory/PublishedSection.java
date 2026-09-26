@@ -8,7 +8,7 @@ import build.jenesis.repository.metadata.Signal;
 import build.jenesis.repository.metadata.State;
 
 /**
- * The {@code published} section codec of the consolidated metadata document (§5.1): the publish facts a
+ * The {@code published} section codec of the consolidated metadata document: the publish facts a
  * coordinate version carries - the publish instant retention orders and ages by, the format-supplied {@code prerelease}
  * flag the prerelease-expiry rule reads, and the {@code pinned} force-keep marker - consolidated out of the separate
  * {@code published/} and {@code pinned/} sidecars this section replaces. The section's presence <em>is</em> membership

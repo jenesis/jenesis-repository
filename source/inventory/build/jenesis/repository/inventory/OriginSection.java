@@ -8,7 +8,7 @@ import build.jenesis.repository.metadata.Signal;
 import build.jenesis.repository.metadata.State;
 
 /**
- * The {@code origin} section codec of the consolidated metadata document (EPIC 25, §6.2): the
+ * The {@code origin} section codec of the consolidated metadata document: the
  * <em>provenance-of-source</em> trail of a coordinate version - where <em>this</em> deployment's bytes for it came from.
  * Distinct from the {@code provenance} attestation summary ("who built it and can they prove it"): origin answers "which
  * supply channel the operator's own deployment acquired it through - the hardened front door, or a hand upload?".
@@ -29,12 +29,12 @@ import build.jenesis.repository.metadata.State;
  * <em>new</em> row, so the origin trail doubles as the visible drift history beside the /verdict. The row's
  * {@code sha256} reconciles with the sibling {@code verdict} section's digest-pinned record (both name the same bytes),
  * so verdict ("what the screen decided about digest D") and origin ("where D came from") point at each other by digest
- * rather than duplicating source/validators (§6.2).
+ * rather than duplicating source/validators.
  *
  * <p><b>Reader-tolerant, row-carrying.</b> A mutation parses only the built-in fields it owns and carries every other
- * row - and every unrecognised field on a row it touches - verbatim (the §5.2 row-level carry, as {@code findings}), so
+ * row - and every unrecognised field on a row it touches - verbatim (the row-level carry {@code findings} has), so
  * a newer writer's row survives an older node untouched. All methods are pure and return a fresh {@link Section} (§11);
- * the section carries a {@link Signal#NEUTRAL neutral} signal - the gate does not consume origin in v1 (§6.2).
+ * the section carries a {@link Signal#NEUTRAL neutral} signal - the gate does not consume origin.
  */
 public final class OriginSection {
 
@@ -115,14 +115,14 @@ public final class OriginSection {
     }
 
     /** Whether the coordinate version carries a {@code local-upload} origin row - the system-of-record marker a cache
-     *  eviction must respect (a local-upload blob is never cache-evicted, §6.2). */
+     *  eviction must respect (a local-upload blob is never cache-evicted). */
     public static boolean hasLocalUpload(Optional<Section> section) {
         return acquisitions(section).stream().anyMatch(Acquisition::localUpload);
     }
 
     /** Whether the coordinate version's <em>only</em> origin is one or more {@code fallback} rows (no {@code local-upload}
-     *  row) - a re-heatable cache entry whose blob a quota-pressure eviction may reclaim while retaining these records
-     *  (the §6.2 eviction dividend). Empty/absent origin is not re-heatable (nothing recorded to key the decision off). */
+     *  row) - a re-heatable cache entry whose blob a quota-pressure eviction may reclaim while retaining these records.
+     *  Empty/absent origin is not re-heatable (nothing recorded to key the decision off). */
     public static boolean reheatableFallbackOnly(Optional<Section> section) {
         List<Acquisition> rows = acquisitions(section);
         return !rows.isEmpty() && rows.stream().noneMatch(Acquisition::localUpload)
@@ -130,7 +130,7 @@ public final class OriginSection {
     }
 
     /**
-     * Record a hand upload through the publish path (§6.2): append a {@code local-upload} row for {@code (local-upload,
+     * Record a hand upload through the publish path: append a {@code local-upload} row for {@code (local-upload,
      * sha256)} when absent, else converge (idempotent - a re-publish of the same bytes refreshes the row's {@code at}
      * without duplicating it). One row per distinct {@code (source, sha256)}: a different-bytes upload appends a new
      * row, so the shadowing of a fallback by a local upload stays visible. Re-derivable each CAS attempt.
@@ -152,11 +152,11 @@ public final class OriginSection {
     }
 
     /**
-     * Record a fallback fetch through the walk's fallback-fetch path (§6.2), for both a store and a no-store fallback:
+     * Record a fallback fetch through the walk's fallback-fetch path, for both a store and a no-store fallback:
      * append a {@code fallback} row for {@code (fallback, sha256)} when absent (the first acquisition of these bytes,
      * {@code serves}=1, {@code lastServed}={@code at} - the synchronous first write, §9), else <em>update</em> the
      * existing row's {@code lastServed} and increment {@code serves} (a repeated no-copy serve of unchanged bytes - the
-     * best-effort coalesced refresh, §6.2/§4). A digest change is a new {@code sha256} and so appends a new row. The
+     * best-effort coalesced refresh, §4). A digest change is a new {@code sha256} and so appends a new row. The
      * fallback identity/policy fields are set on first acquisition and preserved on refresh. Re-derivable each CAS
      * attempt.
      */
@@ -190,7 +190,7 @@ public final class OriginSection {
     }
 
     /** The current row array as a fresh mutable copy - every existing row (recognised or not) carried verbatim so a
-     *  mutation never drops another writer's row or an unknown field on a row (§5.2 row-level carry). */
+     *  mutation never drops another writer's row or an unknown field on a row (the row-level carry). */
     private static ArrayNode rows(Optional<Section> current) {
         ArrayNode rows = JSON.createArrayNode();
         current.flatMap(Section::payload).map(data -> data.path(ACQUISITIONS_FIELD)).filter(JsonNode::isArray)

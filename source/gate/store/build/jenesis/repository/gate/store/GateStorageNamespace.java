@@ -24,7 +24,7 @@ import build.jenesis.repository.gate.QuarantineLog;
  * are composed in a different module from the one that declares them, which is exactly the split that rots: a manifest
  * entry re-spelling the literal survives a rename in the owner, so the operator purge composes a key nothing writes,
  * the walk lists nothing under it, and the dry run reports an empty blast radius while the purge reclaims nothing -
- * the failure found in the well-formedness direction and found in the reaper.
+ * the failure once found in the well-formedness direction and again in the reaper.
  */
 public final class GateStorageNamespace implements StorageNamespace {
 

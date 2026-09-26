@@ -50,10 +50,10 @@ import org.springframework.web.bind.annotation.RestController;
  * the right chain - disagreed with it. {@link SpiCatalogController} carried the same shape and took the same retrofit.
  *
  * <h2>One <em>named</em> tenant, never all of them</h2>
- * gave the console's Security-posture screen the selected tenant's own advisories - conditions about a tenant's
+ * The console's Security-posture screen was given the selected tenant's own advisories - conditions about a tenant's
  * admission policy, raised at {@link Scope#TENANT} against that tenant's effective chain. This read held no tenant, so
  * it dropped them entirely and a headless operator could not obtain what the console shows, although the API and the
- * console are documented as equal administration surfaces (PRINCIPLES &sect;13).
+ * console are documented as equal administration surfaces (&sect;13).
  *
  * <p>{@code ?tenant=<name>} closes that, and closes it the only way the {@code SafetyAdvisor} contract allows. The
  * refusal that made this endpoint tenant-less is <b>not</b> relaxed: enumerating every tenant's effective gate on one
