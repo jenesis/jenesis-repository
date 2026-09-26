@@ -164,9 +164,8 @@
             <form method="post" th:action="@{/ui/admin/scim-token}">
                 <button type="submit" th:text="${scimConfigured} ? 'Regenerate token' : 'Generate token'">Generate token</button>
             </form>
-            <form th:if="${scimConfigured}" method="post" th:action="@{/ui/admin/scim-token/clear}"
-                  onsubmit="return confirm('Disable SCIM for this tenant?');">
-                <button class="secondary outline" type="submit">Clear token</button>
+            <form th:if="${scimConfigured}" method="post" th:action="@{/ui/admin/scim-token/clear}">
+                <button th:replace="~{base :: dangerButton('Clear token', 'Disable SCIM for this tenant? The identity provider can no longer provision its members.')}">Clear token</button>
             </form>
         </div>
     </article>

@@ -98,10 +98,10 @@
              upload body before a format read it) nothing parses the body before the CsrfFilter runs, so a
              token hidden in the body would never be seen. The body is read by the product's own bounded multipart
              reader in SettingsController instead. */-->
-        <form method="post" th:action="@{/ui/settings/tenant/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid"
-              onsubmit="return window.confirm('Restore this tenant from this bundle? It replaces the stored overrides for this tenant.');">
-            <input type="file" name="bundle" accept="application/json,.json" required>
-            <button type="submit">Import tenant bundle</button>
+        <form method="post" th:action="@{/ui/settings/tenant/import(_csrf=${_csrf.token})}" enctype="multipart/form-data" class="grid">
+            <input type="file" name="bundle" accept="application/json,.json" required
+                   aria-label="Tenant settings bundle to import">
+            <button th:replace="~{base :: dangerButton('Restore from bundle', 'Restore this tenant from this bundle? It replaces every stored override of this tenant.')}">Restore from bundle</button>
         </form>
     </article>
 

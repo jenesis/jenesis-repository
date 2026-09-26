@@ -27,7 +27,14 @@
 
     <article>
         <h2>Cache settings</h2>
-        <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/cache'}">
+        <!--/* What a reader who may not change them sees is the values; the form is an editor's. */-->
+        <dl th:unless="${isEditor}">
+            <dt>Size cap</dt><dd th:text="${#strings.isEmpty(project.size)} ? 'none' : ${project.size}">none</dd>
+            <dt>Eviction order</dt>
+            <dd th:text="${project.lru} ? 'least-recently-used first' : 'most-recently-used first'">order</dd>
+            <dt>TTL</dt><dd th:text="${#strings.isEmpty(project.ttl)} ? 'none' : ${project.ttl}">none</dd>
+        </dl>
+        <form th:if="${isEditor}" method="post" th:action="@{'/ui/projects/' + ${project.name} + '/cache'}">
             <label>Size cap <small>(bytes; blank = no cap)</small>
                 <input name="size" th:value="${project.size}" inputmode="numeric" placeholder="(none)">
             </label>
@@ -40,26 +47,8 @@
             <label>TTL <small>(ISO-8601 duration, e.g. P30D or PT12H; blank = none)</small>
                 <input name="ttl" th:value="${project.ttl}" placeholder="P30D">
             </label>
-            <button type="submit" th:disabled="${!isEditor}">Save settings</button>
+            <button type="submit">Save settings</button>
         </form>
-    </article>
-
-    <article>
-        <h2>Eviction</h2>
-        <p><small>Runs the cache server's own sweep directly on the volume, in the background; the outcome and the
-            entries left are shown above when it lands.</small></p>
-        <div class="grid">
-            <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/size'}">
-                <button type="submit" th:disabled="${!isEditor}">Enforce size cap now</button>
-            </form>
-            <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/ttl'}">
-                <button type="submit" th:disabled="${!isEditor}">Expire stale (ttl) now</button>
-            </form>
-            <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/clear'}">
-                <button type="submit" class="secondary outline app-danger" th:disabled="${!isEditor}"
-                        th:attr="data-delete=${project.name},data-delete-warning='Every cached entry of this project is deleted; the next builds run without them.'">Clear all entries</button>
-            </form>
-        </div>
     </article>
 
     <article>
@@ -68,6 +57,25 @@
             <a href="/ui/credentials">Access &rarr; Credentials</a>, grant this project - or <code>*</code> for every
             project - the role <strong>deploy</strong> to read and store, or <strong>read-only</strong> to read.</p>
     </article>
+
+    <!--/* The sweeps delete entries, so they sit apart under a rule of their own, each asking first: the two that
+         enforce the settings above as a confirmation, the one that empties the project as a deletion. */-->
+    <section th:if="${isEditor}" class="app-divide" aria-labelledby="eviction">
+        <h2 id="eviction">Eviction</h2>
+        <p><small>Runs the cache server's own sweep directly on the volume, in the background; the outcome and the
+            entries left are shown above when it lands.</small></p>
+        <div class="app-actions">
+            <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/size'}">
+                <button th:replace="~{base :: dangerButton('Enforce size cap now', 'Evict entries until the project is within its size cap?')}">Enforce size cap now</button>
+            </form>
+            <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/ttl'}">
+                <button th:replace="~{base :: dangerButton('Expire stale entries now', 'Delete every entry older than the project ttl?')}">Expire stale entries now</button>
+            </form>
+            <form method="post" class="app-actions__danger" th:action="@{'/ui/projects/' + ${project.name} + '/evict/clear'}">
+                <button th:replace="~{base :: deleteButton('Clear all entries', ${project.name}, 'Every cached entry of this project is deleted; the next builds run without them.')}">Clear all entries</button>
+            </form>
+        </div>
+    </section>
 </main>
 </body>
 </html>

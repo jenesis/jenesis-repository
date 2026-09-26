@@ -16,22 +16,6 @@
         same document is the <code>walks</code> setting the settings screen, <code>/api/settings</code> and the
         CLI edit.</small></p>
 
-    <article>
-        <h2>Now</h2>
-        <form method="post" th:action="@{/ui/walks/run}" class="setting-edit">
-            <button type="submit">Walk the store now</button>
-            <small>Every node picks the request up within half a minute; the <code>rebuild</code> entry's consumers
-                ride it, and a node that did not shut down cleanly asks for the same walk on its own.</small>
-        </form>
-        <p th:if="${overview.requests.isEmpty()}"><small>No walk is requested.</small></p>
-        <ul th:unless="${overview.requests.isEmpty()}">
-            <li th:each="r : ${overview.requests}">
-                <strong th:text="${r.subject}">walk</strong> requested at <span th:text="${r.at}">when</span>:
-                <span th:text="${r.reason}">why</span>
-            </li>
-        </ul>
-    </article>
-
     <article th:each="e : ${overview.entries}" class="setting-group">
         <h2 th:text="${e.name}">rebuild</h2>
         <p class="setting-values">
@@ -102,6 +86,24 @@
         </form>
         <p><small>The default document, for reference: <code th:text="${defaultDocument}">[]</code></small></p>
     </article>
+
+    <!--/* A walk out of schedule is the exception to everything above and costs a read of every object, so it comes
+         after the schedules, set apart, and asks before it starts. */-->
+    <section class="app-divide" aria-labelledby="walk-now">
+        <h2 id="walk-now">Out of schedule</h2>
+        <form method="post" th:action="@{/ui/walks/run}" class="setting-edit">
+            <button th:replace="~{base :: dangerButton('Walk the store now', 'Walk the store now? Every object is read once more; each schedule above says what its last run cost.')}">Walk the store now</button>
+            <small>Every node picks the request up within half a minute; the <code>rebuild</code> entry's consumers
+                ride it, and a node that did not shut down cleanly asks for the same walk on its own.</small>
+        </form>
+        <p th:if="${overview.requests.isEmpty()}"><small>No walk is requested.</small></p>
+        <ul th:unless="${overview.requests.isEmpty()}">
+            <li th:each="r : ${overview.requests}">
+                <strong th:text="${r.subject}">walk</strong> requested at <span th:text="${r.at}">when</span>:
+                <span th:text="${r.reason}">why</span>
+            </li>
+        </ul>
+    </section>
 </main>
 </body>
 </html>
