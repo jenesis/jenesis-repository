@@ -474,6 +474,14 @@ public class RepositoryController {
         respond(response, 409, exception.getMessage());
     }
 
+    /** A publish whose blob a collector removed while it was in flight is a transient failure, not a refusal: sent
+     *  again, the bytes are stored again. {@code 503} with a {@code Retry-After} is how a client is told to do that. */
+    @ExceptionHandler(Publication.BlobCollected.class)
+    public void blobCollected(Publication.BlobCollected exception, HttpServletResponse response) throws IOException {
+        response.setHeader("Retry-After", "1");
+        respond(response, 503, exception.getMessage());
+    }
+
     /** A write refused because the deployment is read-only maps to {@code 403 Forbidden} - the store choke point
      *  rejected the mutation before any bytes were stored, whatever endpoint or internal path attempted it. */
     @ExceptionHandler(ReadOnlyException.class)

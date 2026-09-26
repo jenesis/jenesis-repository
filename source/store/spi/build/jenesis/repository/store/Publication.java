@@ -271,7 +271,22 @@ public final class Publication {
                 return read;
             }
         });
+        // Un-condemned the moment its bytes are stored, not when a pointer is linked at the end of the screen. A
+        // content-addressed store keeps a blob it already holds and drops the upload, so a publish of bytes a
+        // collector had condemned is relying on that one blob from here on; left condemned, a confirming sweep
+        // running while the publish is screened deletes it, and the link that follows names nothing.
+        uncondemn(hash);
         return new Blob(hash, counted[0]);
+    }
+
+    /** Clear a collector's {@code gc/condemned/<hash>} marker, answering whether there was one. */
+    private boolean uncondemn(String hash) throws IOException {
+        String condemned = "gc/condemned/" + hash;
+        if (!store.exists(condemned)) {
+            return false;
+        }
+        store.delete(condemned);
+        return true;
     }
 
     /**
@@ -366,12 +381,15 @@ public final class Publication {
      *  so a compare-and-set conflict re-reads the token and retries (the bounded idiom every other load-bearing
      *  pointer write uses) rather than silently dropping the losing write: a concurrent republish of the same path
      *  resolves to last-writer-wins - the same outcome the two writes would have had a moment apart - and a caller
-     *  whose link cannot land is told so instead of believing it published. Once the pointer lands, any garbage
+     *  whose link cannot land is told so instead of believing it published. Before the pointer is written, any garbage
      *  collector's {@code gc/condemned/<hash>} marker on the blob is cleared - identical content dedupes to one
      *  blob, so a "new" publish may link a blob a collector already judged unreferenced, and clearing the marker on
      *  the write path (every link site: publish, quarantine, promotion, cross-publish) un-condemns it before the
-     *  collecting sweep's final marker re-read. One existence probe per link, a no-op wherever collection never
-     *  condemned the blob; the marker key is the store-layout convention the {@code gc} SPI documents. */
+     *  collecting sweep's final marker re-read - and a blob that did carry a marker is confirmed present, since a
+     *  sweep that got there first leaves the marker behind the blob it deleted; that raises {@link BlobCollected}
+     *  rather than writing a pointer at nothing. A publish has already cleared the marker once, when it stored the
+     *  bytes. One existence probe per link, a no-op wherever collection never condemned the blob; the marker key is
+     *  the store-layout convention the {@code gc} SPI documents. */
     public String link(String requestPath, String hash) throws IOException {
         return link(requestPath, hash, -1L);
     }
@@ -414,6 +432,13 @@ public final class Publication {
             // between the two writes would lift the marker this hold is about to need with nothing to say so.
             HeldBy.record(store, hash, requestPath.substring(QUARANTINE_PATH.length()));
         }
+        // The collector's marker is cleared before the pointer is written, and a blob that turns out to have been
+        // condemned is confirmed present first: a confirming sweep that deleted it while this publish was in flight
+        // leaves only its marker behind (it deletes blob first, marker last), and a pointer written now would name
+        // nothing and answer 201. Refused instead, so the client sends the bytes again and they are stored again.
+        if (uncondemn(hash) && store.size("blobs/" + hash) < 0) {
+            throw new BlobCollected(requestPath, hash);
+        }
         boolean guarded = !quarantine && GUARD.isBound() && GUARD.get().equals(requestPath);
         Optional<ArtifactStore.Versioned> prior = Retries.decide(store, key, current -> {
             if (guarded && current.isPresent()) {
@@ -429,10 +454,6 @@ public final class Publication {
                     : reviewPending(store, requestPath));
             return Retries.Verdict.write(ServableNames.Pointer.render(hash, length, held), current);
         });
-        String condemned = "gc/condemned/" + hash;
-        if (store.exists(condemned)) {
-            store.delete(condemned);
-        }
         if (quarantine) {
             // The serving pointer's copy of the hold, after the review pointer and before the observers hear of it,
             // so a listing observer re-deciding the entry reads the path as held. Every /quarantine link, fresh or
@@ -1006,6 +1027,21 @@ public final class Publication {
         /** The key this policy probes for {@code artifact} - the explicit one, or the publication's own pointer. */
         String key(ArtifactDescriptor artifact) {
             return pointer != null ? pointer : "publish" + artifact.path();
+        }
+    }
+
+    /**
+     * Raised by {@link #link} when the blob it would point at was deleted by a garbage collector while the publish
+     * was in flight - the bytes were condemned, this publish deduplicated onto them, and a confirming sweep removed
+     * them before the pointer was written. Nothing was linked. The failure is transient rather than a
+     * refusal: sent again, the bytes are stored again and the link lands, so an edge answers {@code 503} with a
+     * {@code Retry-After}.
+     */
+    public static final class BlobCollected extends IOException {
+
+        BlobCollected(String requestPath, String hash) {
+            super("the blob " + hash + " that " + requestPath + " would name was collected while this publish was in "
+                    + "flight; publish it again");
         }
     }
 
