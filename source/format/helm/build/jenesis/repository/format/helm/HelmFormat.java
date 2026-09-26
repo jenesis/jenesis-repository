@@ -5,7 +5,10 @@ import module org.apache.commons.compress;
 import module org.yaml.snakeyaml;
 
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
@@ -47,7 +50,7 @@ import build.jenesis.repository.store.StoredListing;
  * {@link BlobLayout} seam instead.
  */
 public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryImporter,
-        ArtifactSignatures {
+        ArtifactSignatures, RepositoryExporter {
 
     /** The package-ecosystem name Helm coordinates report. OSV has no Helm advisory feed, so a vulnerability lookup
      *  finds nothing while the deny-list, the malicious-package flag and licence policy still key on the coordinate. */
@@ -557,5 +560,25 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
     private static String text(Map<?, ?> map, String key) {
         Object value = map.get(key);
         return value instanceof String string && !string.isBlank() ? string : null;
+    }
+
+    /**
+     * Each registry's chart of the version is put at {@code <repo>/charts/<name>-<version>.tgz}, and its provenance
+     * file after it at the same name with {@code .prov} - the direct upload a chart repository takes, and the path
+     * each is served from, so a file already there is not sent again. The target derives its own {@code index.yaml}.
+     */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        String file = coordinate + "-" + version + TGZ;
+        List<BlobExport.Pair> pairs = new ArrayList<>();
+        for (String repo : repository.list("helm")) {
+            pairs.add(new BlobExport.Pair(fileKey(repo, file), repo + "/" + CHARTS + file));
+            pairs.add(new BlobExport.Pair(fileKey(repo, file + ".prov"), repo + "/" + CHARTS + file + ".prov"));
+        }
+        return BlobExport.put(repository, pairs, target);
     }
 }

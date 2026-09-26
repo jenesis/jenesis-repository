@@ -11,6 +11,8 @@ import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -53,7 +55,7 @@ import build.jenesis.repository.format.Checksums;
  * not served here yet; the tag convention is what every cosign version pushes by default.
  */
 public final class OciFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, BlobReferences,
-        ArtifactSignatures {
+        ArtifactSignatures, RepositoryExporter {
 
     /** cosign's tag for the signature artifact of the manifest {@code sha256:<hex>}: {@code sha256-<hex>.sig}. */
     private static final String SIGNATURE_TAG_PREFIX = "sha256-", SIGNATURE_TAG_SUFFIX = ".sig";
@@ -66,7 +68,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      *  the discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final OciImporter importer = new OciImporter();
 
-    private static final String OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
+    static final String OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
 
     private static final String MANIFEST_ACCEPT = String.join(", ", OCI_MANIFEST,
             "application/vnd.oci.image.index.v1+json",
@@ -1466,7 +1468,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
-    private static String hex(String digest) {
+    static String hex(String digest) {
         int colon = digest.indexOf(':');
         return colon < 0 ? digest : digest.substring(colon + 1);
     }
@@ -1486,7 +1488,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * an empty segment on purpose - a trailing slash and a doubled separator are legitimate request shapes - while a
      * Distribution name segment may not be empty.
      */
-    private static boolean isImageName(String name) {
+    static boolean isImageName(String name) {
         if (name.isEmpty() || !ArtifactStore.traversalFree(name)) {
             return false;
         }
@@ -1522,5 +1524,19 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /** An image is exported tag by tag through the Distribution API, as {@code docker push} sends it; see
+     *  {@link OciExport}. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        return OciExport.export(repository, coordinate, version, target);
+    }
+
+    /** The versions of an image are recorded under the ecosystem its inventory layout declares. */
+    @Override
+    public Optional<String> inventory() {
+        return Optional.of("oci");
     }
 }

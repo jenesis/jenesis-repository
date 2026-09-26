@@ -18,6 +18,10 @@ import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.multipart.MultipartBody;
+import build.jenesis.repository.multipart.MultipartForm;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.PublishedExport;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -38,7 +42,8 @@ import build.jenesis.repository.format.Semver;
  * the same cursor the PyPI upload walks), so no hand-scan walks the binary {@code .nupkg} bytes; the {@code .nuspec} is
  * read with the JDK XML.
  */
-public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, ArtifactSignatures {
+public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, ArtifactSignatures,
+        RepositoryExporter {
 
     static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -1166,5 +1171,35 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /**
+     * The version's {@code .nupkg} is pushed as {@code dotnet nuget push} pushes it: a multipart {@code PUT} to the
+     * service index's {@code PackagePublish} resource, the credential in {@code X-NuGet-ApiKey} rather than in an
+     * {@code Authorization} header, and asked for back at its flat-container path, so a package already there is
+     * not pushed again. A signed package carries its signature inside it, so it travels with the bytes.
+     */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        String id = coordinate.toLowerCase(Locale.ROOT);
+        String file = id + "." + version + ".nupkg";
+        Blobs blobs = new Blobs(repository);
+        Optional<Blobs.Located> located = blobs.locate("nuget/" + id + "/" + version + "/" + file);
+        if (located.isEmpty()) {
+            return Exported.WITHHELD;
+        }
+        String hash = located.get().hash();
+        MultipartForm form = MultipartForm.create()
+                .file("package", file, "application/octet-stream", located.get().size(), () -> blobs.open(hash));
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("Content-Type", form.contentType());
+        target.credential().ifPresent(credential -> headers.put("X-NuGet-ApiKey", credential.secret()));
+        return PublishedExport.send(List.of(new PublishedExport.File(
+                new ExportTarget.Request("PUT", PUSH, headers, ExportTarget.Body.of(form.length(), form::open)),
+                Optional.of("v3-flatcontainer/" + id + "/" + version + "/" + file), hash)), target);
     }
 }

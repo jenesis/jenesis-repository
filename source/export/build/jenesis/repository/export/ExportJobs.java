@@ -121,7 +121,7 @@ public final class ExportJobs {
 
         /** The inventory's versions of the format's ecosystem, one coordinate at a time, in publish order. */
         void coordinates(RepositoryFormat format, RepositoryExporter exporter) throws IOException {
-            String ecosystem = ((EcosystemLayout) format).ecosystem();
+            String ecosystem = exporter.inventory().orElseGet(() -> ((EcosystemLayout) format).ecosystem());
             StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
             String[] current = {null};
             List<String> versions = new ArrayList<>();

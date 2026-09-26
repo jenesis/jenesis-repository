@@ -109,6 +109,11 @@ public final class HttpExportTarget implements ExportTarget {
     }
 
     private static HttpRequest.BodyPublisher publisher(Body body) {
+        if (body.length() == 0) {
+            // An empty file is a file - a recipe's empty source list, a marker a client writes - and the JDK refuses a
+            // streamed publisher of length zero outright, so it goes as the empty body it is.
+            return HttpRequest.BodyPublishers.noBody();
+        }
         Supplier<InputStream> open = () -> {
             try {
                 return body.open();

@@ -4,7 +4,10 @@ import module java.base;
 import module tools.jackson.databind;
 
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.ProxyLeg;
@@ -65,7 +68,8 @@ import build.jenesis.repository.walk.TraversalException;
  * repository), so the index needs no rewrite. {@link #defaultUpstream()} is ConanCenter (the canonical public Conan
  * registry); a deployment can name a different upstream per repository.
  */
-public final class ConanFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter {
+public final class ConanFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
+        RepositoryExporter {
 
     /** The package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). OSV
      *  has no dedicated Conan feed, so vulnerability lookups on it simply find nothing; the coordinate still drives
@@ -909,5 +913,23 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /**
+     * Every revision of the version is uploaded as {@code conan upload} uploads it through the v2 API: each recipe
+     * file of a revision, then each file of every package built from it, put at the path it is served from - which
+     * names the revisions the client computed, so the target holds the same revisions rather than new ones.
+     */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        List<BlobExport.Pair> pairs = new ArrayList<>();
+        for (ConanFile file : conanFiles(coordinate, version, repository)) {
+            pairs.add(new BlobExport.Pair(file.key(), file.path().substring(PREFIX.length())));
+        }
+        return BlobExport.put(repository, pairs, target);
     }
 }

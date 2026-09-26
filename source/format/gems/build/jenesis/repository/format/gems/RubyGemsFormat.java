@@ -5,6 +5,9 @@ import module org.apache.commons.compress;
 import module org.yaml.snakeyaml;
 import module tools.jackson.databind;
 import build.jenesis.repository.multipart.MultipartBody;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.PublishedExport;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.store.PublishInterceptor;
 
 import build.jenesis.repository.format.Listings;
@@ -42,7 +45,8 @@ import build.jenesis.repository.store.Publication;
  * (kept apart so the legacy surface stays visible), precomputed at push and served as a plain streamed read. The gem
  * itself is served at {@code /rubygems/gems/<file>.gem}.
  */
-public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, ArtifactSignatures {
+public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, ArtifactSignatures,
+        RepositoryExporter {
 
     private static final String QUICK = "quick/Marshal.4.8/";
 
@@ -1000,5 +1004,32 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /**
+     * The version's {@code .gem} is pushed as {@code gem push} pushes it: the raw gem posted to
+     * {@code api/v1/gems}, the key as the bare {@code Authorization} value the client sends, and asked for back at
+     * {@code gems/<name>-<version>.gem}, so a gem already there is not pushed again. A signed gem carries its
+     * signatures inside it, so they travel with the bytes.
+     */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        Blobs blobs = new Blobs(repository);
+        String file = coordinate + "-" + version + ".gem";
+        Optional<Blobs.Located> located = blobs.locate("rubygemfiles/" + file);
+        if (located.isEmpty()) {
+            return Exported.WITHHELD;
+        }
+        String hash = located.get().hash();
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("Content-Type", "application/octet-stream");
+        target.credential().ifPresent(credential -> headers.put("Authorization", credential.secret()));
+        return PublishedExport.send(List.of(new PublishedExport.File(new ExportTarget.Request("POST", "api/v1/gems",
+                headers, ExportTarget.Body.of(located.get().size(), () -> blobs.open(hash))),
+                Optional.of("gems/" + file), hash)), target);
     }
 }

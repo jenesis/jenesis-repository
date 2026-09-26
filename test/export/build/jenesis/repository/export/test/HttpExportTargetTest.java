@@ -108,6 +108,14 @@ class HttpExportTargetTest {
     }
 
     @Test
+    void an_empty_file_is_sent_as_an_empty_body() throws IOException {
+        ExportTarget.Response response = target(Optional.empty()).send(Request.put("empty", "application/octet-stream",
+                ExportTarget.Body.of(0, () -> new ByteArrayInputStream(new byte[0]))));
+        assertThat(response.ok()).isTrue();
+        assertThat(requested).containsExactly("PUT /target/empty");
+    }
+
+    @Test
     void an_answer_is_kept_only_up_to_the_cap() throws IOException {
         ExportTarget.Response response = target(Optional.empty()).send(put("large"));
         assertThat(response.ok()).isFalse();

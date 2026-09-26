@@ -44,6 +44,14 @@ public final class MultipartForm {
         return this;
     }
 
+    /** A field whose value is a document of its own type - JSON metadata, a manifest - rather than a bare string. */
+    public MultipartForm field(String name, String contentType, byte[] value) {
+        byte[] copy = value.clone();
+        parts.add(new Part(head("form-data; name=\"" + quoted(name) + "\"", Optional.of(contentType)),
+                () -> new ByteArrayInputStream(copy), copy.length));
+        return this;
+    }
+
     /** A file part of {@code length} bytes ({@code -1} when not known), opened from {@code content} on each send. */
     public MultipartForm file(String name, String filename, String contentType, long length, Content content) {
         parts.add(new Part(head("form-data; name=\"" + quoted(name) + "\"; filename=\"" + quoted(filename) + "\"",

@@ -12,6 +12,9 @@ import build.jenesis.repository.blobs.OutboundTargets;
 import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.blobs.ProxyRelay;
 import build.jenesis.repository.format.ArtifactLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.PublishedExport;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -60,7 +63,8 @@ import build.jenesis.repository.store.Withheld;
  * other language formats, so the {@code publish/}-namespace eviction ({@link #paths}) stays empty; coordinate-scoped
  * enforcement runs through the {@code BlobLayout} seam ({@link #blobKeys}/{@link #servedPaths}) instead.
  */
-public final class CargoFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter {
+public final class CargoFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
+        RepositoryExporter {
 
     /** The OSV package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). */
     public static final String ECOSYSTEM = "crates.io";
@@ -893,5 +897,81 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /**
+     * Each registry's crate of the version is published as {@code cargo publish} frames it - the little-endian
+     * length of the publish metadata, the metadata, the length of the {@code .crate}, the {@code .crate} - to that
+     * registry's {@code api/v1/crates/new}, with the token as the raw {@code Authorization} value Cargo sends. The
+     * metadata is rebuilt from the stored index line, which carries the name, version, dependencies and features a
+     * registry indexes; what it does not carry - the licence among it - a registry reads out of the {@code Cargo.toml}
+     * inside the crate, as this one does. Asked for back at its download path, so a crate already there is not sent.
+     */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        String crate = canonical(coordinate);
+        Blobs blobs = new Blobs(repository);
+        List<PublishedExport.File> files = new ArrayList<>();
+        for (String repo : repository.list("cargo")) {
+            Optional<Blobs.Located> located = blobs.locate(crateKey(repo, crate, version));
+            ByteArrayOutputStream line = new ByteArrayOutputStream();
+            if (located.isEmpty() || !blobs.read(indexKey(repo, crate, version), line)) {
+                continue;
+            }
+            byte[] metadata = MAPPER.writeValueAsBytes(publishMetadata(MAPPER.readTree(line.toByteArray())));
+            String hash = located.get().hash();
+            // The frame states the crate's length before its bytes, so a pointer written before lengths were recorded
+            // is sized from the blob.
+            long size = located.get().size() >= 0 ? located.get().size() : blobs.size(crateKey(repo, crate, version));
+            Map<String, String> headers = new LinkedHashMap<>();
+            headers.put("Content-Type", "application/octet-stream");
+            target.credential().ifPresent(credential -> headers.put("Authorization", credential.secret()));
+            ExportTarget.Body frame = ExportTarget.Body.of(8L + metadata.length + size,
+                    () -> new SequenceInputStream(Collections.enumeration(List.of(
+                            new ByteArrayInputStream(length(metadata.length)), new ByteArrayInputStream(metadata),
+                            new ByteArrayInputStream(length(size)), blobs.open(hash)))));
+            files.add(new PublishedExport.File(new ExportTarget.Request("PUT", repo + "/" + NEW, headers, frame),
+                    Optional.of(repo + "/" + API_CRATES + coordinate + "/" + version + DOWNLOAD), hash));
+        }
+        return PublishedExport.send(files, target);
+    }
+
+    /** The publish metadata an index line was made from: {@link #indexLine}'s rewrite, run backwards. */
+    private static ObjectNode publishMetadata(JsonNode line) {
+        ObjectNode metadata = MAPPER.createObjectNode();
+        metadata.put("name", text(line, "name"));
+        metadata.put("vers", text(line, "vers"));
+        ArrayNode deps = metadata.putArray("deps");
+        for (JsonNode dep : line.path("deps")) {
+            ObjectNode entry = deps.addObject();
+            String renamed = dep.path("package").asString(null);
+            entry.put("name", renamed != null ? renamed : text(dep, "name"));
+            entry.put("version_req", text(dep, "req"));
+            entry.set("features", dep.get("features") instanceof ArrayNode features
+                    ? features : MAPPER.createArrayNode());
+            entry.put("optional", dep.path("optional").asBoolean(false));
+            entry.put("default_features", dep.path("default_features").asBoolean(true));
+            put(entry, "target", dep.path("target").asString(null));
+            entry.put("kind", dep.path("kind").asString("normal"));
+            put(entry, "registry", dep.path("registry").asString(null));
+            put(entry, "explicit_name_in_toml", renamed != null ? text(dep, "name") : null);
+        }
+        metadata.set("features", line.get("features") instanceof ObjectNode features
+                ? features : MAPPER.createObjectNode());
+        metadata.putArray("authors");
+        metadata.putArray("keywords");
+        metadata.putArray("categories");
+        metadata.putObject("badges");
+        put(metadata, "links", line.path("links").asString(null));
+        return metadata;
+    }
+
+    /** Cargo's little-endian {@code u32} length prefix. */
+    private static byte[] length(long value) {
+        return new byte[] {(byte) value, (byte) (value >>> 8), (byte) (value >>> 16), (byte) (value >>> 24)};
     }
 }

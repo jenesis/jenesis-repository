@@ -11,6 +11,10 @@ import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.multipart.MultipartBody;
+import build.jenesis.repository.multipart.MultipartForm;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.PublishedExport;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -44,7 +48,8 @@ import tools.jackson.databind.ObjectMapper;
  * {@code problem} object. See {@link SwiftListings} for why those are different rather than two spellings of one
  * thing.
  */
-public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures {
+public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures,
+        RepositoryExporter {
 
     /** The archive signature's sidecar suffix under the archive key and path: {@code <version>.zip.sig}. */
     private static final String SIGNATURE = ".sig";
@@ -599,5 +604,58 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             paths.add("/" + key);
         }
         return paths;
+    }
+
+    /**
+     * Each registry's release is published as SE-0391 has a client publish one: a multipart {@code PUT} to
+     * {@code <repo>/<scope>/<name>/<version>} carrying the source archive, the metadata it was published with, its
+     * {@code Package.swift} where one was sent, and its signature with the format header where it was signed. Asked for
+     * back at the archive's path, so a release already there - a registry answers a second publish {@code 409} - is
+     * not sent again.
+     */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        int dot = coordinate.indexOf('.');
+        if (!BlobLayout.addressable(coordinate, version) || dot <= 0 || dot == coordinate.length() - 1) {
+            return Exported.WITHHELD;
+        }
+        String scope = coordinate.substring(0, dot), name = coordinate.substring(dot + 1);
+        Blobs blobs = new Blobs(repository);
+        List<PublishedExport.File> files = new ArrayList<>();
+        for (String repo : repository.list("swift")) {
+            String archiveKey = SwiftListings.archiveKey(repo, scope, name, version);
+            Optional<Blobs.Located> located = blobs.locate(archiveKey);
+            if (located.isEmpty()) {
+                continue;
+            }
+            String hash = located.get().hash();
+            MultipartForm form = MultipartForm.create().file("source-archive", name + "-" + version + ".zip",
+                    "application/zip", located.get().size(), () -> blobs.open(hash));
+            ByteArrayOutputStream release = new ByteArrayOutputStream();
+            if (blobs.read(SwiftListings.metadataKey(repo, scope, name, version), release)) {
+                form.field("metadata", "application/json",
+                        MAPPER.writeValueAsBytes(MAPPER.readTree(release.toByteArray()).path("metadata")));
+            }
+            ByteArrayOutputStream manifest = new ByteArrayOutputStream();
+            if (blobs.read(SwiftListings.manifestKey(repo, scope, name, version, ""), manifest)) {
+                form.field("package-manifest", "text/x-swift", manifest.toByteArray());
+            }
+            Map<String, String> headers = new LinkedHashMap<>();
+            ByteArrayOutputStream signature = new ByteArrayOutputStream();
+            if (blobs.read(archiveKey + SIGNATURE, signature)) {
+                byte[] signed = signature.toByteArray();
+                form.file("source-archive-signature", "source-archive.sig", "application/octet-stream", signed.length,
+                        () -> new ByteArrayInputStream(signed));
+                headers.put("X-Swift-Package-Signature-Format", SIGNATURE_FORMAT);
+            }
+            headers.put("Content-Type", form.contentType());
+            headers.put("Accept", "application/vnd.swift.registry.v1+json");
+            files.add(new PublishedExport.File(new ExportTarget.Request("PUT",
+                    repo + "/" + scope + "/" + name + "/" + version, headers,
+                    ExportTarget.Body.of(form.length(), form::open)),
+                    Optional.of(repo + "/" + scope + "/" + name + "/" + version + ".zip"), hash));
+        }
+        return PublishedExport.send(files, target);
     }
 }

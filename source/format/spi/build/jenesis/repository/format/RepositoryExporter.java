@@ -55,6 +55,15 @@ public interface RepositoryExporter {
     }
 
     /** What the job walks to find this format's versions. */
+    /**
+     * The ecosystem whose inventory rows name this format's versions, for a format that is not itself the
+     * {@link EcosystemLayout} they were recorded under - OCI, whose layout is a capability provider of its own. Empty,
+     * the default, reads the format's own.
+     */
+    default Optional<String> inventory() {
+        return Optional.empty();
+    }
+
     default Units units() {
         return Units.INVENTORY;
     }
