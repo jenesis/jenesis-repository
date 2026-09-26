@@ -866,7 +866,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         return indexPrefix(repo, vendor, pkg) + "/" + version;
     }
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link ComposerImporter} - the format IS the
+    /** The migration-import capability, delegated to the layout-only {@link ComposerImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final ComposerImporter importer = new ComposerImporter();
 

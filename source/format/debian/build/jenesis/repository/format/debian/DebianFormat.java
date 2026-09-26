@@ -1142,7 +1142,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return null;
     }
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link DebianImporter} - the format IS the
+    /** The migration-import capability, delegated to the layout-only {@link DebianImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final DebianImporter importer = new DebianImporter();
 

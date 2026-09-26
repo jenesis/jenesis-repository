@@ -830,7 +830,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
      *  segment, or carrying a path separator or control character. Mirrors the guard the sibling formats (rpm/cargo/…)
      *  apply to their coordinates, so a body- or path-supplied {@code ..} cannot escape the channel's namespace. */
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link CondaImporter} - the format IS the
+    /** The migration-import capability, delegated to the layout-only {@link CondaImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final CondaImporter importer = new CondaImporter();
 

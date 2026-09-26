@@ -1195,7 +1195,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         }
     }
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link HuggingFaceImporter} - the format IS the
+    /** The migration-import capability, delegated to the layout-only {@link HuggingFaceImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final HuggingFaceImporter importer = new HuggingFaceImporter();
 

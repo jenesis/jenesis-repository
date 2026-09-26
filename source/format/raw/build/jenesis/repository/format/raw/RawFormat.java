@@ -33,7 +33,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
     private static final int LISTING_ENTRIES = 10_000;
 
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link RawImporter} - the format IS
+    /** The migration-import capability, delegated to the layout-only {@link RawImporter} - the format IS
      *  the discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final RawImporter importer = new RawImporter();
 

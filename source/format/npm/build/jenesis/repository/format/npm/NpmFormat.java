@@ -1273,7 +1273,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
 
 
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link NpmImporter} - the format IS the
+    /** The migration-import capability, delegated to the layout-only {@link NpmImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final NpmImporter importer = new NpmImporter();
 

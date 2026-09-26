@@ -15,7 +15,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * WSPI.2 (c): {@code RepositoryImporter} is no longer a discovered service but an {@code instanceof} capability on the
+ * {@code RepositoryImporter} is no longer a discovered service but an {@code instanceof} capability on the
  * one {@link RepositoryFormat} seam, with {@code handles}&rarr;{@code imports} and {@code describe}&rarr;{@code
  * importTarget} renamed off the format's own methods. This pins the consolidation: a base format without the capability
  * is unaffected (its assets are skipped), an importing format is discovered and imports, {@link RepositoryImport}

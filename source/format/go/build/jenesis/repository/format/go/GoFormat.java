@@ -656,7 +656,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
 
 
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link GoImporter} - the format IS the
+    /** The migration-import capability, delegated to the layout-only {@link GoImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final GoImporter importer = new GoImporter();
 

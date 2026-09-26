@@ -35,7 +35,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
 
     private static final List<ModuleView> MODULE_VIEWS = ModuleView.installed();
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link MavenImporter} - the format
+    /** The migration-import capability, delegated to the layout-only {@link MavenImporter} - the format
      *  IS the discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final MavenImporter importer = new MavenImporter();
 
@@ -702,7 +702,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 null);
     }
 
-    // --- RepositoryImporter capability (WSPI.2 (c)): delegated to MavenImporter. importTarget avoids the erasure
+    // --- RepositoryImporter capability: delegated to MavenImporter. importTarget avoids the erasure
     //     clash with this format's ArtifactLayout.describe(String); imports avoids the clash with handles(String). ---
 
     @Override

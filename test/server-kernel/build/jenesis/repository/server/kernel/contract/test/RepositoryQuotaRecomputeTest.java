@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The tenant-wide quota recount enumerates each repository's flat {@code blobs/} namespace through the ordered
- * {@link ArtifactStore#page} primitive, never {@link ArtifactStore#list} - the WALK.5 enumerator migration, the
+ * {@link ArtifactStore#page} primitive, never {@link ArtifactStore#list} - the enumerator migration, the
  * tenant-spanning twin of {@code QuotaArtifactStore.recompute} - so a millions-entry namespace never
  * materialises as one list. The store wrapper fails a {@code list("blobs")} outright (the small repository-name
  * listing at the tenant scope stays allowed) and records every page limit, pinning that the recount sums every

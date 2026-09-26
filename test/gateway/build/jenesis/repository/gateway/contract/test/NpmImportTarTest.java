@@ -96,7 +96,7 @@ class NpmImportTarTest {
     }
 
     private static RepositoryImporter npmImporter() {
-        // WSPI.2 (c): the importer is a format capability now, discovered as a RepositoryFormat and filtered by
+        // The importer is a format capability now, discovered as a RepositoryFormat and filtered by
         // instanceof RepositoryImporter (mirroring the built-in importers), never a second discovered service.
         return ServiceLoader.load(RepositoryFormat.class).stream()
                 .map(ServiceLoader.Provider::get)

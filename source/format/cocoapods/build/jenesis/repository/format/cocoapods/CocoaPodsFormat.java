@@ -841,7 +841,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return "cocoapods/" + repo + "/blob/" + name + "/" + version;
     }
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link CocoaPodsImporter} - the format IS the
+    /** The migration-import capability, delegated to the layout-only {@link CocoaPodsImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final CocoaPodsImporter importer = new CocoaPodsImporter();
 

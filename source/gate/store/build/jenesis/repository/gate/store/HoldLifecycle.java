@@ -431,7 +431,7 @@ public final class HoldLifecycle {
     private static void replayImport(ArtifactStore store, String path, String hash, QuarantineDispatch dispatch)
             throws IOException {
         String source = dispatch.headers().getOrDefault(QuarantineDispatch.IMPORT_SOURCE_PATH, path);
-        // WSPI.2 (c): the importer is a format capability now, not a second discovered service - discover the
+        // The importer is a format capability now, not a second discovered service - discover the
         // formats and filter by instanceof RepositoryImporter (mirroring RepositoryImport), so the
         // owning importer is the format that both carries the capability and describes this source path.
         Optional<RepositoryImporter> importer = RepositoryFormat.installed().stream()

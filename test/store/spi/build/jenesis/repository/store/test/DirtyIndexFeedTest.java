@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The reusable incremental-derived-index primitive ({@link DirtyIndexFeed}) exercised as a standalone dirty-set feed
  * over a real {@code FilesystemArtifactStore}, driving a tiny in-test "index" (a coordinate&rarr;version map that stands
- * in for the Lucene snapshot the search index actually maintains). Each test pins one property of the WIDX.1 change-fed
+ * in for the Lucene snapshot the search index actually maintains). Each test pins one property of the change-fed
  * discipline at the primitive level: a marked add / update / delete is reflected after a sweep <em>without</em> a full
  * rebuild; the feed compacts (coalesces re-marks, clears applied markers); the reconcile backstop heals a change the
  * feed missed; an out-of-order marker never regresses a newer document; a crash between snapshot-commit and marker-clear

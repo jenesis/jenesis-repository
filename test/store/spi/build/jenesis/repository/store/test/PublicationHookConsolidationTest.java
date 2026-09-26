@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * WSPI.2 (b): the two publication hooks collapse to one discovered seam - {@link PublishInterceptor} now
+ * The two publication hooks collapse to one discovered seam - {@link PublishInterceptor} now
  * {@code extends PublicationObserver}, so a single {@code uses PublicationObserver} clause discovers both and
  * {@link Publication} splits the one discovered list by {@code instanceof PublishInterceptor}. This pins the
  * consolidation invariants the discovered path relies on: a base-only observer still observes and never screens; an

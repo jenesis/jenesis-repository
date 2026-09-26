@@ -16,7 +16,7 @@ import build.jenesis.repository.store.Publication;
  * asset to the first {@link RepositoryFormat} that also carries the {@link RepositoryImporter} capability and
  * {@link RepositoryImporter#imports imports} its format, writing it into the content-addressed store so the imported
  * repository serves and indexes it as its own. Formats are discovered with {@link java.util.ServiceLoader} and
- * filtered by {@code instanceof RepositoryImporter} (WSPI.2 (c): the importer is a format capability, not a second
+ * filtered by {@code instanceof RepositoryImporter} (the importer is a format capability, not a second
  * discovered service), so the format coverage of an import is simply the set of importing formats on the module path:
  * the core ships Maven, Docker (OCI) and raw with the capability, and another format adds it by implementing the
  * interface. An asset whose format has no importing format is counted as skipped rather than failing the import, so a

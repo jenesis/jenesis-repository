@@ -72,7 +72,7 @@ public class RepositoryProperties {
      *  Only meaningful under {@code auth=true}; a non-empty value under {@code auth=false} is redundant (already fully
      *  open) and warns. The env spelling is {@code JENREG_ANONYMOUS_RIGHTS}. Paired with
      *  {@code jenreg.read-only=true} and {@code anonymous-rights=repository:read} this is the public-mirror
-     *  pattern (WRO.1): reads served anonymously while writes/admin stay key-gated and the store write-gate refuses
+     *  pattern: reads served anonymously while writes/admin stay key-gated and the store write-gate refuses
      *  internal writes. */
     private String anonymousRights = "";
 
@@ -147,7 +147,7 @@ public class RepositoryProperties {
      *  the one a plain composition ships, carrying every installed feature.
      *
      *  <p>Multi-tenancy is opted into rather than inherited. {@code multi} resolves the tenant from the key the
-     *  request presents and the repository from the first path segment. {@code host} and {@code path} (WROUTE.1)
+     *  request presents and the repository from the first path segment. {@code host} and {@code path}
      *  let a request name a non-default tenant
      *  <em>without a key</em>, so an anonymous / redirect-served request can reach any tenant - the single-deployment
      *  multi-tenant CDN. Under {@code host} the tenant is the {@link #tenantHosts} mapping of the request Host (an
@@ -159,7 +159,7 @@ public class RepositoryProperties {
      *  layout, so a deployment can be flipped between them by a restart and finds its data where it was left. */
     private String tenancy = "fixed";
 
-    /** The host→tenant mapping consulted under {@code tenancy=host} (WROUTE.1): a comma-separated list of
+    /** The host→tenant mapping consulted under {@code tenancy=host}: a comma-separated list of
      *  {@code <host>=<tenant>} pairs (e.g. {@code acme.cdn.example.com=acme,foo.cdn.example.com=foo}), the host matched
      *  case-insensitively against the request's server name (the Host header with any port stripped). A host with no
      *  mapping resolves to the {@code default-tenant} - the same fall-through a keyless {@code multi} request takes -
@@ -488,7 +488,7 @@ public class RepositoryProperties {
     }
 
     /** Parse {@link #tenantHosts} into the immutable, lowercased {@code host → tenant} map the {@code host} routing
-     *  looks a request's server name up in (WROUTE.1). Each comma-separated entry is {@code <host>=<tenant>}; blank
+     *  looks a request's server name up in. Each comma-separated entry is {@code <host>=<tenant>}; blank
      *  entries are skipped. A malformed entry - no {@code =}, or an empty host or tenant - <em>fails fast at startup
      *  naming the bad value</em> (the same fail-closed discipline {@code trusted-proxies} uses): a silently-dropped
      *  mapping would route that host to the default tenant instead of the intended one, a routing misconfiguration

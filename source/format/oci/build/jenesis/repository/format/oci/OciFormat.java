@@ -64,7 +64,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link OciImporter} - the format IS
+    /** The migration-import capability, delegated to the layout-only {@link OciImporter} - the format IS
      *  the discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final OciImporter importer = new OciImporter();
 
@@ -1525,7 +1525,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         Retries.update(store, key, _ -> digest.getBytes(StandardCharsets.UTF_8));
     }
 
-    // --- RepositoryImporter capability (WSPI.2 (c)): delegated to OciImporter. importTarget returns empty - OCI owns
+    // --- RepositoryImporter capability: delegated to OciImporter. importTarget returns empty - OCI owns
     //     its own manifest screening choke point, so the import walk lays each OCI asset out unscreened. ---
 
     @Override
