@@ -11,6 +11,7 @@
  */
 open module build.jenesis.repository.format.java.test {
     requires build.jenesis.repository.format.java;
+    requires build.jenesis.repository.format;
     requires org.junit.jupiter;
     requires org.assertj.core;
 }

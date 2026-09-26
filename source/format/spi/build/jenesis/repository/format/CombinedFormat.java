@@ -17,6 +17,7 @@ import build.jenesis.repository.store.Providers;
  * <ul>
  *   <li>{@link #name()} is the repository type a repository is created as. It is a format name's shape and is unique
  *       across the installed formats and combined types together; a clash is a packaging error.</li>
+ *   <li>{@link #publishers()} names formats among {@link #formats()}, at least one.</li>
  *   <li>{@link #formats()} names at least two formats. The type is offered only while every one of them is installed,
  *       and a request in such a repository is offered to exactly those formats.</li>
  *   <li>Pure and stateless: both answers are constants, read once per process.</li>
@@ -29,6 +30,16 @@ public interface CombinedFormat {
 
     /** The names of the formats a repository of this type holds, each at its own mount. */
     List<String> formats();
+
+    /**
+     * The formats among {@link #formats()} that take a write here. A write a member outside them claims is refused
+     * {@code 405}: the type serves that format's view of what the others published, and a client writing into it
+     * directly would lay out an artifact the view is derived from somewhere else. Every member, unless a type says
+     * otherwise.
+     */
+    default List<String> publishers() {
+        return formats();
+    }
 
     /** Every combined type on the module path, validated and held for the process. */
     static List<CombinedFormat> installed() {

@@ -57,6 +57,65 @@ public final class JavaLayout {
     }
 
     /**
+     * The request-path prefix a module's Maven view is served under: its POM and its jars, addressed by module name.
+     * The build tool resolves a project's {@code requires} here - {@code /artifact/<module>/<version>/<module>.pom},
+     * or the version-less {@code /artifact/<module>/<module>.pom} for the latest - and then fetches the jar through its
+     * Maven repository by the coordinate that POM names.
+     */
+    public static final String ARTIFACT_ROUTE = "/artifact/";
+
+    /** The version-addressed view of one of a module's jars: its own when {@code classifier} is empty, else the one
+     *  Maven published under that classifier. */
+    public static String versionedModule(String moduleName, String version, String classifier) {
+        return MODULE_ROUTE + moduleName + "/" + version + "/" + file(moduleName, classifier, "jar");
+    }
+
+    /** A module's file at a version in its Maven view - a jar, own or classified, or its {@code pom}. */
+    public static String versionedArtifact(String moduleName, String version, String classifier, String extension) {
+        return ARTIFACT_ROUTE + moduleName + "/" + version + "/" + file(moduleName, classifier, extension);
+    }
+
+    /** The "latest" of a module's files in its Maven view - its jar or its {@code pom}. */
+    public static String latestArtifact(String moduleName, String extension) {
+        return ARTIFACT_ROUTE + moduleName + "/" + moduleName + "." + extension;
+    }
+
+    private static String file(String moduleName, String classifier, String extension) {
+        return (classifier.isEmpty() ? moduleName : moduleName + "-" + classifier) + "." + extension;
+    }
+
+    /** A snapshot's timestamped build, as Maven names a file of one: {@code <yyyyMMdd.HHmmss>-<build number>}. */
+    private static final Pattern SNAPSHOT_BUILD = Pattern.compile("\\d{8}\\.\\d{6}-\\d+(?:-(.+))?");
+
+    /**
+     * The classifier of a {@code /maven/...} jar: empty for the artifact's own jar, {@code <classifier>} for
+     * {@code <artifact>-<version>-<classifier>.jar}, read the same way from a snapshot's timestamped file name - or
+     * empty-optional when the file name is none of those shapes and so says nothing about which jar it is.
+     */
+    public static Optional<String> mavenClassifier(String requestPath) {
+        String[] coordinate = mavenCoordinate(requestPath);
+        if (coordinate == null || !requestPath.endsWith(".jar")) {
+            return Optional.empty();
+        }
+        String name = requestPath.substring(requestPath.lastIndexOf('/') + 1, requestPath.length() - ".jar".length());
+        String base = coordinate[1] + "-" + coordinate[2];
+        if (name.equals(base)) {
+            return Optional.of("");
+        }
+        if (name.startsWith(base + "-") && name.length() > base.length() + 1) {
+            return Optional.of(name.substring(base.length() + 1));
+        }
+        String snapshot = coordinate[1] + "-" + coordinate[2].replaceFirst("SNAPSHOT$", "");
+        if (coordinate[2].endsWith("-SNAPSHOT") && name.startsWith(snapshot)) {
+            Matcher build = SNAPSHOT_BUILD.matcher(name.substring(snapshot.length()));
+            if (build.matches()) {
+                return Optional.of(build.group(1) == null ? "" : build.group(1));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * A file published <em>beside</em> a Maven coordinate: {@code <dir>/<artifact>-<version><suffix>}.
      *
      * <p>This is the one grammar a describing consumer keeps re-deriving - the sibling POM, the CycloneDX attachment

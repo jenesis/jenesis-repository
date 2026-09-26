@@ -204,9 +204,17 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                     // Reporting it by resolution rather than by construction also settles the opposite error one
                     // layout over, where every version claimed the pointer and a first-version eviction destroyed
                     // a live pointer naming a later one.
-                    String latest = "/module/" + module + "/" + module + ".jar";
-                    if (publication.blob(latest).filter(hash.get()::equals).isPresent()) {
-                        paths.add(latest);
+                    paths.add(JavaLayout.ARTIFACT_ROUTE + module + "/" + version);
+                    for (String latest : List.of(JavaLayout.latestModule(module),
+                            JavaLayout.latestArtifact(module, "jar"))) {
+                        if (publication.blob(latest).filter(hash.get()::equals).isPresent()) {
+                            paths.add(latest);
+                        }
+                    }
+                    Optional<String> pom = publication.blob(mavenDir + "/" + artifact + "-" + version + ".pom");
+                    String latestPom = JavaLayout.latestArtifact(module, "pom");
+                    if (pom.isPresent() && publication.blob(latestPom).equals(pom)) {
+                        paths.add(latestPom);
                     }
                 }
             }
@@ -353,9 +361,29 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     /** {@link #layout(ArtifactStore, String, String)} with the blob's length in hand, so the pointer records it
      *  without the stat the length-less form pays to learn it ({@link Publication#link(String, String, long)}). */
     public static String layout(ArtifactStore store, String path, String hash, long size) throws IOException {
-        new Publication(store).link(path, hash, size);
+        Publication publication = new Publication(store);
+        publication.link(path, hash, size);
         String[] coordinate = JavaLayout.mavenCoordinate(path);
-        if (!path.endsWith(".jar") || coordinate == null) {
+        if (coordinate == null) {
+            return hash;
+        }
+        String pom = JavaLayout.attachment(path, ".pom");
+        if (path.equals(pom)) {
+            // The descriptor of a version whose jar may already have been published - Maven deploys the jar first -
+            // so it joins that module's view now, as the latest one when the module's latest jar is this version's.
+            String jar = JavaLayout.attachment(path, ".jar");
+            Optional<String> jarHash = publication.blob(jar);
+            String module = jarHash.isEmpty() ? null : moduleName(store, jarHash.get());
+            if (module != null) {
+                boolean latest = publication.blob(JavaLayout.latestModule(module)).equals(jarHash);
+                for (ModuleView view : MODULE_VIEWS) {
+                    view.describe(module, coordinate[2], hash, latest, store, path);
+                }
+            }
+            return hash;
+        }
+        Optional<String> classifier = JavaLayout.mavenClassifier(path);
+        if (classifier.isEmpty()) {
             return hash;
         }
         String module = moduleName(store, hash);
@@ -363,7 +391,14 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             return hash;
         }
         for (ModuleView view : MODULE_VIEWS) {
-            view.publish(module, coordinate[2], hash, store, path);
+            view.publish(module, coordinate[2], classifier.get(), hash, store, path);
+        }
+        // And the descriptor, when it arrived first.
+        Optional<String> pomHash = classifier.get().isEmpty() ? publication.blob(pom) : Optional.empty();
+        if (pomHash.isPresent()) {
+            for (ModuleView view : MODULE_VIEWS) {
+                view.describe(module, coordinate[2], pomHash.get(), true, store, pom);
+            }
         }
         return hash;
     }

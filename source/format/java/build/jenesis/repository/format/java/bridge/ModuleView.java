@@ -109,13 +109,15 @@ public interface ModuleView {
      * the version-addressed one(s) and the "latest" one, aimed at the content-addressed blob the Maven publish already
      * stored. Called once per publish of a modular jar, after its Maven coordinate has been linked.
      *
+     * @param classifier empty for the module's own jar, else the classifier Maven published it under - a classified
+     *                   jar has version-addressed views of its own and never moves the "latest" one
      * @param origin the served path the jar was published under - the Maven coordinate this view is a second name
      *               for. An implementation records the relation ({@code ServedAliases}) so that whatever must treat
      *               the names as one artifact can, a reviewer's release above all: neither content hash nor
      *               coordinate version identifies an alias, so the fact exists only where it is created, here.
      */
-    void publish(String moduleName, String version, String hash, ArtifactStore store, String origin)
-            throws IOException;
+    void publish(String moduleName, String version, String classifier, String hash, ArtifactStore store,
+                 String origin) throws IOException;
 
     /**
      * Re-derive only the <em>version-addressed</em> part of the view {@link #publish} would link - the half that is a
@@ -133,6 +135,15 @@ public interface ModuleView {
      * @param origin as on {@link #publish} - a repair pass re-records the alias relation too, which is what recovers
      *               a record lost to a crash between the pointer write and the record write.
      */
-    void rebuild(String moduleName, String version, String hash, ArtifactStore store, String origin)
+    void rebuild(String moduleName, String version, String classifier, String hash, ArtifactStore store,
+                 String origin) throws IOException;
+
+    /**
+     * Give a modular jar's version its descriptor: the POM Maven published beside it, stored under {@code hash},
+     * aimed at by the module's Maven view. {@code latest} says whether this version is the one the module's "latest"
+     * view names, which only the caller can tell - it is an ordering fact, as {@link #rebuild} explains, and a
+     * rebuild passes {@code false}.
+     */
+    void describe(String moduleName, String version, String hash, boolean latest, ArtifactStore store, String origin)
             throws IOException;
 }

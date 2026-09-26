@@ -180,6 +180,66 @@ class MavenCrossPublishSequenceTest {
                 .as("a module published first-hand is untouched by the Maven repair").contains("blobs/" + hash);
     }
 
+    private static final String POM = "/maven/org/example/widget/1.0/widget-1.0.pom";
+    private static final String DESCRIPTOR = "/artifact/" + MODULE + "/1.0/" + MODULE + ".pom";
+
+    @Test
+    void a_pom_published_after_its_jar_joins_the_modules_maven_view() throws IOException {
+        // Maven deploys the jar first: the POM finds the module the jar declared and becomes its descriptor, the one a
+        // build resolves a requires through - by version and, the jar being the latest, by module name alone.
+        MavenFormat.layout(store, PATH, new ByteArrayInputStream(modularJar()));
+        MavenFormat.layout(store, POM, new ByteArrayInputStream(pom()));
+
+        String pom = publication.located(POM).orElseThrow();
+        assertThat(publication.located(DESCRIPTOR)).contains(pom);
+        assertThat(publication.located("/artifact/" + MODULE + "/" + MODULE + ".pom")).contains(pom);
+        assertThat(publication.located("/artifact/" + MODULE + "/1.0/" + MODULE + ".jar"))
+                .contains(publication.located(PATH).orElseThrow());
+    }
+
+    @Test
+    void a_pom_published_before_its_jar_joins_when_the_jar_does() throws IOException {
+        MavenFormat.layout(store, POM, new ByteArrayInputStream(pom()));
+        assertThat(publication.located(DESCRIPTOR)).as("no module is known until a jar declares one").isEmpty();
+
+        MavenFormat.layout(store, PATH, new ByteArrayInputStream(modularJar()));
+
+        assertThat(publication.located(DESCRIPTOR)).contains(publication.located(POM).orElseThrow());
+    }
+
+    @Test
+    void a_classified_modular_jar_never_replaces_the_modules_own_jar() throws IOException {
+        MavenFormat.layout(store, PATH, new ByteArrayInputStream(modularJar()));
+        String own = publication.located(VERSIONED).orElseThrow();
+
+        String classified = "/maven/org/example/widget/1.0/widget-1.0-jdk17.jar";
+        MavenFormat.layout(store, classified, new ByteArrayInputStream(modularJar("jdk17")));
+
+        assertThat(publication.located(VERSIONED)).contains(own);
+        assertThat(publication.located(LATEST)).contains(own);
+        assertThat(publication.located("/module/" + MODULE + "/1.0/" + MODULE + "-jdk17.jar"))
+                .contains(publication.located(classified).orElseThrow());
+    }
+
+    @Test
+    void the_repair_restores_a_maven_view_a_crash_lost() throws IOException {
+        MavenFormat.layout(store, PATH, new ByteArrayInputStream(modularJar()));
+        MavenFormat.layout(store, POM, new ByteArrayInputStream(pom()));
+        store.delete("publish" + DESCRIPTOR);
+        store.delete("publish/artifact/" + MODULE + "/1.0/" + MODULE + ".jar");
+
+        rebuild();
+
+        assertThat(publication.located(DESCRIPTOR)).contains(publication.located(POM).orElseThrow());
+        assertThat(publication.located("/artifact/" + MODULE + "/1.0/" + MODULE + ".jar"))
+                .contains(publication.located(PATH).orElseThrow());
+    }
+
+    private static byte[] pom() {
+        return ("<project><modelVersion>4.0.0</modelVersion><groupId>org.example</groupId>"
+                + "<artifactId>widget</artifactId><version>1.0</version></project>").getBytes(StandardCharsets.UTF_8);
+    }
+
     /** Run one full rebuild pass driving the module-view repair, and answer whether it completed. */
     private boolean rebuild() throws IOException {
         WalkConsumer consumer = new ModuleViewRebuild();
@@ -210,11 +270,20 @@ class MavenCrossPublishSequenceTest {
 
     /** A jar that declares a module name the way a real modular artifact does, read back by the layout sequence. */
     private static byte[] modularJar() throws IOException {
+        return modularJar("");
+    }
+
+    /** {@link #modularJar()} with a marker entry, so a classified jar's bytes differ from the module's own. */
+    private static byte[] modularJar(String marker) throws IOException {
         Manifest manifest = new Manifest();
         manifest.getMainAttributes().putValue("Manifest-Version", "1.0");
         manifest.getMainAttributes().putValue("Automatic-Module-Name", MODULE);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (JarOutputStream jar = new JarOutputStream(bytes, manifest)) {
+            if (!marker.isEmpty()) {
+                jar.putNextEntry(new JarEntry(marker));
+                jar.closeEntry();
+            }
             jar.flush();
         }
         return bytes.toByteArray();

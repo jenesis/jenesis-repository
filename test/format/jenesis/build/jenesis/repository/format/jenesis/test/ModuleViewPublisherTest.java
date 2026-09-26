@@ -37,7 +37,7 @@ class ModuleViewPublisherTest {
         String hash = publication.storeBlob(
                 new ByteArrayInputStream("modular jar".getBytes(StandardCharsets.UTF_8)));
 
-        publisher.publish("com.acme.lib", "1.0", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
+        publisher.publish("com.acme.lib", "1.0", "", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
 
         assertThat(publication.located("/module/com.acme.lib/1.0/com.acme.lib.jar")).contains("blobs/" + hash);
         assertThat(publication.located("/module/com.acme.lib/com.acme.lib.jar")).contains("blobs/" + hash);
@@ -50,7 +50,7 @@ class ModuleViewPublisherTest {
         String hash = publication.storeBlob(
                 new ByteArrayInputStream("modular jar".getBytes(StandardCharsets.UTF_8)));
 
-        publisher.rebuild("com.acme.lib", "1.0", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
+        publisher.rebuild("com.acme.lib", "1.0", "", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
 
         assertThat(publication.located("/module/com.acme.lib/1.0/com.acme.lib.jar")).contains("blobs/" + hash);
         assertThat(publication.located("/module/com.acme.lib/com.acme.lib.jar"))
@@ -65,10 +65,10 @@ class ModuleViewPublisherTest {
         // version it reached last - here 1.0, silently undoing the 2.0 publish that owns it.
         String older = publication.storeBlob(new ByteArrayInputStream("v1".getBytes(StandardCharsets.UTF_8)));
         String newer = publication.storeBlob(new ByteArrayInputStream("v2".getBytes(StandardCharsets.UTF_8)));
-        publisher.publish("com.acme.lib", "1.0", older, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
-        publisher.publish("com.acme.lib", "2.0", newer, store, "/maven/com/acme/lib/2.0/lib-2.0.jar");
+        publisher.publish("com.acme.lib", "1.0", "", older, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
+        publisher.publish("com.acme.lib", "2.0", "", newer, store, "/maven/com/acme/lib/2.0/lib-2.0.jar");
 
-        publisher.rebuild("com.acme.lib", "1.0", older, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
+        publisher.rebuild("com.acme.lib", "1.0", "", older, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
 
         assertThat(publication.located("/module/com.acme.lib/com.acme.lib.jar"))
                 .as("the latest published version still answers by module name alone").contains("blobs/" + newer);
@@ -82,14 +82,58 @@ class ModuleViewPublisherTest {
         // second pass over unchanged stored state leaves the same object with the same body.
         String hash = publication.storeBlob(
                 new ByteArrayInputStream("modular jar".getBytes(StandardCharsets.UTF_8)));
-        publisher.rebuild("com.acme.lib", "1.0", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
+        publisher.rebuild("com.acme.lib", "1.0", "", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
         Optional<ArtifactStore.Versioned> first =
                 store.readVersioned("publish/module/com.acme.lib/1.0/com.acme.lib.jar");
 
-        publisher.rebuild("com.acme.lib", "1.0", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
+        publisher.rebuild("com.acme.lib", "1.0", "", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
 
         assertThat(store.readVersioned("publish/module/com.acme.lib/1.0/com.acme.lib.jar"))
                 .get().extracting(ArtifactStore.Versioned::content)
                 .isEqualTo(first.orElseThrow().content());
+    }
+
+    @Test
+    void publish_links_the_maven_view_a_build_resolves_requires_through() throws IOException {
+        String hash = publication.storeBlob(new ByteArrayInputStream("modular jar".getBytes(StandardCharsets.UTF_8)));
+
+        publisher.publish("com.acme.lib", "1.0", "", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
+
+        assertThat(publication.located("/artifact/com.acme.lib/1.0/com.acme.lib.jar")).contains("blobs/" + hash);
+        assertThat(publication.located("/artifact/com.acme.lib/com.acme.lib.jar")).contains("blobs/" + hash);
+    }
+
+    @Test
+    void a_classified_jar_has_views_of_its_own_and_never_moves_the_latest() throws IOException {
+        String main = publication.storeBlob(new ByteArrayInputStream("main".getBytes(StandardCharsets.UTF_8)));
+        String classified = publication.storeBlob(new ByteArrayInputStream("jdk17".getBytes(StandardCharsets.UTF_8)));
+        publisher.publish("com.acme.lib", "1.0", "", main, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
+
+        publisher.publish("com.acme.lib", "1.0", "jdk17", classified, store,
+                "/maven/com/acme/lib/1.0/lib-1.0-jdk17.jar");
+
+        assertThat(publication.located("/module/com.acme.lib/1.0/com.acme.lib-jdk17.jar"))
+                .contains("blobs/" + classified);
+        assertThat(publication.located("/artifact/com.acme.lib/1.0/com.acme.lib-jdk17.jar"))
+                .contains("blobs/" + classified);
+        assertThat(publication.located("/module/com.acme.lib/1.0/com.acme.lib.jar"))
+                .as("the module's own jar is not overwritten by a classified one declaring the same module")
+                .contains("blobs/" + main);
+        assertThat(publication.located("/module/com.acme.lib/com.acme.lib.jar")).contains("blobs/" + main);
+    }
+
+    @Test
+    void describe_links_the_pom_and_moves_the_latest_one_only_when_told() throws IOException {
+        String first = publication.storeBlob(new ByteArrayInputStream("<project/> 1.0".getBytes(StandardCharsets.UTF_8)));
+        String second = publication.storeBlob(new ByteArrayInputStream("<project/> 2.0".getBytes(StandardCharsets.UTF_8)));
+
+        publisher.describe("com.acme.lib", "1.0", first, true, store, "/maven/com/acme/lib/1.0/lib-1.0.pom");
+        publisher.describe("com.acme.lib", "2.0", second, false, store, "/maven/com/acme/lib/2.0/lib-2.0.pom");
+
+        assertThat(publication.located("/artifact/com.acme.lib/1.0/com.acme.lib.pom")).contains("blobs/" + first);
+        assertThat(publication.located("/artifact/com.acme.lib/2.0/com.acme.lib.pom")).contains("blobs/" + second);
+        assertThat(publication.located("/artifact/com.acme.lib/com.acme.lib.pom"))
+                .as("the latest POM follows the latest jar, which the caller knows and a repair pass does not")
+                .contains("blobs/" + first);
     }
 }

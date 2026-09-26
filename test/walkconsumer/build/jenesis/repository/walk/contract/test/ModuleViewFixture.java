@@ -29,6 +29,12 @@ import build.jenesis.repository.walk.testkit.WalkConsumerFixture;
  * consumer's own derived state, and a pointer another format published is not that. Keeping it in would also make the
  * kit's "before its first pass the projection is empty" check vacuous. That it survives untouched is asserted where
  * the rest of the repair's refusals are, in {@code MavenCrossPublishSequenceTest}.
+ *
+ * <p><b>The corpus seeds each jar's {@code /artifact/} view present, as a publish writes it.</b> That half of a view
+ * lives under {@code publish/artifact}, which sorts <em>before</em> {@code publish/maven}, so a pass writes it into a
+ * subtree it has already walked and only the next pass would deliver it: seeded missing, the two passes would count
+ * differently, which is the kit's check that a pass enumerates the whole corpus. Its repair is asserted beside the
+ * refusals, in {@code MavenCrossPublishSequenceTest}.
  */
 final class ModuleViewFixture implements WalkConsumerFixture {
 
@@ -62,7 +68,7 @@ final class ModuleViewFixture implements WalkConsumerFixture {
         // repair owns both or it does not repair the view.
         // And the module-name record the pass writes for a jar it had to open - the first materialisation of a
         // repository from before the record; every later pass reads it instead of the jar.
-        return List.of(SPACE, ServedAliases.NAMESPACE, MavenFormat.MODULE_INDEX);
+        return List.of(SPACE, "publish/artifact", ServedAliases.NAMESPACE, MavenFormat.MODULE_INDEX);
     }
 
     @Override
@@ -87,10 +93,11 @@ final class ModuleViewFixture implements WalkConsumerFixture {
             String hash = link(store, "publish/maven/kit/artifact" + index + "/1.0/artifact" + index + "-1.0.jar",
                     store.writeBlob(new ByteArrayInputStream(modularJar(module))));
             converged.put("/module/" + module + "/1.0/" + module + ".jar", hash);
+            link(store, "publish/artifact/" + module + "/1.0/" + module + ".jar", hash);
         }
         // A leaf that names no hash is metadata and is never delivered, so it is in neither count.
         store.writeVersioned("publish/maven/kit/notes", "2026-08-18T00:00:00Z rebuild".getBytes(UTF_8), null);
-        return new Corpus(2 * artifacts + 1, converged);
+        return new Corpus(3 * artifacts + 1, converged);
     }
 
     @Override

@@ -5,6 +5,7 @@ import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.format.java.bridge.ModuleView;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.RebuildPass;
 import build.jenesis.repository.walk.WalkConsumer;
 
@@ -79,19 +80,36 @@ public final class ModuleViewRebuild implements WalkConsumer {
     @Override
     public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         String path = artifact.path();
-        if (MODULE_VIEWS.isEmpty() || path == null || !path.startsWith("/maven/") || !path.endsWith(".jar")) {
+        if (MODULE_VIEWS.isEmpty() || path == null || !path.startsWith("/maven/")
+                || !path.endsWith(".jar") && !path.endsWith(".pom")) {
             return;
         }
         String[] coordinate = JavaLayout.mavenCoordinate(path);
         if (coordinate == null || artifact.hash() == null || artifact.size() < 0) {
             return;
         }
-        String module = MavenFormat.moduleName(store, artifact.hash());
+        if (path.endsWith(".pom")) {
+            // A descriptor joins the view of the version's own jar, when that jar is a module; the "latest" descriptor
+            // is a publish's to move, as the latest jar is.
+            if (!path.equals(JavaLayout.attachment(path, ".pom"))) {
+                return;
+            }
+            Optional<String> jar = new Publication(store).blob(JavaLayout.attachment(path, ".jar"));
+            String module = jar.isEmpty() ? null : MavenFormat.moduleName(store, jar.get());
+            if (module != null) {
+                for (ModuleView view : MODULE_VIEWS) {
+                    view.describe(module, coordinate[2], artifact.hash(), false, store, path);
+                }
+            }
+            return;
+        }
+        Optional<String> classifier = JavaLayout.mavenClassifier(path);
+        String module = classifier.isEmpty() ? null : MavenFormat.moduleName(store, artifact.hash());
         if (module == null) {
             return;
         }
         for (ModuleView view : MODULE_VIEWS) {
-            view.rebuild(module, coordinate[2], artifact.hash(), store, path);
+            view.rebuild(module, coordinate[2], classifier.get(), artifact.hash(), store, path);
         }
     }
 }

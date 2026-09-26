@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.ServedAliases;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -134,12 +135,7 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
         String path = exchange.path();
         Publication publication = new Publication(store);
         if (exchange.method().equals("PUT")) {
-            // Layout-only (EPIC 26): screening rides the ingress edge, which screens the body to ACCEPT and restreams
-            // the stored blob into this format, so this branch stores the body content-addressed (streamed, never
-            // buffered) and links its path, then responds 201 - verdicts are the edge's business, not the format's.
-            Publication.Blob blob = publication.stored(exchange.requestStream());
-            publication.link(path, blob.hash(), blob.size());
-            exchange.respond(201);
+            put(exchange, publication, store);
             return;
         }
         Optional<Publication.Located> located = publication.locate(path);
@@ -172,18 +168,67 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
         }
     }
 
-    /** A module version's folder, and the version-less latest pointer when it names this version, each put at its
-     *  path under the repository URL a Jenesis build is pointed at. Versions arrive in the order they were published,
-     *  so the pointer ends on the latest, as it does here. */
+    /**
+     * Publish one module jar: a single {@code PUT} to {@code /module/<name>/<version>/<name>[-<classifier>].jar}, and
+     * nothing else.
+     *
+     * <p>The version-less latest pointer is this repository's to keep, so a publish of a module's own jar moves it
+     * to the version just published - the pointer a Maven publish's module view moves the same way - and a
+     * {@code PUT} to it is refused. So is one under {@code /artifact/}: that view is derived from a Maven publish in a
+     * {@code java} repository and has nothing to be derived from here. A path of any other shape names no module
+     * file and is a {@code 400}.
+     *
+     * <p>Layout only: screening rides the ingress edge, which screens the body to ACCEPT and restreams the stored
+     * blob into this format, so this stores the body content-addressed (streamed, never buffered), links its path
+     * and answers 201 - verdicts are the edge's business, not the format's.
+     */
+    private static void put(FormatExchange exchange, Publication publication, ArtifactStore store)
+            throws IOException {
+        String path = exchange.path();
+        if (!path.startsWith(JavaLayout.MODULE_ROUTE)) {
+            exchange.respond(405);
+            return;
+        }
+        String[] segments = path.substring(JavaLayout.MODULE_ROUTE.length()).split("/", -1);
+        if (segments.length == 2 && segments[1].equals(segments[0] + ".jar")) {
+            exchange.respond(405);
+            return;
+        }
+        if (segments.length != 3 || !ArtifactLayout.addressable(segments) || !moduleFile(segments[0], segments[2])) {
+            exchange.respond(400);
+            return;
+        }
+        Publication.Blob blob = publication.stored(exchange.requestStream());
+        publication.link(path, blob.hash(), blob.size());
+        if (segments[2].equals(segments[0] + ".jar")) {
+            String latest = JavaLayout.latestModule(segments[0]);
+            publication.link(latest, blob.hash(), blob.size());
+            ServedAliases.reassign(store, path, latest);
+        }
+        exchange.respond(201);
+    }
+
+    /** Whether {@code file} is a jar of the module {@code name}: its own, or one classified {@code -<classifier>}. */
+    private static boolean moduleFile(String name, String file) {
+        if (!file.endsWith(".jar")) {
+            return false;
+        }
+        String stem = file.substring(0, file.length() - ".jar".length());
+        return stem.equals(name) || stem.startsWith(name + "-") && stem.length() > name.length() + 1;
+    }
+
+    /** A module version's jars, each put at its path under the repository URL a Jenesis build is pointed at. The
+     *  version-less latest pointer is not sent: the target keeps its own, moving it with each module jar it takes, and
+     *  versions arrive in the order they were published, so it ends where it does here. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {
         List<String> paths = new ArrayList<>();
-        for (String folder : paths(coordinate, version, repository)) {
-            if (folder.endsWith(".jar")) {
-                paths.add(folder);
-            } else {
-                paths.addAll(PublishedExport.published(repository, folder));
+        for (String folder : paths(coordinate, version)) {
+            for (String published : PublishedExport.published(repository, folder)) {
+                if (published.endsWith(".jar")) {
+                    paths.add(published);
+                }
             }
         }
         return PublishedExport.put(repository, paths, "/", target);

@@ -14,11 +14,19 @@ import build.jenesis.repository.store.RepositoryDocument;
  * @param name    the type's name, as the repository's document records it.
  * @param formats the formats a request in the repository is offered, in the order they are offered.
  * @param mount   what is put in front of the path within the repository to make the path the formats see.
+ * @param publishers the names of the formats that take a write in the repository - every one of {@code formats}
+ *                   unless a {@link CombinedFormat#publishers combined type} says otherwise.
  */
-public record RepositoryType(String name, List<RepositoryFormat> formats, String mount) {
+public record RepositoryType(String name, List<RepositoryFormat> formats, String mount, Set<String> publishers) {
 
     public RepositoryType {
         formats = List.copyOf(formats);
+        publishers = Set.copyOf(publishers);
+    }
+
+    /** Whether a write {@code format} claims is one the repository takes. */
+    public boolean publishes(RepositoryFormat format) {
+        return publishers.contains(format.name());
     }
 
     /**
@@ -28,7 +36,7 @@ public record RepositoryType(String name, List<RepositoryFormat> formats, String
     public static Optional<RepositoryType> of(String name, List<RepositoryFormat> formats) {
         for (RepositoryFormat format : formats) {
             if (format.name().equals(name)) {
-                return Optional.of(new RepositoryType(name, List.of(format), format.mount()));
+                return Optional.of(new RepositoryType(name, List.of(format), format.mount(), Set.of(format.name())));
             }
         }
         for (CombinedFormat combined : CombinedFormat.installed()) {
@@ -39,7 +47,7 @@ public record RepositoryType(String name, List<RepositoryFormat> formats, String
                             .ifPresent(members::add);
                 }
                 return members.size() == combined.formats().size()
-                        ? Optional.of(new RepositoryType(name, members, ""))
+                        ? Optional.of(new RepositoryType(name, members, "", Set.copyOf(combined.publishers())))
                         : Optional.empty();
             }
         }

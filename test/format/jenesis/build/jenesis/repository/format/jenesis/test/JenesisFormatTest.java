@@ -12,8 +12,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The Jenesis module layout driven through {@link JenesisFormat#handle}: it claims the {@code /module/} and
- * {@code /artifact/} prefixes, a PUT stores the blob content-addressed and links the path (201), a GET serves it back
- * byte for byte (200), and a GET of an unpublished path is a miss (404).
+ * {@code /artifact/} prefixes, a PUT of a module jar stores the blob content-addressed and links the path (201) - and
+ * the module's latest pointer with it - while every other PUT is refused; a GET serves it back byte for byte (200),
+ * and a GET of an unpublished path is a miss (404).
  */
 class JenesisFormatTest {
 
@@ -73,17 +74,46 @@ class JenesisFormatTest {
     }
 
     @Test
-    void the_artifact_layout_round_trips_the_same_way() throws IOException {
+    void only_a_module_jar_is_published_and_every_other_put_is_refused() throws IOException {
         byte[] body = {4, 5, 6, 7};
+        // The Maven view is derived from a Maven publish in a java repository, and the latest pointer is this
+        // repository's own to keep: neither is a publish target.
+        assertThat(put("/artifact/com.acme/1.0/com.acme.pom", body)).isEqualTo(405);
+        assertThat(put("/module/com.acme/com.acme.jar", body)).isEqualTo(405);
+        // A path naming no jar of the module it sits under names no module file.
+        assertThat(put("/module/com.acme/1.0/notes.txt", body)).isEqualTo(400);
+        assertThat(put("/module/com.acme/1.0/other.jar", body)).isEqualTo(400);
+        assertThat(put("/module/com.acme/com.acme-1.0.jar", body)).isEqualTo(400);
+        assertThat(get("/module/com.acme/1.0/notes.txt").status()).as("nothing refused was stored").isEqualTo(404);
+    }
 
-        FakeExchange put = new FakeExchange("PUT", "/artifact/com.acme/1.0/notes.txt", body);
+    @Test
+    void a_module_jar_moves_the_latest_pointer_and_a_classified_one_does_not() throws IOException {
+        byte[] first = "1.0".getBytes(StandardCharsets.UTF_8), second = "2.0".getBytes(StandardCharsets.UTF_8);
+        assertThat(put("/module/com.acme/1.0/com.acme.jar", first)).isEqualTo(201);
+        assertThat(get("/module/com.acme/com.acme.jar").responseBytes()).isEqualTo(first);
+
+        assertThat(put("/module/com.acme/2.0/com.acme.jar", second)).isEqualTo(201);
+        assertThat(get("/module/com.acme/com.acme.jar").responseBytes())
+                .as("the latest pointer names the version published last").isEqualTo(second);
+
+        byte[] classified = "2.0 sources".getBytes(StandardCharsets.UTF_8);
+        assertThat(put("/module/com.acme/2.0/com.acme-sources.jar", classified)).isEqualTo(201);
+        assertThat(get("/module/com.acme/2.0/com.acme-sources.jar").responseBytes()).isEqualTo(classified);
+        assertThat(get("/module/com.acme/com.acme.jar").responseBytes())
+                .as("a classified jar is one of a version's files, not the module the pointer names").isEqualTo(second);
+    }
+
+    private int put(String path, byte[] body) throws IOException {
+        FakeExchange put = new FakeExchange("PUT", path, body);
         format.handle(put, store);
-        assertThat(put.status()).isEqualTo(201);
+        return put.status();
+    }
 
-        FakeExchange get = new FakeExchange("GET", "/artifact/com.acme/1.0/notes.txt");
+    private FakeExchange get(String path) throws IOException {
+        FakeExchange get = new FakeExchange("GET", path);
         format.handle(get, store);
-        assertThat(get.status()).isEqualTo(200);
-        assertThat(get.responseBytes()).isEqualTo(body);
+        return get;
     }
 
     @Test
@@ -160,7 +190,7 @@ class JenesisFormatTest {
         // link 1 (the versioned jar) lives under the version-directory prefix, link 2 is the latest-pointer file itself.
         Publication publication = new Publication(store);
         String hash = publication.storeBlob(new ByteArrayInputStream("modular jar".getBytes(StandardCharsets.UTF_8)));
-        new ModuleViewPublisher().publish("com.acme", "1.0", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
+        new ModuleViewPublisher().publish("com.acme", "1.0", "", hash, store, "/maven/com/acme/lib/1.0/lib-1.0.jar");
         assertThat(publication.located("/module/com.acme/1.0/com.acme.jar")).contains("blobs/" + hash);
         assertThat(publication.located("/module/com.acme/com.acme.jar")).contains("blobs/" + hash);
 

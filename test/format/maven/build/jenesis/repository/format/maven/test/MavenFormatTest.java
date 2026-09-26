@@ -129,7 +129,8 @@ class MavenFormatTest {
                 automaticModuleJar("org.example.lib")), store);
 
         assertThat(format.paths("org.example:lib", "1.0", store))
-                .containsExactlyInAnyOrder("/maven/org/example/lib/1.0", "/module/org.example.lib/1.0");
+                .containsExactlyInAnyOrder("/maven/org/example/lib/1.0", "/module/org.example.lib/1.0",
+                        "/artifact/org.example.lib/1.0");
     }
 
     @Test
@@ -146,8 +147,9 @@ class MavenFormatTest {
         assertThat(publication.located("/maven/org/example/lib/1.0/lib-1.0.jar"))
                 .as("the marker retracts serving").isEmpty();
         assertThat(format.paths("org.example:lib", "1.0", store))
-                .as("but the version still occupies both folders")
-                .containsExactlyInAnyOrder("/maven/org/example/lib/1.0", "/module/org.example.lib/1.0");
+                .as("but the version still occupies every folder")
+                .containsExactlyInAnyOrder("/maven/org/example/lib/1.0", "/module/org.example.lib/1.0",
+                        "/artifact/org.example.lib/1.0");
     }
 
     @Test
@@ -177,7 +179,8 @@ class MavenFormatTest {
                 .as("the modular jar is laid out and serves").isPresent();
         assertThat(format.paths("org.example:lib", "1.0", store))
                 .as("its module view is cross-published, read from the stored blob")
-                .containsExactlyInAnyOrder("/maven/org/example/lib/1.0", "/module/org.example.lib/1.0");
+                .containsExactlyInAnyOrder("/maven/org/example/lib/1.0", "/module/org.example.lib/1.0",
+                        "/artifact/org.example.lib/1.0");
     }
 
     @Test
@@ -194,7 +197,8 @@ class MavenFormatTest {
         MavenFormat.layout(counting, "/maven/org/example/lib/1.1/lib-1.1.jar", new java.io.ByteArrayInputStream(jar));
         assertThat(counting.calls(FaultInjectingStore.Op.OPEN)).as("the same bytes, published again: the record answers").isEqualTo(opened);
         assertThat(format.paths("org.example:lib", "1.1", store))
-                .containsExactlyInAnyOrder("/maven/org/example/lib/1.1", "/module/org.example.lib/1.1");
+                .containsExactlyInAnyOrder("/maven/org/example/lib/1.1", "/module/org.example.lib/1.1",
+                        "/artifact/org.example.lib/1.1");
     }
 
     @Test

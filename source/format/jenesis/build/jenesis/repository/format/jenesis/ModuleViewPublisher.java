@@ -21,34 +21,49 @@ import build.jenesis.repository.store.ArtifactStore;
 public final class ModuleViewPublisher implements ModuleView {
 
     @Override
-    public void publish(String moduleName, String version, String hash, ArtifactStore store, String origin)
-            throws IOException {
-        rebuild(moduleName, version, hash, store, origin);
-        // The "latest" pointer, and the reason publish and rebuild are two methods: this one says "the most recently
+    public void publish(String moduleName, String version, String classifier, String hash, ArtifactStore store,
+                        String origin) throws IOException {
+        rebuild(moduleName, version, classifier, hash, store, origin);
+        if (!classifier.isEmpty()) {
+            return;   // a classified jar is one of a version's files, never the module the latest view names
+        }
+        // The "latest" pointers, and the reason publish and rebuild are two methods: they say "the most recently
         // published version of this module", which is an ordering fact about publications rather than a fact about
-        // stored state. Only a publish knows it. A rebuild pass re-linking it would move it to whichever version the
-        // walk reached last, so the pass leaves it exactly as the last publish left it.
-        new Publication(store).link(latest(moduleName), hash);
-        // REASSIGNED, not recorded: the latest view names whichever version published last, so this publish takes it
-        // off the version that held it. An append would leave a release of 1.0 lifting a view that has been 2.0's
-        // since 2.0 landed - and 2.0 may be held on its own account.
-        ServedAliases.reassign(store, origin, latest(moduleName));
+        // stored state. Only a publish knows it. A rebuild pass re-linking them would move them to whichever version
+        // the walk reached last, so the pass leaves them exactly as the last publish left them.
+        Publication publication = new Publication(store);
+        for (String latest : List.of(JavaLayout.latestModule(moduleName),
+                JavaLayout.latestArtifact(moduleName, "jar"))) {
+            publication.link(latest, hash);
+            // REASSIGNED, not recorded: the latest view names whichever version published last, so this publish takes
+            // it off the version that held it. An append would leave a release of 1.0 lifting a view that has been
+            // 2.0's since 2.0 landed - and 2.0 may be held on its own account.
+            ServedAliases.reassign(store, origin, latest);
+        }
     }
 
     @Override
-    public void rebuild(String moduleName, String version, String hash, ArtifactStore store, String origin)
-            throws IOException {
-        new Publication(store).link(versioned(moduleName, version), hash);
-        ServedAliases.record(store, origin, versioned(moduleName, version));
+    public void rebuild(String moduleName, String version, String classifier, String hash, ArtifactStore store,
+                        String origin) throws IOException {
+        Publication publication = new Publication(store);
+        for (String view : List.of(JavaLayout.versionedModule(moduleName, version, classifier),
+                JavaLayout.versionedArtifact(moduleName, version, classifier, "jar"))) {
+            publication.link(view, hash);
+            ServedAliases.record(store, origin, view);
+        }
     }
 
-    /** The version-addressed view - a function of stored state alone, so a repair pass re-derives it. */
-    private static String versioned(String moduleName, String version) {
-        return JavaLayout.versionedModule(moduleName, version);
-    }
-
-    /** The "latest" view - written by a publish only; see {@link ModuleView#rebuild}. */
-    private static String latest(String moduleName) {
-        return JavaLayout.latestModule(moduleName);
+    @Override
+    public void describe(String moduleName, String version, String hash, boolean latest, ArtifactStore store,
+                         String origin) throws IOException {
+        Publication publication = new Publication(store);
+        String versioned = JavaLayout.versionedArtifact(moduleName, version, "", "pom");
+        publication.link(versioned, hash);
+        ServedAliases.record(store, origin, versioned);
+        if (latest) {
+            String pom = JavaLayout.latestArtifact(moduleName, "pom");
+            publication.link(pom, hash);
+            ServedAliases.reassign(store, origin, pom);
+        }
     }
 }

@@ -183,6 +183,12 @@ public class RepositoryController {
             response.setStatus(405);
             return;
         }
+        // A write the repository's type does not take from the format that claims it - a Jenesis PUT into a java
+        // repository, whose module view Maven publishes - is a 405 as well.
+        if (write && held.get().claiming().filter(format -> !type.publishes(format)).isPresent()) {
+            response.setStatus(405);
+            return;
+        }
         ScreenedDispatch screened = screened(type);
         if (batch != null && batch.claims(exchange)) {
             // Each exploded entry is screened at the same ingress edge a single deploy uses (the shared
@@ -251,6 +257,9 @@ public class RepositoryController {
         Optional<HeldFormat> held = HeldFormat.of(routing, route, dispatcher.formats());
         if (held.isEmpty()) {
             return 404;
+        }
+        if (held.get().claiming().filter(format -> !held.get().type().publishes(format)).isPresent()) {
+            return 405;
         }
         CapturingExchange exchange = new CapturingExchange(held.get().path(), body);
         if (!screened(held.get().type()).dispatch(exchange, route.store())) {
