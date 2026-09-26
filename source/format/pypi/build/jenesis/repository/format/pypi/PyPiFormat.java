@@ -111,6 +111,27 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return keys;
     }
 
+    /**
+     * The project version a stored distribution pointer serves - the backwards direction the inventory back-fill and
+     * forwarding's self-repair rebuild a lost row from.
+     *
+     * <p>Only {@code pypi/<project>/files/<file>} is decoded, and through {@link #describe} of the path it serves at:
+     * the filename parse is the one the publish recorded its row with, so the two cannot disagree. A file that parse
+     * cannot version answers nothing rather than a coordinate-less descriptor. The reverse index beside it
+     * ({@code by/<version>/<file>}) would decode as well and is left alone - two derivations of one row are two ways
+     * for them to disagree.
+     */
+    @Override
+    public Optional<ArtifactDescriptor> describePointer(String key) {
+        String[] parts = key.split("/", -1);
+        if (parts.length != 4 || !parts[0].equals("pypi") || !parts[2].equals("files")
+                || !BlobLayout.addressable(parts[1], parts[3])) {
+            return Optional.empty();
+        }
+        return describe("/pypi/simple/" + parts[1] + "/" + parts[3])
+                .filter(described -> described.coordinate() != null && described.version() != null);
+    }
+
     /** {@code pypi/<project>/by/<version>/<file>}: the reverse index an upload writes for a file it can version. */
     static String reverseKey(String project, String version, String file) {
         return "pypi/" + project + "/by/" + version + (file.isEmpty() ? "" : "/" + file);

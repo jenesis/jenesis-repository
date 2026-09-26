@@ -83,7 +83,7 @@ class BlobLayoutCoordinateSeamTest {
      * fixtured here now and claim their own keys, which is what the exemption was always waiting for.
      */
     private static final List<String> CLAIMS = List.of("npm", "rubygems", "nuget", "go", "cargo", "composer",
-            "debian", "rpm", "cocoapods", "conda", "conan",
+            "debian", "rpm", "cocoapods", "conda", "conan", "pypi",
             "helm", "terraform", "apk", "winget", "swift", "homebrew");
 
     /**
