@@ -7,6 +7,9 @@ import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.blobs.Keys;
+import build.jenesis.repository.blobs.ProxyLeg;
+import build.jenesis.repository.blobs.ProxyRelay;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -21,6 +24,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * The Swift Package Registry (SE-0292), hosted.
@@ -50,7 +54,7 @@ import tools.jackson.databind.ObjectMapper;
  * thing.
  */
 public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures,
-        RepositoryExporter, RepositoryImporter {
+        RepositoryExporter, RepositoryImporter, ProxyLeg {
 
     /** The archive signature's sidecar suffix under the archive key and path: {@code <version>.zip.sig}. */
     private static final String SIGNATURE = ".sig";
@@ -239,6 +243,140 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
     }
 
     // ---- the read path ----
+
+    // ---- proxy ----
+
+    /** The media type each SE-0391 document is asked for with; a registry may refuse a request that names none. */
+    private static final String ACCEPT = "application/vnd.swift.registry.v1+";
+
+    /**
+     * Proxy a miss to an upstream SE-0391 registry - another organisation's, since there is no public one. The local
+     * repository name is a deployment's alias for it, so {@code /swift/<repo>/<rest>} maps to {@code <upstream>/<rest>}.
+     * Every target is composed that way, so nothing an upstream advertises is followed.
+     *
+     * <p>A package's release list (4.1) and the identifier lookup (4.5) are ENUMERATIONS, fetched fresh on each read,
+     * and only an upstream that answered 404/410 reaches the client as a 404. The release list is rewritten on the way
+     * out: each release's {@code url}, which names the upstream, is dropped, as this repository's own list drops it,
+     * so a client resolves each release relative to this repository and fetches it through its cache and gate. The
+     * lookup names identifiers rather than locations and is relayed as it is.
+     *
+     * <p>A release's metadata (4.2) and manifest (4.3) are PINNED and relayed fresh. Its source archive (4.4) is held
+     * to the {@code checksum} the release metadata declares for its {@code source-archive} - a separate document:
+     * one this repository could not read declines the fill, and a mismatch is refused.
+     */
+    @Override
+    public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
+                               ProxyFormat.Fetcher fetcher) throws IOException {
+        String[] segments = exchange.path().substring(PREFIX.length()).split("/");
+        if (segments.length < 2) {
+            return false;
+        }
+        String repo = segments[0];
+        String[] rest = Arrays.copyOfRange(segments, 1, segments.length);
+        String root = upstream.toString().endsWith("/") ? upstream.toString() : upstream + "/";
+        if (rest.length == 1 && rest[0].equals("identifiers")) {
+            String url = exchange.queryParameter("url");
+            if (url == null || url.isBlank()) {
+                return false;
+            }
+            return relay(exchange, fetcher, URI.create(root + "identifiers?url="
+                    + URLEncoder.encode(url, StandardCharsets.UTF_8)), "json", ProxyRelay.Document.ENUMERATION);
+        }
+        if (rest.length == 2) {
+            URI list = URI.create(root + rest[0] + "/" + strip(rest[1]));
+            ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, list, Map.of("Accept", ACCEPT + "json"),
+                    exchange, ProxyRelay.Document.ENUMERATION);
+            if (!answer.answered()) {
+                return answer.served();
+            }
+            JsonNode document;
+            try {
+                document = MAPPER.readTree(answer.document().body());
+            } catch (RuntimeException unreadable) {
+                document = null;
+            }
+            if (document == null || !(document.get("releases") instanceof ObjectNode releases)) {
+                return ProxyRelay.unanswered(list, exchange, ProxyRelay.Document.ENUMERATION,
+                        "the upstream answered a release list that is not one");
+            }
+            for (JsonNode release : releases) {
+                if (release instanceof ObjectNode entry) {
+                    entry.remove("url");
+                }
+            }
+            respondBytes(exchange, MAPPER.writeValueAsBytes(document), "application/json");
+            return true;
+        }
+        if (rest.length == 3 && rest[2].endsWith(".zip")) {
+            String scope = rest[0], name = rest[1], version = rest[2].substring(0, rest[2].length() - ".zip".length());
+            if (Keys.unsafe(scope) || Keys.unsafe(name) || Keys.unsafe(version)) {
+                return false;
+            }
+            URI target = URI.create(root + scope + "/" + name + "/" + rest[2]);
+            ProxyRelay.Declared declared = archiveChecksum(fetcher, URI.create(root + scope + "/" + name + "/"
+                    + version));
+            if (!declared.readable()) {
+                return ProxyRelay.unverifiable(target, declared);
+            }
+            Blobs blobs = new Blobs(store);
+            try (ProxyFormat.Download download = fetcher.download(target, Map.of("Accept", ACCEPT + "zip"))
+                    .orElse(null)) {
+                if (download == null || download.status() != 200 || !ProxyRelay.fill(blobs,
+                        SwiftListings.archiveKey(repo, scope, name, version), target, download.body(), declared)) {
+                    return false;
+                }
+            }
+            archive(exchange, blobs, repo, scope, name, version);
+            return true;
+        }
+        if (rest.length == 3) {
+            return relay(exchange, fetcher, URI.create(root + rest[0] + "/" + rest[1] + "/" + strip(rest[2])), "json",
+                    ProxyRelay.Document.PINNED);
+        }
+        if (rest.length == 4 && rest[3].equals("Package.swift")) {
+            String swiftVersion = exchange.queryParameter("swift-version");
+            return relay(exchange, fetcher, URI.create(root + rest[0] + "/" + rest[1] + "/" + rest[2]
+                    + "/Package.swift" + (swiftVersion == null ? ""
+                    : "?swift-version=" + URLEncoder.encode(swiftVersion, StandardCharsets.UTF_8))), "swift",
+                    ProxyRelay.Document.PINNED);
+        }
+        return false;
+    }
+
+    /** Relay one document fresh, asked for with the media type the specification gives it. */
+    private static boolean relay(FormatExchange exchange, ProxyFormat.Fetcher fetcher, URI url, String kind,
+                                 ProxyRelay.Document document) throws IOException {
+        ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, url, Map.of("Accept", ACCEPT + kind), exchange,
+                document);
+        if (!answer.answered()) {
+            return answer.served();
+        }
+        respondBytes(exchange, answer.document().body(), kind.equals("swift") ? "text/x-swift" : "application/json");
+        return true;
+    }
+
+    /** The {@code checksum} a release's metadata declares for its {@code source-archive}: a SHA-256 in hex. */
+    private static ProxyRelay.Declared archiveChecksum(ProxyFormat.Fetcher fetcher, URI release) throws IOException {
+        ProxyRelay.Sidecar sidecar = ProxyRelay.declaring(fetcher, release, Map.of("Accept", ACCEPT + "json"));
+        if (!sidecar.answered()) {
+            return sidecar.verdict();
+        }
+        JsonNode document;
+        try {
+            document = MAPPER.readTree(sidecar.document().body());
+        } catch (RuntimeException unreadable) {
+            return ProxyRelay.Declared.unreadable("the release metadata at " + release + " is not JSON");
+        }
+        for (JsonNode resource : document.path("resources")) {
+            if (resource.path("name").asString("").equals("source-archive")) {
+                String checksum = resource.path("checksum").asString("");
+                return checksum.matches("[0-9a-fA-F]{64}")
+                        ? ProxyRelay.Declared.of("SHA-256", HexFormat.of().parseHex(checksum))
+                        : ProxyRelay.Declared.NONE;
+            }
+        }
+        return ProxyRelay.Declared.NONE;
+    }
 
     /**
      * 4.1, the release list.

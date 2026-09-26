@@ -1,7 +1,9 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.store.ArtifactStore;
@@ -112,9 +114,10 @@ final class SwiftFormatFixture implements EcosystemFormatFixture {
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
 
-                FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY, PROXY,
-                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE, PROXY,
-                FormatContract.Property.PROXY_STREAMS_UPSTREAM_BODY, PROXY,
+                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
+                "every path this leg fills is one a miss on fails the resolution: the release list is an "
+                        + "ENUMERATION, refused as a 502 rather than answered empty, and a source archive is the file "
+                        + "a release names. Its manifest is relayed rather than filled",
                 FormatContract.Property.PUBLISH_PATHS_ARE_DESCRIBED,
                 "same protocol reason as PUBLISH_SERVES_EXACT_BYTES: the kit's arbitrary body publishes nowhere here. "
                         + "Restated, not dropped: PackagedArtifactContract records where a real package publish "
@@ -146,11 +149,43 @@ final class SwiftFormatFixture implements EcosystemFormatFixture {
 
     /** There is no canonical public Swift registry to mirror, which is unusual among these formats and is the
      *  whole reason the proxy rows here are declarations rather than tests. */
-    private static final String PROXY =
-            "swift has no proxy leg, and unlike the other formats that say so it has nowhere to point one: there "
-                    + "is no canonical public Swift package registry to pull through. A deployment mirroring "
-                    + "another organisation's registry is a real case and a separate change; these rows arrive "
-                    + "with it";
+    @Override
+    public Optional<Upstream> upstream(GeneratedBody body) {
+        return Optional.of(new Upstream(BASE + "/acme/proxied/9.9.9.zip", PROXIED_ROOT, fetcher(body, body.sha256())));
+    }
+
+    @Override
+    public Optional<Upstream> tampered(GeneratedBody body) {
+        return Optional.of(new Upstream(BASE + "/acme/proxied/9.9.9.zip", PROXIED_ROOT,
+                fetcher(body, "0".repeat(64))));
+    }
+
+    /** Another organisation's registry, the only kind a Swift registry can pull through. */
+    private static final URI PROXIED_ROOT = URI.create("https://swift.invalid/registry/");
+
+    /** A registry answering one release's metadata, declaring {@code checksum} for its archive, and the archive. */
+    private static ProxyFormat.Fetcher fetcher(GeneratedBody body, String checksum) {
+        String release = PROXIED_ROOT + "acme/proxied/9.9.9";
+        byte[] metadata = ("{\"id\":\"acme.proxied\",\"version\":\"9.9.9\",\"resources\":[{\"name\":"
+                + "\"source-archive\",\"type\":\"application/zip\",\"checksum\":\"" + checksum + "\"}]}")
+                .getBytes(StandardCharsets.UTF_8);
+        return new ProxyFormat.Fetcher.Buffered() {
+
+            @Override
+            public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
+                return url.toString().equals(release)
+                        ? Optional.of(new ProxyFormat.Fetched(200, metadata, Map.of()))
+                        : Optional.of(new ProxyFormat.Fetched(404, new byte[0], Map.of()));
+            }
+
+            @Override
+            public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) {
+                return url.toString().equals(release + ".zip")
+                        ? Optional.of(new ProxyFormat.Download(200, body.open(), Map.of()))
+                        : Optional.of(new ProxyFormat.Download(404, InputStream.nullInputStream(), Map.of()));
+            }
+        };
+    }
 
     private static String download(String version) {
         return RELEASES + "/" + version + ".zip";
