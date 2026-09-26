@@ -271,13 +271,13 @@ public class ServingConfig {
         // The routed gateway's legs were screened and the demo seeder's was; this one was not, which is the
         // reachability shape: both contracts held and the wiring between them was the hole.
         //
-        // The upstream each fetch pulls through is the serving tenant's (LiveUpstreams), but the screen is still the
-        // DEPLOYMENT-WIDE gate: the hooks are one singleton and PullThroughHooks carries no tenant yet, so a tenant's
-        // stricter proxy policy does not reach this leg. The store the screen records into arrives per call, which is
-        // what lets a singleton carry a screen at all.
+        // The upstream each fetch pulls through is the serving tenant's (LiveUpstreams), and so is the gate that
+        // screens it: the hooks are one singleton, and the dispatcher binds each request's tenant into them, so a
+        // tenant's own proxy policy screens its pull-through here as it does on the routed gateway's legs. The store the
+        // screen records into arrives per call, which is what lets a singleton carry a screen at all.
         FormatDispatcher.Upstreams upstreams = new LiveUpstreams(liveConfig, formats);
         return new FormatDispatcher(formats, upstreams, upstreamFetcher, observations,
-                new ProxyScreenHooks(liveConfig::proxyGate, liveConfig.holdDays(),
+                ProxyScreenHooks.perTenant(liveConfig::proxyGate, liveConfig.holdDays(),
                         liveConfig.withholdIncompleteScreens()));
     }
 

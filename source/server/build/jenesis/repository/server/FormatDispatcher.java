@@ -83,7 +83,8 @@ public final class FormatDispatcher {
             if (format.handles(path)) {
                 URI base = upstreams.upstream(tenant, format.name());
                 if (base != null && fetcher != ProxyFormat.Fetcher.NONE && format instanceof ProxyFormat proxy) {
-                    new PullThroughCache(fetcher, observations, hooks).serve(format, proxy, base, exchange, store);
+                    new PullThroughCache(fetcher, observations, hooks.forTenant(tenant))
+                            .serve(format, proxy, base, exchange, store);
                 } else {
                     format.handle(exchange, store);
                 }

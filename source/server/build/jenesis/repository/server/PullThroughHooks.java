@@ -39,6 +39,17 @@ public interface PullThroughHooks {
     };
 
     /**
+     * These hooks as they apply to requests of {@code tenant}. The serving dispatcher is one singleton over every
+     * tenant's store, so what differs per tenant - its own compliance gate, stricter or looser than the deployment's -
+     * cannot be bound when the hooks are built; the dispatcher asks for the tenant's hooks per request and hands those
+     * to the cache. The default is these hooks unchanged, which is right for hooks that decide nothing per tenant; a
+     * {@code null} tenant is a request the deployment serves in no tenant's name.
+     */
+    default PullThroughHooks forTenant(String tenant) {
+        return this;
+    }
+
+    /**
      * Verify a locally cached artifact against the current gate BEFORE a pull-through hit serves it, returning how the
      * cache should proceed. The default returns {@link HitDecision#serveThrough()} - the local-first serve runs
      * exactly as today, and (because the downstream treats "nothing durably local" as serve-through too) a path with no

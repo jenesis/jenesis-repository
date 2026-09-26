@@ -7,11 +7,13 @@ import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.server.FormatDispatcher;
 import build.jenesis.repository.server.PullThroughCache;
 import build.jenesis.repository.server.PullThroughHooks;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
+import io.micrometer.observation.ObservationRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -82,6 +84,34 @@ public class PullThroughHooksTest {
         assertThat(hooks.verifiedStore).as("verifyHit receives the scoped store").isSameAs(store);
         assertThat(hooks.screenFetchPaths).as("a hit runs no miss leg, so screenFetch is not offered the hit path")
                 .doesNotContain("/spyproxy/hit");
+    }
+
+    /** The dispatcher serves every tenant through one set of hooks, so it binds each request's tenant into them and
+     *  the cache screens through the tenant's hooks - never the unbound ones, which would decide as no tenant. */
+    @Test
+    void the_dispatcher_screens_each_request_through_its_tenants_hooks() throws IOException {
+        SpyFormat format = new SpyFormat();
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/miss", UPSTREAM);
+        SpyHooks acme = new SpyHooks();
+        List<String> bound = new ArrayList<>();
+        PullThroughHooks perTenant = new PullThroughHooks() {
+            @Override
+            public PullThroughHooks forTenant(String tenant) {
+                bound.add(tenant);
+                return acme;
+            }
+        };
+        FormatDispatcher dispatcher = new FormatDispatcher(List.of(format),
+                (_, name) -> name.equals("spyproxy") ? UPSTREAM_BASE : null, format.fetcher, ObservationRegistry.NOOP,
+                perTenant);
+
+        FakeExchange miss = new FakeExchange("GET", "/spyproxy/miss");
+        dispatcher.dispatch("acme", miss, store);
+
+        assertThat(bound).as("the request's tenant is bound into the hooks").containsExactly("acme");
+        assertThat(acme.screenFetchPaths).as("and the tenant's hooks screened the miss")
+                .containsExactly("/spyproxy/miss");
+        assertThat(miss.responseBody).isEqualTo(UPSTREAM);
     }
 
     @Test

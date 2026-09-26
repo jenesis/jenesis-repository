@@ -13,6 +13,7 @@ import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.UnrecognisedSettings;
 import build.jenesis.repository.server.DemoSeeder;
 import build.jenesis.repository.server.DemoSeeding;
+import build.jenesis.repository.server.PullThroughHooks;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.store.PublishPathWiring;
 import build.jenesis.repository.settings.SettingsContributor;
@@ -60,8 +61,8 @@ public class DemoConfig {
         // proxy leg is screened by the identical mechanism, with no screening code added to the free DemoSeeder and no
         // reintroduced embedded publish screen. A quarantined/rejected suggestion then populates the QUARANTINE/REJECT
         // surface from the proxy-leg screen.
-        ProxyScreenHooks demoScreen = new ProxyScreenHooks(
-                () -> liveConfig.proxyGate(properties.getDefaultTenant()), liveConfig.holdDays());
+        PullThroughHooks demoScreen = ProxyScreenHooks.perTenant(liveConfig::proxyGate, liveConfig.holdDays(), false)
+                .forTenant(properties.getDefaultTenant());
         // The seed writes through the store, so a read-only deployment runs no seeding - a background write job.
         return new DemoSeeding(liveConfig.demo() && !properties.isReadOnly(),
                 new DemoSeeder(ServingConfig.enabledFormats(environment), upstreamFetcher, demoScreen), store,
