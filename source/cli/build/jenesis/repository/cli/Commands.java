@@ -73,8 +73,9 @@ public final class Commands {
                     noun("dependents", "who depends on a coordinate", "build.jenesis.repository.dependents",
                             DiscoveryCommands::dependents,
                             act("dependents <repo> [coordinate]", "the blast radius of a coordinate"),
-                            act("dependents <repo> --package NAME [--cursor T]",
-                                    "the versions whose manifest declares a dependency on a package")),
+                            act("dependents <repo> --package NAME [--version V] [--cursor T]",
+                                    "the versions whose manifest declares a dependency on a package, and whether "
+                                            + "each requirement admits a version")),
                     noun("sbom", "a CycloneDX / SPDX bill of materials", "build.jenesis.repository.sbom",
                             DiscoveryCommands::sbom,
                             act("sbom <repo> [path] [--format cyclonedx|cyclonedx-xml|spdx] [--output F]",

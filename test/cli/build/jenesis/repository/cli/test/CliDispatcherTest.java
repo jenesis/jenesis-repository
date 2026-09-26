@@ -192,14 +192,17 @@ public class CliDispatcherTest {
     @Test
     public void dependents_prints_the_versions_declaring_a_package_apart_with_their_requirement() throws Exception {
         dependentsStatus = 200;
-        dependentsBody = "{\"dependency\":\"lodash\",\"declared\":[{\"ecosystem\":\"npm\",\"coordinate\":\"app\","
-                + "\"version\":\"1.0.0\",\"requirement\":\"^4.17.0\"},{\"ecosystem\":\"npm\",\"coordinate\":\"lib\","
-                + "\"version\":\"2.0.0\",\"requirement\":\"\"}],\"nextDeclaredCursor\":\"tok\"}";
+        dependentsBody = "{\"dependency\":\"lodash\",\"declared\":["
+                + "{\"ecosystem\":\"npm\",\"coordinate\":\"app\",\"version\":\"1.0.0\","
+                + "\"requirement\":\"^4.17.0\",\"admits\":\"admits\"},"
+                + "{\"ecosystem\":\"npm\",\"coordinate\":\"lib\",\"version\":\"2.0.0\",\"requirement\":\"\"}],"
+                + "\"nextDeclaredCursor\":\"tok\"}";
         String out = capture(() -> assertThat(
-                Cli.run(new String[] {"dependents", "releases", "--package", "lodash", "--cursor", "c1"})).isZero());
+                Cli.run(new String[] {"dependents", "releases", "--package", "lodash", "--version", "4.17.21",
+                        "--cursor", "c1"})).isZero());
         assertThat(dependentsQuery).as("the package and the cursor reach the declared answer")
-                .contains("package=lodash").contains("after=c1");
-        assertThat(out).contains("npm  app  1.0.0  ^4.17.0")
+                .contains("package=lodash").contains("version=4.17.21").contains("after=c1");
+        assertThat(out).contains("npm  app  1.0.0  ^4.17.0  admits")
                 .as("a declaration stating no requirement says so rather than printing nothing")
                 .contains("npm  lib  2.0.0  -")
                 .contains("next cursor: tok");

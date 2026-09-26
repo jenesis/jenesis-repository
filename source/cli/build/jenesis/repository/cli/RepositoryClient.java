@@ -424,11 +424,15 @@ public final class RepositoryClient {
     }
 
     /** The declared tier of the reverse-dependency index: one page of the versions whose manifest declares a
-     *  dependency on the package {@code dependency}, resumed after {@code cursor}. Returns {@code null} when the index
-     *  is not installed on this deployment (HTTP 501). */
-    public DependentsReport declarations(String repo, String dependency, String cursor)
+     *  dependency on the package {@code dependency}, resumed after {@code cursor} - and, given a {@code version} of
+     *  that package, whether each requirement admits it. Returns {@code null} when the index is not installed on this
+     *  deployment (HTTP 501). */
+    public DependentsReport declarations(String repo, String dependency, String version, String cursor)
             throws IOException, InterruptedException {
         String path = "/api/dependents?repo=" + enc(repo) + "&package=" + enc(dependency);
+        if (version != null && !version.isBlank()) {
+            path += "&version=" + enc(version);
+        }
         if (cursor != null && !cursor.isBlank()) {
             path += "&after=" + enc(cursor);
         }
@@ -1971,8 +1975,10 @@ public final class RepositoryClient {
                                    List<Declaration> declared, String nextDeclaredCursor) {
     }
 
-    /** One version declaring a dependency, with the requirement its manifest states - empty where it states none. */
-    public record Declaration(String ecosystem, String coordinate, String version, String requirement) {
+    /** One version declaring a dependency, with the requirement its manifest states - empty where it states none -
+     *  and, when a version was asked about, whether that requirement {@code admits} it: {@code admits},
+     *  {@code excludes} or {@code unknown}. */
+    public record Declaration(String ecosystem, String coordinate, String version, String requirement, String admits) {
     }
 
     /** The license inventory facets: {@code indexed} says whether the search index answered, then the per-category and
