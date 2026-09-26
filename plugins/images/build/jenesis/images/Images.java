@@ -34,7 +34,7 @@ public class Images implements BuildExecutorModule {
 
     /** Bumped when the step's behaviour changes: a step is keyed by the digest of its serialized form, not by its
      *  bytecode, so an edited body would otherwise reuse the cached verdict. */
-    private static final long VERSION = 2L;
+    private static final long VERSION = 3L;
 
     /** The build's statement of what images exist, written by the build step and read by the push. */
     public static final String MANIFEST = "images.txt";
@@ -43,15 +43,24 @@ public class Images implements BuildExecutorModule {
     private static final long CHARTING = 3L;
 
     /** Bumped when the push step's behaviour changes, for the same reason as {@link #VERSION}. */
-    private static final long PUSHING = 8L;
+    private static final long PUSHING = 9L;
 
     /** The value naming where to publish; kept apart from the {@link Configuration} the other steps are keyed by, so
      *  naming a target publishes what was built instead of building it again. */
     private static final String PUSH = "push";
 
+    /** The value naming how a publish signs what it pushed - see {@link Signing}. Kept apart from the
+     *  {@link Configuration} for the reason {@link #PUSH} is. */
+    private static final String SIGN = "sign";
+
+    /** Where the build step keeps each image's SBOM for the push to attest: {@code sbom/<repository>.cdx.json}. */
+    static final String SBOMS = "sbom";
+
     private final Configuration configuration;
 
     private final List<String> targets;
+
+    private final Signing signing;
 
     public Images() {
         this(new LinkedHashMap<>());
@@ -60,6 +69,7 @@ public class Images implements BuildExecutorModule {
     public Images(SequencedMap<String, String> properties) {
         SequencedMap<String, String> described = new LinkedHashMap<>(properties);
         targets = Push.targets(described.remove(PUSH));
+        signing = Signing.of(described.remove(SIGN));
         configuration = Configuration.of(described);
     }
 
@@ -71,7 +81,7 @@ public class Images implements BuildExecutorModule {
         executor.addStep("chart", new Charts(CHARTING, configuration), inherited.sequencedKeySet());
         // The push reads what the two builds just wrote, and runs only when a target is named - so building does
         // not publish. See Push for why it is a step at all and what makes it really happen.
-        executor.addStep("push", new Push(PUSHING, configuration, targets), "docker", "chart");
+        executor.addStep("push", new Push(PUSHING, configuration, targets, signing), "docker", "chart");
     }
 
     private record Build(long version, Configuration configuration) implements BuildStep {
@@ -128,6 +138,7 @@ public class Images implements BuildExecutorModule {
             }
             for (Map.Entry<String, Path> image : contexts.entrySet()) {
                 build(image.getKey(), image.getValue());
+                sbom(module(image.getValue()), image.getKey(), arguments, context.next());
             }
             Files.write(context.next().resolve(MANIFEST), contexts.sequencedKeySet());
             return CompletableFuture.completedStage(new BuildStepResult(true));
@@ -152,6 +163,35 @@ public class Images implements BuildExecutorModule {
                             + "named by tag alone. Declare it by digest - docker=<image>:<tag>@sha256:<digest> in the "
                             + "module's META-INF/build.jenesis/packaging.properties - so a rebuilt release is the "
                             + "same image.");
+                }
+            }
+        }
+
+        /**
+         * Keep the image module's CycloneDX SBOM - the one the build tool writes for every module and {@code stage}
+         * gathers under {@code sbom/<module path>/} - beside the manifest, named for the image, so the push attests an
+         * image's SBOM from what this step built rather than finding it a second time. An image whose module has none
+         * keeps none, and a signing publish refuses it there.
+         */
+        private static void sbom(String module, String tag, SequencedMap<String, BuildStepArgument> arguments,
+                                 Path next) throws IOException {
+            for (BuildStepArgument argument : arguments.values()) {
+                if (argument.removed() || argument.folder() == null) {
+                    continue;
+                }
+                Path folder = argument.folder().resolve(SBOMS).resolve(module);
+                if (!Files.isDirectory(folder)) {
+                    continue;
+                }
+                try (Stream<Path> reports = Files.list(folder)) {
+                    Optional<Path> report = reports.filter(path -> path.getFileName().toString().endsWith(".cdx.json"))
+                            .sorted().findFirst();
+                    if (report.isPresent()) {
+                        Path kept = Files.createDirectories(next.resolve(SBOMS))
+                                .resolve(tag.substring(0, tag.lastIndexOf(':')) + ".cdx.json");
+                        Files.copy(report.get(), kept, StandardCopyOption.REPLACE_EXISTING);
+                        return;
+                    }
                 }
             }
         }

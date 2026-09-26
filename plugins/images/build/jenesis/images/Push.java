@@ -34,7 +34,7 @@ import build.jenesis.BuildStepResult;
  * image published with it ({@link #released}). Two images never share a repository with the image as the tag, since
  * a registry shows every tag of a repository to anyone who can see it.
  */
-record Push(long version, Configuration configuration, List<String> targets) implements BuildStep {
+record Push(long version, Configuration configuration, List<String> targets, Signing signing) implements BuildStep {
 
     /** A push's whole value is its effect on a registry, and that effect does not travel in a step output - so a
      *  shared cache answering this step would report a push that never happened. The local cache is left alone:
@@ -86,9 +86,25 @@ record Push(long version, Configuration configuration, List<String> targets) imp
                     + "packaged. Publishing half of a release - the image without the chart that names it - is "
                     + "worse than publishing none, so this stops rather than skipping them.");
         }
+        // Everything a signing publish needs is checked before anything is pushed: finding out afterwards leaves a
+        // release published unsigned.
+        signing.require();
+        Map<String, Path> sboms = new LinkedHashMap<>();
+        if (signing.active()) {
+            Path kept = folder(arguments, Images.SBOMS);
+            for (String image : images) {
+                Path sbom = kept == null ? null : kept.resolve(repository(image) + ".cdx.json");
+                if (sbom == null || !Files.isRegularFile(sbom)) {
+                    throw new IllegalStateException("No SBOM was kept for " + image + ", so this signing publish "
+                            + "could not attest what the image contains. Its module's CycloneDX SBOM is staged by "
+                            + "`stage`; run the images goal after it.");
+                }
+                sboms.put(image, sbom);
+            }
+        }
         String release = environment("PUSH_VERSION", DEFAULT_VERSION);
         for (String target : targets) {
-            publish(target, images, charts, release, context.next());
+            publish(target, images, charts, release, context.next(), sboms);
         }
         return CompletableFuture.completedStage(new BuildStepResult(true));
     }
@@ -109,6 +125,16 @@ record Push(long version, Configuration configuration, List<String> targets) imp
         return List.of();
     }
 
+    /** A folder of that name in one of the step's inputs, or {@code null}. */
+    private static Path folder(SequencedMap<String, BuildStepArgument> arguments, String name) {
+        for (BuildStepArgument argument : arguments.values()) {
+            if (argument.folder() != null && Files.isDirectory(argument.folder().resolve(name))) {
+                return argument.folder().resolve(name);
+            }
+        }
+        return null;
+    }
+
     /** The packaged chart archives, found beside the manifest that names the charts. */
     private static List<Path> packaged(SequencedMap<String, BuildStepArgument> arguments) throws IOException {
         for (BuildStepArgument argument : arguments.values()) {
@@ -126,8 +152,8 @@ record Push(long version, Configuration configuration, List<String> targets) imp
         return List.of();
     }
 
-    private void publish(String target, List<String> images, List<Path> charts, String release, Path work)
-            throws IOException {
+    private void publish(String target, List<String> images, List<Path> charts, String release, Path work,
+                         Map<String, Path> sboms) throws IOException {
         String registry = switch (target) {
             case "hub" -> hub();
             case "aws" -> aws();
@@ -149,6 +175,9 @@ record Push(long version, Configuration configuration, List<String> targets) imp
             if (!"0".equals(environment("PUSH_LATEST", "1"))) {
                 tagAndPush(image, remote + ":latest");
             }
+            // Both tags name one digest, and the digest is what is signed: a tag moves, and a signature over one says
+            // nothing about what a later pull of it gets.
+            signing.sign(pushedDigest(remote + ":" + release, remote), sboms.get(image));
         }
         if (target.equals("scaleway") && !charts.isEmpty()) {
             // Scaleway's template runs the image as a Serverless Container through Terraform and names no chart, and
@@ -162,8 +191,13 @@ record Push(long version, Configuration configuration, List<String> targets) imp
                     work.resolve("charts-" + target).resolve(chart.getFileName().toString()));
             // helm derives the OCI repository from the chart's own name and the tag from its version, so the target
             // is the namespace alone - which is also why what tells two charts apart is their name, not their tag.
-            Cli.run(List.of("helm", "push", released.toString(), "oci://" + oci(target, registry)));
+            String answer = Cli.combined(List.of("helm", "push", released.toString(), "oci://" + oci(target, registry)));
             System.out.println("[images]   pushed " + released.getFileName() + " to oci://" + oci(target, registry));
+            if (signing.active()) {
+                String name = released.getFileName().toString();
+                name = name.substring(0, name.length() - ("-" + release + ".tgz").length());
+                signing.sign(oci(target, registry) + "/" + name + "@" + chartDigest(answer, released), null);
+            }
         }
     }
 
@@ -224,6 +258,31 @@ record Push(long version, Configuration configuration, List<String> targets) imp
      */
     private static String oci(String target, String registry) {
         return "hub".equals(target) ? "registry-1.docker.io/" + registry : registry;
+    }
+
+    /**
+     * The digest the registry holds for a tag this step just pushed, as {@code <repository>@sha256:<hex>}: docker
+     * records it on the local image as it pushes, so reading it back costs no registry call.
+     */
+    private static String pushedDigest(String tag, String remote) throws IOException {
+        String digests = Cli.capture(List.of("docker", "image", "inspect", "--format",
+                "{{range .RepoDigests}}{{println .}}{{end}}", tag));
+        for (String line : digests.lines().map(String::strip).toList()) {
+            if (line.startsWith(remote + "@sha256:") || line.startsWith("docker.io/" + remote + "@sha256:")) {
+                return remote + line.substring(line.indexOf('@'));
+            }
+        }
+        throw new IllegalStateException("docker reported no digest for " + tag + " after pushing it: " + digests);
+    }
+
+    /** The digest {@code helm push} reports for the chart it pushed ({@code Digest: sha256:<hex>}). */
+    private static String chartDigest(String answer, Path chart) {
+        Matcher digest = Pattern.compile("Digest:\\s*(sha256:[0-9a-f]{64})").matcher(answer);
+        if (!digest.find()) {
+            throw new IllegalStateException("helm push reported no digest for " + chart.getFileName()
+                    + ", so it cannot be signed: " + answer);
+        }
+        return digest.group(1);
     }
 
     private static void require(String image) throws IOException {

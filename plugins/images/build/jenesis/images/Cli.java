@@ -43,6 +43,26 @@ final class Cli {
         return output.strip();
     }
 
+    /** Run {@code command} and return what it printed on both streams, failing if it does not exit zero - for a
+     *  tool whose answer is a line it may write to either, as {@code helm push} does with the digest it pushed. */
+    static String combined(List<String> command) throws IOException {
+        Process process;
+        try {
+            process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        } catch (IOException unavailable) {
+            throw missing(command, unavailable);
+        }
+        String output;
+        try (InputStream in = process.getInputStream()) {
+            output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        System.out.print(output);
+        if (await(process, command) != 0) {
+            throw new IllegalStateException(String.join(" ", redacted(command)) + " exited non-zero");
+        }
+        return output.strip();
+    }
+
     /** Run {@code command} with {@code input} on its standard input - a secret handed to a tool without ever
      *  reaching a command line, where it would be visible to every process on the machine. */
     static void feed(List<String> command, String input) throws IOException {
