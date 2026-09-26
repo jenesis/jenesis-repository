@@ -143,6 +143,55 @@ public interface DependentsQuery {
      */
     Set<String> reachable(Collection<String> coordinates) throws IOException;
 
+    /**
+     * One bounded page of the versions whose manifest <em>declares</em> a dependency on the package
+     * {@code dependency} - spelled as its ecosystem spells a coordinate, with no version - each with the requirement
+     * the manifest states, resumable by the opaque {@code cursor} a previous page returned.
+     *
+     * <p><strong>A second tier, not a wider blast radius.</strong> {@link #dependents} answers from resolved trees:
+     * an artifact that embeds a bill of materials names the exact version it was built against, so "depends on X at
+     * this version" is a fact. A manifest states a requirement - a range, a floor, a tag - and which version a client
+     * installs for it is the client's decision, made later and elsewhere. So a declaration is reported as what it is,
+     * with its requirement beside it, and never joins {@link #reachable}: a vulnerability's count of affected
+     * artifacts stays a count of facts.
+     *
+     * <p>Answers what the index recorded. A version since deleted or withheld may still be listed until the index
+     * next passes over it, so a surface that discloses names screens each row, exactly as it screens a dependent.
+     * An index that keeps no declared tier inherits an empty page and {@link #declarationsBuiltAt()}'s empty, and so
+     * reads as not yet built rather than as "nothing declares it".
+     *
+     * @param cursor a previous page's {@link DeclarationPage#nextCursor()}, or {@code null}/empty for the first page
+     * @param limit  the maximum declarations to return (a non-positive limit yields an empty page)
+     */
+    default DeclarationPage declarations(String dependency, String cursor, int limit) throws IOException {
+        return new DeclarationPage(List.of(), null);
+    }
+
+    /** When the declared tier last completed a pass over every published version, or empty when none has - the
+     *  tier's own staleness stamp beside {@link #builtAt()}, since the two tiers are fed by different passes. */
+    default Optional<Instant> declarationsBuiltAt() throws IOException {
+        return Optional.empty();
+    }
+
+    /** One version's declaration of a dependency: the declaring version's ecosystem, coordinate and version, and the
+     *  requirement its manifest states - empty where it states none. */
+    record Declaration(String ecosystem, String coordinate, String version, String requirement) {
+        public Declaration {
+            Objects.requireNonNull(ecosystem, "ecosystem");
+            Objects.requireNonNull(coordinate, "coordinate");
+            Objects.requireNonNull(version, "version");
+            requirement = requirement == null ? "" : requirement;
+        }
+    }
+
+    /** One bounded page of {@link #declarations}: the rows and the opaque cursor to resume after, or {@code null}
+     *  when this page is the last. */
+    record DeclarationPage(List<Declaration> declarations, String nextCursor) {
+        public DeclarationPage {
+            declarations = List.copyOf(declarations);
+        }
+    }
+
     /** Best-effort neutralisation of one coordinate, so a single malformed purl from a hostile or bit-rotted SBOM
      *  never throws out of {@link #reachable(Collection)} and takes the whole vulnerability / blast-radius report with
      *  it - an un-neutralisable coordinate falls back to its raw form (it simply will not match a report line, which

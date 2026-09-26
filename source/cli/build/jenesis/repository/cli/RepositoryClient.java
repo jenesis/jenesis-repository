@@ -423,6 +423,23 @@ public final class RepositoryClient {
         return JSON.readValue(response.body(), DependentsReport.class);
     }
 
+    /** The declared tier of the reverse-dependency index: one page of the versions whose manifest declares a
+     *  dependency on the package {@code dependency}, resumed after {@code cursor}. Returns {@code null} when the index
+     *  is not installed on this deployment (HTTP 501). */
+    public DependentsReport declarations(String repo, String dependency, String cursor)
+            throws IOException, InterruptedException {
+        String path = "/api/dependents?repo=" + enc(repo) + "&package=" + enc(dependency);
+        if (cursor != null && !cursor.isBlank()) {
+            path += "&after=" + enc(cursor);
+        }
+        HttpResponse<String> response = send("GET", path, null, null);
+        if (response.statusCode() == 501) {
+            return null;
+        }
+        require(response, 200, "query the declarations of " + dependency + " in " + repo);
+        return JSON.readValue(response.body(), DependentsReport.class);
+    }
+
     /**
      * The generated SBOM for a hosted coordinate ({@code path} set) or a whole repository ({@code path} null), in the
      * requested {@code format} (CycloneDX by default). The document is a small metadata index, so it is returned as a
@@ -1948,8 +1965,14 @@ public final class RepositoryClient {
     }
 
     /** A reverse-dependency answer: with a {@code coordinate}, the {@code dependents} pulling it in; without one,
-     *  the {@code coordinates} the index holds. The unanswered half is {@code null}. */
-    public record DependentsReport(String coordinate, List<String> dependents, List<String> coordinates) {
+     *  the {@code coordinates} the index holds; with a package, the versions that {@code declared} a dependency on
+     *  it and the {@code nextDeclaredCursor} past them. The unanswered parts are {@code null}. */
+    public record DependentsReport(String coordinate, List<String> dependents, List<String> coordinates,
+                                   List<Declaration> declared, String nextDeclaredCursor) {
+    }
+
+    /** One version declaring a dependency, with the requirement its manifest states - empty where it states none. */
+    public record Declaration(String ecosystem, String coordinate, String version, String requirement) {
     }
 
     /** The license inventory facets: {@code indexed} says whether the search index answered, then the per-category and

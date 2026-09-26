@@ -91,9 +91,27 @@ final class DiscoveryCommands {
 
     static int dependents(String[] args, Path home) throws Exception {
         if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: dependents <repo> [coordinate]");
+            throw new IllegalArgumentException(
+                    "Usage: dependents <repo> [coordinate] | dependents <repo> --package NAME [--cursor T]");
         }
-        String coordinate = args.length > 2 ? args[2] : null;
+        String coordinate = null;
+        String dependency = null;
+        String cursor = null;
+        for (int i = 2; i < args.length; i++) {
+            switch (args[i]) {
+                case "--package" -> dependency = CliSupport.flag(args, ++i);
+                case "--cursor" -> cursor = CliSupport.flag(args, ++i);
+                default -> {
+                    if (args[i].startsWith("--") || coordinate != null) {
+                        throw new IllegalArgumentException("Unknown dependents argument '" + args[i] + "'");
+                    }
+                    coordinate = args[i];
+                }
+            }
+        }
+        if (dependency != null) {
+            return declarations(args[1], dependency, cursor, home);
+        }
         RepositoryClient.DependentsReport report = CliSupport.client(home).dependents(args[1], coordinate);
         if (report == null) {
             System.out.println("The reverse-dependency index is not installed on this deployment.");
@@ -114,6 +132,30 @@ final class DiscoveryCommands {
             return 0;
         }
         dependents.forEach(System.out::println);
+        return 0;
+    }
+
+    /** The declared tier for one package: one page of the versions declaring it, each with its requirement, and the
+     *  cursor to ask for the next. Printed apart from the resolved dependents, because a requirement is not a version
+     *  anything was built against. */
+    private static int declarations(String repo, String dependency, String cursor, Path home) throws Exception {
+        RepositoryClient.DependentsReport report = CliSupport.client(home).declarations(repo, dependency, cursor);
+        if (report == null) {
+            System.out.println("The reverse-dependency index is not installed on this deployment.");
+            return 0;
+        }
+        List<RepositoryClient.Declaration> declared = report.declared();
+        if (declared == null || declared.isEmpty()) {
+            System.out.println("No version declares a dependency on " + dependency + ".");
+        } else {
+            for (RepositoryClient.Declaration row : declared) {
+                System.out.println(row.ecosystem() + "  " + row.coordinate() + "  " + row.version() + "  "
+                        + (row.requirement() == null || row.requirement().isEmpty() ? "-" : row.requirement()));
+            }
+        }
+        if (report.nextDeclaredCursor() != null) {
+            System.out.println("next cursor: " + report.nextDeclaredCursor());
+        }
         return 0;
     }
 

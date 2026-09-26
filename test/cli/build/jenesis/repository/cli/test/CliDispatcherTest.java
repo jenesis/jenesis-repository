@@ -57,6 +57,7 @@ public class CliDispatcherTest {
     private volatile int deployStatus = 201;
     private volatile int dependentsStatus = 200;
     private volatile String dependentsBody = "{}";
+    private volatile String dependentsQuery;
     private volatile String sbomBody = "{\"bomFormat\":\"CycloneDX\"}";
     private volatile int findingsStatus = 200;
     private volatile String findingsBody = "{\"available\":true,\"findings\":[]}";
@@ -186,6 +187,22 @@ public class CliDispatcherTest {
         String out = capture(() -> assertThat(
                 Cli.run(new String[] {"dependents", "releases", "pkg:maven/x/core@1"})).isZero());
         assertThat(out).contains("pkg:maven/x/app@1").contains("pkg:maven/x/lib@1");
+    }
+
+    @Test
+    public void dependents_prints_the_versions_declaring_a_package_apart_with_their_requirement() throws Exception {
+        dependentsStatus = 200;
+        dependentsBody = "{\"dependency\":\"lodash\",\"declared\":[{\"ecosystem\":\"npm\",\"coordinate\":\"app\","
+                + "\"version\":\"1.0.0\",\"requirement\":\"^4.17.0\"},{\"ecosystem\":\"npm\",\"coordinate\":\"lib\","
+                + "\"version\":\"2.0.0\",\"requirement\":\"\"}],\"nextDeclaredCursor\":\"tok\"}";
+        String out = capture(() -> assertThat(
+                Cli.run(new String[] {"dependents", "releases", "--package", "lodash", "--cursor", "c1"})).isZero());
+        assertThat(dependentsQuery).as("the package and the cursor reach the declared answer")
+                .contains("package=lodash").contains("after=c1");
+        assertThat(out).contains("npm  app  1.0.0  ^4.17.0")
+                .as("a declaration stating no requirement says so rather than printing nothing")
+                .contains("npm  lib  2.0.0  -")
+                .contains("next cursor: tok");
     }
 
     @Test
@@ -376,6 +393,7 @@ public class CliDispatcherTest {
                         + "\"skippedFormats\":[],\"cursor\":null,\"asset\":null,\"error\":\"\"}");
             }
             if (matches(path, "/api/dependents")) {
+                dependentsQuery = query;
                 return respond(dependentsStatus, dependentsBody);
             }
             if (matches(path, "/api/sbom")) {
