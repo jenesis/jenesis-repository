@@ -108,6 +108,7 @@ public class Images implements BuildExecutorModule {
                                     + "this build makes");
                             continue;
                         }
+                        pinned(module(candidate), candidate.resolve("Dockerfile"));
                         String tag = repository.get() + ":latest";
                         Path clash = contexts.putIfAbsent(tag, candidate);
                         if (clash != null) {
@@ -130,6 +131,29 @@ public class Images implements BuildExecutorModule {
             }
             Files.write(context.next().resolve(MANIFEST), contexts.sequencedKeySet());
             return CompletableFuture.completedStage(new BuildStepResult(true));
+        }
+
+        /**
+         * Refuse an image built on a base named by tag alone. A tag moves - the same release rebuilt a week later
+         * would be a different image, and nothing downstream could tell - so every {@code FROM} in the staged
+         * Dockerfile names its base by digest, {@code <image>:<tag>@sha256:<digest>}, which a module declares as
+         * {@code docker=<base>} in its {@code META-INF/build.jenesis/packaging.properties}. Checked here, where the
+         * value the tool wrote is read, rather than by scanning the declarations.
+         */
+        private static void pinned(String module, Path dockerfile) throws IOException {
+            for (String line : Files.readAllLines(dockerfile, StandardCharsets.UTF_8)) {
+                String trimmed = line.strip();
+                if (!trimmed.regionMatches(true, 0, "FROM ", 0, 5)) {
+                    continue;
+                }
+                String base = trimmed.substring(5).strip().split("\\s+")[0];
+                if (!base.contains("@sha256:")) {
+                    throw new IllegalStateException("The image of " + module + " is built FROM " + base + ", a base "
+                            + "named by tag alone. Declare it by digest - docker=<image>:<tag>@sha256:<digest> in the "
+                            + "module's META-INF/build.jenesis/packaging.properties - so a rebuilt release is the "
+                            + "same image.");
+                }
+            }
         }
 
         /** The module path a staged context was written for: the build names a module's step folder by its path,
