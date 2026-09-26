@@ -691,8 +691,16 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {
-        return PublishedExport.putAll(repository, paths(coordinate, version), "/maven/", target);
+        return PublishedExport.putAll(repository, paths(coordinate, version), CLIENT_PATH, target);
     }
+
+    /** A Maven client is pointed at a repository's {@code /maven/}, the root this format lays its paths out from. */
+    @Override
+    public String clientPath() {
+        return CLIENT_PATH;
+    }
+
+    private static final String CLIENT_PATH = "/maven/";
 
     /** The coordinate's {@code maven-metadata.xml} and its checksums, after its last version, as {@code mvn deploy}
      *  sends them after the version it adds. */

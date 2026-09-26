@@ -64,6 +64,15 @@ public interface RepositoryExporter {
         return Optional.empty();
     }
 
+    /**
+     * Where this format's client is pointed, under a repository's URL: the URL an export target is given is a
+     * repository's URL with this appended, and every path {@link #export} sends is relative to it. {@code /} for
+     * almost every format; Maven's lays its paths out from {@code /maven/}, so its client is pointed there.
+     */
+    default String clientPath() {
+        return "/";
+    }
+
     default Units units() {
         return Units.INVENTORY;
     }
