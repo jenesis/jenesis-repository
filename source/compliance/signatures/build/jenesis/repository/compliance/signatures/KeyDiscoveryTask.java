@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.signatures;
 
 import module java.base;
 import module java.net.http;
+import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.compliance.SignatureScheme;
 import build.jenesis.repository.format.ArtifactSignatures;
@@ -189,13 +190,23 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
      * direct method on the domain, as the draft orders them ({@link WebKeyDirectory}). With {@code base} given,
      * the direct method rooted at that one host for every domain - a stub, or an internal directory that mirrors
      * every domain a deployment's maintainers use.
+     *
+     * <p>Without {@code base} the domain is taken from package metadata - the address a publisher wrote - so it is
+     * screened as a proxy fetch is: a host resolving to a private, loopback or link-local address is not asked, and
+     * no redirect is followed, since a public host could otherwise send the fetch inward. A directory the operator
+     * names is theirs to point anywhere, internal included, and is asked as named.
      */
     public static MaintainerFetcher wkd(String base) {
-        HttpClient client = client();
+        boolean named = base != null && !base.isBlank();
+        HttpClient client = named ? client() : ScreenedHttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build();
         return address -> {
-            List<URI> lookups = base == null || base.isBlank()
-                    ? WebKeyDirectory.lookups(address)
-                    : List.of(WebKeyDirectory.lookup(base.trim(), address));
+            List<URI> lookups = named
+                    ? List.of(WebKeyDirectory.lookup(base.trim(), address))
+                    : WebKeyDirectory.lookups(address).stream()
+                            .filter(lookup -> lookup.getHost() != null
+                                    && !PrivateHosts.resolvesToPrivate(lookup.getHost()))
+                            .toList();
             IOException unreachable = null;
             for (URI lookup : lookups) {
                 try {
