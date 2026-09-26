@@ -978,6 +978,44 @@ public final class RepositoryClient {
         return JSON.readValue(response.body(), ImportStatus.class);
     }
 
+    /** Start publishing every version {@code repo} holds to the repository at {@code url} - the URL the format's own
+     *  client would be pointed at - with a token, or a user name and password; {@code resume} continues a stopped
+     *  job. */
+    public ExportResult startExport(String repo, String url, String token, String username, String password,
+                                    String resume) throws IOException, InterruptedException {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("url", url);
+        if (token != null) {
+            fields.put("token", token);
+        }
+        if (username != null) {
+            fields.put("username", username);
+        }
+        if (password != null) {
+            fields.put("password", password);
+        }
+        if (resume != null) {
+            fields.put("resume", resume);
+        }
+        HttpResponse<String> response = send("POST", "/api/repository/export?repo=" + enc(repo),
+                body(fields), "application/json");
+        if (response.statusCode() == 202) {
+            return new ExportResult(202, JSON.readValue(response.body(), ImportJob.class).job(), null);
+        }
+        return new ExportResult(response.statusCode(), null, response.body());
+    }
+
+    /** The state and counts of an export job, or {@code null} when no such job exists (HTTP 404). */
+    public ExportStatus exportStatus(String repo, String job) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET",
+                "/api/repository/export/" + enc(job) + "?repo=" + enc(repo), null, null);
+        if (response.statusCode() == 404) {
+            return null;
+        }
+        require(response, 200, "read export job " + job);
+        return JSON.readValue(response.body(), ExportStatus.class);
+    }
+
     /** The retroactive-license-enforcement dry-run plan for a repository - what enabling enforcement would newly hold
      *  under the current policy - or {@code null} when license policy is not installed (HTTP 501). With {@code unknown}
      *  it additionally previews holding the coordinates whose license could not be identified. */
@@ -2015,6 +2053,17 @@ public final class RepositoryClient {
     /** The acknowledgement of a submitted import: the HTTP {@code status} (202 accepted, 405 read-only, 501 no
      *  upstream, 400 no such source) and, when accepted, the {@code job} id to poll. */
     public record ImportResult(int status, String job) {
+    }
+
+    /** The acknowledgement of a submitted export: the HTTP {@code status}, the {@code job} id to poll when it was
+     *  accepted, and the server's reason when it was not - an export URL the deployment refuses says why. */
+    public record ExportResult(int status, String job, String reason) {
+    }
+
+    /** An export job's state and counts: versions published, already present and withheld, where it has reached, and
+     *  the error that stopped it if any. */
+    public record ExportStatus(String state, String target, int published, int present, int withheld, String cursor,
+                               String reached, String error) {
     }
 
     /** An import job's state and counts: what has been imported and skipped, which formats had no importer, the walk's

@@ -11,7 +11,12 @@ import org.springframework.core.env.Environment;
 public class ExportConfig {
 
     @Bean
-    public ExportController exportController(RepositoryRouting routing, Environment environment) {
-        return new ExportController(routing, key -> environment.getProperty(Features.key(key)));
+    public Exports exports(RepositoryRouting routing, Environment environment) {
+        return new Exports(routing, key -> environment.getProperty(Features.key(key)));
+    }
+
+    @Bean
+    public ExportController exportController(Exports exports, RepositoryRouting routing) {
+        return new ExportController(exports, routing);
     }
 }

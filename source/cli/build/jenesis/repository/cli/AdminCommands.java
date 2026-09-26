@@ -456,6 +456,78 @@ final class AdminCommands {
         };
     }
 
+    /** How often a watched export reprints: its counters move per version, as an import's do. */
+    private static final Duration EXPORT_PROGRESS = Duration.ofSeconds(5);
+
+    static int exportRepo(String[] args, Path home) throws Exception {
+        if (args.length < 2) {
+            throw new IllegalArgumentException("Usage: export <repo> --url U [--token T | --user U --password P] "
+                    + "[--resume JOB] | export status <repo> <job>");
+        }
+        RepositoryClient client = CliSupport.client(home);
+        if (args[1].equals("status")) {
+            if (args.length < 4) {
+                throw new IllegalArgumentException("Usage: export status <repo> <job>");
+            }
+            if (Refresh.on()) {
+                return Refresh.until(EXPORT_PROGRESS, () -> exportState(client, args[2], args[3]));
+            }
+            return exportState(client, args[2], args[3]).code();
+        }
+        String repo = args[1];
+        String url = null;
+        String token = null;
+        String user = null;
+        String password = null;
+        String resume = null;
+        for (int i = 2; i < args.length; i++) {
+            switch (args[i]) {
+                case "--url" -> url = CliSupport.flag(args, ++i);
+                case "--token" -> token = CliSupport.flag(args, ++i);
+                case "--user" -> user = CliSupport.flag(args, ++i);
+                case "--password" -> password = CliSupport.flag(args, ++i);
+                case "--resume" -> resume = CliSupport.flag(args, ++i);
+                default -> throw new IllegalArgumentException("Unknown export flag '" + args[i] + "'");
+            }
+        }
+        if (url == null) {
+            throw new IllegalArgumentException("export needs --url: the URL the format's client would be pointed at.");
+        }
+        RepositoryClient.ExportResult result = client.startExport(repo, url, token, user, password, resume);
+        if (result.status() == 202) {
+            System.out.println("Export started; job " + result.job()
+                    + ". Poll it with: export status " + repo + " " + result.job());
+            return 0;
+        }
+        System.out.println("Export refused (HTTP " + result.status() + ")"
+                + (result.reason() == null || result.reason().isBlank() ? "." : ": " + result.reason().strip()));
+        return 1;
+    }
+
+    /** Print one export job's state, and say whether there is any point asking again. */
+    private static Refresh.Poll.State exportState(RepositoryClient client, String repo, String job) throws Exception {
+        RepositoryClient.ExportStatus status = client.exportStatus(repo, job);
+        if (status == null) {
+            System.out.println("No export job '" + job + "' in " + repo + ".");
+            return Refresh.Poll.State.done(1);
+        }
+        System.out.println("state:     " + status.state());
+        System.out.println("target:    " + status.target());
+        System.out.println("published: " + status.published());
+        System.out.println("present:   " + status.present());
+        System.out.println("withheld:  " + status.withheld());
+        if (status.reached() != null && !status.reached().isEmpty()) {
+            System.out.println("reached:   " + status.reached());
+        }
+        if (status.error() != null && !status.error().isEmpty()) {
+            System.out.println("error:     " + status.error());
+        }
+        if ("running".equalsIgnoreCase(status.state())) {
+            return Refresh.Poll.State.running();
+        }
+        return Refresh.Poll.State.done(status.error() == null || status.error().isEmpty() ? 0 : 1);
+    }
+
     static int tenants(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {

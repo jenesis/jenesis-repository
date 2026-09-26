@@ -130,6 +130,7 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.config.web;
     requires build.jenesis.repository.management.web;
     requires build.jenesis.repository.export;
+    requires build.jenesis.repository.export.web;
     requires build.jenesis.repository.console.api;
     requires build.jenesis.repository.deploy.web;
     // Credentials for a private upstream, and the tokens AWS registries issue in place of one.

@@ -90,6 +90,8 @@ public class CliBindingTest {
             Map.entry("deploy", Binding.of("/releases/", "deploy", "releases", "/a/b.jar", "@FILE")),
             Map.entry("import", Binding.of("/api/repository/import", "import", "releases",
                     "--source", "nexus", "--url", "http://x/", "--source-repo", "r")),
+            Map.entry("export", Binding.of("/api/repository/export", "export", "releases",
+                    "--url", "http://x/")),
             Map.entry("cache", Binding.of("/api/cache/projects", "cache", "projects")),
             Map.entry("keylogin", Binding.of("/api/keylogin", "keylogin", "list")),
             Map.entry("scim", Binding.of("/api/scim/token", "scim", "token")),

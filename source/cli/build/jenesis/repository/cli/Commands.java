@@ -202,7 +202,12 @@ public final class Commands {
                     noun("import", "import from another repository manager", null, AdminCommands::importRepo,
                             act("import <repo> --source S --url U --source-repo R [--format F]"
                                     + " [--user U --password P] [--resume JOB]", "start an import"),
-                            act("import status <repo> <job>", "the state and counts of an import job")))),
+                            act("import status <repo> <job>", "the state and counts of an import job")),
+                    noun("export", "publish a whole repository to another one", "build.jenesis.repository.export",
+                            AdminCommands::exportRepo,
+                            act("export <repo> --url U [--token T | --user U --password P] [--resume JOB]",
+                                    "start publishing every version to the repository a client would reach at U"),
+                            act("export status <repo> <job>", "the state and counts of an export job")))),
 
             new Section("Operations", List.of(
                     noun("cache", "the build-cache projects on this deployment's volume",

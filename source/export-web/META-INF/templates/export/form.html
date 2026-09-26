@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Export')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Export a repository')}"></header>
+
+    <p><small>Publish every version a repository holds to another repository - another deployment of this product,
+        or any repository manager - through the protocol the format's own client publishes with, so the other side
+        needs no importer. A version already there is not sent again, so an export can be run again or resumed, and
+        a held version is never sent. The job runs in the background; this screen shows where it has got to.</small></p>
+
+    <article>
+        <h2>Start an export</h2>
+        <form method="post" th:action="@{/ui/export}">
+            <label>Repository
+                <input type="text" name="repository" required placeholder="releases" th:value="${repository}"
+                       th:attr="aria-describedby='export-repository-help'">
+            </label>
+            <small id="export-repository-help">A repository in <strong th:text="${tenant}">tenant</strong>; every
+                version it holds is exported.</small>
+
+            <label>Target URL
+                <input type="url" name="url" required placeholder="https://repo.example.com/repository/maven-releases/"
+                       th:attr="aria-describedby='export-url-help'">
+            </label>
+            <small id="export-url-help">The URL the format's own client would be pointed at to publish into the other
+                repository. It must be https and reach a public host unless this deployment allows migrating to an
+                internal one.</small>
+
+            <div class="grid">
+                <label>Username <small>(optional)</small>
+                    <input name="username" autocomplete="off"></label>
+                <label>Password <small>(optional)</small>
+                    <input name="password" type="password" autocomplete="off"></label>
+                <label>Token <small>(instead of a password)</small>
+                    <input name="token" type="password" autocomplete="off"></label>
+            </div>
+            <small>The credential is used for this job only and never stored; resuming a job asks for it again.</small>
+
+            <label>Resume job <small>(optional)</small>
+                <input name="resume" autocomplete="off" placeholder="the id of a stopped job"></label>
+
+            <button type="submit">Start export</button>
+        </form>
+    </article>
+
+    <article th:unless="${repository.isBlank()}">
+        <h2>Exports of <span th:text="${repository}">releases</span></h2>
+        <th:block th:if="${running}">
+            <p th:replace="~{base :: running('An export is running.')}"></p>
+        </th:block>
+        <p th:if="${jobs.isEmpty()}"><small>No exports of this repository yet.</small></p>
+        <figure th:unless="${jobs.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Job</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Target</th>
+                    <th scope="col" class="app-list__num">Published</th>
+                    <th scope="col" class="app-list__num">Already there</th>
+                    <th scope="col" class="app-list__num">Withheld</th>
+                    <th scope="col">Detail</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="job : ${jobs}">
+                    <td><code th:text="${job.id}">id</code></td>
+                    <td><span class="app-badge"
+                              th:classappend="${job.running()} ? 'app-badge--info' : (${job.error} ? 'app-badge--danger' : 'app-badge--pass')"
+                              th:text="${job.state}">running</span></td>
+                    <td><code th:text="${job.target}">url</code></td>
+                    <td class="app-list__num" th:text="${job.published}">0</td>
+                    <td class="app-list__num" th:text="${job.present}">0</td>
+                    <td class="app-list__num" th:text="${job.withheld}">0</td>
+                    <td>
+                        <small th:if="${job.error}" th:text="${job.error}">error</small>
+                        <small th:if="${job.error == null and job.reached != null}"
+                               th:text="'reached ' + ${job.reached}">reached</small>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <p th:if="${next}"><a th:href="@{/ui/export(repository=${repository}, after=${next})}">Showing the first
+            page - more exports follow</a></p>
+    </article>
+</main>
+</body>
+</html>
