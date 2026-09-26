@@ -8,6 +8,10 @@ import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
+import build.jenesis.repository.blobs.OutboundTargets;
+import build.jenesis.repository.blobs.ProxyLeg;
+import build.jenesis.repository.blobs.ProxyRelay;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.blobs.RequestBase;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
@@ -17,7 +21,9 @@ import build.jenesis.repository.format.signing.OpenPgpSigner;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import build.jenesis.repository.format.Listings;
 
 /**
@@ -51,7 +57,7 @@ import build.jenesis.repository.format.Listings;
  * still be read by anything addressing these paths directly, but not by {@code terraform init}.
  */
 public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryExporter,
-        RepositoryImporter {
+        RepositoryImporter, ProxyLeg {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -449,6 +455,276 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
             return;
         }
         exchange.respond(200, body);
+    }
+
+    // ---- proxy ----
+
+    /** Where an upstream registry serves each protocol, as its discovery document names them. */
+    private record Services(URI providers, URI modules) {
+    }
+
+    /**
+     * Proxy a miss to an upstream Terraform registry. The registry is found the way a client finds one: its
+     * {@code /.well-known/terraform.json} names where each protocol is served, and a registry that publishes none is
+     * read at {@code v1/providers/} and {@code v1/modules/} under the configured root. A location the discovery
+     * document names, and every URL a package document names, is chosen by the upstream, so each is screened
+     * ({@link OutboundTargets}) before it is fetched.
+     *
+     * <p>The version lists of a provider and of a module are ENUMERATIONS, fetched fresh on each read; only an upstream
+     * that answered 404/410 reaches the client as a 404. They name no URLs and are relayed as they are.
+     *
+     * <p>A provider's package document is PINNED and rewritten on the way out. Its {@code download_url} names this
+     * repository's own path for the zip, and its {@code shasums_url} and {@code shasums_signature_url} name this
+     * repository's paths for the sums and their signature, each carrying the platform the document was read for. The
+     * sums and the signature are the upstream's, relayed fresh, and the {@code signing_keys} are left as they are,
+     * so a client verifies the upstream's signature over the upstream's sums, and the zip against them. The zip
+     * itself is held to the {@code shasum} of the same package document that locates it, so an unreadable document
+     * leaves nothing to fetch.
+     *
+     * <p>A module's download names a source in {@code X-Terraform-Get}. When that source is a {@code .tar.gz} archive
+     * over HTTPS, the answer names this repository's own path for it, and the archive is cached as fetched - the
+     * protocol declares no checksum for a module. Any other source - a git repository, which is what most public
+     * modules name - is not an archive this repository can hold, and its address is relayed as it is.
+     */
+    @Override
+    public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
+                               ProxyFormat.Fetcher fetcher) throws IOException {
+        String[] segments = exchange.path().substring(PREFIX.length()).split("/");
+        if (segments.length < 2 || Keys.unsafe(segments[0])) {
+            return false;
+        }
+        String repo = segments[0];
+        String[] path = Arrays.copyOfRange(segments, 1, segments.length);
+        for (String segment : path) {
+            if (Keys.unsafe(segment)) {
+                return false;
+            }
+        }
+        boolean allowInternal = ProxyLeg.allowInternalTargets(exchange);
+        Services services = services(upstream, fetcher, allowInternal);
+        if (path.length == 5 && path[0].equals("v1") && path[1].equals("providers") && path[4].equals("versions")) {
+            return relay(exchange, fetcher, services.providers().resolve(path[2] + "/" + path[3] + "/versions"),
+                    "application/json", ProxyRelay.Document.ENUMERATION);
+        }
+        if (path.length == 6 && path[0].equals("v1") && path[1].equals("modules") && path[5].equals("versions")) {
+            return relay(exchange, fetcher,
+                    services.modules().resolve(path[2] + "/" + path[3] + "/" + path[4] + "/versions"),
+                    "application/json", ProxyRelay.Document.ENUMERATION);
+        }
+        if (path.length == 8 && path[0].equals("v1") && path[1].equals("providers") && path[5].equals("download")) {
+            return proxiedPackage(exchange, fetcher, services, repo, path[2], path[3], path[4], path[6], path[7]);
+        }
+        if (path.length == 7 && path[0].equals("v1") && path[1].equals("modules") && path[6].equals("download")) {
+            return proxiedModuleDownload(exchange, fetcher, services, repo, path[2], path[3], path[4], path[5],
+                    allowInternal, upstream);
+        }
+        if (path.length == 5 && path[0].equals("providers")) {
+            String namespace = path[1], type = path[2], version = path[3], file = path[4];
+            if (file.equals("SHA256SUMS") || file.equals("SHA256SUMS.sig")) {
+                String os = exchange.queryParameter("os"), arch = exchange.queryParameter("arch");
+                if (os == null || arch == null || Keys.unsafe(os) || Keys.unsafe(arch)) {
+                    return false;
+                }
+                JsonNode document = packageDocument(fetcher, services, namespace, type, version, os, arch);
+                URI sums = document == null ? null : advertised(document, file.equals("SHA256SUMS")
+                        ? "shasums_url" : "shasums_signature_url", upstream, allowInternal);
+                return sums != null && relay(exchange, fetcher, sums, file.equals("SHA256SUMS")
+                        ? "text/plain; charset=utf-8" : "application/octet-stream", ProxyRelay.Document.PINNED);
+            }
+            Optional<String[]> platform = TerraformCoordinates.platformOf(type, version, file);
+            if (platform.isEmpty()) {
+                return false;
+            }
+            JsonNode document = packageDocument(fetcher, services, namespace, type, version, platform.get()[0],
+                    platform.get()[1]);
+            URI zip = document == null || !file.equals(document.path("filename").asString(""))
+                    ? null : advertised(document, "download_url", upstream, allowInternal);
+            if (zip == null) {
+                return false;
+            }
+            String shasum = document.path("shasum").asString("");
+            ProxyRelay.Declared declared = shasum.matches("[0-9a-fA-F]{64}")
+                    ? ProxyRelay.Declared.of("SHA-256", HexFormat.of().parseHex(shasum)) : ProxyRelay.Declared.NONE;
+            return fill(exchange, store, fetcher, zip,
+                    TerraformCoordinates.providerArchive(repo, namespace, type, version, file), declared,
+                    "application/zip");
+        }
+        if (path.length == 5 && path[0].equals("modules") && path[4].endsWith(MODULE_ARCHIVE)) {
+            String version = path[4].substring(0, path[4].length() - MODULE_ARCHIVE.length());
+            URI archive = moduleArchive(fetcher, services, path[1], path[2], path[3], version, allowInternal, upstream);
+            return archive != null && fill(exchange, store, fetcher, archive,
+                    TerraformCoordinates.moduleArchive(repo, path[1], path[2], path[3], version),
+                    ProxyRelay.Declared.NONE, "application/gzip");
+        }
+        return false;
+    }
+
+    /** The upstream's protocol locations, from its discovery document or at the default paths when it has none. */
+    private static Services services(URI upstream, ProxyFormat.Fetcher fetcher, boolean allowInternal)
+            throws IOException {
+        URI root = URI.create(upstream.toString().endsWith("/") ? upstream.toString() : upstream + "/");
+        URI providers = root.resolve("v1/providers/"), modules = root.resolve("v1/modules/");
+        Optional<ProxyFormat.Fetched> discovery = fetcher.fetch(root.resolve(".well-known/terraform.json"), Map.of());
+        if (discovery.isPresent() && discovery.get().status() == 200) {
+            try {
+                JsonNode document = MAPPER.readTree(discovery.get().body());
+                providers = service(document, "providers.v1", root, upstream, allowInternal, providers);
+                modules = service(document, "modules.v1", root, upstream, allowInternal, modules);
+            } catch (RuntimeException unreadable) {
+                // not a discovery document: the default locations stand
+            }
+        }
+        return new Services(providers, modules);
+    }
+
+    private static URI service(JsonNode document, String name, URI root, URI upstream, boolean allowInternal,
+                               URI fallback) {
+        String location = document.path(name).asString("");
+        if (location.isEmpty()) {
+            return fallback;
+        }
+        try {
+            URI resolved = root.resolve(location.endsWith("/") ? location : location + "/");
+            return OutboundTargets.mayFollow(resolved, upstream, allowInternal) ? resolved : fallback;
+        } catch (IllegalArgumentException invalid) {
+            return fallback;
+        }
+    }
+
+    /** A provider version's package document for one platform, or {@code null} when it could not be read. */
+    private static JsonNode packageDocument(ProxyFormat.Fetcher fetcher, Services services, String namespace,
+                                            String type, String version, String os, String arch) throws IOException {
+        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(services.providers().resolve(namespace + "/" + type
+                + "/" + version + "/download/" + os + "/" + arch), Map.of());
+        if (fetched.isEmpty() || fetched.get().status() != 200) {
+            return null;
+        }
+        try {
+            return MAPPER.readTree(fetched.get().body());
+        } catch (RuntimeException unreadable) {
+            return null;
+        }
+    }
+
+    /** A URL a package document names, screened, or {@code null}. */
+    private static URI advertised(JsonNode document, String field, URI upstream, boolean allowInternal) {
+        String text = document.path(field).asString("");
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            URI url = URI.create(text);
+            return url.isAbsolute() && OutboundTargets.mayFollow(url, upstream, allowInternal) ? url : null;
+        } catch (IllegalArgumentException invalid) {
+            return null;
+        }
+    }
+
+    /** The package document, with its URLs naming this repository's own paths. */
+    private boolean proxiedPackage(FormatExchange exchange, ProxyFormat.Fetcher fetcher, Services services,
+                                   String repo, String namespace, String type, String version, String os,
+                                   String arch) throws IOException {
+        URI url = services.providers().resolve(namespace + "/" + type + "/" + version + "/download/" + os + "/"
+                + arch);
+        ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, url, Map.of(), exchange, ProxyRelay.Document.PINNED);
+        if (!answer.answered()) {
+            return answer.served();
+        }
+        JsonNode document;
+        try {
+            document = MAPPER.readTree(answer.document().body());
+        } catch (RuntimeException unreadable) {
+            return false;
+        }
+        String file = TerraformCoordinates.providerFile(type, version, os, arch);
+        if (!(document instanceof ObjectNode rewritten) || !file.equals(document.path("filename").asString(""))) {
+            return false;
+        }
+        String base = base(exchange, repo) + "/providers/" + namespace + "/" + type + "/" + version;
+        String platform = "?os=" + URLEncoder.encode(os, StandardCharsets.UTF_8) + "&arch="
+                + URLEncoder.encode(arch, StandardCharsets.UTF_8);
+        rewritten.put("download_url", base + "/" + file);
+        rewritten.put("shasums_url", base + "/SHA256SUMS" + platform);
+        rewritten.put("shasums_signature_url", base + "/SHA256SUMS.sig" + platform);
+        respondJson(exchange, MAPPER.writeValueAsBytes(rewritten));
+        return true;
+    }
+
+    /** A module version's download: this repository's own archive path when the source is an archive it can hold. */
+    private boolean proxiedModuleDownload(FormatExchange exchange, ProxyFormat.Fetcher fetcher, Services services,
+                                          String repo, String namespace, String name, String system, String version,
+                                          boolean allowInternal, URI upstream) throws IOException {
+        URI url = services.modules().resolve(namespace + "/" + name + "/" + system + "/" + version + "/download");
+        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(url, Map.of());
+        if (fetched.isEmpty() || (fetched.get().status() != 204 && fetched.get().status() != 200)) {
+            return false;
+        }
+        String source = fetched.get().header("X-Terraform-Get");
+        if (source == null || source.isBlank()) {
+            return false;
+        }
+        URI archive = archiveSource(url, source, allowInternal, upstream);
+        exchange.setResponseHeader("X-Terraform-Get", archive == null ? source
+                : base(exchange, repo) + "/modules/" + namespace + "/" + name + "/" + system + "/" + version
+                        + MODULE_ARCHIVE);
+        exchange.respond(204);
+        return true;
+    }
+
+    /** The archive a module version's download names, when it is one this repository can hold, or {@code null}. */
+    private static URI moduleArchive(ProxyFormat.Fetcher fetcher, Services services, String namespace, String name,
+                                     String system, String version, boolean allowInternal, URI upstream)
+            throws IOException {
+        URI url = services.modules().resolve(namespace + "/" + name + "/" + system + "/" + version + "/download");
+        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(url, Map.of());
+        if (fetched.isEmpty() || (fetched.get().status() != 204 && fetched.get().status() != 200)) {
+            return null;
+        }
+        String source = fetched.get().header("X-Terraform-Get");
+        return source == null ? null : archiveSource(url, source, allowInternal, upstream);
+    }
+
+    /** {@code source} resolved against the download it came from, when it is an HTTPS {@code .tar.gz} with no getter
+     *  prefix, subdirectory or query - the one shape that is simply a file to fetch - and passes the screen. */
+    private static URI archiveSource(URI download, String source, boolean allowInternal, URI upstream) {
+        int scheme = source.indexOf("://");
+        if (scheme < 0 || source.contains("::") || source.indexOf("//", scheme + 3) >= 0 || source.contains("?")) {
+            return null;
+        }
+        try {
+            URI resolved = download.resolve(source.strip());
+            String archivePath = resolved.getPath();
+            return archivePath != null && (archivePath.endsWith(MODULE_ARCHIVE) || archivePath.endsWith(".tgz"))
+                    && OutboundTargets.mayFollow(resolved, upstream, allowInternal) ? resolved : null;
+        } catch (IllegalArgumentException invalid) {
+            return null;
+        }
+    }
+
+    /** Relay one document fresh. */
+    private static boolean relay(FormatExchange exchange, ProxyFormat.Fetcher fetcher, URI url, String contentType,
+                                 ProxyRelay.Document document) throws IOException {
+        ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, url, Map.of(), exchange, document);
+        if (!answer.answered()) {
+            return answer.served();
+        }
+        exchange.setResponseHeader("Content-Type", contentType);
+        exchange.respond(200, answer.document().body());
+        return true;
+    }
+
+    /** Fetch an artifact into the store under {@code key}, held to {@code declared}, and serve it. */
+    private boolean fill(FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher, URI url,
+                         String key, ProxyRelay.Declared declared, String contentType) throws IOException {
+        Blobs blobs = new Blobs(store);
+        try (ProxyFormat.Download download = fetcher.download(url, Map.of()).orElse(null)) {
+            if (download == null || download.status() != 200
+                    || !ProxyRelay.fill(blobs, key, url, download.body(), declared)) {
+                return false;
+            }
+        }
+        stream(exchange, blobs, key, contentType);
+        return true;
     }
 
     /** This registry's external base for the URLs the protocol documents carry. */

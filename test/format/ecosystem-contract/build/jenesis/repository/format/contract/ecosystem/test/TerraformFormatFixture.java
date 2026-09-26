@@ -1,7 +1,9 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.store.ArtifactStore;
@@ -110,9 +112,10 @@ final class TerraformFormatFixture implements EcosystemFormatFixture {
     @Override
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
-                FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY, PROXY,
-                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE, PROXY,
-                FormatContract.Property.PROXY_STREAMS_UPSTREAM_BODY, PROXY,
+                FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
+                "every path this leg fills is one a miss on fails terraform init: a version list is an "
+                        + "ENUMERATION, refused as a 502 rather than answered empty, and a provider zip is the file "
+                        + "its package document named",
                 FormatContract.Property.COORDINATE_TRAVERSAL_REFUSED,
                 "TerraformFormat implements ArtifactLayout for ecosystem()/describe() only: paths() answers empty "
                         + "by design, because a Terraform artifact's pointer lives in the blobs namespace rather "
@@ -124,10 +127,46 @@ final class TerraformFormatFixture implements EcosystemFormatFixture {
 
     /** Scoped to serving the registry; mirroring {@code registry.terraform.io} is a separate change, so these three
      *  rows have no subject rather than a failing one. */
-    private static final String PROXY =
-            "terraform has no proxy leg: this entry is scoped to serving a hosted registry - the two protocols and "
-                    + "the signed SHA256SUMS - and pulling through registry.terraform.io is a separate change that "
-                    + "these rows arrive with";
+    @Override
+    public Optional<Upstream> upstream(GeneratedBody body) {
+        return Optional.of(new Upstream(PROXIED, PROXIED_ROOT, fetcher(body, body.sha256())));
+    }
+
+    @Override
+    public Optional<Upstream> tampered(GeneratedBody body) {
+        return Optional.of(new Upstream(PROXIED, PROXIED_ROOT, fetcher(body, "0".repeat(64))));
+    }
+
+    /** The upstream registry the proxy leg reads, which publishes no discovery document, and the zip it serves. */
+    private static final URI PROXIED_ROOT = URI.create("https://registry.invalid/");
+    private static final String PROXIED_FILE = "terraform-provider-proxied_9.9.9_linux_amd64.zip";
+    private static final String PROXIED = BASE + "/providers/acme/proxied/9.9.9/" + PROXIED_FILE;
+
+    /** A registry answering the provider's package document, declaring {@code shasum}, and the zip it names on
+     *  another path of its own origin. */
+    private static ProxyFormat.Fetcher fetcher(GeneratedBody body, String shasum) {
+        String document = PROXIED_ROOT + "v1/providers/acme/proxied/9.9.9/download/linux/amd64";
+        String zip = PROXIED_ROOT + "releases/" + PROXIED_FILE;
+        byte[] json = ("{\"os\":\"linux\",\"arch\":\"amd64\",\"filename\":\"" + PROXIED_FILE + "\","
+                + "\"download_url\":\"" + zip + "\",\"shasum\":\"" + shasum + "\"}")
+                .getBytes(StandardCharsets.UTF_8);
+        return new ProxyFormat.Fetcher.Buffered() {
+
+            @Override
+            public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
+                return url.toString().equals(document)
+                        ? Optional.of(new ProxyFormat.Fetched(200, json, Map.of()))
+                        : Optional.of(new ProxyFormat.Fetched(404, new byte[0], Map.of()));
+            }
+
+            @Override
+            public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) {
+                return url.toString().equals(zip)
+                        ? Optional.of(new ProxyFormat.Download(200, body.open(), Map.of()))
+                        : Optional.of(new ProxyFormat.Download(404, InputStream.nullInputStream(), Map.of()));
+            }
+        };
+    }
 
     /** One provider release, published as the two platforms a version list then reports. */
     private void release(ArtifactStore store, String version) throws IOException {
