@@ -130,7 +130,9 @@ public class Cache {
      * entry's last use, which is the error margin the ttl and the least-recently-used sweep accept in exchange for
      * a warm build of thousands of hits writing nothing - the first warm build after a cold store included, since
      * the node that stored an entry remembers having done so. The stamp is an object beside the entry on every
-     * backend alike, never a modification time, so a store copied from one backend to another keeps it.
+     * backend alike, never a modification time, so a store copied from one backend to another keeps it - and on the
+ * object stores a touch rewrites nothing, so a recency read from modification times is the time an entry was
+ * written, which is not what a least-recently-used sweep is meant to order by.
      */
     public Cache touchInterval(Duration interval) {
         if (interval == null || interval.isZero() || interval.isNegative()) {

@@ -20,7 +20,10 @@ import build.jenesis.repository.walk.WalkPass;
  * of its enumerations are ordered, resumable, segmented and multi-node-safe, and no phase ever holds the whole
  * store in memory. Both are passes of their own rather than the shared rebuild pass: the mark must see every
  * pointer, withheld ones included (a held artifact's blob is referenced, and a mark that took the rebuild's screened
- * view would leave it for the sweep), and the sweep walks {@code blobs/}, which the rebuild never visits.
+ * view would leave it for the sweep), and the sweep walks {@code blobs/}, which the rebuild never visits. Folding
+ * the mark into the shared walk was built and rejected: re-expressing the lease fence over the walk's shard space
+ * deleted a live blob, because a superseding pass advances the manifest when it starts and writes its first shard
+ * later, and {@code MarkSweepTest} caught it.
  *
  * <p><b>Mark, sharded.</b> One walk pass ({@code gc-mark}) over the caller's pointer roots reads each small leaf
  * object and keeps every hash it names, buffered in memory only up to the walk's checkpoint stride: the walk

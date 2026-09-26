@@ -24,6 +24,10 @@ import module java.base;
  * one point read per question about that hash, bounded by crashes in a two-write window. Every review pointer is
  * linked and unlinked through {@link Publication}, which is what makes the index complete once backfilled.
  *
+ * <p><b>The mapping lives at the hold, not in the {@code withheld/} marker</b>, because the store has no versioned
+ * delete: a marker that recorded its own holders was clobbered by a concurrent release's unversioned delete on the
+ * first run of the race case, and the holder it lost was a live hold with nothing left to say so.
+ *
  * <p>A repository from before the index has review pointers nothing indexed; the first reader to ask backfills
  * every pointer by the descent it used to make, then {@linkplain #completed stamps} the repository, and the descent
  * is never taken again there. Until the stamp stands a reader answers by the descent, as before, so no release
