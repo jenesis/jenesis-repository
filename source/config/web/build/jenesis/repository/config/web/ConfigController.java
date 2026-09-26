@@ -145,7 +145,8 @@ public class ConfigController {
                     carried.add(row);
                 }
             }
-            if (carried.isEmpty() && !step.id().equals(FirstRunSteps.STARTER_CREDENTIAL)) {
+            // A step about settings this image does not carry is left out; a step about no setting stays.
+            if (carried.isEmpty() && !step.keys().isEmpty()) {
                 continue;
             }
             steps.add(new StepView(step.id(), step.title(), step.why(), carried));

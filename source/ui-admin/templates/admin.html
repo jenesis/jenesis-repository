@@ -102,6 +102,18 @@
                                 <button th:replace="~{base :: deleteButton('Revoke', ${grant.key}, 'The group loses this grant, and so does every member who held it through the group.')}">Revoke</button>
                             </form>
                         </span>
+                        <!--/* A grant is added on the group it is for, never by typing the group's name again. */-->
+                        <details th:if="${isAdmin}">
+                            <summary>Add grant</summary>
+                            <form method="post" th:action="@{/ui/admin/groups/grant}">
+                                <input type="hidden" name="name" th:value="${g.name()}">
+                                <label>Scope <small>(a repository, a build-cache project, or <code>*</code>)</small>
+                                    <input name="scope" required placeholder="*" value="*"></label>
+                                <label>Rights <small>(comma-separated)</small>
+                                    <input name="tokens" required placeholder="repository:read"></label>
+                                <button type="submit">Grant</button>
+                            </form>
+                        </details>
                     </td>
                     <td>
                         <span th:if="${g.members().isEmpty()}"><small>nobody yet</small></span>
@@ -117,6 +129,17 @@
                         <!--/* The preview is capped so this screen costs the same on a group of eight and one of
                              eight hundred; the rest are reachable through the API. */-->
                         <small th:if="${g.more()}">and more</small>
+                        <details th:if="${isAdmin}">
+                            <summary>Add member</summary>
+                            <form method="post" th:action="@{/ui/admin/groups/members}">
+                                <input type="hidden" name="name" th:value="${g.name()}">
+                                <label>Provider-qualified id
+                                    <input name="id" required placeholder="oidc/8f3c1a" list="known-principals"
+                                           autocomplete="off">
+                                </label>
+                                <button type="submit">Add</button>
+                            </form>
+                        </details>
                     </td>
                     <td th:if="${isAdmin}">
                         <form method="post" th:action="@{/ui/admin/groups/remove}">
@@ -129,27 +152,20 @@
             </table>
         </figure>
         <th:block th:if="${groups.isEmpty()}">
-            <div th:replace="~{base :: empty('No groups yet — grant one below and everyone in it holds those rights.')}"></div>
+            <div th:replace="~{base :: empty('No groups yet — create one and everyone in it holds its rights.')}"></div>
         </th:block>
+        <!--/* A group exists once it holds something, so it is created with the first grant; members and further
+             grants are added on its row. */-->
         <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/grant}">
+            <h3>New group</h3>
             <div class="grid">
-                <label>Group <input name="name" required placeholder="developers"></label>
+                <label>Name <input name="name" required placeholder="developers"></label>
                 <label>Scope <small>(a repository, a build-cache project, or <code>*</code>)</small>
                     <input name="scope" required placeholder="*" value="*"></label>
                 <label>Rights <small>(comma-separated)</small>
                     <input name="tokens" required placeholder="repository:read"></label>
             </div>
-            <button type="submit">Grant to the group</button>
-        </form>
-        <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/members}">
-            <div class="grid">
-                <label>Group <input name="name" required placeholder="developers"></label>
-                <label>Provider-qualified id
-                    <input name="id" required placeholder="oidc/8f3c1a" list="known-principals"
-                           autocomplete="off">
-                </label>
-            </div>
-            <button type="submit">Add to the group</button>
+            <button type="submit">Create group</button>
         </form>
     </article>
 

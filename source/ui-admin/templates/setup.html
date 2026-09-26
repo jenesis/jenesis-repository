@@ -19,6 +19,9 @@
         <h2 th:text="${step.title}">Step</h2>
         <p class="setting-doc" th:text="${step.why}">Why this is asked now.</p>
 
+        <!--/* The steps about an object rather than a setting link the screen that creates it. */-->
+        <p th:if="${step.id == 'repository'}"><a th:href="@{/ui/repositories}">Create a repository &rarr;</a></p>
+        <p th:if="${step.id == 'upstream'}"><a th:href="@{/ui/settings/upstreams}">Name an upstream &rarr;</a></p>
         <th:block th:if="${step.id == 'starter-credential'}">
             <ul class="setup-credential">
                 <li th:if="${starterSession}"><strong>This session is signed in with the starter key.</strong>

@@ -14,8 +14,10 @@ import module java.base;
  * into a step would be a second copy that drifts. A step whose key the deployment's catalogue does not carry
  * (its module is not on the image) is rendered without it, never invented.
  *
- * <p>The first step has no setting at all: the starter credentials are environment secrets a deployment is
- * provisioned with, not dials in the store, and the step says what to do about them.
+ * <p>Three steps have no setting at all, and {@link #KEYLESS} names them. The starter credentials are environment
+ * secrets a deployment is provisioned with, not dials in the store; a repository and an upstream are objects a
+ * deployment creates rather than values it sets. Each step says what to do about its subject, and a surface may add a
+ * way to do it - the console links the screen that creates each.
  */
 public final class FirstRunSteps {
 
@@ -37,6 +39,15 @@ public final class FirstRunSteps {
     /** The step that is about this guide itself - the dial that switches the first-run redirect off. */
     public static final String THE_WIZARD = "wizard";
 
+    /** The step that is about creating the first repository. */
+    public static final String REPOSITORY = "repository";
+
+    /** The step that is about naming the first upstream. */
+    public static final String UPSTREAM = "upstream";
+
+    /** The steps that are about something other than a setting, so they name no keys. */
+    public static final Set<String> KEYLESS = Set.of(STARTER_CREDENTIAL, REPOSITORY, UPSTREAM);
+
     public static final List<Step> ALL = List.of(
             new Step(STARTER_CREDENTIAL, "Stop using the starter credential",
                     "A new deployment is first signed in to with the one-time key its start printed, which stops "
@@ -45,6 +56,15 @@ public final class FirstRunSteps {
                             + "deployment is provisioned with, re-provisioned on every boot for as long as they are "
                             + "set. Grant a real administrator and issue a real credential, then unset both; removing "
                             + "an id from jenreg.ui.admins does not revoke the grant it seeded.",
+                    List.of()),
+            new Step(REPOSITORY, "Create a repository",
+                    "A deployment serves nothing until it has a repository to publish into or to proxy through. "
+                            + "A repository is created with a name and the format it holds, and every URL names it.",
+                    List.of()),
+            new Step(UPSTREAM, "Name an upstream",
+                    "Nothing is fetched from a public registry until an upstream is named for its format, so a "
+                            + "deployment that proxies names one before its first client asks: the "
+                            + "format-upstream.<format> setting, which every surface edits.",
                     List.of()),
             new Step("feeds", "Advisory feeds",
                     "Which public advisory sources this deployment consults. Every one is off until it is switched "
@@ -74,8 +94,8 @@ public final class FirstRunSteps {
                     List.of("gc", "collect", "keep-last", "max-age", "walks")),
             new Step(THE_WIZARD, "This guide",
                     "Whether a super-admin signing in with the starter key is sent here first. Switch it off once for "
-                            + "a deployment provisioned from configuration; the screen stays reachable as Setup, under "
-                            + "Settings.",
+                            + "a deployment provisioned from configuration; the screen stays reachable as First-run "
+                            + "setup, under Settings.",
                     List.of("setup-wizard")));
 
     private FirstRunSteps() {

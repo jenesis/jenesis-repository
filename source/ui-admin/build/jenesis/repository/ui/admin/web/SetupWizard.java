@@ -87,7 +87,8 @@ public class SetupWizard {
         List<Step> steps = new ArrayList<>();
         for (FirstRunSteps.Step step : FirstRunSteps.ALL) {
             List<SettingsAdmin.SettingView> views = settings.views(step.keys());
-            if (views.isEmpty() && !step.id().equals(FirstRunSteps.STARTER_CREDENTIAL)) {
+            // A step about settings this image does not carry is left out; a step about no setting stays.
+            if (views.isEmpty() && !step.keys().isEmpty()) {
                 continue;
             }
             steps.add(new Step(step.id(), step.title(), step.why(), views));
