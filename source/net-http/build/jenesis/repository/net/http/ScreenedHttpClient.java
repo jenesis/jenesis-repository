@@ -46,9 +46,19 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
  *       leaves the origin they were meant for, which the JDK's client does not.</li>
  * </ul>
  *
+ * <p><b>No call waits without a bound.</b> The JDK's client waits for ever when a caller names no timeout, and every
+ * outbound call - an upstream, an identity provider, the object stores' SDKs - goes through this one. A connect gives
+ * up after {@link #CONNECT_TIMEOUT} unless the builder names another, answering
+ * {@link HttpConnectTimeoutException}. And an exchange gives up once nothing has arrived or left for
+ * {@link #IDLE_TIMEOUT} ({@link Builder#idleTimeout}, or the request's own {@linkplain HttpRequest#timeout() timeout}
+ * when that is longer), answering {@link HttpTimeoutException} naming the address:
+ * an upstream that accepts and never answers, or stops half way through a body, fails the call rather than holding
+ * it. The bound is on silence rather than on the whole call, so an upload or a download that keeps moving is never
+ * cut short however long it takes - which a total bound would do to a large blob written to an object store.
+ *
  * <p>Everything else is the JDK's contract: {@link HttpRequest#timeout()} bounds the wait for the response's
- * headers and answers {@link HttpTimeoutException}, the connect timeout answers {@link HttpConnectTimeoutException},
- * and a body the handler reads streams rather than being buffered. It speaks HTTP/1.1, over TLS where the URL says
+ * headers from the moment the request is sent and answers {@link HttpTimeoutException}, and a body the handler reads
+ * streams rather than being buffered. It speaks HTTP/1.1, over TLS where the URL says
  * so, verifying the host name against the default trust material or the {@link SSLContext} the builder is given.
  * A cookie handler, an authenticator and a proxy selector are refused at build time rather than ignored, since no
  * caller uses one and a silently ignored one is a security setting that does not hold.
@@ -72,19 +82,27 @@ public final class ScreenedHttpClient extends HttpClient {
     /** How much of a response a body subscriber is handed at a time. */
     private static final int CHUNK = 16 * 1024;
 
-    /** The wait for a response's headers when the request names no timeout, as the JDK's client has none: ten years. */
-    private static final long UNBOUNDED = TimeUnit.DAYS.toMillis(3650);
+    /** How long a connect is waited for when the builder names no {@linkplain Builder#connectTimeout timeout}. */
+    public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+
+    /** How long an exchange may go with nothing sent or received - the wait for a response's headers once the
+     *  request is sent, or for the next bytes of either body - when the builder names no
+     *  {@linkplain Builder#idleTimeout other}. */
+    public static final Duration IDLE_TIMEOUT = Duration.ofMinutes(1);
 
     private static final Map<Engine.Key, Engine> ENGINES = new ConcurrentHashMap<>();
 
     private final Engine engine;
     private final Duration connectTimeout;
+    private final Duration idleTimeout;
     private final Redirect redirect;
     private final SSLContext sslContext;
 
-    private ScreenedHttpClient(Engine engine, Duration connectTimeout, Redirect redirect, SSLContext sslContext) {
+    private ScreenedHttpClient(Engine engine, Duration connectTimeout, Duration idleTimeout, Redirect redirect,
+                               SSLContext sslContext) {
         this.engine = engine;
         this.connectTimeout = connectTimeout;
+        this.idleTimeout = idleTimeout;
         this.redirect = redirect;
         this.sslContext = sslContext;
     }
@@ -127,7 +145,7 @@ public final class ScreenedHttpClient extends HttpClient {
 
     @Override
     public Optional<Duration> connectTimeout() {
-        return Optional.ofNullable(connectTimeout);
+        return Optional.of(connectTimeout);
     }
 
     @Override
@@ -248,8 +266,11 @@ public final class ScreenedHttpClient extends HttpClient {
 
     /** Send one request and wait for its response's headers, the body left to stream. */
     private Exchange exchange(HttpRequest request) throws IOException, InterruptedException {
+        // A request naming a longer wait for its headers than the idle timeout is waited for that long.
+        Duration idle = request.timeout().filter(named -> named.compareTo(idleTimeout) > 0).orElse(idleTimeout);
         Request outbound = engine.client.newRequest(request.uri())
                 .method(request.method())
+                .idleTimeout(idle.toMillis(), TimeUnit.MILLISECONDS)
                 .followRedirects(false);
         outbound.headers(headers -> {
             request.headers().map().forEach((name, values) -> values.forEach(value -> headers.add(name, value)));
@@ -264,9 +285,11 @@ public final class ScreenedHttpClient extends HttpClient {
         InputStreamResponseListener listener = new InputStreamResponseListener();
         outbound.send(listener);
         try {
-            Duration timeout = request.timeout().orElse(null);
-            Response response = listener.get(timeout == null ? UNBOUNDED : timeout.toMillis(), TimeUnit.MILLISECONDS);
-            return new Exchange(response, listener);
+            // With no timeout named, the idle timeout is what ends a wait for headers that are not coming.
+            Response response = request.timeout().isPresent()
+                    ? listener.get(request.timeout().get().toMillis(), TimeUnit.MILLISECONDS)
+                    : listener.get(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+            return new Exchange(response, listener, request.uri(), idle);
         } catch (TimeoutException timedOut) {
             HttpTimeoutException failure = new HttpTimeoutException("request timed out: " + request.uri());
             outbound.abort(failure);
@@ -275,7 +298,7 @@ public final class ScreenedHttpClient extends HttpClient {
             outbound.abort(interrupted);
             throw interrupted;
         } catch (ExecutionException failed) {
-            throw translated(failed.getCause(), request.uri());
+            throw translated(failed.getCause(), request.uri(), idle);
         }
     }
 
@@ -299,7 +322,11 @@ public final class ScreenedHttpClient extends HttpClient {
     }
 
     /** Jetty's failure as the exception the JDK's client throws for it. */
-    private IOException translated(Throwable cause, URI uri) {
+    private IOException translated(Throwable cause, URI uri, Duration idle) {
+        HttpTimeoutException stalled = stalled(cause, uri, idle);
+        if (stalled != null) {
+            return stalled;
+        }
         Throwable failure = cause;
         while (failure != null && !(failure instanceof IOException)) {
             failure = failure.getCause();
@@ -308,7 +335,7 @@ public final class ScreenedHttpClient extends HttpClient {
                 || failure instanceof ConnectException || failure instanceof HttpTimeoutException) {
             return (IOException) failure;
         }
-        if (failure instanceof SocketTimeoutException && connectTimeout != null) {
+        if (failure instanceof SocketTimeoutException) {
             HttpConnectTimeoutException timedOut = new HttpConnectTimeoutException("connect timed out: " + uri);
             timedOut.initCause(failure);
             return timedOut;
@@ -317,6 +344,24 @@ public final class ScreenedHttpClient extends HttpClient {
             return io;
         }
         return new IOException("request to " + uri + " failed: " + cause, cause);
+    }
+
+    /** The idle timeout Jetty ended an exchange with, as the timeout the JDK's client names, or {@code null} when
+     *  {@code cause} is some other failure. A connect that times out is a {@link SocketTimeoutException} instead. */
+    private static HttpTimeoutException stalled(Throwable cause, URI uri, Duration idle) {
+        for (Throwable failure = cause; failure != null; failure = failure.getCause()) {
+            if (failure instanceof HttpTimeoutException timedOut) {
+                return timedOut;
+            }
+            if (failure instanceof TimeoutException) {
+                HttpTimeoutException timedOut = new HttpTimeoutException("no answer from " + uri.getHost()
+                        + (uri.getPort() == -1 ? "" : ":" + uri.getPort()) + " for " + idle.toMillis()
+                        + " ms, so the call to " + uri + " was abandoned (idle timeout)");
+                timedOut.initCause(cause);
+                return timedOut;
+            }
+        }
+        return null;
     }
 
     private static boolean sameOrigin(URI left, URI right) {
@@ -338,7 +383,7 @@ public final class ScreenedHttpClient extends HttpClient {
     // ---- the exchange and its body ----
 
     /** A response whose headers have arrived and whose body is still to be read. */
-    private record Exchange(Response response, InputStreamResponseListener listener) {
+    private record Exchange(Response response, InputStreamResponseListener listener, URI uri, Duration idle) {
 
         /** Close the body unread: the response is a redirect the chain goes past. */
         void discard() throws IOException {
@@ -366,7 +411,7 @@ public final class ScreenedHttpClient extends HttpClient {
                     return Version.HTTP_1_1;
                 }
             });
-            Download download = new Download(listener.getInputStream(), subscriber);
+            Download download = new Download(listener.getInputStream(), subscriber, uri, idle);
             subscriber.onSubscribe(download);
             Thread.ofVirtual().name("jenesis-http-body").start(download);
             T body;
@@ -393,13 +438,17 @@ public final class ScreenedHttpClient extends HttpClient {
 
         private final InputStream in;
         private final HttpResponse.BodySubscriber<?> subscriber;
+        private final URI uri;
+        private final Duration idle;
         private final Object lock = new Object();
         private long demand;
         private boolean cancelled;
 
-        Download(InputStream in, HttpResponse.BodySubscriber<?> subscriber) {
+        Download(InputStream in, HttpResponse.BodySubscriber<?> subscriber, URI uri, Duration idle) {
             this.in = in;
             this.subscriber = subscriber;
+            this.uri = uri;
+            this.idle = idle;
         }
 
         @Override
@@ -449,7 +498,8 @@ public final class ScreenedHttpClient extends HttpClient {
                 }
             } catch (IOException | RuntimeException failure) {
                 if (!cancelled) {
-                    subscriber.onError(failure);
+                    HttpTimeoutException stalled = stalled(failure, uri, idle);
+                    subscriber.onError(stalled == null ? failure : stalled);
                 }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
@@ -529,9 +579,7 @@ public final class ScreenedHttpClient extends HttpClient {
             connector.setScheduler(scheduler);
             connector.setSelectors(1);
             connector.setSslContextFactory(tls);
-            if (key.connectTimeout() != null) {
-                connector.setConnectTimeout(key.connectTimeout());
-            }
+            connector.setConnectTimeout(key.connectTimeout());
             client = new org.eclipse.jetty.client.HttpClient(new HttpClientTransportOverHTTP(connector));
             client.setExecutor(threads);
             client.setScheduler(scheduler);
@@ -590,7 +638,8 @@ public final class ScreenedHttpClient extends HttpClient {
     /** The JDK's builder surface, for the settings this client honours. */
     public static final class Builder implements HttpClient.Builder {
 
-        private Duration connectTimeout;
+        private Duration connectTimeout = CONNECT_TIMEOUT;
+        private Duration idleTimeout = IDLE_TIMEOUT;
         private Redirect redirect = Redirect.NEVER;
         private SSLContext sslContext;
         private Resolver resolver = Resolver.SYSTEM;
@@ -606,6 +655,17 @@ public final class ScreenedHttpClient extends HttpClient {
         @Override
         public Builder connectTimeout(Duration duration) {
             this.connectTimeout = Objects.requireNonNull(duration, "duration");
+            return this;
+        }
+
+        /** How long an exchange may go with nothing sent or received before it is abandoned with an
+         *  {@link HttpTimeoutException}; {@link #IDLE_TIMEOUT} unless named. A caller whose peer is known to think
+         *  for longer before it answers - a storage service assembling a large object - names a longer one. */
+        public Builder idleTimeout(Duration duration) {
+            if (duration.isNegative() || duration.isZero()) {
+                throw new IllegalArgumentException("an idle timeout is positive: " + duration);
+            }
+            this.idleTimeout = duration;
             return this;
         }
 
@@ -673,7 +733,8 @@ public final class ScreenedHttpClient extends HttpClient {
                     throw new IllegalStateException("the default TLS context is unavailable", unavailable);
                 }
             }
-            return new ScreenedHttpClient(Engine.of(connectTimeout, tls, resolver), connectTimeout, redirect, tls);
+            return new ScreenedHttpClient(Engine.of(connectTimeout, tls, resolver), connectTimeout, idleTimeout,
+                    redirect, tls);
         }
     }
 }

@@ -28,8 +28,6 @@ final class GcsTransport extends HttpTransport {
     private static final Set<String> NOT_SENT = Set.of("host", "content-length", "connection", "expect", "upgrade",
             "user-agent", "x-goog-api-client");
 
-    private final HttpClient client = ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).build();
-
     @Override
     protected LowLevelHttpRequest buildRequest(String method, String url) {
         return new Request(method, URI.create(url));
@@ -45,7 +43,8 @@ final class GcsTransport extends HttpTransport {
         private final String method;
         private final URI url;
         private final List<String[]> headers = new ArrayList<>();
-        private Duration readTimeout = Duration.ofMinutes(1);
+        private Duration connectTimeout = ScreenedHttpClient.CONNECT_TIMEOUT;
+        private Duration readTimeout = ScreenedHttpClient.IDLE_TIMEOUT;
 
         Request(String method, URI url) {
             this.method = method;
@@ -57,8 +56,13 @@ final class GcsTransport extends HttpTransport {
             headers.add(new String[] {name, value});
         }
 
+        /** The library's read timeout is a bound on silence, which is what the client's idle timeout is - never a
+         *  bound on the whole call, which would cut a large upload short. */
         @Override
         public void setTimeout(int connectTimeout, int readTimeout) {
+            if (connectTimeout > 0) {
+                this.connectTimeout = Duration.ofMillis(connectTimeout);
+            }
             if (readTimeout > 0) {
                 this.readTimeout = Duration.ofMillis(readTimeout);
             }
@@ -66,7 +70,9 @@ final class GcsTransport extends HttpTransport {
 
         @Override
         public LowLevelHttpResponse execute() throws IOException {
-            HttpRequest.Builder builder = HttpRequest.newBuilder(url).timeout(readTimeout);
+            HttpClient client = ScreenedHttpClient.newBuilder().connectTimeout(connectTimeout)
+                    .idleTimeout(readTimeout).build();
+            HttpRequest.Builder builder = HttpRequest.newBuilder(url);
             for (String[] header : headers) {
                 if (!NOT_SENT.contains(header[0].toLowerCase(Locale.ROOT))) {
                     builder.header(header[0], header[1]);

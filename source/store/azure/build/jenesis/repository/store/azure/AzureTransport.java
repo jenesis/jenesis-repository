@@ -33,12 +33,9 @@ public final class AzureTransport implements HttpClient {
     private static final Set<String> NOT_SENT = Set.of("host", "content-length", "connection", "expect", "upgrade",
             "user-agent");
 
-    /** How long a request waits for the response's headers - a response already streaming is not cut short. */
-    private static final Duration RESPONSE_TIMEOUT = Duration.ofMinutes(1);
-
-    private final java.net.http.HttpClient client = ScreenedHttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    /** Bounded by the client's connect and idle timeouts rather than by a total: a large blob's upload takes as long
+     *  as it takes, and only silence ends it. */
+    private final java.net.http.HttpClient client = ScreenedHttpClient.newHttpClient();
 
     @Override
     public Mono<HttpResponse> send(HttpRequest request) {
@@ -57,7 +54,7 @@ public final class AzureTransport implements HttpClient {
     private HttpResponse exchange(HttpRequest request) throws IOException {
         java.net.http.HttpRequest.Builder builder;
         try {
-            builder = java.net.http.HttpRequest.newBuilder(request.getUrl().toURI()).timeout(RESPONSE_TIMEOUT);
+            builder = java.net.http.HttpRequest.newBuilder(request.getUrl().toURI());
         } catch (URISyntaxException malformed) {
             throw new IOException("not a request URI: " + request.getUrl(), malformed);
         }

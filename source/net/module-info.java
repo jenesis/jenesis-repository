@@ -1,6 +1,8 @@
 /**
- * The address ranges a deployment must not be steered into: loopback, link-local, site-local, multicast,
- * carrier-grade NAT and the IPv6 unique-local block.
+ * The address ranges a deployment must not be steered into: every block the special-purpose address registries do
+ * not call globally reachable - loopback, link-local, private-use, shared, benchmarking, documentation, reserved,
+ * multicast and the IPv6 unique-local block among them - with the translation prefixes judged by the address they
+ * carry.
  *
  * <p>It is its own module, and a tiny one, because the callers that need it sit on both sides of a boundary
  * neither should have to cross. {@code PrivateHosts} lived in the format SPI, so the webhook, forwarding and

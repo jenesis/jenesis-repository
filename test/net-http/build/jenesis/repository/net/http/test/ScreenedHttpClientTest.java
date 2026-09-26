@@ -56,7 +56,7 @@ class ScreenedHttpClientTest {
 
     @Test
     void a_host_admitted_public_is_not_connected_to_once_it_resolves_to_a_private_address() throws Exception {
-        String admitted = "198.51.100.7", unscreened = "198.51.100.8";
+        String admitted = "9.9.9.9", unscreened = "149.112.112.112";
         assertThat(PrivateHosts.resolvesToPrivate(admitted)).as("the screen admits it").isFalse();
         // Both names now answer loopback, as a rebound name would.
         HttpClient client = ScreenedHttpClient.newBuilder()
@@ -175,6 +175,148 @@ class ScreenedHttpClientTest {
     }
 
     @Test
+    void a_client_named_no_timeouts_still_has_bounded_ones() {
+        assertThat(ScreenedHttpClient.newHttpClient().connectTimeout()).contains(ScreenedHttpClient.CONNECT_TIMEOUT);
+        assertThat(ScreenedHttpClient.IDLE_TIMEOUT).as("an idle upstream is given up on within minutes, not years")
+                .isPositive().isLessThanOrEqualTo(Duration.ofMinutes(5));
+    }
+
+    @Test
+    void a_server_that_accepts_and_never_answers_fails_the_call_by_name() throws Exception {
+        try (ServerSocket silent = new ServerSocket(0, 50, InetAddress.getLoopbackAddress())) {
+            List<Socket> held = new CopyOnWriteArrayList<>();
+            Thread.ofVirtual().start(() -> {
+                try {
+                    held.add(silent.accept());
+                } catch (IOException _) {
+                    // the server socket closes with the test
+                }
+            });
+            HttpClient client = ScreenedHttpClient.newBuilder().idleTimeout(Duration.ofMillis(500)).build();
+            long started = System.nanoTime();
+
+            assertThatThrownBy(() -> client.send(HttpRequest.newBuilder(
+                            URI.create("http://127.0.0.1:" + silent.getLocalPort() + "/never")).build(),
+                    HttpResponse.BodyHandlers.discarding()))
+                    .isInstanceOf(HttpTimeoutException.class)
+                    .hasMessageContaining("127.0.0.1:" + silent.getLocalPort())
+                    .hasMessageContaining("idle timeout");
+            assertThat(Duration.ofNanos(System.nanoTime() - started)).as("given up on at the idle timeout")
+                    .isLessThan(Duration.ofSeconds(10));
+            assertThat(held).as("the connection was made; it is the answer that never came").hasSize(1);
+            for (Socket socket : held) {
+                socket.close();
+            }
+        }
+    }
+
+    @Test
+    void a_request_naming_a_longer_wait_than_the_idle_timeout_is_waited_for() throws Exception {
+        HttpClient client = ScreenedHttpClient.newBuilder().idleTimeout(Duration.ofMillis(300)).build();
+
+        assertThat(client.send(HttpRequest.newBuilder(url(server, "/slow")).timeout(Duration.ofSeconds(20)).build(),
+                HttpResponse.BodyHandlers.discarding()).statusCode())
+                .as("a model or a portal thinking for longer than the idle timeout, as its caller said it may")
+                .isEqualTo(200);
+    }
+
+    @Test
+    void a_body_that_stops_half_way_fails_by_name() throws Exception {
+        try (ServerSocket halting = new ServerSocket(0, 50, InetAddress.getLoopbackAddress())) {
+            Thread.ofVirtual().start(() -> {
+                try (Socket socket = halting.accept()) {
+                    socket.getInputStream().read(new byte[8192]);
+                    socket.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n0123456789")
+                            .getBytes(StandardCharsets.US_ASCII));
+                    socket.getOutputStream().flush();
+                    Thread.sleep(Duration.ofSeconds(30));
+                } catch (IOException | InterruptedException _) {
+                    // the client abandons the connection, which is what is being waited for
+                }
+            });
+            HttpClient client = ScreenedHttpClient.newBuilder().idleTimeout(Duration.ofMillis(500)).build();
+
+            assertThatThrownBy(() -> client.send(HttpRequest.newBuilder(
+                            URI.create("http://127.0.0.1:" + halting.getLocalPort() + "/half")).build(),
+                    HttpResponse.BodyHandlers.ofString()))
+                    .isInstanceOf(HttpTimeoutException.class)
+                    .hasMessageContaining("127.0.0.1:" + halting.getLocalPort());
+        }
+    }
+
+    @Test
+    void an_exchange_that_keeps_moving_outlasts_the_idle_timeout() throws Exception {
+        HttpClient client = ScreenedHttpClient.newBuilder().idleTimeout(Duration.ofMillis(400)).build();
+        InputStream trickle = new InputStream() {
+            private int sent;
+
+            @Override
+            public int read() {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public int read(byte[] buffer, int offset, int length) {
+                if (sent == 12) {
+                    return -1;
+                }
+                try {
+                    Thread.sleep(Duration.ofMillis(100));
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+                buffer[offset] = (byte) ('a' + sent++);
+                return 1;
+            }
+        };
+
+        HttpResponse<Void> uploaded = client.send(HttpRequest.newBuilder(url(server, "/echo"))
+                .POST(HttpRequest.BodyPublishers.ofInputStream(() -> trickle)).build(),
+                HttpResponse.BodyHandlers.discarding());
+
+        assertThat(uploaded.statusCode()).as("an upload three times the idle timeout long").isEqualTo(200);
+        assertThat(bodies.getLast()).asString(StandardCharsets.UTF_8).isEqualTo("abcdefghijkl");
+
+        HttpResponse<String> downloaded = client.send(HttpRequest.newBuilder(url(server, "/trickle")).build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertThat(downloaded.body()).as("a download three times the idle timeout long").isEqualTo("abcdefghijkl");
+    }
+
+    @Test
+    void a_connect_nobody_accepts_times_out_by_name() throws Exception {
+        try (ServerSocket full = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            List<Socket> queued = new ArrayList<>();
+            try {
+                // Fill the accept queue, which is never drained, until a connect is left waiting.
+                boolean waiting = false;
+                for (int attempt = 0; attempt < 16 && !waiting; attempt++) {
+                    Socket socket = new Socket();
+                    queued.add(socket);
+                    try {
+                        socket.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), full.getLocalPort()),
+                                200);
+                    } catch (SocketTimeoutException _) {
+                        waiting = true;
+                    }
+                }
+                Assumptions.assumeTrue(waiting, "this platform accepts connects past a full backlog");
+                HttpClient client = ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofMillis(300)).build();
+
+                assertThatThrownBy(() -> client.send(HttpRequest.newBuilder(
+                                URI.create("http://127.0.0.1:" + full.getLocalPort() + "/")).build(),
+                        HttpResponse.BodyHandlers.discarding()))
+                        .isInstanceOf(HttpConnectTimeoutException.class)
+                        .hasMessageContaining("127.0.0.1:" + full.getLocalPort());
+            } finally {
+                for (Socket socket : queued) {
+                    socket.close();
+                }
+            }
+        }
+    }
+
+    @Test
     void a_port_nothing_listens_on_is_a_refused_connection() throws IOException {
         int closed;
         try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
@@ -226,6 +368,18 @@ class ScreenedHttpClientTest {
                 String query = exchange.getRequestURI().getQuery();
                 exchange.getResponseHeaders().set("Location", query.substring("to=".length()));
                 exchange.sendResponseHeaders(302, -1);
+            }
+            case "/trickle" -> {
+                exchange.sendResponseHeaders(200, 12);
+                for (int sent = 0; sent < 12; sent++) {
+                    try {
+                        Thread.sleep(Duration.ofMillis(100));
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                    exchange.getResponseBody().write('a' + sent);
+                    exchange.getResponseBody().flush();
+                }
             }
             case "/slow" -> {
                 try {

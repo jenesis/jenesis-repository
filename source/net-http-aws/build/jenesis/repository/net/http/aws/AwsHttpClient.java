@@ -29,10 +29,9 @@ public final class AwsHttpClient implements SdkHttpClient {
     private static final Set<String> CARRIED = Set.of("host", "content-length", "connection", "expect", "upgrade",
             "user-agent");
 
-    /** How long a request waits for the response's headers - a response already streaming is not cut short. */
-    private static final Duration RESPONSE_TIMEOUT = Duration.ofMinutes(1);
-
-    private final HttpClient client = ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+    /** Bounded by the client's connect and idle timeouts rather than by a total: a large object's upload takes as long
+     *  as it takes, and only silence ends it. */
+    private final HttpClient client = ScreenedHttpClient.newHttpClient();
 
     @Override
     public ExecutableHttpRequest prepareRequest(HttpExecuteRequest request) {
@@ -43,7 +42,7 @@ public final class AwsHttpClient implements SdkHttpClient {
             @Override
             public HttpExecuteResponse call() throws IOException {
                 SdkHttpRequest sdk = request.httpRequest();
-                HttpRequest.Builder builder = HttpRequest.newBuilder(sdk.getUri()).timeout(RESPONSE_TIMEOUT);
+                HttpRequest.Builder builder = HttpRequest.newBuilder(sdk.getUri());
                 long length = -1;
                 boolean expect = false;
                 for (Map.Entry<String, List<String>> header : sdk.headers().entrySet()) {
