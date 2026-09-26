@@ -21,6 +21,10 @@ import build.jenesis.repository.format.signing.OpenPgpSigner;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -60,6 +64,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         RepositoryImporter, ProxyLeg {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TerraformFormat.class);
 
     /** The package-ecosystem name Terraform coordinates report. */
     public static final String ECOSYSTEM = "Terraform";
@@ -483,8 +489,11 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
      *
      * <p>A module's download names a source in {@code X-Terraform-Get}. When that source is a {@code .tar.gz} archive
      * over HTTPS, the answer names this repository's own path for it, and the archive is cached as fetched - the
-     * protocol declares no checksum for a module. Any other source - a git repository, which is what most public
-     * modules name - is not an archive this repository can hold, and its address is relayed as it is.
+     * protocol declares no checksum for a module. A git source on a host the operator lists
+     * ({@link TerraformGitSource}) is fetched as its ref's archive and served the same way, with the directory inside
+     * the archive named for the client; its digest is recorded on the first fetch, and a later fetch of different
+     * bytes - a moved tag - is refused. Any other source is relayed as it is, or, for a git source, refused when the
+     * operator has switched that on.
      */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
@@ -515,7 +524,7 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
             return proxiedPackage(exchange, fetcher, services, repo, path[2], path[3], path[4], path[6], path[7]);
         }
         if (path.length == 7 && path[0].equals("v1") && path[1].equals("modules") && path[6].equals("download")) {
-            return proxiedModuleDownload(exchange, fetcher, services, repo, path[2], path[3], path[4], path[5],
+            return proxiedModuleDownload(exchange, store, fetcher, services, repo, path[2], path[3], path[4], path[5],
                     allowInternal, upstream);
         }
         if (path.length == 5 && path[0].equals("providers")) {
@@ -551,10 +560,19 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         }
         if (path.length == 5 && path[0].equals("modules") && path[4].endsWith(MODULE_ARCHIVE)) {
             String version = path[4].substring(0, path[4].length() - MODULE_ARCHIVE.length());
-            URI archive = moduleArchive(fetcher, services, path[1], path[2], path[3], version, allowInternal, upstream);
-            return archive != null && fill(exchange, store, fetcher, archive,
-                    TerraformCoordinates.moduleArchive(repo, path[1], path[2], path[3], version),
-                    ProxyRelay.Declared.NONE, "application/gzip");
+            URI download = services.modules().resolve(path[1] + "/" + path[2] + "/" + path[3] + "/" + version
+                    + "/download");
+            String source = moduleSource(fetcher, download);
+            if (source == null) {
+                return false;
+            }
+            String key = TerraformCoordinates.moduleArchive(repo, path[1], path[2], path[3], version);
+            URI archive = archiveSource(download, source, allowInternal, upstream);
+            if (archive != null) {
+                return fill(exchange, store, fetcher, archive, key, ProxyRelay.Declared.NONE, "application/gzip");
+            }
+            Optional<TerraformGitSource> git = gitSource(exchange, source, allowInternal, upstream);
+            return git.isPresent() && fillPinned(exchange, store, fetcher, git.get(), key, repo);
         }
         return false;
     }
@@ -651,7 +669,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     }
 
     /** A module version's download: this repository's own archive path when the source is an archive it can hold. */
-    private boolean proxiedModuleDownload(FormatExchange exchange, ProxyFormat.Fetcher fetcher, Services services,
+    private boolean proxiedModuleDownload(FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher,
+                                          Services services,
                                           String repo, String namespace, String name, String system, String version,
                                           boolean allowInternal, URI upstream) throws IOException {
         URI url = services.modules().resolve(namespace + "/" + name + "/" + system + "/" + version + "/download");
@@ -663,25 +682,124 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         if (source == null || source.isBlank()) {
             return false;
         }
-        URI archive = archiveSource(url, source, allowInternal, upstream);
-        exchange.setResponseHeader("X-Terraform-Get", archive == null ? source
-                : base(exchange, repo) + "/modules/" + namespace + "/" + name + "/" + system + "/" + version
-                        + MODULE_ARCHIVE);
+        String served = base(exchange, repo) + "/modules/" + namespace + "/" + name + "/" + system + "/" + version
+                + MODULE_ARCHIVE;
+        if (archiveSource(url, source, allowInternal, upstream) == null) {
+            Optional<TerraformGitSource> git = gitSource(exchange, source, allowInternal, upstream);
+            if (git.isPresent()) {
+                // The archive holds one top-level directory whose name the host chooses, and Terraform does not
+                // expand a glob in a registry module's subdirectory - so the archive is fetched now, which the client
+                // is about to ask for anyway, and the directory it holds is named.
+                String key = TerraformCoordinates.moduleArchive(repo, namespace, name, system, version);
+                Blobs blobs = new Blobs(store);
+                Optional<String> directory = blobs.exists(key) || pinned(blobs, fetcher, git.get(), key, repo)
+                        ? topDirectory(blobs, key) : Optional.empty();
+                if (directory.isEmpty()) {
+                    return false;
+                }
+                served += "//" + directory.get()
+                        + (git.get().subdirectory().isEmpty() ? "" : "/" + git.get().subdirectory());
+            } else if (TerraformGitSource.git(source)
+                    && Boolean.parseBoolean(exchange.setting(TerraformGitSource.REFUSE))) {
+                LOGGER.warn("Refusing the download of {}/{}/{} {}: its source {} is a git repository this repository "
+                                + "cannot fetch - its host is not in {}, or it names no single ref - and {} is on.",
+                        namespace, name, system, version, source, TerraformGitSource.HOSTS, TerraformGitSource.REFUSE);
+                return false;
+            } else {
+                served = source;
+            }
+        }
+        exchange.setResponseHeader("X-Terraform-Get", served);
         exchange.respond(204);
         return true;
     }
 
-    /** The archive a module version's download names, when it is one this repository can hold, or {@code null}. */
-    private static URI moduleArchive(ProxyFormat.Fetcher fetcher, Services services, String namespace, String name,
-                                     String system, String version, boolean allowInternal, URI upstream)
-            throws IOException {
-        URI url = services.modules().resolve(namespace + "/" + name + "/" + system + "/" + version + "/download");
-        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(url, Map.of());
+    /** {@code source} as a listed git host's archive, when it is one and the archive's URL passes the screen. */
+    private static Optional<TerraformGitSource> gitSource(FormatExchange exchange, String source, boolean allowInternal,
+                                                          URI upstream) {
+        return TerraformGitSource.of(source, exchange.setting(TerraformGitSource.HOSTS))
+                .filter(git -> OutboundTargets.mayFollow(git.archive(), upstream, allowInternal));
+    }
+
+    /** The source a module version's {@code download} names upstream, or {@code null} when it names none. */
+    private static String moduleSource(ProxyFormat.Fetcher fetcher, URI download) throws IOException {
+        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(download, Map.of());
         if (fetched.isEmpty() || (fetched.get().status() != 204 && fetched.get().status() != 200)) {
             return null;
         }
         String source = fetched.get().header("X-Terraform-Get");
-        return source == null ? null : archiveSource(url, source, allowInternal, upstream);
+        return source == null || source.isBlank() ? null : source;
+    }
+
+    /**
+     * Fetch a git ref's archive into the store under {@code key}, held to the digest its first fetch recorded, and
+     * serve it. Nothing upstream declares a digest for a ref, and a tag can be moved, so the first fetch's is kept -
+     * established once, so two nodes fetching at once cannot record two - and every later fetch of the same host,
+     * repository and ref must produce the same bytes. One that does not is refused and said to be a moved ref.
+     */
+    private boolean fillPinned(FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher,
+                               TerraformGitSource git, String key, String repo) throws IOException {
+        Blobs blobs = new Blobs(store);
+        if (!pinned(blobs, fetcher, git, key, repo)) {
+            return false;
+        }
+        stream(exchange, blobs, key, "application/gzip");
+        return true;
+    }
+
+    /** Fetch a git ref's archive into {@code key}, held to its recorded digest as {@link #fillPinned} describes. */
+    private static boolean pinned(Blobs blobs, ProxyFormat.Fetcher fetcher, TerraformGitSource git, String key,
+                                  String repo) throws IOException {
+        String record = TerraformCoordinates.gitDigest(repo, git.identity());
+        ByteArrayOutputStream recorded = new ByteArrayOutputStream();
+        boolean known = blobs.read(record, recorded);
+        try (ProxyFormat.Download download = fetcher.download(git.archive(), Map.of()).orElse(null)) {
+            if (download == null || download.status() != 200) {
+                return false;
+            }
+            if (!known) {
+                blobs.write(key, download.body());
+            } else if (!blobs.writeVerified(key, download.body(), "SHA-256",
+                    HexFormat.of().parseHex(recorded.toString(StandardCharsets.UTF_8).strip()))) {
+                LOGGER.warn("Refusing {} fetched from {}: its bytes differ from the SHA-256 {} recorded on its first "
+                                + "fetch, so the ref has moved upstream. Nothing was cached or served.", git.identity(),
+                        git.archive(), recorded.toString(StandardCharsets.UTF_8).strip());
+                return false;
+            }
+        }
+        if (!known) {
+            String hash = blobs.hash(key).orElseThrow(() -> new IOException("nothing was stored at " + key));
+            String established = new String(blobs.establish(record, () -> hash.getBytes(StandardCharsets.UTF_8)),
+                    StandardCharsets.UTF_8).strip();
+            if (!established.equals(hash)) {
+                blobs.delete(key);
+                LOGGER.warn("Refusing {} fetched from {}: another fetch of the same ref recorded different bytes "
+                        + "({}) a moment earlier.", git.identity(), git.archive(), established);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The one directory a git host's archive of a ref holds everything under, read off its first entry. */
+    private static Optional<String> topDirectory(Blobs blobs, String key) throws IOException {
+        Optional<Blobs.Located> located = blobs.locate(key);
+        if (located.isEmpty()) {
+            return Optional.empty();
+        }
+        try (TarArchiveInputStream tar = new TarArchiveInputStream(
+                new GZIPInputStream(blobs.open(located.get().hash())), "UTF-8")) {
+            TarArchiveEntry entry = tar.getNextEntry();
+            if (entry == null) {
+                return Optional.empty();
+            }
+            int slash = entry.getName().indexOf('/');
+            String directory = slash < 0 ? entry.getName() : entry.getName().substring(0, slash);
+            return Keys.unsafe(directory) ? Optional.empty() : Optional.of(directory);
+        } catch (IOException unreadable) {
+            LOGGER.warn("The archive cached at {} is not a readable tar.gz: {}", key, unreadable.toString());
+            return Optional.empty();
+        }
     }
 
     /** {@code source} resolved against the download it came from, when it is an HTTPS {@code .tar.gz} with no getter

@@ -2,6 +2,8 @@ package build.jenesis.repository.format.terraform;
 
 import module java.base;
 
+import build.jenesis.repository.format.Checksums;
+
 /**
  * The two coordinate shapes Terraform's registry protocols address, and the store keys this format gives them.
  *
@@ -28,6 +30,12 @@ final class TerraformCoordinates {
      */
     static String moduleArchive(String repo, String namespace, String name, String system, String version) {
         return ROOT + repo + "/modules/" + namespace + "/" + name + "/" + system + "/" + version + ".tar.gz";
+    }
+
+    /** The digest a git source's archive was recorded with on its first fetch, keyed on the digest of its host,
+     *  repository and ref - which may run longer than a key segment, and hold characters none may. */
+    static String gitDigest(String repo, String identity) {
+        return ROOT + repo + "/git/" + Checksums.sha256(identity.getBytes(StandardCharsets.UTF_8));
     }
 
     /** A provider version's per-platform zip, named as the protocol's {@code filename} field reports it. */
