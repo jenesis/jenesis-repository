@@ -80,27 +80,11 @@ public final class ModuleViewRebuild implements WalkConsumer {
     @Override
     public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         String path = artifact.path();
-        if (MODULE_VIEWS.isEmpty() || path == null || !path.startsWith("/maven/")
-                || !path.endsWith(".jar") && !path.endsWith(".pom")) {
+        if (MODULE_VIEWS.isEmpty() || path == null || !path.startsWith("/maven/") || !path.endsWith(".jar")) {
             return;
         }
         String[] coordinate = JavaLayout.mavenCoordinate(path);
         if (coordinate == null || artifact.hash() == null || artifact.size() < 0) {
-            return;
-        }
-        if (path.endsWith(".pom")) {
-            // A descriptor joins the view of the version's own jar, when that jar is a module; the "latest" descriptor
-            // is a publish's to move, as the latest jar is.
-            if (!path.equals(JavaLayout.attachment(path, ".pom"))) {
-                return;
-            }
-            Optional<String> jar = new Publication(store).blob(JavaLayout.attachment(path, ".jar"));
-            String module = jar.isEmpty() ? null : MavenFormat.moduleName(store, jar.get());
-            if (module != null) {
-                for (ModuleView view : MODULE_VIEWS) {
-                    view.describe(module, coordinate[2], artifact.hash(), false, store, path);
-                }
-            }
             return;
         }
         Optional<String> classifier = JavaLayout.mavenClassifier(path);
@@ -110,6 +94,18 @@ public final class ModuleViewRebuild implements WalkConsumer {
         }
         for (ModuleView view : MODULE_VIEWS) {
             view.rebuild(module, coordinate[2], classifier.get(), artifact.hash(), store, path);
+        }
+        // The version's descriptor joins the view with its own jar, not on a walk of every POM: a POM beside a jar
+        // that is no module has no view to join, and asking would cost every walked POM two reads in a repository
+        // with no module in it. The "latest" descriptor is a publish's to move, as the latest jar is.
+        if (classifier.get().isEmpty()) {
+            String pomPath = JavaLayout.attachment(path, ".pom");
+            Optional<String> pom = new Publication(store).blob(pomPath);
+            if (pom.isPresent()) {
+                for (ModuleView view : MODULE_VIEWS) {
+                    view.describe(module, coordinate[2], pom.get(), false, store, pomPath);
+                }
+            }
         }
     }
 }
