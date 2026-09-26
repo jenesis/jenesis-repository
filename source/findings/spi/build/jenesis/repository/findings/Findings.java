@@ -12,9 +12,8 @@ import build.jenesis.repository.store.Stamp;
  * coordinate, every surface reads and filters them. Writes obey categorize-never-discard - {@link #record} merges
  * by {@code (source, id)} and never removes a sibling row, {@link #supersede} marks rather than deletes, and
  * {@link #label} adds an attributed annotation to an existing finding. The only removals are the artifact's own
- * lifecycle: an eviction deletes the version's rows through the {@linkplain #key stable key} this contract fixes,
- * and a discarded quarantine hold takes its gate findings with it - the ledger's data never outlives what it
- * describes, and never goes for any lesser reason.
+ * lifecycle: an eviction deletes the version's rows with the version's document, and a discarded quarantine hold takes
+ * its gate findings with it - the ledger's data never outlives what it describes, and never goes for any lesser reason.
  */
 public interface Findings {
 
@@ -297,22 +296,6 @@ public interface Findings {
     }
 
     /**
-     * The stable store key of a coordinate version's findings document, fixed by this contract so the artifact's
-     * lifecycle owners reclaim the rows without reaching into the persistence module: the inventory's {@code evict}
-     * deletes this key when the version goes, exactly as it takes the {@code downloaded/} and {@code licenses/}
-     * sidecars. The coordinate is URL-encoded into a single traversal-free segment, the same scheme the
-     * {@code published/} sidecar uses, so the two trees join on their segments; the {@code ecosystem} and
-     * {@code version} are each validated as a single traversal-free segment through {@link ArtifactStore#segment} -
-     * the guard the sibling {@code published/}/{@code pinned/} sidecar keys carry - so a {@code ..}-laced version or
-     * ecosystem fed by a caller (a report request, an admin label) can never aim a read or write at a neighbouring
-     * key-space inside the repository scope.
-     */
-    static String key(String ecosystem, String coordinate, String version) {
-        return PREFIX + "/" + ArtifactStore.segment(ecosystem) + "/"
-                + URLEncoder.encode(coordinate, StandardCharsets.UTF_8) + "/" + ArtifactStore.segment(version);
-    }
-
-    /**
      * The instant the repository's advisory findings were last refreshed against the live feeds - by the scheduled
      * vulnerability sweep or an operator's explicit rescan - so every view can show how fresh its rendered ledger is.
      * Last-writer-wins: the newest completed refresh is the panel's honest freshness, whoever drove it. Absent means the
@@ -326,9 +309,8 @@ public interface Findings {
      * The {@link #EVICTED eviction epoch}: bumped when a version's findings were reclaimed by eviction, so the
      * vulnerability rank index rebuilds on its next pass instead of no-opping on an unmoved {@link #scanned} stamp.
      * Bumped by an artifact-lifecycle owner (the inventory's {@code evict}, a cache reclaim, a discarded-hold reap)
-     * <em>after</em> the findings are removed, so a rebuild that observes the new epoch also observes the removal;
-     * module-independent, so a lifecycle owner marks the change whether or not the persistence module is installed -
-     * exactly as it deletes findings by {@link #key} without reaching into the module.
+     * <em>after</em> the findings are removed, so a rebuild that observes the new epoch also observes the removal. A
+     * lifecycle owner marks it through this key without reaching into the findings module.
      */
     static Epoch evictions(ArtifactStore store) {
         return new Epoch(store, EVICTED);

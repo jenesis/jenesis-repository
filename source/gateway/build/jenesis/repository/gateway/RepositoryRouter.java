@@ -100,8 +100,8 @@ public final class RepositoryRouter {
      * <p><b>DNS-directory legs.</b> A {@link RepositoryDefinition.Source.DnsDirectory} leg delegates here through the
      * same seam, but with {@code upstream == null}: the {@code redirect-dns}-provided handler resolves the target per
      * request by the DNS walk ({@code DnsDirectory.locate}) from the coordinate the {@code format} derives, rather than
-     * from a clause-literal upstream. A handler that serves a DNS leg must therefore read the routing from {@code
-     * fallback.source()} and the {@code exchange} path, not assume a non-null {@code upstream}.
+     * from a clause-literal upstream. A handler that serves a DNS leg must therefore read the routing from
+     * {@code fallback.source()} and the {@code exchange} path, not assume a non-null {@code upstream}.
      */
     @FunctionalInterface
     public interface RedirectHandler {
@@ -166,9 +166,9 @@ public final class RepositoryRouter {
     }
 
     /** Resolve the consolidated metadata store bound to a repository's scoped store from the discovered persistence
-     *  module, or {@code null} when none is installed (the leg then records/reuses nothing). */
+     *  module. */
     private static final Function<ArtifactStore, MetadataStore> INSTALLED_METADATA =
-            store -> MetadataProvider.installed().map(provider -> provider.over(store)).orElse(null);
+            store -> MetadataProvider.installed().over(store);
 
     private RepositoryRouter(Function<String, RepositoryDefinition> definitions,
                              BiFunction<String, String, ArtifactStore> stores,
@@ -565,9 +565,6 @@ public final class RepositoryRouter {
             return;
         }
         MetadataStore metadata = metadataOver.apply(records);
-        if (metadata == null) {
-            return;                       // no metadata persistence module - origin has nowhere durable to live
-        }
         String key = tenant + '|' + repository + '|' + path + '|' + sha256;
         LocalDate today = LocalDate.ofInstant(Instant.now(), ZoneOffset.UTC);
         // Coalesce same-day refreshes of the SAME (key) so a hot pass-through does not CAS-storm one doc key (§7): a key
@@ -618,9 +615,7 @@ public final class RepositoryRouter {
                         + "proxy definition.");
             }
             // The digest-pinned verdict is recorded in the consolidated metadata document over the same durable
-            // per-repository store the QuarantineLog lives in, and - on a store-on-pass leg - reused from it. A
-            // deployment without the metadata persistence module has no provider, so the leg records/reuses nothing and
-            // screens every fetch.
+            // per-repository store the QuarantineLog lives in, and - on a store-on-pass leg - reused from it.
             //
             // A transient `harden nocache` leg (store=false) still records the verdict for audit and keeps drift
             // detection, but does NOT reuse a recorded ALLOW to skip screening: nothing durable is cached, so every

@@ -42,7 +42,7 @@ class ProvenanceSummaryTest {
     void a_verified_provenance_summary_is_neutral() throws IOException {
         new StoreRepositoryInventory(store).recordProvenance(ECO, COORD, VERSION, true, SHA);
 
-        MetadataStore metadata = MetadataProvider.installed().orElseThrow().over(store);
+        MetadataStore metadata = MetadataProvider.installed().over(store);
         Section section = metadata.section(ECO, COORD, VERSION, ProvenanceSection.TAG).orElseThrow();
         ProvenanceSection.Summary summary = ProvenanceSection.summary(Optional.of(section)).orElseThrow();
         assertThat(summary.verified()).as("the attestation verified and bound").isTrue();
@@ -56,7 +56,7 @@ class ProvenanceSummaryTest {
         // gate admits it (some other policy may hold it, unchanged) but the summary flags provenance unconfirmed.
         new StoreRepositoryInventory(store).recordProvenance(ECO, COORD, VERSION, false, null);
 
-        MetadataStore metadata = MetadataProvider.installed().orElseThrow().over(store);
+        MetadataStore metadata = MetadataProvider.installed().over(store);
         Section section = metadata.section(ECO, COORD, VERSION, ProvenanceSection.TAG).orElseThrow();
         ProvenanceSection.Summary summary = ProvenanceSection.summary(Optional.of(section)).orElseThrow();
         assertThat(summary.verified()).isFalse();
@@ -73,7 +73,7 @@ class ProvenanceSummaryTest {
         inventory.record(ECO, COORD, VERSION, java.time.Instant.parse("2026-07-25T10:00:00Z"));
         inventory.recordProvenance(ECO, COORD, VERSION, true, SHA);
 
-        MetadataStore metadata = MetadataProvider.installed().orElseThrow().over(store);
+        MetadataStore metadata = MetadataProvider.installed().over(store);
         assertThat(metadata.read(ECO, COORD, VERSION).orElseThrow().tags())
                 .as("the provenance summary rides the same per-version document as the publish facts")
                 .contains("published", ProvenanceSection.TAG);

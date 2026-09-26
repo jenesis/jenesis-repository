@@ -51,7 +51,7 @@ class InventoryPublishGuardsTest {
     @Test
     void a_slash_bearing_version_is_rejected_by_the_production_key_derivation() {
         // "1.0/beta" carries a path separator but no ".." - it is the ArtifactStore.segment guard behind the real
-        // publishedKey/MetadataKey derivation, reached through the public record API, that must reject it, not a
+        // MetadataKey derivation, reached through the public record API, that must reject it, not a
         // substring "../" scan. A bare "1.0/beta" (the exact shape a PyPI release label can take) would otherwise fan
         // the member out under a "1.0/" pseudo-coordinate, colliding with a neighbouring version's key-space.
         assertThatThrownBy(() -> inventory().record(ECO, COORD, "1.0/beta", NOW))

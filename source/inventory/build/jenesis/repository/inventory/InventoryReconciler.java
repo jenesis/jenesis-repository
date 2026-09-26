@@ -16,8 +16,7 @@ import build.jenesis.repository.walk.ArtifactWalk;
  * <em>publish facts</em> from the live {@code publish/} pointer tree in both directions and sweeps the derived
  * per-version key spaces of no-longer-published versions. The publish facts are the {@code published}
  * section of the consolidated metadata document (its presence is membership of the published set), so the forward leg
- * restores a missing section and the reverse leg removes a section whose pointers are gone; with no metadata store
- * installed the legs fall back to the legacy {@code published/} sidecars, the pre-cutover behaviour. The inventory owns
+ * restores a missing section and the reverse leg removes a section whose pointers are gone. The inventory owns
  * the seam - {@link StoreRepositoryInventory#reconcile} delegates here - so this class carries only the sweep legs and
  * calls back into the inventory core for the format-driven {@code describe}/{@code record}, the membership check and the
  * shared key/layout helpers.
@@ -47,8 +46,8 @@ final class InventoryReconciler {
      * descriptor, timestamped at {@code now}: the conservative publish instant, which only ever delays an age-based
      * eviction, never accelerates it. The reverse orphan - a section whose coordinate has no live pointer left, the
      * residue of a crashed {@link StoreRepositoryInventory#evict} - is removed. The same orphan rule then sweeps the
-     * derived per-version key spaces - the {@code downloaded/} markers, the {@code overrides/<kind>/} hold-overrides and
-     * the {@code licenses/}/{@code pinned/} sidecars of a graceful-absence deployment - deleting every row whose
+     * derived per-version key spaces - the {@code overrides/<kind>/} hold-overrides and the {@code pinned/} markers -
+     * deleting every row whose
      * version is no longer published <em>and</em> whose absence an installed format can positively confirm; a row
      * nothing installed can judge is left alone. Reads only the tiny pointers and documents, never an artifact blob, and commits
      * through the store's compare-and-set, so it runs identically on filesystem and every object store. Idempotent: a
@@ -70,32 +69,21 @@ final class InventoryReconciler {
         return new StoreRepositoryInventory.Reconciliation(restored, removed, removeOrphanDerived(walk));
     }
 
-    /** Delete every {@code downloaded/} and {@code overrides/<kind>/} row - and every {@code licenses/}/
-     *  {@code pinned/} sidecar a graceful-absence deployment wrote - whose coordinate version is <em>provably</em>
+    /** Delete every {@code overrides/<kind>/} and {@code pinned/} row whose coordinate version is <em>provably</em>
      *  gone: no published membership AND a format that can place the coordinate says it has no pointer left, the
      *  derived residue of an eviction that crashed between deletes. One shared-walk pass; a row that judges the same
      *  is deleted the same, and a replayed visit after a crash-resume finds the row already gone.
      *
-     *  <p>Both halves of the judgment are three-valued, and for one reason: each is answered through a module that may
-     *  not be installed. The liveness half was made so first, then the membership half, because which plane
-     *  carries the publish facts - the consolidated {@code meta} document or the legacy {@code published/} sidecar -
-     *  is chosen by the installed metadata persistence, so removing that module (or installing it over a store written
-     *  without one) flipped every version in the repository to "not a published member" and left this sweep judging
-     *  the whole store by liveness alone.
-     *
-     *  <p>The third state is the one that matters: a row whose ecosystem <em>no installed format owns</em> is
-     *  {@link Known.Unknown} and is left exactly where it is. Uninstalling a format module used to make
-     *  {@code isLive} answer {@code false} for every one of its versions, and this sweep then deleted their
-     *  {@code pinned/}, {@code overrides/}, {@code licenses/} and {@code downloaded/} rows - a human's force-keep and
-     *  a human's clearance of a hold, deleted because a module was absent, which this product's standing rule forbids
-     *  and which had just been enforced one family over, for {@code holds/}. A version whose format is gone is not
-     *  dead; it is unreadable by that format right now, and "I cannot tell" must never share an outcome with "it is
-     *  gone". The genuine orphan is still reaped, because it is still provable: an installed format that can place the
-     *  coordinate and finds no pointer for it. */
+     *  <p>The liveness half is three-valued, because it is answered through a format module that may not be
+     *  installed: a row whose ecosystem <em>no installed format owns</em> is {@link Known.Unknown} and is left exactly
+     *  where it is. A version whose format is gone is not dead; it is unreadable by that format right now, and "I
+     *  cannot tell" must never share an outcome with "it is gone" - a human's force-keep or a human's clearance of a
+     *  hold, deleted because a module was absent, is what the product's standing rule forbids. The genuine orphan is
+     *  still reaped, because it is still provable: an installed format that can place the coordinate and finds no
+     *  pointer for it. */
     private int removeOrphanDerived(ArtifactWalk walk) throws IOException {
         int[] removed = {0};
-        walk.walk(store, "reconcile-derived", List.of(StoreRepositoryInventory.DOWNLOADED, LicenseInventory.ROOT,
-                        OverrideRecords.ROOT, StoreRepositoryInventory.PINNED),
+        walk.walk(store, "reconcile-derived", List.of(OverrideRecords.ROOT, StoreRepositoryInventory.PINNED),
                 key -> {
             if (judgeDerived(key)) {
                 removed[0]++;
@@ -104,57 +92,45 @@ final class InventoryReconciler {
         return removed[0];
     }
 
-    /** The derived leg for one row under {@code downloaded/}, {@code licenses/}, {@code overrides/} or
-     *  {@code pinned/}: remove it when its version is provably unpublished and provably gone; {@code true} when it
-     *  was removed. */
+    /** The derived leg for one row under {@code overrides/} or {@code pinned/}: remove it when its version is provably
+     *  unpublished and provably gone; {@code true} when it was removed. */
     boolean judgeDerived(String key) throws IOException {
-        {
-            String[] parts = key.split("/");
-            String ecosystem;
-            String coordinate;
-            String version;
-            if (OverrideRecords.ROOT.equals(parts[0])) {
-                // overrides/<kind>/<eco>/<coord>/<ver>, every segment encoded - parsed by the space's one owner
-                // rather than re-spelled here, which is exactly the drift that was closed there.
-                Optional<OverrideRecords.Row> row = OverrideRecords.parse(key);
-                if (row.isEmpty()) {
-                    return false;
-                }
-                ecosystem = row.get().ecosystem();
-                coordinate = row.get().coordinate();
-                version = row.get().version();
-            } else {
-                if (parts.length != 4) {                         // downloaded|licenses|pinned/<eco>/<coord>/<ver>
-                    return false;
-                }
-                ecosystem = parts[1];
-                coordinate = StoreRepositoryInventory.decode(parts[2]);
-                version = parts[3];
-            }
-            // Membership is three-valued for the same reason liveness is: which plane carries the publish
-            // facts is chosen by the installed metadata persistence, so an absent (or newly-installed) module flips
-            // every version to "not a member" - and this sweep deletes on that answer. Both arms below are written
-            // out: the sweep deletes on Absent alone, and Present and Unknown share an outcome only because BOTH are
-            // reasons to keep the row - not because the third state was folded into either of them.
-            boolean provablyUnpublished = switch (inventory.membership(ecosystem, coordinate, version)) {
-                case Known.Absent<PublishedSection.Facts> _ -> true;
-                case Known.Present<PublishedSection.Facts> _ -> false;   // a live or just-restored release
-                case Known.Unknown<PublishedSection.Facts> _ -> false;   // a membership nothing here can read
-            };
-            if (!provablyUnpublished) {
+        String[] parts = key.split("/");
+        String ecosystem;
+        String coordinate;
+        String version;
+        if (OverrideRecords.ROOT.equals(parts[0])) {
+            // overrides/<kind>/<eco>/<coord>/<ver>, every segment encoded - parsed by the space's one owner
+            // rather than re-spelled here, which is exactly the drift that was closed there.
+            Optional<OverrideRecords.Row> row = OverrideRecords.parse(key);
+            if (row.isEmpty()) {
                 return false;
             }
-            boolean provablyGone = switch (liveness(ecosystem, coordinate, version)) {
-                case Known.Absent<String> _ -> true;
-                case Known.Present<String> _ -> false;                   // still serving under an installed format
-                case Known.Unknown<String> _ -> false;                   // nothing installed can place it
-            };
-            if (!provablyGone) {
+            ecosystem = row.get().ecosystem();
+            coordinate = row.get().coordinate();
+            version = row.get().version();
+        } else {
+            if (parts.length != 4) {                         // pinned/<eco>/<coord>/<ver>
                 return false;
             }
-            store.delete(key);
-            return true;
+            ecosystem = parts[1];
+            coordinate = StoreRepositoryInventory.decode(parts[2]);
+            version = parts[3];
         }
+        // The sweep deletes on a proven absence alone; a live or just-restored release keeps its rows.
+        if (!(inventory.membership(ecosystem, coordinate, version) instanceof Known.Absent)) {
+            return false;
+        }
+        boolean provablyGone = switch (liveness(ecosystem, coordinate, version)) {
+            case Known.Absent<String> _ -> true;
+            case Known.Present<String> _ -> false;                   // still serving under an installed format
+            case Known.Unknown<String> _ -> false;                   // nothing installed can place it
+        };
+        if (!provablyGone) {
+            return false;
+        }
+        store.delete(key);
+        return true;
     }
 
     /** Whether a coordinate version still has a live pointer under an installed format - a {@code publish/} pointer for
@@ -197,7 +173,7 @@ final class InventoryReconciler {
      *  blobs-namespace format's pointers are not visited and such a release's lost section is not rebuilt here.
      *
      *  <p>Stated precisely, because "a known gap" understated it. The exposure is generic - a crash between writing
-     *  a serving pointer and writing its {@code published/} section leaves a row nothing repairs - and it applies to
+     *  a serving pointer and writing its {@code published} section leaves a row nothing repairs - and it applies to
      *  every blobs-namespace format, of which the product installs around twenty. Only {@code oci} is covered, by
      *  {@code InventoryBackfillConsumer}, which reads the coordinate back out of each stored pointer through
      *  {@code BlobLayout.describePointer} - so a format that can name its own keys is repaired and one that cannot
@@ -263,12 +239,12 @@ final class InventoryReconciler {
 
     /** For every published member whose coordinate has no surviving pointer - {@code publish/} for a
      *  Publication-namespace layout, the format's own {@link BlobLayout#blobKeys blob keys} for a blobs-namespace one -
-     *  remove its publish facts: the reverse-repair direction, a crashed eviction's residue. When the metadata store is
-     *  installed the {@code published} section is dropped from the document (the licenses and any sibling sections stay);
-     *  otherwise the legacy {@code published/} sidecar is deleted. A member nothing can judge is kept: an ecosystem with
-     *  no installed format, or a roots-only format whose version pointers are not enumerable from the coordinate -
-     *  removing on "found nothing" there would wipe the retention books of every live release. One shared-walk pass over
-     *  the {@link StoreRepositoryInventory#publishedRoot} tree; a replayed visit re-judges the row and a removed one is
+     *  remove its publish facts: the reverse-repair direction, a crashed eviction's residue. The {@code published}
+     *  section is dropped from the document (the licenses and any sibling sections stay). A member nothing can judge is
+     *  kept: an ecosystem with no installed format, or a roots-only format whose version pointers are not enumerable
+     *  from the coordinate - removing on "found nothing" there would wipe the retention books of every live release.
+     *  One shared-walk pass over the {@link StoreRepositoryInventory#publishedRoot} tree; a replayed visit re-judges
+     *  the row and a removed one is
      *  no longer a member. */
     private int removeOrphanPublished(ArtifactWalk walk) throws IOException {
         int[] removed = {0};
@@ -285,7 +261,6 @@ final class InventoryReconciler {
      *  judge is kept. */
     boolean judgePublished(String key) throws IOException {
         String root = inventory.publishedRoot();
-        boolean consolidated = metadata != null;
         if (!key.startsWith(root + "/")) {
             return false;
         }
@@ -297,20 +272,17 @@ final class InventoryReconciler {
             String ecosystem = segments[0];
             String coordinate = StoreRepositoryInventory.decode(segments[1]);
             String version = segments[2];
-            Optional<PublishedSection.Facts> facts = Optional.empty();
-            if (consolidated) {
-                // Membership is the document's published section; a licenses-only document is not a member and is left
-                // untouched. A legacy published/ key is a member by its existence - judged from the key alone, no read.
-                Optional<ArtifactStore.Versioned> document = store.readVersioned(key);
-                Section section = document
-                        .map(versioned -> MetadataDocument.read(versioned.content())
-                                .section(PublishedSection.TAG).orElse(null))
-                        .orElse(null);
-                if (!PublishedSection.published(Optional.ofNullable(section))) {
-                    return false;
-                }
-                facts = PublishedSection.facts(Optional.ofNullable(section));
+            // Membership is the document's published section; a licenses-only document is not a member and is left
+            // untouched.
+            Optional<ArtifactStore.Versioned> document = store.readVersioned(key);
+            Section section = document
+                    .map(versioned -> MetadataDocument.read(versioned.content())
+                            .section(PublishedSection.TAG).orElse(null))
+                    .orElse(null);
+            if (!PublishedSection.published(Optional.ofNullable(section))) {
+                return false;
             }
+            Optional<PublishedSection.Facts> facts = PublishedSection.facts(Optional.ofNullable(section));
             boolean judgeable = false;
             boolean live = false;
             for (ArtifactLayout layout : StoreRepositoryInventory.layoutsFor(ecosystem)) {
@@ -337,18 +309,13 @@ final class InventoryReconciler {
             }
             if (live && facts.isPresent()) {
                 // The document already read backfills the two bounded listing faces for a live release recorded
-                // before they existed (a legacy published/ row is judged from its key alone and is not read here;
-                // its publish-namespace releases are backfilled by the pointer leg above).
+                // before they existed.
                 backfillFaces(ecosystem, coordinate, version, facts.get());
             }
             if (!judgeable || live) {
                 return false;
             }
-            if (metadata != null) {
-                metadata.mutate(ecosystem, coordinate, version, PublishedSection.TAG, current -> null);
-            } else {
-                store.delete(key);
-            }
+            metadata.mutate(ecosystem, coordinate, version, PublishedSection.TAG, current -> null);
             return true;
         }
     }

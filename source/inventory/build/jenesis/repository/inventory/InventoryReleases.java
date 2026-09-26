@@ -6,7 +6,6 @@ import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.cleanup.RepositoryInventory;
 import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataKey;
-import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
@@ -29,14 +28,11 @@ final class InventoryReleases {
     private final StoreRepositoryInventory inventory;
     private final ArtifactStore store;
     private final ArtifactWalk walk;
-    private final MetadataStore metadata;
 
-    InventoryReleases(StoreRepositoryInventory inventory, ArtifactStore store, ArtifactWalk walk,
-                      MetadataStore metadata) {
+    InventoryReleases(StoreRepositoryInventory inventory, ArtifactStore store, ArtifactWalk walk) {
         this.inventory = inventory;
         this.store = store;
         this.walk = walk;
-        this.metadata = metadata;
     }
 
     /** Every published release, buffered - see {@link StoreRepositoryInventory#releases()}. */
@@ -125,45 +121,28 @@ final class InventoryReleases {
     }
 
     /** The row: the publish facts and the download facts, each read once. The count and the newest instant come from
-     *  the document's downloads section; the last-download instant falls back to the legacy sidecar, then to the
-     *  publish time, which is what the retention rules read. */
+     *  the document's downloads section; a version never downloaded reads as downloaded at its publish time, which is
+     *  what the retention rules read. */
     private Release release(String ecosystem, String coordinate, String version, PublishedSection.Facts facts)
             throws IOException {
         Optional<DownloadsSection.Facts> downloads = inventory.downloads(ecosystem, coordinate, version);
         Instant downloadedAt = downloads.map(DownloadsSection.Facts::last).orElse(null);
-        if (downloadedAt == null) {
-            downloadedAt = sidecar(ecosystem, coordinate, version).orElse(null);
-        }
         return new Release(ecosystem, coordinate, version, facts.at(), downloadedAt == null ? facts.at() : downloadedAt,
                 facts.prerelease(), facts.pinned(), downloads.map(DownloadsSection.Facts::count).orElse(null),
                 downloadedAt);
     }
 
-    /** The legacy {@code downloaded/} sidecar's instant - a deployment without the consolidated store, or a marker
-     *  from before the downloads section; one that does not parse reads as never, the marker being best-effort. */
-    private Optional<Instant> sidecar(String ecosystem, String coordinate, String version) throws IOException {
-        return store.readVersioned(StoreRepositoryInventory.downloadedKey(ecosystem, coordinate, version))
-                .flatMap(stored -> {
-                    try {
-                        return Optional.of(Instant.parse(new String(stored.content(), StandardCharsets.UTF_8).trim()));
-                    } catch (DateTimeParseException _) {
-                        return Optional.empty();
-                    }
-                });
-    }
-
     /**
      * The publish facts a {@link StoreRepositoryInventory#publishedRoot} key carries when it is a published member,
-     * else empty: the document's {@code published} section (its {@code at} is membership) in the consolidated store, or
-     * the sidecar's {@code "<instant> <prerelease>"} row plus the {@code pinned/} marker when none is installed. A
-     * {@code @coordinate}
+     * else empty: the document's {@code published} section, whose {@code at} is membership. A {@code @coordinate}
      * document, a non-member document, a corrupt or unreadable row, and a key that raced away all read as empty rather
      * than aborting the enumeration.
      */
     private Optional<StoreRepositoryInventory.PublishedAt> readPublished(String key) throws IOException {
-        String root = key.startsWith(MetadataKey.PREFIX + "/")
-                ? MetadataKey.PREFIX : StoreRepositoryInventory.PUBLISHED;
-        String[] segments = key.substring(root.length() + 1).split("/");
+        if (!key.startsWith(MetadataKey.PREFIX + "/")) {
+            return Optional.empty();
+        }
+        String[] segments = key.substring(MetadataKey.PREFIX.length() + 1).split("/");
         if (segments.length != 3) {
             return Optional.empty();
         }
@@ -174,29 +153,15 @@ final class InventoryReleases {
         if (stored.isEmpty()) {
             return Optional.empty();
         }
-        if (root.equals(MetadataKey.PREFIX)) {
-            if (version.startsWith("@")) {
-                return Optional.empty();                     // the per-coordinate document, not a version release
-            }
-            Optional<Section> section = MetadataDocument.read(stored.get().content()).section(PublishedSection.TAG);
-            if (!PublishedSection.published(section)) {
-                return Optional.empty();
-            }
-            return PublishedSection.facts(section)
-                    .map(facts -> new StoreRepositoryInventory.PublishedAt(ecosystem, coordinate, version, facts));
+        if (version.startsWith("@")) {
+            return Optional.empty();                         // the per-coordinate document, not a version release
         }
-        String[] value = new String(stored.get().content(), StandardCharsets.UTF_8).trim().split(" ");
-        Instant published;
-        try {
-            published = value.length > 0 && !value[0].isEmpty() ? Instant.parse(value[0]) : Instant.EPOCH;
-        } catch (DateTimeParseException _) {
+        Optional<Section> section = MetadataDocument.read(stored.get().content()).section(PublishedSection.TAG);
+        if (!PublishedSection.published(section)) {
             return Optional.empty();
         }
-        boolean prerelease = value.length > 1 && Boolean.parseBoolean(value[1]);
-        boolean pinned = store.readVersioned(
-                StoreRepositoryInventory.pinnedKey(ecosystem, coordinate, version)).isPresent();
-        return Optional.of(new StoreRepositoryInventory.PublishedAt(ecosystem, coordinate, version,
-                new PublishedSection.Facts(published, prerelease, pinned)));
+        return PublishedSection.facts(section)
+                .map(facts -> new StoreRepositoryInventory.PublishedAt(ecosystem, coordinate, version, facts));
     }
 
     /** Whether any version of a coordinate is still a published member - see the last-version check in
@@ -226,45 +191,20 @@ final class InventoryReleases {
      *  enumeration the identity rollup folds over, so a repository with millions of versions never materialises them
      *  all in heap. Same membership as the buffered {@link #coordinates()}. */
     void coordinates(StoreRepositoryInventory.CoordinateVisitor visitor) throws IOException {
-        if (metadata == null) {
-            // Graceful absence: a published/ key IS a member, so the triple reads from the key alone.
-            inventory.walk(StoreRepositoryInventory.PUBLISHED, key -> {
-                String[] segments = key.substring(StoreRepositoryInventory.PUBLISHED.length() + 1).split("/");
-                if (segments.length == 3) {
-                    visitor.accept(new StoreRepositoryInventory.Coordinate(
-                            segments[0], StoreRepositoryInventory.decode(segments[1]), segments[2]));
-                }
-            });
-        } else {
-            // Consolidated: membership is the document's published section, so each meta document is read once.
-            inventory.walk(MetadataKey.PREFIX, key -> {
-                Optional<StoreRepositoryInventory.PublishedAt> published = readPublished(key);
-                if (published.isPresent()) {
-                    visitor.accept(new StoreRepositoryInventory.Coordinate(
-                            published.get().ecosystem(), published.get().coordinate(), published.get().version()));
-                }
-            });
-        }
+        // Membership is the document's published section, so each meta document is read once.
+        inventory.walk(MetadataKey.PREFIX, key -> {
+            Optional<StoreRepositoryInventory.PublishedAt> published = readPublished(key);
+            if (published.isPresent()) {
+                visitor.accept(new StoreRepositoryInventory.Coordinate(
+                        published.get().ecosystem(), published.get().coordinate(), published.get().version()));
+            }
+        });
     }
 
     /** Stream every published member with its publish instant and declared-license set - the identity rebuild's
-     *  enumeration: one document read per member on the consolidated layout, where the publish facts and the licenses
-     *  are sections of the same document, and the {@code published/} plus {@code licenses/} sidecars on the
-     *  graceful-absence one. Same membership as {@link #coordinates(StoreRepositoryInventory.CoordinateVisitor)}. */
+     *  enumeration: one document read per member, where the publish facts and the licenses are sections of the same
+     *  document. Same membership as {@link #coordinates(StoreRepositoryInventory.CoordinateVisitor)}. */
     void members(StoreRepositoryInventory.MemberVisitor visitor) throws IOException {
-        if (metadata == null) {
-            LicenseInventory licenses = new LicenseInventory(store);
-            inventory.walk(StoreRepositoryInventory.PUBLISHED, key -> {
-                Optional<StoreRepositoryInventory.PublishedAt> published = readPublished(key);
-                if (published.isPresent()) {
-                    StoreRepositoryInventory.PublishedAt member = published.get();
-                    visitor.accept(new StoreRepositoryInventory.Member(member.ecosystem(), member.coordinate(),
-                            member.version(), member.facts().at(),
-                            licenses.read(member.ecosystem(), member.coordinate(), member.version())));
-                }
-            });
-            return;
-        }
         inventory.walk(MetadataKey.PREFIX, key -> {
             String[] segments = key.substring(MetadataKey.PREFIX.length() + 1).split("/");
             if (segments.length != 3 || segments[2].startsWith("@")) {

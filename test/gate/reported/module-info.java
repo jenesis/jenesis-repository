@@ -17,6 +17,7 @@ open module build.jenesis.repository.gate.reported.test {
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.findings.store;
     requires build.jenesis.repository.inventory;
+    requires build.jenesis.repository.metadata.store;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
     // The layout the published path describes itself through, so the version has a coordinate to report against.

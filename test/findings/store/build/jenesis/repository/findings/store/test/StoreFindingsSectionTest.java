@@ -17,13 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The findings cutover: the store-backed findings ledger over the consolidated metadata document's {@code findings}
- * section - a recorded finding lands in the document, not a sidecar; the section's signal summarises the highest
- * severity; a sibling section on the same coordinate survives a findings mutate; a version with no findings section
- * reads as empty and its leftover {@code findings/} sidecar is neither consulted nor removed; the repository-wide walk
- * is the document plane alone; an unrecognised (newer-node) section row rides a mutate verbatim; the batched
- * {@code recordAll}/{@code commit} fold a whole pass into one write; and with no metadata store installed the ledger
- * degrades to the sidecar.
+ * The store-backed findings ledger over the consolidated metadata document's {@code findings} section: a recorded
+ * finding lands in the document; the section's signal summarises the highest severity; a sibling section on the same
+ * coordinate survives a findings mutate; an unrecognised (newer-node) section row rides a mutate verbatim; and the
+ * batched {@code recordAll}/{@code commit} fold a whole pass into one write.
  */
 class StoreFindingsSectionTest {
 
@@ -41,19 +38,17 @@ class StoreFindingsSectionTest {
     void setUp() {
         store = ArtifactStoreProvider.resolve(
                 "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
-        metadata = MetadataProvider.installed().orElseThrow().over(store);
+        metadata = MetadataProvider.installed().over(store);
         findings = new StoreFindings(store, metadata);
     }
 
     @Test
-    void a_recorded_finding_lands_in_the_documents_findings_section_not_a_sidecar() throws IOException {
+    void a_recorded_finding_lands_in_the_documents_findings_section() throws IOException {
         findings.record("Maven", "org.acme:lib", "1.0", Finding.of(
                 "CVE-1", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "vuln", FIRST));
 
         assertThat(findings.of("Maven", "org.acme:lib", "1.0")).singleElement()
                 .satisfies(finding -> assertThat(finding.id()).isEqualTo("CVE-1"));
-        assertThat(store.readVersioned(Findings.key("Maven", "org.acme:lib", "1.0")))
-                .as("the cutover writes the section, never the retired sidecar").isEmpty();
         assertThat(metadata.section("Maven", "org.acme:lib", "1.0", "findings"))
                 .as("the rows live in the document's findings section").isPresent()
                 .get().satisfies(section -> assertThat(section.signal().severity())
@@ -73,41 +68,6 @@ class StoreFindingsSectionTest {
         assertThat(findings.of("Maven", "org.acme:lib", "1.0")).hasSize(1);
         assertThat(metadata.section("Maven", "org.acme:lib", "1.0", "published"))
                 .as("the sibling section survives the findings write").isPresent();
-    }
-
-    @Test
-    void a_version_with_no_findings_section_reads_empty_and_its_leftover_sidecar_is_neither_read_nor_removed()
-            throws IOException {
-        // A findings/ object written by a deployment that predates the persistence module. With the module installed
-        // the section is the whole answer, so this reads as empty - there is no fall-through to an older key - and the
-        // read leaves it standing: removing a deployment's data is the operator's explicit purge.
-        store.writeVersioned(Findings.key("Maven", "org.acme:lib", "1.0"),
-                document(row("CVE-1", "osv", "VULNERABILITY", "HIGH", "vuln")), null);
-
-        assertThat(findings.of("Maven", "org.acme:lib", "1.0"))
-                .as("an absent findings section means nothing recorded; the sidecar is not consulted").isEmpty();
-        assertThat(findings.all(Findings.Filter.none()))
-                .as("and the walk is the document plane alone").isEmpty();
-        assertThat(store.readVersioned(Findings.key("Maven", "org.acme:lib", "1.0")))
-                .as("a read never removes it either (S10)").isPresent();
-        assertThat(metadata.read("Maven", "org.acme:lib", "1.0"))
-                .as("a GET never writes - no document was created by the read (S10)").isEmpty();
-    }
-
-    @Test
-    void the_walk_is_the_document_plane_alone_and_a_leftover_sidecar_never_joins_or_shadows_it() throws IOException {
-        findings.record("Maven", "a:one", "1.0", Finding.of(
-                "CVE-A", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "a", FIRST));   // -> document
-        store.writeVersioned(Findings.key("Maven", "b:two", "1.0"),
-                document(row("CVE-B", "osv", "VULNERABILITY", "HIGH", "b")), null);                    // -> sidecar
-        // A coordinate present in BOTH its document and a leftover sidecar: the document answers, the sidecar does not.
-        store.writeVersioned(Findings.key("Maven", "a:one", "1.0"),
-                document(row("CVE-A", "osv", "VULNERABILITY", "HIGH", "a")), null);
-
-        assertThat(findings.all(Findings.Filter.none())).extracting(located -> located.finding().id())
-                .as("a sidecar-only coordinate is not in the ledger").containsExactly("CVE-A");
-        assertThat(findings.all(new Findings.Filter("a:one", null, null, null, null, null)))
-                .as("and the document serves its coordinate exactly once").hasSize(1);
     }
 
     @Test
@@ -181,19 +141,6 @@ class StoreFindingsSectionTest {
                 List.of(new Findings.Batch.Annotation("osv", "ABSENT",
                         new Finding.Label("ai", "applicability", "applies", 1.0, FIRST)))))
                 .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void with_no_metadata_store_installed_the_ledger_stays_on_the_sidecar() throws IOException {
-        StoreFindings noMeta = new StoreFindings(store, null);
-        noMeta.record("Maven", "org.acme:lib", "1.0", Finding.of(
-                "CVE-1", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "vuln", FIRST));
-
-        assertThat(store.readVersioned(Findings.key("Maven", "org.acme:lib", "1.0")))
-                .as("no metadata store - the sidecar is the ledger").isPresent();
-        assertThat(metadata.read("Maven", "org.acme:lib", "1.0"))
-                .as("nothing was written to the document").isEmpty();
-        assertThat(noMeta.of("Maven", "org.acme:lib", "1.0")).hasSize(1);
     }
 
     private static byte[] document(String... rows) {

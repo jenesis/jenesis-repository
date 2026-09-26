@@ -76,10 +76,9 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     private final ArtifactStore store;
     private final ArtifactWalk walk;
 
-    /** The consolidated metadata store the publish facts live in, or {@code null} when no
-     *  {@link MetadataProvider} is installed - the graceful-absence path stays on the {@code published/}/{@code pinned/}
-     *  sidecars instead. When present, the {@code published} section is the source of truth and the only one read:
-     *  the publish instant, the prerelease flag and the pin, with set completeness back-filled by the reconcile
+    /** The consolidated metadata store the publish facts live in. The {@code published} section is the source of
+     *  truth and the only one read: the publish instant, the prerelease flag and the pin, with set completeness
+     *  back-filled by the reconcile
      *  forward-repair (§5). */
     private final MetadataStore metadata;
 
@@ -128,7 +127,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         this.publication = new Publication(store);
         this.store = store;
         this.walk = walk;
-        this.metadata = MetadataProvider.installed().map(provider -> provider.over(store)).orElse(null);
+        this.metadata = MetadataProvider.installed().over(store);
         this.identity = new InventoryIdentity(store);
         this.rollUp = new SubtreeSizeRollUp(this, store, walk, publication);
         this.reconciler = new InventoryReconciler(this, store, metadata);
@@ -139,7 +138,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         // chain the coordinate/paging screen consults is the deployment's own interceptor list (the ComplianceScreen and
         // staging screens), never a second independently discovered one.
         this.browse = new InventoryBrowse(store, new ServableNames(store, publication));
-        this.enumeration = new InventoryReleases(this, store, walk, metadata);
+        this.enumeration = new InventoryReleases(this, store, walk);
         this.eviction = new InventoryEviction(this, store, publication, identity);
     }
 
@@ -500,19 +499,18 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         Retries.update(store, key, current -> value);
     }
 
-    /** The key-space the published-set enumeration walks: the consolidated {@code meta} documents when the metadata
-     *  store is installed (their {@code published} section is membership), or the legacy {@code published/} sidecars
-     *  otherwise. Both trees share the {@code <root>/<eco>/<enc(coord)>/<version>} shape, so the walk's segment plan and
-     *  every caller's key parsing are identical either way. Static and provider-derived so an external ecosystem
-     *  enumeration (the console browse, the attribution export) lists the same root the inventory writes. */
     /** The root of the newest-first release index every publish is recorded into, beside {@link #publishedRoot()}:
      *  a pass or hook that records a publish writes here too and declares it. */
     public static String recentRoot() {
         return RecentReleases.ROOT;
     }
 
+    /** The key-space the published-set enumeration walks: the consolidated {@code meta} documents, whose
+     *  {@code published} section is membership, in the {@code <root>/<eco>/<enc(coord)>/<version>} shape. Named here
+     *  so an external ecosystem enumeration (the console browse, the attribution export) lists the root the
+     *  inventory writes. */
     public static String publishedRoot() {
-        return MetadataProvider.installed().isPresent() ? MetadataKey.PREFIX : PUBLISHED;
+        return MetadataKey.PREFIX;
     }
 
     /** One published coordinate version and its publish facts, resolved from a walked {@link #publishedRoot} key. */
@@ -784,10 +782,10 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * whether this deployment can enumerate everything the store holds; a non-reclaiming reader (the rebuild pass,
      * which only re-derives from what it can see) is served correctly by this list.
      */
-    /** The roots of the per-coordinate derived rows a walk's {@code DERIVED} family enumerates: the download stamps,
-     *  the declared licenses, the override records and the pins - what the reconcile's derived-row leg judges. */
+    /** The roots of the per-coordinate derived rows a walk's {@code DERIVED} family enumerates: the override records
+     *  and the pins - what the reconcile's derived-row leg judges. */
     public static List<String> derivedRoots() {
-        return List.of(DOWNLOADED, LicenseInventory.ROOT, OverrideRecords.ROOT, PINNED);
+        return List.of(OverrideRecords.ROOT, PINNED);
     }
 
     public static List<String> pointerRoots() {
@@ -805,23 +803,21 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      */
     public static SortedSet<String> unplaceableEcosystems(ArtifactStore store) throws IOException {
         SortedSet<String> unjudgeable = new TreeSet<>();
-        for (String root : List.of(MetadataKey.PREFIX, PUBLISHED)) {
-            ECOSYSTEMS.scan(store, root, ecosystem -> {
-                if (!placeable(ecosystem)) {
-                    unjudgeable.add(ecosystem);
-                }
-            });
-        }
+        ECOSYSTEMS.scan(store, MetadataKey.PREFIX, ecosystem -> {
+            if (!placeable(ecosystem)) {
+                unjudgeable.add(ecosystem);
+            }
+        });
         return unjudgeable;
     }
 
     /**
      * Forget one ecosystem's durable records - the operator's explicit retirement of data whose format is gone,
      * and the way out of the refusal every reclaiming pass answers an unplaceable ecosystem with. Deletes the
-     * ecosystem's slices of the record spaces ({@code meta}, {@code published}, {@code downloaded}, {@code pinned},
-     * {@code licenses}), after which the ecosystem no longer appears in the published index: the collector judges
-     * the repository again, the format's now-unreferenced content blobs are ordinary garbage it reclaims, and the
-     * stray pointers and listings that remain are reaped by the format module's own manifest purge.
+     * ecosystem's slices of the record spaces ({@code meta}, {@code pinned}), after which the ecosystem no longer
+     * appears in the published index: the collector judges the repository again, the format's now-unreferenced content
+     * blobs are ordinary garbage it reclaims, and the stray pointers and listings that remain are reaped by the format
+     * module's own manifest purge.
      *
      * <p>Refused while any installed format still places the ecosystem: forgetting a live ecosystem's records
      * would orphan data a format is actively serving. The caller audits; this only deletes.
@@ -847,7 +843,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     public long forgetEcosystem(String ecosystem) throws IOException {
         refuseIfPlaceable(ecosystem);
         long removed = 0;
-        for (String root : List.of(MetadataKey.PREFIX, PUBLISHED, DOWNLOADED, PINNED, LicenseInventory.ROOT)) {
+        for (String root : List.of(MetadataKey.PREFIX, PINNED)) {
             removed += forget(root + "/" + ArtifactStore.segment(ecosystem));
         }
         return removed;
@@ -885,31 +881,27 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * itself, reporting the cause through {@code GcPlan.refusal()}; there is no longer a pre-check for a caller to
      * forget.
      *
-     * <p>Judged from the durable record rather than from discovery, exactly as the hold records and the reconcile sweep judge theirs: the
-     * published set's own first level names every ecosystem this repository has content for, and it is read from
-     * <em>both</em> planes - the consolidated {@code meta} documents and the legacy {@code published/} sidecars -
-     * because which of the two is authoritative is itself a function of an installed module ({@link #publishedRoot}),
-     * and reading only the currently-selected one would let an absent metadata module hide every ecosystem there is.
-     * An ecosystem no installed format owns is unjudgeable: it may serve perfectly well through a module that is
-     * currently uninstalled, and nothing here can name the roots its pointers live under. Two bounded first-level
-     * listings, no walk.
+     * <p>Judged from the durable record rather than from discovery, exactly as the hold records and the reconcile
+     * sweep judge theirs: the published set's own first level ({@link #publishedRoot}) names every ecosystem this
+     * repository has content for. An ecosystem no installed format owns is unjudgeable: it may serve perfectly well
+     * through a module that is currently uninstalled, and nothing here can name the roots its pointers live under. One
+     * bounded first-level listing, no walk.
      */
     public static Known<List<String>> pointerRoots(ArtifactStore store) throws IOException {
         SortedSet<String> unjudgeable = new TreeSet<>();
-        for (String root : List.of(MetadataKey.PREFIX, PUBLISHED)) {
-            // Through the bounded primitive, and a truncated enumeration is refused rather than returned: a short
-            // ecosystem list reads as "nothing unaccounted for", which is precisely the answer that lets the sweep
-            // delete. The level is one segment per ecosystem, so no upload can grow it and the caps are never near.
-            Traversal.Result result = ECOSYSTEMS.scan(store, root, ecosystem -> {
-                if (!placeable(ecosystem)) {
-                    unjudgeable.add(ecosystem);
-                }
-            });
-            if (result.truncated()) {
-                throw new IOException("the " + root + "/ ecosystem index did not enumerate whole ("
-                        + result.delivered() + " delivered); refusing to answer, because a short ecosystem list reads "
-                        + "as 'every root is accounted for' and lets a collection reclaim what it cannot see");
+        String root = MetadataKey.PREFIX;
+        // Through the bounded primitive, and a truncated enumeration is refused rather than returned: a short
+        // ecosystem list reads as "nothing unaccounted for", which is precisely the answer that lets the sweep
+        // delete. The level is one segment per ecosystem, so no upload can grow it and the caps are never near.
+        Traversal.Result result = ECOSYSTEMS.scan(store, root, ecosystem -> {
+            if (!placeable(ecosystem)) {
+                unjudgeable.add(ecosystem);
             }
+        });
+        if (result.truncated()) {
+            throw new IOException("the " + root + "/ ecosystem index did not enumerate whole ("
+                    + result.delivered() + " delivered); refusing to answer, because a short ecosystem list reads "
+                    + "as 'every root is accounted for' and lets a collection reclaim what it cannot see");
         }
         if (!unjudgeable.isEmpty()) {
             return Known.uninstalled("garbage collection is skipped: no installed format can place the ecosystem(s) "
@@ -1065,8 +1057,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * Recompute the rollup accumulator from the live published set and store it - the one-time O(#versions) fold the
      * lazy {@link #identity} read runs on an absent accumulator, and the authoritative recompute {@link #reconcile}
      * runs to heal any incremental drift. Reads each version's publish facts and its declared-license section in one
-     * document read (the {@code published/} and {@code licenses/} sidecars when no consolidated store is installed),
-     * never an artifact blob.
+     * document read, never an artifact blob.
      *
      * <p>Publishes keep landing while the walk runs, and each member is folded exactly once: the rebuild
      * {@linkplain InventoryIdentity#begin stamps} the rollup with a boundary instant, the walk folds every member
@@ -1279,27 +1270,13 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return List.copyOf(layouts);
     }
 
-    /** The three per-version sidecar roots this class composes every key of, and the only place their spelling is
-     *  written. The reconcile sweep that reaps them and the manifest that declares {@code downloaded/} name
-     *  these constants rather than re-spelling the literals - which is what {@code overrides/} was given and
-     *  what these three still lacked: a reaper composing its own spelling reaps a key no writer wrote. */
-    static final String PUBLISHED = "published";
-
-    static final String DOWNLOADED = "downloaded";
-
+    /** The pin index's root: one marker per pinned version, so the pins are enumerated from this small namespace
+     *  rather than by reading a flag out of every document. This class composes every key of it and is the only place
+     *  its spelling is written; the reconcile sweep that reaps a stale marker and the manifest that declares the root
+     *  name this constant, because a reaper composing its own spelling reaps a key no writer wrote. */
     static final String PINNED = "pinned";
 
-    /** Package-private so the extracted subsystems rebuild/read a sidecar under the identical key the core writes. */
-    static String publishedKey(String ecosystem, String coordinate, String version) {
-        return PUBLISHED + "/" + ArtifactStore.segment(ecosystem) + "/" + encode(coordinate)
-                + "/" + ArtifactStore.segment(version);
-    }
-
-    static String downloadedKey(String ecosystem, String coordinate, String version) {
-        return DOWNLOADED + "/" + ArtifactStore.segment(ecosystem) + "/" + encode(coordinate)
-                + "/" + ArtifactStore.segment(version);
-    }
-
+    /** Package-private so the extracted subsystems read and write a marker under the identical key. */
     static String pinnedKey(String ecosystem, String coordinate, String version) {
         return PINNED + "/" + ArtifactStore.segment(ecosystem) + "/" + encode(coordinate)
                 + "/" + ArtifactStore.segment(version);

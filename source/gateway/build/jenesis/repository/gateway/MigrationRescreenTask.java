@@ -65,9 +65,7 @@ import build.jenesis.repository.store.Publication;
  * cheap to re-run: every already-verdicted artifact is skipped by the digest-pinned check, so a second pass re-screens
  * nothing. A crash mid-sweep re-converges: the artifacts screened before the crash keep their recorded verdicts and are
  * skipped on the next pass, which screens only the rest. It runs on startup/activation (the scheduler resolves it when
- * {@code harden-rescreen} is enabled) and can be re-triggered on demand. With no consolidated metadata module installed
- * the leg records no verdict and reuses none, so the sweep degrades to re-screening every cached artifact each pass
- * (always safe, never a silently-incomplete view) - exactly the /graceful-absence behaviour.
+ * {@code harden-rescreen} is enabled) and can be re-triggered on demand.
  *
  * <p><b>Gated to {@code harden} repos.</b> A repository whose definition carries no {@code harden} upstream fallback is
  * skipped: a repository with no fallbacks, a grouped view, a plain caching proxy and a {@code nocache} pass-through all
@@ -140,9 +138,7 @@ public final class MigrationRescreenTask implements MaintenanceTask {
 
     /** As {@link #MigrationRescreenTask(Duration, Function, int, HardenedScreen.Bounds, CachedArtifactSource)},
      *  with an explicit per-repository {@code metadata} resolver (a repository's store to its digest-pinned verdict
-     *  store, {@code null}-yielding when no persistence module is installed) - the seam a test injects an in-test
-     *  {@code MetadataStore} through, since putting the persistence module on the gateway test path would flip the
-     *  sibling tests off their sidecar path. */
+     *  store) - the seam a test injects an in-test {@code MetadataStore} through. */
     public MigrationRescreenTask(Duration interval, Function<GatePolicyProvider.Path, ComplianceGate> gates,
                                  int holdDays, HardenedScreen.Bounds bounds, CachedArtifactSource source,
                                  Function<ArtifactStore, MetadataStore> metadata) {
@@ -155,10 +151,9 @@ public final class MigrationRescreenTask implements MaintenanceTask {
     }
 
     /** The production per-repository metadata resolver: the discovered consolidated metadata store over the
-     *  repository's own store, or {@code null} when no {@link MetadataProvider} is installed (the leg then records no
-     *  verdict and reuses none - the graceful-absence path). */
+     *  repository's own store. */
     public static Function<ArtifactStore, MetadataStore> discoveredMetadata() {
-        return store -> MetadataProvider.installed().map(provider -> provider.over(store)).orElse(null);
+        return store -> MetadataProvider.installed().over(store);
     }
 
     @Override
@@ -260,13 +255,10 @@ public final class MigrationRescreenTask implements MaintenanceTask {
     }
 
     /** Whether a current digest-pinned {@code ALLOW} verdict already pins exactly the cached bytes - the lookup
-     *  that decides an artifact needs no screening. A missing metadata store, an absent verdict, a verdict over
-     *  different bytes, or a withholding/refusal all read as "needs screening" (fail-closed), so the sweep re-screens
+     *  that decides an artifact needs no screening. An absent verdict, a verdict over different bytes, or a
+     *  withholding/refusal all read as "needs screening" (fail-closed), so the sweep re-screens
      *  rather than trusting an unverified or stale cache. A read failure re-screens too. */
     private static boolean currentlyVerdicted(MetadataStore metadata, Cached cached) {
-        if (metadata == null) {
-            return false;
-        }
         HardenedScreen.Coordinate coordinate = HardenedScreen.coordinate(cached.path());
         try {
             // The completeness test applies here too, and this is the surface an operator reaches for after

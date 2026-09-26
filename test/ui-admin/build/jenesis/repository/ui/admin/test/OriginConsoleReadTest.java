@@ -60,7 +60,7 @@ public class OriginConsoleReadTest {
         // The coordinate the maven layout describes for the path - the key the origin section is written under, aligned
         // with what browse.origin resolves it to.
         RepositoryBrowse.ArtifactDetail detail = browse.artifact("central", PATH);
-        MetadataStore metadata = MetadataProvider.installed().orElseThrow().over(repo);
+        MetadataStore metadata = MetadataProvider.installed().over(repo);
         metadata.mutate(detail.ecosystem(), detail.coordinate(), detail.version(), OriginSection.TAG,
                 OriginSection.recordUpload("upload-sha", Instant.parse("2026-06-01T00:00:00Z")));
         metadata.mutate(detail.ecosystem(), detail.coordinate(), detail.version(), OriginSection.TAG,

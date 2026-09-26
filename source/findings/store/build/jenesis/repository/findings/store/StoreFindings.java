@@ -1,8 +1,6 @@
 package build.jenesis.repository.findings.store;
 
 import module java.base;
-import module tools.jackson.databind;
-import module org.slf4j;
 import build.jenesis.repository.events.EventSink;
 import build.jenesis.repository.events.RepositoryEvent;
 import build.jenesis.repository.findings.Finding;
@@ -13,19 +11,17 @@ import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.walk.BoundedChildren;
 
 /**
- * The findings ledger over one repository's scoped store, consolidated into the {@code findings} section of
- * the unified per-coordinate metadata document ({@link MetadataKey#version}) that replaces the standalone
- * {@code findings/} sidecar. Each coordinate version's findings are one tagged section of its document - a version's
- * whole record is still a point lookup, the repository-wide view still walks a name tree (now {@code meta/}, never an
- * artifact body), and an eviction reclaims the version with a single document delete. Every mutation re-reads, merges
- * only the {@code findings} section and commits through the store's section-scoped compare-and-set, carrying every
- * other section verbatim, so the sweep, the gate and an on-demand report writing the same coordinate converge on the
- * union of their rows instead of losing an update - and a licenses or publish writer on the same document never
- * collides beyond the CAS token.
+ * The findings ledger over one repository's scoped store: the {@code findings} section of the unified per-coordinate
+ * metadata document ({@link MetadataKey#version}). Each coordinate version's findings are one tagged section of its
+ * document - a version's whole record is still a point lookup, the repository-wide view still walks a name tree (now
+ * {@code meta/}, never an artifact body), and an eviction reclaims the version with a single document delete. Every
+ * mutation re-reads, merges only the {@code findings} section and commits through the store's section-scoped
+ * compare-and-set, carrying every other section verbatim, so the sweep, the gate and an on-demand report writing the
+ * same coordinate converge on the union of their rows instead of losing an update - and a licenses or publish writer
+ * on the same document never collides beyond the CAS token.
  *
  * <p>Categorize-never-discard is unchanged: {@link #record} only appends or refreshes (keeping an existing row's
  * {@code firstSeen}, labels and supersession mark), {@link #supersede} marks a row rather than deleting it, and nothing
@@ -37,37 +33,24 @@ import build.jenesis.repository.walk.BoundedChildren;
  * <p><strong>Batched commit (§4a).</strong> {@link #commit} folds a whole batch of rows and labels into <em>one</em>
  * section mutate, so a scan pass's advisory rows or an AI sweep's per-finding labels cost one compare-and-set for the
  * coordinate version, not one per row.
- *
- * <p><strong>One layout at a time.</strong> With the consolidated metadata store installed, both the point read and
- * the repository-wide walk are the {@code meta} documents' findings sections and nothing else. With no store installed
- * at all, both reads and writes stay on the {@code findings/} sidecar, so a deployment without {@code metadata.store}
- * degrades gracefully rather than losing its findings. What is deliberately absent is a fall-through between the two:
- * a document with no findings section means <em>nothing recorded</em>, and a walk that unioned the two planes would
- * have to dedup them.
  */
 public final class StoreFindings implements Findings {
-
-    private static final JsonMapper JSON = JsonMapper.builder().build();
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(StoreFindings.class);
 
 
     private final ArtifactStore store;
 
-    /** The consolidated metadata store this repository's document lives in, or {@code null} when no
-     *  {@link MetadataProvider} is installed (the graceful-absence path stays on the {@code findings/} sidecar). */
+    /** The consolidated metadata store this repository's document lives in. */
     private final MetadataStore metadata;
 
     public StoreFindings(ArtifactStore store) {
-        this(store, MetadataProvider.installed().map(provider -> provider.over(store)).orElse(null));
+        this(store, MetadataProvider.installed().over(store));
     }
 
-    /** Bind the ledger to an explicit metadata store (or {@code null} for the graceful-absence sidecar path) rather
-     *  than the discovered one - the seam a distribution wires directly, and a test uses to exercise one path
-     *  deterministically. */
+    /** Bind the ledger to an explicit metadata store rather than the discovered one - the seam a distribution wires
+     *  directly, and a test uses to hold one store in hand. */
     public StoreFindings(ArtifactStore store, MetadataStore metadata) {
         this.store = store;
-        this.metadata = metadata;
+        this.metadata = Objects.requireNonNull(metadata, "metadata");
     }
 
     @Override
@@ -136,15 +119,11 @@ public final class StoreFindings implements Findings {
 
     @Override
     public List<Finding> of(String ecosystem, String coordinate, String version) throws IOException {
-        if (metadata != null) {
-            // The section is the whole answer: an absent one means nothing has been recorded for this version here,
-            // not that its rows live under an older key.
-            return metadata.read(ecosystem, coordinate, version)
-                    .filter(document -> document.has(FindingsSection.TAG))
-                    .map(document -> FindingsSection.rows(document.section(FindingsSection.TAG)))
-                    .orElseGet(List::of);
-        }
-        return sidecarRows(ecosystem, coordinate, version);
+        // The section is the whole answer: an absent one means nothing has been recorded for this version.
+        return metadata.read(ecosystem, coordinate, version)
+                .filter(document -> document.has(FindingsSection.TAG))
+                .map(document -> FindingsSection.rows(document.section(FindingsSection.TAG)))
+                .orElseGet(List::of);
     }
 
     @Override
@@ -206,16 +185,11 @@ public final class StoreFindings implements Findings {
         new FindingsFilterIndex(store).rebuild(this, scanStamp + ' ' + Findings.evictions(store).current());
     }
 
-    /** Apply a row transform through the {@code findings} section (the consolidated store) or, in graceful absence,
-     *  the {@code findings/} sidecar - one compare-and-set either way. */
+    /** Apply a row transform through the {@code findings} section - one compare-and-set. */
     private void apply(String ecosystem, String coordinate, String version,
                        UnaryOperator<List<Finding>> rowTransform) throws IOException {
-        if (metadata != null) {
-            metadata.mutate(ecosystem, coordinate, version, FindingsSection.TAG,
-                    FindingsSection.transform(rowTransform, Instant.now()));
-        } else {
-            sidecarMutate(ecosystem, coordinate, version, rowTransform);
-        }
+        metadata.mutate(ecosystem, coordinate, version, FindingsSection.TAG,
+                FindingsSection.transform(rowTransform, Instant.now()));
     }
 
     /** Label-or-throw against a mutable row list, matching {@link #label}'s contract inside a batch: a classifier's
@@ -248,10 +222,9 @@ public final class StoreFindings implements Findings {
     }
 
     /**
-     * Walk for the findings a filter matches, collecting at most {@code cap} of them. With the consolidated store
-     * installed the walk is the {@code meta} documents' findings sections; with no store installed it is the plain
-     * sidecar walk. A coordinate-scoped filter is a direct key-prefix lookup under each tree (the canonical key codec
-     * is shared, so one push-down serves both), an ecosystem-scoped filter narrows to that ecosystem's subtree.
+     * Walk for the findings a filter matches, collecting at most {@code cap} of them: the {@code meta} documents'
+     * findings sections. A coordinate-scoped filter is a direct key-prefix lookup, an ecosystem-scoped filter narrows
+     * to that ecosystem's subtree.
      */
     private Collected collect(Filter filter, int cap, int examinedCap) throws IOException {
         List<Located> located = new ArrayList<>();
@@ -292,29 +265,19 @@ public final class StoreFindings implements Findings {
 
     /** The shared walk behind {@link #collect} and {@link #all(Filter, Visitor)}: each match is offered to
      *  {@code sink}, which returns true to stop the walk early (the bounded collect) or false to continue (the
-     *  streaming visitor). One layout is walked, never a union of two - the document sections when a consolidated
-     *  store is installed, the {@code findings/} sidecars when none is. */
+     *  streaming visitor). */
     private void walk(Filter filter, LocatedSink sink) throws IOException {
-        // One layout or the other, each naming its own root at every level. The two branches are kept apart rather
-        // than folded behind a `root` variable so the roots this ledger reads stay legible to the storage-namespace
-        // census, which resolves a key only where it is spelled at the call site (the manifest's ratchet went
-        // blind to `meta`/`findings` the moment the listing became a helper call through a parameter).
+        // The root is spelled at every level rather than passed through a variable, so the roots this ledger reads
+        // stay legible to the storage-namespace census, which resolves a key only where it is spelled at the call site.
         try {
-            if (metadata != null) {
-                eachEcosystem(filter, MetadataKey.PREFIX, ecosystem ->
-                        eachCoordinate(filter, ecosystem, MetadataKey.PREFIX, encoded ->
-                                LEDGER.scan(store, MetadataKey.PREFIX + "/" + ecosystem + "/" + encoded, version -> {
-                                    if (version.equals(MetadataKey.COORDINATE)) {
-                                        return;                  // the per-coordinate document, not a version's
-                                    }
-                                    emit(filter, sink, ecosystem, encoded, version);
-                                })));
-                return;
-            }
-            eachEcosystem(filter, Findings.PREFIX, ecosystem ->
-                    eachCoordinate(filter, ecosystem, Findings.PREFIX, encoded ->
-                            LEDGER.scan(store, Findings.PREFIX + "/" + ecosystem + "/" + encoded, version ->
-                                    emit(filter, sink, ecosystem, encoded, version))));
+            eachEcosystem(filter, MetadataKey.PREFIX, ecosystem ->
+                    eachCoordinate(filter, ecosystem, MetadataKey.PREFIX, encoded ->
+                            LEDGER.scan(store, MetadataKey.PREFIX + "/" + ecosystem + "/" + encoded, version -> {
+                                if (version.equals(MetadataKey.COORDINATE)) {
+                                    return;                      // the per-coordinate document, not a version's
+                                }
+                                emit(filter, sink, ecosystem, encoded, version);
+                            })));
         } catch (Stop _) {
             // the sink asked to stop; the enumeration is abandoned without draining another container
         }
@@ -334,11 +297,8 @@ public final class StoreFindings implements Findings {
         }
     }
 
-    /** The rows recorded for one coordinate version, from whichever layout this ledger reads. */
+    /** The rows recorded for one coordinate version. */
     private List<Finding> rows(String ecosystem, String coordinate, String version) throws IOException {
-        if (metadata == null) {
-            return sidecarRows(ecosystem, coordinate, version);
-        }
         Optional<Section> section = metadata.section(ecosystem, coordinate, version, FindingsSection.TAG);
         return section.isEmpty() ? List.of() : FindingsSection.rows(section);
     }
@@ -419,36 +379,6 @@ public final class StoreFindings implements Findings {
         }
         for (String candidate : candidates) {
             names.accept(candidate);
-        }
-    }
-
-    /** The rows of one coordinate version's {@code findings/} sidecar - the graceful-absence read; empty when the
-     *  sidecar was never written. */
-    private List<Finding> sidecarRows(String ecosystem, String coordinate, String version) throws IOException {
-        return store.readVersioned(Findings.key(ecosystem, coordinate, version))
-                .map(versioned -> FindingsSection.parse(readTree(versioned.content())).recognised())
-                .orElse(List.of());
-    }
-
-    /** Re-read, transform and compare-and-set a coordinate version's {@code findings/} sidecar, retrying a concurrent
-     *  writer's conflict a bounded number of times - the graceful-absence path when no consolidated store is present. */
-    private void sidecarMutate(String ecosystem, String coordinate, String version,
-                               UnaryOperator<List<Finding>> mutation) throws IOException {
-        Retries.update(store, Findings.key(ecosystem, coordinate, version), current -> {
-            FindingsSection.Document document = current
-                    .map(versioned -> FindingsSection.parse(readTree(versioned.content())))
-                    .orElseGet(FindingsSection.Document::empty);
-            List<Finding> rows = mutation.apply(new ArrayList<>(document.recognised()));
-            return JSON.writeValueAsBytes(FindingsSection.serialize(rows, document.carried()));
-        });
-    }
-
-    private static JsonNode readTree(byte[] content) {
-        try {
-            return JSON.readTree(content);
-        } catch (RuntimeException e) {
-            LOGGER.warn("Skipping an unreadable findings document", e);
-            return JSON.createObjectNode();
         }
     }
 }

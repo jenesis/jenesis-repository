@@ -217,7 +217,7 @@ final class HoldReleaseContract {
 
         isTrue(!release.records(store, path), fixture,
                 "a discard drops the record, so a thrown-away version's holds/ row does not dangle forever - a "
-                        + "discarded version has no published sidecar, so no eviction or reconcile sweep would ever "
+                        + "discarded version has no published record, so no eviction or reconcile sweep would ever "
                         + "reach it");
         equal(release.override(store, path), Optional.empty(), fixture,
                 "and promotes NO override: no human cleared the finding, so nothing may stop a future sweep from "

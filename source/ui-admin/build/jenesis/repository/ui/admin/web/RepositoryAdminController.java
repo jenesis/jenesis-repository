@@ -499,7 +499,7 @@ public class RepositoryAdminController {
         model.addAttribute("servedPath", repositories.servedPath(repo, detail.path()));
         // The origin acquisition rows (read from the OriginSection): where this deployment's bytes came
         // from - uploaded vs via which fallback, stored/passed-through, screening, serves. A neutral display the gate
-        // does not consume; empty when the coordinate carries no recorded origin (or no metadata module is installed).
+        // does not consume; empty when the coordinate carries no recorded origin.
         model.addAttribute("origin", browse.origin(repo, detail.path()));
         downloads(model);
         // The browse folder the "back to folder" link returns to, computed here (not in the view): parent() guards a

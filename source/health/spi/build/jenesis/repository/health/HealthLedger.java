@@ -210,20 +210,6 @@ public interface HealthLedger extends HealthSource {
     }
 
     /**
-     * The stable store key of a coordinate's health record, fixed by this contract so the artifact's lifecycle owner
-     * (the inventory's {@code evict}) reclaims it without reaching into the persistence module. Version-independent -
-     * health is a property of the project, not a release - so the key carries only ecosystem and coordinate: the
-     * {@code ecosystem} is validated as a single traversal-free segment through {@link ArtifactStore#segment} and the
-     * {@code coordinate} is URL-encoded into one segment, the same scheme the {@code findings/} and {@code published/}
-     * sidecars use, so a {@code ..}-laced ecosystem or coordinate fed by a caller can never aim a read or write at a
-     * neighbouring key-space inside the repository scope.
-     */
-    static String key(String ecosystem, String coordinate) {
-        return PREFIX + "/" + ArtifactStore.segment(ecosystem) + "/"
-                + URLEncoder.encode(coordinate, StandardCharsets.UTF_8);
-    }
-
-    /**
      * The instant the repository's maintainer health was last refreshed against the live health source - by the
      * scheduled health sweep or an operator's explicit rescan - so every view can show how fresh its rendered ledger is.
      * Last-writer-wins: the newest completed refresh is the panel's honest freshness, whoever drove it. Absent means the
@@ -238,8 +224,7 @@ public interface HealthLedger extends HealthSource {
      * rank index rebuilds on its next pass instead of no-opping on an unmoved {@link #scanned} stamp. Bumped by the
      * artifact-lifecycle owner (the inventory's {@code evict}, on the last-version eviction that reclaims the
      * coordinate's health) <em>after</em> the record is removed, so a rebuild that observes the new epoch also observes
-     * the removal; module-independent, so the lifecycle owner marks the change whether or not the persistence module is
-     * installed - exactly as it deletes the record by {@link #key} without reaching into the module.
+     * the removal. The lifecycle owner marks it through this key without reaching into the health module.
      */
     static Epoch evictions(ArtifactStore store) {
         return new Epoch(store, EVICTED);

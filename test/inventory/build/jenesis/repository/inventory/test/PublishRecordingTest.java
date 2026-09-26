@@ -61,7 +61,7 @@ class PublishRecordingTest {
         String document = MetadataKey.version(ECO, COORD, "1.0");
         assertThat(written.stream().filter(document::equals).count())
                 .as("the version's document is written once, whatever the recording carries").isEqualTo(1);
-        MetadataStore metadata = MetadataProvider.installed().orElseThrow().over(store);
+        MetadataStore metadata = MetadataProvider.installed().over(store);
         assertThat(inventory.publishedAt(ECO, COORD, "1.0")).as("published").contains(PUBLISHED);
         assertThat(metadata.section(ECO, COORD, "1.0", OriginSection.TAG)).as("the origin row").isPresent();
         assertThat(new LicenseInventory(store).read(ECO, COORD, "1.0")).as("the licences").contains(APACHE);

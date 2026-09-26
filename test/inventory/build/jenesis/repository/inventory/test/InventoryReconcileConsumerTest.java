@@ -45,8 +45,8 @@ class InventoryReconcileConsumerTest {
         link("half-evicted", "1.0.0");
         inventory().record(InventoryTestFormat.path("half-evicted", "1.0.0"), NOW);
         store.delete("publish" + InventoryTestFormat.path("half-evicted", "1.0.0"));   // reverse: an orphan section
-        store.write("downloaded/" + ECO + "/ghost/1.0.0",                     // derived: a legacy marker of nothing published
-                new ByteArrayInputStream(NOW.toString().getBytes(StandardCharsets.UTF_8)));
+        String marker = "pinned/" + ECO + "/ghost/1.0.0";                   // derived: a pin of nothing published
+        store.writeVersioned(marker, new byte[0], null);
         InventoryReconcileConsumer consumer = new InventoryReconcileConsumer();
         assertThat(consumer.families()).containsExactlyInAnyOrder(
                 InventoryReconcileConsumer.Family.POINTERS, InventoryReconcileConsumer.Family.INVENTORY,
@@ -59,7 +59,7 @@ class InventoryReconcileConsumerTest {
                 .extracting(StoreRepositoryInventory.Coordinate::coordinate)
                 .as("the served pointer's facts are restored; the orphan section is gone")
                 .containsExactly("half-published");
-        assertThat(inventory().lastDownloaded(ECO, "ghost", "1.0.0")).as("the orphan marker is swept").isEmpty();
+        assertThat(store.readVersioned(marker)).as("the orphan marker is swept").isEmpty();
         assertThat(RebuildPass.failed(store)).isEmpty();
     }
 

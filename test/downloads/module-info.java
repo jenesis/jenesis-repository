@@ -25,6 +25,7 @@
 open module build.jenesis.repository.downloads.test {
     requires build.jenesis.repository.downloads;
     requires build.jenesis.repository.inventory;
+    requires build.jenesis.repository.metadata.store;
     requires build.jenesis.repository.server.spi;   // drain() and dropped() are declared on BatchingWorker
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.store;

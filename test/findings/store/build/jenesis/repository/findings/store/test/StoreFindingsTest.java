@@ -222,12 +222,11 @@ class StoreFindingsTest {
     }
 
     @Test
-    void the_provider_is_discovered_and_the_key_is_traversal_safe() throws IOException {
+    void the_provider_is_discovered_and_a_path_like_coordinate_round_trips() throws IOException {
         assertThat(FindingsProvider.installed()).as("ServiceLoader discovers the store module").isPresent();
         // A coordinate with path-like characters (a Go module path) encodes into one traversal-free segment.
         findings.record("Go", "github.com/acme/lib", "v1.0.0", Finding.of(
                 "GO-1", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.LOW, "words", FIRST));
-        assertThat(Findings.key("Go", "github.com/acme/lib", "v1.0.0")).doesNotContain("acme/lib");
         assertThat(FindingsProvider.installed().orElseThrow().over(store)
                 .of("Go", "github.com/acme/lib", "v1.0.0")).hasSize(1);
         assertThat(findings.all(Findings.Filter.none())).singleElement()
@@ -236,108 +235,15 @@ class StoreFindingsTest {
 
     @Test
     void a_traversal_laced_ecosystem_or_version_is_rejected() {
-        // ecosystem escapes findings/ into a sibling key-space; version moves within it - both are guarded through
-        // ArtifactStore.segment, the same guard the inventory's published/pinned sidecar keys carry.
-        assertThatThrownBy(() -> Findings.key("../auth", "org.acme:lib", "1.0"))
+        // An ecosystem that would escape into a sibling key-space, or a version that would move within it, is refused
+        // by the document's key codec before anything is read or written.
+        assertThatThrownBy(() -> findings.of("../auth", "org.acme:lib", "1.0"))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> Findings.key("Maven", "org.acme:lib", ".."))
+        assertThatThrownBy(() -> findings.of("Maven", "org.acme:lib", ".."))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> Findings.key("Maven/..", "org.acme:lib", "1.0"))
+        assertThatThrownBy(() -> findings.of("Maven/..", "org.acme:lib", "1.0"))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> Findings.key("Maven", "org.acme:lib", "1.0/.."))
+        assertThatThrownBy(() -> findings.of("Maven", "org.acme:lib", "1.0/.."))
                 .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void a_garbled_or_forward_incompatible_row_is_skipped_not_thrown() throws IOException {
-        // Driven over the sidecar layout (no metadata store installed), because that is the layout whose whole stored
-        // object a foreign write can garble; the row codec it exercises is the one the document's findings section
-        // shares. A null metadata store pins that path where the module otherwise installs a provider.
-        StoreFindings findings = new StoreFindings(store, null);
-        findings.record("Maven", "org.acme:lib", "1.0", Finding.of(
-                "CVE-1", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "good", FIRST));
-        // A whole document that is not JSON (a foreign object placed under findings/, a torn write): of() reads it as
-        // no rows and the repository-wide walk skips it, rather than 500-ing the whole tenant's ledger.
-        store.writeVersioned(Findings.key("npm", "left-pad", "1.0.0"),
-                "this is not json at all".getBytes(StandardCharsets.UTF_8), null);
-        // A single row carrying a Finding.Kind a newer node wrote that this one does not know: the row drops, its
-        // valid sibling in the same document survives (forward compatibility the SPI promises).
-        String mixed = "{\"findings\":["
-                + "{\"id\":\"OK-1\",\"source\":\"osv\",\"kind\":\"VULNERABILITY\",\"category\":\"advisory\","
-                + "\"severity\":\"HIGH\",\"confidence\":1.0,\"description\":\"kept\",\"references\":[],"
-                + "\"provenance\":\"\",\"attributes\":{},\"firstSeen\":\"2026-07-01T00:00:00Z\","
-                + "\"lastSeen\":\"2026-07-01T00:00:00Z\",\"labels\":[]},"
-                + "{\"id\":\"BAD-1\",\"source\":\"osv\",\"kind\":\"FROM_THE_FUTURE\",\"category\":\"advisory\","
-                + "\"severity\":\"HIGH\",\"confidence\":1.0,\"description\":\"unknown kind\",\"references\":[],"
-                + "\"provenance\":\"\",\"attributes\":{},\"firstSeen\":\"2026-07-01T00:00:00Z\","
-                + "\"lastSeen\":\"2026-07-01T00:00:00Z\",\"labels\":[]}]}";
-        store.writeVersioned(Findings.key("Maven", "org.acme:mixed", "2.0"),
-                mixed.getBytes(StandardCharsets.UTF_8), null);
-
-        assertThat(findings.of("npm", "left-pad", "1.0.0")).as("a non-JSON document reads as no rows").isEmpty();
-        assertThat(findings.of("Maven", "org.acme:mixed", "2.0"))
-                .as("the good row survives its garbled sibling").singleElement()
-                .satisfies(finding -> assertThat(finding.id()).isEqualTo("OK-1"));
-        assertThat(findings.all(Findings.Filter.none()))
-                .as("the walk never throws on one bad document, returning every good row")
-                .extracting(located -> located.finding().id()).containsExactlyInAnyOrder("CVE-1", "OK-1");
-    }
-
-    @Test
-    void a_mutate_carries_a_newer_nodes_unrecognised_row_and_its_labels_through_untouched() throws IOException {
-        // A rolling upgrade: a newer node wrote a coordinate holding a row this (older) node fully understands beside
-        // a row it does not - a Finding.Kind and Severity newer than this node's enums, carrying its own waiver and
-        // review labels. The document is written straight to the store as the newer node left it.
-        String key = Findings.key("Maven", "org.acme:lib", "1.0");
-        String document = "{\"findings\":["
-                + "{\"id\":\"CVE-OLD\",\"source\":\"osv\",\"kind\":\"VULNERABILITY\",\"category\":\"advisory\","
-                + "\"severity\":\"MEDIUM\",\"confidence\":1.0,\"description\":\"known here\",\"references\":[],"
-                + "\"provenance\":\"scan\",\"attributes\":{},\"firstSeen\":\"2026-07-01T00:00:00Z\","
-                + "\"lastSeen\":\"2026-07-01T00:00:00Z\",\"labels\":[]},"
-                + "{\"id\":\"SBOM-TAMPER-1\",\"source\":\"provenance-engine\",\"kind\":\"SUPPLY_CHAIN_INTEGRITY\","
-                + "\"category\":\"attestation\",\"severity\":\"CATACLYSMIC\",\"confidence\":0.95,"
-                + "\"description\":\"unsigned rebuild from the future\",\"references\":[\"https://slsa.dev/x\"],"
-                + "\"provenance\":\"newer-node\",\"attributes\":{\"builder\":\"ghost\"},"
-                + "\"firstSeen\":\"2026-07-10T00:00:00Z\",\"lastSeen\":\"2026-07-11T00:00:00Z\","
-                + "\"supersededBy\":null,\"labels\":["
-                + "{\"source\":\"waiver\",\"name\":\"approved\",\"value\":\"approved-by-secops\",\"confidence\":1.0,"
-                + "\"when\":\"2026-07-12T00:00:00Z\"},"
-                + "{\"source\":\"review\",\"name\":\"triage\",\"value\":\"accepted-risk\",\"confidence\":0.8,"
-                + "\"when\":\"2026-07-12T09:30:00Z\"}]}]}";
-        store.writeVersioned(key, document.getBytes(StandardCharsets.UTF_8), null);
-
-        // This node - which knows neither the SUPPLY_CHAIN_INTEGRITY kind nor the CATACLYSMIC severity - mutates the
-        // one row it recognises (a re-record refresh) and appends a brand-new row of its own. The read->mutate->CAS
-        // cycle must not drop the row it could not parse.
-        findings.record("Maven", "org.acme:lib", "1.0", Finding.of(
-                "CVE-OLD", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "rescored here", LATER));
-        findings.record("Maven", "org.acme:lib", "1.0", Finding.of(
-                "CVE-NEW", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.LOW, "found here", LATER));
-
-        // Reads surface only the rows this node understands: its refreshed row and its new row, never the future one.
-        assertThat(findings.of("Maven", "org.acme:lib", "1.0"))
-                .as("a reader never sees a kind/severity it cannot parse")
-                .extracting(Finding::id).containsExactly("CVE-OLD", "CVE-NEW");
-        assertThat(findings.of("Maven", "org.acme:lib", "1.0"))
-                .filteredOn(finding -> finding.id().equals("CVE-OLD")).singleElement()
-                .satisfies(finding -> {
-                    assertThat(finding.severity()).as("the recognised row's mutation landed").isEqualTo(Severity.HIGH);
-                    assertThat(finding.description()).isEqualTo("rescored here");
-                });
-
-        // The unrecognised row and every one of its labels survived the older node's write verbatim - a downgrade
-        // over a rolling upgrade is lossless, so the node that understands them will read them back whole.
-        String persisted = new String(
-                store.readVersioned(key).orElseThrow().content(), StandardCharsets.UTF_8);
-        assertThat(persisted).as("the future row and its facts round-trip untouched")
-                .contains("SBOM-TAMPER-1")
-                .contains("SUPPLY_CHAIN_INTEGRITY")
-                .contains("CATACLYSMIC")
-                .contains("unsigned rebuild from the future")
-                .contains("\"builder\":\"ghost\"");
-        assertThat(persisted).as("the waiver and review labels on the future row survive verbatim")
-                .contains("approved-by-secops")
-                .contains("accepted-risk")
-                .contains("2026-07-12T09:30:00Z");
     }
 }

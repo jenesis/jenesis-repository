@@ -18,6 +18,7 @@ open module build.jenesis.repository.gate.test {
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.inventory;
+    requires build.jenesis.repository.metadata.store;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;

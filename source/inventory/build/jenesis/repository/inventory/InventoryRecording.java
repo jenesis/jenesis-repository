@@ -21,13 +21,12 @@ import build.jenesis.repository.metadata.SectionMutation;
  * that records when a coordinate version was published (the timestamp retention orders and ages by, plus the
  * format-supplied prerelease flag), its provenance summary, and its last-download marker, and answers the point reads
  * those facts back ({@link #publishedAt}, {@link #lastDownloaded}, {@link #publishedFacts}, {@link #membership}). The
- * publish facts land in the consolidated metadata document's {@code published} section when a {@link MetadataStore} is
- * installed (its presence is membership of the published set); with no metadata store installed the {@code published/}
- * sidecar is the source of truth instead. One layout or the other, never a fall-through. Each first
- * publish folds the coordinate's member into the {@link InventoryIdentity} rollup so a whole-repository export's ETag
- * revalidates. The facade owns the seam - the {@code record}/{@code recordProvenance}/{@code recordDownload}/
- * {@code publishedAt}/{@code lastDownloaded} methods delegate here - and this class shares the facade's compare-and-set
- * {@code writeVersioned} and its store-key/codec helpers rather than duplicating them.
+ * publish facts land in the consolidated metadata document's {@code published} section (its presence is membership
+ * of the published set). Each first publish folds the coordinate's member into the {@link InventoryIdentity} rollup so
+ * a whole-repository export's ETag revalidates. The facade owns the seam - the {@code record}/{@code
+ * recordProvenance}/{@code recordDownload}/ {@code publishedAt}/{@code lastDownloaded} methods delegate here - and this
+ * class shares the facade's compare-and-set {@code writeVersioned} and its store-key/codec helpers rather than
+ * duplicating them.
  */
 final class InventoryRecording {
 
@@ -117,20 +116,9 @@ final class InventoryRecording {
      * the identity index: on a first publish the member joins with the fingerprint of the licences the document now
      * records, and on a re-publish whose union changed the recorded set the member is re-folded from the old set to
      * the new, exactly as the separate licence write used to do after its own commit. The recent-releases feed sees
-     * a first publish only, as before. On the sidecar plane - no metadata module installed - the published key and
-     * the licence sidecar are two keys anyway and the plane keeps no provenance, so the recording lands through the
-     * per-fact faces there.
+     * a first publish only, as before.
      */
     void commit(Recording recording) throws IOException {
-        if (metadata == null) {
-            record(recording.ecosystem, recording.coordinate, recording.version, recording.prerelease,
-                    recording.published, recording.originSha256);
-            if (recording.licenses != null) {
-                new LicenseInventory(store).record(recording.ecosystem, recording.coordinate, recording.version,
-                        recording.licenses);
-            }
-            return;
-        }
         Instant now = Clocks.now();
         String documentKey = MetadataKey.version(recording.ecosystem, recording.coordinate, recording.version);
         Committed committed = DocumentTurns.take(store, documentKey,
@@ -214,29 +202,11 @@ final class InventoryRecording {
      *  the {@code published} section - one CAS, no extra round-trip. A {@code null} sha records no origin. */
     void record(String ecosystem, String coordinate, String version, boolean prerelease, Instant published,
                 String originSha256) throws IOException {
-        boolean firstPublish;
-        if (metadata != null) {
-            // The publish facts land in the document's published section (its presence is membership of the
-            // published set). Edge-triggered on the absent -> present transition, followed by the rollup fold-in on
-            // a first publish. On a hand upload the local-upload origin row rides that SAME doc mutate.
-            firstPublish = recordPublishedSection(ecosystem, coordinate, version, prerelease, published, originSha256);
-            if (!firstPublish) {
-                return;
-            }
-        } else {
-            String key = StoreRepositoryInventory.publishedKey(ecosystem, coordinate, version);
-            firstPublish = store.readVersioned(key).isEmpty();
-            inventory.writeVersioned(key, (published.toString() + " " + prerelease).getBytes(StandardCharsets.UTF_8));
-            if (!firstPublish) {
-                return;
-            }
-            // The absent -> present transition folds the coordinate's member into the rollup identity so the
-            // whole-repository SBOM / NOTICE ETag revalidates. The member's license contribution is the canonical
-            // fingerprint of the declared SET read through LicenseInventory, so an incremental fold and a full rebuild
-            // agree whether or not the version has been migrated. (The document path folds after its own commit.)
-            Optional<byte[]> licenses = LicenseSection.fingerprintOf(
-                    new LicenseInventory(store).read(ecosystem, coordinate, version));
-            identity.foldIn(InventoryIdentity.member(ecosystem, coordinate, version, licenses), published);
+        // The publish facts land in the document's published section (its presence is membership of the published
+        // set). Edge-triggered on the absent -> present transition, followed by the rollup fold-in on a first publish.
+        // On a hand upload the local-upload origin row rides that SAME doc mutate.
+        if (!recordPublishedSection(ecosystem, coordinate, version, prerelease, published, originSha256)) {
+            return;
         }
         RecentReleases.record(store, ecosystem, coordinate, version, published);
     }
@@ -291,12 +261,9 @@ final class InventoryRecording {
     }
 
     /** Record a coordinate version's provenance summary at publish - see
-     *  {@link StoreRepositoryInventory#recordProvenance}. A no-op when the consolidated metadata store is absent. */
+     *  {@link StoreRepositoryInventory#recordProvenance}. */
     void recordProvenance(String ecosystem, String coordinate, String version, boolean verified, String sha256)
             throws IOException {
-        if (metadata == null) {
-            return;
-        }
         metadata.mutate(ecosystem, coordinate, version, ProvenanceSection.TAG,
                 ProvenanceSection.record(verified, sha256, Clocks.now()));
     }
@@ -308,137 +275,53 @@ final class InventoryRecording {
 
     /**
      * Record {@code delta} downloads of a coordinate version, the newest at {@code last}: one compare-and-set on the
-     * document's {@code downloads} section in the consolidated store, which sums with what other nodes landed; the
-     * {@code downloaded/} sidecar carrying the instant alone where no consolidated store is installed.
+     * document's {@code downloads} section, which sums with what other nodes landed.
      */
     void recordDownloads(String ecosystem, String coordinate, String version, long delta, Instant last)
             throws IOException {
-        if (metadata != null) {
-            metadata.mutate(ecosystem, coordinate, version, DownloadsSection.TAG,
-                    DownloadsSection.add(delta, last, Clocks.now()));
-            return;
-        }
-        inventory.writeVersioned(StoreRepositoryInventory.downloadedKey(ecosystem, coordinate, version),
-                last.toString().getBytes(StandardCharsets.UTF_8));
+        metadata.mutate(ecosystem, coordinate, version, DownloadsSection.TAG,
+                DownloadsSection.add(delta, last, Clocks.now()));
     }
 
-    /** The download facts of a coordinate version - count and newest instant - or empty where the consolidated store
-     *  is not installed or nothing was ever recorded. */
+    /** The download facts of a coordinate version - count and newest instant - or empty when nothing was ever
+     *  recorded. */
     Optional<DownloadsSection.Facts> downloads(String ecosystem, String coordinate, String version)
             throws IOException {
-        if (metadata == null) {
-            return Optional.empty();
-        }
         return DownloadsSection.facts(metadata.section(ecosystem, coordinate, version, DownloadsSection.TAG));
     }
 
     Optional<List<DependencySection.Declared>> dependencies(String ecosystem, String coordinate, String version)
             throws IOException {
-        if (metadata == null) {
-            return Optional.empty();
-        }
         return DependencySection.declared(metadata.section(ecosystem, coordinate, version, DependencySection.TAG));
     }
 
-    /** When a coordinate version was recorded as published - the {@code published/} sidecar's instant - or empty. */
+    /** When a coordinate version was recorded as published, or empty. */
     Optional<Instant> publishedAt(String ecosystem, String coordinate, String version) throws IOException {
         return publishedFacts(ecosystem, coordinate, version).map(PublishedSection.Facts::at);
     }
 
-    /** When a coordinate version was last downloaded, or empty if never: the document's {@code downloads} section
-     *  first, then the {@code downloaded/} sidecar - a deployment without the consolidated store, or a marker from
-     *  before the section existed. A sidecar that does not parse reads as never, not as an error: the marker is
-     *  best-effort by design. */
+    /** When a coordinate version was last downloaded, or empty if never: the document's {@code downloads}
+     *  section. */
     Optional<Instant> lastDownloaded(String ecosystem, String coordinate, String version) throws IOException {
-        Optional<Instant> recorded = downloads(ecosystem, coordinate, version).map(DownloadsSection.Facts::last);
-        if (recorded.isPresent()) {
-            return recorded;
-        }
-        return store.readVersioned(StoreRepositoryInventory.downloadedKey(ecosystem, coordinate, version))
-                .flatMap(versioned -> {
-                    try {
-                        return Optional.of(Instant.parse(new String(versioned.content(), StandardCharsets.UTF_8).trim()));
-                    } catch (DateTimeParseException _) {
-                        return Optional.empty();
-                    }
-                });
+        return downloads(ecosystem, coordinate, version).map(DownloadsSection.Facts::last);
     }
 
-    /** The publish facts of one coordinate version as a point read: the {@code published} section when a consolidated
-     *  store is installed, and the {@code published/} sidecar when none is (the graceful-absence layout the write
-     *  side mirrors). One layout or the other - never one falling through to the other, which would let a document
-     *  that legitimately carries no published section be answered from a stale key. A read never writes (§10). */
+    /** The publish facts of one coordinate version as a point read of its document's {@code published} section. A
+     *  read never writes (§10). */
     Optional<PublishedSection.Facts> publishedFacts(String ecosystem, String coordinate, String version)
             throws IOException {
-        if (metadata != null) {
-            Optional<Section> section = metadata.section(ecosystem, coordinate, version, PublishedSection.TAG);
-            return section.isPresent() && PublishedSection.published(section)
-                    ? PublishedSection.facts(section) : Optional.empty();
-        }
-        Optional<ArtifactStore.Versioned> stored = store.readVersioned(
-                StoreRepositoryInventory.publishedKey(ecosystem, coordinate, version));
-        if (stored.isEmpty()) {
-            return Optional.empty();
-        }
-        String[] value = new String(stored.get().content(), StandardCharsets.UTF_8).trim().split(" ");
-        Instant published;
-        try {
-            published = value.length > 0 && !value[0].isEmpty() ? Instant.parse(value[0]) : Instant.EPOCH;
-        } catch (DateTimeParseException _) {
-            return Optional.empty();
-        }
-        boolean prerelease = value.length > 1 && Boolean.parseBoolean(value[1]);
-        boolean pinned = store.readVersioned(
-                StoreRepositoryInventory.pinnedKey(ecosystem, coordinate, version)).isPresent();
-        return Optional.of(new PublishedSection.Facts(published, prerelease, pinned));
+        Optional<Section> section = metadata.section(ecosystem, coordinate, version, PublishedSection.TAG);
+        return section.isPresent() && PublishedSection.published(section)
+                ? PublishedSection.facts(section) : Optional.empty();
     }
 
     /**
-     * Whether a coordinate version is a published member, three-valued for the sweeps that DELETE on a {@code false}
-     *: {@link Known.Present} with the version's publish facts, {@link Known.Absent} when neither plane holds
-     * a record for it, {@link Known.Unknown} when the plane this deployment does not read holds one.
-     *
-     * <p>There is deliberately no two-valued {@code isPublished} beside this. It existed, "for the callers that only
-     * fold a rollup and do nothing destructive with a {@code false}" - and both of its callers were on the eviction
-     * path, which is the one place a fused answer is least affordable. A caller that genuinely may treat an unread
-     * plane as a non-membership now writes that arm where the knowledge is.
-     *
-     * <p>Which plane carries the publish facts is chosen by {@code MetadataProvider.installed()}: the consolidated
-     * {@code meta} document when a persistence module is installed, the legacy {@code published/} sidecar when none
-     * is - and never one falling through to the other, deliberately, so a document that legitimately carries no
-     * published section is not answered from a stale key. That choice is a function of an installed module, so
-     * uninstalling the metadata persistence module (or installing it over a store written without one) silently flips
-     * every version of the repository to "not a published member" - and the liveness guard covers the FORMAT leg only,
-     * so the reconcile sweep then judges those versions by liveness alone and reaps the derived rows of every one it
-     * can read as gone, while the forward leg re-records versions that were never lost. A record standing on the plane
-     * this deployment does not read is not evidence of anything: nothing was asked of it.
-     *
-     * <p>So a version whose own plane says nothing, while the OTHER plane holds a record for it, is
-     * {@link Known.Unknown} ({@link Known.Cause#UNINSTALLED} - the module that owns the plane the record lives on is
-     * not the one installed here) rather than {@link Known.Absent}. There is deliberately no fold of one plane into
-     * the other here either (a read never writes, and the two are not migrated on the fly): the row is left exactly
-     * where it is, for the operator's explicit purge or for a deployment that installs the module again. One extra
-     * point read, only on the miss.
+     * Whether a coordinate version is a published member, for the sweeps that DELETE on a {@code false}:
+     * {@link Known.Present} with the version's publish facts, {@link Known.Absent} when its document records no
+     * publish. Typed as {@link Known} because those callers already judge a three-valued answer, and an unreadable
+     * document reaches them as the {@link IOException} it is rather than as an absence.
      */
     Known<PublishedSection.Facts> membership(String ecosystem, String coordinate, String version) throws IOException {
-        Optional<PublishedSection.Facts> facts = publishedFacts(ecosystem, coordinate, version);
-        if (facts.isPresent()) {
-            return Known.known(facts.get());
-        }
-        String other;
-        try {
-            other = metadata != null
-                    ? StoreRepositoryInventory.publishedKey(ecosystem, coordinate, version)
-                    : MetadataKey.version(ecosystem, coordinate, version);
-        } catch (IllegalArgumentException _) {
-            // The other plane's codec refuses this coordinate outright (a traversal-hostile segment, a version opening
-            // with the reserved '@'), so no record can ever have been written there and there is nothing unread.
-            return Known.absent();
-        }
-        return store.exists(other)
-                ? Known.uninstalled("the publish facts of " + ecosystem + " " + coordinate + ":" + version
-                        + " stand at " + other + ", on the plane this deployment's metadata persistence does not "
-                        + "read; nothing was asked of where they actually live")
-                : Known.absent();
+        return publishedFacts(ecosystem, coordinate, version).map(Known::known).orElseGet(Known::absent);
     }
 }

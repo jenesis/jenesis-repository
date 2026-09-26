@@ -219,7 +219,7 @@ class StoreMetadataTest {
 
     @Test
     void the_provider_is_discovered() {
-        MetadataProvider provider = MetadataProvider.installed().orElseThrow();
+        MetadataProvider provider = MetadataProvider.installed();
         assertThat(provider.over(store)).isInstanceOf(StoreMetadata.class);
     }
 

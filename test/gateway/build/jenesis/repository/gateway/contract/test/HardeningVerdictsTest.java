@@ -99,14 +99,6 @@ class HardeningVerdictsTest {
         assertThat(view.drift().alarming()).isEqualTo(HardenedScreen.driftEvents() > 0);
     }
 
-    @Test
-    void a_missing_metadata_module_degrades_the_verdict_to_absent_not_fabricated() throws Exception {
-        HardeningVerdicts.View view = new HardeningVerdicts(null, quarantine).view("/spy/lib-1.0.spy", 10);
-
-        assertThat(view.screened()).as("no persistence installed: the leg records none, the read shows none").isFalse();
-        assertThat(view.verdict()).isNull();
-    }
-
     private void seedVerdict(String path, String digest, Verdict verdict, Instant screenedAt,
                              List<VerdictSection.Validator> validators) throws IOException {
         HardenedScreen.Coordinate coordinate = HardenedScreen.coordinate(path);

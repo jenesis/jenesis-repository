@@ -27,6 +27,7 @@ open module build.jenesis.repository.application {
     requires build.jenesis.repository.definitions;
     requires build.jenesis.repository.gate.spi;
     requires build.jenesis.repository.inventory;
+    requires build.jenesis.repository.metadata.store;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.settings;

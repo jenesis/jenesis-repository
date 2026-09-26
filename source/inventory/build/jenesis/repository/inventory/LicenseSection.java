@@ -130,9 +130,8 @@ public final class LicenseSection {
 
     /**
      * The rollup-identity fingerprint of a <em>declared set</em> - the single definition every member computation
-     * routes through, whether the set was read from the {@code meta} licenses section or, on the graceful-absence path,
-     * from the {@code licenses/} sidecar. Because it is a canonical encoding of the <em>set</em> and not of the stored
-     * bytes, a coordinate's member digest is identical under either layout.
+     * routes through. Because it is a canonical encoding of the <em>set</em> and not of the stored bytes, a
+     * coordinate's member digest does not depend on how the section happens to be serialised.
      * Empty for an absent set (never inspected); a present (possibly empty) byte array for a present one, preserving
      * the absent-versus-present-but-empty distinction the member digest depends on.
      */

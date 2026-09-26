@@ -80,17 +80,16 @@ class ReconcileTest {
     }
 
     @Test
-    void the_derived_leg_sweeps_a_download_marker_of_a_no_longer_published_version() throws IOException {
-        // A download marker in the layout from before the downloads section: the sidecar of a version that is
-        // neither published nor serving - the residue of an eviction that removed the release but not its derived
-        // rows. The derived leg still sweeps the legacy row; a document's downloads section goes with the document.
-        store.write("downloaded/" + ECO + "/ghost/1.0.0", new ByteArrayInputStream(NOW.toString().getBytes(StandardCharsets.UTF_8)));
-        assertThat(inventory().lastDownloaded(ECO, "ghost", "1.0.0")).contains(NOW);
+    void the_derived_leg_sweeps_a_pin_marker_of_a_no_longer_published_version() throws IOException {
+        // A pin index row of a version that is neither published nor serving - the residue of an eviction that
+        // removed the release but crashed before its pin marker. The pin itself went with the version's document.
+        String marker = "pinned/" + ECO + "/ghost/1.0.0";
+        store.writeVersioned(marker, new byte[0], null);
 
         StoreRepositoryInventory.Reconciliation result = inventory().reconcile(WALK, LATER);
 
-        assertThat(result.derived()).as("the orphan download marker is swept").isEqualTo(1);
-        assertThat(inventory().lastDownloaded(ECO, "ghost", "1.0.0")).as("the marker is gone").isEmpty();
+        assertThat(result.derived()).as("the orphan pin marker is swept").isEqualTo(1);
+        assertThat(store.readVersioned(marker)).as("the marker is gone").isEmpty();
     }
 
     @Test

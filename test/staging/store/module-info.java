@@ -9,6 +9,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.staging.store.test {
+    requires build.jenesis.repository.metadata.store;
     requires build.jenesis.repository.staging;
     requires build.jenesis.repository.staging.store;
     requires build.jenesis.repository.store;

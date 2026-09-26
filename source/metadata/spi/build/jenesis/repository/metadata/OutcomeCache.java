@@ -2,8 +2,6 @@ package build.jenesis.repository.metadata;
 
 import module java.base;
 
-import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.Retries;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -11,18 +9,16 @@ import tools.jackson.databind.node.ObjectNode;
  * Where a pass keeps what it derived about one coordinate, and how it decides whether it may skip deriving it
  * again.
  *
- * <p>Both questions are mechanical and neither belongs to a domain module. <b>Where</b> is a consolidated metadata
- * section when that module is installed and a sidecar under the pass's own key when it is not - one layout or the
- * other, never one falling through to the other, because an absent section means this coordinate has not been
- * judged here rather than that the answer lives under an older key. <b>Whether</b> is a fingerprint of the inputs:
+ * <p>Both questions are mechanical and neither belongs to a domain module. <b>Where</b> is the pass's own section of
+ * the coordinate's consolidated metadata document; an absent section means this coordinate has not been judged
+ * here. <b>Whether</b> is a fingerprint of the inputs:
  * the same inputs mean re-deriving would reach the same answer, so the pass skips and says it did.
  *
  * <p>Five passes had written both out by hand - the four AI passes plus the bytecode reachability sweep - and the
- * {@code readCache} of each was the same code but for the type of its coordinate. An earlier consolidation
- * extracted the sidecar half into a helper, which is exactly why there were still five copies of the interesting
- * part: extracting a helper gives divergence a shared subroutine, while moving the <em>decision</em> is what stops
- * it. Read the format strictly in one pass and leniently in another and the two disagree about whether a cached
- * answer is usable, which shows up as a pass that will not stop re-deriving.
+ * {@code readCache} of each was the same code but for the type of its coordinate. Extracting a helper would have
+ * given divergence a shared subroutine; moving the <em>decision</em> here is what stops it. Read the format strictly in
+ * one pass and leniently in another and the two disagree about whether a cached answer is usable, which shows up as a
+ * pass that will not stop re-deriving.
  *
  * <p><b>Why here and not on the maintenance context.</b> {@code RepositoryContext} is the surface that already
  * hands a pass its store, its clock and its meters, and this belongs beside them. But the metadata SPI re-exports
@@ -41,14 +37,12 @@ public final class OutcomeCache {
     private static final String FINGERPRINT = "fingerprint";
 
     private final MetadataStore meta;
-    private final ArtifactStore store;
     private final String tag;
     private final int schema;
     private final String format;
 
-    private OutcomeCache(MetadataStore meta, ArtifactStore store, String tag, int schema, String format) {
+    private OutcomeCache(MetadataStore meta, String tag, int schema, String format) {
         this.meta = meta;
-        this.store = store;
         this.tag = tag;
         this.schema = schema;
         this.format = format;
@@ -57,25 +51,23 @@ public final class OutcomeCache {
     /**
      * The cache one pass keeps.
      *
-     * @param meta   the consolidated metadata store, or {@code null} when no metadata module is installed - in
-     *               which case the sidecar named by each {@link Key} is the live layout rather than a fallback
+     * @param meta   the consolidated metadata store the coordinate documents live in
      * @param tag    the section tag this pass owns
      * @param schema the section schema version this pass writes
      * @param format the stamp that says a stored document is this pass's own shape
      */
-    public static OutcomeCache of(MetadataStore meta, ArtifactStore store, String tag, int schema, String format) {
-        return new OutcomeCache(meta, Objects.requireNonNull(store, "store"),
-                Objects.requireNonNull(tag, "tag"), schema, Objects.requireNonNull(format, "format"));
+    public static OutcomeCache of(MetadataStore meta, String tag, int schema, String format) {
+        return new OutcomeCache(Objects.requireNonNull(meta, "meta"), Objects.requireNonNull(tag, "tag"), schema,
+                Objects.requireNonNull(format, "format"));
     }
 
-    /** One coordinate, and the sidecar key its document lives under when no metadata module is installed. */
-    public record Key(String ecosystem, String coordinate, String version, String sidecar) {
+    /** One coordinate version. */
+    public record Key(String ecosystem, String coordinate, String version) {
 
         public Key {
             Objects.requireNonNull(ecosystem, "ecosystem");
             Objects.requireNonNull(coordinate, "coordinate");
             Objects.requireNonNull(version, "version");
-            Objects.requireNonNull(sidecar, "sidecar");
         }
     }
 
@@ -85,24 +77,10 @@ public final class OutcomeCache {
      * simply derives it again - so this answers an empty document rather than failing.
      */
     public ObjectNode read(Key key) throws IOException {
-        if (meta != null) {
-            if (meta.section(key.ecosystem(), key.coordinate(), key.version(), tag)
-                    .flatMap(Section::payload).orElse(null) instanceof ObjectNode node
-                    && format.equals(node.path(FORMAT).asString(null))) {
-                return node;
-            }
-            return fresh();
-        }
-        Optional<ArtifactStore.Versioned> versioned = store.readVersioned(key.sidecar());
-        if (versioned.isPresent()) {
-            try {
-                if (JSON.readTree(versioned.get().content()) instanceof ObjectNode node
-                        && format.equals(node.path(FORMAT).asString(null))) {
-                    return node;
-                }
-            } catch (RuntimeException _) {
-                // a corrupt or outdated cache document only ever costs a re-derivation
-            }
+        if (meta.section(key.ecosystem(), key.coordinate(), key.version(), tag)
+                .flatMap(Section::payload).orElse(null) instanceof ObjectNode node
+                && format.equals(node.path(FORMAT).asString(null))) {
+            return node;
         }
         return fresh();
     }
@@ -113,16 +91,8 @@ public final class OutcomeCache {
      * produced it.
      */
     public void write(Key key, ObjectNode document, Instant when) throws IOException {
-        if (meta != null) {
-            meta.mutate(key.ecosystem(), key.coordinate(), key.version(), tag,
-                    _ -> Section.derived(tag, schema, when, Signal.NEUTRAL, document));
-            return;
-        }
-        byte[] value = JSON.writeValueAsBytes(document);
-        // A compare-and-set, retried through the shared backoff rather than a handful of immediate tries: a lost
-        // write here is a peer writing the same key at the same moment, and losers that all retry at once simply
-        // collide again.
-        Retries.update(store, key.sidecar(), _ -> value);
+        meta.mutate(key.ecosystem(), key.coordinate(), key.version(), tag,
+                _ -> Section.derived(tag, schema, when, Signal.NEUTRAL, document));
     }
 
     /**

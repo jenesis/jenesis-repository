@@ -15,6 +15,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.webhook.web.test {
+    requires build.jenesis.repository.metadata.store;
     requires build.jenesis.repository.webhook.web;
     requires build.jenesis.repository.webhook;
     requires build.jenesis.repository.events;

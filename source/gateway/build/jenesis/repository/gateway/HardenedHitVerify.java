@@ -193,13 +193,9 @@ public final class HardenedHitVerify implements PullThroughHooks {
         }
     }
 
-    /** The digest-pinned verdict recorded for this path's coordinate, if any - read only, best-effort (a missing
-     *  metadata store or a read failure reads as absent, so the leg re-screens rather than trusting an unverified hit). */
+    /** The digest-pinned verdict recorded for this path's coordinate, if any - read only. */
     private Optional<VerdictSection.Recorded> recorded(ArtifactStore store, String path) throws IOException {
         MetadataStore metadata = metadataOver.apply(store);
-        if (metadata == null) {
-            return Optional.empty();
-        }
         HardenedScreen.Coordinate coordinate = HardenedScreen.coordinate(path);
         return VerdictSection.recorded(metadata.section(coordinate.ecosystem(), coordinate.coordinate(),
                 coordinate.version(), VerdictSection.TAG));

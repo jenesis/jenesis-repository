@@ -9,6 +9,7 @@ import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactDescriptor;
+import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.store.ArtifactStore;
 
@@ -40,10 +41,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * withheld).
  *
  * <p><b>Full-body screen tier.</b> The verdict is reached over the <em>whole</em> spooled body, not a bounded
- * 32 MiB prefix: every claiming inspector screens the complete artifact through a re-openable {@link
- * QualityInspector.Content} spool handle ({@link ProxyScreen#inspectFullBody}) - the embedded-secret content scanner
- * streaming past the prefix window so a credential beyond 32 MiB is caught, a format inspector default-bridged to the
- * same front prefix it read before. Decompression/scan stays bounded by the shared
+ * 32 MiB prefix: every claiming inspector screens the complete artifact through a re-openable
+ * {@link QualityInspector.Content} spool handle ({@link ProxyScreen#inspectFullBody}) - the embedded-secret content
+ * scanner streaming past the prefix window so a credential beyond 32 MiB is caught, a format inspector default-bridged
+ * to the same front prefix it read before. Decompression/scan stays bounded by the shared
  * {@link QualityInspector#FULL_BODY_INSPECTION_LIMIT full-body tier} (and each inspector's own entry/finding/nesting
  * caps), so full-body is not unbounded (a decompression bomb cannot exhaust the node, §1). Every claiming
  * inspector <em>reports</em> whether its own read reached the end of the body or one of those bounds
@@ -62,8 +63,6 @@ import build.jenesis.repository.store.ArtifactStore;
  * recorded, or the document lost it) is never served unscreened: {@link #serveVerified} fails closed and, when the
  * bytes are local, re-screens them from the local store and re-records the verdict (idempotent self-healing, §5), then
  * serves per the fresh verdict; when the bytes are not local it is a MISS that falls to the normal fetch+screen path.
- * With no metadata persistence module installed the {@link MetadataStore} is absent and the leg degrades to screening
- * every fetch (always safe, never a reuse).
  *
  * <p><b>Transient full-enforcement screen ({@code harden nocache}).</b> A hardened leg constructed with
  * verdict-reuse disabled fully screens <em>every</em> fetch and durably caches nothing: it still records the
@@ -384,9 +383,9 @@ public final class HardenedScreen {
      * The coordinate a hardened-leg verdict is recorded under in the consolidated metadata document. It is derived
      * <em>from the request path alone</em> - deterministically, without inspecting the body - so the recorded verdict
      * can be looked up for reuse before any inspection runs (the hot-path dedup, §7): the leading path segment is the
-     * ecosystem, the whole request path the coordinate (URL-encoded into one segment by {@link
-     * build.jenesis.repository.metadata.MetadataKey}), the filename the version. The identity that actually binds the
-     * verdict to the bytes is the content digest carried <em>inside</em> the section, not this coordinate.
+     * ecosystem, the whole request path the coordinate (URL-encoded into one segment by
+     * {@link build.jenesis.repository.metadata.MetadataKey}), the filename the version. The identity that actually
+     * binds the verdict to the bytes is the content digest carried <em>inside</em> the section, not this coordinate.
      */
     public record Coordinate(String ecosystem, String coordinate, String version) {
     }
@@ -445,17 +444,16 @@ public final class HardenedScreen {
      * A hardened screen backed by the compliance {@code gate}, recording withholdings and refusals in {@code records}'
      * durable {@code QuarantineLog} and {@code /quarantine}, holding upstream versions younger than {@code holdDays},
      * and spooling the pre-verdict body into the budgeted {@code spool} - a per-request {@link SpoolStore} scratch the
-     * router reclaims once the request is served. With no consolidated metadata store the leg records no verdict and
-     * reuses none; the router binds one from the discovered persistence module. The
-     * untrusted-upstream fetch {@link Bounds} default to {@link Bounds#standard()}.
+     * router reclaims once the request is served. The digest-pinned verdict is recorded in the installed metadata
+     * store over {@code records}. The untrusted-upstream fetch {@link Bounds} default to {@link Bounds#standard()}.
      */
     public HardenedScreen(ComplianceGate gate, ArtifactStore records, int holdDays, ArtifactStore spool) {
-        this(gate, records, holdDays, spool, null);
+        this(gate, records, holdDays, spool, MetadataProvider.installed().over(records));
     }
 
     /** As {@link #HardenedScreen(ComplianceGate, ArtifactStore, int, ArtifactStore)}, binding the consolidated
-     *  {@code metadata} store the digest-pinned verdict is recorded in and reused from; {@code null} degrades
-     *  to screening every fetch. The untrusted-upstream fetch {@link Bounds} default to {@link Bounds#standard()}. */
+     *  {@code metadata} store the digest-pinned verdict is recorded in and reused from. The untrusted-upstream fetch
+     *  {@link Bounds} default to {@link Bounds#standard()}. */
     public HardenedScreen(ComplianceGate gate, ArtifactStore records, int holdDays, ArtifactStore spool,
                           MetadataStore metadata) {
         this(gate, records, holdDays, spool, metadata, Bounds.standard());
@@ -494,7 +492,7 @@ public final class HardenedScreen {
                           MetadataStore metadata, Bounds bounds, LongSupplier nanoTime, boolean reuseVerdict) {
         this.screen = new ProxyScreen(gate, records, holdDays);
         this.spool = Objects.requireNonNull(spool, "spool");
-        this.metadata = metadata;
+        this.metadata = Objects.requireNonNull(metadata, "metadata");
         this.bounds = Objects.requireNonNull(bounds, "bounds");
         this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
         this.reuseVerdict = reuseVerdict;
@@ -678,12 +676,9 @@ public final class HardenedScreen {
     }
 
     /** The verdict previously recorded for this coordinate, if any - the reuse source (its {@code ALLOW}-and-pins check)
-     *  and the drift baseline (its pinned digest). A missing metadata store, an absent verdict, or a read failure all
-     *  return empty, so the leg re-screens (fail-closed) rather than reusing or false-alarming. */
+     *  and the drift baseline (its pinned digest). An absent verdict or a read failure returns empty, so the leg
+     *  re-screens (fail-closed) rather than reusing or false-alarming. */
     private Optional<VerdictSection.Recorded> priorVerdict(Coordinate coordinate) {
-        if (metadata == null) {
-            return Optional.empty();
-        }
         try {
             return VerdictSection.recorded(metadata.section(coordinate.ecosystem(), coordinate.coordinate(),
                     coordinate.version(), VerdictSection.TAG));
@@ -726,9 +721,6 @@ public final class HardenedScreen {
      *  failure is logged (never silent, §9) rather than failing the serve - it only costs a re-screen next time. */
     private void recordVerdict(Coordinate coordinate, String digest, Verdict verdict, Refusal refusal, String source,
                                List<VerdictSection.Validator> validators) {
-        if (metadata == null) {
-            return;
-        }
         try {
             metadata.mutate(coordinate.ecosystem(), coordinate.coordinate(), coordinate.version(), VerdictSection.TAG,
                     VerdictSection.record(digest, verdict, refusal == null ? null : refusal.name(), PROFILE, source,

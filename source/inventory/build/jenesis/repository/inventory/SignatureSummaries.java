@@ -35,8 +35,8 @@ public final class SignatureSummaries {
     /**
      * The signature summary recorded for a coordinate version.
      *
-     * <p>Best-effort in the render-what-you-have sense: a deployment without the metadata module, a coordinate that
-     * carries no version, or a read that fails yields empty, and the caller says there is none rather than failing
+     * <p>Best-effort in the render-what-you-have sense: a coordinate that carries no version, or a read that fails,
+     * yields empty, and the caller says there is none rather than failing
      * the page. Empty is genuinely "nothing was recorded" - a version published before signatures were checked here -
      * which a caller must not present as a signature that was checked and found wanting.
      */
@@ -45,13 +45,10 @@ public final class SignatureSummaries {
         if (coordinate == null || coordinate.isEmpty() || version == null || version.isEmpty()) {
             return Optional.empty();
         }
-        Optional<MetadataProvider> provider = MetadataProvider.installed();
-        if (provider.isEmpty()) {
-            return Optional.empty();
-        }
+        MetadataProvider provider = MetadataProvider.installed();
         try {
             return SignatureSection.summary(
-                    provider.get().over(store).section(ecosystem, coordinate, version, SignatureSection.TAG));
+                    provider.over(store).section(ecosystem, coordinate, version, SignatureSection.TAG));
         } catch (IOException | RuntimeException unreadable) {
             return Optional.empty();
         }

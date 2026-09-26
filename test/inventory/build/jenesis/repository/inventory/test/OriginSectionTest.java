@@ -44,7 +44,7 @@ class OriginSectionTest {
         store = ArtifactStoreProvider.resolve("filesystem",
                         key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases");
-        metadata = MetadataProvider.installed().orElseThrow().over(store);
+        metadata = MetadataProvider.installed().over(store);
     }
 
     private StoreRepositoryInventory inventory() {

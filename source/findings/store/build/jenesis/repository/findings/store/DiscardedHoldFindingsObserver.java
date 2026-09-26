@@ -23,8 +23,7 @@ import build.jenesis.repository.gate.HeldElsewhere;
  * <p>The findings live in the {@code findings} section of the consolidated metadata document, so a
  * discard drops just that section - surgically, so a coordinate whose document also carries other sections (declared
  * licenses read at inspection) keeps them; when the findings section was the document's only content the whole
- * document goes. The {@code findings/} sidecar of a graceful-absence deployment is removed too. With no metadata store installed the
- * findings never left the sidecar, so only the sidecar is dropped - the graceful-absence path.
+ * document goes.
  */
 public final class DiscardedHoldFindingsObserver implements HoldReleaseObserver {
 
@@ -47,28 +46,18 @@ public final class DiscardedHoldFindingsObserver implements HoldReleaseObserver 
         String ecosystem = described.get().ecosystem();
         String coordinate = described.get().coordinate();
         String version = described.get().version();
-        boolean droppedFindings = false;
-        Optional<MetadataStore> metadata = MetadataProvider.installed().map(provider -> provider.over(store));
-        if (metadata.isPresent()) {
-            Optional<MetadataDocument> document = metadata.get().read(ecosystem, coordinate, version);
-            if (document.isPresent() && document.get().has(FindingsSection.TAG)) {
-                if (document.get().tags().size() == 1) {
-                    // The findings section is the document's only content - the whole discarded-and-never-published
-                    // document goes, so no empty envelope is left to dangle.
-                    store.delete(MetadataKey.version(ecosystem, coordinate, version));
-                } else {
-                    // Other sections (declared licenses) stay; only the findings section is removed.
-                    metadata.get().mutate(ecosystem, coordinate, version, FindingsSection.TAG, current -> null);
-                }
-                droppedFindings = true;
+        MetadataStore metadata = MetadataProvider.installed().over(store);
+        Optional<MetadataDocument> document = metadata.read(ecosystem, coordinate, version);
+        boolean droppedFindings = document.isPresent() && document.get().has(FindingsSection.TAG);
+        if (droppedFindings) {
+            if (document.get().tags().size() == 1) {
+                // The findings section is the document's only content - the whole discarded-and-never-published
+                // document goes, so no empty envelope is left to dangle.
+                store.delete(MetadataKey.version(ecosystem, coordinate, version));
+            } else {
+                // Other sections (declared licenses) stay; only the findings section is removed.
+                metadata.mutate(ecosystem, coordinate, version, FindingsSection.TAG, current -> null);
             }
-        }
-        // The graceful-absence sidecar goes too, or it would dangle after the document's
-        // section is dropped. A presence probe, not a full read.
-        String sidecar = Findings.key(ecosystem, coordinate, version);
-        if (store.exists(sidecar)) {
-            store.delete(sidecar);
-            droppedFindings = true;
         }
         if (droppedFindings) {
             // A discarded hold's findings never rode an artifact eviction (the version was never published), so this is

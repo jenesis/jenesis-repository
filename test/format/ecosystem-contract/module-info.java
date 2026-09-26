@@ -64,6 +64,7 @@ open module build.jenesis.repository.format.contract.ecosystem.test {
 
     // The inventory's canonical spelling, which asks every installed layout.
     requires build.jenesis.repository.inventory;
+    requires build.jenesis.repository.metadata.store;
 
     // Every declared ecosystem format module, so the runtime discovery leg can see all fourteen. A module missing
     // here is exactly the blind spot the separate static leg exists to catch.

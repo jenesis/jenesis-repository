@@ -19,11 +19,10 @@ import build.jenesis.repository.format.ArtifactLayout;
  * a version occupies and reaps its derived per-version rows. {@link #evict} unpublishes the {@code publish/} pointers a
  * Publication-namespace format's {@link ArtifactLayout} resolves (each removal observed with the coordinate this
  * eviction already resolved) and the blob pointers a {@link BlobLayout blobs-namespace} format holds, then deletes the
- * version's publish facts, its {@code downloaded/}/{@code pinned/} markers, its consolidated document and every
- * derived sidecar, folding the evicted member out of the {@link InventoryIdentity} rollup; {@link #discardBlobs} is
- * the blobs-namespace-only destroy leg a discard needs. The facade owns the seam - {@code evict}/{@code discardBlobs}
- * delegate here - and this class shares the facade's membership check, last-version query and its store-key/codec
- * helpers rather than duplicating them.
+ * version's consolidated document, its {@code pinned/} marker and every derived row, folding the evicted member out of
+ * the {@link InventoryIdentity} rollup; {@link #discardBlobs} is the blobs-namespace-only destroy leg a discard needs.
+ * The facade owns the seam - {@code evict}/{@code discardBlobs} delegate here - and this class shares the facade's
+ * membership check, last-version query and its store-key/codec helpers rather than duplicating them.
  */
 final class InventoryEviction {
 
@@ -107,14 +106,13 @@ final class InventoryEviction {
             throw refusal("eviction", release.ecosystem(), release.coordinate(), release.version());
         }
         RecentReleases.forget(store, release);
-        // Capture the version's rollup contribution before its sidecars are removed, so the maintained identity can be
+        // Capture the version's rollup contribution before its document is removed, so the maintained identity can be
         // folded out once the eviction completes (the whole-repository SBOM / NOTICE ETag then revalidates). Read here,
-        // ahead of the deletes, because the license sidecar and the published/ marker are both gone by the end.
+        // ahead of the deletes, because the document carrying both is gone by the end.
         boolean published = foldsOut(inventory.membership(
                 release.ecosystem(), release.coordinate(), release.version()));
-        // The evicted member's license contribution, read through LicenseInventory (the meta licenses section, or a
-        // sidecar on the graceful-absence path) as its canonical declared-set fingerprint, so the fold-out here
-        // and the fold-in at publish agree on the member whether or not the version was migrated.
+        // The evicted member's license contribution, read through LicenseInventory as its canonical declared-set
+        // fingerprint, so the fold-out here and the fold-in at publish agree on the member.
         Optional<byte[]> evictedLicenses = LicenseSection.fingerprintOf(
                 new LicenseInventory(store).read(release.ecosystem(), release.coordinate(), release.version()));
         for (ArtifactLayout layout : StoreRepositoryInventory.layoutsFor(release.ecosystem())) {
@@ -152,64 +150,41 @@ final class InventoryEviction {
                 }
             }
         }
-        // The publish facts live in the version's meta document (deleted below); the published/ sidecar a
-        // no-persistence-module deployment writes instead is removed too, or it would dangle after the document is
-        // gone.
-        deleteIfPresent(StoreRepositoryInventory.publishedKey(
-                release.ecosystem(), release.coordinate(), release.version()));
-        // The version's derived per-coordinate sidecars go with it, or they would dangle forever: the last-download
-        // marker, the license record, and every hold-override marker (reaped by kind at the end of this method).
-        deleteIfPresent(StoreRepositoryInventory.downloadedKey(
-                release.ecosystem(), release.coordinate(), release.version()));
+        // The version's derived per-coordinate rows go with it, or they would dangle forever: every hold-override
+        // marker is reaped by kind at the end of this method.
         // The pin goes with the version too: retention itself never evicts a pinned release, so reaching here
         // pinned means a direct operator eviction - leaving the row would show a phantom pin in the console and,
         // worse, silently auto-pin a later republish of the same version with no human decision behind it.
         deleteIfPresent(StoreRepositoryInventory.pinnedKey(
                 release.ecosystem(), release.coordinate(), release.version()));
         // The version's consolidated metadata document goes with the artifact it describes: it carries the
-        // licenses section (findings/publish-facts/health fold in with later cutovers), so evicting the version removes
-        // the whole per-version document. The licenses/ sidecar a
-        // no-persistence-module deployment writes instead is removed too, or it would dangle after the meta document
-        // is gone.
+        // publish facts, the downloads and the licenses, so evicting the version removes the whole per-version
+        // document.
         boolean versionDocGone = deleteIfPresent(
                 MetadataKey.version(release.ecosystem(), release.coordinate(), release.version()));
-        deleteIfPresent(LicenseInventory.key(release.ecosystem(), release.coordinate(), release.version()));
-        // The findings ledger's document for the version goes with the artifact it describes - the one removal the
-        // categorize-never-discard ledger permits; the key shape is fixed by the findings SPI contract, so this
-        // works whether or not the persistence module is installed (deleting an absent key is a no-op).
-        boolean findingsSidecarGone = deleteIfPresent(
-                Findings.key(release.ecosystem(), release.coordinate(), release.version()));
         // The vulnerability rank index no-ops its rebuild while a freshness stamp only a SCAN moves has not moved; an
         // eviction is not a scan, so without a signal an evicted version's line would linger in the ranked report until
         // the next scan (a whole scan interval). Bump the findings eviction epoch - a dirty signal the rank index folds
         // into its rebuild stamp, NOT the scan stamp (which would misreport the report's as-of instant and thrash the
-        // eventually-consistent read) - when this version's findings home actually went: the consolidated meta document
-        // that carries its findings section, or the findings/ sidecar written in its absence. The line then drops on the
-        // next rank-index pass. Marked by key, exactly as the deletes above are, so it holds whether or not the findings
-        // persistence module is installed; a version that never had a home neither deletes nor bumps.
-        if (versionDocGone || findingsSidecarGone) {
+        // eventually-consistent read) - when the version's document, which carries its findings section, actually went.
+        // The line then drops on the next rank-index pass; a version that never had a document neither deletes nor
+        // bumps.
+        if (versionDocGone) {
             Findings.evictions(store).bump();
         }
         // The maintainer-health record is a per-COORDINATE fact (version-independent), so unlike the per-version
-        // findings document it is reclaimed only when the coordinate's LAST published version goes. The version's
-        // published/ marker was deleted just above, so an empty version listing means this eviction removed the last
-        // version. Health lives in the @coordinate metadata document's health section, so the last-version
-        // eviction deletes that document; the health/ sidecar a no-persistence-module deployment writes instead is
-        // removed too, or it would dangle after the @coordinate document is gone (the same key shape the health SPI contract
-        // fixes, so this works whether or not the health module is installed - an absent-key delete is a no-op). A
-        // record stranded by a concurrent last-version eviction race is a bounded orphan the operator purge / orphan
-        // sweep reaps, never silently swept.
+        // findings it is reclaimed only when the coordinate's LAST published version goes - which an empty published
+        // set for the coordinate says, the version's document having been deleted just above. Health lives in the
+        // @coordinate metadata document's health section, so the last-version eviction deletes that document. A record
+        // stranded by a concurrent last-version eviction race is a bounded orphan the operator purge / orphan sweep
+        // reaps, never silently swept.
         if (!inventory.anyPublishedVersion(release.ecosystem(), release.coordinate())) {
-            boolean coordinateDocGone = deleteIfPresent(
-                    MetadataKey.coordinate(release.ecosystem(), release.coordinate()));
-            boolean healthSidecarGone = deleteIfPresent(HealthLedger.key(release.ecosystem(), release.coordinate()));
             // The last version went, so the coordinate's per-coordinate health is reclaimed - and, exactly as for the
             // findings above, the health rank index would otherwise keep serving the departed coordinate until the next
             // scan moved its freshness stamp. Bump the health eviction epoch (the dirty signal the health rank index
-            // folds into its rebuild stamp, never the scan stamp) when the coordinate's health home actually went - its
-            // @coordinate document's health section, or its health/ sidecar - so the weakest-first
-            // panel drops it on the next rank-index pass. Marked by key, module-independent, like the deletes above.
-            if (coordinateDocGone || healthSidecarGone) {
+            // folds into its rebuild stamp, never the scan stamp) when the @coordinate document actually went, so the
+            // weakest-first panel drops it on the next rank-index pass.
+            if (deleteIfPresent(MetadataKey.coordinate(release.ecosystem(), release.coordinate()))) {
                 HealthLedger.evictions(store).bump();
             }
         }
@@ -231,22 +206,8 @@ final class InventoryEviction {
         // nor its artifact. Neither is a sweep: this runs on an eviction that has already proved it can place the
         // version's pointers (the refusal above), so no row is ever removed because a module is absent.
         HeldSubjects.forget(store, release.ecosystem(), release.coordinate(), release.version());
-        // The AI outcome caches (ai-applicability / ai-audit / ai-reachability / ai-symbols) and the reachability
-        // engine's fingerprint live in sections of the per-version meta document deleted just above, so that one delete
-        // is their primary reclamation. The per-family deletes below reap the sidecars a deployment with no metadata
-        // persistence module writes instead - the graceful-absence layout - which would otherwise dangle after the
-        // version is gone. Each key shape is fixed by the owning module's storage contract, so this reaps them whether
-        // or not that module is installed - an absent-key delete is a no-op. The AI caches key the ecosystem and
-        // version raw and URL-encode only the coordinate (ApplicabilityTask.cacheKey and its peers); the reachability
-        // fingerprint URL-encodes all three (ReachabilityTask.cacheKey), so the two key shapes are built distinctly
-        // here.
-        for (String cache : List.of("ai-applicability", "ai-audit", "ai-reachability", "ai-symbols")) {
-            deleteIfPresent(cache + "/" + release.ecosystem() + "/"
-                    + StoreRepositoryInventory.encode(release.coordinate()) + "/" + release.version());
-        }
-        deleteIfPresent("reachability/" + StoreRepositoryInventory.encode(release.ecosystem()) + "/"
-                + StoreRepositoryInventory.encode(release.coordinate())
-                + "/" + StoreRepositoryInventory.encode(release.version()));
+        // The AI outcome caches and the reachability engine's fingerprint live in sections of the per-version meta
+        // document deleted just above, so that one delete is their reclamation.
         if (published) {
             identity.foldOut(InventoryIdentity.member(
                     release.ecosystem(), release.coordinate(), release.version(), evictedLicenses), release.published());
@@ -323,10 +284,6 @@ final class InventoryEviction {
             trimmed = document.mutate(removals);
         }
         store.writeVersioned(docKey, trimmed.serialize(), currentDoc.get().token());
-        // The version's other served-fact sidecars go with the bytes, but NOT the meta doc (retained, trimmed above).
-        deleteIfPresent(StoreRepositoryInventory.publishedKey(ecosystem, coordinate, version));
-        deleteIfPresent(StoreRepositoryInventory.downloadedKey(ecosystem, coordinate, version));
-        deleteIfPresent(LicenseInventory.key(ecosystem, coordinate, version));
         // The trim above dropped every served-fact section, the findings section among them, so this version's ranked
         // line must drop too - bump the findings eviction epoch so the vulnerability rank index rebuilds on its next
         // pass rather than paging the reclaimed line until the next scan.

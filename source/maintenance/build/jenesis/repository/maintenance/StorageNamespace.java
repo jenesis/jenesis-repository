@@ -29,28 +29,9 @@ import build.jenesis.repository.store.ArtifactStore;
  * is refused at construction, so a new module defaults to per-tenant and a mis-scoped declaration fails instead of
  * silently claiming deployment-global storage.
  *
- * <h2>Claiming a sidecar root conditionally</h2>
- *
- * <p>A module that keeps a graceful-absence sidecar - the layout it falls back to when no metadata module is
- * installed - claims that root <em>only while nothing else can read it</em>:
- *
- * <pre>{@code
- * return MetadataProvider.installed().isPresent()
- *         ? Set.of(<the singletons and derived indexes this module always owns>)
- *         : Set.of(<the same>, <the sidecar root>);
- * }</pre>
- *
- * <p>Both arms are right for their case, and the reason is the same one every time. With no metadata module
- * installed the sidecar <em>is</em> this deployment's live data, so leaving it unclaimed makes the
- * storage-completeness sweep report every live row as an orphan and invite an operator to purge it. Once the
- * metadata module is installed, a leftover sidecar is genuinely unreachable - nothing folds it into the document
- * and nothing reads it - and surfacing it as an orphan is the "absence never deletes" posture doing its job. The
- * two cases differ by whether anything can still read the key, which is exactly what
- * {@code MetadataProvider.installed()} answers, and it is the same seam the module's own store switches layout on.
- *
- * <p>Eight namespaces carry this shape. The argument is written here rather than in each of them, because eight
- * copies of one argument are eight things to keep in step; an implementation states which prefixes it owns and
- * which root is its sidecar, and nothing more.
+ * <p>A module whose per-coordinate facts are sections of the consolidated metadata document claims no root for them:
+ * the document's space ({@code meta}) is the metadata store's own declaration, and every composition carries that
+ * store. What a module declares is what lives outside the document - its repo-level singletons and derived indexes.
  *
  * <h2>Contract</h2>
  * <ol>

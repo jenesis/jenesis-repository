@@ -57,7 +57,7 @@ final class ComplianceScreenFixture implements PublicationHookFixture.Intercepto
         // that calls another module's recorder has to declare where that recorder writes - which is itself worth
         // knowing: ComplianceScreen.committed is the one hook in this family whose effect lands outside its module.
         return List.of("audit/quarantine", "audit/quarantine-index", "holds", "overrides",
-                "published", "recent", "licenses", "identity", "findings");
+                "meta", "recent", "identity", "findings");
     }
 
     @Override
@@ -89,11 +89,11 @@ final class ComplianceScreenFixture implements PublicationHookFixture.Intercepto
 
     @Override
     public Map<String, String> projection(ArtifactStore store) throws IOException {
-        // The screen's durable commit-time trace, normalised to presence: the publish-time sidecar it records for an
+        // The screen's durable commit-time trace, normalised to presence: the metadata document it records for an
         // accepted artifact carries the publish instant, which two converged runs legitimately differ on, and the
         // clause-2 replay check compares this map across three commits of the same bytes.
         Map<String, String> rows = new TreeMap<>();
-        Hooks.names(store, "published").forEach(name -> rows.put(name, "recorded"));
+        Hooks.names(store, "meta").forEach(name -> rows.put(name, "recorded"));
         Hooks.names(store, "audit/quarantine-index").forEach(name -> rows.put("held:" + name, "quarantined"));
         return rows;
     }

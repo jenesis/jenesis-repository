@@ -34,23 +34,21 @@ public final class HardeningVerdicts {
     private final MetadataStore metadata;
     private final QuarantineLog quarantine;
 
-    /** A verdict reader over an explicit {@code metadata} store (may be {@code null} when no persistence module is
-     *  installed - the verdict then reads absent, exactly as the leg records none) and the repository's durable
-     *  {@code quarantine} ledger. */
+    /** A verdict reader over an explicit {@code metadata} store and the repository's durable {@code quarantine}
+     *  ledger. */
     public HardeningVerdicts(MetadataStore metadata, QuarantineLog quarantine) {
-        this.metadata = metadata;
+        this.metadata = Objects.requireNonNull(metadata, "metadata");
         this.quarantine = Objects.requireNonNull(quarantine, "quarantine");
     }
 
     /** A verdict reader over a repository's scoped store: the consolidated metadata store is discovered through
-     *  {@link MetadataProvider} (absent when no persistence module is installed, degrading the verdict to absent) and
-     *  the {@link QuarantineLog} is read from the same store the hardened leg wrote its refusals to. This is the
-     *  production wiring; the {@linkplain #HardeningVerdicts(MetadataStore, QuarantineLog) explicit constructor} is the
+     *  {@link MetadataProvider} and the {@link QuarantineLog} is read from the same store the hardened leg wrote its
+     *  refusals to. This is the production wiring; the {@linkplain #HardeningVerdicts(MetadataStore, QuarantineLog)
+     *  explicit constructor} is the
      *  test seam. */
     public static HardeningVerdicts over(ArtifactStore repositoryStore) {
-        MetadataStore metadata = MetadataProvider.installed().map(provider -> provider.over(repositoryStore))
-                .orElse(null);
-        return new HardeningVerdicts(metadata, new QuarantineLog(repositoryStore));
+        return new HardeningVerdicts(MetadataProvider.installed().over(repositoryStore),
+                new QuarantineLog(repositoryStore));
     }
 
     /** The hardened-leg read for a coordinate: the digest-pinned verdict recorded over its last-screened bytes, the
@@ -61,11 +59,8 @@ public final class HardeningVerdicts {
     }
 
     /** The digest-pinned verdict recorded for a coordinate, or {@code null} when none is recorded (never screened, the
-     *  document lost the section, or no persistence module is installed) - a single metadata section read, no screen. */
+     *  document lost the section) - a single metadata section read, no screen. */
     public RecordedVerdict verdict(String path) throws IOException {
-        if (metadata == null) {
-            return null;
-        }
         HardenedScreen.Coordinate coordinate = HardenedScreen.coordinate(path);
         return VerdictSection.recorded(metadata.section(coordinate.ecosystem(), coordinate.coordinate(),
                 coordinate.version(), VerdictSection.TAG)).map(HardeningVerdicts::render).orElse(null);

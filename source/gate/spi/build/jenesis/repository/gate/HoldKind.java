@@ -126,7 +126,7 @@ public final class HoldKind {
 
     /**
      * The review-discard hook: drop this kind's hold record for the discarded path's coordinate, so a thrown-away
-     * version's row never dangles (nothing evicts a discarded version's rows: it has no published sidecar for the
+     * version's row never dangles (nothing evicts a discarded version's rows: it has no published record for the
      * reconcile sweep to judge). No override is written - no human cleared anything, and a re-publish of the same
      * version is simply re-screened. The record is per version, so while another path of the same version is still
      * held it stays; the last discard reaps it.

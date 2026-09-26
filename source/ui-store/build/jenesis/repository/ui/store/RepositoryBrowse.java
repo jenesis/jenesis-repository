@@ -404,9 +404,9 @@ public class RepositoryBrowse extends TenantScope {
      * version's consolidated metadata document's {@code origin} section ({@link OriginSection}) - a small,
      * bounded read of the one section, never the artifact body (§1). Rows render on the artifact detail and are returned
      * by the origin API, both the neutral display the gate does not consume. Best-effort render-what-you-have (§10): a
-     * path with no coordinate/version, a deployment without the metadata persistence module, or a read failure yields an
-     * empty list (the panel then states there is no recorded origin), never a failed detail view. The path is
-     * {@link #safePrefix traversal-guarded} exactly as {@link #artifact} is.
+     * path with no coordinate/version or a read failure yields an empty list (the panel then states there is no
+     * recorded origin), never a failed detail view. The path is {@link #safePrefix traversal-guarded} exactly as
+     * {@link #artifact} is.
      */
     public List<OriginRow> origin(String repository, String path) throws IOException {
         return originOf(scope(repository), safePrefix(path));
@@ -420,11 +420,7 @@ public class RepositoryBrowse extends TenantScope {
      * anything missing or unreadable yields an empty list, never a thrown error.
      */
     public static List<OriginRow> originOf(ArtifactStore store, String safe) {
-        Optional<MetadataProvider> provider = MetadataProvider.installed();
-        if (provider.isEmpty()) {
-            return List.of();
-        }
-        MetadataStore metadata = provider.get().over(store);
+        MetadataStore metadata = MetadataProvider.installed().over(store);
         List<OriginRow> rows = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         try {
@@ -475,19 +471,20 @@ public class RepositoryBrowse extends TenantScope {
         }
     }
 
-    /** The quality-inspection subsection's scoped error state for a coordinate: the newest active {@link
-     *  Finding.Kind#INSPECTION} finding, recorded when the compliance screen could not parse the artifact (so it was
-     *  screened only from its path coordinate). A point lookup of this coordinate's findings - the same bounded read
-     *  the quarantine verdict above is - not a ledger scan. Best-effort (Principle 10 render-what-you-have): a coordinate
-     *  with no version, an uninstalled findings module, or a read failure yields {@code null}, so the rest of the detail
+    /** The quality-inspection subsection's scoped error state for a coordinate: the newest active
+     *  {@link Finding.Kind#INSPECTION} finding, recorded when the compliance screen could not parse the artifact (so it
+     *  was screened only from its path coordinate). A point lookup of this coordinate's findings - the same bounded
+     *  read the quarantine verdict above is - not a ledger scan. Best-effort (Principle 10 render-what-you-have): a
+     *  coordinate with no version, an uninstalled findings module, or a read failure yields {@code null}, so the rest
+     *  of the detail
      *  view still renders rather than the whole page failing on one subsection's derive. */
     /**
      * The signature summary recorded for this coordinate version, or {@code null} when none was.
      *
      * <p>One bounded point read of the version document's own section - no artifact body, no store walk, no
      * cryptography - so the panel costs the same on a repository holding ten million versions as on one holding ten.
-     * Best-effort in the render-what-you-have sense: a deployment without the metadata module, or a read that fails,
-     * yields no row and the page says there is none, never a failed detail view.
+     * Best-effort in the render-what-you-have sense: a read that fails yields no row and the page says there is none,
+     * never a failed detail view.
      */
     /** The console's view of the signature, over the one read every surface takes. */
     private static SignatureRow signatureOf(ArtifactStore store, String ecosystem, String coordinate,

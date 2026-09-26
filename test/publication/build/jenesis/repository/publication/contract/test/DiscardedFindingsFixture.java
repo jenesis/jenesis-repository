@@ -2,11 +2,15 @@ package build.jenesis.repository.publication.contract.test;
 
 import module java.base;
 
+import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
+import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.hooks.testkit.Coordinates;
 import build.jenesis.repository.hooks.testkit.HoldReleaseFixture;
 import build.jenesis.repository.hooks.testkit.HookTestFormat;
 import build.jenesis.repository.hooks.testkit.Hooks;
+import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.testkit.PublicationHookContract.Property;
 
@@ -41,7 +45,8 @@ final class DiscardedFindingsFixture extends HoldReleaseFixture {
 
     @Override
     public List<String> namespaces() {
-        return ReleaseSpaces.of(Findings.PREFIX);
+        // The findings are a section of the version's metadata document, which a discard drops.
+        return ReleaseSpaces.of(MetadataKey.PREFIX);
     }
 
     @Override
@@ -53,14 +58,15 @@ final class DiscardedFindingsFixture extends HoldReleaseFixture {
 
     @Override
     protected void record(ArtifactStore store, String path) throws IOException {
-        // The per-version findings document the gate wrote beside the hold - the sidecar shape a deployment with no
-        // metadata store installed carries, and the one this hook reclaims.
-        Hooks.upsert(store, sidecar(path), "{\"findings\":[{\"id\":\"gate-kit\",\"severity\":\"HIGH\"}]}");
+        // The per-version findings the gate recorded beside the hold, which this hook reclaims.
+        ledger(store).record(HookTestFormat.ECOSYSTEM, Coordinates.of(path), HookTestFormat.VERSION, Finding.of(
+                "gate-kit", "gate", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "held",
+                Instant.parse("2026-07-01T00:00:00Z")));
     }
 
     @Override
     public boolean records(ArtifactStore store, String path) throws IOException {
-        return store.readVersioned(sidecar(path)).isPresent();
+        return !ledger(store).of(HookTestFormat.ECOSYSTEM, Coordinates.of(path), HookTestFormat.VERSION).isEmpty();
     }
 
     @Override
@@ -70,10 +76,10 @@ final class DiscardedFindingsFixture extends HoldReleaseFixture {
 
     @Override
     public Map<String, String> projection(ArtifactStore store) throws IOException {
-        return Hooks.rows(store, Findings.PREFIX);
+        return Hooks.rows(store, MetadataKey.PREFIX);
     }
 
-    private static String sidecar(String path) {
-        return Findings.key(HookTestFormat.ECOSYSTEM, Coordinates.of(path), HookTestFormat.VERSION);
+    private static Findings ledger(ArtifactStore store) {
+        return FindingsProvider.installed().orElseThrow().over(store);
     }
 }

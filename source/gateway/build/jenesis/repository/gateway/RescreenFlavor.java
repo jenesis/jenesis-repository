@@ -55,7 +55,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
  * fetch appends a {@code fallback} row. So this reads the artifact's own coordinate document and answers
  * {@link GatePolicyProvider.Path#PUBLISH} exactly when a {@code local-upload} row names <em>these</em> bytes.
  *
- * <p><b>Everything else stays {@code PROXY}</b> - no origin record, no metadata module, an unreadable document, a row
+ * <p><b>Everything else stays {@code PROXY}</b> - no origin record, an unreadable document, a row
  * naming other bytes. The default is deliberately the unchanged one, so this can only ever move an artifact off the
  * proxy flavour on positive durable evidence that it was uploaded; a hardened proxy with a pre-cache (the
  * migration case the sweep exists for) keeps being screened exactly as it is today, private-name dimension included.
@@ -77,9 +77,8 @@ public final class RescreenFlavor {
     /**
      * The gate flavour {@code digest}, stored at request path {@code path}, must be re-screened through:
      * {@link GatePolicyProvider.Path#PUBLISH} when the coordinate's {@code origin} trail carries a
-     * {@code local-upload} row for exactly those bytes, {@link GatePolicyProvider.Path#PROXY} otherwise. A
-     * {@code null} {@code metadata} (no persistence module installed) or a read failure answers {@code PROXY} - the
-     * unchanged default - and the read failure is logged rather than swallowed (§9).
+     * {@code local-upload} row for exactly those bytes, {@link GatePolicyProvider.Path#PROXY} otherwise. A read
+     * failure answers {@code PROXY} - the unchanged default - and is logged rather than swallowed (§9).
      *
      * <p>{@code inventory} is taken rather than built here because constructing one runs a {@link java.util.ServiceLoader}
      * scan ({@code MetadataProvider.installed()} caches nothing, by its own contract), and the sweep asks this question
@@ -87,7 +86,7 @@ public final class RescreenFlavor {
      */
     public static GatePolicyProvider.Path of(StoreRepositoryInventory inventory, MetadataStore metadata, String path,
                                              String digest) {
-        if (metadata == null || digest == null || digest.isBlank()) {
+        if (digest == null || digest.isBlank()) {
             return GatePolicyProvider.Path.PROXY;
         }
         Optional<ArtifactDescriptor> described = inventory.describe(path);

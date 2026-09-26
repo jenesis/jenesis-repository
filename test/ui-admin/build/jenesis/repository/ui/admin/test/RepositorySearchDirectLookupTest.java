@@ -79,9 +79,9 @@ public class RepositorySearchDirectLookupTest {
         }
     }
 
-    /** A store that refuses to list an ecosystem folder ({@code published/<eco>}) - the coordinate-enumeration a full
-     *  repository walk performs. A direct hit lookup lists only {@code published} (the ecosystems) and
-     *  {@code published/<eco>/<coordinate>} (one coordinate's versions), never the ecosystem folder itself, so it
+    /** A store that refuses to list or page an ecosystem folder ({@code meta/<eco>}) - the coordinate-enumeration a
+     *  full repository walk performs. A direct hit lookup lists only {@code meta} (the ecosystems) and
+     *  {@code meta/<eco>/<coordinate>} (one coordinate's versions), never the ecosystem folder itself, so it
      *  passes; the old full-walk search would throw here. Reads and writes delegate untouched; {@link #scope}
      *  propagates the guard. A test double, never a backend. */
     private static final class ListRefusingStore implements ArtifactStore {
@@ -90,7 +90,7 @@ public class RepositorySearchDirectLookupTest {
             return delegate.identity();   // a decorator answers its delegate's subspace
         }
 
-        private static final Pattern ECOSYSTEM_FOLDER = Pattern.compile("published/[^/]+");
+        private static final Pattern ECOSYSTEM_FOLDER = Pattern.compile("meta/[^/]+");
 
         private final ArtifactStore delegate;
 
@@ -158,6 +158,10 @@ public class RepositorySearchDirectLookupTest {
     
     @Override
     public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+        if (ECOSYSTEM_FOLDER.matcher(prefix.endsWith("/") ? prefix.substring(0, prefix.length() - 1) : prefix)
+                .matches()) {
+            throw new AssertionError("full coordinate walk: paged every coordinate under " + prefix);
+        }
         return delegate.scan(prefix, startAfter, limit, consumer);
     }
 }
