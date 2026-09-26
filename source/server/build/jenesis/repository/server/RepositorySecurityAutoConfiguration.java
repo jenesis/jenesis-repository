@@ -30,7 +30,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * delegated to the {@link RepositoryAuthorizationManager} (a pass-through when the deployment is anonymous), with the
  * Actuator health endpoint left open for liveness/readiness probes. The {@link KeyAuthenticationFilter} runs first to
  * lift the presented key ({@link PresentedKey}) into the security context. CSRF, HTTP Basic and form login are
- * disabled - this is a machine-to-machine artifact API keyed by a header, not a browser session. Both the
+ * disabled - this is a machine-to-machine artifact API keyed by a header, not a browser session - and a write a
+ * browser sends from another site is refused by the {@link CrossSiteWriteFilter}, since a key presented as a Basic
+ * password is one a browser attaches for itself. Both the
  * authentication entry point and the access-denied handler are the {@link RepositoryAuthorizationEntryPoint}, so a
  * denied request answers the status the credential model intends ({@code 401} unauthorized, {@code 403} forbidden)
  * whichever Spring Security failure path it takes.
@@ -159,6 +161,7 @@ public class RepositorySecurityAutoConfiguration {
                         .requestMatchers("/actuator/health",
                                 "/actuator/health/liveness",
                                 "/actuator/health/readiness").permitAll())
+                .addFilterBefore(new CrossSiteWriteFilter(), UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new KeyAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
         // The composition seam: contributed customizers layer their open routes and filters over the baseline while
