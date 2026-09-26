@@ -60,7 +60,7 @@
 
     <!--/* The sweeps delete entries, so they sit apart under a rule of their own, each asking first: the two that
          enforce the settings above as a confirmation, the one that empties the project as a deletion. */-->
-    <section th:if="${isEditor}" class="app-divide" aria-labelledby="eviction">
+    <section th:if="${isAdmin}" class="app-divide" aria-labelledby="eviction">
         <h2 id="eviction">Eviction</h2>
         <p><small>Runs the cache server's own sweep directly on the volume, in the background; the outcome and the
             entries left are shown above when it lands.</small></p>

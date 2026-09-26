@@ -7,6 +7,7 @@ import build.jenesis.repository.ui.CurrentTenant;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -14,10 +15,10 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 /**
  * Publish a whole repository to another one from the console, and watch the jobs doing it.
  *
- * <p>The screen names a repository of the session's tenant and the URL the other repository's client would be pointed
- * at, and starts a job through {@link Exports} - the service the API answers from - so a refusal reads the same here
- * as it does to a script. It never waits on a job: a running one is shown as running and the page refreshes itself,
- * and each job's counts read back one stored document at a time, a page of them at once.
+ * <p>The screen is a page of the repository it exports: it takes the URL the other repository's client would be
+ * pointed at and starts a job through {@link Exports} - the service the API answers from - so a refusal reads the
+ * same here as it does to a script. It never waits on a job: a running one is shown as running and the page refreshes
+ * itself, and each job's counts read back one stored document at a time, a page of them at once.
  */
 @Controller
 public class ExportScreenController {
@@ -30,18 +31,16 @@ public class ExportScreenController {
         this.tenant = tenant;
     }
 
-    @GetMapping("/ui/export")
-    public String screen(@RequestParam(name = "repository", defaultValue = "") String repository,
-                         @RequestParam(name = "after", defaultValue = "") String after, Model model)
+    /** The form and the repository's jobs. {@code resume} names a stopped job the form is to resume, which a job's row
+     *  offers: resuming asks for the credential again, since it was never stored. */
+    @GetMapping("/ui/repositories/{repo}/export")
+    public String screen(@PathVariable("repo") String repository,
+                         @RequestParam(name = "after", defaultValue = "") String after,
+                         @RequestParam(name = "resume", defaultValue = "") String resume, Model model)
             throws IOException {
         model.addAttribute("tenant", tenant.name());
         model.addAttribute("repository", repository);
-        if (repository.isBlank()) {
-            model.addAttribute("jobs", List.of());
-            model.addAttribute("next", null);
-            model.addAttribute("running", false);
-            return "export/form";
-        }
+        model.addAttribute("resume", resume);
         Exports.JobPage page = exports.jobs(tenant.name(), repository, after.isBlank() ? null : after);
         model.addAttribute("jobs", page.jobs());
         model.addAttribute("next", page.next().orElse(null));
@@ -49,8 +48,8 @@ public class ExportScreenController {
         return "export/form";
     }
 
-    @PostMapping("/ui/export")
-    public String start(@RequestParam("repository") String repository,
+    @PostMapping("/ui/repositories/{repo}/export")
+    public String start(@PathVariable("repo") String repository,
                         @RequestParam("url") String url,
                         @RequestParam(name = "username", defaultValue = "") String username,
                         @RequestParam(name = "password", defaultValue = "") String password,
@@ -65,7 +64,6 @@ public class ExportScreenController {
         } else {
             redirect.addFlashAttribute("error", "Nothing exported: " + started.reason());
         }
-        redirect.addAttribute("repository", repository);
-        return "redirect:/ui/export";
+        return "redirect:/ui/repositories/" + repository + "/export";
     }
 }

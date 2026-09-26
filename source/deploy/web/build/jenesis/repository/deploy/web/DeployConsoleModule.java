@@ -4,9 +4,11 @@ import module java.base;
 
 import build.jenesis.repository.ui.ConsoleModuleProvider;
 import build.jenesis.repository.ui.NavEntry;
+import build.jenesis.repository.ui.RepositoryPage;
 
 /**
- * Discovers the deploy screen: one menu entry and one screen, registered through the console's extension seam.
+ * Discovers the deploy screen: a page of every repository, under its contents beside the import, registered through
+ * the console's extension seam.
  *
  * <p>It is off unless switched on. Publishing from a browser is a convenience for an evaluator and for the
  * occasional artifact that has no build behind it; the way artifacts arrive in a repository is a build tool, and a
@@ -34,9 +36,10 @@ public final class DeployConsoleModule implements ConsoleModuleProvider {
     }
 
     @Override
-    public List<NavEntry> navEntries() {
+    public List<RepositoryPage> repositoryPages() {
         // A tenant admin, not any signed-in user: this writes into the tenant's repositories, and the floor should
-        // read the same as the act. The screen re-checks rather than trusting the nav to have hidden it.
-        return List.of(new NavEntry("Deploy", "/ui/deploy", NavEntry.Access.ADMIN, NavEntry.Group.OPERATIONS));
+        // read the same as the act. The route re-checks rather than trusting the sidebar to have hidden it.
+        return List.of(new RepositoryPage("Deploy", "/deploy", NavEntry.Access.ADMIN, RepositoryPage.Topic.CONTENTS,
+                ""));
     }
 }

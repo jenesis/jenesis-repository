@@ -50,8 +50,15 @@ public record RepositoryPage(String label, String path, NavEntry.Access access, 
         /** What the repository holds, and the ways to put more in. */
         CONTENTS("Contents"),
 
-        /** What the gate decided about it, and what the feeds say about what it holds. */
-        SCREENING("Screening"),
+        /** The queues that wait for a person's decision - what the gate held, what it refused, what an analysis
+         *  proposes - so the work to do is listed apart from the reports about what is there. */
+        REVIEW("Review"),
+
+        /** What the feeds, the ledgers and the policies say about what it holds. */
+        RISK("Risk"),
+
+        /** Where what it holds came from and what depends on it. */
+        PROVENANCE("Provenance"),
 
         /** How long it keeps what it holds, and where it sends it. */
         LIFECYCLE("Lifecycle");

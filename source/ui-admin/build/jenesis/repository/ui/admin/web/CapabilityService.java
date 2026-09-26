@@ -104,6 +104,9 @@ public class CapabilityService {
             MaintenanceTaskProvider.installed().contains("migration-rescreen"),
             enabled(consoleModules, "scim"),
             flag(contributed, "leak-webhook"),
+            // The AI review queue is a filter of the findings ledger that only a code audit fills, so it is listed
+            // where both are present.
+            FindingsProvider.installed().isPresent() && flag(contributed, "ai-review"),
             ImportSourceProvider.declared().stream()
                     .map(provider -> new ImportSourceView(
                             provider.name(), provider.label(), provider.requiresFormat()))
@@ -166,6 +169,7 @@ public class CapabilityService {
                 Map.entry("hardening", capabilities.hardening()),
                 Map.entry("scim", capabilities.scim()),
                 Map.entry("leakWebhook", capabilities.leakWebhook()),
+                Map.entry("aiReview", capabilities.aiReview()),
                 Map.entry("import", capabilities.importAvailable()));
     }
 
@@ -234,7 +238,7 @@ public class CapabilityService {
                                boolean provenance, boolean upstream, boolean upstreamCredentials, boolean rateLimit,
                                boolean dependents, boolean search, boolean index, boolean licensePolicy,
                                boolean findings, boolean maintainerHealth, boolean hardening, boolean scim,
-                               boolean leakWebhook, List<ImportSourceView> importSources) {
+                               boolean leakWebhook, boolean aiReview, List<ImportSourceView> importSources) {
 
         /** An import needs both a source connector and the upstream fetcher on the module path. */
         public boolean importAvailable() {

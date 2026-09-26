@@ -10,12 +10,12 @@
   "not installed" note when no license-policy module contributes a planner (the same 501 degrade the endpoint gives).
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments :: head('License blast radius')}"></head>
+<head th:replace="~{fragments :: head('License enforcement preview')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('License blast radius ' + ${repo})}"></header>
+    <header th:replace="~{base :: pageHeader('License enforcement preview · ' + ${repo})}"></header>
 
     <p th:unless="${blast.installed()}">
         No license-policy module is installed on this deployment, so retroactive-enforcement previews are

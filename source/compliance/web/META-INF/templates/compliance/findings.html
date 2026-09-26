@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments :: head('Findings')}"></head>
+<head th:replace="~{fragments :: head(${reviewQueue} ? 'AI review' : 'Findings')}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Findings · ' + ${repo})}"></header>
+    <header th:replace="~{base :: pageHeader((${reviewQueue} ? 'AI review' : 'Findings') + ' · ' + ${repo})}"></header>
 
     <p th:unless="${panel.available()}">
         No findings module is installed on this deployment, so nothing durable holds what the scans and the gate
@@ -17,7 +17,7 @@
             recorded against this repository's artifacts, attributed to the module or feed that produced each row.
             A superseded finding stays listed with its mark - categorized, never discarded. An AI-produced row is
             a candidate for human review, never an authoritative verdict: confirm or dismiss it here - the
-            <a th:href="@{'/ui/repositories/' + ${repo} + '/findings'(kind='ai-candidate')}">AI review queue</a>
+            <a th:href="@{'/ui/repositories/' + ${repo} + '/ai-review'}">AI review queue</a>
             lists the code-audit candidates awaiting that decision.</small></p>
         <p><small th:if="${panel.lastScanned() != null}">Last scanned against the advisory feeds:
             <span th:text="${panel.lastScanned()}">-</span></small>
@@ -136,6 +136,7 @@
                                 <input type="hidden" name="version" th:value="${row.version()}">
                                 <input type="hidden" name="source" th:value="${row.source()}">
                                 <input type="hidden" name="id" th:value="${row.id()}">
+                                <input th:if="${reviewQueue}" type="hidden" name="queue" value="ai-review">
                                 <button type="submit" name="decision" value="confirmed"
                                         th:if="${row.review() != 'confirmed'}">Confirm</button>
                                 <button type="submit" name="decision" value="dismissed" class="secondary"

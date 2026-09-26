@@ -33,12 +33,13 @@ public final class ComplianceConsoleModule implements ConsoleModuleProvider {
     @Override
     public List<RepositoryPage> repositoryPages() {
         return List.of(
-                new RepositoryPage("Quarantine", "/quarantine", Topic.SCREENING),
-                new RepositoryPage("Refused", "/refusals", Topic.SCREENING),
-                new RepositoryPage("Vulnerabilities", "/vulnerabilities", Topic.SCREENING, "advisories"),
-                new RepositoryPage("Findings", "/findings", Topic.SCREENING, "findings"),
-                new RepositoryPage("Signers", "/signers", Topic.SCREENING),
-                new RepositoryPage("Maintainer health", "/health", Topic.SCREENING, "maintainerHealth"),
-                new RepositoryPage("License blast radius", "/blast-radius", Topic.SCREENING, "licensePolicy"));
+                new RepositoryPage("Quarantine", "/quarantine", Topic.REVIEW),
+                new RepositoryPage("AI review", "/ai-review", Topic.REVIEW, "aiReview"),
+                new RepositoryPage("Refused", "/refusals", Topic.REVIEW),
+                new RepositoryPage("Vulnerabilities", "/vulnerabilities", Topic.RISK, "advisories"),
+                new RepositoryPage("Findings", "/findings", Topic.RISK, "findings"),
+                new RepositoryPage("Maintainer health", "/health", Topic.RISK, "maintainerHealth"),
+                new RepositoryPage("License enforcement preview", "/blast-radius", Topic.RISK, "licensePolicy"),
+                new RepositoryPage("Signers", "/signers", Topic.PROVENANCE));
     }
 }

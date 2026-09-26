@@ -12,15 +12,57 @@
         needs no importer. A version already there is not sent again, so an export can be run again or resumed, and
         a held version is never sent. The job runs in the background; this screen shows where it has got to.</small></p>
 
+    <!--/* The jobs first: whether an export is already running is what decides whether to start one. */-->
     <article>
-        <h2>Start an export</h2>
-        <form method="post" th:action="@{/ui/export}">
-            <label>Repository
-                <input type="text" name="repository" required placeholder="releases" th:value="${repository}"
-                       th:attr="aria-describedby='export-repository-help'">
-            </label>
-            <small id="export-repository-help">A repository in <strong th:text="${tenant}">tenant</strong>; every
-                version it holds is exported.</small>
+        <h2>Exports of <span th:text="${repository}">releases</span></h2>
+        <th:block th:if="${running}">
+            <p th:replace="~{base :: running('An export is running.')}"></p>
+        </th:block>
+        <p th:if="${jobs.isEmpty()}"><small>No exports of this repository yet.</small></p>
+        <figure th:unless="${jobs.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Job</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Target</th>
+                    <th scope="col" class="app-list__num">Published</th>
+                    <th scope="col" class="app-list__num">Already there</th>
+                    <th scope="col" class="app-list__num">Withheld</th>
+                    <th scope="col">Detail</th>
+                    <th scope="col"><span class="app-sr-only">Actions</span></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="job : ${jobs}">
+                    <td><code th:text="${job.id}">id</code></td>
+                    <td><span class="app-badge"
+                              th:classappend="${job.running()} ? 'app-badge--info' : (${job.error} ? 'app-badge--danger' : 'app-badge--pass')"
+                              th:text="${job.state}">running</span></td>
+                    <td><code th:text="${job.target}">url</code></td>
+                    <td class="app-list__num" th:text="${job.published}">0</td>
+                    <td class="app-list__num" th:text="${job.present}">0</td>
+                    <td class="app-list__num" th:text="${job.withheld}">0</td>
+                    <td>
+                        <small th:if="${job.error}" th:text="${job.error}">error</small>
+                        <small th:if="${job.error == null and job.reached != null}"
+                               th:text="'reached ' + ${job.reached}">reached</small>
+                    </td>
+                    <td><a th:unless="${job.running()}"
+                           th:href="@{/ui/repositories/{repo}/export(repo=${repository},resume=${job.id})}">Resume</a></td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <p th:if="${next}"><a th:href="@{/ui/repositories/{repo}/export(repo=${repository}, after=${next})}">Showing
+            the first page - more exports follow</a></p>
+    </article>
+
+    <article id="start">
+        <h2 th:text="${resume.isBlank()} ? 'Start an export' : 'Resume export ' + ${resume}">Start an export</h2>
+        <form method="post" th:action="@{/ui/repositories/{repo}/export(repo=${repository})}">
+            <input th:unless="${resume.isBlank()}" type="hidden" name="resume" th:value="${resume}">
+            <p><small>Every version <strong th:text="${repository}">releases</strong> holds is exported.</small></p>
 
             <label>Target URL
                 <input type="url" name="url" required placeholder="https://repo.example.com/repository/maven-releases/"
@@ -40,54 +82,10 @@
             </div>
             <small>The credential is used for this job only and never stored; resuming a job asks for it again.</small>
 
-            <label>Resume job <small>(optional)</small>
-                <input name="resume" autocomplete="off" placeholder="the id of a stopped job"></label>
-
-            <button type="submit">Start export</button>
+            <button type="submit" th:text="${resume.isBlank()} ? 'Start export' : 'Resume export'">Start export</button>
         </form>
     </article>
 
-    <article th:unless="${repository.isBlank()}">
-        <h2>Exports of <span th:text="${repository}">releases</span></h2>
-        <th:block th:if="${running}">
-            <p th:replace="~{base :: running('An export is running.')}"></p>
-        </th:block>
-        <p th:if="${jobs.isEmpty()}"><small>No exports of this repository yet.</small></p>
-        <figure th:unless="${jobs.isEmpty()}">
-            <table class="app-list">
-                <thead>
-                <tr>
-                    <th scope="col">Job</th>
-                    <th scope="col">State</th>
-                    <th scope="col">Target</th>
-                    <th scope="col" class="app-list__num">Published</th>
-                    <th scope="col" class="app-list__num">Already there</th>
-                    <th scope="col" class="app-list__num">Withheld</th>
-                    <th scope="col">Detail</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr th:each="job : ${jobs}">
-                    <td><code th:text="${job.id}">id</code></td>
-                    <td><span class="app-badge"
-                              th:classappend="${job.running()} ? 'app-badge--info' : (${job.error} ? 'app-badge--danger' : 'app-badge--pass')"
-                              th:text="${job.state}">running</span></td>
-                    <td><code th:text="${job.target}">url</code></td>
-                    <td class="app-list__num" th:text="${job.published}">0</td>
-                    <td class="app-list__num" th:text="${job.present}">0</td>
-                    <td class="app-list__num" th:text="${job.withheld}">0</td>
-                    <td>
-                        <small th:if="${job.error}" th:text="${job.error}">error</small>
-                        <small th:if="${job.error == null and job.reached != null}"
-                               th:text="'reached ' + ${job.reached}">reached</small>
-                    </td>
-                </tr>
-                </tbody>
-            </table>
-        </figure>
-        <p th:if="${next}"><a th:href="@{/ui/export(repository=${repository}, after=${next})}">Showing the first
-            page - more exports follow</a></p>
-    </article>
 </main>
 </body>
 </html>

@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.ui.ConsoleModuleProvider;
 import build.jenesis.repository.ui.NavEntry;
+import build.jenesis.repository.ui.RepositoryPage;
 
 /**
  * Discovers the export screen: one menu entry and one screen, registered through the console's extension seam.
@@ -27,7 +28,9 @@ public final class ExportConsoleModule implements ConsoleModuleProvider {
     }
 
     @Override
-    public List<NavEntry> navEntries() {
-        return List.of(new NavEntry("Export", "/ui/export", NavEntry.Access.ADMIN, NavEntry.Group.OPERATIONS));
+    public List<RepositoryPage> repositoryPages() {
+        // Where a repository's content is sent, beside the forwarding that sends it continuously.
+        return List.of(new RepositoryPage("Export", "/export", NavEntry.Access.ADMIN,
+                RepositoryPage.Topic.LIFECYCLE, ""));
     }
 }

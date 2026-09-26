@@ -93,7 +93,7 @@
             </tbody>
         </table>
         </figure>
-        <p><a th:href="@{'/ui/repositories/' + ${repo} + '#quarantine'}">Review the quarantine queue &rarr;</a></p>
+        <p><a th:href="@{'/ui/repositories/' + ${repo} + '/quarantine'}">Review the quarantine queue &rarr;</a></p>
     </article>
 
     <!--/* Quality-inspection subsection: a scoped error state, rendered on the shared subsectionError wrapper, only when
@@ -128,7 +128,20 @@
                         <span th:unless="${v.current}" th:text="${v.version}">0.9</span>
                     </td>
                     <td><small th:text="${v.published}">2026-06-01T00:00:00Z</small></td>
-                    <td th:text="${v.pinned} ? 'yes' : ''">yes</td>
+                    <td>
+                        <span th:text="${v.pinned} ? 'yes' : ''">yes</span>
+                        <form th:if="${isEditor and !detail.ecosystem.isEmpty() and !detail.coordinate.isEmpty()}"
+                              method="post" style="display:inline; margin:0"
+                              th:action="${v.pinned} ? @{'/ui/repositories/' + ${repo} + '/pins/remove'} : @{'/ui/repositories/' + ${repo} + '/pins'}"
+                              th:with="here=@{/ui/repositories/{repo}/artifact(repo=${repo},path=${detail.path})}">
+                            <input type="hidden" name="ecosystem" th:value="${detail.ecosystem}">
+                            <input type="hidden" name="coordinate" th:value="${detail.coordinate}">
+                            <input type="hidden" name="version" th:value="${v.version}">
+                            <input type="hidden" name="returnTo" th:value="${here}">
+                            <th:block th:if="${v.pinned}"><button th:replace="~{base :: dangerButton('Unpin', 'Lift this pin? The version becomes eligible for retention eviction.')}">Unpin</button></th:block>
+                            <button th:unless="${v.pinned}" type="submit" class="secondary outline">Pin</button>
+                        </form>
+                    </td>
                     <td th:if="${downloadsTracked}">
                         <span th:text="${v.downloads}">7</span>
                         <small th:if="${!v.lastDownloaded.isEmpty()}" th:text="'last ' + ${v.lastDownloaded}">last 2026-06-05T12:00:00Z</small>

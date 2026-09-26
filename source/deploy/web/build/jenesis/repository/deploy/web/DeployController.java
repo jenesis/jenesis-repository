@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -17,7 +18,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 /**
  * Publish one artifact from the console.
  *
- * <p>The screen names a repository and a path and takes a file; the publish goes through
+ * <p>The screen is a page of the repository it publishes into; it takes a path and a file, and the publish goes through
  * {@link RepositoryController#publish}, which is the same ingress edge a {@code PUT} to {@code /repository/**}
  * takes. So the routing decides the store and whether the target accepts a write, the discovered interceptor chain
  * screens the body once, and an accepted blob is laid out by the claiming format. Nothing here opens a store or
@@ -47,9 +48,10 @@ public class DeployController {
         this.tenant = tenant;
     }
 
-    @GetMapping("/ui/deploy")
-    public String form(Model model) {
+    @GetMapping("/ui/repositories/{repo}/deploy")
+    public String form(@PathVariable("repo") String repo, Model model) {
         model.addAttribute("tenant", tenant.name());
+        model.addAttribute("repo", repo);
         return "deploy/form";
     }
 
@@ -60,8 +62,8 @@ public class DeployController {
      * quarantined it and a reviewer decides - and a refusal is not an error page, it is the gate working. Reporting
      * both as "upload failed" is how an operator learns to distrust the screen.
      */
-    @PostMapping("/ui/deploy")
-    public String deploy(@RequestParam("repository") String target,
+    @PostMapping("/ui/repositories/{repo}/deploy")
+    public String deploy(@PathVariable("repo") String target,
                          @RequestParam("path") String path,
                          HttpServletRequest request,
                          RedirectAttributes redirect) {
@@ -81,7 +83,7 @@ public class DeployController {
         } catch (IOException | RuntimeException failure) {
             redirect.addFlashAttribute("error", "Could not publish " + artifactPath + ": " + failure.getMessage());
         }
-        return "redirect:/ui/deploy";
+        return "redirect:/ui/repositories/" + target + "/deploy";
     }
 
     /** What each status the edge answers means to an operator, in their terms rather than the protocol's. */

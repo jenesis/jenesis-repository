@@ -611,15 +611,18 @@ public class RepositoryAdminController {
         return "redirect:/ui/repositories/" + repo + "/retention";
     }
 
+    /** Pin a version - from the Pins page's form, or from the version's own row on a coordinate or artifact page,
+     *  which names itself in {@code returnTo} so the reader stays where they pinned. */
     @PostMapping("/ui/repositories/{repo}/pins")
     public String pin(@PathVariable("repo") String repo,
                       @RequestParam("ecosystem") String ecosystem,
                       @RequestParam("coordinate") String coordinate,
                       @RequestParam("version") String version,
+                      @RequestParam(name = "returnTo", defaultValue = "") String returnTo,
                       RedirectAttributes redirect) throws IOException {
         lifecycle.pin(repo, ecosystem, coordinate, version);
         redirect.addFlashAttribute("message", "Pinned " + coordinate + ":" + version + ".");
-        return "redirect:/ui/repositories/" + repo + "/pins";
+        return "redirect:" + within(repo, returnTo, "/pins");
     }
 
     @PostMapping("/ui/repositories/{repo}/pins/remove")
@@ -627,10 +630,21 @@ public class RepositoryAdminController {
                         @RequestParam("ecosystem") String ecosystem,
                         @RequestParam("coordinate") String coordinate,
                         @RequestParam("version") String version,
+                        @RequestParam(name = "returnTo", defaultValue = "") String returnTo,
                         RedirectAttributes redirect) throws IOException {
         lifecycle.unpin(repo, ecosystem, coordinate, version);
         redirect.addFlashAttribute("message", "Unpinned " + coordinate + ":" + version + ".");
-        return "redirect:/ui/repositories/" + repo + "/pins";
+        return "redirect:" + within(repo, returnTo, "/pins");
+    }
+
+    /** {@code requested} when it is a page of this repository's own console, else its {@code fallback} page: a form
+     *  names where to return, and a return address outside the repository - another host above all - is not
+     *  followed. */
+    static String within(String repo, String requested, String fallback) {
+        String base = "/ui/repositories/" + repo + "/";
+        return requested.startsWith(base) && !requested.contains("//") && !requested.contains("\\")
+                ? requested
+                : "/ui/repositories/" + repo + fallback;
     }
 
     @PostMapping("/ui/repositories/{repo}/staging/{id}/promote")

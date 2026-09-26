@@ -76,7 +76,7 @@ final class ConsoleAuthorization {
                 // mutation gate below - and the GET is gated too, because a form nobody may submit is a control
                 // that reads as available. The module is off unless an operator switches it on; this is what the
                 // route means once it exists.
-                .requestMatchers("/ui/deploy").access(tenants.require(UserDirectory.Role.ADMIN))
+                .requestMatchers("/ui/repositories/*/deploy").access(tenants.require(UserDirectory.Role.ADMIN))
                 .requestMatchers(HttpMethod.POST, "/ui/repositories/quota", "/ui/repositories/rate-limit")
                         .access(tenants.require(UserDirectory.Role.ADMIN))
                 // Deleting a repository removes everything it holds, for everyone - admin-grade, like the limits.

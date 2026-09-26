@@ -113,6 +113,9 @@ public class ComplianceScreenController {
         return "redirect:/ui/repositories/" + repo + "/health";
     }
 
+    /** The finding kind a code audit records its candidates under, which is what the AI review queue lists. */
+    private static final String AI_CANDIDATE = "ai-candidate";
+
     /** The findings screen: the persisted findings ledger for a repository, filterable by coordinate (the
      *  per-artifact view), kind, source, category and severity - read from the store, no feed queried. */
     @GetMapping("/ui/repositories/{repo}/findings")
@@ -130,6 +133,17 @@ public class ComplianceScreenController {
         model.addAttribute("category", category);
         model.addAttribute("severity", severity);
         model.addAttribute("panel", compliance.findings(repo, coordinate, kind, source, category, severity));
+        model.addAttribute("reviewQueue", false);
+        return QUALIFIER + "/findings";
+    }
+
+    /** The AI review queue: the findings a code audit proposed, waiting for a person to confirm or dismiss them. It is
+     *  the findings ledger filtered to those candidates, served as a page of its own so the queue is listed with the
+     *  quarantine - the other work waiting on a decision - rather than reachable only from a sentence. */
+    @GetMapping("/ui/repositories/{repo}/ai-review")
+    public String aiReview(@PathVariable("repo") String repo, Model model) throws IOException {
+        findings(repo, "", AI_CANDIDATE, "", "", "", model);
+        model.addAttribute("reviewQueue", true);
         return QUALIFIER + "/findings";
     }
 
@@ -144,12 +158,14 @@ public class ComplianceScreenController {
                                 @RequestParam("id") String id,
                                 @RequestParam("decision") String decision,
                                 @RequestParam(name = "note", defaultValue = "") String note,
+                                @RequestParam(name = "queue", defaultValue = "") String queue,
                                 RedirectAttributes redirect) throws IOException {
         compliance.review(repo, ecosystem, coordinate, version, source, id, decision,
                 note.isBlank() ? null : note);
         redirect.addFlashAttribute("message", ("confirmed".equalsIgnoreCase(decision) ? "Confirmed " : "Dismissed ")
                 + id + " on " + coordinate + ":" + version + ".");
-        return "redirect:/ui/repositories/" + repo + "/findings";
+        // A decision made in the AI review queue returns to the queue, where the next candidate waits.
+        return "redirect:/ui/repositories/" + repo + ("ai-review".equals(queue) ? "/ai-review" : "/findings");
     }
 
     @GetMapping("/ui/repositories/{repo}/quarantine")
