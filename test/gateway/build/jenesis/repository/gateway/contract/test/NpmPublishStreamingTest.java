@@ -52,6 +52,31 @@ class NpmPublishStreamingTest {
                 .as("the tarball pointer resolves to the streamed blob").isEqualTo(store.artifactHash());
     }
 
+    /**
+     * Everything in an envelope but the tarball is small metadata, so it is read within a bound rather than whole: an
+     * envelope whose versions run past it is answered {@code 413} while they stream, and the tarball after them is
+     * never read, so nothing is stored.
+     */
+    @Test
+    void version_metadata_past_its_bound_is_refused_before_the_tarball_is_read() throws IOException {
+        StringBuilder versions = new StringBuilder("{\"_id\":\"bigpkg\",\"name\":\"bigpkg\",\"versions\":{");
+        String description = "x".repeat(1024 * 1024);
+        for (int index = 0; index < 20; index++) {
+            versions.append(index == 0 ? "" : ",").append("\"1.0.").append(index).append("\":{\"name\":\"bigpkg\",")
+                    .append("\"description\":\"").append(description).append("\"}");
+        }
+        String body = versions + "},\"_attachments\":{\"bigpkg-1.0.0.tgz\":{\"data\":\"AAAA\",\"length\":3}}}";
+
+        NpmStreamStore store = new NpmStreamStore();
+        PublishExchange exchange = new PublishExchange(
+                new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)), "/npm/bigpkg");
+        discover("npm").handle(exchange, store);
+
+        assertThat(exchange.status).as("twenty megabytes of version metadata is past the bound").isEqualTo(413);
+        assertThat(store.objects).as("and the tarball after it was never read, so nothing was stored").isEmpty();
+        assertThat(store.pointers).isEmpty();
+    }
+
     /** The discovered {@link RepositoryFormat} of the given name (the modules are not exported, so a test
      *  reaches them through the same {@link ServiceLoader} seam the server uses). */
     private static RepositoryFormat discover(String name) {

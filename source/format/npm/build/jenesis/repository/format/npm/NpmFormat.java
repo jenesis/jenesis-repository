@@ -25,6 +25,7 @@ import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.Withheld;
+import tools.jackson.core.JsonGenerator;
 import tools.jackson.core.JsonParser;
 import tools.jackson.core.JsonToken;
 import build.jenesis.repository.format.Semver;
@@ -43,6 +44,14 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         ArtifactSignatures, RepositoryExporter {
 
     static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /** The most version metadata one publish envelope may carry, every version together. A version's metadata is its
+     *  {@code package.json} with the readme folded in - kilobytes, a megabyte for a long readme - and a publish carries
+     *  one version, so this is generous; it is what keeps an envelope from being a way to fill the heap. */
+    static final int LARGEST_VERSIONS = 16 * 1024 * 1024;
+
+    /** The most a publish envelope's {@code dist-tags} may carry: a handful of tag names and versions. */
+    static final int LARGEST_DIST_TAGS = 64 * 1024;
 
     @Override
     public String name() {
@@ -304,7 +313,13 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
      * those bytes were screened, so it admits nothing unassessed.
      */
     private void publish(String name, FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
-        Envelope envelope = parse(name, exchange, blobs, store);
+        Envelope envelope;
+        try {
+            envelope = parse(name, exchange, blobs, store);
+        } catch (TooLarge refused) {
+            exchange.respond(413);   // an envelope field past its bound - nothing was indexed
+            return;
+        }
         if (envelope == null) {
             exchange.respond(400);   // not a JSON object, or an unsafe version / attachment key - nothing was indexed
             return;
@@ -393,8 +408,10 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                     }
                     case "dist-tags" -> {
                         if (parser.currentToken() == JsonToken.START_OBJECT) {
-                            JsonNode tags = parser.readValueAsTree();
-                            distTags = MAPPER.writeValueAsBytes(tags);
+                            distTags = bounded(parser, LARGEST_DIST_TAGS);
+                            if (distTags == null) {
+                                throw new TooLarge("dist-tags");
+                            }
                         } else {
                             parser.skipChildren();
                         }
@@ -426,7 +443,11 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             parser.skipChildren();
             return null;
         }
-        JsonNode read = parser.readValueAsTree();
+        byte[] held = bounded(parser, ArtifactSignatures.Material.LARGEST_SIGNATURE);
+        if (held == null) {
+            return null;
+        }
+        JsonNode read = MAPPER.readTree(held);
         ObjectNode envelope = read instanceof ObjectNode object ? object : MAPPER.createObjectNode();
         if (read instanceof ArrayNode list) {
             envelope.set("attestations", list);
@@ -466,24 +487,82 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return MAPPER.writeValueAsBytes(object);
     }
 
-    /** Hold each version's metadata subtree against its version. A version subtree is small index metadata, so it is
-     *  read whole; the key is validated here, before anything can be written from it. False on an unsafe version that
-     *  would forge a pointer key with {@code /} or {@code ..}. */
+    /** Hold each version's metadata subtree against its version, all of them together within
+     *  {@link #LARGEST_VERSIONS}; the key is validated here, before anything can be written from it. False on an unsafe
+     *  version that would forge a pointer key with {@code /} or {@code ..}.
+     *
+     *  @throws TooLarge when the envelope's version metadata grows past the bound */
     private static boolean readVersions(JsonParser parser, Map<String, byte[]> versions) throws IOException {
         if (parser.currentToken() != JsonToken.START_OBJECT) {
             parser.skipChildren();
             return true;
         }
+        int remaining = LARGEST_VERSIONS;
         while (parser.nextToken() == JsonToken.PROPERTY_NAME) {
             String version = parser.currentName();
             parser.nextToken();   // advance onto the version's metadata object
             if (Keys.unsafe(version)) {
                 return false;
             }
-            JsonNode metadata = parser.readValueAsTree();
-            versions.put(version, MAPPER.writeValueAsBytes(metadata));
+            byte[] metadata = bounded(parser, remaining);
+            if (metadata == null) {
+                throw new TooLarge("versions");
+            }
+            remaining -= metadata.length;
+            versions.put(version, metadata);
         }
         return true;
+    }
+
+    /**
+     * The subtree the parser is on, as the bytes of its JSON, or {@code null} when those grew past {@code limit} - read
+     * to its end either way, one token at a time, so what an envelope costs in memory is the limit and one token
+     * rather than the whole subtree it sent. Every field of a publish envelope but the tarball is small metadata, and
+     * reading one whole before measuring it let a publisher make the node hold whatever it chose to send.
+     */
+    private static byte[] bounded(JsonParser parser, int limit) throws IOException {
+        Bounded out = new Bounded(limit);
+        try (JsonGenerator generator = MAPPER.createGenerator(out)) {
+            generator.copyCurrentStructure(parser);
+        }
+        return out.over ? null : out.toByteArray();
+    }
+
+    /** A buffer that holds at most its limit, and past it holds nothing and remembers that it was passed. */
+    private static final class Bounded extends ByteArrayOutputStream {
+
+        private final int limit;
+        private boolean over;
+
+        private Bounded(int limit) {
+            this.limit = limit;
+        }
+
+        @Override
+        public void write(int value) {
+            write(new byte[]{(byte) value}, 0, 1);
+        }
+
+        @Override
+        public void write(byte[] bytes, int offset, int length) {
+            if (over) {
+                return;
+            }
+            if ((long) count + length > limit) {
+                over = true;
+                reset();
+                return;
+            }
+            super.write(bytes, offset, length);
+        }
+    }
+
+    /** An envelope field past its bound, answered {@code 413} rather than read. */
+    private static final class TooLarge extends IOException {
+
+        private TooLarge(String field) {
+            super("the publish envelope's " + field + " is past its bound");
+        }
     }
 
     /** Screen and link each attachment's tarball as its bytes stream by. The tarball is the one unbounded field, so it

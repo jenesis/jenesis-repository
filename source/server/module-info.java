@@ -85,5 +85,6 @@ open module build.jenesis.repository.server {
             with build.jenesis.repository.server.NodeDivergenceAdvisor;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.server.ConsistencySettingsContributor,
-                 build.jenesis.repository.server.LogsSettingsContributor;
+                 build.jenesis.repository.server.LogsSettingsContributor,
+                 build.jenesis.repository.server.UploadLimitSettingsContributor;
 }

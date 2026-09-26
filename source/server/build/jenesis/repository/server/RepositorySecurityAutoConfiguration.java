@@ -162,6 +162,8 @@ public class RepositorySecurityAutoConfiguration {
                                 "/actuator/health/liveness",
                                 "/actuator/health/readiness").permitAll())
                 .addFilterBefore(new CrossSiteWriteFilter(), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new UploadLimitFilter(UploadLimitFilter.live(Features.lookup())),
+                        UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new KeyAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
         // The composition seam: contributed customizers layer their open routes and filters over the baseline while
