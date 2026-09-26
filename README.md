@@ -154,6 +154,33 @@ Every suite runs in process - no container, browser or live network - so the bui
 an SPI is expected to arrive with the test-kit clause that pins the new behaviour, so every implementation
 inherits it.
 
+## Supply chain
+
+What goes into a build is pinned, and what comes out of one can be checked:
+
+| | Pinned or signed | Checked by |
+|---|---|---|
+| Java dependencies | every version and SHA-256 in `build.jenesis/pin-repository.properties`; every signing key's fingerprint beside it in `build.jenesis/signature-repository.properties` | the build, on every resolve; `-Djenesis.dependency.signature=declared` verifies each artifact's and POM's signature against the declared key |
+| Artifacts | a CycloneDX SBOM in every jar the build writes; the Maven Central releases PGP-signed (`jreleaser.yml`) | Maven Central's signature check, or `gpg --verify` |
+| Build and CI | the build tool as a submodule commit; every GitHub Action by commit SHA | `git submodule status`; the workflow files |
+| Image and chart | the base image by digest (`source/bundle/META-INF/build.jenesis/packaging.properties`; the images step refuses a base named by tag alone); the pushed image and chart signed by digest, keylessly, with the publish workflow's identity, and the image's CycloneDX SBOM attested to the same digest | `cosign`, below |
+
+To check a pulled image - the chart takes the same two flags:
+
+```bash
+cosign verify \
+  --certificate-identity-regexp '^https://github\.com/jenesis/jenesis-repository/\.github/workflows/publish-images\.yml@' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  docker.io/<namespace>/jenesis-repository:<version>
+cosign verify-attestation --type cyclonedx \
+  --certificate-identity-regexp '^https://github\.com/jenesis/jenesis-repository/\.github/workflows/publish-images\.yml@' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  docker.io/<namespace>/jenesis-repository:<version>
+```
+
+The signatures are recorded in Sigstore's public transparency log, which is what lets `cosign` check them with
+no key distributed beside the image.
+
 ## Continuous integration and releases
 
 `.github/workflows/build.yml` builds and tests on push and pull request, on JDK 25, and uploads `target/` on
