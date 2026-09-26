@@ -7,6 +7,7 @@ import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Condemned;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -94,7 +95,7 @@ class MarkSweepTest {
     @Test
     void a_condemned_blob_relinked_through_publication_is_never_collected() throws IOException {
         // The dedup re-publish race: identical content dedupes to the blob a pass already condemned; the re-link
-        // clears the marker on the write path, so the next sweep has nothing due.
+        // spares it on the write path, so the next sweep has nothing due.
         ArtifactStore store = store();
         Publication publication = new Publication(store);
         String blob = publication.storeBlob(bytes("deduped"));
@@ -102,7 +103,7 @@ class MarkSweepTest {
         assertThat(store.exists("gc/condemned/" + blob)).isTrue();
 
         publication.link("/maven/back.jar", blob);
-        assertThat(store.exists("gc/condemned/" + blob)).as("the link un-condemned the blob").isFalse();
+        assertThat(Condemned.standing(store, blob)).as("the link spared the blob").isFalse();
 
         GcPlan next = collector().collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(next.collected()).isZero();

@@ -284,8 +284,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     }
 
     /**
-     * A {@code twine upload} wraps its artifact in a multipart form, so this format is <b>not</b> edge-screened
-     * ((a)): the request body is an <em>envelope</em>, and gating it at the shared single-body edge would hash and
+     * A {@code twine upload} wraps its artifact in a multipart form, so this format is <b>not</b> edge-screened:
+     * the request body is an <em>envelope</em>, and gating it at the shared single-body edge would hash and
      * assess the multipart while the bytes that later serve are the wheel or sdist inside it - a second
      * content-addressed object under a hash no interceptor ever saw, which is {@code RepositoryFormat} clause 14's
      * fail-open direction. The shared edge ({@code ScreenedDispatch}) takes the request body verbatim and offers no
@@ -611,15 +611,13 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     }
 
     /**
-     * The republish conflict policy this format hands the hosted-publish operation as <em>data</em>, rather
-     * than re-implementing "is this filename already taken" beside the layout: {@code OVERWRITE}, last-writer-wins.
-     * That is exactly what a {@code twine upload} does today - a distribution pointer lives in the {@code pypi/} blobs
-     * namespace, not in {@code publish/}, so the release-immutability edge hook (which reads a
-     * {@code publish/<path>} pointer) has never seen it, and a re-upload has always silently re-pointed. A
-     * <em>probing</em> mode could not be expressed here in any case: the operation evaluates the policy before the
-     * accepted layout runs, and the pointer key an upload collides on is only known once the envelope's
-     * {@code name} field and the {@code content} part's filename have both been read - which happens inside that
-     * layout, since the protocol does not order the two.
+     * The republish policy handed to the hosted-publish operation, which evaluates it before the layout runs:
+     * {@code OVERWRITE}, since the key an upload collides on is only known once the envelope's {@code name} field and
+     * the {@code content} part's filename have both been read - inside the layout, as the protocol does not order the
+     * two. PyPI refuses a filename already uploaded, whatever its bytes, and so does this: the refusal is taken at the
+     * link ({@link Blobs#linkOnce}), inside the pointer's compare-and-set, and answered as PyPI answers it
+     * ({@link #alreadyExists}). A re-upload of the identical file converges rather than being refused, so an upload
+     * whose answer was lost can be sent again.
      */
     private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
 
@@ -631,7 +629,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
      * <b>The commit point is the {@code pypi/<project>/files/<filename>} pointer link</b> - before it nothing serves
      * and the Simple index answers a miss; after it the distribution downloads and the project index lists it.
      *
-     * <p>This is the ordering fix owns for PyPI: the former code linked the distribution pointer <em>first</em>
+     * <p>This is the ordering fix for PyPI: the former code linked the distribution pointer <em>first</em>
      * and only then stamped {@code pypi/<project>/.hosted}, so a crash in between left a downloadable file whose
      * project index had not yet been switched on. The marker gates a listing surface, so it is a visibility write and
      * is now declared beside the pointer - after it, never before, so the index is never switched on ahead of the
@@ -640,7 +638,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
      * <p>The distribution file (the multipart {@code content} part) is the one unbounded part - a wheel or sdist of
      * arbitrary size - so it is handed to the operation as the accepted body and streams straight into the
      * content-addressed store (hash-on-write, never buffered) while the small text fields (name, version, digests) are
-     * read whole. Since (a) that part is also what the <b>screen</b> sees: this format opts out of the single-body
+     * read whole. That part is also what the <b>screen</b> sees: this format opts out of the single-body
      * ingress edge ({@link #screened()}), so nothing content-addresses the multipart envelope any more and there is no
      * second CAS object under a hash no interceptor ever saw. The wheel is stored exactly once, the accepted hash is
      * the distribution's own - which is what the Simple index publishes as its {@code #sha256} - and the bytes the
@@ -652,7 +650,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
      * No size cap: a multi-gigabyte upload that no heap could hold still completes, because the body is never a
      * {@code byte[]}.
      *
-     * <p><b>This is the format's screening choke point</b> ((a)). Because {@link #screened()} is {@code false} the
+     * <p><b>This is the format's screening choke point</b>. Because {@link #screened()} is {@code false} the
      * shared ingress edge dispatches the upload straight here, so the operation is constructed with the
      * <em>discovered</em> interceptor chain and observer list rather than two empty ones: the one screen runs here,
      * over the distribution's own bytes, and the one after-commit notification fires here once it is visible. The
@@ -683,7 +681,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
             exchange.respond(400);   // an envelope carrying no `content` file part uploads no distribution
             return;
         }
-        Publication.Commit commit;
+        Publication.Commit commit = null;
         try (InputStream part = distribution) {
             commit = new Publication(store).commit(
                     uploaded(exchange, form.project, form.filename), part, REPUBLISH,
@@ -702,7 +700,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                         return Publication.Visibility
                                 // The serving pointer, in this format's own namespace rather than publish/ - so it is
                                 // declared through a Serving step, not named with at().
-                                .through((hash, _, _) -> blobs.link("pypi/" + project + "/files/" + filename, hash))
+                                .through((hash, size, _) -> blobs.linkOnce(fileKey(project, filename), hash, size))
                                 // The attestations the upload carried, kept beside the file before the Simple page
                                 // links them, so no client reads a link whose provenance is still to come.
                                 .andThrough((_, _, _) -> storeAttestations(blobs, project, filename, form.attestations))
@@ -725,6 +723,13 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                 default -> {
                 }
             }
+        } catch (Publication.RepublishConflict taken) {
+            if (commit != null) {
+                // A held re-upload was refused before anything was marked: its review handle goes with it.
+                new Publication(store, List.of(), List.of()).unpublish("/quarantine" + commit.artifact().path());
+            }
+            exchange.respond(400, alreadyExists(form.filename, taken));
+            return;
         }
         switch (commit.disposition()) {
             case ACCEPT -> exchange.respond(commit.visible() ? 200 : 400);
@@ -761,13 +766,27 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         if (project == null || Keys.unsafe(project) || Keys.unsafe(filename)) {
             return;
         }
+        // A hold never replaces a released file: refused before the mark, so nothing is left held.
+        blobs.refuseReplacement(fileKey(project, filename), hash);
         Withheld.mark(store, hash, new PyPiFormat().describe("/pypi/simple/" + project + "/" + filename)
                 .orElse(ArtifactDescriptor.at("PyPI", "/pypi/simple/" + project + "/" + filename)));
-        blobs.link("pypi/" + project + "/files/" + filename, hash);
+        blobs.linkOnce(fileKey(project, filename), hash, -1L);
         storeAttestations(blobs, project, filename, form.attestations);
         markHosted(store, hostedKey(project));
         reverseIndex(blobs, project, filename);
         new PyPiListings(blobs).refresh(project, filename);   // held: the stored pages keep it out
+    }
+
+    /** The serving pointer of one uploaded file. */
+    private static String fileKey(String project, String filename) {
+        return "pypi/" + project + "/files/" + filename;
+    }
+
+    /** PyPI's answer to a filename already uploaded, which {@code twine upload --skip-existing} recognises by its
+     *  {@code 400} and its words. */
+    private static byte[] alreadyExists(String filename, Publication.RepublishConflict taken) {
+        return ("File already exists ('" + filename + "', with sha256 hash '" + taken.published() + "'). A published "
+                + "file cannot be replaced; upload it under a new version.").getBytes(StandardCharsets.UTF_8);
     }
 
     /** Write the file's reverse-index entry, so its version's keys are found without scanning the project. */
@@ -1133,7 +1152,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return SEPARATORS.matcher(name.toLowerCase(Locale.ROOT)).replaceAll("-");
     }
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link PyPiImporter} - the format IS the
+    /** The migration-import capability, delegated to the layout-only {@link PyPiImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final PyPiImporter importer = new PyPiImporter();
 

@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.ServedAliases;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -106,6 +107,34 @@ class ServedAliasesTest {
         assertThat(ServedAliases.group(store, TWO))
                 .as("and 2.0 still owns it")
                 .containsExactlyInAnyOrder(TWO, LATEST);
+    }
+
+    @Test
+    void an_alias_appended_while_a_group_empties_is_kept() throws IOException {
+        ServedAliases.reassign(store, ONE, LATEST);
+        boolean[] appended = {false};
+        // The latest view moves to 2.0, emptying 1.0's group - and at that write a cross-publish of 1.0's versioned
+        // view appends to the same group, through the unwrapped store.
+        FaultInjectingStore racing = FaultInjectingStore.wrap(store).tracing((op, key) -> {
+            if ((op == FaultInjectingStore.Op.WRITE_VERSIONED || op == FaultInjectingStore.Op.DELETE)
+                    && ServedAliases.groupKey(ONE).equals(key) && !appended[0]) {
+                appended[0] = true;
+                try {
+                    ServedAliases.record(store, ONE, VERSIONED);
+                } catch (IOException failure) {
+                    throw new UncheckedIOException(failure);
+                }
+            }
+        });
+
+        ServedAliases.reassign(racing, TWO, LATEST);
+
+        assertThat(appended[0]).as("the append landed as the group emptied").isTrue();
+        assertThat(ServedAliases.aliases(store, ONE))
+                .as("an emptying written by compare-and-set loses to the append and is retried over it, where a "
+                        + "delete decided on the empty read would have taken the append with it")
+                .containsExactly(VERSIONED);
+        assertThat(ServedAliases.aliases(store, TWO)).containsExactly(LATEST);
     }
 
     @Test

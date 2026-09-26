@@ -6,6 +6,7 @@ import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.gc.GarbageCollector;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Condemned;
 import build.jenesis.repository.store.Names;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ServableNames;
@@ -38,12 +39,13 @@ import build.jenesis.repository.walk.WalkPass;
  * {@code gc/condemned/<hash>} marker removed; an unreferenced one is <em>condemned</em> (marker created, stamped
  * with this pass) the first time and <em>deleted only when its marker carries an earlier pass</em> - the marker is
  * the clock, giving every crash-torn or in-flight publish a full mark-pass enumeration of grace (spared the moment it
- * is referenced) with no store-timestamp API, and, when {@code jenreg.gc.grace} is set, a wall-clock floor on top so
- * a fast generation turnover across nodes cannot shorten it. The marker re-read immediately before deletion is the final guard: a dedup re-publish that
- * re-links condemned content clears the marker on the write path ({@code Publication.link}), collapsing the
- * residual race to the two back-to-back reads between that re-read and the delete. Blob first, marker last; a
- * marker whose blob is gone is swept by the convergence leg, which also drops the reference shards of superseded
- * passes.
+ * is referenced) with no store-timestamp API, and a wall-clock floor on top ({@code jenreg.gc.grace}, two hours
+ * unless set) so a fast generation turnover across nodes cannot shorten it. The marker is the arbiter between the
+ * delete and a publish relying on the same bytes ({@link Condemned}): the sweep claims it by compare-and-set over the
+ * token it judged the blob by, and deletes only once the claim has landed, while a dedup re-publish spares the blob
+ * by compare-and-set on the same marker - so whichever lands first decides, and a publish that meets a claim is
+ * refused with a retryable answer rather than linking bytes that are going. Blob first, marker last; a marker whose
+ * blob is gone is swept by the convergence leg, which also drops the reference shards of superseded passes.
  *
  * <p>Both phases only ever act on shapes they recognise: a leaf that names no SHA-256 is skipped at mark, and a
  * {@code blobs/} name that is not a hash is never judged, let alone deleted. A pointer body is read through
@@ -70,7 +72,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
     /** The two walk consumers, whose pass state a console reads back through {@code ArtifactWalk.pass}. */
     static final String MARK = "gc-mark", SWEEP = "gc-sweep";
 
-    private static final String CONDEMNED = "gc/condemned";
+    private static final String CONDEMNED = Condemned.SPACE;
 
 
     /** A pointer names a hash in a few dozen bytes; a larger leaf is other metadata and is never read whole. */
@@ -78,8 +80,10 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
 
     private final ArtifactWalk walk;
 
-    /** A wall-clock floor on the condemn-to-collect grace, on top of the one-pass generation gap. Zero (the default)
-     *  keeps the grace purely generation-based: condemn in one pass, collect in the next. A positive value guards the
+    /** A wall-clock floor on the condemn-to-collect grace, on top of the one-pass generation gap: two hours in a
+     *  deployment unless {@code jenreg.gc.grace} names another ({@link GarbageCollector#defaultGrace()}), zero for a
+     *  collector built without one. Zero keeps the grace purely generation-based: condemn in one pass, collect in the
+     *  next. A positive value guards the
      *  case where generations advance faster than the nominal collection interval - several nodes each running
      *  {@code collect}, or a node restarting and re-collecting after a segment lease expires - by refusing to delete a
      *  blob until it has also carried its condemned marker for at least this long. Strictly more conservative than the
@@ -158,8 +162,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
                     .map(MarkSweepGarbageCollector::parse).orElse(null);
             // Mirror collect()'s deletion test exactly, so the dry run previews precisely what the next collect would
             // reclaim: condemned by a judgment at or before the completed mark (an unreadable/newer marker is not due,
-            // repaired by a sweep) AND past the wall-clock grace floor (zero by default). Applying the same floor here
-            // is what keeps plan and collect in agreement - without it the dry run over-reports every blob still
+            // repaired by a sweep) AND past the wall-clock grace floor (two hours by default). Applying the same floor
+            // here is what keeps plan and collect in agreement - without it the dry run over-reports every blob still
             // inside its grace window.
             if (parsed == null || parsed.pass() > judged
                     || Duration.between(parsed.since(), now).compareTo(graceFloor) < 0) {
@@ -460,24 +464,31 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
                 // Unreferenced but not (recognisably) condemned yet: condemn it now, never delete it in the pass
                 // that first judged it. Create-if-absent (an unreadable marker is repaired on its own token); a
                 // lost race means a concurrent sweeper condemned it, which is convergence, not a lost update.
-                var _ = store.writeVersioned(marker, marker(generation, now),
+                var _ = store.writeVersioned(marker, Condemned.condemnation(generation, now),
                         current.map(ArtifactStore.Versioned::token).orElse(null));
                 condemned++;
                 standing++; // now condemned, awaiting the confirming pass
             } else if (parsed.pass() < generation && Duration.between(parsed.since(), now).compareTo(graceFloor) >= 0
                     && referencesStillStand()) {
                 // Condemned by an earlier pass, still unreferenced by this one, past the wall-clock grace floor
-                // (zero by default), and our reference shards still stand (the lease fence below). Re-read the marker
-                // as the final guard immediately before the destructive delete - after the lease-fence round-trip, not
-                // the stale read from before it: a dedup re-publish that re-referenced these bytes since we judged them
-                // clears the marker on its write path (the contract Publication.link documents), so a marker gone now
-                // means the blob was re-linked and must be spared. The completed mark's shard needs no re-read: it
-                // gained nothing but duplicates since the pass finished. Blob first, marker last, so a crash in between
-                // leaves only a marker the convergence leg removes.
-                if (store.readVersioned(marker).isEmpty()) {
-                    spared++;   // a concurrent re-publish cleared the marker since we judged it - these bytes are referenced again
+                // (two hours by default), and our reference shards still stand (the lease fence below). Claim the
+                // marker over the token we judged the blob by: a dedup re-publish that re-referenced these bytes since
+                // spared them by writing the same marker, so a claim that does not land means the blob is relied on
+                // again and is spared, and one that lands refuses every publish of these bytes until they are gone.
+                // The completed mark's shard needs no re-read: it gained nothing but duplicates since the pass
+                // finished.
+                Instant claiming = Instant.now();
+                if (!Condemned.claim(store, hash, current.get(), claiming)) {
+                    spared++;
                     return;
                 }
+                if (Duration.between(claiming, Instant.now()).compareTo(Condemned.CLAIM_EXPIRY.dividedBy(2)) > 0) {
+                    // Paused between the claim and the delete for long enough that a publish may be about to take
+                    // the claim back: the next pass judges the blob again.
+                    standing++;
+                    return;
+                }
+                // Blob first, marker last, so a crash in between leaves only a marker the convergence leg removes.
                 deleteIfPresent(store, key);
                 deleteIfPresent(store, marker);
                 collected++;
@@ -627,10 +638,6 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
     /** A condemned marker's content: the pass whose judgment condemned the blob (the clock the grace interval is
      *  measured in) and when - the {@code since} a console shows and the {@code jenreg.gc.grace} floor measures. */
     private record Marker(long pass, Instant since) {
-    }
-
-    private static byte[] marker(long pass, Instant since) {
-        return ("pass=" + pass + "\nsince=" + since).getBytes(StandardCharsets.UTF_8);
     }
 
     /** Parse a marker; {@code null} for an unreadable one, which is re-stamped rather than trusted. */

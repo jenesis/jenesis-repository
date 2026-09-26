@@ -108,6 +108,12 @@ final class Packages {
 
     /** A {@code .nupkg}: a zip whose {@code <id>.nuspec} names the coordinate the push keys the package by. */
     static byte[] nupkg(String id, String version) throws IOException {
+        return nupkg(id, version, "");
+    }
+
+    /** {@link #nupkg(String, String)} built differently by {@code variant}: other bytes, and another dependency, for
+     *  the same id and version - what a republish of a released version carries. */
+    static byte[] nupkg(String id, String version, String variant) throws IOException {
         String nuspec = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
                 + "<package><metadata>"
                 + "<id>" + id + "</id><version>" + version + "</version>"
@@ -116,7 +122,7 @@ final class Packages {
                 // one package: an identical sidecar would dedupe to one blob and a hold on either version's content
                 // would mark the other's too, quietly coupling two versions that must be held independently.
                 + "<dependencies><group targetFramework=\"net8.0\">"
-                + "<dependency id=\"contract.dep." + version + "\" version=\"1.0.0\"/>"
+                + "<dependency id=\"contract.dep." + version + variant + "\" version=\"1.0.0\"/>"
                 + "</group></dependencies>"
                 + "</metadata></package>";
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -125,7 +131,7 @@ final class Packages {
             zip.write(nuspec.getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
             zip.putNextEntry(new ZipEntry("lib/net8.0/" + id + ".dll"));
-            zip.write(("payload of " + id + " " + version).getBytes(StandardCharsets.UTF_8));
+            zip.write(("payload of " + id + " " + version + variant).getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
         }
         return bytes.toByteArray();
@@ -137,9 +143,16 @@ final class Packages {
      *  from. The Ruby object tags are present because the format strips them itself - a fixture that pre-stripped them
      *  would stop exercising that. */
     static byte[] gem(String name, String version) throws IOException {
+        return gem(name, version, "");
+    }
+
+    /** {@link #gem(String, String)} built differently by {@code variant}: other bytes, and another summary in the
+     *  quick spec the push precomputes, for the same name and version. */
+    static byte[] gem(String name, String version, String variant) throws IOException {
         String gemspec = "--- !ruby/object:Gem::Specification\n"
                 + "name: " + name + "\n"
                 + "version: !ruby/object:Gem::Version\n  version: " + version + "\n"
+                + (variant.isEmpty() ? "" : "summary: " + variant + "\n")
                 + "licenses:\n- MIT\n"
                 + "dependencies: []\n";
         byte[] metadata = gzip(gemspec.getBytes(StandardCharsets.UTF_8));

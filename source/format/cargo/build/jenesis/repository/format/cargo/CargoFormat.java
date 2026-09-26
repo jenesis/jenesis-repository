@@ -24,6 +24,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.Withheld;
 
 /**
@@ -41,7 +42,7 @@ import build.jenesis.repository.store.Withheld;
  * {@code .crate} archive that follows it is handed to the shared hosted-publish operation as the accepted body, so it
  * streams hash-on-write into the content-addressed store and is never buffered. Because the frame is unwrapped
  * <em>before</em> the artifact reaches the screen, the bytes the interceptor chain hashes and assesses are the crate's
- * own - not the frame that carried it ({@link #screened()}, (a)). The SHA-256 the operation returns is both the
+ * own - not the frame that carried it ({@link #screened()}). The SHA-256 the operation returns is both the
  * crate pointer's blob hash and the {@code cksum} Cargo's index records, so the archive is read once. A precomputed
  * index line is stored per version, exactly as the Debian and RPM formats store a per-package stanza, so the publish
  * joins the stored lines into the crate's index file and a read streams it rather than reopening every {@code .crate}
@@ -137,7 +138,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
     }
 
     /**
-     * Cargo's publish protocol wraps its artifact, so this format is <b>not</b> edge-screened ((a)): a
+     * Cargo's publish protocol wraps its artifact, so this format is <b>not</b> edge-screened: a
      * {@code PUT /cargo/<repo>/api/v1/crates/new} body is a length-prefixed <em>frame</em>
      * ({@code [u32 json-len][json][u32 crate-len][.crate]}), not the {@code .crate} itself. Gating that frame at the
      * shared single-body edge would hash and assess the envelope while the bytes that later serve are the
@@ -156,9 +157,11 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
     }
 
     /**
-     * The republish conflict policy this format hands the hosted-publish operation as <em>data</em>: {@code OVERWRITE},
-     * last-writer-wins - exactly what a {@code cargo publish} did before (a), since a crate pointer lives in the
-     * {@code cargo/} blobs namespace rather than in {@code publish/}.
+     * The republish policy handed to the hosted-publish operation, which evaluates it before the layout runs:
+     * {@code OVERWRITE}, the refusal being taken at the link instead. crates.io refuses a version already uploaded, and
+     * so does this: the crate pointer is linked through {@link Blobs#linkOnce}, which decides inside its
+     * compare-and-set, and the refusal is answered as crates.io answers it ({@link #alreadyUploaded}). A re-publish
+     * of the identical crate converges.
      */
     private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
 
@@ -167,7 +170,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
      * choreography ({@code Publication.commit}). The frame is {@code [u32 json-len][json][u32 crate-len][.crate]};
      * only the small, bounded JSON metadata at the front is materialised, and the {@code .crate} that follows it is
      * handed to the operation as the accepted body, so it streams hash-on-write into the content-addressed store and
-     * <b>the hash the chain assesses is the hash the download later serves</b>. That is (a)'s whole content: the
+     * <b>the hash the chain assesses is the hash the download later serves</b>. It matters because the
      * former code stored the crate with a raw {@link ArtifactStore#writeBlob} while the edge gated the surrounding
      * frame, so an artifact whose <em>content</em> a screen would refuse published anyway.
      *
@@ -176,8 +179,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
      * deny-list keys on, what a {@code /quarantine} hold pointer is linked at, and what an inspector's artifact leg
      * parses.
      *
-     * <p>Pointer-last, and the ordering is now the operation's rather than hand-written ((c) for this format
-     * falls out with it): the precomputed sparse-index line - which needs the accepted hash as its {@code cksum} - is
+     * <p>Pointer-last, and the ordering is the operation's rather than hand-written: the precomputed sparse-index line - which needs the accepted hash as its {@code cksum} - is
      * content-addressed inside the layout, before anything serves, and the two visibility writes are declared so the
      * crate pointer lands first and the index line that advertises it only after. A crash between them leaves a
      * downloadable crate no index lists, never an indexed crate with no bytes.
@@ -217,7 +219,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         String canonical = canonical(name);
         Blobs blobs = new Blobs(store);
         Bounded crate = new Bounded(in, crateLength);
-        Publication.Commit commit;
+        Publication.Commit commit = null;
         try (crate) {
             commit = new Publication(store).commit(
                     new ArtifactDescriptor(ECOSYSTEM, canonical, version, downloadPath(repo, canonical, version),
@@ -248,7 +250,8 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
                                 // bare writeVersioned): besides the compare-and-set retry, link clears any
                                 // gc/condemned/<hash> marker a collector set, so republishing a crate byte-identical to
                                 // a condemned one un-condemns it before the sweep deletes it.
-                                .through((hash, _, _) -> blobs.link(crateKey(repo, canonical, version), hash))
+                                .through((hash, size, _) -> blobs.linkOnce(crateKey(repo, canonical, version), hash,
+                                        size))
                                 // The index line that advertises it, after it - never before, so a crash never leaves a
                                 // sparse index naming a crate no download can serve.
                                 .andThrough((_, _, _) -> blobs.link(indexKey(repo, canonical, version), line))
@@ -256,6 +259,17 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
                                 // joins the crate's stored index rather than being concatenated on every read.
                                 .andThrough((_, _, _) -> new CargoListings(blobs).refresh(repo, canonical, version));
                     });
+            if (commit.disposition() == PublishInterceptor.Disposition.QUARANTINE) {
+                held(repo, canonical, version, name, metadata, crate, blobs, store, commit.hash());
+            }
+        } catch (Publication.RepublishConflict taken) {
+            if (commit != null) {
+                // A held re-publish was refused before anything was marked: its review handle goes with it.
+                new Publication(store, List.of(), List.of()).unpublish("/quarantine" + commit.artifact().path());
+            }
+            exchange.setResponseHeader("Content-Type", "application/json");
+            exchange.respond(400, alreadyUploaded(canonical, version));
+            return;
         }
         switch (commit.disposition()) {
             case ACCEPT -> {
@@ -269,10 +283,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
             // The chain HELD the crate. Its layout is written all the same, behind the withhold marker
             // (see {@link #held}), so a review release is the marker clear rather than a replay of a publish whose
             // envelope no longer exists.
-            case QUARANTINE -> {
-                held(repo, canonical, version, name, metadata, crate, blobs, store, commit.hash());
-                exchange.respond(202);
-            }
+            case QUARANTINE -> exchange.respond(202);
             // Refused outright: nothing is linked and no marker is set, so the sparse index never names it and the
             // stored blob is the usual unreferenced content-addressed object a collection reclaims. A refusal is never
             // released, so it is never laid out.
@@ -301,11 +312,23 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         String line = blobs.store(new ByteArrayInputStream(
                 indexLine(metadata, name, version, hash).getBytes(StandardCharsets.UTF_8)));
+        // A hold never replaces a released crate: refused before the mark, so nothing is left held.
+        blobs.refuseReplacement(crateKey(repo, canonical, version), hash);
         Withheld.mark(store, hash, new ArtifactDescriptor(ECOSYSTEM, canonical, version,
                 downloadPath(repo, canonical, version), null, false, null, -1L));
-        blobs.link(crateKey(repo, canonical, version), hash);
+        blobs.linkOnce(crateKey(repo, canonical, version), hash, -1L);
         blobs.link(indexKey(repo, canonical, version), line);
         new CargoListings(blobs).refresh(repo, canonical, version);   // held: the stored index keeps it out
+    }
+
+    /** crates.io's refusal of a version already uploaded, in the {@code errors} document cargo prints from. */
+    private static byte[] alreadyUploaded(String canonical, String version) {
+        ObjectNode detail = MAPPER.createObjectNode().put("detail",
+                "crate version `" + version + "` is already uploaded: " + canonical + "@" + version
+                        + " cannot be replaced; publish a new version");
+        ObjectNode errors = MAPPER.createObjectNode();
+        errors.putArray("errors").add(detail);
+        return MAPPER.writeValueAsBytes(errors);
     }
 
     /** The request path a published crate downloads from - the artifact's own served path, which is the path the
@@ -880,7 +903,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return indexPrefix(repo, crate) + "/" + version;
     }
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link CargoImporter} - the format IS the
+    /** The migration-import capability, delegated to the layout-only {@link CargoImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final CargoImporter importer = new CargoImporter();
 

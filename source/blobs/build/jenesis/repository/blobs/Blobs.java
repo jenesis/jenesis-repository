@@ -1,6 +1,8 @@
 package build.jenesis.repository.blobs;
 
 import module java.base;
+import build.jenesis.repository.store.Condemned;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.NodeMemoStore;
@@ -163,13 +165,13 @@ public final class Blobs {
     }
 
     /** Point {@code key} at an already-stored blob hash with the same load-bearing compare-and-set retry {@link #write}
-     *  uses, so a concurrent republish resolves last-writer-wins and a pointer that cannot land is reported rather than
-     *  silently dropped. Once the pointer lands, any garbage collector's {@code gc/condemned/<hash>} marker on the
-     *  blob is cleared - the same guard the {@code Publication.link} gives its {@code publish/} namespace:
-     *  identical content dedupes to one blob, so a "new" publish through a blobs-namespace format may link a blob a
-     *  collector already judged unreferenced, and clearing the marker on the write path un-condemns it before the
-     *  collecting sweep's final marker re-read. One existence probe per link, a no-op wherever collection never
-     *  condemned the blob; the marker key is the store-layout convention the {@code gc} SPI documents. */
+     *  uses, so a concurrent write resolves to the last one and a pointer that cannot land is reported rather than
+     *  silently dropped - for content a later write may replace; a released file is linked by {@link #linkOnce}.
+     *  Before the pointer is written the blob is {@linkplain Condemned#spare spared} from any collector, the same
+     *  guard {@code Publication.link} gives its {@code publish/} namespace: identical content dedupes to one blob, so
+     *  a "new" publish through a blobs-namespace format may link a blob a collector already judged unreferenced, and
+     *  one a sweep has already claimed refuses the link rather than leaving a pointer at nothing. One read
+     *  per link wherever collection never condemned the blob. */
     public void link(String key, String hash) throws IOException {
         link(key, hash, -1L);
     }
@@ -183,12 +185,53 @@ public final class Blobs {
      */
     public void link(String key, String hash, long size) throws IOException {
         requireSafeKey(key);
+        Condemned.spare(store, hash, key);
         long length = size < 0 ? store.size("blobs/" + hash) : size;
         byte[] body = ServableNames.Pointer.render(hash, length);
         Retries.update(store, key, _ -> body);
-        String condemned = "gc/condemned/" + hash;
-        if (store.exists(condemned)) {
-            store.delete(condemned);
+    }
+
+    /**
+     * {@link #link(String, String, long)} for a released file: the pointer is written only where it stands empty or
+     * already names these bytes, and one naming other bytes raises {@link Publication.RepublishConflict} rather than
+     * moving. The decision is taken inside the compare-and-set, over the pointer the write would replace, so of two
+     * first uploads of one release racing each other the first to land serves and the second is refused, and a
+     * re-upload of identical bytes converges on the state it already has.
+     *
+     * <p>It is how a format whose public registry never lets a published file be replaced - a wheel, a
+     * {@code .nupkg}, a gem, a crate - links a release, and how it links a held upload's pointer too, since a hold
+     * written over the served file would withdraw the version the hold was never about. A consumer pinning hashes
+     * ({@code pip --require-hashes}, {@code Cargo.lock}, NuGet's lock file) breaks the day the bytes under a version
+     * change, which is the reason those registries refuse and the reason this does.
+     */
+    public void linkOnce(String key, String hash, long size) throws IOException {
+        requireSafeKey(key);
+        Condemned.spare(store, hash, key);
+        long length = size < 0 ? store.size("blobs/" + hash) : size;
+        byte[] body = ServableNames.Pointer.render(hash, length);
+        Retries.decide(store, key, current -> {
+            if (current.isEmpty()) {
+                return Retries.Verdict.write(body, null);
+            }
+            String standing = ServableNames.parse(current.get().content()).hash();
+            if (!standing.equals(hash)) {
+                throw new Publication.RepublishConflict(key, standing, hash);
+            }
+            return Arrays.equals(current.get().content(), body) ? Retries.Verdict.keep(null)
+                    : Retries.Verdict.write(body, null);
+        });
+    }
+
+    /**
+     * Raise {@link Publication.RepublishConflict} when {@code key} already names bytes other than {@code hash}: the
+     * check a held upload makes before it marks its bytes held, since {@link #linkOnce} would meet the conflict only
+     * after the mark had landed. The link that follows still decides by compare-and-set; this only spares a refused
+     * upload a marker it would leave behind.
+     */
+    public void refuseReplacement(String key, String hash) throws IOException {
+        Optional<String> standing = hash(key);
+        if (standing.isPresent() && !standing.get().equals(hash)) {
+            throw new Publication.RepublishConflict(key, standing.get(), hash);
         }
     }
 
@@ -248,7 +291,7 @@ public final class Blobs {
             }
             Retries.backoff(attempt);
         }
-        throw new IOException("could not establish " + key + " after repeated version conflicts");
+        throw new Retries.Contended("establishing " + key);
     }
 
     /** The lower-case SHA-256 hex the pointer at {@code key} resolves to - the content address the blob is stored
@@ -354,7 +397,7 @@ public final class Blobs {
     }
 
     /** The blob's recorded length for the pointer at {@code key}, or {@code -1} if nothing is published there, the
-     *  blob is {@linkplain build.jenesis.repository.store.Withheld withheld}, or the pointer predates the length -
+     *  blob is {@linkplain build.jenesis.repository.store.Withheld withheld}, or the pointer carries no length -
      *  read off the pointer, never off the blob, like {@link #locate}. */
     public long size(String key) throws IOException {
         return locate(key).map(Located::size).orElse(-1L);

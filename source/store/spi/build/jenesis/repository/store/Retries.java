@@ -23,13 +23,16 @@ import module java.base;
  * a later pass repairs - and a caller choosing it says in its javadoc which pass that is.
  *
  * <p>{@link #decide} and {@link #tryDecide} are the same policy for a write that has more to say than a body: the
- * {@link Decision} hands back a {@link Verdict} - write this body, keep the key as it is, or delete it - together with
- * a value the caller needs from the try that landed (the pointer that was replaced, whether a publish was the first,
- * the transition a re-fold is made from). Twenty-five loops still stood after the first sweep, most of them written
- * out only to keep such a value in a local; a loop that keeps a value is not a reason to keep a loop. A
- * {@link Verdict#delete deletion} is the store's unconditional {@link ArtifactStore#delete}, as every caller that
- * emptied a set and dropped its key already did: the store has no conditional delete, and a peer that lands between
- * the read and the delete has written into a key whose content the deciding try found empty.
+ * {@link Decision} hands back a {@link Verdict} - write this body, or keep the key as it is - together with a value
+ * the caller needs from the try that landed (the pointer that was replaced, whether a publish was the first, the
+ * transition a re-fold is made from). Twenty-five loops still stood after the first sweep, most of them written out
+ * only to keep such a value in a local; a loop that keeps a value is not a reason to keep a loop.
+ *
+ * <p><b>There is no delete verdict.</b> The store has no conditional delete, so a key deleted because the deciding try
+ * found its set empty loses whatever a peer wrote into it between that read and the delete - an alias appended to a
+ * group, a statement added to an identifier's list - with nothing to say so. A set that empties is written empty,
+ * under the same compare-and-set as every other write, and a peer's append then meets a conflict and is retried
+ * rather than lost. What stays empty goes with whatever the key belongs to, never by a delete decided on a read.
  */
 public final class Retries {
 
@@ -42,6 +45,20 @@ public final class Retries {
     private static final LongAdder LOST_UNSETTLED = new LongAdder();
 
     private Retries() {
+    }
+
+    /**
+     * A compare-and-set that lost every one of its tries: peers on the same key at the same moment, more of them or
+     * for longer than {@link #COMPARE_AND_SET} tries outlast. Nothing is wrong with the write or with the store, so an
+     * edge answers it as a transient refusal - {@code 503} with a {@code Retry-After}, which clients retry - and never
+     * as a server error. Within a node, writers of one document take turns, so what contends here is one writer per
+     * node; a burst of a version's files through two nodes lands without meeting it.
+     */
+    public static final class Contended extends IOException {
+
+        public Contended(String what) {
+            super("lost the compare-and-set on " + what + " " + COMPARE_AND_SET + " times running; send it again");
+        }
     }
 
     /** Wait before the next try: a few milliseconds at first, doubling to at most a hundred, plus a little jitter so
@@ -76,28 +93,23 @@ public final class Retries {
     }
 
     /**
-     * What one try of {@link #decide} decided from the key's current content: a body to write, nothing to do, or the
-     * key to delete - and the value the caller gets back from the try that lands.
+     * What one try of {@link #decide} decided from the key's current content: a body to write, or nothing to do - and
+     * the value the caller gets back from the try that lands.
      */
-    public record Verdict<T>(byte[] body, boolean delete, T result) {
+    public record Verdict<T>(byte[] body, T result) {
 
         /** Write {@code body} against the token that was read; {@code result} is the caller's if it lands. */
         public static <T> Verdict<T> write(byte[] body, T result) {
-            return new Verdict<>(Objects.requireNonNull(body, "body"), false, result);
+            return new Verdict<>(Objects.requireNonNull(body, "body"), result);
         }
 
         /** Leave the key as it is - nothing to change - and answer {@code result} at once. */
         public static <T> Verdict<T> keep(T result) {
-            return new Verdict<>(null, false, result);
-        }
-
-        /** Delete the key - a set that emptied, a last statement that went - and answer {@code result}. */
-        public static <T> Verdict<T> delete(T result) {
-            return new Verdict<>(null, true, result);
+            return new Verdict<>(null, result);
         }
     }
 
-    /** A {@link Mutation} that also decides between writing, keeping and deleting, and carries a value back. */
+    /** A {@link Mutation} that also decides between writing and keeping, and carries a value back. */
     @FunctionalInterface
     public interface Decision<T> {
 
@@ -130,7 +142,7 @@ public final class Retries {
     public static <T> T decide(ArtifactStore store, String key, Decision<T> decision) throws IOException {
         Optional<Verdict<T>> landed = tryDecide(store, key, decision);
         if (landed.isEmpty()) {
-            throw new IOException("lost the compare-and-set on " + key + " " + COMPARE_AND_SET + " times running");
+            throw new Contended(key);
         }
         return landed.get().result();
     }
@@ -144,10 +156,6 @@ public final class Retries {
         for (int tries = 0; tries < COMPARE_AND_SET; tries++) {
             Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
             Verdict<T> verdict = decision.decide(current);
-            if (verdict.delete()) {
-                store.delete(key);
-                return Optional.of(verdict);
-            }
             if (verdict.body() == null) {
                 return Optional.of(verdict);
             }
@@ -168,7 +176,7 @@ public final class Retries {
      *  with {@link #backoff} between tries, and the exhaustion throws naming {@code what}. */
     public static void compareAndSet(String what, Attempt attempt) throws IOException {
         if (!tryCompareAndSet(attempt)) {
-            throw new IOException("lost the compare-and-set on " + what + " " + COMPARE_AND_SET + " times running");
+            throw new Contended(what);
         }
     }
 
@@ -290,10 +298,6 @@ public final class Retries {
             return Optional.empty();
         }
         Verdict<T> again = decision.decide(now);
-        if (again.delete()) {
-            LOST_UNSETTLED.increment();
-            return Optional.empty();                 // a delete is work outstanding, not a settled key
-        }
         if (again.body() == null) {
             REPLAYED.increment();
             return Optional.of(again);

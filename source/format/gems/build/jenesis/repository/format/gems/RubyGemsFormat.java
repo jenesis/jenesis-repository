@@ -303,20 +303,18 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     }
 
     /**
-     * The republish conflict policy this format hands the hosted-publish operation as <em>data</em>, rather
-     * than re-implementing "is this version already taken" beside the layout: {@code OVERWRITE}, last-writer-wins.
-     * That is exactly what a {@code gem push} does today - a gem's pointers live in the {@code rubygemfiles/} and
-     * {@code rubygems/} blobs namespaces, not in {@code publish/}, so the release-immutability edge hook
-     * (which reads a {@code publish/<path>} pointer) has never seen them, and a re-push has always silently
-     * re-pointed. A <em>probing</em> mode could not be expressed here in any case: the operation evaluates the policy
-     * before the accepted layout runs, and a gem push is coordinate-<em>less</em> at the request path - the name and
-     * version live in the {@code metadata.gz} gemspec inside the uploaded {@code .gem}, which only that layout parses.
+     * The republish policy handed to the hosted-publish operation, which evaluates it before the layout runs:
+     * {@code OVERWRITE}, since a gem push is coordinate-<em>less</em> at the request path - the name and version live in
+     * the {@code metadata.gz} gemspec inside the uploaded {@code .gem}, which only that layout parses. rubygems.org
+     * refuses a version already pushed, and so does this: the refusal is taken at the link ({@link Blobs#linkOnce}),
+     * inside the pointer's compare-and-set, and answered with rubygems.org's {@code 409}. A re-push of the identical
+     * gem converges.
      */
     private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
 
     /**
      * The {@code gem push} endpoint, run through the one shared hosted-publish choreography
-     * ({@code Publication.commit}) rather than hand-assembled here. A {@code.gem} is an immutable artifact of
+     * ({@code Publication.commit}) rather than hand-assembled here. A {@code .gem} is an immutable artifact of
      * unbounded size, so it is handed to the operation as the accepted body and streams straight into the
      * content-addressed store (hash-on-write, never buffered), taking the SHA-256 the store computes on the way in as
      * the compact-index checksum; the layout then reopens only the front of the <em>stored</em> gem to read the
@@ -327,7 +325,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
      * serves, {@code /info/<name>} is a structural miss and the compact index does not name the gem; after the last
      * declared step the gem downloads, {@code /info} lists it and {@code /versions} carries it.
      *
-     * <p>This is the ordering fix owns for RubyGems: the former code linked the {@code.gem} pointer
+     * <p>This is the ordering fix for RubyGems: the former code linked the {@code .gem} pointer
      * <em>first</em> and only then wrote the compact-index line, the quick spec and the rolled-forward
      * {@code /versions} document - so a crash in between left a downloadable gem whose {@code gem install} could not
      * find its spec. Now the one parse result that is not itself a serving surface, the quick spec, lands before
@@ -410,6 +408,17 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
     private void push(InputStream body, Attestations attestations, Blobs blobs, FormatExchange exchange,
                       ArtifactStore store) throws IOException {
+        try {
+            commitPush(body, attestations, blobs, exchange, store);
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, ("Repushing of gem versions is not allowed.\nPlease bump the version number and "
+                    + "push a new gem.").getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    /** The push {@link #push} answers, a version already pushed aside. */
+    private void commitPush(InputStream body, Attestations attestations, Blobs blobs, FormatExchange exchange,
+                            ArtifactStore store) throws IOException {
         Spec[] pushed = new Spec[1];
         Publication.Commit commit = new Publication(store, List.of(), List.of()).commit(
                 ArtifactDescriptor.at("RubyGems", exchange.path()), body, REPUBLISH,
@@ -437,23 +446,26 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                         }
                     }
                     pushed[0] = spec;
-                    // Precompute the legacy quick spec gem install fetches, exactly as the compact-index line is
-                    // precomputed, so serving it is a plain streamed read; the Marshal encoding lives in QuickSpec.
-                    blobs.write("rubygemfiles/" + spec.name() + "-" + spec.version() + ".gemspec.rz",
-                            QuickSpec.deflated(spec));
                     String versionKey = "rubygems/" + spec.name() + "/versions/" + spec.version();
-                    // The attestations the form carried after the gem, kept before anything serves so the version
-                    // is never discoverable without the provenance it was pushed with; an empty array is not kept.
                     byte[] bundles = attestations.read();
                     return Publication.Visibility
-                            .through((hash, _, _) -> {
+                            // The serving pointers live in this format's own namespaces rather than publish/, so they
+                            // are declared through Serving steps, not named with at(). The .gem pointer comes first:
+                            // it is where a version already pushed refuses this one, so nothing keyed by the version
+                            // - the quick spec, the attestations - is written before it and replaced by a refused push.
+                            .through((hash, size, _) -> blobs.linkOnce(gemKey(spec.name(), spec.version()), hash, size))
+                            // The legacy quick spec gem install fetches, precomputed as the compact-index line is so
+                            // serving it is a plain streamed read; the Marshal encoding lives in QuickSpec.
+                            .andThrough((_, _, _) -> blobs.write("rubygemfiles/" + spec.name() + "-" + spec.version()
+                                    + ".gemspec.rz", QuickSpec.deflated(spec)))
+                            // The attestations the form carried after the gem, kept before the listings below so the
+                            // version is never discoverable without the provenance it was pushed with; an empty array
+                            // is not kept.
+                            .andThrough((_, _, _) -> {
                                 if (bundles != null && namesABundle(bundles)) {
                                     blobs.write(attestationsKey(spec.name() + "-" + spec.version()), bundles);
                                 }
                             })
-                            // The serving pointers live in this format's own namespaces rather than publish/, so they
-                            // are declared through Serving steps, not named with at().
-                            .andThrough((hash, _, _) -> blobs.link(gemKey(spec.name(), spec.version()), hash))
                             // The compact-index line carries the artifact's content address as its checksum: the hash
                             // the operation stored the body under, reused rather than hashing the blob a second time.
                             .andThrough((hash, _, _) -> blobs.write(versionKey,
@@ -995,7 +1007,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
 
 
-    /** The migration-import capability (WSPI.2 (c)), delegated to the layout-only {@link RubyGemsImporter} - the format IS the
+    /** The migration-import capability, delegated to the layout-only {@link RubyGemsImporter} - the format IS the
      *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
     private final RubyGemsImporter importer = new RubyGemsImporter();
 

@@ -127,6 +127,12 @@ public final class DeferredResponse implements FormatExchange {
         return status >= 0;
     }
 
+    /** Whether the format refused the write - a client error it answered, such as a version already published - in
+     *  which case it laid nothing out that an observer should hear of. */
+    public boolean refused() {
+        return status >= 400 && status < 500;
+    }
+
     /** Write the held response to the client, headers first, exactly as the format wrote it. */
     public void release() throws IOException {
         if (!answered()) {

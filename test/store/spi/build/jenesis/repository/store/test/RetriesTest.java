@@ -230,11 +230,6 @@ class RetriesTest {
         String kept = Retries.decide(counting, KEY, _ -> Retries.Verdict.keep("unchanged"));
         assertThat(kept).isEqualTo("unchanged");
         assertThat(counting.calls(Op.WRITE_VERSIONED)).isZero();
-
-        // delete: the key goes, the result is answered
-        boolean deleted = Retries.decide(store, KEY, _ -> Retries.Verdict.delete(true));
-        assertThat(deleted).isTrue();
-        assertThat(store.readVersioned(KEY)).as("a delete verdict removes the key").isEmpty();
     }
 
     @Test
@@ -245,7 +240,8 @@ class RetriesTest {
             losing.conflictNext(FaultInjectingStore.keyContaining(KEY));
         }
         assertThatThrownBy(() -> Retries.decide(losing, KEY, _ -> Retries.Verdict.write(bytes("b"), 1)))
-                .isInstanceOf(IOException.class).hasMessageContaining(KEY);
+                .as("exhaustion is named, so an edge answers it as the transient refusal it is")
+                .isInstanceOf(Retries.Contended.class).hasMessageContaining(KEY);
         for (int lost = 0; lost < Retries.COMPARE_AND_SET; lost++) {
             losing.conflictNext(FaultInjectingStore.keyContaining(KEY));
         }

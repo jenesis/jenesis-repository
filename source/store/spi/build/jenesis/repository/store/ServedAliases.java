@@ -192,7 +192,10 @@ public final class ServedAliases {
         });
     }
 
-    /** Remove one line from a stored set under compare-and-set, deleting the key once it empties. */
+    /** Remove one line from a stored set under compare-and-set. A set that empties is written empty rather than
+     *  deleted: the store has no conditional delete, and an alias a peer appended between this read and a delete
+     *  would be lost with nothing to say so, where against an empty write it meets a conflict and is retried. An
+     *  empty group reads as no aliases, and goes when its origin is {@linkplain #forget forgotten}. */
     private static void remove(ArtifactStore store, String key, String line) throws IOException {
         Retries.decide(store, key, current -> {
             if (current.isEmpty()) {
@@ -202,7 +205,7 @@ public final class ServedAliases {
             if (!lines.remove(line)) {
                 return Retries.Verdict.keep(null);
             }
-            return lines.isEmpty() ? Retries.Verdict.delete(null) : Retries.Verdict.write(join(lines), null);
+            return Retries.Verdict.write(join(lines), null);
         });
     }
 

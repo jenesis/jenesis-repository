@@ -13,6 +13,7 @@ import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.QuotaExceededException;
 import build.jenesis.repository.store.ReadOnlyException;
 import tools.jackson.databind.json.JsonMapper;
@@ -478,6 +479,15 @@ public class RepositoryController {
      *  again, the bytes are stored again. {@code 503} with a {@code Retry-After} is how a client is told to do that. */
     @ExceptionHandler(Publication.BlobCollected.class)
     public void blobCollected(Publication.BlobCollected exception, HttpServletResponse response) throws IOException {
+        response.setHeader("Retry-After", "1");
+        respond(response, 503, exception.getMessage());
+    }
+
+    /** A write whose compare-and-set lost every try to peers on the same document is a transient refusal, not a
+     *  server error: sent again a moment later it lands. {@code 503} with a {@code Retry-After} is how a client is
+     *  told to do that. */
+    @ExceptionHandler(Retries.Contended.class)
+    public void contended(Retries.Contended exception, HttpServletResponse response) throws IOException {
         response.setHeader("Retry-After", "1");
         respond(response, 503, exception.getMessage());
     }

@@ -96,7 +96,8 @@ public final class ScreenedDispatch {
         // below, and fires published() itself once visibility has committed - so this edge no longer re-assembles the
         // screen/layout/notify sequence by hand, and cannot get its order wrong.
         Publication.Commit commit = new Publication(store).commit(descriptor, exchange.requestStream(),
-                // Last-writer-wins, the formats' behaviour: a republish is just a pointer update.
+                // No probe before the layout: a format whose releases are immutable refuses a republish inside it,
+                // at its own pointer's compare-and-set, or through the guard below.
                 Publication.Republish.overwrite(),
                 accepted -> {
                     // The edge plug-in seam runs post-hash but pre-layout: a present Refusal short-circuits (the
@@ -125,6 +126,11 @@ public final class ScreenedDispatch {
                         format.handle(held, store);
                     }
                     answer[0] = held;
+                    if (held.refused()) {
+                        // The format refused the write - a version already published, a body it cannot read - so
+                        // nothing was laid out, and no observer is told of a publish that did not happen.
+                        return Publication.Visibility.declined();
+                    }
                     // A format whose request path names no artifact - a push endpoint - names what it laid out, and
                     // the observers are told about that rather than the endpoint.
                     return held.described().map(Publication.Visibility.laidOut()::describing)

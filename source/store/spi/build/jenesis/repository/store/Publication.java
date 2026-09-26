@@ -46,8 +46,11 @@ import module org.slf4j;
  * <ol>
  *   <li><b>Thread-safety.</b> An instance is a stateless view over one scoped {@link ArtifactStore} and its two hook
  *       lists; concurrent calls on one instance are safe and expected (the server creates them freely per request).
- *       Concurrency between two publications of the <em>same</em> request path resolves to last-writer-wins at the
- *       pointer compare-and-set, which is the outcome the two writes would have had a moment apart.</li>
+ *       Concurrency between two publications of the <em>same</em> request path is decided at the pointer's
+ *       compare-and-set, by the pointer's own rule: a path a layout links {@linkplain #guarded guarded} - and a
+ *       format's own pointer linked through {@code Blobs.linkOnce} - keeps the first bytes to land and refuses the
+ *       rest with {@link RepublishConflict}, identical bytes converging; any other path takes the last write, the
+ *       outcome the two writes would have had a moment apart.</li>
  *   <li><b>Idempotency / replay.</b> Every write on this path converges: the blob is content-addressed, so a replay of
  *       identical bytes dedupes to the same object; a sidecar re-derived from the same blob is rewritten identically;
  *       the pointer compare-and-set re-lands the same body. A byte-identical re-{@link #commit} therefore leaves the
@@ -271,22 +274,12 @@ public final class Publication {
                 return read;
             }
         });
-        // Un-condemned the moment its bytes are stored, not when a pointer is linked at the end of the screen. A
+        // Spared the moment its bytes are stored, not when a pointer is linked at the end of the screen. A
         // content-addressed store keeps a blob it already holds and drops the upload, so a publish of bytes a
         // collector had condemned is relying on that one blob from here on; left condemned, a confirming sweep
         // running while the publish is screened deletes it, and the link that follows names nothing.
-        uncondemn(hash);
+        Condemned.spare(store, hash, "an upload of " + hash);
         return new Blob(hash, counted[0]);
-    }
-
-    /** Clear a collector's {@code gc/condemned/<hash>} marker, answering whether there was one. */
-    private boolean uncondemn(String hash) throws IOException {
-        String condemned = "gc/condemned/" + hash;
-        if (!store.exists(condemned)) {
-            return false;
-        }
-        store.delete(condemned);
-        return true;
     }
 
     /**
@@ -380,16 +373,13 @@ public final class Publication {
      *  blob under another view without re-uploading it. The pointer is the product's most load-bearing small object,
      *  so a compare-and-set conflict re-reads the token and retries (the bounded idiom every other load-bearing
      *  pointer write uses) rather than silently dropping the losing write: a concurrent republish of the same path
-     *  resolves to last-writer-wins - the same outcome the two writes would have had a moment apart - and a caller
-     *  whose link cannot land is told so instead of believing it published. Before the pointer is written, any garbage
-     *  collector's {@code gc/condemned/<hash>} marker on the blob is cleared - identical content dedupes to one
-     *  blob, so a "new" publish may link a blob a collector already judged unreferenced, and clearing the marker on
-     *  the write path (every link site: publish, quarantine, promotion, cross-publish) un-condemns it before the
-     *  collecting sweep's final marker re-read - and a blob that did carry a marker is confirmed present, since a
-     *  sweep that got there first leaves the marker behind the blob it deleted; that raises {@link BlobCollected}
-     *  rather than writing a pointer at nothing. A publish has already cleared the marker once, when it stored the
-     *  bytes. One existence probe per link, a no-op wherever collection never condemned the blob; the marker key is
-     *  the store-layout convention the {@code gc} SPI documents. */
+     *  resolves to the last write unless the path is {@linkplain #guarded guarded}, and a caller
+     *  whose link cannot land is told so instead of believing it published. Before the pointer is written the blob is
+     *  {@linkplain Condemned#spare spared} from any collector - identical content dedupes to one blob, so a "new"
+     *  publish may link a blob a collector already judged unreferenced, at every link site: publish, quarantine,
+     *  promotion, cross-publish - and a blob a sweep has already claimed raises {@link BlobCollected} rather than
+     *  having a pointer written at nothing. A publish has already spared the blob once, when it stored the bytes. One
+     *  read per link wherever collection never condemned the blob. */
     public String link(String requestPath, String hash) throws IOException {
         return link(requestPath, hash, -1L);
     }
@@ -432,13 +422,10 @@ public final class Publication {
             // between the two writes would lift the marker this hold is about to need with nothing to say so.
             HeldBy.record(store, hash, requestPath.substring(QUARANTINE_PATH.length()));
         }
-        // The collector's marker is cleared before the pointer is written, and a blob that turns out to have been
-        // condemned is confirmed present first: a confirming sweep that deleted it while this publish was in flight
-        // leaves only its marker behind (it deletes blob first, marker last), and a pointer written now would name
-        // nothing and answer 201. Refused instead, so the client sends the bytes again and they are stored again.
-        if (uncondemn(hash) && store.size("blobs/" + hash) < 0) {
-            throw new BlobCollected(requestPath, hash);
-        }
+        // The blob is spared from any collector before the pointer is written, by compare-and-set on its marker: a
+        // sweep that claimed it first is deleting it, and a pointer written now would name nothing and answer 201.
+        // Refused instead, so the client sends the bytes again and they are stored again.
+        Condemned.spare(store, hash, requestPath);
         boolean guarded = !quarantine && GUARD.isBound() && GUARD.get().equals(requestPath);
         Optional<ArtifactStore.Versioned> prior = Retries.decide(store, key, current -> {
             if (guarded && current.isPresent()) {
@@ -796,22 +783,22 @@ public final class Publication {
      * and a copy is a place where one of them quietly stops matching the others; this is the same
      * one-choke-point move {@code EventSink.emit} makes for its own fan-out.
      *
-     * <p>Three properties, and the middle one is what the earlier census found missing.
+     * <p>Three properties, and the middle one is what a census of the contract kits found missing.
      * <ol>
      *   <li><b>An ordinary failure is contained and named, and the next observer still runs.</b> These fire after the
      *       publish has committed, so a notification that could not be filed must never retract an artifact that is
      *       already linked and serving - but it must not vanish either, so the observer's class and the subject are
-     *       logged at {@code WARNING} (PRINCIPLES &sect;9: a fail-soft still emits a diagnostic).</li>
+     *       logged at {@code WARNING} (&sect;9: a fail-soft still emits a diagnostic).</li>
      *   <li><b>An {@link Error} is attributed and then propagates.</b> It is the runtime or the module graph giving
      *       way rather than a notification failing to file, and filing it as one observer's contained failure would
      *       leave a deployment serving artifacts on a broken runtime with a WARNING to show for it. It used to
-     *       propagate with <em>no</em> line at all, which is the earlier ruling half-applied: an operator learned that
+     *       propagate with <em>no</em> line at all, which is the product's rule for an Error - attributed and escalated - half-applied: an operator learned that
      *       the publish 500ed and nothing about which of N installed observers had given way. The propagation
      *       direction is deliberately unchanged - it is arguable, because the publish HAS committed and the client
      *       is told it failed, and that argument is a separate decision from this diagnosis.</li>
      *   <li><b>The identity is the observer's class, read before the call.</b> This SPI carries no {@code name()},
      *       so there is nothing to re-enter - but reading it up front is what keeps it that way, and it is the same
-     *       rule and landed one host each.</li>
+     *       rule the event sink and the maintenance scheduler follow, one host each.</li>
      * </ol>
      */
     private static void notify(List<PublicationObserver> observers, String subject, Notification notification) {
@@ -980,7 +967,9 @@ public final class Publication {
 
         /** What an already-published coordinate means for the incoming upload. */
         public enum Mode {
-            /** Last-writer-wins: no probe at all, the pointer simply moves. The formats' behaviour today. */
+            /** No probe before the layout. The pointer moves unless the layout links it through a guard of its own -
+             *  {@link #guarded}, or {@code Blobs.linkOnce} for a format whose pointer is in its own namespace - which is
+             *  where a format whose collision key is only known inside the layout refuses a republish. */
             OVERWRITE,
             /** A re-publish of <em>identical</em> bytes converges (the layout re-runs and lands the same state, so a
              *  half-written first attempt is repaired); different bytes at a taken coordinate raise
@@ -999,7 +988,7 @@ public final class Publication {
             }
         }
 
-        /** Last-writer-wins, the policy every free format publishes under today: no probe, no extra read. */
+        /** {@link Mode#OVERWRITE}: no probe before the layout, no extra read. */
         public static Republish overwrite() {
             return new Republish(Mode.OVERWRITE, null);
         }
@@ -1058,7 +1047,9 @@ public final class Publication {
         private final String published;
         private final String offered;
 
-        RepublishConflict(String pointer, String published, String offered) {
+        /** Refuse {@code offered} at {@code pointer}, which already names {@code published} - public for the formats
+         *  whose serving pointer lives in their own namespace and is linked through {@code Blobs}. */
+        public RepublishConflict(String pointer, String published, String offered) {
             super(pointer + " is already published as " + published
                     + (published.equals(offered) ? " and this policy refuses a re-publish of identical bytes"
                             : " and cannot be re-published as " + offered));

@@ -1,6 +1,8 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import build.jenesis.repository.format.testkit.ContractHold;
+import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
 
@@ -20,10 +22,19 @@ import build.jenesis.repository.store.PublishInterceptor;
  * the per-store scoping, the idempotency - which lives once in {@link ContractHold}; this is the two-line
  * delegation that makes the convention take effect on this module's graph.
  *
- * <p>It overrides only {@code withheld}, leaving {@code assess} at its {@code ACCEPT} default, so it is inert for
- * every path no check has explicitly held.
+ * <p>It holds nothing no check asked it to: {@code withheld} answers only for a path a check held, and
+ * {@code assess} answers {@code QUARANTINE} only while a check has switched {@link #QUARANTINE_UPLOADS} on - how a
+ * check sees what a format's own publish does with an upload the screen holds.
  */
 public final class ContractHoldInterceptor implements PublishInterceptor {
+
+    /** While set, every upload a format screens is held for review. A check sets it around one upload and clears it. */
+    public static final AtomicBoolean QUARANTINE_UPLOADS = new AtomicBoolean();
+
+    @Override
+    public Disposition assess(ArtifactDescriptor artifact, Content content) {
+        return QUARANTINE_UPLOADS.get() ? Disposition.QUARANTINE : Disposition.ACCEPT;
+    }
 
     @Override
     public boolean withheld(String path, ArtifactStore store) {

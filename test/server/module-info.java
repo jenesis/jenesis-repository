@@ -69,6 +69,8 @@ open module build.jenesis.repository.test {
     requires spring.security.core;
     requires spring.beans;
     requires spring.core;
+    // ContendedWriteTest reads the controller's @ExceptionHandler to hold that a contended write's answer is bound.
+    requires spring.web;
 
     requires wiremock.core;
     requires wiremock.jetty;

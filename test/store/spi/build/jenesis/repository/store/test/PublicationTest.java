@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Condemned;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
@@ -352,17 +353,17 @@ class PublicationTest {
     }
 
     @Test
-    void linking_a_blob_clears_a_garbage_collectors_condemned_marker() throws IOException {
+    void linking_a_blob_spares_it_from_a_garbage_collectors_condemnation() throws IOException {
         // Identical content dedupes to one blob, so a "new" publish may link a blob a collector already judged
-        // unreferenced; the link clears the condemned marker on the write path, before the collecting sweep's
-        // final marker re-read - the dedup re-publish guard of the condemn-then-collect contract.
+        // unreferenced; the link spares it on the write path, by compare-and-set on the marker a collecting sweep
+        // must claim before it deletes - the dedup re-publish guard of the condemn-then-collect contract.
         String hash = publication.storeBlob(bytes("payload"));
         store.writeVersioned("gc/condemned/" + hash,
                 "pass=1\nsince=2026-07-16T00:00:00Z".getBytes(StandardCharsets.UTF_8), null);
 
         publication.link("/raw/back", hash);
-        assertThat(store.exists("gc/condemned/" + hash))
-                .as("a re-linked blob is un-condemned the moment its pointer lands").isFalse();
+        assertThat(Condemned.standing(store, hash))
+                .as("a re-linked blob is spared before its pointer lands").isFalse();
         assertThat(publication.located("/raw/back")).contains("blobs/" + hash);
     }
 }
