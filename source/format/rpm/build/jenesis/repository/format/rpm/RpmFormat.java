@@ -8,7 +8,10 @@ import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
 import java.time.Duration;
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.ProxyLeg;
@@ -82,7 +85,7 @@ import build.jenesis.repository.walk.TraversalException;
  * resolves a {@code .rpm} path to its NEVRA coordinate for read-side download tracking and the enforcement round-trip.
  */
 public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
-        ArtifactSignatures {
+        ArtifactSignatures, RepositoryExporter {
 
     /** The OSV-style ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). */
     public static final String ECOSYSTEM = "RPM";
@@ -922,5 +925,12 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /** Each {@code .rpm} of the version is put at its location; the target derives its own repodata. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        return BlobExport.put(repository, mount(), blobKeys(coordinate, version, repository), target);
     }
 }

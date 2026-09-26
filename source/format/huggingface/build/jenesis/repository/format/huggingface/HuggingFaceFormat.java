@@ -4,7 +4,10 @@ import module java.base;
 import module tools.jackson.databind;
 
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.ProxyLeg;
@@ -79,7 +82,8 @@ import build.jenesis.repository.walk.TraversalException;
  * inspector screens the coordinate on both legs, and a {@code HuggingFaceImporter} migrates a Nexus/Artifactory
  * {@code huggingfaceml} registry by replaying each revision file through the streaming publish path.
  */
-public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter {
+public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
+        RepositoryExporter {
 
     /** The package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). OSV
      *  has no dedicated Hugging Face feed, so vulnerability lookups on it simply find nothing; the coordinate still
@@ -1157,5 +1161,23 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /**
+     * Each file of the revision is put at its {@code resolve/<revision>/<path>}, one request a file, as the upload is
+     * made; the target synthesises a commit of its own for it. A file stored under both the revision and the commit a
+     * hosted branch cached is one file, put once.
+     */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        Map<String, BlobExport.Pair> pairs = new LinkedHashMap<>();
+        for (HuggingFaceFile file : huggingFaceFiles(coordinate, version, repository)) {
+            pairs.putIfAbsent(file.path(), new BlobExport.Pair(file.key(), file.path().substring(PREFIX.length())));
+        }
+        return BlobExport.put(repository, List.copyOf(pairs.values()), target);
     }
 }

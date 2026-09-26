@@ -47,46 +47,89 @@ public final class PublishedExport {
         Publication publication = new Publication(repository);
         List<String> ordered = new ArrayList<>(paths);
         ordered.sort(Comparator.comparingInt(PublishedExport::rank).thenComparing(Comparator.naturalOrder()));
-        boolean sent = false;
-        boolean present = true;
+        List<File> files = new ArrayList<>();
         for (String path : ordered) {
             Optional<Publication.Located> located = publication.locate(path);
             if (located.isEmpty()) {
                 continue;
             }
-            sent = true;
-            String relative = relative(path, strip);
             String key = located.get().key();
-            Optional<String> hash = Optional.of(key.substring(key.lastIndexOf('/') + 1));
-            if (target.sha256(relative).equals(hash)) {
-                // Already there, byte for byte: a resumed or repeated export sends nothing twice.
+            String relative = relative(path, strip);
+            files.add(File.put(relative, Optional.of(relative), contentType(path),
+                    key.substring(key.lastIndexOf('/') + 1), located.get().size(), () -> repository.open(key)));
+        }
+        return send(files, target);
+    }
+
+    /**
+     * One file an export sends: the request that publishes it - a {@code PUT} at its path for most formats, a form
+     * {@code POST} for a client that uploads one - where the target serves it once sent - the same path, a path of its
+     * own, or nowhere a single file can be asked for back (a winget manifest, served only inside its package's
+     * document) - and the SHA-256 of its stored bytes, which is what the target is asked for there.
+     */
+    public record File(ExportTarget.Request request, Optional<String> served, String sha256) {
+
+        public File {
+            Objects.requireNonNull(request, "request");
+            Objects.requireNonNull(served, "served");
+            Objects.requireNonNull(sha256, "sha256");
+        }
+
+        /** A file put at {@code path} under the target's URL, from stored bytes of {@code length} ({@code -1} when the
+         *  store never recorded it). */
+        public static File put(String path, Optional<String> served, String contentType, String sha256, long length,
+                               ExportTarget.Opener content) {
+            return new File(ExportTarget.Request.put(path, contentType, ExportTarget.Body.of(length, content)), served,
+                    sha256);
+        }
+    }
+
+    /**
+     * Put each of {@code files}, in the order given, skipping one the target already serves with the same bytes at its
+     * {@link File#served} path: the mechanism every put-at-its-path export shares, whichever namespace its files were
+     * found in. A file the target cannot be asked about is sent unless every file it can be asked about is already
+     * there, in which case the version is. No files - every one withheld or gone - is {@code WITHHELD}; nothing sent
+     * because everything is there is {@code ALREADY_PRESENT}.
+     */
+    public static RepositoryExporter.Exported send(List<File> files, ExportTarget target) throws IOException {
+        if (files.isEmpty()) {
+            return RepositoryExporter.Exported.WITHHELD;
+        }
+        List<Boolean> there = new ArrayList<>(files.size());
+        boolean asked = false;
+        boolean complete = true;
+        for (File file : files) {
+            boolean held = file.served().isPresent() && holds(target, file);
+            there.add(held);
+            asked |= file.served().isPresent();
+            complete &= held || file.served().isEmpty();
+        }
+        if (asked && complete) {
+            // Already there, byte for byte: a resumed or repeated export sends nothing twice.
+            return RepositoryExporter.Exported.ALREADY_PRESENT;
+        }
+        boolean present = true;
+        for (int index = 0; index < files.size(); index++) {
+            File file = files.get(index);
+            if (there.get(index)) {
                 continue;
             }
-            long length = located.get().size();
-            ExportTarget.Response response = target.send(ExportTarget.Request.put(relative, contentType(path),
-                    new ExportTarget.Body() {
-                        @Override
-                        public long length() {
-                            return length;
-                        }
-
-                        @Override
-                        public InputStream open() throws IOException {
-                            return repository.open(key);
-                        }
-                    }));
+            ExportTarget.Response response = target.send(file.request());
             if (response.ok()) {
                 present = false;
-            } else if (!target.sha256(relative).equals(hash)) {
-                throw new IOException("the target refused " + relative + " with " + response.status()
+            } else if (file.served().isEmpty() || !holds(target, file)) {
+                throw new IOException("the target refused " + file.served().orElse(file.request().path()) + " with "
+                        + response.status()
                         + (response.body().isBlank() ? "" : ": " + response.body().strip())
                         + ", and does not hold the same bytes there");
             }
         }
-        if (!sent) {
-            return RepositoryExporter.Exported.WITHHELD;
-        }
         return present ? RepositoryExporter.Exported.ALREADY_PRESENT : RepositoryExporter.Exported.PUBLISHED;
+    }
+
+    /** Whether the target serves {@code file}'s bytes where it is served once put. */
+    private static boolean holds(ExportTarget target, File file) throws IOException {
+        return target.sha256(file.served().orElseThrow()).equals(Optional.of(file.sha256()));
     }
 
     /** The request paths published under {@code folder}, every depth, bounded by {@link #MAX_FILES}. */
@@ -127,7 +170,8 @@ public final class PublishedExport {
         return 0;
     }
 
-    private static String contentType(String path) {
+    /** The content type a file is put with, judged from its name. */
+    public static String contentType(String path) {
         return path.endsWith(".pom") || path.endsWith(".xml") ? "application/xml"
                 : path.endsWith(".json") ? "application/json"
                 : "application/octet-stream";

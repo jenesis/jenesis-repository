@@ -5,7 +5,10 @@ import module tools.jackson.databind;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.store.PublishInterceptor;
 
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.format.ArtifactLayout;
@@ -48,7 +51,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * therefore a statement about what this repository serves, not a guarantee about what a client ends up with -
  * which is a property of the ecosystem's fallback, and is worth knowing before relying on it.
  */
-public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures {
+public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures, RepositoryExporter {
 
     /** The package-ecosystem name Homebrew coordinates report. */
     public static final String ECOSYSTEM = "Homebrew";
@@ -308,5 +311,12 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
             paths.add("/" + key);
         }
         return paths;
+    }
+
+    /** Each bottle of the version is put at its path, its attestations document after it. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        return BlobExport.put(repository, mount(), blobKeys(coordinate, version, repository), target);
     }
 }

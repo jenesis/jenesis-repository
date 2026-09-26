@@ -5,7 +5,10 @@ import module tools.jackson.databind;
 
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.blobs.RequestBase;
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.OutboundTargets;
@@ -76,7 +79,8 @@ import build.jenesis.repository.store.StoredListing;
  * repo name is a deployment alias, stripped), which is the CDN's own layout, so no path rewrite is needed beyond the
  * {@code source} routing. An upstream miss lets the local {@code 404} stand.
  */
-public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter {
+public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
+        RepositoryExporter {
 
     /** The package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). OSV
      *  has no dedicated CocoaPods feed, so vulnerability lookups on it simply find nothing; the coordinate still drives
@@ -854,5 +858,21 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /** Each registry's pod archive of the version is put where a pod push goes - {@code <repo>/<name>/<version>} - and
+     *  asked for back at the path it is served from; the target derives its own podspec stanza from the archive. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        List<BlobExport.Pair> pairs = new ArrayList<>();
+        for (String repo : repository.list("cocoapods")) {
+            pairs.add(new BlobExport.Pair(blobKey(repo, coordinate, version), repo + "/" + coordinate + "/" + version,
+                    repo + "/" + PODS + coordinate + "/" + version + "/" + coordinate + ZIP));
+        }
+        return BlobExport.put(repository, pairs, target);
     }
 }

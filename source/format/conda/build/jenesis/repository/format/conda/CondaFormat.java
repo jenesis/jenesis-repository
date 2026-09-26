@@ -5,7 +5,10 @@ import module org.apache.commons.compress;
 import module tools.jackson.databind;
 
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.ProxyLeg;
@@ -73,7 +76,7 @@ import build.jenesis.repository.store.OwnerOnly;
  * so the {@code publish/}-namespace eviction ({@link #paths}) stays empty; coordinate-scoped enforcement runs through
  * the {@code BlobLayout} seam ({@link #blobKeys}/{@link #servedPaths}) instead.
  */
-public final class CondaFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter {
+public final class CondaFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter, RepositoryExporter {
 
     /** The package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). */
     public static final String ECOSYSTEM = "conda";
@@ -843,5 +846,21 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /** Each build of the version is put where conda's own upload puts it - {@code <channel>/<subdir>/<file>} - which is
+     *  the path it is served at, though not the key it is stored under. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        List<BlobExport.Pair> pairs = new ArrayList<>();
+        for (Coordinate found : keptPackages(coordinate, version, repository)) {
+            pairs.add(new BlobExport.Pair(packageKey(found.repo(), found.subdir(), found.file()),
+                    found.repo() + "/" + found.subdir() + "/" + found.file()));
+        }
+        return BlobExport.put(repository, pairs, target);
     }
 }

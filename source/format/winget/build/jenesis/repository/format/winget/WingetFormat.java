@@ -3,7 +3,10 @@ package build.jenesis.repository.format.winget;
 import module java.base;
 import module tools.jackson.databind;
 
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.RequestBase;
@@ -51,7 +54,8 @@ import build.jenesis.repository.store.StoredListing;
  * {@link BlobLayout} seam ({@link #blobKeys}/{@link #servedPaths}) instead. OSV publishes no winget advisory feed, so
  * vulnerability screening finds nothing while license and malicious-package screening still key on the coordinate.
  */
-public final class WingetFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryImporter {
+public final class WingetFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryImporter,
+        RepositoryExporter {
 
     /** The package-ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id.
      *  Microsoft styles the product "WinGet" and the command {@code winget}; the ecosystem takes the product's
@@ -751,5 +755,33 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
 
     private static String lower(String value) {
         return value == null || value.isBlank() ? null : value.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Each registry's manifest of the version is put first, at {@code <repo>/manifests/<id>/<version>}, and then each
+     * installer at the path it is served from - the order the target insists on, since it refuses an installer whose
+     * version has no manifest. A manifest is served only inside its package's document, so it cannot be asked for back
+     * alone: it is sent whenever an installer is, and a version whose installers are all there is.
+     */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        Blobs blobs = new Blobs(repository);
+        List<BlobExport.Pair> pairs = new ArrayList<>();
+        for (String repo : repository.list("winget")) {
+            if (repository.readVersioned(manifestKey(repo, coordinate, version)).isEmpty()) {
+                continue;
+            }
+            pairs.add(new BlobExport.Pair(manifestKey(repo, coordinate, version),
+                    repo + "/" + MANIFESTS + coordinate + "/" + version, Optional.empty()));
+            for (String file : blobs.list(installerPrefix(repo, coordinate, version))) {
+                pairs.add(new BlobExport.Pair(installerKey(repo, coordinate, version, file),
+                        repo + "/" + INSTALLERS + coordinate + "/" + version + "/" + file));
+            }
+        }
+        return BlobExport.put(repository, pairs, target);
     }
 }

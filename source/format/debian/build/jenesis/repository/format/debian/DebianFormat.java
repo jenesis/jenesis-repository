@@ -6,7 +6,10 @@ import module org.apache.commons.compress;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.debian.keys.DebianKeyring;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.ProxyLeg;
@@ -55,7 +58,7 @@ import build.jenesis.repository.walk.Trees;
  * ({@link #indexCoverage}).
  */
 public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayout, ArtifactSignatures,
-        RepositoryImporter {
+        RepositoryImporter, RepositoryExporter {
 
     /** How many per-package digests one relayed index may record - a bound on the work a hostile upstream can ask
      *  for, well past any real suite (Debian main/amd64 carries some sixty thousand packages). */
@@ -1155,5 +1158,13 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /** Each {@code .deb} of the version is put at its pool path; the target derives its own {@code Packages} and
+     *  {@code Release} and signs them with its own key. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        return BlobExport.put(repository, mount(), blobKeys(coordinate, version, repository), target);
     }
 }

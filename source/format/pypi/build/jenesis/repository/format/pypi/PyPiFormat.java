@@ -20,6 +20,10 @@ import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.multipart.MultipartBody;
+import build.jenesis.repository.multipart.MultipartForm;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.PublishedExport;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -39,7 +43,7 @@ import build.jenesis.repository.walk.ScreenedNames;
  * {@code #sha256} so pip verifies it; the file itself is served at {@code /pypi/simple/<project>/<filename>}.
  */
 public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter,
-        ArtifactSignatures {
+        ArtifactSignatures, RepositoryExporter {
 
     private static final Logger LOGGER =
             LoggerFactory.getLogger(PyPiFormat.class);
@@ -1125,5 +1129,57 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /**
+     * Each distribution of the version is uploaded as {@code twine upload} sends it: the legacy form posted to the
+     * repository's root, naming the project and version and carrying the file, its SHA-256 and the PEP 740
+     * attestations it was uploaded with. The target is asked for each file back at its Simple index path, so a
+     * distribution already there is not sent again.
+     */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        String project = normalize(coordinate);
+        Blobs blobs = new Blobs(repository);
+        List<PublishedExport.File> files = new ArrayList<>();
+        for (String key : blobKeys(coordinate, version, repository)) {
+            Optional<Blobs.Located> located = blobs.locate(key);
+            if (located.isEmpty()) {
+                continue;
+            }
+            String filename = key.substring(key.lastIndexOf('/') + 1);
+            String hash = located.get().hash();
+            MultipartForm form = MultipartForm.create()
+                    .field(":action", "file_upload")
+                    .field("protocol_version", "1")
+                    .field("name", project)
+                    .field("version", version)
+                    .field("filetype", filename.endsWith(".whl") ? "bdist_wheel" : "sdist")
+                    .field("pyversion", pythonTag(filename))
+                    .field("metadata_version", "2.1")
+                    .field("sha256_digest", hash);
+            ByteArrayOutputStream attestations = new ByteArrayOutputStream();
+            if (blobs.read(attestationsKey(project, filename), attestations)) {
+                form.field("attestations", attestations.toString(StandardCharsets.UTF_8));
+            }
+            form.file("content", filename, "application/octet-stream", located.get().size(), () -> blobs.open(hash));
+            files.add(new PublishedExport.File(
+                    ExportTarget.Request.post("", form.contentType(), ExportTarget.Body.of(form.length(), form::open)),
+                    Optional.of("simple/" + project + "/" + filename), hash));
+        }
+        return PublishedExport.send(files, target);
+    }
+
+    /** The {@code pyversion} twine sends: a wheel's python tag, {@code source} for an sdist. */
+    private static String pythonTag(String filename) {
+        if (!filename.endsWith(".whl")) {
+            return "source";
+        }
+        String[] parts = filename.substring(0, filename.length() - ".whl".length()).split("-", -1);
+        return parts.length >= 5 ? parts[parts.length - 3] : "py3";
     }
 }

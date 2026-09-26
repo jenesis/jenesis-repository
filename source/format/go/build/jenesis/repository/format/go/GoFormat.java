@@ -3,7 +3,10 @@ package build.jenesis.repository.format.go;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.ProxyLeg;
@@ -95,7 +98,7 @@ import build.jenesis.repository.format.Semver;
  *     instead of answering (&sect;5, &sect;9).</li>
  * </ol>
  */
-public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter {
+public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, RepositoryExporter {
 
     @Override
     public String name() {
@@ -670,5 +673,13 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /** Each of the version's {@code .info}, {@code .mod} and {@code .zip} is put at its {@code @v/} path, which is how
+     *  a module version is published to a GOPROXY that accepts uploads. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        return BlobExport.put(repository, mount(), blobKeys(coordinate, version, repository), target);
     }
 }

@@ -2,7 +2,10 @@ package build.jenesis.repository.format.apk;
 
 import module java.base;
 
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.format.ArtifactLayout;
@@ -42,7 +45,7 @@ import build.jenesis.repository.format.Listings;
  * half is served at {@code GET /apk/keys/jenesis.rsa.pub} for an operator to place in {@code /etc/apk/keys/}. See
  * {@link ApkSigner} for the scheme and how each part of it was measured.
  */
-public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures {
+public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures, RepositoryExporter {
 
     /** The package-ecosystem name apk coordinates report. */
     public static final String ECOSYSTEM = "Alpine";
@@ -429,5 +432,13 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
             paths.add("/" + key);
         }
         return paths;
+    }
+
+    /** Each {@code .apk} of the version is put at {@code <repo>/<arch>/<file>}; the target derives and signs its own
+     *  {@code APKINDEX}. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        return BlobExport.put(repository, mount(), blobKeys(coordinate, version, repository), target);
     }
 }

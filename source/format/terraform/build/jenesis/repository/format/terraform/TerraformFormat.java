@@ -2,7 +2,10 @@ package build.jenesis.repository.format.terraform;
 
 import module java.base;
 
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.RequestBase;
@@ -46,7 +49,7 @@ import build.jenesis.repository.format.Listings;
  * document is contributed by a separate module rather than served here. A deployment that does not install it can
  * still be read by anything addressing these paths directly, but not by {@code terraform init}.
  */
-public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, BlobLayout {
+public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryExporter {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -526,5 +529,13 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
             paths.add("/" + key);
         }
         return paths;
+    }
+
+    /** The version's module archive, or each of a provider version's platform zips, is put at its path; the
+     *  target derives and signs its own {@code SHA256SUMS}. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        return BlobExport.put(repository, mount(), blobKeys(coordinate, version, repository), target);
     }
 }

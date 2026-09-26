@@ -71,6 +71,12 @@ public interface ExportTarget {
         }
     }
 
+    /** How a body's bytes are opened, each time a request is sent. */
+    @FunctionalInterface
+    interface Opener {
+        InputStream open() throws IOException;
+    }
+
     /** A request body: its length when known ({@code -1} when not) and how to open it, which may happen once per send. */
     interface Body {
 
@@ -79,6 +85,23 @@ public interface ExportTarget {
         long length();
 
         InputStream open() throws IOException;
+
+        /** A body of {@code length} bytes ({@code -1} when not known), opened from {@code content} on each send - a
+         *  stored artifact, or an envelope streamed around one, that is never held whole. */
+        static Body of(long length, Opener content) {
+            Objects.requireNonNull(content, "content");
+            return new Body() {
+                @Override
+                public long length() {
+                    return length;
+                }
+
+                @Override
+                public InputStream open() throws IOException {
+                    return content.open();
+                }
+            };
+        }
 
         static Body of(byte[] content) {
             byte[] copy = content.clone();

@@ -4,7 +4,10 @@ import module java.base;
 import module tools.jackson.databind;
 
 import build.jenesis.repository.blobs.RequestBase;
+import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.format.ExportTarget;
+import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.OutboundTargets;
@@ -86,7 +89,8 @@ import build.jenesis.repository.walk.ScreenedNames;
  * path, and a compliance inspector screens the {@code "Packagist"} ecosystem (a sibling {@code compliance/composer}
  * module).
  */
-public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter {
+public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
+        RepositoryExporter {
 
     /** The OSV package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). */
     public static final String ECOSYSTEM = "Packagist";
@@ -879,5 +883,22 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         importer.importArtifact(path, content, store);
+    }
+
+    /** Each registry's zip of the version is put where a Composer upload goes -
+     *  {@code <repo>/<vendor>/<package>/<version>} - and asked for back at the dist path it is served from; the target
+     *  derives its own {@code p2} stanza. */
+    @Override
+    public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
+            throws IOException {
+        if (!BlobLayout.addressable(coordinate, version)) {
+            return Exported.WITHHELD;
+        }
+        List<BlobExport.Pair> pairs = new ArrayList<>();
+        for (String repo : repository.list("composer")) {
+            pairs.add(new BlobExport.Pair("composer/" + repo + "/dist/" + coordinate + "/" + version + ZIP,
+                    repo + "/" + coordinate + "/" + version, repo + "/" + DISTS + coordinate + "/" + version + ZIP));
+        }
+        return BlobExport.put(repository, pairs, target);
     }
 }
