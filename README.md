@@ -7,9 +7,9 @@ jenesis-repository
 > ### [Jenesis](https://jenesis.build) - a modern Java build tool
 > _Java-native config, plugin-free, with `module-info.java` treated as a feature, not an afterthought._
 
-**An artifact repository for twenty-four package formats.** npm, PyPI, Go, Cargo, NuGet, RubyGems, Debian,
-RPM, apk, Conda, Conan, CocoaPods, Composer, Swift, Helm, Homebrew, Hugging Face, Terraform, winget, Ivy -
-and Maven, OCI, raw and the Jenesis module layout.
+**An artifact repository.** It serves npm, PyPI, Go, Cargo, NuGet, RubyGems, Debian, RPM, apk, Conda, Conan,
+CocoaPods, Composer, Swift, Helm, Homebrew, Hugging Face, Terraform, winget, Ivy - and Maven, OCI, raw and the
+Jenesis module layout.
 
 It is dual-layout at its core: the same artifacts resolve under the Maven layout, so any Maven, Gradle or
 Jenesis build finds them, and under the Jenesis module layout, so a modular build resolves them by module
@@ -24,7 +24,7 @@ coordinate cannot show - the packages in an image's base layer - a scanner run i
 `POST /api/findings/report`, and the image is withheld the same way.
 
 Every format, storage backend, importer and console panel is a `ServiceLoader` plugin over one
-content-addressed store, so twenty of those formats dedupe against each other: an npm tarball and a PyPI
+content-addressed store, so every format that keeps its bytes in the shared `blobs/` namespace dedupes against the others: an npm tarball and a PyPI
 wheel of identical bytes are stored once, and one reference scan answers for all of them.
 
 📖 **The user documentation lives at [jenesis.build/repository](https://jenesis.build/repository/)** -
@@ -113,8 +113,8 @@ seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by 
 |------|--------|
 | `source/server`, `source/server-spi` | The format-neutral dispatcher: routing, auth, the publish edge, the pull-through serve loop, and the `/api` surface. Knows no layout. |
 | `source/store/{spi,filesystem,s3,gcs,azure}` | The content-addressed store and its backends. |
-| `source/format/*` | Twenty-four formats, each a plugin, and the `java` repository type, which composes Maven's layout with the module layout. `{spi,maven,java,oci,raw,jenesis,lifecycle}` are the published-tree ones; the rest - npm, PyPI, Go, Cargo, NuGet, gems, Debian, RPM, apk, Conda, Conan, CocoaPods, Composer, Swift, Helm, Homebrew, Hugging Face, Terraform, winget, Ivy - keep their bytes in the shared `blobs/` namespace. `signing` is the OpenPGP release signing three of them share. |
-| `source/importer/*`, and an importer inside fifteen formats | Migration connectors that walk another repository and replay each asset through the owning format's real publish path. |
+| `source/format/*` | One module per format, each a plugin, and the `java` repository type, which composes Maven's layout with the module layout. `{spi,maven,java,oci,raw,jenesis,lifecycle}` are the published-tree ones; the rest - npm, PyPI, Go, Cargo, NuGet, gems, Debian, RPM, apk, Conda, Conan, CocoaPods, Composer, Swift, Helm, Homebrew, Hugging Face, Terraform, winget, Ivy - keep their bytes in the shared `blobs/` namespace. `signing` is the OpenPGP release signing three of them share. |
+| `source/importer/*`, and the importer most formats carry | Migration connectors that walk another repository and replay each asset through the owning format's real publish path. |
 | `source/proxy` | The upstream fetcher behind pull-through caching, with revalidation and a negative cache. |
 | `source/walk/{spi,store}`, `source/gc/{spi,store}` | The resumable artifact walk, and mark-sweep garbage collection over it. |
 | `source/ui` | The web console (`/ui/`) and its design system. |
@@ -124,16 +124,17 @@ seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by 
 | `source/gate/store`, `source/gate-wiring`, `source/compliance/*` | The publish gate: the Maven and OCI inspectors that name what a publish is, the OSV, GitHub and OpenSSF feeds (off until an operator switches them on), policy-as-code and attestation admission, the scheduled rescan, signature verification, and the review queue where a hold is released. |
 | `source/webhook`, `source/webhook-web`, `source/outbox` | Signed, retried webhooks for what was published, held, released or refused, and the surface that retries a parked delivery. |
 | `source/findings/store`, `source/health/store` | The findings and maintainer-health ledgers the gate and its screens read. |
-| `source/feed`, `source/bundle`, `source/contract/testkit` | The advisory feed, the launchable module, and the shared contract test kit. |
+| `source/feed`, `source/bundle` | The advisory feed, and the launchable module. |
+| `test/kit/*` | The contract test kits: `test/kit/contract` is the shared census, and `store`, `walk`, `format`, `importer` and the rest each carry one family's contract. |
 
-Each family's `testkit` module carries the contract tests an implementation must pass, so a new backend or
+Each family's kit under `test/kit/` carries the contract tests an implementation must pass, so a new backend or
 format is validated against the same suite the built-in ones are.
 
 ## Writing a plugin
 
 A plugin is a module that `provides` one of the SPIs above. Two rules make the seam work:
 
-- **Implement the contract, then run its test kit.** `source/*/testkit` exists so an implementation proves it
+- **Implement the contract, then run its test kit.** `test/kit/*` exists so an implementation proves it
   behaves like the ones already shipping - a store backend that passes the store contract is one the server
   can drive without knowing which it got.
 - **A publish screen is a `PublishInterceptor`.** It sees the artifact once it is stored content-addressed but
@@ -141,8 +142,7 @@ A plugin is a module that `provides` one of the SPIs above. Two rules make the s
   publish gate (`source/gate/store`) is one, armed by `source/gate-wiring`; a composition without the wiring
   screens nothing and accepts every upload.
 
-`AGENTS.md` carries the working conventions for this repository, and `docs/` holds the design notes that
-outlive a single change.
+`AGENTS.md` carries the working conventions for this repository.
 
 ## Tests
 
@@ -150,7 +150,7 @@ outlive a single change.
 java build/jenesis/Make.java build     # compile and run the suite
 ```
 
-Contract suites are tagged, and CI decides which tagged suites to run from what a change touches. A change to
+Every suite runs in process - no container, browser or live network - so the build needs nothing beside JDK 25. A change to
 an SPI is expected to arrive with the test-kit clause that pins the new behaviour, so every implementation
 inherits it.
 
