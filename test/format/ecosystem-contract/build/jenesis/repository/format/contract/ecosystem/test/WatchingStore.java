@@ -18,6 +18,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * declared blob roots} (or the shared content-addressed {@code blobs/} namespace, which every format legitimately
  * resolves through). Nothing here fails on its own - the recording is inert - so a check reads the trace and reports
  * the escape with the key that caused it.
+ *
+ * <p>It can also {@linkplain #holding hold} a caller at a content-addressed write, which is how a race is forced
+ * rather than hoped for: concurrent publishes held there until every one has stored its bytes have all passed
+ * whatever a format checks before storing, and none of them has linked yet.
  */
 final class WatchingStore implements ArtifactStore {
     @Override
@@ -28,15 +32,23 @@ final class WatchingStore implements ArtifactStore {
 
     private final ArtifactStore delegate;
     private final List<String> touched;
+    private final Runnable beforeBlob;
 
-    private WatchingStore(ArtifactStore delegate, List<String> touched) {
+    private WatchingStore(ArtifactStore delegate, List<String> touched, Runnable beforeBlob) {
         this.delegate = delegate;
         this.touched = touched;
+        this.beforeBlob = beforeBlob;
     }
 
     /** Wrap a delegate store; the recording is shared with every {@link #scope} derived from it. */
     static WatchingStore over(ArtifactStore delegate) {
-        return new WatchingStore(Objects.requireNonNull(delegate, "delegate"), new CopyOnWriteArrayList<>());
+        return holding(delegate, () -> { });
+    }
+
+    /** {@link #over}, running {@code beforeBlob} on the caller's thread ahead of every {@link #writeBlob}. */
+    static WatchingStore holding(ArtifactStore delegate, Runnable beforeBlob) {
+        return new WatchingStore(Objects.requireNonNull(delegate, "delegate"), new CopyOnWriteArrayList<>(),
+                Objects.requireNonNull(beforeBlob, "beforeBlob"));
     }
 
     /** Every key and prefix handed to the store since the last {@link #forget()}, in order. */
@@ -56,7 +68,7 @@ final class WatchingStore implements ArtifactStore {
 
     @Override
     public ArtifactStore scope(String tenant) {
-        return new WatchingStore(delegate.scope(tenant), touched);
+        return new WatchingStore(delegate.scope(tenant), touched, beforeBlob);
     }
 
     @Override
@@ -86,6 +98,7 @@ final class WatchingStore implements ArtifactStore {
 
     @Override
     public String writeBlob(InputStream in) throws IOException {
+        beforeBlob.run();
         return delegate.writeBlob(in);
     }
 

@@ -83,6 +83,7 @@ final class Packages {
     private static void entry(TarArchiveOutputStream out, String name, byte[] content) throws IOException {
         TarArchiveEntry member = new TarArchiveEntry(name);
         member.setSize(content.length);
+        member.setModTime(0L);   // pinned, so one chart built twice is the same bytes
         out.putArchiveEntry(member);
         out.write(content);
         out.closeArchiveEntry();
@@ -530,7 +531,8 @@ final class Packages {
     }
 
     private static void member(ArArchiveOutputStream archive, String name, byte[] content) throws IOException {
-        archive.putArchiveEntry(new ArArchiveEntry(name, content.length));
+        // The time pinned, as every other container here: the two-argument form stamps the current second.
+        archive.putArchiveEntry(new ArArchiveEntry(name, content.length, 0, 0, 0100644, 0L));
         archive.write(content);
         archive.closeArchiveEntry();
     }

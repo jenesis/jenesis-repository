@@ -25,14 +25,26 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * still to serve. A format whose upload addresses one path and links another would pass the edge unguarded, and fails
  * here. The rest are {@link #MUTABLE}, each with its reason; a new format joins this census by joining the fixtures,
  * so it cannot arrive undecided.
+ *
+ * <p>Refusing one upload after another is not refusing one of two that race: a check made before the link lets both
+ * rivals past it, and only a decision inside the link's compare-and-set tells them apart. So every format that keeps
+ * its release is also held to a row of {@link ReleaseImmutabilityTest}'s concurrent race, or to a reason in
+ * {@link #NOT_RACED} naming where its race is proven instead.
  */
 class ReleaseImmutabilityCensusTest {
 
     /** Formats whose published file may change under its name, and why. */
     private static final Map<String, String> MUTABLE = Map.of(
             "huggingface", "a file is addressed through a revision, and the revision the fixture publishes to is a "
-                    + "branch (main): a push moves the branch to a new commit, as the Hub does, and the file at a "
-                    + "commit id - the address a pinned download uses - is what never changes");
+                    + "branch (main): a push moves the branch, as it does on the Hub. Only a branch's file changes: "
+                    + "the file at a commit id - the address a pinned download uses - is refused other bytes, which "
+                    + "ReleaseImmutabilityTest's huggingface row holds it to");
+
+    /** Formats that keep their release but have no row in the concurrent race, and where their race is proven. */
+    private static final Map<String, String> NOT_RACED = Map.of(
+            "ivy", "an Ivy file is the publish/ pointer of the path it was uploaded to, so what refuses a second "
+                    + "upload is the ingress edge's guard rather than anything the format decides; the race over "
+                    + "that guard, with a rival landing between the link's read and its write, is GuardedLayoutTest's");
 
     @TempDir
     Path root;
@@ -54,10 +66,8 @@ class ReleaseImmutabilityCensusTest {
             throws Exception {
         Set<String> refusedByTheFormat = ReleaseImmutabilityTest.formats().stream()
                 .map(format -> format.fixture().format()).collect(Collectors.toSet());
-        if (refusedByTheFormat.contains(fixture.format())) {
-            assertThat(MUTABLE).as("%s refuses at its own pointer, so it is not mutable", fixture.format())
-                    .doesNotContainKey(fixture.format());
-            return;
+        if (refusedByTheFormat.contains(fixture.format()) && !MUTABLE.containsKey(fixture.format())) {
+            return;   // held to its refusal, one upload after another and racing, by ReleaseImmutabilityTest
         }
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
@@ -95,6 +105,21 @@ class ReleaseImmutabilityCensusTest {
                 + "(the second upload answered %s)", fixture.format(), uploaded, second)
                 .isEqualTo(firstHash);
         assertThat(second).as("and the second upload was refused").isNotNull();
+    }
+
+    @Test
+    void every_format_that_keeps_its_release_races_for_it_or_says_where_its_race_is_proven() {
+        Set<String> raced = ReleaseImmutabilityTest.formats().stream()
+                .map(format -> format.fixture().format()).collect(Collectors.toSet());
+        Set<String> formats = fixtures().stream().map(FormatFixture::format).collect(Collectors.toSet());
+
+        assertThat(formats.stream().filter(format -> !MUTABLE.containsKey(format))
+                .filter(format -> !raced.contains(format) && !NOT_RACED.containsKey(format)).sorted().toList())
+                .as("a format whose release keeps its bytes but whose refusal no concurrent upload has been sent "
+                        + "against: add it to ReleaseImmutabilityTest.formats(), or to NOT_RACED with the reason")
+                .isEmpty();
+        assertThat(NOT_RACED.keySet()).as("a reason for no race names a format with a fixture and no race")
+                .isSubsetOf(formats).doesNotContainAnyElementsOf(raced);
     }
 
     /** The content hash of what {@code path} serves. */

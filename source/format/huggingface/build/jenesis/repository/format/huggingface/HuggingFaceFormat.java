@@ -17,6 +17,7 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -48,9 +49,11 @@ import build.jenesis.repository.walk.TraversalException;
  * <p><b>Revision-addressed.</b> A file is addressed by its repository revision (a git branch like
  * {@code main} or an immutable commit sha) exactly as the client requests it, so this format is a streaming,
  * revision-addressed file store: it stores whatever the client pushes at the client's revision and never opens an archive
- * (the coordinate is in the request path, not inside the bytes). {@code /api/.../<repo_id>} with no explicit revision
- * resolves the default branch {@code main} (falling back to the most recently uploaded revision), each file upload
- * stamping its revision's time as a small compare-and-set pointer through the store.
+ * (the coordinate is in the request path, not inside the bytes). A file at a commit keeps the bytes it was first
+ * uploaded with, and a push of other bytes there is refused; a file on a branch is replaced by the next push.
+ * {@code /api/.../<repo_id>} with no explicit revision resolves the default branch {@code main} (falling back to the
+ * most recently uploaded revision), each file upload stamping its revision's time as a small compare-and-set pointer
+ * through the store.
  *
  * <p><b>Streaming publish.</b> An uploaded file streams straight through {@link Blobs#write(String, InputStream)} into
  * the content-addressed store, hashed on the way and never buffered, so an arbitrarily large {@code model.safetensors}
@@ -380,6 +383,10 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
      * content-addressed while it streams, so a large model weight never lands in heap; the upload also stamps its
      * revision's time so the generated {@code siblings} / {@code tree} index and the default-revision resolution order
      * correctly. A {@code HEAD} answers the size and the content hash ({@code ETag}) from stored metadata without a body.
+     *
+     * <p>An upload to a commit revision links through {@link Blobs#linkRelease}: a file at a commit is what a pinned
+     * download names, so other bytes there are refused with {@code 409} inside the pointer's compare-and-set, and the
+     * same bytes again converge. An upload to a branch replaces the file, as a push moves a branch on the Hub.
      */
     private void file(String repo, Resolve resolve, FormatExchange exchange, ArtifactStore store) throws IOException {
         String base = base(repo, resolve.type(), resolve.repoId());
@@ -390,7 +397,19 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         Blobs blobs = new Blobs(store);
         if (exchange.method().equals("PUT")) {
             String revBase = base + "/revs/" + resolve.revision();
-            blobs.write(revBase + "/files/" + enc(resolve.filepath()), exchange.requestStream());
+            String fileKey = revBase + "/files/" + enc(resolve.filepath());
+            if (isCommit(resolve.revision())) {
+                Blobs.Stored stored = blobs.stored(exchange.requestStream());
+                try {
+                    blobs.linkRelease(fileKey, stored.hash(), stored.size());
+                } catch (Publication.RepublishConflict taken) {
+                    exchange.respond(409, Blobs.alreadyPublished(resolve.repoId() + "@" + resolve.revision() + "/"
+                            + resolve.filepath()));
+                    return;
+                }
+            } else {
+                blobs.write(fileKey, exchange.requestStream());
+            }
             stampTime(store, revBase + "/time");
             // The revision's commit id, file tree and info document are derived from its stored file list, which
             // the upload updates with this one file - never a walk of the revision's other files.

@@ -22,8 +22,11 @@ import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectReader;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
@@ -123,6 +126,10 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
     }
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /** How a publisher's metadata part is read: one JSON value and nothing after it, so a part carrying a second
+     *  value behind the first is refused rather than read as its first. */
+    private static final ObjectReader METADATA = MAPPER.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     /** The package-ecosystem name Swift coordinates report. */
     public static final String ECOSYSTEM = "Swift";
@@ -519,9 +526,15 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
      *
      * <p>The archive streams into the content-addressed store through the shared multipart reader - which bounds
      * the form fields, so a body declaring a gigabyte-long field cannot be buffered whole - and the digest the
-     * store returns becomes the {@code checksum} the release document publishes. A release that already exists is
-     * refused with {@code 409}, which is what the specification says a registry does: a published release is
-     * immutable.
+     * store returns becomes the {@code checksum} the release document publishes. The archive is linked through
+     * {@link Blobs#linkRelease}, which decides inside the pointer's compare-and-set: of two first publishes racing
+     * with different archives one lands and the other is refused with {@code 409}, the specification's answer for a
+     * release that already exists, and a re-publish of the same archive is accepted and writes the release document
+     * again - so a publish whose document never landed, or whose answer was lost, converges when it is sent again.
+     *
+     * <p>The metadata part is parsed, and the release document is built from the parsed value: metadata that is not
+     * one JSON object is refused with {@code 400}, so a publisher cannot place a field of its own beside the
+     * {@code checksum} the store computed, nor store a document a client cannot read.
      */
     private void publish(FormatExchange exchange, Blobs blobs, String repo, String scope, String name,
                          String version) throws IOException {
@@ -530,10 +543,6 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             return;
         }
         String archiveKey = SwiftListings.archiveKey(repo, scope, name, version);
-        if (blobs.exists(archiveKey)) {
-            exchange.respond(409);   // a published release is immutable
-            return;
-        }
         Optional<String> boundary = MultipartBody.boundary(exchange.requestHeader("Content-Type"));
         if (boundary.isEmpty()) {
             exchange.respond(400);
@@ -573,7 +582,18 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             exchange.respond(400);
             return;
         }
-        blobs.link(archiveKey, hash);
+        Optional<ObjectNode> declared = metadata(metadata);
+        if (declared.isEmpty()) {
+            problem(exchange, 400, "the release metadata is not a JSON object");
+            return;
+        }
+        try {
+            blobs.linkRelease(archiveKey, hash, -1L);
+        } catch (Publication.RepublishConflict taken) {
+            problem(exchange, 409, new String(Blobs.alreadyPublished(scope + "." + name + " " + version),
+                    StandardCharsets.UTF_8));
+            return;
+        }
         if (signature != null) {
             blobs.write(archiveKey + SIGNATURE, signature);
             // The sidecar is announced as its own publish so the signature dimension re-derives the verdict over the
@@ -586,21 +606,47 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             blobs.write(SwiftListings.manifestKey(repo, scope, name, version, ""), manifest);
         }
         blobs.write(SwiftListings.metadataKey(repo, scope, name, version),
-                release(scope, name, version, hash, new String(metadata, StandardCharsets.UTF_8)));
-        indexRepositoryUrls(blobs, repo, scope, name, metadata);
+                release(scope, name, version, hash, declared.get()));
+        indexRepositoryUrls(blobs, repo, scope, name, declared.get());
         new SwiftListings(blobs).refresh(repo, scope, name, version);
         exchange.setResponseHeader("Location", exchange.requestUri());
         exchange.respond(201);
     }
 
     /** The release document endpoint 4.2 answers, assembled once at publish from what the store just told us. */
-    private static byte[] release(String scope, String name, String version, String hash, String metadata) {
-        return ("{\"id\":" + MAPPER.writeValueAsString(scope + "." + name)
-                + ",\"version\":" + MAPPER.writeValueAsString(version)
-                + ",\"resources\":[{\"name\":\"source-archive\",\"type\":\"application/zip\",\"checksum\":"
-                + MAPPER.writeValueAsString(hash) + "}]"
-                + ",\"metadata\":" + (metadata.isBlank() ? "{}" : metadata)
-                + "}").getBytes(StandardCharsets.UTF_8);
+    private static byte[] release(String scope, String name, String version, String hash, ObjectNode metadata) {
+        ObjectNode release = MAPPER.createObjectNode();
+        release.put("id", scope + "." + name);
+        release.put("version", version);
+        ObjectNode archive = release.putArray("resources").addObject();
+        archive.put("name", "source-archive");
+        archive.put("type", "application/zip");
+        archive.put("checksum", hash);
+        release.set("metadata", metadata);
+        return MAPPER.writeValueAsBytes(release);
+    }
+
+    /** The publisher's metadata part as one JSON object - an absent or blank part is an empty one - or empty when the
+     *  part is anything else: not JSON, another kind of value, or a value with more after it. */
+    private static Optional<ObjectNode> metadata(byte[] metadata) {
+        if (new String(metadata, StandardCharsets.UTF_8).isBlank()) {
+            return Optional.of(MAPPER.createObjectNode());
+        }
+        try {
+            return METADATA.readTree(metadata) instanceof ObjectNode object ? Optional.of(object) : Optional.empty();
+        } catch (JacksonException malformed) {
+            return Optional.empty();
+        }
+    }
+
+    /** Refuse with the specification's problem details (RFC 7807), the body a client prints a refusal from. */
+    private static void problem(FormatExchange exchange, int status, String detail) throws IOException {
+        ObjectNode problem = MAPPER.createObjectNode();
+        problem.put("status", status);
+        problem.put("detail", detail);
+        exchange.setResponseHeader(CONTENT_VERSION, API_VERSION);
+        exchange.setResponseHeader("Content-Type", "application/problem+json");
+        exchange.respond(status, MAPPER.writeValueAsBytes(problem));
     }
 
     /** Whether a package still offers anything - the screen {@link #identifiers} applies. A held release leaves
@@ -620,11 +666,9 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
     }
 
     /** Note this package under every repository URL its metadata declares, so 4.5 is a point read. */
-    private static void indexRepositoryUrls(Blobs blobs, String repo, String scope, String name, byte[] metadata)
+    private static void indexRepositoryUrls(Blobs blobs, String repo, String scope, String name, JsonNode metadata)
             throws IOException {
-        // Parsed, not split on commas. The previous form stripped the brackets and split the text on ",", which
-        // is right until a URL contains one - and a repositoryURLs entry is publisher-supplied.
-        for (JsonNode element : MAPPER.readTree(metadata).path("repositoryURLs")) {
+        for (JsonNode element : metadata.path("repositoryURLs")) {
             String url = element.asString("");
             if (!url.isBlank()) {
                 blobs.note(urlIndex(repo, url) + "/" + scope + "/" + name, scope + "." + name);
