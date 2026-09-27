@@ -3,7 +3,11 @@
  * change a deployment over the repository's HTTP API - the same {@code /api/*} surface the console drives, so the
  * command line, the console and the API stay equal. Runs on the built-in HTTP client, with Jackson for JSON.
  *
+ * <p>{@code Cli} is its launcher, so a launcher is built from it and the module ships with the bundle that
+ * requires it: on Central and in every image's module path.
+ *
  * @jenesis.release 25
+ * @jenesis.main build.jenesis.repository.cli.Cli
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
