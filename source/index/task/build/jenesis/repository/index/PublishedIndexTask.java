@@ -21,8 +21,8 @@ import build.jenesis.repository.walk.Traversal;
  * cadence a full-snapshot rebase re-indexes everything into a fresh chain (Central's weekly-full/daily-incremental
  * shape), superseding the old chain's chunks and garbage-collecting them after a grace period. Exclusive (the
  * default), so a replicated deployment publishes on one node per interval under the {@code index} lease and the
- * descriptor's compare-and-set never loses an update. The walk reads only pointer metadata and the small
- * {@code published/} sidecar - never an artifact blob.
+ * descriptor's compare-and-set never loses an update. The walk reads only pointer metadata and each version's
+ * document for its publish instant - never an artifact blob.
  *
  * <p>Orphan note: a pass that dies between writing chunk objects and committing the descriptor - or a corrupt head
  * that {@link IndexDescriptor#parse} reads as empty - leaves chunk objects behind that no descriptor references.
@@ -123,7 +123,7 @@ public final class PublishedIndexTask implements MaintenanceTask {
         List<DirtyIndexFeed.Entry> marked = List.of();
         if (rebase) {
             // Every served pointer, in path order, over the pass's own bounded walk of the publish tree; each record's
-            // publish instant is read from its published/ sidecar as it is walked, never pre-buffered.
+            // publish instant is read from its version document as it is walked, never pre-buffered.
             walk(store, publication, servableNames, inventory, true, watermark, record -> {
                 writer.add(record);
                 progress.advance(record.published(), record.path());
@@ -332,16 +332,16 @@ public final class PublishedIndexTask implements MaintenanceTask {
         Instant published = Instant.EPOCH;
         boolean racing = false;
         if (coordinate != null && version != null) {
-            // The publish instant is read per walked coordinate from its published/ sidecar - a bounded small-object
+            // The publish instant is read per walked coordinate from its version document - a bounded small-object
             // read alongside the describe/size reads above - rather than from a snapshot map pre-buffered over the whole
-            // release set. A publish racing this pass (its pointer walked, its sidecar just landed) is indexed at its
-            // real instant, so the watermark advances correctly and it is not stranded below EPOCH.
+            // release set. A publish racing this pass (its pointer walked, its document just written) is indexed at
+            // its real instant, so the watermark advances correctly and it is not stranded below EPOCH.
             Instant at = inventory.publishedAt(ecosystem, coordinate, version).orElse(null);
             if (at != null) {
                 published = at;
             } else {
                 // A located coordinate/version whose publish instant is not yet recorded (the pointer landed but the
-                // sidecar has not - the narrow window a publish races this pass): it is genuinely indexable now, so do
+                // version document has not - the narrow window a publish races this pass): it is indexable now, so do
                 // not let it fall below the watermark. Defaulting it to EPOCH and skipping it would strand it, because
                 // the committed watermark advances past its real instant via the other publications in this pass, and
                 // no later incremental pass would re-append it until the P7D rebase. Index it now (its EPOCH never

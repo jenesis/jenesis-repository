@@ -22,9 +22,11 @@ import build.jenesis.repository.store.Retries;
  * <p><strong>Never fabricate a partial set.</strong> An incremental {@link #add}/{@link #remove} only ever refines an
  * <em>already present</em> index; when the key is absent it is left absent so the read path rebuilds the authoritative
  * full set from the walk. Starting an add from an empty base for an absent key would silently drop the user's other
- * (pre-index) memberships - the exact hazard the reverse index must never introduce. A present index is therefore only
- * ever built by a full walk (the read-path {@link #stampIfAbsent stamp}) or refined from such a base, so it is always
- * complete; an absent index always triggers a full walk.
+ * memberships a walk would find - the exact hazard the reverse index must never introduce. A present index is therefore
+ * only ever built by a full walk (the read-path {@link #stampIfAbsent stamp}) or refined from such a base by direct
+ * membership writes; an absent index always triggers a full walk. A tenant that reaches the user through a group
+ * after the stamp is not added, since group derivation is written by {@code Authorization}, not by this index's
+ * writers.
  */
 public final class MembershipIndex {
 

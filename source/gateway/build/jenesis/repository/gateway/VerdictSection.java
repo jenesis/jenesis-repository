@@ -90,7 +90,7 @@ public final class VerdictSection {
         }
 
         /** How completely the screen behind this verdict looked: the full-body inspection ceiling in force when it
-         *  ran, or {@code 0} for a record written before completeness travelled with the answer. */
+         *  ran. A record that names no ceiling reads {@code 0}, which satisfies no positive one. */
         public boolean completeAt(long currentLimit) {
             return inspectionLimit >= currentLimit;
         }
@@ -106,15 +106,11 @@ public final class VerdictSection {
          * The reuse test, with completeness: an {@code ALLOW} over exactly these bytes, reached by a screen that
          * looked at least as far as this deployment now looks.
          *
-         * <p>Digest-exactness alone is not enough, and the gap is sharp. The verdict pins <em>what</em> was decided
-         * about the bytes; it did not carry <em>how completely we looked</em> at them. So an ALLOW reached while the
-         * full-body ceiling was 64 MiB was reused digest-exactly after an operator raised that ceiling - and raising
-         * it is the one change that would have let the screen finish. The artifact whose tail was never inspected is
-         * precisely the one the operator raised the tier to inspect, and it was the one guaranteed not to be
-         * re-screened.
-         *
-         * <p>A record written before this field existed carries {@code 0} and so never satisfies a positive
-         * ceiling: it re-screens once, which is the fail-closed direction and costs one inspection.
+         * <p>Digest-exactness alone is not enough. The digest pins <em>what</em> was decided about the bytes, not
+         * <em>how completely they were looked at</em>: an ALLOW reached under a 64 MiB full-body ceiling must not be
+         * reused after an operator raises that ceiling, because the artifact whose tail was never inspected is
+         * precisely the one the operator raised the tier to inspect. A record that names no ceiling never satisfies
+         * a positive one, so it re-screens: the fail-closed direction, at the cost of one inspection.
          */
         public boolean allows(String digest, long currentLimit) {
             return allows(digest) && completeAt(currentLimit);

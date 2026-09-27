@@ -17,15 +17,12 @@ import org.springframework.stereotype.Component;
  * super-admin) and per request (the role that the current tenant grants) with a point read per tenant asked about.
  * Writing membership is the per-tenant {@link UserDirectory}'s job; this is the cross-tenant read side.
  *
- * <p>{@link #accessibleTo} would be O(#tenants) store reads per login and per render - it read every tenant's
- * membership to find the ones the user belongs to - and the request-scoped {@link MembershipCache}
- * only dedupes those reads within a single request. It now consults the reverse user&rarr;tenants
- * {@link MembershipIndex} instead: a point read for the candidate set, each candidate then confirmed against the
- * forward file it was derived from (see {@link #granted}), so the answer is always exactly the old walk's. The forward
- * per-member object stays the source of truth and the index is maintained on every membership write; a user whose index
- * is <em>absent</em> (a membership predating the index, or a torn write) falls back to the old walk and stamps the
- * index from it, so the optimisation never drops a real membership and self-heals to the point read on the next
- * request.
+ * <p>{@link #accessibleTo} consults the reverse user&rarr;tenants {@link MembershipIndex}: a point read for the
+ * candidate set, each candidate then confirmed against the forward grant it was derived from (see {@link #granted}),
+ * so the answer is exactly what a walk of every tenant would give, at O(#user's tenants) point reads. The forward
+ * per-member object stays the source of truth and the index is maintained on every membership write. A user whose
+ * index is <em>absent</em> - a torn first write, or a user whose only role reaches them through a group - is answered
+ * by the walk, which stamps the index so the next request is the point read.
  */
 @Component
 public class Memberships {
@@ -50,9 +47,7 @@ public class Memberships {
             return Optional.empty();
         }
         // Memoised for the life of the request: the shell, nav and every authorization decision read the same
-        // role, and each read is a store round-trip to that member's own grants. A point read of one subject:
-        // before the per-member key space this read the tenant's ENTIRE membership document to answer one role,
-        // on every authenticated request.
+        // role, and each read is a point read of that member's own grants.
         return cache.role(tenant, id, () -> UserDirectory.roleIn(authorization, tenant, id));
     }
 
@@ -68,9 +63,9 @@ public class Memberships {
                 // confirmed against its forward member object - never the O(#tenants) walk (see granted).
                 return granted(id, indexed.get());
             }
-            // Backfill: no reverse index for this user (a membership written before the index existed, or a torn
-            // write). Fall back to the O(#tenants) walk so a real membership is never dropped, and stamp the index
-            // from it (best-effort) so the next read is the point read above - self-healing.
+            // No reverse index for this user (a torn first write, or a role held only through a group). The
+            // O(#tenants) walk answers so a real membership is never dropped, and stamps the index (best-effort) so
+            // the next read is the point read above.
             List<String> walked = granted(id, tenants.all());
             index.stampIfAbsent(id, walked);
             return walked;
@@ -82,9 +77,9 @@ public class Memberships {
      * applied to the full tenant list on the fallback path and to the indexed candidate set on the fast path. The
      * fast path must not trust a present index verbatim: the index is derived state and tenant deletion never
      * rewrites it ({@code TenantPurge} removes the tenant's own key spaces, not every member's {@code by-user}
-     * entry), so a deleted tenant lingers there where the old walk - which only ever iterated live tenants - could
-     * never return it. Confirming each candidate against the forward source of truth (a deleted tenant's member object reads
-     * absent, so it grants nothing) restores exactly the walk's answer at O(#user's tenants) point reads, each
+     * entry), so a deleted tenant lingers there where a walk - which iterates live tenants only - would never return
+     * it. Confirming each candidate against the forward source of truth (a deleted tenant's member object reads
+     * absent, so it grants nothing) gives exactly the walk's answer at O(#user's tenants) point reads, each
      * memoised for the request by {@link MembershipCache}, instead of the walk's O(#deployment's tenants). The stale
      * entry is deliberately left in place rather than pruned: a remove-on-read would race a concurrent re-grant's
      * index add and could drop a real membership - the one hazard the index must never introduce - while an unpruned

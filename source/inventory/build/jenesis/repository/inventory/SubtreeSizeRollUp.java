@@ -141,11 +141,10 @@ final class SubtreeSizeRollUp {
      * about what a browse total counts.
      *
      * <p>A retroactive hold links {@code publish/quarantine<path>} and <b>does not unpublish the artifact's own
-     * pointer</b>, so for the life of the hold the same bytes sit under two {@code publish/} keys and were counted
-     * twice in every ancestor total, the repository root included. Invisibly, too: the console hides the
-     * {@code quarantine} subtree from browse, so the inflation had no row an operator could open to explain it
-     *. A review handle is how a held artifact stays reachable to a reviewer; nothing serves from it, so it
-     * contributes no bytes to a total exactly as it contributes no row to a listing.
+     * pointer</b>, so for the life of the hold the same bytes sit under two {@code publish/} keys; counting both would
+     * double them in every ancestor total, the repository root included, and invisibly, since the console hides the
+     * {@code quarantine} subtree from browse. A review handle is how a held artifact stays reachable to a reviewer;
+     * nothing serves from it, so it contributes no bytes to a total exactly as it contributes no row to a listing.
      */
     static boolean underReview(String publishKey) {
         return publishKey.equals(Publication.QUARANTINE_ROOT)
@@ -159,10 +158,7 @@ final class SubtreeSizeRollUp {
         ROWS.scan(store, ROOT, name -> {
             String path = name.equals("~") ? "" : StoreRepositoryInventory.decode(name);
             String key = path.isEmpty() ? "publish" : "publish/" + path;
-            // A row under the review subtree is dropped whether or not its folder still exists: the fold stopped
-            // creating them, so any that remain were written before it stopped and would otherwise stand until the hold
-            // ended - a cached total for a folder browse does not show.
-            if (underReview(key) || store.isEmpty(key)) {
+            if (store.isEmpty(key)) {
                 new StoredCounter(store, ROOT + "/" + name).delete();
             }
         });

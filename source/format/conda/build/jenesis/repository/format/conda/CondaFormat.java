@@ -310,10 +310,9 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         record.put("sha256", hash);
         record.put("size", size);
-        // Route the package pointer through Blobs.link (not a bare writeVersioned): besides the compare-and-set retry,
-        // link clears any gc/condemned/<hash> marker a collector set, so republishing content byte-identical to a
-        // condemned blob un-condemns it before the sweep deletes it - otherwise a 200/201 publish is GC-deleted to a
-        // permanent 404. The blob hash is exactly what the pointer stores, so the marker key matches.
+        // The package pointer goes through Blobs rather than a bare writeVersioned: the link spares the blob from a
+        // collector that has condemned it, so content byte-identical to a condemned blob is not swept from under a
+        // publish that answered 201.
         Blobs blobs = new Blobs(store);
         try {
             // A package file never changes under its name once uploaded - a conda lock file pins its sha256 - so the
