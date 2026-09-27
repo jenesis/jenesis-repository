@@ -98,7 +98,7 @@ final class PublishRecorder {
         // Continuity is learned from what actually landed: every signature that verified by a trusted signer
         // on an accepted publish is observed, so the next version by another signer is measured against it.
         recordMaintainers(store, inspected, artifact.path());
-        reportSigners(store, inspected, artifact.path());
+        reportSigners(store, inspected, artifact.path(), true);
     }
 
     /**
@@ -295,12 +295,9 @@ final class PublishRecorder {
      * a version the inspection could place on a coordinate is observed, so continuity is learned from what landed
      * (only when {@code accepted}), and every signature by a signer no source held a key for is reported wanted,
      * so a discovery source knows what to fetch. Best-effort by the seam's own contract: a lost observation delays
-     * an expectation, a lost want delays a fetch, and neither can admit a signer.
+     * an expectation, a lost want delays a fetch, and neither can admit a signer. Every caller says whether the
+     * publish was accepted, since a held or refused upload's bytes never landed and its signer is no continuity.
      */
-    void reportSigners(ArtifactStore store, List<ComplianceGate.Subject> inspected, String path) {
-        reportSigners(store, inspected, path, true);
-    }
-
     void reportSigners(ArtifactStore store, List<ComplianceGate.Subject> inspected, String path,
                        boolean accepted) {
         if (inspected == null || inspected.stream().noneMatch(subject -> !subject.signatures().isEmpty())) {

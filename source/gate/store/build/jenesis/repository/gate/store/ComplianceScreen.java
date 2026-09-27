@@ -489,7 +489,7 @@ public final class ComplianceScreen implements PublishInterceptor {
                 if (assessment != null && assessment.verdict() == Verdict.QUARANTINE) {
                     recorder.recordMaintainers(store, inspected, artifact.path());
                 }
-                recorder.reportSigners(store, inspected, artifact.path());
+                recorder.reportSigners(store, inspected, artifact.path(), false);
                 List<String> reasons = new ArrayList<>();
                 if (assessment != null) {
                     for (ComplianceGate.Finding finding : assessment.findings()) {
