@@ -6,6 +6,7 @@ import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.cache.storage.ProjectPolicy;
 import build.jenesis.repository.cache.storage.Names;
+import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.walk.Traversal;
 
@@ -275,9 +276,30 @@ public class CacheService {
     /** Create a project (no access is granted here - see credentials); its policy is whatever its tenant's and the
      *  deployment's project settings say until it is given its own. */
     public void createProject(String name) throws IOException {
+        createProject(name, Map.of());
+    }
+
+    /**
+     * Create a project with {@code values} as its own settings - what the project wizard and
+     * {@code POST /api/cache/projects} complete with. Every value is validated through the catalogue first and a
+     * refusal writes nothing; the settings are stored before the provisioning marker, and a project exists as soon as
+     * anything is stored under it, so it is in force as configured from the moment it exists. A creation that stops
+     * between the two leaves the project existing with its settings and without its creation stamp, which is how a
+     * project a build brought into being is listed too.
+     *
+     * @throws IllegalArgumentException when the name or any value is refused, or the project exists already.
+     */
+    public void createProject(String name, Map<String, String> values) throws IOException {
         String validated = validateName(name);
+        SortedMap<String, String> refused = settings.refusals(Setting.Scope.PROJECT, values, true);
+        if (!refused.isEmpty()) {
+            throw new IllegalArgumentException(String.join(" ", refused.values()));
+        }
         if (storage.projectExists(validated)) {
             throw new IllegalArgumentException("Project already exists: " + name);
+        }
+        if (!values.isEmpty()) {
+            settings.saveProject(current.name(), validated, values);
         }
         storage.createProject(validated);
     }

@@ -226,7 +226,9 @@ public final class Commands {
                             "build.jenesis.repository.application", CacheCommands::projects,
                             act("projects", "every project with its entry count, size and caps"),
                             act("projects show <project>", "one project's caps, counts and last pass"),
-                            act("projects create <project>", "create a project; grant access from a credential"),
+                            act("projects create <project> [--set <key>=<value>]...",
+                                    "create a project, with its own settings if given; grant access from a "
+                                            + "credential"),
                             act("projects config <project> [--size <cap>] [--lru <true|false>] [--ttl <duration>]",
                                     "set the well-known cache values; an omitted one is cleared"),
                             act("projects evict <project> <size|ttl|clear>",
@@ -355,8 +357,9 @@ public final class Commands {
                     noun("repos", "the repositories and their runtime definitions", null, AdminCommands::repos,
                             act("repos", "list the deployment's definitions, which a repository of each name routes by "
                                     + "unless it sets its own routing"),
-                            act("repos create <name> <format> [description]",
-                                    "create a repository holding one format, optionally described"),
+                            act("repos create <name> <format> [description] [--set <key>=<value>]...",
+                                    "create a repository holding one format, optionally described and with its "
+                                            + "own settings - all written together, or nothing when one is refused"),
                             act("repos describe <name> <description>", "describe a repository; an empty one clears it"),
                             act("repos delete <name> [--yes]", "delete a repository and everything it holds, after "
                                     + "typing 'delete <name>' - or --yes, for a script"),

@@ -655,13 +655,15 @@ final class AdminCommands {
         }
         switch (args[1]) {
             case "create" -> {
-                scoped.unscoped("repos create <name> <format> [description]");
-                if (args.length < 4) {
-                    throw new IllegalArgumentException("Usage: repos create <name> <format> [description]");
+                String usage = "repos create <name> <format> [description] [--set <key>=<value>]...";
+                scoped.unscoped(usage);
+                List<String> rest = new ArrayList<>(Arrays.asList(args));
+                Map<String, String> settings = CliSupport.sets(rest);
+                if (rest.size() < 4) {
+                    throw new IllegalArgumentException("Usage: " + usage);
                 }
-                String description = args.length > 4
-                        ? String.join(" ", Arrays.copyOfRange(args, 4, args.length)) : null;
-                System.out.println(client.settings().createRepository(args[2], args[3], description)
+                String description = rest.size() > 4 ? String.join(" ", rest.subList(4, rest.size())) : null;
+                System.out.println(client.settings().createRepository(rest.get(2), rest.get(3), description, settings)
                         ? "Created " + args[3] + " repository " + args[2] + "."
                         : "Repository " + args[2] + " already holds " + args[3] + ".");
             }

@@ -206,8 +206,24 @@ public final class SettingsClient extends ClientCalls {
     /** {@link #createRepository(String, String)}, giving the repository {@code description} when one is given. */
     public boolean createRepository(String name, String format, String description)
             throws IOException, InterruptedException {
-        Map<String, String> request = description == null
-                ? Map.of("value", format) : Map.of("value", format, "description", description);
+        return createRepository(name, format, description, Map.of());
+    }
+
+    /**
+     * {@link #createRepository(String, String, String)}, the repository created with {@code settings} as its own in
+     * the same request - validated by the server before anything is written, and refused whole, with every refusal
+     * named, when any value is refused.
+     */
+    public boolean createRepository(String name, String format, String description, Map<String, String> settings)
+            throws IOException, InterruptedException {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("value", format);
+        if (description != null) {
+            request.put("description", description);
+        }
+        if (!settings.isEmpty()) {
+            request.put("settings", settings);
+        }
         HttpResponse<String> response = send("PUT", repository(name), body(request), "application/json");
         if (response.statusCode() == 201 || response.statusCode() == 200) {
             return response.statusCode() == 201;

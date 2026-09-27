@@ -37,7 +37,17 @@ public final class BuildCacheClient extends ClientCalls {
     }
 
     public String createCacheProject(String name) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("POST", "/api/cache/projects?name=" + enc(name), HttpRequest.BodyPublishers.noBody(), null);
+        return createCacheProject(name, Map.of());
+    }
+
+    /** Create a project with {@code settings} as its own, in the one request - validated by the server before
+     *  anything is written, and refused whole when any value is refused. */
+    public String createCacheProject(String name, Map<String, String> settings)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response = settings.isEmpty()
+                ? send("POST", "/api/cache/projects?name=" + enc(name), HttpRequest.BodyPublishers.noBody(), null)
+                : send("POST", "/api/cache/projects?name=" + enc(name), body(Map.of("settings", settings)),
+                        "application/json");
         require(response, 201, "create the build-cache project");
         return response.body();
     }

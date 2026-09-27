@@ -30,8 +30,7 @@ final class CacheCommands {
         }
         return switch (args[1]) {
             case "show" -> print(CliSupport.client(home).buildCache().cacheProject(name(args, "show <project>")));
-            case "create" -> print(CliSupport.client(home).buildCache()
-                    .createCacheProject(name(args, "create <project>")));
+            case "create" -> create(args, home);
             case "config" -> config(args, home);
             case "evict" -> evict(args, home);
             case "recount" -> print(CliSupport.client(home).buildCache().recountCache(name(args, "recount <project>")));
@@ -73,6 +72,13 @@ final class CacheCommands {
             return 1;
         }
         return print(CliSupport.client(home).buildCache().deleteCacheProject(project));
+    }
+
+    private static int create(String[] args, Path home) throws Exception {
+        List<String> rest = new ArrayList<>(Arrays.asList(args));
+        Map<String, String> settings = CliSupport.sets(rest);
+        String project = name(rest.toArray(String[]::new), "create <project> [--set <key>=<value>]...");
+        return print(CliSupport.client(home).buildCache().createCacheProject(project, settings));
     }
 
     private static String name(String[] args, String usage) {

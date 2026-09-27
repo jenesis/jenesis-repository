@@ -33,6 +33,28 @@ final class CliSupport {
         return args[i];
     }
 
+    /**
+     * Take every {@code --set <key>=<value>} out of {@code args}, in order, as the settings a creation carries; what
+     * is left is the command's own arguments. A {@code --set} with no {@code =} is refused rather than read as a key
+     * set to nothing, which would clear it.
+     */
+    static Map<String, String> sets(List<String> args) {
+        Map<String, String> settings = new LinkedHashMap<>();
+        for (int i = 0; i < args.size(); ) {
+            if (!args.get(i).equals("--set")) {
+                i++;
+                continue;
+            }
+            if (i + 1 >= args.size() || args.get(i + 1).indexOf('=') <= 0) {
+                throw new IllegalArgumentException("--set takes <key>=<value>");
+            }
+            String pair = args.get(i + 1);
+            settings.put(pair.substring(0, pair.indexOf('=')), pair.substring(pair.indexOf('=') + 1));
+            args.subList(i, i + 2).clear();
+        }
+        return settings;
+    }
+
     static String orDash(String value) {
         return value == null || value.isEmpty() ? "-" : value;
     }

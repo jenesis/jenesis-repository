@@ -83,6 +83,8 @@ public class ProjectsController {
         return "redirect:/ui/projects";
     }
 
+    /** Create a project from the list's form. The creation reads the settings documents a creation's settings are
+     *  validated by, one object per module under a constant prefix, narrow by construction. */
     @PostMapping("/ui/projects")
     public String create(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
         service.createProject(name);

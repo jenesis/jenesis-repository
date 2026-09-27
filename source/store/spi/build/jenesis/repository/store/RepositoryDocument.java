@@ -46,6 +46,11 @@ public record RepositoryDocument(String format, Instant created, String descript
         return line;
     }
 
+    /** Whether the repository whose scope this is has a document at all - one point probe, whatever it holds. */
+    public static boolean exists(ArtifactStore repository) {
+        return repository.exists(Scopes.REPOSITORY);
+    }
+
     /** The document of the repository whose scope this is, or empty when it has none. */
     public static Optional<RepositoryDocument> read(ArtifactStore repository) throws IOException {
         Optional<ArtifactStore.Versioned> stored = repository.readVersioned(Scopes.REPOSITORY);

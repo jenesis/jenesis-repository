@@ -611,6 +611,13 @@ public class ConfigController {
      * <p>A {@code "description"} beside the format gives the repository that description - empty clears it - and a
      * description alone, with no format, describes a repository that exists: {@code 200}, or {@code 404} when there is
      * none.
+     *
+     * <p>A {@code "settings"} map beside the format creates the repository with those as its own settings, in one
+     * step: every value is validated through the catalogue first, as {@code PUT /api/repository/settings/<key>} would
+     * validate it, and a refusal answers {@code 400} naming every refused value with nothing written; the settings are
+     * then stored before the document that makes the repository exist ({@link RepositoryType#create(ArtifactStore,
+     * String, String, RepositoryType.Configuration)}), so it answers its first request as configured. Such a creation
+     * only creates: a repository that exists already is answered {@code 409} and left as it was.
      */
     @PutMapping("/repository/{tenant}/{name}")
     public void createRepository(@PathVariable("name") String name,
@@ -619,6 +626,8 @@ public class ConfigController {
                                  HttpServletRequest servlet, HttpServletResponse response) throws IOException {
         String format = request == null ? null : request.value();
         String description = request == null ? null : request.description();
+        Map<String, String> configured = request == null || request.settings() == null ? Map.of()
+                : request.settings();
         if (description != null) {
             try {
                 description = RepositoryDocument.description(description);
@@ -628,6 +637,11 @@ public class ConfigController {
             }
         }
         RepositoryRouting.Route described = routing.route(servlet);
+        if (format == null && !configured.isEmpty()) {
+            text(response, 400, "Settings are given when a repository is created, beside its format; an existing "
+                    + "repository's are set through PUT /api/repository/settings/<key>?repo=<name>.");
+            return;
+        }
         if (format == null && description != null && !described.repository().isEmpty()) {
             if (!describe(described, key, description)) {
                 text(response, 404, "There is no repository '" + described.repository() + "'.");
@@ -652,13 +666,31 @@ public class ConfigController {
                     + "once it is gone.");
             return;
         }
-        RepositoryType.Creation creation = RepositoryType.create(route.store(), format);
-        if (creation != RepositoryType.Creation.CONFLICT && description != null) {
+        boolean operatorKey = operator.test(key);
+        if (!configured.isEmpty()) {
+            SortedMap<String, String> refused = live.refusals(Setting.Scope.REPOSITORY, configured, operatorKey);
+            if (!refused.isEmpty()) {
+                text(response, 400, "Repository '" + route.repository() + "' was not created: "
+                        + String.join(" ", refused.values()));
+                return;
+            }
+        }
+        String tenant = route.tenant();
+        String repository = route.repository();
+        RepositoryType.Creation creation = RepositoryType.create(route.store(), format, description,
+                configured.isEmpty() ? null : () -> live.setRepository(tenant, repository, configured, operatorKey));
+        if ((creation == RepositoryType.Creation.UNCHANGED || creation == RepositoryType.Creation.RETYPED)
+                && description != null) {
             describe(route, key, description);
         }
         switch (creation) {
             case CREATED -> {
-                audit(route.tenant(), key, AuditActions.REPOSITORY_CREATE, route.repository());
+                audit(tenant, key, AuditActions.REPOSITORY_CREATE, repository);
+                configured.forEach((setting, value) -> {
+                    if (value != null && !value.isBlank()) {
+                        audit(tenant, key, "setting.set", tenant + "/" + repository + "/" + setting);
+                    }
+                });
                 response.setStatus(201);
             }
             case RETYPED -> {
@@ -670,6 +702,9 @@ public class ConfigController {
                     + RepositoryDocument.read(route.store()).map(RepositoryDocument::format).orElse("another format")
                     + ", which '" + format + "' does not hold everything of - what is stored there would stop "
                     + "answering.");
+            case EXISTS -> text(response, 409, "Repository '" + repository + "' already exists; a creation that "
+                    + "carries settings creates a repository and changes none. Set an existing repository's through "
+                    + "PUT /api/repository/settings/<key>?repo=" + repository + ".");
         }
     }
 
@@ -951,8 +986,9 @@ public class ConfigController {
     public record NamedValueRequest(String value) {
     }
 
-    /** A repository's creation: the format it holds, and an optional description. */
-    public record RepositoryRequest(String value, String description) {
+    /** A repository's creation: the format it holds, an optional description, and optionally the settings it is
+     *  created with. */
+    public record RepositoryRequest(String value, String description, Map<String, String> settings) {
     }
 
     public record UpstreamAuthRequest(String scheme, String username, String password, String token, String header) {

@@ -110,16 +110,26 @@ public class CacheProjectsController {
         return service == null ? List.of() : service.listProjects();
     }
 
+    /**
+     * Create a project - {@code POST /api/cache/projects?name=<project>}, with an optional
+     * {@code {"settings":{...}}} body creating it with those as its own settings in one step: every value validated
+     * through the catalogue first, {@code 400} naming every refusal with nothing written, the settings stored before
+     * the project exists ({@link CacheService#createProject(String, Map)}). {@code 400} too for a project that exists.
+     *
+     * <p>Validating reads the deployment's settings documents, one object per module under a constant prefix, narrow
+     * by construction.
+     */
     @PostMapping("/api/cache/projects")
     public Map<String, Object> create(@RequestParam("name") String name,
                                       @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                      @RequestBody(required = false) ProjectRequest body,
                                       HttpServletRequest request, HttpServletResponse response) throws IOException {
         CacheService service = service(key, request, response);
         if (service == null) {
             return Map.of();
         }
         RepositoryRequests.rejectTraversal(name);
-        service.createProject(name);
+        service.createProject(name, body == null || body.settings() == null ? Map.of() : body.settings());
         response.setStatus(201);
         return Map.of("name", name, "created", true);
     }
@@ -233,6 +243,10 @@ public class CacheProjectsController {
 
     /** One project setting as the API answers it - the shape {@code GET /api/settings} lists a setting in, so a client
      *  reads either the same way. */
+    /** A project's creation: optionally the settings it is created with. */
+    public record ProjectRequest(Map<String, String> settings) {
+    }
+
     public record SettingView(String key, String kind, String value, String defaultValue, boolean overridden,
                               boolean appliesImmediately, boolean pinned, String pinnedBy, String group, String label,
                               String description, boolean advanced) {

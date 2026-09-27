@@ -86,7 +86,16 @@ public record RepositoryType(String name, List<RepositoryFormat> formats, String
         /** The repository held a type this one {@link #covers covers}, and now holds this one. */
         RETYPED,
         /** The repository holds a type this one does not cover, which is left as it is. */
-        CONFLICT
+        CONFLICT,
+        /** The repository exists, and a creation that {@linkplain Configuration configures} a new repository left it
+         *  exactly as it was: an existing repository's settings are changed where settings are changed. */
+        EXISTS
+    }
+
+    /** What a creation writes into a new repository before it exists: the repository's own settings. */
+    @FunctionalInterface
+    public interface Configuration {
+        void write() throws IOException;
     }
 
     /**
@@ -96,7 +105,32 @@ public record RepositoryType(String name, List<RepositoryFormat> formats, String
      * still answers where it did; and any other is refused, since stored paths would stop answering.
      */
     public static Creation create(ArtifactStore repository, String type) throws IOException {
-        if (new RepositoryDocument(type, Instant.now()).create(repository)) {
+        return create(repository, type, "", null);
+    }
+
+    /**
+     * {@link #create(ArtifactStore, String)}, the document a new repository is given recording {@code description},
+     * and - when {@code configuration} is given - the repository's own settings written first. The document is what
+     * makes a repository exist, so settings written before it are in force from its first request; a creation that
+     * stops between the two leaves settings for a repository that does not exist, which answer nothing, and a retry
+     * writes them again before creating it.
+     *
+     * <p>A configured creation only ever creates. A repository that already has a document is answered
+     * {@link Creation#EXISTS} with nothing written, and so is one a concurrent creation brought into being between the
+     * probe and the document - the settings both wrote are then the later writer's, and exactly one creation is told
+     * {@link Creation#CREATED}.
+     */
+    public static Creation create(ArtifactStore repository, String type, String description,
+                                  Configuration configuration) throws IOException {
+        RepositoryDocument document = new RepositoryDocument(type, Instant.now(), description);
+        if (configuration != null) {
+            if (RepositoryDocument.exists(repository)) {
+                return Creation.EXISTS;
+            }
+            configuration.write();
+            return document.create(repository) ? Creation.CREATED : Creation.EXISTS;
+        }
+        if (document.create(repository)) {
             return Creation.CREATED;
         }
         Optional<RepositoryDocument> held = RepositoryDocument.read(repository);

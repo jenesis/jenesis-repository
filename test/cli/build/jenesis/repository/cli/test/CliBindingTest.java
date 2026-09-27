@@ -2,6 +2,7 @@ package build.jenesis.repository.cli.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import module tools.jackson.databind;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
@@ -143,8 +144,19 @@ public class CliBindingTest {
         run("login", "http://127.0.0.1:" + server.port() + "/", "--key", "test-key");
     }
 
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
     private static void run(String... args) throws Exception {
         Cli.run(args);
+    }
+
+    /** Run a command for the request it sends; the stub's reply, which it may not accept, is not the subject. */
+    private static void sent(String... args) {
+        try {
+            Cli.run(args);
+        } catch (Exception failedAfterTheCall) {
+            // the request is what is under test
+        }
     }
 
     @AfterAll
@@ -195,6 +207,34 @@ public class CliBindingTest {
         assertThat(requests.get(1).getUrl())
                 .as("and a clear names the version too, or it clears nothing")
                 .contains("version=1.0");
+    }
+
+    /**
+     * A creation carries every {@code --set} as its settings, in the one request that creates the repository or the
+     * project - the atomic create the API validates whole - and never as a follow-up write; what is not a
+     * {@code --set} stays the command's own, so the words of a description are not read as settings.
+     */
+    @Test
+    void a_creation_carries_its_settings_in_the_request_that_creates() throws Exception {
+        server.resetRequests();
+        sent("repos", "create", "libs", "maven", "Build", "outputs", "--set", "keep-last=3", "--set",
+                "routing=fallback https://repo1.maven.org/maven2/");
+        sent("projects", "create", "agents", "--set", "project-size=1048576");
+
+        List<LoggedRequest> requests = server.findAll(RequestPatternBuilder.allRequests());
+        assertThat(requests).as("one request each").hasSize(2);
+        JsonNode repository = JSON.readTree(requests.getFirst().getBodyAsString());
+        assertThat(repository.get("value").asString()).isEqualTo("maven");
+        assertThat(repository.get("description").asString()).isEqualTo("Build outputs");
+        assertThat(repository.get("settings").get("keep-last").asString()).isEqualTo("3");
+        assertThat(repository.get("settings").get("routing").asString())
+                .isEqualTo("fallback https://repo1.maven.org/maven2/");
+        assertThat(requests.get(1).getUrl()).isEqualTo("/api/cache/projects?name=agents");
+        assertThat(JSON.readTree(requests.get(1).getBodyAsString()).get("settings").get("project-size").asString())
+                .isEqualTo("1048576");
+        assertThatThrownBy(() -> run("repos", "create", "libs", "maven", "--set", "keep-last"))
+                .as("a --set with no value is refused, not read as clearing the key")
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     /**

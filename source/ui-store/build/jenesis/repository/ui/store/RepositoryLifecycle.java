@@ -19,6 +19,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.staging.Staging;
 import build.jenesis.repository.staging.StagingProvider;
 import build.jenesis.repository.format.RepositoryType;
+import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.RepositoryRemoval;
@@ -65,6 +66,22 @@ public class RepositoryLifecycle extends TenantScope {
      * @throws IllegalArgumentException when the name, the type or the description is refused.
      */
     public RepositoryType.Creation create(String repository, String format, String description) throws IOException {
+        return create(repository, format, description, Map.of(), false);
+    }
+
+    /**
+     * {@link #create(String, String, String)}, the repository created with {@code values} as its own settings - the
+     * one creation the repository wizard completes with. Every value is validated through the catalogue first and a
+     * refusal writes nothing; the settings are then stored before the document that makes the repository exist
+     * ({@link RepositoryType#create(ArtifactStore, String, String, RepositoryType.Configuration)}), and a repository
+     * that exists already is answered {@link RepositoryType.Creation#EXISTS}, unchanged.
+     *
+     * @param operator whether the session is the deployment operator's, who alone sets an operator-only setting.
+     * @throws IllegalArgumentException when the name, the type, the description or any value is refused - naming
+     *                                  every refused value.
+     */
+    public RepositoryType.Creation create(String repository, String format, String description,
+                                          Map<String, String> values, boolean operator) throws IOException {
         if (!RepositoryType.offerable().contains(format)) {
             throw new IllegalArgumentException("'" + format + "' is not a format this deployment serves.");
         }
@@ -73,8 +90,17 @@ public class RepositoryLifecycle extends TenantScope {
             throw new IllegalArgumentException("Repository '" + repository + "' is still being deleted; create it "
                     + "again once it is gone.");
         }
-        RepositoryType.Creation creation = RepositoryType.create(scope(repository), format);
-        if (creation != RepositoryType.Creation.CONFLICT && !line.isEmpty()) {
+        if (!values.isEmpty()) {
+            SortedMap<String, String> refused = settings.refusals(Setting.Scope.REPOSITORY, values, operator);
+            if (!refused.isEmpty()) {
+                throw new IllegalArgumentException(String.join(" ", refused.values()));
+            }
+        }
+        String tenant = tenant();
+        RepositoryType.Creation creation = RepositoryType.create(scope(repository), format, line, values.isEmpty()
+                ? null : () -> settings.saveRepository(tenant, repository, values, operator));
+        if ((creation == RepositoryType.Creation.UNCHANGED || creation == RepositoryType.Creation.RETYPED)
+                && !line.isEmpty()) {
             describe(repository, line);
         }
         switch (creation) {

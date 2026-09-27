@@ -8,6 +8,8 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.format.RepositoryType;
+import build.jenesis.repository.settings.Setting;
+import build.jenesis.repository.settings.StoredSettings;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.store.RepositoryAdmin;
 import build.jenesis.repository.ui.store.RepositoryLifecycle;
@@ -89,6 +91,33 @@ class CreateRepositoryTest {
         assertThat(recorded).containsExactly(
                 "acme operator " + AuditActions.REPOSITORY_CREATE + " libs",
                 "acme operator " + AuditActions.REPOSITORY_RETYPE + " libs to java");
+    }
+
+    @Test
+    void a_repository_created_with_its_settings_holds_them_and_a_refused_one_is_not_created() throws IOException {
+        ArtifactStore store = store();
+        RepositoryLifecycle lifecycle = new RepositoryLifecycle(store, tenant(), ObservationRegistry.NOOP, audit(),
+                () -> "operator", new SettingsAdmin(store));
+
+        assertThatThrownBy(() -> lifecycle.create("mirror", "raw", "", Map.of("routing", "teleport"), true))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("routing");
+        assertThatThrownBy(() -> lifecycle.create("mirror", "raw", "", Map.of("routing", "writable"), false))
+                .as("the routing is the deployment operator's").isInstanceOf(IllegalArgumentException.class);
+        assertThat(RepositoryDocument.exists(store.scope("acme").scope("mirror"))).isFalse();
+        assertThat(StoredSettings.read(store.scope("acme").scope("mirror"), Setting.Scope.REPOSITORY)).isEmpty();
+        assertThat(recorded).isEmpty();
+
+        assertThat(lifecycle.create("mirror", "raw", "Mirrored files", Map.of("routing", "writable"), true))
+                .isEqualTo(RepositoryType.Creation.CREATED);
+        assertThat(StoredSettings.read(store.scope("acme").scope("mirror"), Setting.Scope.REPOSITORY))
+                .containsEntry("routing", "writable");
+        assertThat(RepositoryDocument.read(store.scope("acme").scope("mirror")).orElseThrow().description())
+                .isEqualTo("Mirrored files");
+        assertThat(lifecycle.create("mirror", "raw", "", Map.of("routing", "fallback https://repo1.maven.org/"), true))
+                .as("a creation with settings never changes a repository that exists")
+                .isEqualTo(RepositoryType.Creation.EXISTS);
+        assertThat(StoredSettings.read(store.scope("acme").scope("mirror"), Setting.Scope.REPOSITORY))
+                .containsEntry("routing", "writable");
     }
 
     @Test

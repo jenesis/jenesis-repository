@@ -169,7 +169,9 @@ public class RepositoryAdminController {
     }
 
     /** Create a repository to hold one type - the only way a repository comes into being - give one that holds content
-     *  but no format the type it holds, or move one to a type that holds everything its old one did. */
+     *  but no format the type it holds, or move one to a type that holds everything its old one did. The creation
+     *  reads the settings documents a creation's settings are validated by, one object per module under a constant
+     *  prefix, narrow by construction. */
     @PostMapping("/ui/repositories/create")
     public String create(@RequestParam("name") String name, @RequestParam("format") String format,
                          @RequestParam(name = "description", defaultValue = "") String description,

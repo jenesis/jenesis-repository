@@ -22,6 +22,7 @@ open module build.jenesis.repository.ui.store.test {
     requires build.jenesis.repository.format.maven;
     requires build.jenesis.repository.format.jenesis;
     requires build.jenesis.repository.format;
+    requires build.jenesis.repository.settings;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.cache.storage;
     requires build.jenesis.repository.cache.storage.testkit;

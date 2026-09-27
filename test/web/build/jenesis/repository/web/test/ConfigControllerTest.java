@@ -14,6 +14,9 @@ import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.RepositoryRemoval;
+import build.jenesis.repository.format.RepositoryType;
+import build.jenesis.repository.settings.Setting;
+import build.jenesis.repository.settings.StoredSettings;
 import build.jenesis.repository.upstream.UpstreamCredentialSource;
 import build.jenesis.repository.upstream.store.StoreUpstreamCredentials;
 import build.jenesis.repository.servlet.testkit.Servlets;
@@ -21,6 +24,7 @@ import build.jenesis.repository.web.testkit.Web;
 import jakarta.servlet.http.HttpServletRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The deployment-config surface over a real store, driven through its handlers: the settings catalogue with each
@@ -384,10 +388,10 @@ class ConfigControllerTest {
     @Test
     void a_repository_is_created_once_described_and_deleted() throws IOException {
         Servlets.Response created = Servlets.response();
-        controller.createRepository("files", "key", new ConfigController.RepositoryRequest("raw", "Build outputs"),
+        controller.createRepository("files", "key", new ConfigController.RepositoryRequest("raw", "Build outputs", null),
                 Servlets.request("PUT", "/repository/default/files"), created.servlet());
         Servlets.Response again = Servlets.response();
-        controller.createRepository("files", "key", new ConfigController.RepositoryRequest("raw", null),
+        controller.createRepository("files", "key", new ConfigController.RepositoryRequest("raw", null, null),
                 Servlets.request("PUT", "/repository/default/files"), again.servlet());
 
         assertThat(created.status()).isEqualTo(201);
@@ -399,7 +403,7 @@ class ConfigControllerTest {
         });
 
         Servlets.Response described = Servlets.response();
-        controller.createRepository("files", "key", new ConfigController.RepositoryRequest(null, "Nightly outputs"),
+        controller.createRepository("files", "key", new ConfigController.RepositoryRequest(null, "Nightly outputs", null),
                 Servlets.request("PUT", "/repository/default/files"), described.servlet());
         assertThat(described.status()).isEqualTo(200);
         assertThat(RepositoryDocument.read(repository).orElseThrow().description()).isEqualTo("Nightly outputs");
@@ -410,24 +414,105 @@ class ConfigControllerTest {
         assertThat(deleted.status()).isEqualTo(202);
         assertThat(deleted.body()).startsWith("Deleting repository 'files'");
         assertThat(RepositoryDocument.read(repository)).as("it stops answering before the answer").isEmpty();
-        assertThat(audit.actions()).containsExactly(AuditActions.REPOSITORY_DESCRIBE, AuditActions.REPOSITORY_CREATE,
-                AuditActions.REPOSITORY_DESCRIBE, AuditActions.REPOSITORY_DELETE);
+        assertThat(audit.actions()).as("a description given at creation is in the document the creation writes")
+                .containsExactly(AuditActions.REPOSITORY_CREATE, AuditActions.REPOSITORY_DESCRIBE,
+                        AuditActions.REPOSITORY_DELETE);
+    }
+
+    @Test
+    void a_repository_created_with_its_settings_holds_them_from_its_first_request() throws IOException {
+        Servlets.Response created = Servlets.response();
+        controller.createRepository("libs", "key", new ConfigController.RepositoryRequest("raw", "Build outputs",
+                        Map.of("keep-last", "3", "routing", "writable")),
+                Servlets.request("PUT", "/repository/default/libs"), created.servlet());
+
+        assertThat(created.status()).isEqualTo(201);
+        ArtifactStore repository = repositories.store("default", "libs");
+        assertThat(RepositoryDocument.read(repository)).hasValueSatisfying(document -> {
+            assertThat(document.format()).isEqualTo("raw");
+            assertThat(document.description()).isEqualTo("Build outputs");
+        });
+        assertThat(StoredSettings.read(repository, Setting.Scope.REPOSITORY))
+                .containsEntry("keep-last", "3").containsEntry("routing", "writable");
+        assertThat(audit.actions()).containsExactly(AuditActions.REPOSITORY_CREATE, "setting.set", "setting.set");
+    }
+
+    @Test
+    void a_creation_with_a_refused_setting_writes_nothing_at_all() throws IOException {
+        Servlets.Response refused = Servlets.response();
+        controller.createRepository("libs", "key", new ConfigController.RepositoryRequest("raw", "Build outputs",
+                        Map.of("keep-last", "-1", "max-age", "PT0S", "routing", "writable")),
+                Servlets.request("PUT", "/repository/default/libs"), refused.servlet());
+
+        assertThat(refused.status()).isEqualTo(400);
+        assertThat(refused.body()).as("every refused value is named, not the first")
+                .contains("keep-last").contains("max-age");
+        assertThat(written("default/libs")).as("no document, and no setting").isEmpty();
+        assertThat(audit.rows()).isEmpty();
+
+        Servlets.Response notTheOperator = Servlets.response();
+        controller(UpstreamCredentialSource.NONE, false).createRepository("libs", "key",
+                new ConfigController.RepositoryRequest("raw", null, Map.of("routing", "writable")),
+                Servlets.request("PUT", "/repository/default/libs"), notTheOperator.servlet());
+        assertThat(notTheOperator.status()).as("the routing is the deployment operator's to set").isEqualTo(400);
+        assertThat(written("default/libs")).isEmpty();
+    }
+
+    @Test
+    void a_creation_with_settings_only_creates_and_never_changes_a_repository() throws IOException {
+        controller.createRepository("libs", null, new ConfigController.RepositoryRequest("raw", null, null),
+                Servlets.request("PUT", "/repository/default/libs"), Servlets.response().servlet());
+        Servlets.Response again = Servlets.response();
+        controller.createRepository("libs", "key", new ConfigController.RepositoryRequest("raw", null,
+                        Map.of("keep-last", "3")),
+                Servlets.request("PUT", "/repository/default/libs"), again.servlet());
+        Servlets.Response alone = Servlets.response();
+        controller.createRepository("libs", "key", new ConfigController.RepositoryRequest(null, null,
+                        Map.of("keep-last", "3")),
+                Servlets.request("PUT", "/repository/default/libs"), alone.servlet());
+
+        assertThat(again.status()).isEqualTo(409);
+        assertThat(again.body()).contains("already exists").contains("/api/repository/settings/");
+        assertThat(alone.status()).as("settings with no format are no creation").isEqualTo(400);
+        assertThat(StoredSettings.read(repositories.store("default", "libs"), Setting.Scope.REPOSITORY)).isEmpty();
+    }
+
+    @Test
+    void a_creation_whose_settings_cannot_be_written_leaves_no_repository() {
+        ArtifactStore repository = repositories.store("default", "libs");
+
+        assertThatThrownBy(() -> RepositoryType.create(repository, "raw", "", () -> {
+            throw new IOException("the store went away");
+        })).isInstanceOf(IOException.class);
+        assertThat(RepositoryDocument.exists(repository))
+                .as("the settings are written before the document that makes the repository exist").isFalse();
+    }
+
+    /** Every object stored under {@code prefix}. */
+    private List<String> written(String prefix) throws IOException {
+        Path under = root.resolve(prefix);
+        if (!Files.exists(under)) {
+            return List.of();
+        }
+        try (Stream<Path> files = Files.walk(under)) {
+            return files.filter(Files::isRegularFile).map(Path::toString).toList();
+        }
     }
 
     @Test
     void creation_refuses_a_type_nothing_serves_and_a_repository_still_being_deleted() throws IOException {
         Servlets.Response unknown = Servlets.response();
-        controller.createRepository("files", null, new ConfigController.RepositoryRequest("cobol", null),
+        controller.createRepository("files", null, new ConfigController.RepositoryRequest("cobol", null, null),
                 Servlets.request("PUT", "/repository/default/files"), unknown.servlet());
         assertThat(unknown.status()).isEqualTo(400);
         assertThat(unknown.body()).contains("'cobol' is not a format a repository can hold here");
 
         ArtifactStore repository = repositories.store("default", "gone");
-        controller.createRepository("gone", null, new ConfigController.RepositoryRequest("raw", null),
+        controller.createRepository("gone", null, new ConfigController.RepositoryRequest("raw", null, null),
                 Servlets.request("PUT", "/repository/default/gone"), Servlets.response().servlet());
         RepositoryRemoval.begin(repository);
         Servlets.Response removing = Servlets.response();
-        controller.createRepository("gone", null, new ConfigController.RepositoryRequest("raw", null),
+        controller.createRepository("gone", null, new ConfigController.RepositoryRequest("raw", null, null),
                 Servlets.request("PUT", "/repository/default/gone"), removing.servlet());
         assertThat(removing.status()).isEqualTo(409);
         assertThat(removing.body()).contains("is still being deleted");
@@ -436,7 +521,7 @@ class ConfigControllerTest {
     @Test
     void describing_or_deleting_a_repository_that_does_not_exist_is_a_404() throws IOException {
         Servlets.Response described = Servlets.response();
-        controller.createRepository("nowhere", null, new ConfigController.RepositoryRequest(null, "text"),
+        controller.createRepository("nowhere", null, new ConfigController.RepositoryRequest(null, "text", null),
                 Servlets.request("PUT", "/repository/default/nowhere"), described.servlet());
         Servlets.Response deleted = Servlets.response();
         controller.deleteRepository("nowhere", null, Servlets.request("DELETE", "/repository/default/nowhere"),
