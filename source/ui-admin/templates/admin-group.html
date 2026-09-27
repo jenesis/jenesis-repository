@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Group')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeaderCrumbs(${name}, ${crumbs})}"></header>
+    <!--/* One group of this tenant: what it grants and who is in it, each with its own action. A group name and a
+         member id come from the store and are rendered as text through th:text/th:value only. */-->
+    <p>A group of tenant <strong th:text="${tenant}">default</strong>. Everyone in it holds what it grants, from their
+        next request.</p>
+
+    <article>
+        <h2>Grants</h2>
+        <figure th:unless="${grants.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Scope</th>
+                    <th scope="col">Rights</th>
+                    <th th:if="${isAdmin}" scope="col"><span class="app-sr-only">Actions</span></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="grant : ${grants}">
+                    <td><code th:text="${grant.key}">*</code></td>
+                    <td><code th:text="${grant.value}">repository:read</code></td>
+                    <td th:if="${isAdmin}" class="app-list__actions">
+                        <div class="app-actions">
+                            <form method="post" th:action="@{/ui/admin/groups/revoke-grant}">
+                                <input type="hidden" name="name" th:value="${name}">
+                                <input type="hidden" name="scope" th:value="${grant.key}">
+                                <button th:replace="~{base :: deleteButton('Revoke', ${grant.key}, 'The group loses this grant, and so does every member who held it through the group.')}">Revoke</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <th:block th:if="${grants.isEmpty()}">
+            <div th:replace="~{base :: empty('This group grants nothing yet, so its members hold nothing through it.')}"></div>
+        </th:block>
+        <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/grant}">
+            <input type="hidden" name="name" th:value="${name}">
+            <div class="grid">
+                <label>Scope <small>(a repository, a build-cache project, or <code>*</code>)</small>
+                    <input name="scope" required placeholder="*" value="*"></label>
+                <label>Rights <small>(comma-separated)</small>
+                    <input name="tokens" required placeholder="repository:read"></label>
+            </div>
+            <button th:replace="~{base :: primaryButton('Grant')}">Grant</button>
+        </form>
+    </article>
+
+    <article>
+        <h2>Members</h2>
+        <figure th:unless="${members.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Id</th>
+                    <th th:if="${isAdmin}" scope="col"><span class="app-sr-only">Actions</span></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="member : ${members}">
+                    <td><code th:text="${member}">oidc/ada</code></td>
+                    <td th:if="${isAdmin}" class="app-list__actions">
+                        <div class="app-actions">
+                            <form method="post" th:action="@{/ui/admin/groups/members/remove}">
+                                <input type="hidden" name="name" th:value="${name}">
+                                <input type="hidden" name="id" th:value="${member}">
+                                <button th:replace="~{base :: deleteButton('Remove', ${member}, 'The member leaves the group and loses what the group grants.')}">Remove</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <p th:if="${nextCursor != null}"><small>Showing the first <span th:text="${members.size()}">200</span>
+            members; <a th:href="@{/ui/admin/group(name=${name},cursor=${nextCursor})}">more</a>.</small></p>
+        <th:block th:if="${members.isEmpty()}">
+            <div th:replace="~{base :: empty('Nobody is in this group yet.')}"></div>
+        </th:block>
+        <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/members}">
+            <input type="hidden" name="name" th:value="${name}">
+            <label>Provider-qualified id
+                <input name="id" required placeholder="oidc/8f3c1a" list="known-principals" autocomplete="off">
+            </label>
+            <datalist id="known-principals">
+                <option th:each="seen : ${knownPrincipals}" th:value="${seen.id()}" th:text="${seen.label()}"></option>
+            </datalist>
+            <button th:replace="~{base :: primaryButton('Add member')}">Add member</button>
+        </form>
+    </article>
+
+    <article th:if="${isAdmin}">
+        <h2>Delete this group</h2>
+        <p><small>The group is deleted with its grants and its membership, and every member is re-derived so nothing
+            of it is left conferring rights.</small></p>
+        <form method="post" th:action="@{/ui/admin/groups/remove}">
+            <input type="hidden" name="name" th:value="${name}">
+            <button th:replace="~{base :: deleteButton('Delete group', ${name}, 'The group is deleted with its grants; its members lose what it granted.')}">Delete group</button>
+        </form>
+    </article>
+</main>
+</body>
+</html>

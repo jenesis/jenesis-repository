@@ -87,7 +87,7 @@
                     <th scope="col">Group</th>
                     <th scope="col">Grants</th>
                     <th scope="col">Members</th>
-                    <th th:if="${isAdmin}" scope="col"><span class="app-sr-only">Actions</span></th>
+                    <th scope="col"><span class="app-sr-only">Actions</span></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -95,57 +95,24 @@
                     <td><code th:text="${g.name()}">developers</code></td>
                     <td>
                         <span th:if="${g.grants().isEmpty()}"><small>grants nothing</small></span>
-                        <div th:each="grant : ${g.grants()}" class="app-actions">
+                        <div th:each="grant : ${g.grants()}">
                             <code th:text="${grant.key} + ' → ' + ${grant.value}">* → repository:read</code>
-                            <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/revoke-grant}">
-                                <input type="hidden" name="name" th:value="${g.name()}">
-                                <input type="hidden" name="scope" th:value="${grant.key}">
-                                <button th:replace="~{base :: deleteButton('Revoke', ${grant.key}, 'The group loses this grant, and so does every member who held it through the group.')}">Revoke</button>
-                            </form>
                         </div>
-                        <!--/* A grant is added on the group it is for, never by typing the group's name again. */-->
-                        <details th:if="${isAdmin}">
-                            <summary>Add grant</summary>
-                            <form method="post" th:action="@{/ui/admin/groups/grant}">
-                                <input type="hidden" name="name" th:value="${g.name()}">
-                                <label>Scope <small>(a repository, a build-cache project, or <code>*</code>)</small>
-                                    <input name="scope" required placeholder="*" value="*"></label>
-                                <label>Rights <small>(comma-separated)</small>
-                                    <input name="tokens" required placeholder="repository:read"></label>
-                                <button th:replace="~{base :: secondaryButton('Grant')}">Grant</button>
-                            </form>
-                        </details>
                     </td>
                     <td>
                         <span th:if="${g.members().isEmpty()}"><small>nobody yet</small></span>
-                        <div th:each="member : ${g.members()}" class="app-actions">
-                            <code th:text="${member}">oidc/ada</code>
-                            <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/members/remove}">
-                                <input type="hidden" name="name" th:value="${g.name()}">
-                                <input type="hidden" name="id" th:value="${member}">
-                                <button th:replace="~{base :: deleteButton('Remove', ${member}, 'The member leaves the group and loses what the group grants.')}">Remove</button>
-                            </form>
-                        </div>
+                        <div th:each="member : ${g.members()}"><code th:text="${member}">oidc/ada</code></div>
                         <!--/* The preview is capped so this screen costs the same on a group of eight and one of
-                             eight hundred; the rest are reachable through the API. */-->
+                             eight hundred; the group's page pages the rest. */-->
                         <small th:if="${g.more()}">and more</small>
-                        <details th:if="${isAdmin}">
-                            <summary>Add member</summary>
-                            <form method="post" th:action="@{/ui/admin/groups/members}">
-                                <input type="hidden" name="name" th:value="${g.name()}">
-                                <label>Provider-qualified id
-                                    <input name="id" required placeholder="oidc/8f3c1a" list="known-principals"
-                                           autocomplete="off">
-                                </label>
-                                <button th:replace="~{base :: secondaryButton('Add')}">Add</button>
-                            </form>
-                        </details>
                     </td>
-                    <td th:if="${isAdmin}" class="app-list__actions">
+                    <!--/* A group is changed and deleted on its own page, as every object with a page is, so its row
+                         carries one action however many grants and members it has. */-->
+                    <td class="app-list__actions">
                         <div class="app-actions">
-                            <form method="post" th:action="@{/ui/admin/groups/remove}">
+                            <form method="get" th:action="@{/ui/admin/group}">
                                 <input type="hidden" name="name" th:value="${g.name()}">
-                                <button th:replace="~{base :: deleteButton('Delete group', ${g.name()}, 'The group is deleted with its grants; its members lose what it granted.')}">Delete group</button>
+                                <button th:replace="~{base :: secondaryButton('Open')}">Open</button>
                             </form>
                         </div>
                     </td>
@@ -157,7 +124,7 @@
             <div th:replace="~{base :: empty('No groups yet — create one and everyone in it holds its rights.')}"></div>
         </th:block>
         <!--/* A group exists once it holds something, so it is created with the first grant; members and further
-             grants are added on its row. */-->
+             grants are added on its page. */-->
         <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/grant}">
             <h3>New group</h3>
             <div class="grid">

@@ -27,7 +27,9 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
     public Set<String> fragments() {
         // What these templates reach for directly. The brand, the module links and the theme switch are inside
         // the shared shell, so this console asks for the shell and gets them. The alert is: the repository overview warns inline when garbage collection refuses the repository.
+        // A page under another screen - a group under Members - carries the trail back to it.
         return Set.of(ConsoleLayout.HEAD_CONTENTS, ConsoleLayout.SHELL, ConsoleLayout.PAGE_HEADER,
+                ConsoleLayout.PAGE_HEADER_CRUMBS,
                 ConsoleLayout.MESSAGES, ConsoleLayout.SUBSECTION_ERROR, ConsoleLayout.ALERT,
                 ConsoleLayout.EMPTY,
                 // Every action carries its weight: the main one, a neutral one, a recoverable consequence that asks

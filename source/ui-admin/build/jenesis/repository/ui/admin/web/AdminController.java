@@ -119,6 +119,37 @@ public class AdminController {
         return rows;
     }
 
+    /** How many members one group page renders; the rest are a cursor away. */
+    private static final int GROUP_MEMBERS_PAGE = 200;
+
+    /**
+     * One group's page: what it grants and who is in it, each with its own action, and the group's deletion last.
+     * Its row on the members screen only opens it, so that screen stays one action per row however large a group
+     * grows. The members are a page of the group's membership key space, resumed by {@code cursor}.
+     */
+    @GetMapping("/group")
+    public String group(@RequestParam("name") String name,
+                        @RequestParam(name = "cursor", required = false) String cursor, Model model)
+            throws IOException {
+        Authorization.SubjectPage members =
+                authorization.groups().members(current.name(), name, cursor, GROUP_MEMBERS_PAGE);
+        model.addAttribute("name", name);
+        model.addAttribute("grants", authorization.grants(current.name(), Authorization.Subject.group(name)));
+        model.addAttribute("members", members.ids());
+        model.addAttribute("nextCursor", members.next());
+        model.addAttribute("crumbs", List.of(Map.of("href", "/ui/admin", "label", "Members"),
+                Map.of("href", "", "label", name)));
+        model.addAttribute("knownPrincipals", known.page(null, KNOWN_PAGE));
+        return "admin-group";
+    }
+
+    /** Back to the group's own page after a change to it, the name carried as a query parameter so no name a user
+     *  typed is ever part of a path. */
+    private static String toGroup(String name, RedirectAttributes redirect) {
+        redirect.addAttribute("name", name);
+        return "redirect:/ui/admin/group";
+    }
+
     /** Grant a group rights at a scope. Every member holds them from the next request - the write re-derives them
      *  before it returns, which is what makes a group a grant rather than a label.
      *
@@ -135,7 +166,7 @@ public class AdminController {
         audit("group.grant.set", name + " " + scope);
         redirect.addFlashAttribute("message",
                 "Granted " + tokens.trim() + " on " + scope + " to everyone in " + name + ".");
-        return "redirect:/ui/admin";
+        return toGroup(name, redirect);
     }
 
     @PostMapping("/groups/revoke-grant")
@@ -145,7 +176,7 @@ public class AdminController {
         authorization.removeGrant(current.name(), Authorization.Subject.group(name), scope);
         audit("group.grant.remove", name + " " + scope);
         redirect.addFlashAttribute("message", "Removed the grant on " + scope + " from " + name + ".");
-        return "redirect:/ui/admin";
+        return toGroup(name, redirect);
     }
 
     /** Put a principal in a group. The group need not exist first: one with members and no grants confers nothing,
@@ -157,7 +188,7 @@ public class AdminController {
         authorization.groups().addMember(current.name(), name, id.trim());
         audit("group.member.add", name + " " + id.trim());
         redirect.addFlashAttribute("message", "Added " + id.trim() + " to " + name + ".");
-        return "redirect:/ui/admin";
+        return toGroup(name, redirect);
     }
 
     @PostMapping("/groups/members/remove")
@@ -167,7 +198,7 @@ public class AdminController {
         authorization.groups().removeMember(current.name(), name, id);
         audit("group.member.remove", name + " " + id);
         redirect.addFlashAttribute("message", "Removed " + id + " from " + name + ".");
-        return "redirect:/ui/admin";
+        return toGroup(name, redirect);
     }
 
     /** Delete a group: its grants, its metadata and its membership, with every member re-derived so nothing of it
