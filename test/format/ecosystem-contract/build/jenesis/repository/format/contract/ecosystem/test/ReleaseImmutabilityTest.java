@@ -148,6 +148,21 @@ class ReleaseImmutabilityTest {
                 .as("no key the release had is rewritten by a refused upload of %s", format).isEmpty();
     }
 
+    /** npm prints a refusal's reason only from the {@code error} field of a JSON body, so that is where it is. */
+    @Test
+    void npm_refuses_in_the_document_its_client_reads_the_reason_from() throws IOException {
+        Format npm = formats().stream().filter(format -> format.name().equals("npm")).findFirst().orElseThrow();
+        ArtifactStore store = store(npm.name());
+        npm.upload(store, "");
+
+        Upload second = npm.upload(store, "rebuilt");
+
+        assertThat(second.exchange().status()).isEqualTo(403);
+        assertThat(second.exchange().responseHeader("Content-Type")).startsWith("application/json");
+        assertThat(second.exchange().responseText())
+                .isEqualTo("{\"error\":\"You cannot publish over the previously published versions.\"}");
+    }
+
     /** The operator's opt-out, as the edge resolves it for the publishing tenant, lets a release be replaced - the one
      *  dial every release link honours rather than each format reading it. */
     @ParameterizedTest

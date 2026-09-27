@@ -319,9 +319,12 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             return;
         } catch (Publication.RepublishConflict taken) {
             // A version's tarball never changes once published, and npm's registry answers a second publish of it
-            // this way - which is what `npm publish` reports - rather than with a bare conflict.
-            exchange.respond(403, "You cannot publish over the previously published versions."
-                    .getBytes(StandardCharsets.UTF_8));
+            // this way rather than with a bare conflict. The words go in the JSON document's error field, the one
+            // place `npm publish` reads a refusal's reason from; any other body leaves it printing a generic 403 that
+            // reads as a missing permission.
+            exchange.setResponseHeader("Content-Type", "application/json");
+            exchange.respond(403, MAPPER.writeValueAsBytes(
+                    Map.of("error", "You cannot publish over the previously published versions.")));
             return;
         }
         if (envelope == null) {
