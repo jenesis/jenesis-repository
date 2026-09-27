@@ -3,8 +3,8 @@ package build.jenesis.repository.cli;
 import module java.base;
 
 /**
- * The deployment-administration verbs: {@code settings} reads and writes the runtime settings, {@code quota} /
- * {@code rate-limit} / {@code audit} the tenant ceilings and trail, {@code capabilities} reports what the server
+ * The deployment-administration verbs: {@code settings} reads and writes the runtime settings, {@code limits} /
+ * {@code audit} the tenant ceilings and trail, {@code capabilities} reports what the server
  * carries, {@code repos} / {@code upstreams} define runtime repositories and format proxies, {@code deploy}
  * publishes a file (or explodes an archive per entry), and {@code import} walks an incumbent's repository.
  */
@@ -129,43 +129,40 @@ final class AdminCommands {
         return 0;
     }
 
-    static int quota(String[] args, Path home) throws Exception {
+    /**
+     * {@code limits}: what the tenant's repositories may use together, read and set as the console's Limits page
+     * shows them - the storage quota beside what is stored, then the request-rate ceiling. They are two API
+     * documents, so under {@code --json} the answer is the array of both.
+     */
+    static int limits(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length > 1 && args[1].equals("set")) {
-            if (args.length < 3) {
-                throw new IllegalArgumentException("Usage: quota set <bytes>  (0 clears the quota)");
+            if (args.length != 4 || !(args[2].equals("quota") || args[2].equals("rate"))) {
+                throw new IllegalArgumentException("Usage: limits set quota <bytes>  (0 clears the quota)\n"
+                        + "       limits set rate <permits-per-minute>  (0 falls back to the deployment's)");
             }
-            client.settings().setQuota(Long.parseLong(args[2]));
-            System.out.println("Set the storage quota.");
-            return 0;
-        }
-        SettingsClient.QuotaView view = client.settings().quota();
-        System.out.println("limit: " + (view.maxBytes() == 0 ? "unlimited" : view.maxBytes() + " bytes"));
-        System.out.println("used:  " + view.usedBytes() + " bytes");
-        return 0;
-    }
-
-    static int rateLimit(String[] args, Path home) throws Exception {
-        RepositoryClient client = CliSupport.client(home);
-        if (args.length > 1 && args[1].equals("set")) {
-            if (args.length < 3) {
-                throw new IllegalArgumentException("Usage: rate-limit set <permits-per-minute>  (0 uses the default)");
+            if (args[2].equals("quota")) {
+                client.settings().setQuota(Long.parseLong(args[3]));
+                System.out.println("Set the storage quota.");
+                return 0;
             }
-            if (!client.settings().setRateLimit(Long.parseLong(args[2]))) {
+            if (!client.settings().setRateLimit(Long.parseLong(args[3]))) {
                 System.out.println("Rate limiting is not installed on this deployment.");
                 return 1;
             }
             System.out.println("Set the rate limit.");
             return 0;
         }
-        SettingsClient.RateLimitView view = client.settings().rateLimit();
-        if (view == null) {
-            System.out.println("Rate limiting is not installed on this deployment.");
-            return 0;
+        if (args.length > 1) {
+            throw new IllegalArgumentException("Unknown limits action: " + args[1]);
         }
-        System.out.println(view.permitsPerMinute() == 0
-                ? "No tenant ceiling (falls back to the deployment default)."
-                : view.permitsPerMinute() + " permits per minute.");
+        SettingsClient.QuotaView quota = client.settings().quota();
+        System.out.println("quota: " + (quota.maxBytes() == 0 ? "unlimited" : quota.maxBytes() + " bytes"));
+        System.out.println("used:  " + quota.usedBytes() + " bytes");
+        SettingsClient.RateLimitView rate = client.settings().rateLimit();
+        System.out.println("rate:  " + (rate == null ? "rate limiting is not installed on this deployment"
+                : rate.permitsPerMinute() == 0 ? "no tenant ceiling (falls back to the deployment default)"
+                : rate.permitsPerMinute() + " permits per minute"));
         return 0;
     }
 

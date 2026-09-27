@@ -5,8 +5,9 @@ import module java.base;
 /**
  * The compliance and governance verbs: {@code vulnerabilities} and {@code findings} read the advisory and findings
  * ledgers, {@code licenses} the declared-license facets, {@code quarantine} the compliance gate's holds,
- * {@code provenance} the signed attestations, {@code policy} the credential-lifetime policy, and {@code retro-plan}
- * dry-runs what enabling license enforcement would newly hold.
+ * {@code ai-review} the findings a code audit proposed, {@code provenance} the signed attestations, {@code policy}
+ * the credential-lifetime policy, and {@code enforcement-preview} dry-runs what enabling license enforcement would
+ * newly hold.
  */
 final class ComplianceCommands {
 
@@ -109,6 +110,17 @@ final class ComplianceCommands {
             }
         }
         return 0;
+    }
+
+    /**
+     * The AI review queue: the findings ledger narrowed to what a code audit proposed and nobody has yet confirmed or
+     * dismissed - the console's page of the same name reads the same ledger through the same filter.
+     */
+    static int aiReview(String[] args, Path home) throws Exception {
+        if (args.length != 2) {
+            throw new IllegalArgumentException("Usage: ai-review <repo>");
+        }
+        return findings(new String[] {"findings", args[1], "--kind", "ai-candidate"}, home);
     }
 
     static int findings(String[] args, Path home) throws Exception {
@@ -390,7 +402,7 @@ final class ComplianceCommands {
         return 0;
     }
 
-    static int retroPlan(String[] args, Path home) throws Exception {
+    static int enforcementPreview(String[] args, Path home) throws Exception {
         boolean unknown = false;
         String repo = null;
         for (int i = 1; i < args.length; i++) {
@@ -401,7 +413,7 @@ final class ComplianceCommands {
             }
         }
         if (repo == null) {
-            throw new IllegalArgumentException("Usage: retro-plan <repo> [--unknown]");
+            throw new IllegalArgumentException("Usage: enforcement-preview <repo> [--unknown]");
         }
         RiskClient.RetroPlan plan = CliSupport.client(home).risk().retroPlan(repo, unknown);
         if (plan == null) {

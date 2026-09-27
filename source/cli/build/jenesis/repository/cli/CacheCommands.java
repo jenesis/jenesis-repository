@@ -24,12 +24,11 @@ final class CacheCommands {
     /** The passes a project accepts, named as the server routes them. */
     private static final Set<String> PASSES = Set.of("size", "ttl", "clear");
 
-    static int cache(String[] args, Path home) throws Exception {
+    static int projects(String[] args, Path home) throws Exception {
         if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: cache <projects|show|create|config|evict|recount|delete> [...]");
+            return print(CliSupport.client(home).buildCache().cacheProjects());
         }
         return switch (args[1]) {
-            case "projects" -> print(CliSupport.client(home).buildCache().cacheProjects());
             case "show" -> print(CliSupport.client(home).buildCache().cacheProject(name(args, "show <project>")));
             case "create" -> print(CliSupport.client(home).buildCache()
                     .createCacheProject(name(args, "create <project>")));
@@ -37,7 +36,7 @@ final class CacheCommands {
             case "evict" -> evict(args, home);
             case "recount" -> print(CliSupport.client(home).buildCache().recountCache(name(args, "recount <project>")));
             case "delete" -> delete(args, home);
-            default -> throw new IllegalArgumentException("Unknown cache command '" + args[1] + "'");
+            default -> throw new IllegalArgumentException("Unknown projects action '" + args[1] + "'");
         };
     }
 
@@ -49,7 +48,7 @@ final class CacheCommands {
                 case "--size" -> size = CliSupport.flag(args, ++i);
                 case "--lru" -> lru = CliSupport.flag(args, ++i);
                 case "--ttl" -> ttl = CliSupport.flag(args, ++i);
-                default -> throw new IllegalArgumentException("Usage: cache config <project> [--size <cap>] "
+                default -> throw new IllegalArgumentException("Usage: projects config <project> [--size <cap>] "
                         + "[--lru <true|false>] [--ttl <duration>]");
             }
         }
@@ -59,7 +58,7 @@ final class CacheCommands {
     private static int evict(String[] args, Path home) throws Exception {
         String project = name(args, "evict <project> <size|ttl|clear>");
         if (args.length < 4 || !PASSES.contains(args[3])) {
-            throw new IllegalArgumentException("Usage: cache evict <project> <size|ttl|clear>");
+            throw new IllegalArgumentException("Usage: projects evict <project> <size|ttl|clear>");
         }
         return print(CliSupport.client(home).buildCache().evictCache(project, args[3]));
     }
@@ -78,7 +77,7 @@ final class CacheCommands {
 
     private static String name(String[] args, String usage) {
         if (args.length < 3) {
-            throw new IllegalArgumentException("Usage: cache " + usage);
+            throw new IllegalArgumentException("Usage: projects " + usage);
         }
         return args[2];
     }

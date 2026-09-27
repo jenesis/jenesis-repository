@@ -92,7 +92,7 @@
             <a th:replace="~{base :: brand}"></a>
             <!--/* The tenant, beside the brand, wherever the deployment serves several: the one being worked in, or
                  that none is chosen yet. Either way it leads to the screen that lists the tenants to choose from. */-->
-            <a th:if="${multiTenant}" class="app-tenant" th:href="@{/ui/instances}"
+            <a th:if="${multiTenant}" class="app-tenant" th:href="@{/ui/tenants}"
                th:classappend="${tenant == null} ? 'app-tenant--none'"
                th:title="${tenant != null} ? |Working in tenant ${tenant} - switch tenant| : 'Choose a tenant to work in'">
                 <th:block th:if="${tenant != null}"><span class="app-sr-only">Tenant </span><span

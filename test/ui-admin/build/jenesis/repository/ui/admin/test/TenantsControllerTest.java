@@ -15,7 +15,7 @@ import build.jenesis.repository.ui.identity.UserDirectory;
 import build.jenesis.repository.ui.identity.UserDirectory.Role;
 import build.jenesis.repository.ui.store.TenantPurge;
 import build.jenesis.repository.ui.store.TenantService;
-import build.jenesis.repository.ui.admin.web.InstancesController;
+import build.jenesis.repository.ui.admin.web.TenantsController;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
 
@@ -23,17 +23,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Switching the console's active tenant is gated: {@code /instances/select} is only {@code .authenticated()} in the
+ * Switching the console's active tenant is gated: {@code /tenants/select} is only {@code .authenticated()} in the
  * security config, so this membership re-check is the sole barrier stopping a signed-in user from switching into a
  * tenant it does not belong to (and then reading that tenant's credentials and projects). A member may select its
  * tenant, a super-admin may select any, and a non-member or an unknown tenant is refused.
  */
-public class InstancesControllerTest {
+public class TenantsControllerTest {
 
     @TempDir
     private Path root;
 
-    private InstancesController controller;
+    private TenantsController controller;
     private String selected;
 
     @BeforeEach
@@ -53,7 +53,7 @@ public class InstancesControllerTest {
                 selected = tenant;
             }
         };
-        controller = new InstancesController(tenants, purge,
+        controller = new TenantsController(tenants, purge,
                 new Memberships(Authorization.enforcing(rootStorage.store()), tenants,
                         new MembershipCache()),
                 current);

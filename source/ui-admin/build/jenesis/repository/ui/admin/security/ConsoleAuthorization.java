@@ -42,7 +42,7 @@ final class ConsoleAuthorization {
                 .requestMatchers(HttpMethod.POST, "/ui/logout").permitAll()
                 // The destination of the floor at the bottom of this matrix, so it cannot itself be behind it.
                 .requestMatchers("/ui/no-access").authenticated()
-                .requestMatchers("/ui/instances/create", "/ui/instances/delete").hasRole("SUPERADMIN")
+                .requestMatchers("/ui/tenants/create", "/ui/tenants/delete").hasRole("SUPERADMIN")
                 // The reclaim sweeps every tenant's build-cache projects, so it is the super-admin's whatever the
                 // project rules below grant a tenant's editors.
                 .requestMatchers(HttpMethod.POST, "/ui/projects/volume-reclaim").hasRole("SUPERADMIN")
@@ -50,7 +50,7 @@ final class ConsoleAuthorization {
                 // selected already - but NOT merely authenticated. It is the console's front door, and a principal
                 // that is a member nowhere must meet the floor here as it does everywhere else; a rule ahead of
                 // anyRequest() overrides it, so the floor has to be spelled out rather than inherited.
-                .requestMatchers("/ui/instances", "/ui/instances/select")
+                .requestMatchers("/ui/tenants", "/ui/tenants/select")
                         .access(ConsoleAccessRule.holdsSomething(access))
                 .requestMatchers("/ui/setup", "/ui/setup/**").hasRole("SUPERADMIN")
                 .requestMatchers("/ui/settings", "/ui/settings/**").hasRole("SUPERADMIN")
@@ -61,7 +61,7 @@ final class ConsoleAuthorization {
                 // Screens that moved to the base module keep the floor they had under /settings/**: a shared screen
                 // must not become easier to reach by moving, and the route does not carry the prefix that gated it.
                 // Named one by one so a move is a deliberate decision about access, not a side effect.
-                .requestMatchers("/ui/observability", "/ui/posture").hasRole("SUPERADMIN")
+                .requestMatchers("/ui/metrics", "/ui/posture").hasRole("SUPERADMIN")
                 // Every tenant's cached reads on the node, and every node's grants: nothing about it is a tenant's.
                 .requestMatchers("/ui/caches", "/ui/caches/**").hasRole("SUPERADMIN")
                 .requestMatchers("/ui/admin/**").access(tenants.require(UserDirectory.Role.ADMIN))

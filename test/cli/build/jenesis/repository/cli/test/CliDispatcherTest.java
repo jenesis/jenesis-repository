@@ -25,9 +25,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
  * pipeline verbs map their own status codes: a quarantine listing renders each hold's reasons, a staging
  * promote conflict (409) and a forwarding retry with nothing parked (404) exit non-zero, and a not-installed staging
  * (501) or published index (404) reports the absence without failing the command. The governance and maintenance verbs
- * map theirs the same way: capabilities renders the module list, a not-installed rate-limit (501) or
- * retro-plan (501) reports the absence without failing, a provenance key with signing off (404) and a missing import
- * job (404) exit non-zero, and a batch {@code --explode zip} with a gate-rejected member exits non-zero.
+ * map theirs the same way: capabilities renders the module list, a not-installed rate limit (501) under limits
+ * or enforcement-preview (501) reports the absence without failing, a provenance key with signing off (404) and a
+ * missing import job (404) exit non-zero, and a batch {@code --explode zip} with a gate-rejected member exits
+ * non-zero.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class CliDispatcherTest {
@@ -321,16 +322,16 @@ public class CliDispatcherTest {
     }
 
     @Test
-    public void rate_limit_reports_when_not_installed() throws Exception {
+    public void limits_report_a_rate_limit_that_is_not_installed() throws Exception {
         rateLimitStatus = 501;
-        String out = capture(() -> assertThat(Cli.run(new String[] {"rate-limit"})).isZero());
-        assertThat(out).contains("not installed");
+        String out = capture(() -> assertThat(Cli.run(new String[] {"limits"})).isZero());
+        assertThat(out).contains("quota: unlimited").contains("rate limiting is not installed");
     }
 
     @Test
-    public void retro_plan_reports_when_not_installed() throws Exception {
+    public void enforcement_preview_reports_when_not_installed() throws Exception {
         retroStatus = 501;
-        String out = capture(() -> assertThat(Cli.run(new String[] {"retro-plan", "releases"})).isZero());
+        String out = capture(() -> assertThat(Cli.run(new String[] {"enforcement-preview", "releases"})).isZero());
         assertThat(out).contains("not installed");
     }
 
@@ -379,6 +380,9 @@ public class CliDispatcherTest {
 
             if (matches(path, "/api/capabilities")) {
                 return respond(200, CAPABILITIES);
+            }
+            if (matches(path, "/api/quota")) {
+                return respond(200, "{\"maxBytes\":0,\"usedBytes\":0}");
             }
             if (matches(path, "/api/rate-limit")) {
                 return respond(rateLimitStatus, "{\"permitsPerMinute\":0}");

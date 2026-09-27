@@ -6,6 +6,9 @@
  * other tree with the rest of them, against the console the images actually serve - this module's own shell node
  * is gone, and with it the temptation to prove the product against a composition nobody runs.
  *
+ * <p>It also reads the command-line client's help registry, to hold its headings to the console's groups and topics:
+ * the client may not require the console, so the test that compares the two lives where both can be seen.
+ *
  * @jenesis.release 25
  * @jenesis.exclude spring.security.oauth2.client com.nimbusds/oauth2-oidc-sdk
  * @jenesis.test build.jenesis.repository.ui
@@ -22,6 +25,7 @@ open module build.jenesis.repository.ui.test {
     requires build.jenesis.repository.observation;
     requires build.jenesis.repository.posture;
     requires build.jenesis.repository.contract.testkit;
+    requires build.jenesis.repository.cli;
     requires java.net.http;
     requires spring.core;
     requires spring.beans;

@@ -11,23 +11,23 @@ class NavigationTest {
     @Test
     void a_page_is_offered_when_a_rendered_link_leads_to_it() {
         Navigation navigation = new Navigation(
-                List.of(new Navigation.Link("Operations", "/ui/observability", true)),
+                List.of(new Navigation.Link("Operations", "/ui/metrics", true)),
                 new Navigation.Sidebar("Operations", new Navigation.Link("Back", "/ui/", false), List.of(
                         new Navigation.Section("", List.of(
-                                new Navigation.Link("Metrics", "/ui/observability", true),
+                                new Navigation.Link("Metrics", "/ui/metrics", true),
                                 new Navigation.Link("Walks", "/ui/walks", false))))));
 
         assertThat(navigation.offers("/ui/walks")).as("a sidebar link").isTrue();
-        assertThat(navigation.offers("/ui/observability")).as("a header link").isTrue();
+        assertThat(navigation.offers("/ui/metrics")).as("a header link").isTrue();
         assertThat(navigation.offers("/ui/")).as("the sidebar's way back").isTrue();
     }
 
     @Test
     void a_page_no_link_leads_to_is_not_offered() {
         Navigation navigation = new Navigation(
-                List.of(new Navigation.Link("Operations", "/ui/observability", true)),
+                List.of(new Navigation.Link("Operations", "/ui/metrics", true)),
                 new Navigation.Sidebar("Operations", null, List.of(new Navigation.Section("", List.of(
-                        new Navigation.Link("Metrics", "/ui/observability", true))))));
+                        new Navigation.Link("Metrics", "/ui/metrics", true))))));
 
         assertThat(navigation.offers("/ui/walks")).as("a module this composition does not carry").isFalse();
         assertThat(navigation.offers("/ui/walks/")).as("matched exactly, not by prefix").isFalse();

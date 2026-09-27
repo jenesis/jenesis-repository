@@ -19,7 +19,7 @@ import build.jenesis.repository.scope.Scopes;
  * through the one shared {@link Scopes} rule. The reserved store namespaces the root shares with the artifact store
  * ({@code auth/}, {@code config/}, {@code audit/}, {@code locks/}) are therefore invisible to this service in both
  * directions: they cannot be created, and they are not listed. Excluded only on creation, {@link #all} - the
- * console's {@code /instances} screen and the super-admin's accessible-tenants answer - would offer {@code audit} as
+ * console's {@code /tenants} screen and the super-admin's accessible-tenants answer - would offer {@code audit} as
  * a tenant to open and delete.
  */
 public class TenantService {

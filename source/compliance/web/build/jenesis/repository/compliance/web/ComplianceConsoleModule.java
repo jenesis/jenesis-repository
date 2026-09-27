@@ -39,7 +39,7 @@ public final class ComplianceConsoleModule implements ConsoleModuleProvider {
                 new RepositoryPage("Vulnerabilities", "/vulnerabilities", Topic.RISK, "advisories"),
                 new RepositoryPage("Findings", "/findings", Topic.RISK, "findings"),
                 new RepositoryPage("Maintainer health", "/health", Topic.RISK, "maintainerHealth"),
-                new RepositoryPage("License enforcement preview", "/blast-radius", Topic.RISK, "licensePolicy"),
+                new RepositoryPage("Enforcement preview", "/enforcement-preview", Topic.RISK, "licensePolicy"),
                 new RepositoryPage("Signers", "/signers", Topic.PROVENANCE));
     }
 }

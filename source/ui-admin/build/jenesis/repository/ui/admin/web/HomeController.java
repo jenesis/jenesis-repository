@@ -15,7 +15,7 @@ import build.jenesis.repository.ui.ConsoleScreen;
  * The landing routes. After sign-in a reader is routed by how many tenants they can reach. On a fixed deployment there
  * is one, and it is chosen for everyone. On a deployment of several, a member of exactly one tenant is taken into it,
  * while a deployment administrator - who can reach every tenant - starts with none chosen and picks one from the
- * instances list, which the header's tenant chooser also leads to; so does anyone who belongs to several.
+ * tenants list, which the header's tenant chooser also leads to; so does anyone who belongs to several.
  */
 @Controller
 @ConsoleScreen
@@ -63,7 +63,7 @@ public class HomeController {
         if (setup.redirects(authentication, session)) {
             return "redirect:/ui/setup";
         }
-        return current.name() != null ? "redirect:/ui/repositories" : "redirect:/ui/instances";
+        return current.name() != null ? "redirect:/ui/repositories" : "redirect:/ui/tenants";
     }
 
 

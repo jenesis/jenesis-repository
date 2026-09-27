@@ -4,7 +4,7 @@ import module java.base;
 
 /**
  * The verbs an operator reaches for when running the deployment rather than curating what is in it: the posture and
- * consistency reads, the log tail, the observability and SPI catalogues, the effective configuration, the outbound
+ * consistency reads, the log tail, the metrics report and the SPI catalogue, the effective configuration, the outbound
  * webhooks, the DNS redirect records, and the two provenance-adjacent reads that answer
  * "where did this come from" and "what would hardening do with it".
  *
@@ -89,7 +89,7 @@ final class OperationsCommands {
         return 0;
     }
 
-    static int observability(String[] args, Path home) throws Exception {
+    static int metrics(String[] args, Path home) throws Exception {
         System.out.println(CliSupport.client(home).operations().observability());
         return 0;
     }

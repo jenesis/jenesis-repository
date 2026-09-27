@@ -110,14 +110,15 @@ final class AuthCommands {
     }
 
     /**
-     * {@code principals}: what a signed-in person holds, over the same grants a key and a group hold theirs in.
+     * {@code members}: what a signed-in person holds, over the same grants a key and a group hold theirs in - the
+     * people the console's Members page lists.
      *
      * <p>The one holder that had no client surface: a key has had {@code credentials} from the start and a group
      * now has {@code groups}, while a person's rights were reachable only through the console and the SCIM
      * connector an identity provider drives. What a person holds through a group is the group's and is not edited
      * here - editing it on the member would be editing a copy.
      */
-    static int principals(String[] args, Path home) throws Exception {
+    static int members(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
             for (AccessClient.Principal principal : client.access().principals()) {
@@ -130,7 +131,7 @@ final class AuthCommands {
         switch (args[1]) {
             case "grant" -> {
                 if (args.length < 5) {
-                    throw new IllegalArgumentException("Usage: principals grant <id> <scope> <token,token,...>");
+                    throw new IllegalArgumentException("Usage: members grant <id> <scope> <token,token,...>");
                 }
                 client.access().setPrincipalGrant(args[2], args[3], List.of(args[4].split(",")),
                         args.length > 5 ? args[5] : null);
@@ -139,19 +140,19 @@ final class AuthCommands {
             }
             case "revoke-grant" -> {
                 if (args.length < 4) {
-                    throw new IllegalArgumentException("Usage: principals revoke-grant <id> <scope>");
+                    throw new IllegalArgumentException("Usage: members revoke-grant <id> <scope>");
                 }
                 client.access().removePrincipalGrant(args[2], args[3]);
                 System.out.println("Removed grant " + args[3] + " on " + args[2] + ".");
             }
             case "remove" -> {
                 if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: principals remove <id>");
+                    throw new IllegalArgumentException("Usage: members remove <id>");
                 }
                 client.access().removePrincipal(args[2]);
                 System.out.println("Removed everything granted directly to " + args[2] + ".");
             }
-            default -> throw new IllegalArgumentException("Unknown principals action: " + args[1]);
+            default -> throw new IllegalArgumentException("Unknown members action: " + args[1]);
         }
         return 0;
     }

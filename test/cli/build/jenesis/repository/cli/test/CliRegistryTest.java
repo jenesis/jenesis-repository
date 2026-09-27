@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class CliRegistryTest {
 
-    private static final String OVERVIEW = "jenesis-repo - operate a Jenesis repository";
+    private static final String OVERVIEW = "jenreg - operate a Jenesis repository";
 
     @TempDir
     private static Path home;

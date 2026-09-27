@@ -15,7 +15,7 @@
         consumers that ride it, and read what the last run of each one measured before you shorten a cadence. The
         same document is the <code>walks</code> setting the settings screen, <code>/api/settings</code> and the
         CLI edit. The state of every background task, the walks' consumers among them, is on
-        <a th:href="@{/ui/observability}">Metrics</a>.</small></p>
+        <a th:href="@{/ui/metrics}">Metrics</a>.</small></p>
 
     <article th:each="e : ${overview.entries}" class="setting-group">
         <h2 th:text="${e.name}">rebuild</h2>

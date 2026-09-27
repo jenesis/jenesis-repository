@@ -33,7 +33,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 /**
  * Cross-cutting web concerns of the console's screens - the {@link ConsoleScreen}s, and nothing else in the context,
  * so a failure on the API or the data plane is never answered with the console's error page. Expose the signed-in user, the selected tenant, and the role flags for
- * that tenant to every view (so the layout can greet them, show the instances switcher only when it
+ * that tenant to every view (so the layout can greet them, show the tenant switcher only when it
  * is meaningful, let editors mutate and reserve admin-only controls). The role flags are resolved
  * against the current tenant, and a super-admin is admin everywhere. Validation/storage failures
  * become a friendly error page, and a missing tenant selection bounces back through the router.
@@ -180,8 +180,8 @@ public class GlobalControllerAdvice {
         return roleAtLeast(authentication, Role.EDITOR);
     }
 
-    @ModelAttribute("showInstances")
-    public boolean showInstances(Authentication authentication) {
+    @ModelAttribute("showTenants")
+    public boolean showTenants(Authentication authentication) {
         if (authentication == null) {
             return false;
         }
@@ -224,7 +224,7 @@ public class GlobalControllerAdvice {
         entries.add(new NavEntry("Credentials", "/ui/credentials", Access.ADMIN, Group.ACCESS));
         entries.add(new NavEntry("Members", "/ui/admin", Access.ADMIN, Group.ACCESS));
         entries.add(new NavEntry("Audit trail", "/ui/admin/audit", Access.ADMIN, Group.ACCESS, "audit"));
-        entries.add(new NavEntry("Metrics", "/ui/observability", Access.SUPERADMIN, Group.OPERATIONS));
+        entries.add(new NavEntry("Metrics", "/ui/metrics", Access.SUPERADMIN, Group.OPERATIONS));
         entries.add(new NavEntry("Security posture", "/ui/posture", Access.SUPERADMIN, Group.OPERATIONS));
         entries.add(new NavEntry("Caches", "/ui/caches", Access.SUPERADMIN, Group.OPERATIONS));
         // The group's header link opens its first entry, so the everyday catalogue leads and the first-run guide -
@@ -235,8 +235,8 @@ public class GlobalControllerAdvice {
         entries.add(new NavEntry("Modules", "/ui/settings/modules", Access.SUPERADMIN, Group.SETTINGS));
         // Picking a tenant is meaningful only where there is more than one to pick, and the header's tenant name
         // links here too, so a member of several tenants reaches it without the Settings group being theirs.
-        if (showInstances(authentication)) {
-            entries.add(new NavEntry("Tenants", "/ui/instances", Group.SETTINGS));
+        if (showTenants(authentication)) {
+            entries.add(new NavEntry("Tenants", "/ui/tenants", Group.SETTINGS));
         }
         entries.add(new NavEntry("Backup & restore", "/ui/settings/backup", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("First-run setup", "/ui/setup", Access.SUPERADMIN, Group.SETTINGS));

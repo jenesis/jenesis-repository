@@ -4,7 +4,7 @@ import module java.base;
 
 /**
  * The decisions a new deployment is guided through on its first run - the one definition the console's setup
- * screen ({@code /setup}), the API ({@code GET /api/setup}) and the CLI ({@code jenesis-repo setup}) render, so
+ * screen ({@code /setup}), the API ({@code GET /api/setup}) and the CLI ({@code jenreg setup}) render, so
  * the three surfaces walk the same list in the same order and a step added here appears on all three.
  *
  * <p>A step names the settings it is about and says in a sentence why they are worth deciding now; it never

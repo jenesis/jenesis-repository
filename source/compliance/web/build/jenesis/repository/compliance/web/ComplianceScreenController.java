@@ -65,29 +65,29 @@ public class ComplianceScreenController {
         return "redirect:/ui/repositories/" + repo + "/vulnerabilities";
     }
 
-    /** The retroactive-license-enforcement blast-radius panel: a read-only preview of what turning enforcement on
+    /** The enforcement preview: a read-only dry run of what turning retroactive licence enforcement on
      *  would newly hold in this repository under the current license policy (the console face of
      *  {@code GET /api/licenses/retro/plan}). {@code unknown} widens the preview to the riskier {@code denied+unknown}
      *  mode. The panel degrades to a "not installed" note when no license-policy module contributes a planner. */
-    @GetMapping("/ui/repositories/{repo}/blast-radius")
-    public String blastRadius(@PathVariable("repo") String repo,
-                              @RequestParam(name = "unknown", defaultValue = "false") boolean unknown,
-                              Model model) throws IOException {
+    @GetMapping("/ui/repositories/{repo}/enforcement-preview")
+    public String enforcementPreview(@PathVariable("repo") String repo,
+                                     @RequestParam(name = "unknown", defaultValue = "false") boolean unknown,
+                                     Model model) throws IOException {
         model.addAttribute("repo", repo);
         model.addAttribute("unknown", unknown);
         model.addAttribute("blast", compliance.blastRadius(repo, unknown));
-        return QUALIFIER + "/blast-radius";
+        return QUALIFIER + "/enforcement-preview";
     }
 
-    @PostMapping("/ui/repositories/{repo}/blast-radius")
-    public String recomputeBlastRadius(@PathVariable("repo") String repo,
-                                       @RequestParam(name = "unknown", defaultValue = "false") boolean unknown,
-                                       RedirectAttributes redirect) throws IOException {
+    @PostMapping("/ui/repositories/{repo}/enforcement-preview")
+    public String recomputeEnforcementPreview(@PathVariable("repo") String repo,
+                                              @RequestParam(name = "unknown", defaultValue = "false") boolean unknown,
+                                              RedirectAttributes redirect) throws IOException {
         // The pass assesses every release, so the request starts it and the screen shows it running.
         redirect.addFlashAttribute("message", compliance.computeBlastRadius(repo, unknown)
-                ? "Blast-radius pass started; this screen shows its result when it finishes."
-                : "A blast-radius pass is already running, or no license policy is installed.");
-        return "redirect:/ui/repositories/" + repo + "/blast-radius?unknown=" + unknown;
+                ? "Enforcement preview started; this screen shows its result when it finishes."
+                : "An enforcement preview is already running, or no license policy is installed.");
+        return "redirect:/ui/repositories/" + repo + "/enforcement-preview?unknown=" + unknown;
     }
 
     /** The maintainer-health panel: the durable OpenSSF Scorecard-style health the sweep persisted for a repository's
@@ -108,7 +108,7 @@ public class ComplianceScreenController {
     @PostMapping("/ui/repositories/{repo}/health/rescan")
     public String rescanHealth(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
         // Started, not awaited: the pass asks a live source about every published coordinate. The screen shows it
-        // running and the result when it lands, the same way the vulnerability and blast-radius passes report.
+        // running and the result when it lands, the same way the vulnerability pass and the enforcement preview report.
         redirect.addFlashAttribute("message", compliance.rescanMaintainerHealth(repo)
                 ? "Maintainer-health rescan started; this panel shows its result when it finishes."
                 : "A rescan is already running, or no maintainer-health module is installed.");

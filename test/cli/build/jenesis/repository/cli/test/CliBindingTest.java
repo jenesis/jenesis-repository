@@ -69,8 +69,11 @@ public class CliBindingTest {
             Map.entry("health", Binding.of("/api/health", "health", "releases")),
             Map.entry("findings", Binding.of("/api/findings", "findings", "releases")),
             Map.entry("licenses", Binding.of("/api/licenses", "licenses", "releases")),
-            Map.entry("retro-plan", Binding.of("/api/licenses/retro/plan", "retro-plan", "releases")),
+            Map.entry("enforcement-preview",
+                    Binding.of("/api/licenses/retro/plan", "enforcement-preview", "releases")),
             Map.entry("quarantine", Binding.of("/api/quarantine", "quarantine", "releases")),
+            Map.entry("ai-review",
+                    Binding.of("/api/findings?repo=releases&kind=ai-candidate", "ai-review", "releases")),
             Map.entry("signers", Binding.of("/api/signers", "signers", "releases")),
             Map.entry("signature", Binding.of("/api/signature", "signature", "releases", "/a/b.jar")),
             Map.entry("policy", Binding.of("/api/policy", "policy")),
@@ -93,7 +96,7 @@ public class CliBindingTest {
                     "--source", "nexus", "--url", "http://x/", "--source-repo", "r")),
             Map.entry("export", Binding.of("/api/repository/export", "export", "releases",
                     "--url", "http://x/")),
-            Map.entry("cache", Binding.of("/api/cache/projects", "cache", "projects")),
+            Map.entry("projects", Binding.of("/api/cache/projects", "projects")),
             Map.entry("keylogin", Binding.of("/api/keylogin", "keylogin", "list")),
             Map.entry("scim", Binding.of("/api/scim/token", "scim", "token")),
             Map.entry("posture", Binding.of("/api/admin/posture", "posture")),
@@ -101,7 +104,7 @@ public class CliBindingTest {
             Map.entry("walks", Binding.of("/api/admin/walks", "walks")),
             Map.entry("consistency", Binding.of("/api/admin/consistency", "consistency")),
             Map.entry("logs", Binding.of("/api/admin/logs", "logs")),
-            Map.entry("observability", Binding.of("/api/admin/observability", "observability")),
+            Map.entry("metrics", Binding.of("/api/admin/observability", "metrics")),
             Map.entry("spi", Binding.of("/api/admin/spi", "spi")),
             Map.entry("config", Binding.of("/api/config", "config")),
             Map.entry("webhook", Binding.of("/api/webhook", "webhook", "releases")),
@@ -113,12 +116,11 @@ public class CliBindingTest {
             Map.entry("repos", Binding.of("/api/repositories", "repos")),
             Map.entry("tenants", Binding.of("/api/admin/tenants", "tenants")),
             Map.entry("upstreams", Binding.of("/api/upstreams", "upstreams")),
-            Map.entry("quota", Binding.of("/api/quota", "quota")),
-            Map.entry("rate-limit", Binding.of("/api/rate-limit", "rate-limit")),
+            Map.entry("limits", Binding.of("/api/quota", "limits")),
             Map.entry("audit", Binding.of("/api/audit", "audit")),
             Map.entry("credentials", Binding.of("/api/credentials", "credentials")),
             Map.entry("groups", Binding.of("/api/groups", "groups")),
-            Map.entry("principals", Binding.of("/api/principals", "principals")),
+            Map.entry("members", Binding.of("/api/principals", "members")),
             Map.entry("roles", Binding.of("/api/roles", "roles")),
             Map.entry("trusts", Binding.of("/api/trusts", "trusts")));
 
@@ -202,12 +204,12 @@ public class CliBindingTest {
     @Test
     void a_cache_project_is_deleted_only_when_confirmed() throws Exception {
         server.resetRequests();
-        assertThatThrownBy(() -> run("cache", "delete", "agents"))
+        assertThatThrownBy(() -> run("projects", "delete", "agents"))
                 .as("with no terminal and no --yes, nothing is confirmed").isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("--yes");
         assertThat(server.findAll(RequestPatternBuilder.allRequests())).as("and nothing was sent").isEmpty();
 
-        run("cache", "delete", "agents", "--yes");
+        run("projects", "delete", "agents", "--yes");
 
         List<LoggedRequest> requests = server.findAll(RequestPatternBuilder.allRequests());
         assertThat(requests).hasSize(1);

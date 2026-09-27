@@ -29,7 +29,7 @@ import org.springframework.context.annotation.Import;
  */
 @Configuration(proxyBeanMethods = false)
 @Import({LoginController.class, NoAccessController.class, SpiCatalogScreenController.class,
-        PostureScreenController.class, ObservabilityScreenController.class, DevConsoleSecurity.class,
+        PostureScreenController.class, MetricsScreenController.class, DevConsoleSecurity.class,
         DevSources.class})
 public class ConsoleScreensConfig {
 }

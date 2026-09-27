@@ -17,7 +17,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * A tenant is created, listed and deleted over the API through the same directory and purge the console's instances
+ * A tenant is created, listed and deleted over the API through the same directory and purge the console's tenants
  * screen uses: a deletion takes the tenant's artifacts with it, the audit names the key's hash and never the key, and
  * a key outside the operator tenant is refused however it is granted.
  */

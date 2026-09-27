@@ -22,14 +22,14 @@ import build.jenesis.repository.ui.ConsoleScreen;
  */
 @Controller
 @ConsoleScreen
-public class InstancesController {
+public class TenantsController {
 
     private final TenantService tenants;
     private final TenantPurge purge;
     private final Memberships memberships;
     private final SessionCurrentTenant current;
 
-    public InstancesController(TenantService tenants, TenantPurge purge, Memberships memberships,
+    public TenantsController(TenantService tenants, TenantPurge purge, Memberships memberships,
                                SessionCurrentTenant current) {
         this.tenants = tenants;
         this.purge = purge;
@@ -37,17 +37,17 @@ public class InstancesController {
         this.current = current;
     }
 
-    @GetMapping("/ui/instances")
+    @GetMapping("/ui/tenants")
     public String list(Authentication authentication, Model model) throws IOException {
         boolean superadmin = hasSuperadmin(authentication);
         List<String> all = superadmin ? tenants.all() : memberships.accessibleTo(authentication.getName(), false);
         model.addAttribute("tenants", all);
         model.addAttribute("selected", current.name());
         model.addAttribute("superadmin", superadmin);
-        return "instances";
+        return "tenants";
     }
 
-    @PostMapping("/ui/instances/select")
+    @PostMapping("/ui/tenants/select")
     public String select(@RequestParam("tenant") String tenant, Authentication authentication) {
         boolean superadmin = hasSuperadmin(authentication);
         if (!tenants.exists(tenant)) {
@@ -60,22 +60,22 @@ public class InstancesController {
         return "redirect:/ui/repositories";
     }
 
-    @PostMapping("/ui/instances/create")
+    @PostMapping("/ui/tenants/create")
     public String create(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
         tenants.create(name);           // records the tenant.create audit event in the domain (TenantService)
         redirect.addFlashAttribute("message",
                 "Created tenant '" + name + "'. Select it, then add its first admin under Admin.");
-        return "redirect:/ui/instances";
+        return "redirect:/ui/tenants";
     }
 
-    @PostMapping("/ui/instances/delete")
+    @PostMapping("/ui/tenants/delete")
     public String delete(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
         purge.delete(name);
         if (name.equals(current.name())) {
             current.clear();
         }
         redirect.addFlashAttribute("message", "Deleted tenant '" + name + "'.");
-        return "redirect:/ui/instances";
+        return "redirect:/ui/tenants";
     }
 
     private static boolean hasSuperadmin(Authentication authentication) {

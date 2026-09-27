@@ -19,18 +19,18 @@ import org.springframework.web.bind.annotation.GetMapping;
  */
 @Controller
 @ConsoleScreen
-public class ObservabilityScreenController {
+public class MetricsScreenController {
 
     private final ConfigurableListableBeanFactory beans;
 
-    public ObservabilityScreenController(ConfigurableListableBeanFactory beans) {
+    public MetricsScreenController(ConfigurableListableBeanFactory beans) {
         this.beans = beans;
     }
 
     /** The report of this context: the discovered sources and every source among the singletons it has built. */
-    @GetMapping("/ui/observability")
-    public String observability(Model model) throws IOException {
+    @GetMapping("/ui/metrics")
+    public String metrics(Model model) throws IOException {
         model.addAttribute("report", ObservabilityReport.of(Arrays.stream(beans.getSingletonNames()).map(beans::getSingleton).filter(Objects::nonNull).toList()));
-        return "console/observability";
+        return "console/metrics";
     }
 }

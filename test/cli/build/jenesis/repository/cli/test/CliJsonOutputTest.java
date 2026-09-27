@@ -109,7 +109,7 @@ public class CliJsonOutputTest {
         try {
             out = capture(() -> {
                 try {
-                    Cli.run(new String[] {"quota", "--json"});
+                    Cli.run(new String[] {"limits", "--json"});
                 } catch (Exception expected) {
                     // main() renders it; run() is allowed to throw, which is what the wrapper below stands in for
                     System.err.println("{\"error\":" + expected.getMessage().length() + "}");

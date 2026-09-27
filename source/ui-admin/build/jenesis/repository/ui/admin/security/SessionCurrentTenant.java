@@ -8,7 +8,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 /**
  * The web console's {@link CurrentTenant}: the tenant the current session has selected, held as an HTTP-session
  * attribute. A session with exactly one accessible tenant has it selected automatically and never sees the
- * concept; a user with several, or an env super-admin, picks one on the instances page. Selecting and clearing are
+ * concept; a user with several, or an env super-admin, picks one on the tenants page. Selecting and clearing are
  * session mutations, so they live here in the web layer rather than on the Spring-free domain interface.
  */
 @Component

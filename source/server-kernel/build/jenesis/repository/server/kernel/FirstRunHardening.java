@@ -43,7 +43,7 @@ public final class FirstRunHardening {
             "Enable the additional credentialed advisory feeds you hold tokens for (GitHub, Snyk, VulnCheck, VulnDB, "
                     + "Mend, Socket) on the settings screen or over /api/settings - and decide the public no-credential "
                     + "feeds (OSV, CISA KEV, OpenSSF, EPSS, deps.dev), which are opt-in too: the first-run setup guide "
-                    + "(/setup on the console, jenesis-repo setup on the CLI) walks them with the rest.",
+                    + "(/setup on the console, jenreg setup on the CLI) walks them with the rest.",
             "Set a deployment-wide deny-list for any coordinates you never want served, however they arrive.");
 
     /** One recommended tightening step: a discovered setting's key, its human label and its description (the "how"). */
