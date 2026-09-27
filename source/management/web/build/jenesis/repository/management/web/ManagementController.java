@@ -229,19 +229,6 @@ public class ManagementController {
         response.getWriter().write("audit is not installed on this deployment");
     }
 
-    private static final Pattern HASH = Pattern.compile("[0-9a-f]{64}");
-
-    private static String text(Instant instant) {
-        return instant == null ? null : instant.toString();
-    }
-
-    private static String hashId(String id) {
-        if (id == null || !HASH.matcher(id).matches()) {
-            throw new IllegalArgumentException("Invalid credential id");
-        }
-        return id;
-    }
-
     /** A blank value is no bound; otherwise an absolute ISO-8601 instant. */
     private static Instant instant(String value) {
         return value == null || value.isBlank() ? null : Instant.parse(value.trim());
@@ -270,20 +257,11 @@ public class ManagementController {
         response.setStatus(400);
     }
 
-
-
-
-
-
     public record RoleRequest(String tokens) {
     }
 
     public record AuditView(String at, String actor, String action, String target) {
     }
-
-
-
-
 
     public record PolicyView(String defaultLifetime, String maxLifetime) {
     }

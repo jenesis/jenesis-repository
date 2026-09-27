@@ -15,7 +15,8 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.cleanup.web {
-    exports build.jenesis.repository.cleanup.web to build.jenesis.repository.server.kernel.test;
+    exports build.jenesis.repository.cleanup.web to build.jenesis.repository.server.kernel.test,
+            build.jenesis.repository.web.test;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.audit;

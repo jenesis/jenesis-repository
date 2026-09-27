@@ -18,7 +18,8 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.config.web {
-    exports build.jenesis.repository.config.web to build.jenesis.repository.server.kernel.test;
+    exports build.jenesis.repository.config.web to build.jenesis.repository.server.kernel.test,
+            build.jenesis.repository.web.test;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.format;

@@ -115,11 +115,6 @@ public class ConfigController {
         return view;
     }
 
-    /** A tenant's runtime-settings view: only the tenant-overridable keys (the gate policy, deny list and forward
-     *  targets a tenant may retune), each with its tenant-effective value along the chain <em>pin &gt; tenant document
-     *  &gt; global document &gt; default</em>, its global effective value as the tenant's baseline, whether this tenant
-     *  has overridden it, and whether it is pinned deployment-wide (a pinned key is inert for a tenant too). The
-     *  deployment-wide knobs are not listed - a tenant cannot change them. */
     /**
      * The first-run setup guide - the decisions a new deployment should make, in order, each with the settings
      * rows it is about: the one list the console's {@code /setup} screen and the CLI's {@code setup} verb render
@@ -154,6 +149,11 @@ public class ConfigController {
         return new SetupView(steps);
     }
 
+    /** A tenant's runtime-settings view: only the tenant-overridable keys (the gate policy, deny list and forward
+     *  targets a tenant may retune), each with its tenant-effective value along the chain <em>pin &gt; tenant document
+     *  &gt; global document &gt; default</em>, its global effective value as the tenant's baseline, whether this tenant
+     *  has overridden it, and whether it is pinned deployment-wide (a pinned key is inert for a tenant too). The
+     *  deployment-wide knobs are not listed - a tenant cannot change them. */
     private List<SettingView> tenantSettings(String tenant) {
         Map<String, String> tenantOverrides = settings.overrides(tenant);
         List<SettingView> view = new ArrayList<>();

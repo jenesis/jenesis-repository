@@ -220,16 +220,6 @@ public class RepositoryAdminController {
     }
 
     /**
-     * Delete a repository and everything it holds, and forget the tenant's own definition of it - the deployment's is
-     * every tenant's, so it stays. Only through the deletion
-     * dialog: the request must carry the phrase the dialog has the reader type, {@code delete <name>}, so a form
-     * posted without it - or for another name - deletes nothing. The objects go off the request path; the list shows
-     * the repository as being deleted until they are gone.
-     *
-     * <p>Forgetting the definition reads the settings document - one object per module under a constant prefix, as
-     * every settings handler does - and nothing on the request path reads the repository's objects.
-     */
-    /**
      * Route this tenant's repository: store a definition of the tenant's own, which routes the repository over the
      * deployment's, validated exactly as the deployment's are. A super-admin's act, as the API's is - repointing an
      * upstream is the operator's decision, not a tenant administrator's.
@@ -258,6 +248,16 @@ public class RepositoryAdminController {
         return "redirect:/ui/repositories/" + repo;
     }
 
+    /**
+     * Delete a repository and everything it holds, and forget the tenant's own definition of it - the deployment's is
+     * every tenant's, so it stays. Only through the deletion
+     * dialog: the request must carry the phrase the dialog has the reader type, {@code delete <name>}, so a form
+     * posted without it - or for another name - deletes nothing. The objects go off the request path; the list shows
+     * the repository as being deleted until they are gone.
+     *
+     * <p>Forgetting the definition reads the settings document - one object per module under a constant prefix, as
+     * every settings handler does - and nothing on the request path reads the repository's objects.
+     */
     @PostMapping("/ui/repositories/{repo}/delete")
     public String delete(@PathVariable("repo") String name,
                          @RequestParam(name = "confirm", defaultValue = "") String confirm,

@@ -16,6 +16,7 @@ open module build.jenesis.repository.ui.admin.test {
     requires build.jenesis.repository.ui.store;
     requires build.jenesis.repository.ui.identity;
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.cleanup;
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.settings;
@@ -36,6 +37,8 @@ open module build.jenesis.repository.ui.admin.test {
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.format.maven;
+    requires build.jenesis.repository.format.raw;
+    requires build.jenesis.repository.servlet.testkit;
     requires build.jenesis.repository.cache.storage;
     requires build.jenesis.repository.cache.storage.delegating;
     requires build.jenesis.repository.cache.storage.testkit;
