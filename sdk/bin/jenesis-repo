@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# The jenesis-repo command as SDKMAN installs it: the client's launcher jar under lib/, run by a Java 25 or newer
+# runtime from JAVA_HOME or the PATH.
+set -e
+SCRIPT="$0"
+while [ -L "$SCRIPT" ]; do
+    LINK="$(readlink "$SCRIPT")"
+    case "$LINK" in
+        /*) SCRIPT="$LINK" ;;
+        *) SCRIPT="$(dirname "$SCRIPT")/$LINK" ;;
+    esac
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd -P)"
+CLI_HOME="$(dirname "$SCRIPT_DIR")"
+
+if [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/java" ]; then
+    JAVA="${JAVA_HOME}/bin/java"
+elif command -v java >/dev/null 2>&1; then
+    JAVA="java"
+else
+    echo "jenesis-repo: no Java runtime found - set JAVA_HOME or add 'java' to PATH (Java 25 or newer required)" >&2
+    exit 1
+fi
+
+if ! JAVA_VERSION_OUTPUT="$("$JAVA" -version 2>&1)"; then
+    echo "jenesis-repo: failed to invoke '$JAVA -version'" >&2
+    exit 1
+fi
+JAVA_MAJOR="$(printf '%s\n' "$JAVA_VERSION_OUTPUT" | awk -F'"' '/version/ {split($2, parts, /[._-]/); print parts[1]+0; exit}')"
+if [ "${JAVA_MAJOR:-0}" -lt 25 ] 2>/dev/null; then
+    JAVA_REPORTED="$(printf '%s\n' "$JAVA_VERSION_OUTPUT" | awk -F'"' '/version/ {print $2; exit}')"
+    echo "jenesis-repo: Java 25 or newer required, but '$JAVA' reports version '${JAVA_REPORTED:-unknown}'" >&2
+    exit 1
+fi
+
+exec "$JAVA" ${JAVA_OPTS:-} -jar "$CLI_HOME/lib/jenesis-repo.jar" "$@"

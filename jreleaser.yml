@@ -27,6 +27,23 @@ release:
     skipTag: false
     tagName: 'v{{projectVersion}}'
 
+# The command-line client: its launcher jar as a download of its own, and the SDKMAN archive that wraps it with the
+# jenesis-repo command. Both are assembled by release.yml after staging; SDKMAN itself is published from release.yml
+# against state.sdkman.io, since JReleaser speaks only SDKMAN's retired vendor API.
+distributions:
+  jenesis-repo:
+    type: JAVA_BINARY
+    executable:
+      name: jenesis-repo
+    java:
+      mainClass: build.jenesis.repository.cli.Cli
+    artifacts:
+      - path: 'sdk/jenesis-repo-{{projectVersion}}.zip'
+
+files:
+  artifacts:
+    - path: 'sdk/jenesis-repo-{{projectVersion}}.jar'
+
 deploy:
   maven:
     mavenCentral:
