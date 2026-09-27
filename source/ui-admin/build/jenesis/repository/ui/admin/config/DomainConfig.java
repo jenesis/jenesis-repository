@@ -33,6 +33,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.ConfigurableEnvironment;
 import build.jenesis.repository.scope.Scopes;
+import build.jenesis.repository.server.RepositoryRoutingProvider;
 
 /**
  * Wires the Spring-free {@code build.jenesis.repository.ui.store} application-service layer into the console's context. The
@@ -151,7 +152,8 @@ public class DomainConfig {
      *  that decides whether a tenant is chosen for the reader, and the header that shows which one is. */
     @Bean
     public Tenancy tenancy(ConfigurableEnvironment environment) {
-        return new Tenancy(environment.getProperty("jenreg.tenancy", "fixed").equals("fixed"));
+        return new Tenancy(environment.getProperty("jenreg." + RepositoryRoutingProvider.SETTING,
+                RepositoryRoutingProvider.FIXED).equals(RepositoryRoutingProvider.FIXED));
     }
 
     /** Whether the deployment serves one tenant ({@code jenreg.tenancy=fixed}) or several. */

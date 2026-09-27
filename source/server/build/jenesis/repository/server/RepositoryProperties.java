@@ -157,7 +157,7 @@ public class RepositoryProperties {
      *  traversal-free and, when a key is also present, must name the key's own tenant (else a {@code 403}), so a key
      *  for tenant A can never be turned against tenant B by forging the Host or path. All four modes address the same
      *  layout, so a deployment can be flipped between them by a restart and finds its data where it was left. */
-    private String tenancy = "fixed";
+    private String tenancy = RepositoryRoutingProvider.FIXED;
 
     /** The host→tenant mapping consulted under {@code tenancy=host}: a comma-separated list of
      *  {@code <host>=<tenant>} pairs (e.g. {@code acme.cdn.example.com=acme,foo.cdn.example.com=foo}), the host matched
