@@ -18,6 +18,7 @@ import build.jenesis.repository.upstream.UpstreamCredentialSource;
 import build.jenesis.repository.upstream.store.StoreUpstreamCredentials;
 import build.jenesis.repository.servlet.testkit.Servlets;
 import build.jenesis.repository.web.testkit.Web;
+import jakarta.servlet.http.HttpServletRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -57,6 +58,11 @@ class ConfigControllerTest {
                 Web.routing(store, repositories));
     }
 
+    /** An {@code /api} call, which names no tenant: the routing answers the one this deployment serves. */
+    private static HttpServletRequest request() {
+        return Servlets.request("PUT", "/api/settings");
+    }
+
     private ConfigController.SettingView row(List<ConfigController.SettingView> rows, String key) {
         return rows.stream().filter(row -> row.key().equals(key)).findFirst().orElseThrow();
     }
@@ -69,7 +75,7 @@ class ConfigControllerTest {
 
         Servlets.Response response = Servlets.response();
         controller.setSetting("vulnerability-threshold", "operator-key", null,
-                new ConfigController.SettingRequest("HIGH"), response.servlet());
+                new ConfigController.SettingRequest("HIGH"), request(), response.servlet());
 
         assertThat(response.status()).isEqualTo(200);
         ConfigController.SettingView after = row(controller.settings(null, null), "vulnerability-threshold");
@@ -90,9 +96,10 @@ class ConfigControllerTest {
         assertThat(pinned.value()).as("the pin's value is the effective one").isEqualTo("REJECT");
 
         Servlets.Response put = Servlets.response();
-        controller.setSetting(PINNED, null, null, new ConfigController.SettingRequest("ALLOW"), put.servlet());
+        controller.setSetting(PINNED, null, null, new ConfigController.SettingRequest("ALLOW"),
+                request(), put.servlet());
         Servlets.Response delete = Servlets.response();
-        controller.clearSetting(PINNED, null, null, delete.servlet());
+        controller.clearSetting(PINNED, null, null, request(), delete.servlet());
 
         assertThat(put.status()).isEqualTo(409);
         assertThat(put.body()).contains("is pinned by").contains("would be inert");
@@ -105,12 +112,12 @@ class ConfigControllerTest {
     void an_unknown_key_and_an_unparsable_value_are_refused_with_nothing_stored() throws IOException {
         Servlets.Response unknown = Servlets.response();
         controller.setSetting("no-such-setting", null, null, new ConfigController.SettingRequest("x"),
-                unknown.servlet());
+                request(), unknown.servlet());
         Servlets.Response unparsable = Servlets.response();
         controller.setSetting("vulnerability-threshold", null, null, new ConfigController.SettingRequest("SEVERE"),
-                unparsable.servlet());
+                request(), unparsable.servlet());
         Servlets.Response clearUnknown = Servlets.response();
-        controller.clearSetting("no-such-setting", null, null, clearUnknown.servlet());
+        controller.clearSetting("no-such-setting", null, null, request(), clearUnknown.servlet());
 
         assertThat(unknown.status()).isEqualTo(400);
         assertThat(unparsable.status()).isEqualTo(400);
@@ -122,10 +129,10 @@ class ConfigControllerTest {
     @Test
     void a_cleared_setting_reverts_to_its_default() throws IOException {
         controller.setSetting("vulnerability-threshold", null, null, new ConfigController.SettingRequest("LOW"),
-                Servlets.response().servlet());
+                request(), Servlets.response().servlet());
         Servlets.Response response = Servlets.response();
 
-        controller.clearSetting("vulnerability-threshold", null, null, response.servlet());
+        controller.clearSetting("vulnerability-threshold", null, null, request(), response.servlet());
 
         assertThat(response.status()).isEqualTo(200);
         assertThat(row(controller.settings(null, null), "vulnerability-threshold").overridden()).isFalse();
@@ -137,7 +144,7 @@ class ConfigControllerTest {
         Servlets.Response response = Servlets.response();
 
         controller.setSetting("vulnerability-threshold", null, "acme", new ConfigController.SettingRequest("LOW"),
-                response.servlet());
+                request(), response.servlet());
 
         assertThat(response.status()).isEqualTo(200);
         List<ConfigController.SettingView> tenant = controller.settings(null, "acme");
@@ -148,7 +155,7 @@ class ConfigControllerTest {
         assertThat(row(controller.settings(null, null), "vulnerability-threshold").overridden())
                 .as("the deployment-wide value is untouched").isFalse();
 
-        controller.clearSetting("vulnerability-threshold", null, "acme", Servlets.response().servlet());
+        controller.clearSetting("vulnerability-threshold", null, "acme", request(), Servlets.response().servlet());
         assertThat(row(controller.settings(null, "acme"), "vulnerability-threshold").overridden()).isFalse();
         assertThat(audit.rows()).extracting(Web.Recorded::target)
                 .containsExactly("acme/vulnerability-threshold", "acme/vulnerability-threshold");
@@ -167,31 +174,32 @@ class ConfigControllerTest {
     @Test
     void an_exported_bundle_restores_and_a_bad_or_pinned_one_is_refused_before_a_write() throws IOException {
         controller.setSetting("vulnerability-threshold", null, null, new ConfigController.SettingRequest("HIGH"),
-                Servlets.response().servlet());
+                request(), Servlets.response().servlet());
         Servlets.Response exported = Servlets.response();
         controller.exportSettings(null, exported.servlet());
         assertThat(exported.contentType()).isEqualTo("application/json");
         assertThat(exported.body()).contains("\"vulnerability-threshold\"").contains("\"HIGH\"");
 
         Servlets.Response missing = Servlets.response();
-        controller.importSettings(null, null, null, missing.servlet());
+        controller.importSettings(null, null, null, request(), missing.servlet());
         assertThat(missing.status()).isEqualTo(400);
 
         Servlets.Response bad = Servlets.response();
         controller.importSettings(null, null, Map.of(SettingsDocuments.moduleOf("vulnerability-threshold"),
-                Map.of("vulnerability-threshold", "SEVERE")), bad.servlet());
+                Map.of("vulnerability-threshold", "SEVERE")), request(), bad.servlet());
         assertThat(bad.status()).isEqualTo(400);
         assertThat(bad.body()).contains("does not resolve");
 
         Servlets.Response pinned = Servlets.response();
-        controller.importSettings(null, null, Map.of(SettingsDocuments.moduleOf(PINNED), Map.of(PINNED, "ALLOW")), pinned.servlet());
+        controller.importSettings(null, null, Map.of(SettingsDocuments.moduleOf(PINNED), Map.of(PINNED, "ALLOW")),
+                request(), pinned.servlet());
         assertThat(pinned.status()).isEqualTo(409);
         assertThat(pinned.body()).contains(PINNED);
         assertThat(settings.overrides()).containsEntry("vulnerability-threshold", "HIGH");
 
         Servlets.Response restored = Servlets.response();
         controller.importSettings(null, null, Map.of(SettingsDocuments.moduleOf("vulnerability-threshold"), Map.of("vulnerability-threshold", "MEDIUM")),
-                restored.servlet());
+                request(), restored.servlet());
         assertThat(restored.status()).isEqualTo(200);
         assertThat(settings.overrides()).containsEntry("vulnerability-threshold", "MEDIUM");
         assertThat(audit.actions()).endsWith("settings.import");
@@ -201,7 +209,7 @@ class ConfigControllerTest {
     void a_tenant_slice_is_exported_and_restored_on_its_own() throws IOException {
         Servlets.Response restored = Servlets.response();
         controller.importSettings(null, "acme", Map.of(SettingsDocuments.moduleOf("deny-list"), Map.of("deny-list", "pkg:npm/evil")),
-                restored.servlet());
+                request(), restored.servlet());
         assertThat(restored.status()).isEqualTo(200);
 
         Servlets.Response exported = Servlets.response();
@@ -215,16 +223,17 @@ class ConfigControllerTest {
     void a_routing_entry_is_parsed_and_screened_before_it_is_stored() throws IOException {
         Servlets.Response writable = Servlets.response();
         controller.setRepositoryDefinition("releases", "key", null,
-                new ConfigController.NamedValueRequest("writable"), writable.servlet());
+                new ConfigController.NamedValueRequest("writable"), request(), writable.servlet());
         Servlets.Response nonsense = Servlets.response();
         controller.setRepositoryDefinition("broken", null, null,
-                new ConfigController.NamedValueRequest("sometimes maybe"), nonsense.servlet());
+                new ConfigController.NamedValueRequest("sometimes maybe"), request(), nonsense.servlet());
         Servlets.Response plaintext = Servlets.response();
         controller.setRepositoryDefinition("mirror", null, null,
-                new ConfigController.NamedValueRequest("fallback http://mirror.example/maven2"), plaintext.servlet());
+                new ConfigController.NamedValueRequest("fallback http://mirror.example/maven2"),
+                request(), plaintext.servlet());
         Servlets.Response unnamed = Servlets.response();
         controller.setRepositoryDefinition("..", null, null, new ConfigController.NamedValueRequest("writable"),
-                unnamed.servlet());
+                request(), unnamed.servlet());
 
         assertThat(writable.status()).isEqualTo(200);
         assertThat(nonsense.status()).isEqualTo(400);
@@ -236,7 +245,7 @@ class ConfigControllerTest {
                 .containsExactly(new ConfigController.NamedValue("releases", "writable"));
         assertThat(audit.actions()).containsExactly(AuditActions.REPOSITORY_SET);
 
-        controller.removeRepositoryDefinition("releases", null, null, Servlets.response().servlet());
+        controller.removeRepositoryDefinition("releases", null, null, request(), Servlets.response().servlet());
         assertThat(controller.repositoryDefinitions(null)).isEmpty();
         assertThat(audit.actions()).endsWith(AuditActions.REPOSITORY_REMOVE);
     }
@@ -244,10 +253,10 @@ class ConfigControllerTest {
     @Test
     void a_tenant_routes_its_own_repository_over_the_deployment() throws IOException {
         controller.setRepositoryDefinition("releases", null, "acme",
-                new ConfigController.NamedValueRequest("writable"), Servlets.response().servlet());
+                new ConfigController.NamedValueRequest("writable"), request(), Servlets.response().servlet());
         Servlets.Response badTenant = Servlets.response();
         controller.setRepositoryDefinition("releases", null, "not a tenant",
-                new ConfigController.NamedValueRequest("writable"), badTenant.servlet());
+                new ConfigController.NamedValueRequest("writable"), request(), badTenant.servlet());
 
         assertThat(controller.repositoryDefinitions("acme"))
                 .containsExactly(new ConfigController.NamedValue("releases", "writable"));
@@ -262,15 +271,16 @@ class ConfigControllerTest {
     void a_format_upstream_must_be_an_https_url() throws IOException {
         Servlets.Response https = Servlets.response();
         controller.setUpstream("npm", null, null, new ConfigController.NamedValueRequest("https://registry.npmjs.org"),
-                https.servlet());
+                request(), https.servlet());
         Servlets.Response plaintext = Servlets.response();
         controller.setUpstream("pypi", null, null, new ConfigController.NamedValueRequest("http://pypi.example/"),
-                plaintext.servlet());
+                request(), plaintext.servlet());
         Servlets.Response blank = Servlets.response();
-        controller.setUpstream("go", null, null, new ConfigController.NamedValueRequest(" "), blank.servlet());
+        controller.setUpstream("go", null, null, new ConfigController.NamedValueRequest(" "),
+                request(), blank.servlet());
         Servlets.Response malformed = Servlets.response();
         controller.setUpstream("go", null, null, new ConfigController.NamedValueRequest("https://bad host/"),
-                malformed.servlet());
+                request(), malformed.servlet());
 
         assertThat(https.status()).isEqualTo(200);
         assertThat(plaintext.status()).isEqualTo(400);
@@ -280,7 +290,7 @@ class ConfigControllerTest {
         assertThat(controller.upstreams(null))
                 .containsExactly(new ConfigController.NamedValue("npm", "https://registry.npmjs.org"));
 
-        controller.removeUpstream("npm", null, null, Servlets.response().servlet());
+        controller.removeUpstream("npm", null, null, request(), Servlets.response().servlet());
         assertThat(controller.upstreams(null)).isEmpty();
         assertThat(audit.actions()).containsExactly(AuditActions.UPSTREAM_SET, AuditActions.UPSTREAM_REMOVE);
     }
@@ -291,9 +301,10 @@ class ConfigControllerTest {
         assertThat(controller.upstreamCredentialHosts(list.servlet())).isNull();
         Servlets.Response set = Servlets.response();
         controller.setUpstreamCredential("nexus.internal", null,
-                new ConfigController.UpstreamAuthRequest("bearer", null, null, "t0ken", null), set.servlet());
+                new ConfigController.UpstreamAuthRequest("bearer", null, null, "t0ken", null),
+                request(), set.servlet());
         Servlets.Response remove = Servlets.response();
-        controller.removeUpstreamCredential("nexus.internal", null, remove.servlet());
+        controller.removeUpstreamCredential("nexus.internal", null, request(), remove.servlet());
 
         assertThat(List.of(list.status(), set.status(), remove.status())).containsOnly(501);
         assertThat(list.body()).isEqualTo("upstream credentials are not installed on this deployment");
@@ -305,16 +316,18 @@ class ConfigControllerTest {
                 SecretCipher.of("k1:" + Base64.getEncoder().encodeToString(new byte[32]))));
         Servlets.Response set = Servlets.response();
         keyed.setUpstreamCredential("nexus.internal", "operator",
-                new ConfigController.UpstreamAuthRequest("bearer", null, null, "t0ken", null), set.servlet());
+                new ConfigController.UpstreamAuthRequest("bearer", null, null, "t0ken", null), request(),
+                        set.servlet());
         Servlets.Response incomplete = Servlets.response();
         keyed.setUpstreamCredential("other.internal", null,
-                new ConfigController.UpstreamAuthRequest("basic", "user", null, null, null), incomplete.servlet());
+                new ConfigController.UpstreamAuthRequest("basic", "user", null, null, null), request(),
+                        incomplete.servlet());
 
         assertThat(set.status()).isEqualTo(200);
         assertThat(incomplete.status()).isEqualTo(400);
         assertThat(keyed.upstreamCredentialHosts(Servlets.response().servlet())).containsExactly("nexus.internal");
 
-        keyed.removeUpstreamCredential("nexus.internal", null, Servlets.response().servlet());
+        keyed.removeUpstreamCredential("nexus.internal", null, request(), Servlets.response().servlet());
         assertThat(keyed.upstreamCredentialHosts(Servlets.response().servlet())).isEmpty();
         assertThat(audit.actions()).containsExactly(AuditActions.UPSTREAM_AUTH_SET, AuditActions.UPSTREAM_AUTH_REMOVE);
     }
@@ -326,7 +339,8 @@ class ConfigControllerTest {
         Servlets.Response response = Servlets.response();
 
         unkeyed.setUpstreamCredential("nexus.internal", null,
-                new ConfigController.UpstreamAuthRequest("bearer", null, null, "t0ken", null), response.servlet());
+                new ConfigController.UpstreamAuthRequest("bearer", null, null, "t0ken", null), request(),
+                        response.servlet());
 
         assertThat(response.status()).isEqualTo(400);
         assertThat(response.body()).contains("JENREG_SECRETS_KEY");

@@ -3,6 +3,7 @@ package build.jenesis.repository.management.web;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.CredentialContext;
 import build.jenesis.repository.server.RepositoryAutoConfiguration;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Repositories;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -13,9 +14,8 @@ import org.springframework.context.annotation.Bean;
  * This distribution's {@link CredentialContext}, contributed <em>before</em> the core decides it needs a default.
  *
  * <p>The credential routes live once, in the core's {@code CredentialsController}. Only two things vary here and
- * neither is logic - the tenant is resolved through the deployment's own tenancy rather than read off the key, and
- * every mutation is written to the audit ledger - so they are supplied through this seam instead of by restating
- * the routes.
+ * neither is logic - every mutation is written to the audit ledger, and a caller naming no tenant falls back to the
+ * configured default - so they are supplied through this seam instead of by restating the routes.
  *
  * <p>An auto-configuration ordered {@code before} the core's, rather than a plain {@code @Configuration} bean, so
  * the core's {@code @ConditionalOnMissingBean} sees this one already present and steps aside. Exactly ONE
@@ -34,7 +34,7 @@ public class CredentialContextAutoConfiguration {
 
     @Bean
     @ConditionalOnBean({Repositories.class, AuditTrail.class})
-    public CredentialContext credentialContext(Repositories repositories, AuditTrail audit) {
-        return new AuditedCredentialContext(repositories, audit);
+    public CredentialContext credentialContext(RepositoryProperties properties, AuditTrail audit) {
+        return new AuditedCredentialContext(properties.getDefaultTenant(), audit);
     }
 }

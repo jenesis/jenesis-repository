@@ -190,7 +190,7 @@ public class RepositoryAutoConfiguration {
                 + "as it is set.", tenant);
     }
 
-    /** The default credential context: tenant from the key, no auditing. A distribution publishes its own. */
+    /** The default credential context: no auditing. A distribution publishes its own. */
     @Bean
     @ConditionalOnMissingBean
     public CredentialContext credentialContext() {
@@ -208,23 +208,26 @@ public class RepositoryAutoConfiguration {
      *  reason to stand down. The two serve different paths and both belong; only the name was shared. */
     @Bean("repositoryCredentialsController")
     @ConditionalOnMissingBean
-    public CredentialsController credentialsController(Authorization authorization, CredentialContext context) {
-        return new CredentialsController(authorization, context);
+    public CredentialsController credentialsController(Authorization authorization, RepositoryRouting routing,
+                                                       CredentialContext context) {
+        return new CredentialsController(authorization, routing, context);
     }
 
     /** The one person surface, declared beside the other two holders' and named the same way. */
     @Bean("repositoryPrincipalsController")
     @ConditionalOnMissingBean
-    public PrincipalsController principalsController(Authorization authorization, CredentialContext context) {
-        return new PrincipalsController(authorization, context);
+    public PrincipalsController principalsController(Authorization authorization, RepositoryRouting routing,
+                                                     CredentialContext context) {
+        return new PrincipalsController(authorization, routing, context);
     }
 
     /** The one group surface, declared beside the credential one and named the same way and for the same reason:
      *  a console that renders group pages would otherwise collide with it on an unqualified bean name. */
     @Bean("repositoryGroupsController")
     @ConditionalOnMissingBean
-    public GroupsController groupsController(Authorization authorization, CredentialContext context) {
-        return new GroupsController(authorization, context);
+    public GroupsController groupsController(Authorization authorization, RepositoryRouting routing,
+                                             CredentialContext context) {
+        return new GroupsController(authorization, routing, context);
     }
 
     /**
@@ -263,8 +266,9 @@ public class RepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "trustsController")
-    public TrustsController trustsController(Authorization authorization, CredentialContext credentialContext) {
-        return new TrustsController(authorization, credentialContext);
+    public TrustsController trustsController(Authorization authorization, RepositoryRouting routing,
+                                             CredentialContext credentialContext) {
+        return new TrustsController(authorization, routing, credentialContext);
     }
 
     @Bean

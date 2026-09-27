@@ -1,12 +1,14 @@
 package build.jenesis.repository.compliance.web;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.compliance.signatures.SignerIndex;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.kernel.RepositoryRequests;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,9 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class SignersController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
 
-    public SignersController(Repositories repositories) {
+    public SignersController(Repositories repositories, RepositoryRouting routing) {
         this.repositories = repositories;
+        this.routing = routing;
     }
 
     /** A signer the index knows: the wire identity, the hash it is filed under, and - for a keyless identity - the
@@ -58,9 +62,9 @@ public class SignersController {
     public SignersView signers(@RequestParam("repo") String repo,
                                @RequestParam(value = "after", required = false) String after,
                                @RequestParam(value = "limit", defaultValue = "200") int limit,
-                               @RequestHeader(value = Repositories.KEY, required = false) String key,
+                               HttpServletRequest request,
                                HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+        String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return null;
         }
@@ -76,9 +80,9 @@ public class SignersController {
                                @RequestParam("signer") String signer,
                                @RequestParam(value = "after", required = false) String after,
                                @RequestParam(value = "limit", defaultValue = "200") int limit,
-                               @RequestHeader(value = Repositories.KEY, required = false) String key,
+                               HttpServletRequest request,
                                HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+        String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return null;
         }
@@ -98,16 +102,4 @@ public class SignersController {
         return after == null || after.isBlank() ? null : after;
     }
 
-    private String access(String repo, String key, HttpServletResponse response) {
-        if (!Repositories.valid(repo)) {
-            response.setStatus(400);
-            return null;
-        }
-        String tenant = repositories.tenant(key);
-        if (!Repositories.valid(tenant)) {
-            response.setStatus(400);
-            return null;
-        }
-        return tenant;
-    }
 }

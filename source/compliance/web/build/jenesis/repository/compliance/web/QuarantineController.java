@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance.web;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.compliance.Verdict;
@@ -10,6 +11,7 @@ import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.gate.store.GatedRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,16 +40,19 @@ public class QuarantineController {
     private static final int REFUSAL_LIMIT = 25;
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final AuditTrail audit;
 
-    public QuarantineController(Repositories repositories, AuditTrail audit) {
+    public QuarantineController(Repositories repositories, RepositoryRouting routing, AuditTrail audit) {
         this.repositories = repositories;
+        this.routing = routing;
         this.audit = audit;
     }
 
     /** The first page of the queue - the embedding/test seam. */
-    public QuarantineView quarantine(String repo, String key, HttpServletResponse response) throws IOException {
-        return quarantine(repo, null, MAX_PAGE, key, response);
+    public QuarantineView quarantine(String repo, HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+        return quarantine(repo, null, MAX_PAGE, request, response);
     }
 
     @GetMapping("/api/quarantine")
@@ -55,9 +60,9 @@ public class QuarantineController {
     public QuarantineView quarantine(@RequestParam("repo") String repo,
                                      @RequestParam(value = "after", required = false) String after,
                                      @RequestParam(value = "limit", defaultValue = "500") int limit,
-                                     @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                     HttpServletRequest request,
                                      HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+        String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return null;
         }
@@ -99,8 +104,8 @@ public class QuarantineController {
     public void releaseQuarantined(@RequestParam("repo") String repo,
                                    @RequestHeader(value = Repositories.KEY, required = false) String key,
                                    @RequestBody QuarantineRequest request,
-                                   HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+                                   HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String tenant = RepositoryRequests.access(routing, repo, http, response);
         if (tenant == null) {
             return;
         }
@@ -108,7 +113,7 @@ public class QuarantineController {
         // Audit BEFORE the mutation, not after: a crash between the release and a trailing audit write would leave a
         // privileged mutation unrecorded. The audit trail is best-effort (a failed write never fails the release), so
         // recording first cannot block the release either - it only guarantees the release is never silently unaudited.
-        audit(key, AuditActions.QUARANTINE_RELEASE, repo + request.path());
+        audit(tenant, key, AuditActions.QUARANTINE_RELEASE, repo + request.path());
         new GatedRepository(repositories.writable(tenant, repo))
                 .release(repositories.formatPath(tenant, repo, request.path()));
         response.setStatus(200);
@@ -122,15 +127,15 @@ public class QuarantineController {
     public Discarded discardQuarantined(@RequestParam("repo") String repo,
                                         @RequestHeader(value = Repositories.KEY, required = false) String key,
                                         @RequestBody QuarantineRequest request,
-                                        HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+                                        HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String tenant = RepositoryRequests.access(routing, repo, http, response);
         if (tenant == null) {
             return null;
         }
         RepositoryRequests.rejectTraversal(request.path());
         // Audit before the mutation for the same reason as release above: never let a crash end a privileged discard
         // unrecorded; the best-effort trail cannot block the discard.
-        audit(key, AuditActions.QUARANTINE_DISCARD, repo + request.path());
+        audit(tenant, key, AuditActions.QUARANTINE_DISCARD, repo + request.path());
         boolean discarded = new GatedRepository(repositories.writable(tenant, repo))
                 .discard(repositories.formatPath(tenant, repo, request.path()));
         response.setStatus(200);
@@ -144,29 +149,9 @@ public class QuarantineController {
         response.setStatus(400);
     }
 
-    /**
-     * Validates the named repository and resolves the request's tenant from the {@code Jenesis-Repository-Key} header,
-     * answering {@code 400} for a traversal-unsafe repository or tenant name and {@code null} so the caller returns at
-     * once. Rights are enforced by Spring Security before the request reaches the controller, so this makes no
-     * authorization decision - the same guard the monolith carried, unchanged by the move.
-     */
-    private String access(String repo, String key, HttpServletResponse response) {
-        if (!Repositories.valid(repo)) {
-            response.setStatus(400);
-            return null;
-        }
-        String tenant = repositories.tenant(key);
-        if (!Repositories.valid(tenant)) {
-            response.setStatus(400);
-            return null;
-        }
-        return tenant;
-    }
-
-    /** Records the privileged review mutation against the acting key's tenant and hashed identity - the same audit
-     *  choreography the monolith carried, so the trail is unchanged by the move. */
-    private void audit(String key, String action, String target) {
-        String tenant = repositories.tenant(key);
+    /** Records the privileged review mutation against the tenant it acted on and the acting key's hashed
+     *  identity. */
+    private void audit(String tenant, String key, String action, String target) {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, target);
     }
 

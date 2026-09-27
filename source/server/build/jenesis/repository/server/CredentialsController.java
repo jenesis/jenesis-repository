@@ -23,9 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
  * fresh install could be given was to switch authentication off, which is not a bootstrap but a different
  * deployment. The first key comes from {@code jenreg.bootstrap-key}; every key after it comes from here.
  *
- * <p>The tenant is read from the managing key itself ({@link Authorization#tenantOf}), which is where a key's
- * tenant already lives - {@code jenk_<tenant>.<secret><checksum>} - so this surface needs no tenant routing of its
- * own and behaves the same on a single-tenant deployment as on a routed one.
+ * <p>The tenant administered is the one the deployment's routing answers for the request
+ * ({@link RepositoryRouting#tenant}), as for every other {@code /api} call: the served tenant under the fixed routing,
+ * the key's own under a key-confined one, the host's under a host routing - each of which refuses a key naming a
+ * tenant it may not act on. The key's rights are still decided in its own credential space, so an operator key
+ * administers the tenant a fixed deployment serves.
  *
  * <p>Every route is under {@code /api/} and is therefore gated by {@code manage:read} (the GET) or
  * {@code manage:write} (the mutations) at scope {@code *} by the security chain before it is reached; nothing here
@@ -40,10 +42,13 @@ public final class CredentialsController {
     private static final Pattern HASH = Pattern.compile("[0-9a-f]{64}");
 
     private final Authorization authorization;
+    private final RepositoryRouting routing;
+
     private final CredentialContext context;
 
-    public CredentialsController(Authorization authorization, CredentialContext context) {
+    public CredentialsController(Authorization authorization, RepositoryRouting routing, CredentialContext context) {
         this.authorization = Objects.requireNonNull(authorization, "authorization");
+        this.routing = Objects.requireNonNull(routing, "routing");
         this.context = Objects.requireNonNull(context, "context");
     }
 
@@ -57,8 +62,7 @@ public final class CredentialsController {
     @ResponseBody
     public List<CredentialView> credentials(HttpServletRequest http, HttpServletResponse response)
             throws IOException {
-        String key = PresentedKey.from(http);
-        String tenant = context.tenant(key);
+        String tenant = routing.tenant(http);
         String after = http.getParameter("after");
         Authorization.CredentialPage page = authorization.credentials(tenant,
                 after == null || after.isBlank() ? null : after, pageSize(http.getParameter("limit")));
@@ -97,14 +101,14 @@ public final class CredentialsController {
                        @RequestBody(required = false) MintRequest request,
                        HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        String tenant = context.tenant(key);
+        String tenant = routing.tenant(http);
         String minted = Authorization.mint(tenant);
         String hash = Authorization.hash(minted);
         Instant expires = authorization.lifetimes().mintExpiry(tenant,
                 request == null ? null : CredentialLifetimes.expiry(request.expires()),
                 request != null && Boolean.TRUE.equals(request.nonExpiring()));
         authorization.provision(tenant, hash, request == null ? null : request.label(), expires);
-        context.audit(key, "credential.mint", hash);
+        context.audit(tenant, key, "credential.mint", hash);
         response.setStatus(201);
         return new Minted(hash, minted, expires == null ? null : expires.toString());
     }
@@ -116,11 +120,12 @@ public final class CredentialsController {
                          @RequestBody GrantRequest request,
                          HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
+        String tenant = routing.tenant(http);
         // Through the subject form so the expiry is honoured: the record carries one for every holder, and a field
         // a surface accepts and drops is worse than one it never offered.
-        authorization.setGrant(context.tenant(key), Authorization.Subject.credential(hashId(id)),
+        authorization.setGrant(tenant, Authorization.Subject.credential(hashId(id)),
                 request.scope(), String.join(",", request.tokens()), CredentialLifetimes.expiry(request.expires()));
-        context.audit(key, "grant.set", id + " " + request.scope());
+        context.audit(tenant, key, "grant.set", id + " " + request.scope());
         response.setStatus(200);
     }
 
@@ -129,8 +134,9 @@ public final class CredentialsController {
                             HttpServletRequest http,
                             HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.removeGrant(context.tenant(key), hashId(id), scope);
-        context.audit(key, "grant.remove", id + " " + scope);
+        String tenant = routing.tenant(http);
+        authorization.removeGrant(tenant, hashId(id), scope);
+        context.audit(tenant, key, "grant.remove", id + " " + scope);
         response.setStatus(200);
     }
 
@@ -140,9 +146,10 @@ public final class CredentialsController {
                           @RequestBody(required = false) ExpiryRequest request,
                           HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.setExpiry(context.tenant(key), hashId(id),
+        String tenant = routing.tenant(http);
+        authorization.setExpiry(tenant, hashId(id),
                 request == null ? null : CredentialLifetimes.expiry(request.expires()));
-        context.audit(key, "credential.expiry", id);
+        context.audit(tenant, key, "credential.expiry", id);
         response.setStatus(200);
     }
 
@@ -151,8 +158,9 @@ public final class CredentialsController {
                        HttpServletRequest http,
                        HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.revoke(context.tenant(key), hashId(id));
-        context.audit(key, "credential.revoke", id);
+        String tenant = routing.tenant(http);
+        authorization.revoke(tenant, hashId(id));
+        context.audit(tenant, key, "credential.revoke", id);
         response.setStatus(200);
     }
 
@@ -167,9 +175,10 @@ public final class CredentialsController {
                          @RequestBody(required = false) RotateRequest request,
                          HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        Authorization.Rotated rotated = authorization.rotate(context.tenant(key), hashId(id),
+        String tenant = routing.tenant(http);
+        Authorization.Rotated rotated = authorization.rotate(tenant, hashId(id),
                 request == null ? null : CredentialLifetimes.lifetime(request.overlap()));
-        context.audit(key, "credential.rotate", id + " -> " + Authorization.hash(rotated.key()));
+        context.audit(tenant, key, "credential.rotate", id + " -> " + Authorization.hash(rotated.key()));
         response.setStatus(201);
         return new Minted(Authorization.hash(rotated.key()), rotated.key(),
                 rotated.expires() == null ? null : rotated.expires().toString());
@@ -185,9 +194,10 @@ public final class CredentialsController {
                                     @RequestBody(required = false) AllowedAddressesRequest request,
                                     HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.setAllowedAddresses(context.tenant(key), hashId(id),
+        String tenant = routing.tenant(http);
+        authorization.setAllowedAddresses(tenant, hashId(id),
                 request == null ? null : request.addresses());
-        context.audit(key, "credential.allowed-ips", id);
+        context.audit(tenant, key, "credential.allowed-ips", id);
         response.setStatus(200);
     }
 

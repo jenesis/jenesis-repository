@@ -11,6 +11,7 @@ import build.jenesis.repository.compliance.ProvenanceSigner;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.server.kernel.PinnedSettings;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.Settings;
 import org.springframework.beans.factory.ObjectProvider;
@@ -34,52 +35,56 @@ import org.springframework.core.env.Environment;
 public class ComplianceWebConfig {
 
     @Bean
-    public QuarantineController quarantineController(Repositories repositories, AuditTrail audit) {
-        return new QuarantineController(repositories, audit);
+    public QuarantineController quarantineController(Repositories repositories, RepositoryRouting routing,
+                                                     AuditTrail audit) {
+        return new QuarantineController(repositories, routing, audit);
     }
 
     @Bean
-    public SignatureController signatureController(Repositories repositories) {
+    public SignatureController signatureController(Repositories repositories, RepositoryRouting routing) {
         // What the gate made of a publisher's signature, read back from durable state. Registered here rather than
         // found by a component scan because this module registers every controller explicitly - a scan would make the
         // surface depend on package layout, and a controller nobody names is one nobody notices is missing.
-        return new SignatureController(repositories);
+        return new SignatureController(repositories, routing);
     }
 
     @Bean
-    public SignersController signersController(Repositories repositories) {
+    public SignersController signersController(Repositories repositories, RepositoryRouting routing) {
         // What one signer signed, and who has signed at all - the read side of the continuity the gate learns.
-        return new SignersController(repositories);
+        return new SignersController(repositories, routing);
     }
 
     @Bean
-    public HardeningVerdictController hardeningVerdictController(Repositories repositories) {
+    public HardeningVerdictController hardeningVerdictController(Repositories repositories,
+                                                                 RepositoryRouting routing) {
         // The read-only hardened-leg surface: the recorded verdict, recent typed refusals and the drift alarm,
         // assembled from durable state only (no re-screen, no fetch). Present exactly when this module is.
-        return new HardeningVerdictController(repositories);
+        return new HardeningVerdictController(repositories, routing);
     }
 
     @Bean
-    public VulnerabilityController vulnerabilityController(Repositories repositories,
+    public VulnerabilityController vulnerabilityController(Repositories repositories, RepositoryRouting routing,
                                                            AdvisorySource advisories,
                                                            List<AdvisorySignal> advisorySignals,
                                                            Environment environment) {
         // The attributed per-feed view of the same feeds the merged AdvisorySource bean carries, resolved from the
         // same configuration lookup, so the findings ledger records which feed reported an advisory.
-        return new VulnerabilityController(repositories, advisories,
+        return new VulnerabilityController(repositories, routing, advisories,
                 AdvisorySource.named(Features.namespaced(environment::getProperty)),
                 advisorySignals);
     }
 
     @Bean
-    public FindingsController findingsController(Repositories repositories, AuditTrail audit, LiveConfig liveConfig) {
+    public FindingsController findingsController(Repositories repositories, RepositoryRouting routing, AuditTrail audit,
+                                                 LiveConfig liveConfig) {
         // A reported finding is decided by the gate a publish into the same tenant meets, read live, so a threshold or
         // action changed at runtime applies to the next report exactly as it does to the next publish.
-        return new FindingsController(repositories, audit, liveConfig::publishGate);
+        return new FindingsController(repositories, routing, audit, liveConfig::publishGate);
     }
 
     @Bean
-    public HealthController healthController(Repositories repositories, HealthSource healthSource,
+    public HealthController healthController(Repositories repositories, RepositoryRouting routing,
+                                             HealthSource healthSource,
                                              ObjectProvider<MaintenanceScheduler> maintenance) {
         // The durable health read renders the ledger the sweep populates; the live source is consulted only on an
         // explicit refresh=true. The same shared source instance the publish screen and sweep probe, injected by type.
@@ -90,18 +95,19 @@ public class ComplianceWebConfig {
         // there - it simply leaves the ranking to whatever does run one. Passed as a SUPPLIER, not resolved here:
         // the scheduler bean is initMethod="start", so pulling it while this bean is built would start its workers
         // earlier in context startup than the deployment intends, for no reason - nothing needs it until a refresh.
-        return new HealthController(repositories, healthSource, maintenance::getIfAvailable);
+        return new HealthController(repositories, routing, healthSource, maintenance::getIfAvailable);
     }
 
     @Bean
-    public ProvenanceController provenanceController(Repositories repositories, ProvenanceSigner provenanceSigner,
-                                                     AuditTrail audit) {
-        return new ProvenanceController(repositories, provenanceSigner, audit);
+    public ProvenanceController provenanceController(Repositories repositories, RepositoryRouting routing,
+                                                     ProvenanceSigner provenanceSigner, AuditTrail audit) {
+        return new ProvenanceController(repositories, routing, provenanceSigner, audit);
     }
 
     @Bean
-    public LicenseRetroController licenseRetroController(Repositories repositories, Settings settings,
-                                                        Environment environment, PinnedSettings pins) {
-        return new LicenseRetroController(repositories, settings, environment, pins);
+    public LicenseRetroController licenseRetroController(Repositories repositories, RepositoryRouting routing,
+                                                        Settings settings, Environment environment,
+                                                        PinnedSettings pins) {
+        return new LicenseRetroController(repositories, routing, settings, environment, pins);
     }
 }

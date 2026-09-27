@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance.web;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.compliance.ProvenanceSigner;
 import build.jenesis.repository.server.kernel.Repositories;
@@ -8,6 +9,7 @@ import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,20 +30,23 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code GET} (an append-only log grown without bound, and a signature paid per read); generating it is a
  * security-relevant event, so the first generation is recorded on the {@link AuditTrail}. With no signer
  * configured the endpoints answer {@code 404}, exactly as they did in the monolith. Every route is under {@code /api/}
- * and is gated {@code manage:read} by the security chain before the request is reached; the tenant comes from the key,
- * so two tenants never read each other's attestations, and a traversal-unsafe repository, tenant or path name is a
- * {@code 400}. Provenance is a compliance surface, so it rides the compliance module's discovery rather than a module
+ * and is gated {@code manage:read} by the security chain before the request is reached; the tenant is the one the
+ * routing answers for the request, so two tenants never read each other's attestations, and a traversal-unsafe
+ * repository, tenant or path name is a {@code 400}. Provenance is a compliance surface, so it rides the compliance module's discovery rather than a module
  * of its own.
  */
 @RestController
 public class ProvenanceController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final ProvenanceSigner provenanceSigner;
     private final AuditTrail audit;
 
-    public ProvenanceController(Repositories repositories, ProvenanceSigner provenanceSigner, AuditTrail audit) {
+    public ProvenanceController(Repositories repositories, RepositoryRouting routing,
+                                ProvenanceSigner provenanceSigner, AuditTrail audit) {
         this.repositories = repositories;
+        this.routing = routing;
         this.provenanceSigner = provenanceSigner;
         this.audit = audit;
     }
@@ -51,8 +56,8 @@ public class ProvenanceController {
     public String provenance(@RequestParam("repo") String repo,
                              @RequestParam("path") String path,
                              @RequestHeader(value = Repositories.KEY, required = false) String key,
-                             HttpServletResponse response) throws IOException {
-        ProvenanceSigner.Attestation attestation = attested(repo, path, key, response);
+                             HttpServletRequest request, HttpServletResponse response) throws IOException {
+        ProvenanceSigner.Attestation attestation = attested(repo, path, key, request, response);
         return attestation == null ? null : attestation.envelope();
     }
 
@@ -71,8 +76,9 @@ public class ProvenanceController {
     public ProvenanceMaterialView provenanceMaterial(@RequestParam("repo") String repo,
                                                      @RequestParam("path") String path,
                                                      @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                                     HttpServletRequest request,
                                                      HttpServletResponse response) throws IOException {
-        ProvenanceSigner.Attestation attestation = attested(repo, path, key, response);
+        ProvenanceSigner.Attestation attestation = attested(repo, path, key, request, response);
         if (attestation == null) {
             return null;
         }
@@ -91,9 +97,9 @@ public class ProvenanceController {
      *  served. Signed and appended once and then cached content-addressed - a later read serves the cached attestation
      *  rather than re-signing and re-appending - and the first generation is audited. {@code null} after setting the
      *  response status when access is refused, no signer is configured or the artifact is absent. */
-    private ProvenanceSigner.Attestation attested(String repo, String path, String key,
+    private ProvenanceSigner.Attestation attested(String repo, String path, String key, HttpServletRequest request,
                                                   HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+        String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return null;
         }
@@ -175,25 +181,6 @@ public class ProvenanceController {
     @ExceptionHandler(IllegalArgumentException.class)
     public void badRequest(HttpServletResponse response) {
         response.setStatus(400);
-    }
-
-    /**
-     * Validates the named repository and resolves the request's tenant from the {@code Jenesis-Repository-Key} header,
-     * answering {@code 400} for a traversal-unsafe repository or tenant name and {@code null} so the caller returns at
-     * once. Rights are enforced by Spring Security before the request reaches the controller, so this makes no
-     * authorization decision - the same guard the monolith carried, unchanged by the move.
-     */
-    private String access(String repo, String key, HttpServletResponse response) {
-        if (!Repositories.valid(repo)) {
-            response.setStatus(400);
-            return null;
-        }
-        String tenant = repositories.tenant(key);
-        if (!Repositories.valid(tenant)) {
-            response.setStatus(400);
-            return null;
-        }
-        return tenant;
     }
 
     /** An attestation with its signing-time verification material; {@code certificateChain} and

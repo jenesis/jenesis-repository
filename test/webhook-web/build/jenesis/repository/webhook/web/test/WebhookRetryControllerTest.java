@@ -7,7 +7,9 @@ import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.cleanup.RetentionProvider;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.events.EventType;
+import build.jenesis.repository.server.FixedTenantRouting;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.kernel.RepositoriesRoutingContext;
 import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.spi.Authorization;
@@ -16,6 +18,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.webhook.WebhookOutbox;
 import build.jenesis.repository.webhook.web.WebhookController;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,9 +59,17 @@ public class WebhookRetryControllerTest {
         LiveConfig live = new LiveConfig(new Settings(store), properties, AdvisorySource.none(), _ -> null);
         repositories = new Repositories(store, Authorization.anonymous(), live,
                 StagingProvider.resolve(_ -> null), RetentionProvider.resolve(_ -> null));
-        tenant = repositories.tenant(null);            // the default tenant an anonymous request resolves to
+        // The fixed routing a deployment configuring no tenancy runs, so an /api call answers the tenant it serves.
+        tenant = properties.getDefaultTenant();
         audit = new RecordingAudit();
-        controller = new WebhookController(repositories, audit);
+        controller = new WebhookController(repositories,
+                new FixedTenantRouting(new RepositoriesRoutingContext(store, repositories, tenant, _ -> null),
+                        tenant, tenant), audit);
+    }
+
+    /** A keyless {@code /api} call: the routing answers the tenant this deployment serves. */
+    private static HttpServletRequest request() {
+        return mock(HttpServletRequest.class);
     }
 
     private WebhookOutbox outbox() {
@@ -76,7 +87,7 @@ public class WebhookRetryControllerTest {
         outbox().record(parkedEntry("evt-1"));
 
         CapturingResponse response = new CapturingResponse();
-        controller.retry(REPO, null, new WebhookController.RetryRequest("evt-1"), response.proxy());
+        controller.retry(REPO, null, new WebhookController.RetryRequest("evt-1"), request(), response.proxy());
 
         assertThat(response.status()).as("a parked entry unparks with 200").isEqualTo(200);
         assertThat(outbox().entries()).singleElement().satisfies(entry -> {
@@ -98,12 +109,12 @@ public class WebhookRetryControllerTest {
         outbox().record(parkedEntry("evt-1"));
 
         CapturingResponse first = new CapturingResponse();
-        controller.retry(REPO, null, new WebhookController.RetryRequest("evt-1"), first.proxy());
+        controller.retry(REPO, null, new WebhookController.RetryRequest("evt-1"), request(), first.proxy());
         assertThat(first.status()).isEqualTo(200);
 
         CapturingResponse second = new CapturingResponse();
         assertThatCode(() ->
-                controller.retry(REPO, null, new WebhookController.RetryRequest("evt-1"), second.proxy()))
+                controller.retry(REPO, null, new WebhookController.RetryRequest("evt-1"), request(), second.proxy()))
                 .doesNotThrowAnyException();
 
         assertThat(second.status()).as("a re-retry of an already-unparked entry is 404, not a duplicate or a 500")
@@ -116,7 +127,8 @@ public class WebhookRetryControllerTest {
     void a_retry_of_a_missing_entry_is_a_404_not_a_500() throws IOException {
         CapturingResponse response = new CapturingResponse();
         assertThatCode(() ->
-                controller.retry(REPO, null, new WebhookController.RetryRequest("no-such-id"), response.proxy()))
+                controller.retry(REPO, null, new WebhookController.RetryRequest("no-such-id"), request(),
+                        response.proxy()))
                 .doesNotThrowAnyException();
 
         assertThat(response.status()).isEqualTo(404);
@@ -131,7 +143,7 @@ public class WebhookRetryControllerTest {
                 1, 0L, false, "", Set.of(), 0L));
 
         CapturingResponse response = new CapturingResponse();
-        controller.retry(REPO, null, new WebhookController.RetryRequest("evt-pending"), response.proxy());
+        controller.retry(REPO, null, new WebhookController.RetryRequest("evt-pending"), request(), response.proxy());
 
         assertThat(response.status()).isEqualTo(404);
         assertThat(outbox().entries()).singleElement()
@@ -141,7 +153,7 @@ public class WebhookRetryControllerTest {
     @Test
     void a_blank_id_is_rejected_with_400() throws IOException {
         CapturingResponse response = new CapturingResponse();
-        controller.retry(REPO, null, new WebhookController.RetryRequest("  "), response.proxy());
+        controller.retry(REPO, null, new WebhookController.RetryRequest("  "), request(), response.proxy());
         assertThat(response.status()).isEqualTo(400);
     }
 
@@ -150,7 +162,7 @@ public class WebhookRetryControllerTest {
         outbox().record(parkedEntry("evt-1"));
 
         CapturingResponse response = new CapturingResponse();
-        WebhookController.WebhookView view = controller.webhook(REPO, null, null, null, response.proxy());
+        WebhookController.WebhookView view = controller.webhook(REPO, null, null, request(), response.proxy());
 
         assertThat(view.entries()).singleElement().satisfies(entry -> {
             assertThat(entry.id()).isEqualTo("evt-1");
@@ -171,7 +183,7 @@ public class WebhookRetryControllerTest {
     @Test
     void the_status_read_carries_the_reconciliation_route_for_every_event_type() throws IOException {
         CapturingResponse response = new CapturingResponse();
-        WebhookController.WebhookView view = controller.webhook(REPO, null, null, null, response.proxy());
+        WebhookController.WebhookView view = controller.webhook(REPO, null, null, request(), response.proxy());
 
         assertThat(view.reconciliation()).as("the route is rendered even on an empty queue - an integrator asking "
                 + "'where did my event go?' is looking at a queue that does NOT contain it").isNotNull();

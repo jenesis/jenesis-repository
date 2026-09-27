@@ -1,12 +1,13 @@
 package build.jenesis.repository.compliance.web;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.inventory.SignatureSection;
 import build.jenesis.repository.inventory.SignatureSummaries;
 import build.jenesis.repository.server.kernel.Repositories;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,9 +37,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class SignatureController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
 
-    public SignatureController(Repositories repositories) {
+    public SignatureController(Repositories repositories, RepositoryRouting routing) {
         this.repositories = repositories;
+        this.routing = routing;
     }
 
     /** The signature as a surface reports it: the section's summary, whole. {@code source} is the trust source's
@@ -53,13 +56,13 @@ public class SignatureController {
     @ResponseBody
     public SignatureView signature(@RequestParam("repo") String repo,
                                    @RequestParam(value = "path", defaultValue = "") String path,
-                                   @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                   HttpServletRequest request,
                                    HttpServletResponse response) {
         if (!Repositories.valid(repo)) {
             response.setStatus(400);
             return null;
         }
-        String tenant = repositories.tenant(key);
+        String tenant = routing.tenant(request);
         if (!Repositories.valid(tenant)) {
             response.setStatus(400);
             return null;

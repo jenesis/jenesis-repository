@@ -1,8 +1,11 @@
 package build.jenesis.repository.index.web;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.index.PublishedIndex;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,8 +19,8 @@ import org.springframework.web.bind.annotation.RestController;
  * streams one immutable, content-addressed chunk with an {@code ETag} equal to its SHA-256 id and
  * {@code Cache-Control: public, max-age=…, immutable}, honouring {@code If-None-Match} with a {@code 304} - so a
  * consumer's sync is fetch-descriptor, diff, fetch-only-unseen-chunks, and every chunk fetch is cached forever. The
- * tenant comes from the key, so two tenants never read each other's index; a traversal-unsafe repository or chunk id
- * is a {@code 400}. Rights are enforced by the security chain before the request reaches the controller.
+ * tenant is the one the routing answers for the request, so two tenants never read each other's index; a
+ * traversal-unsafe repository or chunk id is a {@code 400}. Rights are enforced by the security chain before the request reaches the controller.
  */
 @RestController
 public class IndexController {
@@ -25,16 +28,17 @@ public class IndexController {
     private static final String IMMUTABLE = "public, max-age=31536000, immutable";
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
 
-    public IndexController(Repositories repositories) {
+    public IndexController(Repositories repositories, RepositoryRouting routing) {
         this.repositories = repositories;
+        this.routing = routing;
     }
 
     @GetMapping("/api/index")
     public void descriptor(@RequestParam("repo") String repo,
-                           @RequestHeader(value = Repositories.KEY, required = false) String key,
-                           HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+                           HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return;
         }
@@ -51,10 +55,9 @@ public class IndexController {
     @GetMapping("/api/index/chunks/{id}")
     public void chunk(@PathVariable("id") String id,
                       @RequestParam("repo") String repo,
-                      @RequestHeader(value = Repositories.KEY, required = false) String key,
                       @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch,
-                      HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+                      HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return;
         }
@@ -83,19 +86,6 @@ public class IndexController {
         try (OutputStream out = response.getOutputStream()) {
             index.streamChunk(id, out);
         }
-    }
-
-    private String access(String repo, String key, HttpServletResponse response) {
-        if (!Repositories.valid(repo)) {
-            response.setStatus(400);
-            return null;
-        }
-        String tenant = repositories.tenant(key);
-        if (!Repositories.valid(tenant)) {
-            response.setStatus(400);
-            return null;
-        }
-        return tenant;
     }
 
     /** A chunk id is a 64-character lowercase SHA-256 hex string, so a path parameter can never escape the subtree. */

@@ -4,10 +4,12 @@ import module java.base;
 
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.cache.storage.CacheStorage;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.ui.store.CacheService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -51,7 +53,7 @@ public class CacheProjectsController {
 
     private final ObjectProvider<CacheStorage> storage;
     private final AuditTrail audit;
-    private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final CacheService.Passes passes;
 
     /**
@@ -60,15 +62,15 @@ public class CacheProjectsController {
      * out of it. It is resolved lazily for the same reason {@code StagingController} answers 501 rather than
      * failing to construct: an absent feature is a 501, never a dead context.
      *
-     * <p>It is the <b>root</b> storage, scoped per request by the tenant the presented key names. The console's
-     * {@code cacheTenantStorage} is request-scoped and takes its tenant from the selected session instead, which is
-     * right for a screen and wrong here twice over: a headless call has no session, so it would throw rather than
-     * answer, and a call that did carry one would act on the session's tenant rather than the key's.
+     * <p>It is the <b>root</b> storage, scoped per request by the tenant the routing answers for the request. The
+     * console's {@code cacheTenantStorage} is request-scoped and takes its tenant from the selected session instead,
+     * which is right for a screen and wrong here twice over: a headless call has no session, so it would throw rather
+     * than answer, and a call that did carry one would act on the session's tenant rather than the request's.
      */
     public CacheProjectsController(@Qualifier("cacheRootStorage") ObjectProvider<CacheStorage> storage,
                                    AuditTrail audit,
-                                   Repositories repositories) {
-        this(storage, audit, repositories, CacheService.Passes.BACKGROUND);
+                                   RepositoryRouting routing) {
+        this(storage, audit, routing, CacheService.Passes.BACKGROUND);
     }
 
     /**
@@ -79,27 +81,28 @@ public class CacheProjectsController {
      */
     public CacheProjectsController(ObjectProvider<CacheStorage> storage,
                                    AuditTrail audit,
-                                   Repositories repositories,
+                                   RepositoryRouting routing,
                                    CacheService.Passes passes) {
         this.storage = storage;
         this.audit = audit;
-        this.repositories = repositories;
+        this.routing = routing;
         this.passes = passes;
     }
 
     /** Every project on the volume with its stored counts and caps - the project set, never the entries behind it. */
     @GetMapping("/api/cache/projects")
     public List<CacheService.ProjectSummary> list(@RequestHeader(value = Repositories.KEY, required = false) String key,
+                                                  HttpServletRequest request,
                                                   HttpServletResponse response) throws IOException {
-        CacheService service = service(key, response);
+        CacheService service = service(key, request, response);
         return service == null ? List.of() : service.listProjects();
     }
 
     @PostMapping("/api/cache/projects")
     public Map<String, Object> create(@RequestParam("name") String name,
                                       @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                      HttpServletResponse response) throws IOException {
-        CacheService service = service(key, response);
+                                      HttpServletRequest request, HttpServletResponse response) throws IOException {
+        CacheService service = service(key, request, response);
         if (service == null) {
             return Map.of();
         }
@@ -112,8 +115,9 @@ public class CacheProjectsController {
     @GetMapping("/api/cache/projects/{name}")
     public CacheService.ProjectDetail detail(@PathVariable("name") String name,
                                              @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                             HttpServletRequest request,
                                              HttpServletResponse response) throws IOException {
-        CacheService service = service(key, response);
+        CacheService service = service(key, request, response);
         if (service == null) {
             return null;
         }
@@ -128,8 +132,9 @@ public class CacheProjectsController {
                                                 @RequestParam(name = "lru", required = false) String lru,
                                                 @RequestParam(name = "ttl", required = false) String ttl,
                                                 @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                                HttpServletRequest request,
                                                 HttpServletResponse response) throws IOException {
-        CacheService service = service(key, response);
+        CacheService service = service(key, request, response);
         if (service == null) {
             return null;
         }
@@ -141,29 +146,30 @@ public class CacheProjectsController {
     @PostMapping("/api/cache/projects/{name}/evict/size")
     public Map<String, Object> enforceSizeCap(@PathVariable("name") String name,
                                               @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                              HttpServletRequest request,
                                               HttpServletResponse response) throws IOException {
-        return pass(name, key, response, CacheService::enforceSizeCap);
+        return pass(name, key, request, response, CacheService::enforceSizeCap);
     }
 
     @PostMapping("/api/cache/projects/{name}/evict/ttl")
     public Map<String, Object> expireTtl(@PathVariable("name") String name,
                                          @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                         HttpServletResponse response) throws IOException {
-        return pass(name, key, response, CacheService::expireTtl);
+                                         HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return pass(name, key, request, response, CacheService::expireTtl);
     }
 
     @PostMapping("/api/cache/projects/{name}/evict/clear")
     public Map<String, Object> clear(@PathVariable("name") String name,
                                      @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                     HttpServletResponse response) throws IOException {
-        return pass(name, key, response, CacheService::clearAll);
+                                     HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return pass(name, key, request, response, CacheService::clearAll);
     }
 
     @PostMapping("/api/cache/projects/{name}/recount")
     public Map<String, Object> recount(@PathVariable("name") String name,
                                        @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                       HttpServletResponse response) throws IOException {
-        return pass(name, key, response, CacheService::recount);
+                                       HttpServletRequest request, HttpServletResponse response) throws IOException {
+        return pass(name, key, request, response, CacheService::recount);
     }
 
     /**
@@ -175,8 +181,8 @@ public class CacheProjectsController {
     @DeleteMapping("/api/cache/projects/{name}")
     public Map<String, Object> delete(@PathVariable("name") String name,
                                       @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                      HttpServletResponse response) throws IOException {
-        CacheService service = service(key, response);
+                                      HttpServletRequest request, HttpServletResponse response) throws IOException {
+        CacheService service = service(key, request, response);
         if (service == null) {
             return Map.of();
         }
@@ -185,9 +191,9 @@ public class CacheProjectsController {
     }
 
     /** One shape for the four passes: they all start work and answer whether this call is the one that started it. */
-    private Map<String, Object> pass(String name, String key, HttpServletResponse response, Pass pass)
-            throws IOException {
-        CacheService service = service(key, response);
+    private Map<String, Object> pass(String name, String key, HttpServletRequest request,
+                                     HttpServletResponse response, Pass pass) throws IOException {
+        CacheService service = service(key, request, response);
         if (service == null) {
             return Map.of();
         }
@@ -206,13 +212,13 @@ public class CacheProjectsController {
      * tenant. The actor is the presented key's hash, which is what the sibling controllers record and what keeps an
      * audit row attributable without a console session to read a member from.
      */
-    private CacheService service(String key, HttpServletResponse response) {
+    private CacheService service(String key, HttpServletRequest request, HttpServletResponse response) {
         CacheStorage cache = storage.getIfAvailable();
         if (cache == null) {
             response.setStatus(501);
             return null;
         }
-        String tenant = repositories.tenant(key);
+        String tenant = routing.tenant(request);
         if (!Repositories.valid(tenant)) {
             response.setStatus(400);
             return null;

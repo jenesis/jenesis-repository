@@ -1,6 +1,8 @@
 package build.jenesis.repository.server.kernel;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.util.UriUtils;
 
@@ -19,17 +21,18 @@ public final class RepositoryRequests {
     }
 
     /**
-     * Validates the named repository and resolves the request's tenant from the {@code Jenesis-Repository-Key}
-     * header, answering {@code 400} for a traversal-unsafe repository or tenant name and returning {@code null} so
-     * the caller returns at once. Rights are enforced by Spring Security before the request reaches the controller,
-     * so this makes no authorization decision.
+     * Validates the named repository and resolves the tenant the deployment's routing answers for the request
+     * ({@link RepositoryRouting#tenant}), answering {@code 400} for a traversal-unsafe repository or tenant name and
+     * returning {@code null} so the caller returns at once. Rights are enforced by Spring Security before the request
+     * reaches the controller, so this makes no authorization decision.
      */
-    public static String access(Repositories repositories, String repo, String key, HttpServletResponse response) {
+    public static String access(RepositoryRouting routing, String repo, HttpServletRequest request,
+                                HttpServletResponse response) {
         if (!Repositories.valid(repo)) {
             response.setStatus(400);
             return null;
         }
-        String tenant = repositories.tenant(key);
+        String tenant = routing.tenant(request);
         if (!Repositories.valid(tenant)) {
             response.setStatus(400);
             return null;

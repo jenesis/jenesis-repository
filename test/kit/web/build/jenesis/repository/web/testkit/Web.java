@@ -82,6 +82,13 @@ public final class Web {
                 "default", "default");
     }
 
+    /** The fixed routing over {@code repositories}' store serving {@code tenant}, administered by that tenant's keys
+     *  alone - the tenant every {@code /api} call a suite makes through it answers for. */
+    public static RepositoryRouting routing(Repositories repositories, String tenant) {
+        return new FixedTenantRouting(new RepositoriesRoutingContext(repositories.root(), repositories, tenant,
+                _ -> null), tenant, tenant);
+    }
+
     /** An environment holding exactly {@code pinned} and nothing ambient - no process environment, no system
      *  properties - so a handler reading the effective-value chain sees only what the suite puts there or in the
      *  store. Every key given is a pin, since it is set from above the store. */

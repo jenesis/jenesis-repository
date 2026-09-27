@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.web;
 import module java.base;
 import module org.slf4j;
 
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.cleanup.StoredReport;
 import build.jenesis.repository.compliance.HealthSource;
 import build.jenesis.repository.compliance.HealthSource.Health;
@@ -12,9 +13,9 @@ import build.jenesis.repository.health.HealthLedgerProvider;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,6 +55,7 @@ public class HealthController {
     private static final Logger LOGGER = LoggerFactory.getLogger(HealthController.class);
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     // The durable health ledger is a discovered optional module; empty when absent, so the endpoint answers 501.
     private final Optional<HealthLedgerProvider> health;
     // The live health source, consulted only on an explicit refresh (never the default read); HealthSource.none() when
@@ -64,24 +66,26 @@ public class HealthController {
      *  the ranking waits. */
     private final Supplier<MaintenanceScheduler> maintenance;
 
-    public HealthController(Repositories repositories, HealthSource source,
+    public HealthController(Repositories repositories, RepositoryRouting routing, HealthSource source,
                             Supplier<MaintenanceScheduler> maintenance) {
-        this(repositories, source, HealthLedgerProvider.installed(), maintenance);
+        this(repositories, routing, source, HealthLedgerProvider.installed(), maintenance);
     }
 
     /** Embedding/test seam: bind an explicit health-ledger provider (empty to disable the read-through) rather than
      *  discovering one through {@link HealthLedgerProvider#installed()}. */
-    public HealthController(Repositories repositories, HealthSource source, Optional<HealthLedgerProvider> health) {
-        this(repositories, source, health, () -> null);
+    public HealthController(Repositories repositories, RepositoryRouting routing, HealthSource source,
+                            Optional<HealthLedgerProvider> health) {
+        this(repositories, routing, source, health, () -> null);
     }
 
     /** @param maintenance resolved <em>at use</em>, never here: the scheduler bean is {@code initMethod = "start"},
      *  so pulling it during this controller's construction would start its workers earlier in context startup than
      *  the deployment intends. A supplier keeps the bean graph's ordering exactly as it was before the on-demand
      *  rank build existed. */
-    public HealthController(Repositories repositories, HealthSource source, Optional<HealthLedgerProvider> health,
-                            Supplier<MaintenanceScheduler> maintenance) {
+    public HealthController(Repositories repositories, RepositoryRouting routing, HealthSource source,
+                            Optional<HealthLedgerProvider> health, Supplier<MaintenanceScheduler> maintenance) {
         this.repositories = repositories;
+        this.routing = routing;
         this.source = source;
         this.health = health;
         this.maintenance = maintenance;
@@ -99,13 +103,13 @@ public class HealthController {
                                @RequestParam(value = "refresh", defaultValue = "false") boolean refresh,
                                @RequestParam(value = "after", defaultValue = "") String after,
                                @RequestParam(value = "limit", defaultValue = "500") int limit,
-                               @RequestHeader(value = Repositories.KEY, required = false) String key,
+                               HttpServletRequest http,
                                HttpServletResponse response) throws IOException {
         if (!Repositories.valid(repo)) {
             response.setStatus(400);
             return null;
         }
-        String tenant = repositories.tenant(key);
+        String tenant = routing.tenant(http);
         if (!Repositories.valid(tenant)) {
             response.setStatus(400);
             return null;

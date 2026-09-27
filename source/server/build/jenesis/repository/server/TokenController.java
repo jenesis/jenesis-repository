@@ -51,7 +51,7 @@ public class TokenController {
         if (exchanged == null) {
             return ResponseEntity.status(401).build();
         }
-        context.audit(exchanged.key(), "credential.exchange", "oidc:" + exchanged.trust());
+        context.audit(resolved, exchanged.key(), "credential.exchange", "oidc:" + exchanged.trust());
         return ResponseEntity.ok(Map.of(
                 "key", exchanged.key(),
                 "expires", exchanged.expires().toString(),

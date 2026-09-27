@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.lifecycle.web;
 
 import build.jenesis.repository.audit.AuditTrail;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,7 +19,8 @@ import org.springframework.context.annotation.Configuration;
 public class LifecycleWebConfig {
 
     @Bean
-    public LifecycleController lifecycleController(Repositories repositories, AuditTrail audit) {
-        return new LifecycleController(repositories, audit);
+    public LifecycleController lifecycleController(Repositories repositories, RepositoryRouting routing,
+                                                   AuditTrail audit) {
+        return new LifecycleController(repositories, routing, audit);
     }
 }

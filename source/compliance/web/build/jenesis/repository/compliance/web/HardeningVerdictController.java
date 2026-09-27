@@ -1,12 +1,14 @@
 package build.jenesis.repository.compliance.web;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.gateway.HardeningVerdicts;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,18 +36,20 @@ public class HardeningVerdictController {
     private static final int REFUSAL_LIMIT = 25;
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
 
-    public HardeningVerdictController(Repositories repositories) {
+    public HardeningVerdictController(Repositories repositories, RepositoryRouting routing) {
         this.repositories = repositories;
+        this.routing = routing;
     }
 
     @GetMapping("/api/hardening/verdict")
     @ResponseBody
     public HardeningView verdict(@RequestParam("repo") String repo,
                                  @RequestParam(value = "path", required = false) String path,
-                                 @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                 HttpServletRequest request,
                                  HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+        String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return null;
         }
@@ -67,25 +71,6 @@ public class HardeningVerdictController {
     @ExceptionHandler(IllegalArgumentException.class)
     public void badRequest(HttpServletResponse response) {
         response.setStatus(400);
-    }
-
-    /**
-     * Validates the named repository and resolves the request's tenant from the {@code Jenesis-Repository-Key} header,
-     * answering {@code 400} for a traversal-unsafe repository or tenant name and {@code null} so the caller returns at
-     * once. Rights are enforced by the security chain before the controller is reached (every {@code /api/} GET needs
-     * {@code manage:read}), so this makes no authorization decision - the same guard {@link QuarantineController} carries.
-     */
-    private String access(String repo, String key, HttpServletResponse response) {
-        if (!Repositories.valid(repo)) {
-            response.setStatus(400);
-            return null;
-        }
-        String tenant = repositories.tenant(key);
-        if (!Repositories.valid(tenant)) {
-            response.setStatus(400);
-            return null;
-        }
-        return tenant;
     }
 
     /** The hardening read as the console renders it: the repository and whether it is a hardened proxy (drives the

@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.lifecycle.web;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -10,6 +11,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ServableNames;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -40,10 +42,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class LifecycleController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final AuditTrail audit;
 
-    public LifecycleController(Repositories repositories, AuditTrail audit) {
+    public LifecycleController(Repositories repositories, RepositoryRouting routing, AuditTrail audit) {
         this.repositories = repositories;
+        this.routing = routing;
         this.audit = audit;
     }
 
@@ -60,9 +64,9 @@ public class LifecycleController {
                               @RequestParam(value = "coordinate", required = false) String coordinate,
                               @RequestParam(value = "after", required = false) String after,
                               @RequestParam(value = "limit", required = false) Integer limit,
-                              @RequestHeader(value = Repositories.KEY, required = false) String key,
+                              HttpServletRequest request,
                               HttpServletResponse response) throws IOException {
-        String tenant = access(repository, key, response);
+        String tenant = RepositoryRequests.access(routing, repository, request, response);
         if (tenant == null) {
             return null;
         }
@@ -122,8 +126,8 @@ public class LifecycleController {
                      @RequestParam("state") String state,
                      @RequestParam(value = "message", required = false) String message,
                      @RequestHeader(value = Repositories.KEY, required = false) String key,
-                     HttpServletResponse response) throws IOException {
-        String tenant = access(repository, key, response);
+                     HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = RepositoryRequests.access(routing, repository, request, response);
         if (tenant == null) {
             return;
         }
@@ -147,7 +151,7 @@ public class LifecycleController {
         }
         Lifecycle.mark(repositories.store(tenant, repository), coordinate, version,
                 new Lifecycle.Flag(parsed, message == null ? "" : message));
-        audit(key, "lifecycle." + parsed.name().toLowerCase(Locale.ROOT),
+        audit(tenant, key, "lifecycle." + parsed.name().toLowerCase(Locale.ROOT),
                 repository + "/" + coordinate + "@" + version);
         response.setStatus(200);
     }
@@ -158,15 +162,15 @@ public class LifecycleController {
                       @RequestParam("coordinate") String coordinate,
                       @RequestParam("version") String version,
                       @RequestHeader(value = Repositories.KEY, required = false) String key,
-                      HttpServletResponse response) throws IOException {
-        String tenant = access(repository, key, response);
+                      HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = RepositoryRequests.access(routing, repository, request, response);
         if (tenant == null) {
             return;
         }
         RepositoryRequests.rejectTraversal(coordinate);
         RepositoryRequests.rejectTraversal(version);
         if (Lifecycle.clear(repositories.store(tenant, repository), coordinate, version)) {
-            audit(key, "lifecycle.clear", repository + "/" + coordinate + "@" + version);
+            audit(tenant, key, "lifecycle.clear", repository + "/" + coordinate + "@" + version);
         }
         response.setStatus(200);
     }
@@ -177,28 +181,7 @@ public class LifecycleController {
         response.setStatus(400);
     }
 
-    /**
-     * Validates the named repository and resolves the request's tenant from the {@code Jenesis-Repository-Key} header,
-     * answering {@code 400} for a traversal-unsafe repository or tenant name and returning {@code null} so the caller
-     * returns at once. Rights are enforced by Spring Security before the request reaches the controller, so this makes
-     * no authorization decision - the same helper the monolith's {@code RepositoryRequests} carried, kept private to the
-     * adapter so the surface stays a thin HTTP layer over the domain.
-     */
-    private String access(String repository, String key, HttpServletResponse response) {
-        if (!Repositories.valid(repository)) {
-            response.setStatus(400);
-            return null;
-        }
-        String tenant = repositories.tenant(key);
-        if (!Repositories.valid(tenant)) {
-            response.setStatus(400);
-            return null;
-        }
-        return tenant;
-    }
-
-    private void audit(String key, String action, String target) {
-        String tenant = repositories.tenant(key);
+    private void audit(String tenant, String key, String action, String target) {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, target);
     }
 

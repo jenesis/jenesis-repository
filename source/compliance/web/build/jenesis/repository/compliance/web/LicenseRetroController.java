@@ -1,14 +1,16 @@
 package build.jenesis.repository.compliance.web;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.gate.RetroLicensePlanner;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,14 +29,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class LicenseRetroController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final Settings settings;
     private final Environment environment;
 
     private final PinnedSettings pins;
 
-    public LicenseRetroController(Repositories repositories, Settings settings, Environment environment,
-                                  PinnedSettings pins) {
+    public LicenseRetroController(Repositories repositories, RepositoryRouting routing, Settings settings,
+                                  Environment environment, PinnedSettings pins) {
         this.repositories = repositories;
+        this.routing = routing;
         this.settings = settings;
         this.environment = environment;
         this.pins = pins;
@@ -44,9 +48,9 @@ public class LicenseRetroController {
     @ResponseBody
     public PlanView plan(@RequestParam("repo") String repo,
                          @RequestParam(value = "unknown", defaultValue = "false") boolean unknown,
-                         @RequestHeader(value = Repositories.KEY, required = false) String key,
+                         HttpServletRequest request,
                          HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+        String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return null;
         }
@@ -69,28 +73,9 @@ public class LicenseRetroController {
         return new PlanView(unknown ? "denied+unknown" : "denied", plan.count(), held);
     }
 
-    /**
-     * Validates the named repository and resolves the request's tenant from the {@code Jenesis-Repository-Key} header,
-     * answering {@code 400} for a traversal-unsafe repository or tenant name and {@code null} so the caller returns at
-     * once. Rights are enforced by Spring Security before the request reaches the controller, so this makes no
-     * authorization decision.
-     */
     /** The planner, resolved once: whether the licence-policy module is installed cannot change within a JVM,
      *  and this route answered that question with a module-graph walk on every call. */
     private final Optional<RetroLicensePlanner> planner = RetroLicensePlanner.installed();
-
-    private String access(String repo, String key, HttpServletResponse response) {
-        if (!Repositories.valid(repo)) {
-            response.setStatus(400);
-            return null;
-        }
-        String tenant = repositories.tenant(key);
-        if (!Repositories.valid(tenant)) {
-            response.setStatus(400);
-            return null;
-        }
-        return tenant;
-    }
 
     /** The dry-run plan for one repository: the mode previewed, how many releases a fresh enabling pass would newly
      *  hold, and the per-coordinate reasons behind them. */

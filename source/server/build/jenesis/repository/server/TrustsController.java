@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CredentialLifetimes;
 import build.jenesis.repository.server.spi.OidcTrusts;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,18 +33,19 @@ public class TrustsController {
     public static final String SET = "trust.set", REMOVE = "trust.remove";
 
     private final Authorization authorization;
+    private final RepositoryRouting routing;
     private final CredentialContext context;
 
-    public TrustsController(Authorization authorization, CredentialContext context) {
+    public TrustsController(Authorization authorization, RepositoryRouting routing, CredentialContext context) {
         this.authorization = authorization;
+        this.routing = routing;
         this.context = context;
     }
 
     @GetMapping("/api/trusts")
-    public List<TrustView> trusts(@RequestHeader(value = PresentedKey.HEADER, required = false) String key)
-            throws IOException {
+    public List<TrustView> trusts(HttpServletRequest http) throws IOException {
         List<TrustView> views = new ArrayList<>();
-        for (OidcTrusts.Trust trust : authorization.trusts().of(context.tenant(key))) {
+        for (OidcTrusts.Trust trust : authorization.trusts().of(routing.tenant(http))) {
             views.add(new TrustView(trust.name(), trust.issuer(), trust.audience(), trust.subject(),
                     trust.scope(), trust.rights(), trust.ttl() == null ? null : trust.ttl().toString()));
         }
@@ -55,20 +57,22 @@ public class TrustsController {
     public void setTrust(@PathVariable("name") String name,
                          @RequestHeader(value = PresentedKey.HEADER, required = false) String key,
                          @RequestBody TrustRequest request,
-                         HttpServletResponse response) throws IOException {
-        authorization.trusts().set(context.tenant(key), new OidcTrusts.Trust(name, request.issuer(),
+                         HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String tenant = routing.tenant(http);
+        authorization.trusts().set(tenant, new OidcTrusts.Trust(name, request.issuer(),
                 request.audience(), request.subject(), request.scope(), request.rights(),
                 CredentialLifetimes.lifetime(request.ttl())));
-        context.audit(key, SET, name);
+        context.audit(tenant, key, SET, name);
         response.setStatus(200);
     }
 
     @DeleteMapping("/api/trusts/{name}")
     public void removeTrust(@PathVariable("name") String name,
                             @RequestHeader(value = PresentedKey.HEADER, required = false) String key,
-                            HttpServletResponse response) throws IOException {
-        authorization.trusts().remove(context.tenant(key), name);
-        context.audit(key, REMOVE, name);
+                            HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String tenant = routing.tenant(http);
+        authorization.trusts().remove(tenant, name);
+        context.audit(tenant, key, REMOVE, name);
         response.setStatus(200);
     }
 

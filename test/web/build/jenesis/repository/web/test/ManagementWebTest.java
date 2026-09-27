@@ -16,6 +16,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.servlet.testkit.Servlets;
 import build.jenesis.repository.web.testkit.Web;
 import org.springframework.core.env.ConfigurableEnvironment;
+import jakarta.servlet.http.HttpServletRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,24 +43,30 @@ class ManagementWebTest {
         Authorization authorization = Authorization.enforcing(store);
         Repositories repositories = Web.repositories(store, authorization);
         audit = Web.audit();
-        controller = new ManagementController(repositories, authorization, audit);
+        controller = new ManagementController(repositories, Web.routing(store, repositories), authorization, audit);
+    }
+
+    /** An {@code /api} call, which names no tenant: the routing answers the one this deployment serves. */
+    private static HttpServletRequest request() {
+        return Servlets.request("PUT", "/api/policy");
     }
 
     @Test
     void a_lifetime_policy_reads_back_as_written_and_is_audited() throws IOException {
         Servlets.Response response = Servlets.response();
 
-        controller.setPolicy(null, new ManagementController.PolicyRequest("P30D", "P90D"), response.servlet());
+        controller.setPolicy(null, new ManagementController.PolicyRequest("P30D", "P90D"), request(),
+                response.servlet());
 
         assertThat(response.status()).isEqualTo(200);
-        assertThat(controller.policy(null)).isEqualTo(new ManagementController.PolicyView("PT720H", "PT2160H"));
+        assertThat(controller.policy(request())).isEqualTo(new ManagementController.PolicyView("PT720H", "PT2160H"));
         assertThat(audit.actions()).containsExactly(AuditActions.POLICY_SET);
     }
 
     @Test
     void a_lifetime_that_is_not_a_duration_is_a_bad_request() throws IOException {
         assertThatThrownBy(() -> controller.setPolicy(null, new ManagementController.PolicyRequest("a month", null),
-                Servlets.response().servlet())).isInstanceOf(IllegalArgumentException.class);
+                request(), Servlets.response().servlet())).isInstanceOf(IllegalArgumentException.class);
         Servlets.Response mapped = Servlets.response();
         controller.badRequest(mapped.servlet());
 
@@ -69,36 +76,38 @@ class ManagementWebTest {
 
     @Test
     void a_quota_is_the_ceiling_set_beside_what_is_stored() throws IOException {
-        controller.setQuota(null, new ManagementController.QuotaRequest(1_048_576), Servlets.response().servlet());
+        controller.setQuota(null, new ManagementController.QuotaRequest(1_048_576), request(),
+                Servlets.response().servlet());
 
-        assertThat(controller.quota(null)).isEqualTo(new ManagementController.QuotaView(1_048_576, 0));
+        assertThat(controller.quota(request())).isEqualTo(new ManagementController.QuotaView(1_048_576, 0));
         assertThat(audit.rows()).singleElement().satisfies(row -> {
             assertThat(row.action()).isEqualTo(AuditActions.QUOTA_SET);
             assertThat(row.target()).isEqualTo("1048576");
         });
 
-        controller.setQuota(null, new ManagementController.QuotaRequest(0), Servlets.response().servlet());
-        assertThat(controller.quota(null).maxBytes()).as("zero clears the ceiling").isZero();
+        controller.setQuota(null, new ManagementController.QuotaRequest(0), request(), Servlets.response().servlet());
+        assertThat(controller.quota(request()).maxBytes()).as("zero clears the ceiling").isZero();
     }
 
     @Test
     void a_rate_ceiling_reads_back_as_written() throws IOException {
-        controller.setRateLimit(null, new ManagementController.RateLimitRequest(600), Servlets.response().servlet());
+        controller.setRateLimit(null, new ManagementController.RateLimitRequest(600), request(),
+                Servlets.response().servlet());
 
-        assertThat(controller.rateLimit(null, Servlets.response().servlet()).permitsPerMinute()).isEqualTo(600);
+        assertThat(controller.rateLimit(request(), Servlets.response().servlet()).permitsPerMinute()).isEqualTo(600);
         assertThat(audit.actions()).containsExactly("rate-limit.set");
     }
 
     @Test
     void a_custom_role_joins_the_built_in_ones_until_it_is_removed() throws IOException {
-        assertThat(controller.roles(null)).containsKeys("read-only", "deploy", "admin");
+        assertThat(controller.roles(request())).containsKeys("read-only", "deploy", "admin");
 
         controller.setRole("ci", null, new ManagementController.RoleRequest("repository:read,repository:write"),
-                Servlets.response().servlet());
-        assertThat(controller.roles(null)).containsEntry("ci", "repository:read,repository:write");
+                request(), Servlets.response().servlet());
+        assertThat(controller.roles(request())).containsEntry("ci", "repository:read,repository:write");
 
-        controller.removeRole("ci", null, Servlets.response().servlet());
-        assertThat(controller.roles(null)).doesNotContainKey("ci");
+        controller.removeRole("ci", null, request(), Servlets.response().servlet());
+        assertThat(controller.roles(request())).doesNotContainKey("ci");
         assertThat(audit.actions()).containsExactly(AuditActions.ROLE_SET, AuditActions.ROLE_REMOVE);
     }
 
@@ -106,34 +115,34 @@ class ManagementWebTest {
     void the_audit_trail_pages_by_cursor_and_says_when_it_is_done() throws IOException {
         for (String role : List.of("one", "two", "three")) {
             controller.setRole(role, null, new ManagementController.RoleRequest("repository:read"),
-                    Servlets.response().servlet());
+                    request(), Servlets.response().servlet());
         }
         Servlets.Response first = Servlets.response();
 
-        List<ManagementController.AuditView> page = controller.auditTrail(null, null, null, null, 0, null, 2,
+        List<ManagementController.AuditView> page = controller.auditTrail(null, null, null, 0, null, 2, request(),
                 first.servlet());
 
         assertThat(page).hasSize(2);
         String next = first.header("Jenesis-Next-Cursor");
         assertThat(next).as("more remains, so the answer says where it resumes").isNotNull();
         Servlets.Response last = Servlets.response();
-        List<ManagementController.AuditView> rest = controller.auditTrail(null, null, null, null, 0, next, 2,
+        List<ManagementController.AuditView> rest = controller.auditTrail(null, null, null, 0, next, 2, request(),
                 last.servlet());
         assertThat(rest).hasSize(1);
         assertThat(last.header("Jenesis-Next-Cursor")).as("the last page carries no cursor").isNull();
-        assertThat(controller.auditTrail(null, null, null, AuditActions.ROLE_SET, 1, null, 500,
+        assertThat(controller.auditTrail(null, null, AuditActions.ROLE_SET, 1, null, 500, request(),
                 Servlets.response().servlet())).as("an offset page").hasSize(2);
     }
 
     @Test
     void the_csv_export_quotes_what_needs_it_and_defuses_a_formula() throws IOException {
         controller.setRole("=HYPERLINK(\"x\")", null, new ManagementController.RoleRequest("repository:read"),
-                Servlets.response().servlet());
+                request(), Servlets.response().servlet());
         controller.setRole("plain,with comma", null, new ManagementController.RoleRequest("repository:read"),
-                Servlets.response().servlet());
+                request(), Servlets.response().servlet());
         Servlets.Response response = Servlets.response();
 
-        controller.auditCsv(null, null, null, null, response.servlet());
+        controller.auditCsv(null, null, null, request(), response.servlet());
 
         assertThat(response.contentType()).isEqualTo("text/csv;charset=UTF-8");
         List<String> lines = response.body().lines().toList();
@@ -144,13 +153,14 @@ class ManagementWebTest {
 
     @Test
     void with_no_audit_module_the_trail_answers_501() throws IOException {
-        ManagementController unaudited = new ManagementController(Web.repositories(store),
+        Repositories repositories = Web.repositories(store);
+        ManagementController unaudited = new ManagementController(repositories, Web.routing(store, repositories),
                 Authorization.enforcing(store), AuditTrail.none());
         Servlets.Response page = Servlets.response();
         Servlets.Response csv = Servlets.response();
 
-        assertThat(unaudited.auditTrail(null, null, null, null, 0, null, 10, page.servlet())).isNull();
-        unaudited.auditCsv(null, null, null, null, csv.servlet());
+        assertThat(unaudited.auditTrail(null, null, null, 0, null, 10, request(), page.servlet())).isNull();
+        unaudited.auditCsv(null, null, null, request(), csv.servlet());
 
         assertThat(page.status()).isEqualTo(501);
         assertThat(csv.status()).isEqualTo(501);

@@ -3,6 +3,7 @@ package build.jenesis.repository.server.kernel;
 import module java.base;
 
 import build.jenesis.repository.server.RoutingContext;
+import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
@@ -48,7 +49,8 @@ public final class RepositoriesRoutingContext implements RoutingContext {
 
     @Override
     public String tenantOf(String key) {
-        return repositories.tenant(key);
+        String tenant = Authorization.tenantOf(key);
+        return tenant == null ? defaultTenant : tenant;
     }
 
     @Override

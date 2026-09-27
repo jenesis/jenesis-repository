@@ -2,12 +2,13 @@ package build.jenesis.repository.console.api;
 
 import module java.base;
 
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.ui.store.RepositoryBrowse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,18 +33,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class OriginController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
 
-    public OriginController(Repositories repositories) {
+    public OriginController(Repositories repositories, RepositoryRouting routing) {
         this.repositories = repositories;
+        this.routing = routing;
     }
 
     @GetMapping("/api/origin")
     @ResponseBody
     public List<RepositoryBrowse.OriginRow> origin(@RequestParam("repo") String repo,
                                                    @RequestParam(value = "path", defaultValue = "") String path,
-                                                   @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                                   HttpServletRequest request,
                                                    HttpServletResponse response) throws IOException {
-        String tenant = RepositoryRequests.access(repositories, repo, key, response);
+        String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return null;
         }

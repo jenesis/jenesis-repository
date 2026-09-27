@@ -73,11 +73,8 @@ public final class CoreSettingsContributor implements SettingsContributor {
                         "How long one node holds the background-maintenance lease; keep under the task intervals.",
                         Setting.Kind.DURATION, "PT10M", false).advanced(),
                 new Setting("default-tenant", "Tenancy", "Default tenant",
-                        "Tenant a request resolves to when its key carries none. Applies on the next restart: the "
-                                + "routing legs pick a new value up immediately, but the tenants directory resolves "
-                                + "once at boot, so until the deployment restarts the console's instance list, the "
-                                + "orphan diagnostic and the purge keep naming the previous default while keyless "
-                                + "traffic has already moved.",
+                        "Tenant a request resolves to when its key carries none. Applies on the next restart, "
+                                + "when the routing and the tenants directory both take it up.",
                         Setting.Kind.STRING, Scopes.DEFAULT_TENANT, false).essential(),
                 new Setting("block-private-import-hosts", "Network", "Block private import hosts",
                         "Reject a migration URL - an import's source or an export's target - that is plaintext http, "

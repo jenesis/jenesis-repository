@@ -38,10 +38,13 @@ public final class PrincipalsController {
 
     private final Authorization authorization;
 
+    private final RepositoryRouting routing;
+
     private final CredentialContext context;
 
-    public PrincipalsController(Authorization authorization, CredentialContext context) {
+    public PrincipalsController(Authorization authorization, RepositoryRouting routing, CredentialContext context) {
         this.authorization = Objects.requireNonNull(authorization, "authorization");
+        this.routing = Objects.requireNonNull(routing, "routing");
         this.context = Objects.requireNonNull(context, "context");
     }
 
@@ -49,8 +52,7 @@ public final class PrincipalsController {
     @GetMapping("/api/principals")
     @ResponseBody
     public List<PrincipalView> principals(HttpServletRequest http, HttpServletResponse response) throws IOException {
-        String key = PresentedKey.from(http);
-        String tenant = context.tenant(key);
+        String tenant = routing.tenant(http);
         String after = http.getParameter("after");
         Authorization.SubjectPage page = authorization.subjects(tenant, Authorization.Kind.PRINCIPAL,
                 after == null || after.isBlank() ? null : after, pageSize(http.getParameter("limit")));
@@ -72,20 +74,22 @@ public final class PrincipalsController {
                          @RequestBody PrincipalGrantRequest request,
                          HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.setGrant(context.tenant(key), Authorization.Subject.principal(request.id()),
+        String tenant = routing.tenant(http);
+        authorization.setGrant(tenant, Authorization.Subject.principal(request.id()),
                 request.scope(), String.join(",", request.tokens()),
                 CredentialLifetimes.expiry(request.expires()));
-        context.audit(key, "principal.grant.set", request.id() + " " + request.scope());
+        context.audit(tenant, key, "principal.grant.set", request.id() + " " + request.scope());
         response.setStatus(200);
     }
 
     @DeleteMapping("/api/principals/grants")
     public void removeGrant(HttpServletRequest http, HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
+        String tenant = routing.tenant(http);
         String id = required(http, "id");
         String scope = required(http, "scope");
-        authorization.removeGrant(context.tenant(key), Authorization.Subject.principal(id), scope);
-        context.audit(key, "principal.grant.remove", id + " " + scope);
+        authorization.removeGrant(tenant, Authorization.Subject.principal(id), scope);
+        context.audit(tenant, key, "principal.grant.remove", id + " " + scope);
         response.setStatus(200);
     }
 
@@ -95,9 +99,10 @@ public final class PrincipalsController {
     @DeleteMapping("/api/principals")
     public void remove(HttpServletRequest http, HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
+        String tenant = routing.tenant(http);
         String id = required(http, "id");
-        authorization.removeSubject(context.tenant(key), Authorization.Subject.principal(id));
-        context.audit(key, "principal.remove", id);
+        authorization.removeSubject(tenant, Authorization.Subject.principal(id));
+        context.audit(tenant, key, "principal.remove", id);
         response.setStatus(200);
     }
 

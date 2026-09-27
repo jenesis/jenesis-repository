@@ -18,10 +18,10 @@ import build.jenesis.repository.store.QuotaArtifactStore;
 
 /**
  * Resolves a request to its isolated artifact space and builds the per-space components, so one deployment serves
- * many tenants and many named repositories - exactly the cache's stateless multi-tenancy. The tenant rides in the
- * key ({@code jenk_<tenant>.<secret>}, the configured default when a request carries none); the repository is named in
- * the URL path. Storage is the root store scoped to {@code <tenant>/<repo>}, a confined subspace, so two tenants -
- * or two repositories - never see each other's artifacts. Tenant and repository names are validated as
+ * many tenants and many named repositories - exactly the cache's stateless multi-tenancy. The tenant a request acts
+ * on is the deployment's routing's answer ({@link build.jenesis.repository.server.RepositoryRouting}); the repository
+ * is named in the URL path. Storage is the root store scoped to {@code <tenant>/<repo>}, a confined subspace, so two
+ * tenants - or two repositories - never see each other's artifacts. Tenant and repository names are validated as
  * traversal-free path segments before they ever scope the store.
  *
  * <p>What this hands out is the scoped store, the quota and the two answers a definition gives
@@ -36,7 +36,8 @@ public final class Repositories {
 
     /** The tenant-key request header, the stable home shared by the core controllers, the security chain
      *  (the tenancy module's {@code RepositoryAuthorizationManager} and {@code MultiTenantRouting}, the telemetry download filter) and the
-     *  discovered per-feature {@code web} adapters - the tenant it carries is resolved by {@link #tenant(String)}. */
+     *  discovered per-feature {@code web} adapters. Which tenant a request acts on is the routing's answer
+     *  ({@link build.jenesis.repository.server.RepositoryRouting#tenant}), never read off this header alone. */
     public static final String KEY = "Jenesis-Repository-Key";
 
     /** The header a NuGet client pushes with ({@code dotnet nuget push --api-key}), the one credential carrier the
@@ -97,13 +98,6 @@ public final class Repositories {
      *  then answer that retention is not available on this deployment. */
     public Optional<RetentionSweeper> retentionSweeper() {
         return retentionSweeper;
-    }
-
-    /** The tenant a key resolves to - the one carried in a {@code jenk_<tenant>.}-prefixed key, or the default
-     *  when there is no key or it is not well-formed. */
-    public String tenant(String key) {
-        String tenant = Authorization.tenantOf(key);
-        return tenant == null ? live.defaultTenant() : tenant;
     }
 
     /**

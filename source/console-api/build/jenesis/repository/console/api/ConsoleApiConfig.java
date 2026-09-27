@@ -5,6 +5,7 @@ import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.spi.Authorization;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -23,20 +24,20 @@ public class ConsoleApiConfig {
 
     @Bean
     public ScimTokenController scimTokenController(@Qualifier("rootStorage") ObjectProvider<Documents> storage,
-                                                   AuditTrail audit, Repositories repositories) {
-        return new ScimTokenController(storage, audit, repositories);
+                                                   AuditTrail audit, RepositoryRouting routing) {
+        return new ScimTokenController(storage, audit, routing);
     }
 
     @Bean
     public CacheProjectsController cacheProjectsController(
             @Qualifier("cacheRootStorage") ObjectProvider<CacheStorage> storage, AuditTrail audit,
-            Repositories repositories) {
-        return new CacheProjectsController(storage, audit, repositories);
+            RepositoryRouting routing) {
+        return new CacheProjectsController(storage, audit, routing);
     }
 
     @Bean
-    public OriginController originController(Repositories repositories) {
-        return new OriginController(repositories);
+    public OriginController originController(Repositories repositories, RepositoryRouting routing) {
+        return new OriginController(repositories, routing);
     }
 
     /** The tenants, over the documents the console's own tenant directory is built over: the repository store's root,

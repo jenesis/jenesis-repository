@@ -7,6 +7,7 @@ import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.CredentialContext;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.maintenance.StorageNamespaces;
@@ -36,9 +37,9 @@ import org.springframework.core.env.Environment;
 public class ManagementWebConfig {
 
     @Bean
-    public ManagementController managementController(Repositories repositories, Authorization authorization,
-                                                     AuditTrail audit) {
-        return new ManagementController(repositories, authorization, audit);
+    public ManagementController managementController(Repositories repositories, RepositoryRouting routing,
+                                                     Authorization authorization, AuditTrail audit) {
+        return new ManagementController(repositories, routing, authorization, audit);
     }
 
 

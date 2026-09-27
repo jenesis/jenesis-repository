@@ -3,11 +3,13 @@ package build.jenesis.repository.management.web;
 import module java.base;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CredentialLifetimes;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.spi.RateLimiterProvider;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -26,9 +28,9 @@ import org.springframework.web.bind.annotation.RestController;
  * quota, request-rate ceiling, named roles and the audit trail - peeled out of the
  * {@code RepositoryController} monolith into its own thin {@code web} adapter and contributed through the
  * {@code ServerModuleProvider} seam. A JSON CRUD over the framework-free {@link Authorization} (resolved per tenant
- * through {@link Repositories}) and the discovered {@link AuditTrail}; the tenant is the one carried by
- * the managing {@code Jenesis-Repository-Key} header. Every route here is under {@code /api/} and is gated
- * {@code manage:read} (the reads) or {@code manage:write} (the mutations) at scope {@code *} by the security chain
+ * through {@link Repositories}) and the discovered {@link AuditTrail}; the tenant is the one the deployment's
+ * routing answers for the request ({@link RepositoryRouting#tenant}). Every route here is under {@code /api/} and is
+ * gated {@code manage:read} (the reads) or {@code manage:write} (the mutations) at scope {@code *} by the security chain
  * before the request is reached, so this controller makes no authorization decision - the same guard the monolith
  * carried, unchanged by the move. With no rate-limiting module installed the rate-limit endpoints answer {@code 501};
  * with no audit module installed the audit endpoints answer {@code 501}, after the auth check so {@code 401}/{@code 403}
@@ -38,32 +40,34 @@ import org.springframework.web.bind.annotation.RestController;
 public class ManagementController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final Authorization authorization;
     private final AuditTrail audit;
     // Module presence is static for a JVM; resolved once so the rate-limit surface can say "not installed".
     private final boolean rateLimiting = RateLimiterProvider.resolve(key -> null) != RateLimiter.NONE;
 
-    public ManagementController(Repositories repositories, Authorization authorization, AuditTrail audit) {
+    public ManagementController(Repositories repositories, RepositoryRouting routing, Authorization authorization,
+                                AuditTrail audit) {
         this.repositories = repositories;
+        this.routing = routing;
         this.authorization = authorization;
         this.audit = audit;
     }
 
-    private void audit(String key, String action, String target) {
-        String tenant = repositories.tenant(key);
+    private void audit(String tenant, String key, String action, String target) {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, target);
     }
 
     // The credential routes are the CORE's: build.jenesis.repository.server.CredentialsController owns list,
     // mint, grant, revoke, expiry, rotate and the source-IP allowlist, and every one of them is a thin call onto
-    // Authorization, which holds the logic. Resolving the tenant through Repositories and writing an audit row are
-    // not logic, so both are supplied through CredentialContext and the routes exist once, not restated here. Two
+    // Authorization, which holds the logic. Writing an audit row is not logic, so it is supplied through
+    // CredentialContext and the routes exist once, not restated here. Two
     // implementations of "issue a credential" would drift, and the drift would be in an authorization surface.
 
     @GetMapping("/api/policy")
     @ResponseBody
-    public PolicyView policy(@RequestHeader(value = Repositories.KEY, required = false) String key) throws IOException {
-        CredentialLifetimes.Policy policy = authorization.lifetimes().policy(repositories.tenant(key));
+    public PolicyView policy(HttpServletRequest http) throws IOException {
+        CredentialLifetimes.Policy policy = authorization.lifetimes().policy(routing.tenant(http));
         return new PolicyView(policy.defaultLifetime().toString(),
                 policy.maxLifetime() == null ? null : policy.maxLifetime().toString());
     }
@@ -72,19 +76,20 @@ public class ManagementController {
     @PutMapping("/api/policy")
     public void setPolicy(@RequestHeader(value = Repositories.KEY, required = false) String key,
                           @RequestBody(required = false) PolicyRequest request,
-                          HttpServletResponse response) throws IOException {
-        authorization.lifetimes().setPolicy(repositories.tenant(key),
+                          HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String tenant = routing.tenant(http);
+        authorization.lifetimes().setPolicy(tenant,
                 request == null ? null : CredentialLifetimes.lifetime(request.defaultLifetime()),
                 request == null ? null : CredentialLifetimes.lifetime(request.maxLifetime()));
-        audit(key, AuditActions.POLICY_SET, "lifetime");
+        audit(tenant, key, AuditActions.POLICY_SET, "lifetime");
         response.setStatus(200);
     }
 
     /** The tenant's storage quota: the byte ceiling ({@code 0} when unlimited) and the bytes currently stored. */
     @GetMapping("/api/quota")
     @ResponseBody
-    public QuotaView quota(@RequestHeader(value = Repositories.KEY, required = false) String key) throws IOException {
-        String tenant = repositories.tenant(key);
+    public QuotaView quota(HttpServletRequest http) throws IOException {
+        String tenant = routing.tenant(http);
         return new QuotaView(repositories.quotaLimit(tenant), repositories.quotaUsed(tenant));
     }
 
@@ -93,8 +98,8 @@ public class ManagementController {
     @PutMapping("/api/quota")
     public void setQuota(@RequestHeader(value = Repositories.KEY, required = false) String key,
                          @RequestBody QuotaRequest request,
-                         HttpServletResponse response) throws IOException {
-        String tenant = repositories.tenant(key);
+                         HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String tenant = routing.tenant(http);
         authorization.quotas().set(tenant, request == null ? 0L : request.maxBytes());
         // The usage total is NOT recomputed here: that walks every blob of every repository the tenant owns while
         // the caller waits - so the cost of setting a limit would grow with the tenant, which is the one thing a
@@ -102,41 +107,42 @@ public class ManagementController {
         // a limit, so deferring costs a window rather than the number: enforcement runs on the previous total until
         // the next pass, and a limit lowered mid-window can be briefly over-admitted against. That is the trade,
         // taken deliberately, and it is the reason the pass runs unconditionally rather than only on change.
-        audit(key, AuditActions.QUOTA_SET, Long.toString(request == null ? 0L : request.maxBytes()));
+        audit(tenant, key, AuditActions.QUOTA_SET, Long.toString(request == null ? 0L : request.maxBytes()));
         response.setStatus(200);
     }
 
     /** The tenant's request rate ceiling in permits per minute ({@code 0} when it falls back to the deployment default). */
     @GetMapping("/api/rate-limit")
     @ResponseBody
-    public RateLimitView rateLimit(@RequestHeader(value = Repositories.KEY, required = false) String key,
-                                   HttpServletResponse response) throws IOException {
+    public RateLimitView rateLimit(HttpServletRequest http, HttpServletResponse response) throws IOException {
         if (!rateLimiting) {
             respondRateLimitNotInstalled(response);
             return null;
         }
-        return new RateLimitView(authorization.rateLimits().of(repositories.tenant(key)));
+        return new RateLimitView(authorization.rateLimits().of(routing.tenant(http)));
     }
 
     /** Set ({@code > 0}) or clear ({@code 0}) the tenant's request rate ceiling in permits per minute. */
     @PutMapping("/api/rate-limit")
     public void setRateLimit(@RequestHeader(value = Repositories.KEY, required = false) String key,
-                             @RequestBody RateLimitRequest request, HttpServletResponse response) throws IOException {
+                             @RequestBody RateLimitRequest request, HttpServletRequest http,
+                             HttpServletResponse response) throws IOException {
         if (!rateLimiting) {
             respondRateLimitNotInstalled(response);
             return;
         }
         long permitsPerMinute = request == null ? 0L : request.permitsPerMinute();
-        authorization.rateLimits().set(repositories.tenant(key), permitsPerMinute);
-        audit(key, "rate-limit.set", Long.toString(permitsPerMinute));
+        String tenant = routing.tenant(http);
+        authorization.rateLimits().set(tenant, permitsPerMinute);
+        audit(tenant, key, "rate-limit.set", Long.toString(permitsPerMinute));
         response.setStatus(200);
     }
 
     /** The tenant's named roles (name to comma-separated tokens): built-in read-only/deploy/admin plus custom ones. */
     @GetMapping("/api/roles")
     @ResponseBody
-    public Map<String, String> roles(@RequestHeader(value = Repositories.KEY, required = false) String key) throws IOException {
-        return authorization.roles().of(repositories.tenant(key));
+    public Map<String, String> roles(HttpServletRequest http) throws IOException {
+        return authorization.roles().of(routing.tenant(http));
     }
 
     /** Add or replace a custom role by name from comma-separated tokens. */
@@ -144,18 +150,20 @@ public class ManagementController {
     public void setRole(@PathVariable("name") String name,
                         @RequestHeader(value = Repositories.KEY, required = false) String key,
                         @RequestBody RoleRequest request,
-                        HttpServletResponse response) throws IOException {
-        authorization.roles().set(repositories.tenant(key), name, request.tokens());
-        audit(key, AuditActions.ROLE_SET, name);
+                        HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String tenant = routing.tenant(http);
+        authorization.roles().set(tenant, name, request.tokens());
+        audit(tenant, key, AuditActions.ROLE_SET, name);
         response.setStatus(200);
     }
 
     @DeleteMapping("/api/roles/{name}")
     public void removeRole(@PathVariable("name") String name,
                            @RequestHeader(value = Repositories.KEY, required = false) String key,
-                           HttpServletResponse response) throws IOException {
-        authorization.roles().remove(repositories.tenant(key), name);
-        audit(key, AuditActions.ROLE_REMOVE, name);
+                           HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String tenant = routing.tenant(http);
+        authorization.roles().remove(tenant, name);
+        audit(tenant, key, AuditActions.ROLE_REMOVE, name);
         response.setStatus(200);
     }
 
@@ -166,22 +174,22 @@ public class ManagementController {
      *  CSV export below streams the whole trail for off-system retention. */
     @GetMapping("/api/audit")
     @ResponseBody
-    public List<AuditView> auditTrail(@RequestHeader(value = Repositories.KEY, required = false) String key,
-                                      @RequestParam(name = "from", required = false) String from,
+    public List<AuditView> auditTrail(@RequestParam(name = "from", required = false) String from,
                                       @RequestParam(name = "to", required = false) String to,
                                       @RequestParam(name = "action", required = false) String action,
                                       @RequestParam(name = "offset", defaultValue = "0") int offset,
                                       @RequestParam(name = "after", required = false) String after,
                                       @RequestParam(name = "limit", defaultValue = "500") int limit,
-                                      HttpServletResponse response) throws IOException {
+                                      HttpServletRequest http, HttpServletResponse response) throws IOException {
         if (audit == AuditTrail.none()) {
             respondAuditNotInstalled(response);
             return null;
         }
         int size = Math.clamp(limit, 1, 1000);
+        String tenant = routing.tenant(http);
         AuditTrail.Page page = after != null && !after.isBlank() || offset <= 0
-                ? audit.query(repositories.tenant(key), instant(from), instant(to), action, after, size)
-                : audit.query(repositories.tenant(key), instant(from), instant(to), action, offset, size);
+                ? audit.query(tenant, instant(from), instant(to), action, after, size)
+                : audit.query(tenant, instant(from), instant(to), action, offset, size);
         if (page.next() != null) {
             response.setHeader("Jenesis-Next-Cursor", page.next());
         }
@@ -198,19 +206,19 @@ public class ManagementController {
      *  large trail exports within a flat memory envelope (the store-backed trail holds only one day's events at a
      *  time). */
     @GetMapping(value = "/api/audit.csv", produces = "text/csv;charset=UTF-8")
-    public void auditCsv(@RequestHeader(value = Repositories.KEY, required = false) String key,
-                         @RequestParam(name = "from", required = false) String from,
+    public void auditCsv(@RequestParam(name = "from", required = false) String from,
                          @RequestParam(name = "to", required = false) String to,
                          @RequestParam(name = "action", required = false) String action,
-                         HttpServletResponse response) throws IOException {
+                         HttpServletRequest http, HttpServletResponse response) throws IOException {
         if (audit == AuditTrail.none()) {
             respondAuditNotInstalled(response);
             return;
         }
+        String tenant = routing.tenant(http);
         response.setContentType("text/csv;charset=UTF-8");
         Writer out = response.getWriter();
         out.write("at,actor,action,target\n");
-        audit.stream(repositories.tenant(key), instant(from), instant(to), action, event ->
+        audit.stream(tenant, instant(from), instant(to), action, event ->
                 out.write(csv(event.at().toString()) + ',' + csv(event.actor()) + ',' + csv(event.action()) + ','
                         + csv(event.target()) + '\n'));
     }

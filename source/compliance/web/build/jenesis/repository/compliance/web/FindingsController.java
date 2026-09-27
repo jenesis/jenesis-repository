@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance.web;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.compliance.AdvisorySource;
@@ -16,6 +17,7 @@ import build.jenesis.repository.findings.WaiverLabels;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -71,19 +73,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class FindingsController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final AuditTrail audit;
     private final Optional<FindingsProvider> findings;
     private final Function<String, ComplianceGate> gates;
 
-    public FindingsController(Repositories repositories, AuditTrail audit, Function<String, ComplianceGate> gates) {
-        this(repositories, audit, FindingsProvider.installed(), gates);
+    public FindingsController(Repositories repositories, RepositoryRouting routing, AuditTrail audit,
+                              Function<String, ComplianceGate> gates) {
+        this(repositories, routing, audit, FindingsProvider.installed(), gates);
     }
 
     /** Embedding/test seam: bind an explicit findings provider rather than discovering one. {@code gates} answers
      *  the publish gate a tenant's reports are decided by. */
-    public FindingsController(Repositories repositories, AuditTrail audit, Optional<FindingsProvider> findings,
-                              Function<String, ComplianceGate> gates) {
+    public FindingsController(Repositories repositories, RepositoryRouting routing, AuditTrail audit,
+                              Optional<FindingsProvider> findings, Function<String, ComplianceGate> gates) {
         this.repositories = repositories;
+        this.routing = routing;
         this.audit = audit;
         this.findings = findings;
         this.gates = gates;
@@ -101,12 +106,12 @@ public class FindingsController {
     public ReportAnswer report(@RequestParam("repo") String repo,
                                @RequestHeader(value = Repositories.KEY, required = false) String key,
                                @RequestBody ReportRequest request,
-                               HttpServletResponse response) throws IOException {
+                               HttpServletRequest http, HttpServletResponse response) throws IOException {
         if (!Repositories.valid(repo)) {
             response.setStatus(400);
             return null;
         }
-        String tenant = repositories.tenant(key);
+        String tenant = routing.tenant(http);
         if (!Repositories.valid(tenant)) {
             response.setStatus(400);
             return null;
@@ -147,13 +152,12 @@ public class FindingsController {
                                  @RequestParam(value = "severity", required = false) String severity,
                                  @RequestParam(value = "offset", defaultValue = "0") int offset,
                                  @RequestParam(value = "limit", defaultValue = "500") int limit,
-                                 @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                 HttpServletResponse response) throws IOException {
+                                 HttpServletRequest request, HttpServletResponse response) throws IOException {
         if (!Repositories.valid(repo)) {
             response.setStatus(400);
             return null;
         }
-        String tenant = repositories.tenant(key);
+        String tenant = routing.tenant(request);
         if (!Repositories.valid(tenant)) {
             response.setStatus(400);
             return null;
@@ -221,12 +225,12 @@ public class FindingsController {
                        @RequestParam("decision") String decision,
                        @RequestParam(value = "note", required = false) String note,
                        @RequestHeader(value = Repositories.KEY, required = false) String key,
-                       HttpServletResponse response) throws IOException {
+                       HttpServletRequest http, HttpServletResponse response) throws IOException {
         if (!Repositories.valid(repo)) {
             response.setStatus(400);
             return;
         }
-        String tenant = repositories.tenant(key);
+        String tenant = routing.tenant(http);
         if (!Repositories.valid(tenant)) {
             response.setStatus(400);
             return;
@@ -272,12 +276,12 @@ public class FindingsController {
                        @RequestParam("expires") String expires,
                        @RequestParam(value = "note", required = false) String note,
                        @RequestHeader(value = Repositories.KEY, required = false) String key,
-                       HttpServletResponse response) throws IOException {
+                       HttpServletRequest request, HttpServletResponse response) throws IOException {
         if (!Repositories.valid(repo)) {
             response.setStatus(400);
             return;
         }
-        String tenant = repositories.tenant(key);
+        String tenant = routing.tenant(request);
         if (!Repositories.valid(tenant)) {
             response.setStatus(400);
             return;
@@ -322,12 +326,12 @@ public class FindingsController {
                              @RequestParam("source") String source,
                              @RequestParam("id") String id,
                              @RequestHeader(value = Repositories.KEY, required = false) String key,
-                             HttpServletResponse response) throws IOException {
+                             HttpServletRequest request, HttpServletResponse response) throws IOException {
         if (!Repositories.valid(repo)) {
             response.setStatus(400);
             return;
         }
-        String tenant = repositories.tenant(key);
+        String tenant = routing.tenant(request);
         if (!Repositories.valid(tenant)) {
             response.setStatus(400);
             return;

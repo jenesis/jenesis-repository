@@ -39,8 +39,8 @@ import org.springframework.web.bind.annotation.RestController;
  * definitions, the per-format proxy upstreams and the per-host upstream credentials - peeled out of the
  * {@code RepositoryController} monolith into its own thin {@code web} adapter and contributed through the
  * {@code ServerModuleProvider} seam. A JSON CRUD over the store-backed {@link Settings} (with {@link LiveConfig}
- * rebuilt live where a setting allows it) and the discovered {@link UpstreamCredentialSource}; the tenant is the one
- * carried by the managing {@code Jenesis-Repository-Key} header, resolved through {@link Repositories}.
+ * rebuilt live where a setting allows it) and the discovered {@link UpstreamCredentialSource}; a mutation is audited
+ * under the tenant the deployment's routing answers for the request ({@link RepositoryRouting#tenant}).
  * These are deployment-wide knobs, so every route here is under {@code /api/} and is gated {@code manage:write} (the
  * mutations) or {@code manage:read} (the reads) at scope {@code *} by the security chain before the request is
  * reached - operator-tenant-only - so this controller makes no authorization decision, the same guard the monolith
@@ -79,10 +79,6 @@ public class ConfigController {
      *  the boot sweep answer from exactly the same effective value (stored setting over file/env default). */
     private boolean allowInternal() {
         return live.proxyAllowInternal();
-    }
-
-    private void audit(String key, String action, String target) {
-        audit(repositories.tenant(key), key, action, target);
     }
 
     private void audit(String tenant, String key, String action, String target) {
@@ -199,7 +195,9 @@ public class ConfigController {
     public void setSetting(@PathVariable("key") String key,
                            @RequestHeader(value = Repositories.KEY, required = false) String authKey,
                            @RequestParam(value = "tenant", required = false) String tenant,
-                           @RequestBody SettingRequest request, HttpServletResponse response) throws IOException {
+                           @RequestBody SettingRequest request, HttpServletRequest http,
+                           HttpServletResponse response) throws IOException {
+        String routed = routing.tenant(http);
         Setting setting = catalogue().stream().filter(candidate -> candidate.key().equals(key))
                 .findFirst().orElse(null);
         if (setting == null) {
@@ -240,7 +238,7 @@ public class ConfigController {
                 refuseSecret(response, refused);
                 return;
             }
-            audit(authKey, "setting.set", tenant + "/" + key);
+            audit(routed, authKey, "setting.set", tenant + "/" + key);
             response.setStatus(200);
             return;
         }
@@ -260,7 +258,7 @@ public class ConfigController {
             response.setStatus(400);
             return;
         }
-        audit(authKey, "setting.set", key);
+        audit(routed, authKey, "setting.set", key);
         response.setStatus(200);
     }
 
@@ -274,7 +272,8 @@ public class ConfigController {
     public void clearSetting(@PathVariable("key") String key,
                              @RequestHeader(value = Repositories.KEY, required = false) String authKey,
                              @RequestParam(value = "tenant", required = false) String tenant,
-                             HttpServletResponse response) throws IOException {
+                             HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String routed = routing.tenant(request);
         boolean catalogued = catalogue().stream().anyMatch(candidate -> candidate.key().equals(key));
         if (!catalogued) {
             response.setStatus(400);
@@ -290,13 +289,13 @@ public class ConfigController {
         }
         if (tenant != null && !tenant.isBlank()) {
             settings.set(tenant, key, null);
-            audit(authKey, "setting.clear", tenant + "/" + key);
+            audit(routed, authKey, "setting.clear", tenant + "/" + key);
             response.setStatus(200);
             return;
         }
         settings.set(key, null);
         live.rebuild();
-        audit(authKey, "setting.clear", key);
+        audit(routed, authKey, "setting.clear", key);
         response.setStatus(200);
     }
 
@@ -331,7 +330,8 @@ public class ConfigController {
     public void importSettings(@RequestHeader(value = Repositories.KEY, required = false) String authKey,
                                @RequestParam(value = "tenant", required = false) String tenant,
                                @RequestBody(required = false) Map<String, Map<String, String>> bundle,
-                               HttpServletResponse response) throws IOException {
+                               HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String routed = routing.tenant(request);
         if (bundle == null) {
             response.setStatus(400);
             return;
@@ -382,7 +382,7 @@ public class ConfigController {
             return;
         }
         live.rebuild();
-        audit(authKey, "settings.import", tenant == null || tenant.isBlank()
+        audit(routed, authKey, "settings.import", tenant == null || tenant.isBlank()
                 ? SettingsDocuments.ROOT
                 : tenant + "/" + SettingsDocuments.ROOT);
         response.setStatus(200);
@@ -462,7 +462,8 @@ public class ConfigController {
                                         @RequestHeader(value = Repositories.KEY, required = false) String key,
                                         @RequestParam(value = "tenant", required = false) String tenant,
                                         @RequestBody NamedValueRequest request,
-                                        HttpServletResponse response) throws IOException {
+                                        HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String routed = routing.tenant(http);
         if (!Repositories.valid(name) || request == null || request.value() == null || !tenantName(tenant)) {
             response.setStatus(400);
             return;
@@ -502,7 +503,7 @@ public class ConfigController {
         // With a tenant, the definition is that tenant's own and routes its repository of this name over the
         // deployment's; the checks above are the same either way.
         store(tenant, SettingsScopes.repositoryKey(name), request.value());
-        audit(key, AuditActions.REPOSITORY_SET, scoped(tenant, name));
+        audit(routed, key, AuditActions.REPOSITORY_SET, scoped(tenant, name));
         response.setStatus(200);
     }
 
@@ -638,13 +639,15 @@ public class ConfigController {
     public void removeRepositoryDefinition(@PathVariable("name") String name,
                                            @RequestHeader(value = Repositories.KEY, required = false) String key,
                                            @RequestParam(value = "tenant", required = false) String tenant,
+                                           HttpServletRequest request,
                                            HttpServletResponse response) throws IOException {
+        String routed = routing.tenant(request);
         if (!tenantName(tenant)) {
             response.setStatus(400);
             return;
         }
         store(tenant, SettingsScopes.repositoryKey(name), null);
-        audit(key, AuditActions.REPOSITORY_REMOVE, scoped(tenant, name));
+        audit(routed, key, AuditActions.REPOSITORY_REMOVE, scoped(tenant, name));
         response.setStatus(200);
     }
 
@@ -663,7 +666,8 @@ public class ConfigController {
                             @RequestHeader(value = Repositories.KEY, required = false) String key,
                             @RequestParam(value = "tenant", required = false) String tenant,
                             @RequestBody NamedValueRequest request,
-                            HttpServletResponse response) throws IOException {
+                            HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String routed = routing.tenant(http);
         if (request == null || request.value() == null || request.value().isBlank() || !tenantName(tenant)) {
             response.setStatus(400);
             return;
@@ -687,7 +691,7 @@ public class ConfigController {
             return;
         }
         store(tenant, SettingsScopes.upstreamKey(format), request.value());
-        audit(key, AuditActions.UPSTREAM_SET, scoped(tenant, format));
+        audit(routed, key, AuditActions.UPSTREAM_SET, scoped(tenant, format));
         response.setStatus(200);
     }
 
@@ -695,13 +699,14 @@ public class ConfigController {
     public void removeUpstream(@PathVariable("format") String format,
                                @RequestHeader(value = Repositories.KEY, required = false) String key,
                                @RequestParam(value = "tenant", required = false) String tenant,
-                               HttpServletResponse response) throws IOException {
+                               HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String routed = routing.tenant(request);
         if (!tenantName(tenant)) {
             response.setStatus(400);
             return;
         }
         store(tenant, SettingsScopes.upstreamKey(format), null);
-        audit(key, AuditActions.UPSTREAM_REMOVE, scoped(tenant, format));
+        audit(routed, key, AuditActions.UPSTREAM_REMOVE, scoped(tenant, format));
         response.setStatus(200);
     }
 
@@ -766,7 +771,8 @@ public class ConfigController {
     public void setUpstreamCredential(@PathVariable("host") String host,
                                       @RequestHeader(value = Repositories.KEY, required = false) String key,
                                       @RequestBody UpstreamAuthRequest request,
-                                      HttpServletResponse response) throws IOException {
+                                      HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String routed = routing.tenant(http);
         if (upstreamCredentials == UpstreamCredentialSource.NONE) {
             respondUpstreamAuthNotInstalled(response);
             return;
@@ -785,20 +791,21 @@ public class ConfigController {
             refuseSecret(response, refused);
             return;
         }
-        audit(key, AuditActions.UPSTREAM_AUTH_SET, host);
+        audit(routed, key, AuditActions.UPSTREAM_AUTH_SET, host);
         response.setStatus(200);
     }
 
     @DeleteMapping("/api/upstreams/auth/{host}")
     public void removeUpstreamCredential(@PathVariable("host") String host,
                                          @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                         HttpServletResponse response) throws IOException {
+                                         HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String routed = routing.tenant(request);
         if (upstreamCredentials == UpstreamCredentialSource.NONE) {
             respondUpstreamAuthNotInstalled(response);
             return;
         }
         upstreamCredentials.remove(host);
-        audit(key, AuditActions.UPSTREAM_AUTH_REMOVE, host);
+        audit(routed, key, AuditActions.UPSTREAM_AUTH_REMOVE, host);
         response.setStatus(200);
     }
 

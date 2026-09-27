@@ -1,13 +1,16 @@
 package build.jenesis.repository.webhook.web;
 
 import module java.base;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.events.EventReconciliation;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.webhook.WebhookOutbox;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,10 +40,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class WebhookController {
 
     private final Repositories repositories;
+    private final RepositoryRouting routing;
     private final AuditTrail audit;
 
-    public WebhookController(Repositories repositories, AuditTrail audit) {
+    public WebhookController(Repositories repositories, RepositoryRouting routing, AuditTrail audit) {
         this.repositories = repositories;
+        this.routing = routing;
         this.audit = audit;
     }
 
@@ -57,9 +62,9 @@ public class WebhookController {
     public WebhookView webhook(@RequestParam("repo") String repo,
                                @RequestParam(value = "after", required = false) String after,
                                @RequestParam(value = "limit", required = false) Integer limit,
-                               @RequestHeader(value = Repositories.KEY, required = false) String key,
+                               HttpServletRequest request,
                                HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+        String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return null;
         }
@@ -122,8 +127,8 @@ public class WebhookController {
     public void retry(@RequestParam("repo") String repo,
                       @RequestHeader(value = Repositories.KEY, required = false) String key,
                       @RequestBody RetryRequest request,
-                      HttpServletResponse response) throws IOException {
-        String tenant = access(repo, key, response);
+                      HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String tenant = RepositoryRequests.access(routing, repo, http, response);
         if (tenant == null) {
             return;
         }
@@ -139,22 +144,6 @@ public class WebhookController {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key),
                 "webhook.retry", repo + '/' + request.id());
         response.setStatus(200);
-    }
-
-    /** Validate the named repository and resolve the request's tenant from the key header, answering {@code 400} and
-     *  {@code null} for a traversal-unsafe repository or tenant so the caller returns at once. Rights are enforced by
-     *  the security chain before the request is reached, so this makes no authorization decision. */
-    private String access(String repo, String key, HttpServletResponse response) {
-        if (!Repositories.valid(repo)) {
-            response.setStatus(400);
-            return null;
-        }
-        String tenant = repositories.tenant(key);
-        if (!Repositories.valid(tenant)) {
-            response.setStatus(400);
-            return null;
-        }
-        return tenant;
     }
 
     /** Whether a webhook entry's coordinate may be disclosed on this served listing: its {@code coordinate:version}

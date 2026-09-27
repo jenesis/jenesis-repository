@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
  * first.
  *
  * <p>It is deliberately the same shape as {@link CredentialsController}, because a group is deliberately the same
- * kind of thing: the tenant comes from the managing key rather than from routing of its own, a grant is a scope
+ * kind of thing: the tenant is the one the routing answers for the request, a grant is a scope
  * and a set of rights in the one vocabulary, and every route sits under {@code /api/} and is therefore gated by
  * {@code manage:read} or {@code manage:write} by the security chain before it is reached. Nothing here re-decides
  * authorization.
@@ -38,10 +38,13 @@ public final class GroupsController {
 
     private final Authorization authorization;
 
+    private final RepositoryRouting routing;
+
     private final CredentialContext context;
 
-    public GroupsController(Authorization authorization, CredentialContext context) {
+    public GroupsController(Authorization authorization, RepositoryRouting routing, CredentialContext context) {
         this.authorization = Objects.requireNonNull(authorization, "authorization");
+        this.routing = Objects.requireNonNull(routing, "routing");
         this.context = Objects.requireNonNull(context, "context");
     }
 
@@ -50,8 +53,7 @@ public final class GroupsController {
     @GetMapping("/api/groups")
     @ResponseBody
     public List<GroupView> groups(HttpServletRequest http, HttpServletResponse response) throws IOException {
-        String key = PresentedKey.from(http);
-        String tenant = context.tenant(key);
+        String tenant = routing.tenant(http);
         String after = http.getParameter("after");
         Authorization.SubjectPage page = authorization.subjects(tenant, Authorization.Kind.GROUP,
                 after == null || after.isBlank() ? null : after, pageSize(http.getParameter("limit")));
@@ -72,9 +74,9 @@ public final class GroupsController {
     @ResponseBody
     public List<String> members(@PathVariable("name") String name,
                                 HttpServletRequest http, HttpServletResponse response) {
-        String key = PresentedKey.from(http);
+        String tenant = routing.tenant(http);
         String after = http.getParameter("after");
-        Authorization.SubjectPage page = authorization.groups().members(context.tenant(key), group(name),
+        Authorization.SubjectPage page = authorization.groups().members(tenant, group(name),
                 after == null || after.isBlank() ? null : after, pageSize(http.getParameter("limit")));
         if (page.next() != null) {
             response.setHeader("Jenesis-Next-Cursor", page.next());
@@ -90,10 +92,11 @@ public final class GroupsController {
                          @RequestBody CredentialsController.GrantRequest request,
                          HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.setGrant(context.tenant(key), Authorization.Subject.group(group(name)),
+        String tenant = routing.tenant(http);
+        authorization.setGrant(tenant, Authorization.Subject.group(group(name)),
                 request.scope(), String.join(",", request.tokens()),
                 CredentialLifetimes.expiry(request.expires()));
-        context.audit(key, "group.grant.set", name + " " + request.scope());
+        context.audit(tenant, key, "group.grant.set", name + " " + request.scope());
         response.setStatus(200);
     }
 
@@ -101,8 +104,9 @@ public final class GroupsController {
     public void removeGrant(@PathVariable("name") String name, @PathVariable("scope") String scope,
                             HttpServletRequest http, HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.removeGrant(context.tenant(key), Authorization.Subject.group(group(name)), scope);
-        context.audit(key, "group.grant.remove", name + " " + scope);
+        String tenant = routing.tenant(http);
+        authorization.removeGrant(tenant, Authorization.Subject.group(group(name)), scope);
+        context.audit(tenant, key, "group.grant.remove", name + " " + scope);
         response.setStatus(200);
     }
 
@@ -114,8 +118,9 @@ public final class GroupsController {
                           @RequestBody MemberRequest request,
                           HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.groups().addMember(context.tenant(key), group(name), request.id());
-        context.audit(key, "group.member.add", name + " " + request.id());
+        String tenant = routing.tenant(http);
+        authorization.groups().addMember(tenant, group(name), request.id());
+        context.audit(tenant, key, "group.member.add", name + " " + request.id());
         response.setStatus(200);
     }
 
@@ -125,12 +130,13 @@ public final class GroupsController {
     public void removeMember(@PathVariable("name") String name,
                              HttpServletRequest http, HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
+        String tenant = routing.tenant(http);
         String id = http.getParameter("id");
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("A member is removed by id: pass ?id=<provider-qualified id>");
         }
-        authorization.groups().removeMember(context.tenant(key), group(name), id);
-        context.audit(key, "group.member.remove", name + " " + id);
+        authorization.groups().removeMember(tenant, group(name), id);
+        context.audit(tenant, key, "group.member.remove", name + " " + id);
         response.setStatus(200);
     }
 
@@ -140,8 +146,9 @@ public final class GroupsController {
     public void remove(@PathVariable("name") String name,
                        HttpServletRequest http, HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.removeSubject(context.tenant(key), Authorization.Subject.group(group(name)));
-        context.audit(key, "group.remove", name);
+        String tenant = routing.tenant(http);
+        authorization.removeSubject(tenant, Authorization.Subject.group(group(name)));
+        context.audit(tenant, key, "group.remove", name);
         response.setStatus(200);
     }
 
