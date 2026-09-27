@@ -18,12 +18,12 @@ final class ComplianceCommands {
             throw new IllegalArgumentException("Usage: health <repo> [--refresh]");
         }
         boolean refresh = Arrays.asList(args).subList(2, args.length).contains("--refresh");
-        RepositoryClient.HealthReport report = CliSupport.client(home).health(args[1], refresh);
+        RiskClient.HealthReport report = CliSupport.client(home).risk().health(args[1], refresh);
         if (!report.available()) {
             System.out.println("No health source is configured on this deployment.");
             return 0;
         }
-        for (RepositoryClient.HealthEntry entry : report.entries()) {
+        for (RiskClient.HealthEntry entry : report.entries()) {
             System.out.printf(Locale.ROOT, "%5.1f  %s %s (maintenance %s, review %s, provenance %s)%n",
                     entry.overall(), entry.ecosystem(), entry.coordinate(), score(entry.maintenance()),
                     score(entry.review()), score(entry.provenance()));
@@ -53,7 +53,7 @@ final class ComplianceCommands {
                 default -> throw new IllegalArgumentException("Unknown option: " + args[i]);
             }
         }
-        RepositoryClient.VulnerabilityReport report = CliSupport.client(home).vulnerabilities(args[1], reachability,
+        RiskClient.VulnerabilityReport report = CliSupport.client(home).risk().vulnerabilities(args[1], reachability,
                 applicability);
         // Before anything reassuring: an empty result prints "No known vulnerabilities" below, and a feed that
         // never answered produces exactly that empty result. A script reads the same fact out of --json, where the
@@ -73,9 +73,9 @@ final class ComplianceCommands {
                             + "them for everything).");
             return 0;
         }
-        for (RepositoryClient.VulnerableArtifact artifact : report.vulnerable()) {
+        for (RiskClient.VulnerableArtifact artifact : report.vulnerable()) {
             System.out.println(artifact.coordinate());
-            for (RepositoryClient.Advisory advisory : artifact.advisories()) {
+            for (RiskClient.Advisory advisory : artifact.advisories()) {
                 String fix = advisory.fixed() == null || advisory.fixed().isBlank()
                         ? "no fix available"
                         : "fixed in " + advisory.fixed();
@@ -99,7 +99,7 @@ final class ComplianceCommands {
                 if (advisory.signals() != null) {
                     // The server names its signal columns - the known-exploited flag and the EPSS probability among
                     // them; the CLI renders whatever the deployment contributes.
-                    for (RepositoryClient.Cell cell : advisory.signals()) {
+                    for (RiskClient.Cell cell : advisory.signals()) {
                         if (cell.value() != null && !cell.value().isEmpty()) {
                             line.append(", ").append(cell.value());
                         }
@@ -138,7 +138,7 @@ final class ComplianceCommands {
                 default -> throw new IllegalArgumentException("Unknown option: " + args[i]);
             }
         }
-        RepositoryClient.FindingsReport report = CliSupport.client(home).findings(args[1], coordinate, kind, source,
+        RiskClient.FindingsReport report = CliSupport.client(home).risk().findings(args[1], coordinate, kind, source,
                 category, severity);
         if (report == null) {
             System.out.println("The findings store is not installed on this deployment.");
@@ -149,7 +149,7 @@ final class ComplianceCommands {
             return 0;
         }
         String at = null;
-        for (RepositoryClient.FindingRow row : report.findings()) {
+        for (RiskClient.FindingRow row : report.findings()) {
             String key = row.coordinate() + ":" + row.version();
             if (!key.equals(at)) {
                 System.out.println(key);
@@ -173,7 +173,7 @@ final class ComplianceCommands {
             }
             System.out.println(line);
             if (row.labels() != null) {
-                for (RepositoryClient.FindingLabel label : row.labels()) {
+                for (RiskClient.FindingLabel label : row.labels()) {
                     System.out.println("    label " + label.source() + "/" + label.name() + ": " + label.value());
                 }
             }
@@ -185,7 +185,7 @@ final class ComplianceCommands {
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: licenses <repo>");
         }
-        RepositoryClient.LicensesView view = CliSupport.client(home).licenses(args[1]);
+        RiskClient.LicensesView view = CliSupport.client(home).risk().licenses(args[1]);
         if (!view.indexed()) {
             System.out.println(
                     "License facets need the search index (search/lucene is not installed or the index is empty).");
@@ -196,11 +196,11 @@ final class ComplianceCommands {
             return 0;
         }
         System.out.println("categories:");
-        for (RepositoryClient.LicenseCount count : view.categories()) {
+        for (RiskClient.LicenseCount count : view.categories()) {
             System.out.printf("  %-24s %d%n", count.value(), count.count());
         }
         System.out.println("licenses:");
-        for (RepositoryClient.LicenseCount count : view.licenses()) {
+        for (RiskClient.LicenseCount count : view.licenses()) {
             System.out.printf("  %-24s %d%n", count.value(), count.count());
         }
         return 0;
@@ -212,24 +212,24 @@ final class ComplianceCommands {
         }
         RepositoryClient client = CliSupport.client(home);
         if (args.length >= 3) {
-            List<RepositoryClient.SignedCoordinate> signed = client.signedBy(args[1], args[2]);
+            List<ProvenanceClient.SignedCoordinate> signed = client.provenance().signedBy(args[1], args[2]);
             if (signed.isEmpty()) {
                 System.out.println("This signer signed nothing that was accepted in " + args[1] + ".");
                 return 0;
             }
-            for (RepositoryClient.SignedCoordinate coordinate : signed) {
+            for (ProvenanceClient.SignedCoordinate coordinate : signed) {
                 System.out.printf("%-10s %s  %d version%s, last %s%s%n", coordinate.ecosystem(), coordinate.coordinate(),
                         coordinate.versions(), coordinate.versions() == 1 ? "" : "s", coordinate.last(),
                         coordinate.since() == null ? "" : ", since " + coordinate.since());
             }
             return 0;
         }
-        List<RepositoryClient.Signer> signers = client.signers(args[1]);
+        List<ProvenanceClient.Signer> signers = client.provenance().signers(args[1]);
         if (signers.isEmpty()) {
             System.out.println("No signed version has been accepted in " + args[1] + " yet.");
             return 0;
         }
-        for (RepositoryClient.Signer signer : signers) {
+        for (ProvenanceClient.Signer signer : signers) {
             System.out.println(signer.signer());
             if (signer.issuer() != null || signer.subject() != null) {
                 System.out.println("    issuer  " + signer.issuer());
@@ -246,7 +246,7 @@ final class ComplianceCommands {
         if (args.length < 3) {
             throw new IllegalArgumentException("Usage: signature <repo> <path>");
         }
-        RepositoryClient.Signature signature = CliSupport.client(home).signature(args[1], args[2]);
+        ProvenanceClient.Signature signature = CliSupport.client(home).provenance().signature(args[1], args[2]);
         if (signature == null) {
             System.out.println("No signature has been recorded for " + args[2] + " in " + args[1]
                     + ": it was published before signatures were checked here, or its format carries none.");
@@ -282,7 +282,7 @@ final class ComplianceCommands {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: quarantine release <repo> <path>");
                 }
-                client.releaseQuarantine(args[2], args[3]);
+                client.review().releaseQuarantine(args[2], args[3]);
                 System.out.println("Released " + args[3] + " into " + args[2] + ".");
                 return 0;
             }
@@ -290,17 +290,17 @@ final class ComplianceCommands {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: quarantine discard <repo> <path>");
                 }
-                client.discardQuarantine(args[2], args[3]);
+                client.review().discardQuarantine(args[2], args[3]);
                 System.out.println("Discarded " + args[3] + ".");
                 return 0;
             }
             default -> {
-                List<RepositoryClient.QuarantineEvent> events = client.quarantine(args[1]);
+                List<ReviewClient.QuarantineEvent> events = client.review().quarantine(args[1]);
                 if (events.isEmpty()) {
                     System.out.println("Nothing is held for review.");
                     return 0;
                 }
-                for (RepositoryClient.QuarantineEvent event : events) {
+                for (ReviewClient.QuarantineEvent event : events) {
                     System.out.printf("%s  %-9s %s%n", event.when(), event.verdict(), event.path());
                     if (event.reasons() != null) {
                         for (String reason : event.reasons()) {
@@ -315,7 +315,7 @@ final class ComplianceCommands {
 
     static int provenance(String[] args, Path home) throws Exception {
         if (args.length >= 2 && args[1].equals("key")) {
-            String pem = CliSupport.client(home).provenanceKey();
+            String pem = CliSupport.client(home).provenance().provenanceKey();
             if (pem == null) {
                 System.out.println("Provenance signing is not enabled on this deployment.");
                 return 1;
@@ -324,7 +324,7 @@ final class ComplianceCommands {
             return 0;
         }
         if (args.length >= 2 && (args[1].equals("cert") || args[1].equals("certificate"))) {
-            String pem = CliSupport.client(home).provenanceCertificate();
+            String pem = CliSupport.client(home).provenance().provenanceCertificate();
             if (pem == null) {
                 System.out.println("No provenance certificate (a bare-key signer, or signing is not enabled).");
                 return 1;
@@ -347,10 +347,10 @@ final class ComplianceCommands {
         }
         RepositoryClient client = CliSupport.client(home);
         if (!material) {
-            System.out.println(client.provenance(rest.get(0), rest.get(1)));
+            System.out.println(client.provenance().provenance(rest.get(0), rest.get(1)));
             return 0;
         }
-        RepositoryClient.ProvenanceMaterial view = client.provenanceMaterial(rest.get(0), rest.get(1));
+        ProvenanceClient.ProvenanceMaterial view = client.provenance().provenanceMaterial(rest.get(0), rest.get(1));
         if (view == null) {
             System.out.println("Provenance signing is not enabled on this deployment.");
             return 1;
@@ -361,7 +361,7 @@ final class ComplianceCommands {
             System.out.println(view.certificateChain());
         }
         if (view.transparencyLog() != null) {
-            RepositoryClient.TransparencyLog log = view.transparencyLog();
+            ProvenanceClient.TransparencyLog log = view.transparencyLog();
             System.out.println("transparency log: " + log.uuid() + " (index " + log.logIndex() + ")");
         }
         return 0;
@@ -380,11 +380,11 @@ final class ComplianceCommands {
                     default -> throw new IllegalArgumentException("Unknown policy flag '" + args[i] + "'");
                 }
             }
-            client.setPolicy(defaultLifetime, maxLifetime);
+            client.access().setPolicy(defaultLifetime, maxLifetime);
             System.out.println("Set the credential lifetime policy.");
             return 0;
         }
-        RepositoryClient.PolicyView view = client.policy();
+        AccessClient.PolicyView view = client.access().policy();
         System.out.println("default lifetime: " + view.defaultLifetime());
         System.out.println("max lifetime:     " + CliSupport.orDash(view.maxLifetime()));
         return 0;
@@ -403,14 +403,14 @@ final class ComplianceCommands {
         if (repo == null) {
             throw new IllegalArgumentException("Usage: retro-plan <repo> [--unknown]");
         }
-        RepositoryClient.RetroPlan plan = CliSupport.client(home).retroPlan(repo, unknown);
+        RiskClient.RetroPlan plan = CliSupport.client(home).risk().retroPlan(repo, unknown);
         if (plan == null) {
             System.out.println("License policy is not installed on this deployment.");
             return 0;
         }
         System.out.println("mode:  " + plan.mode());
         System.out.println("count: " + plan.count());
-        for (RepositoryClient.RetroHeld held : plan.held()) {
+        for (RiskClient.RetroHeld held : plan.held()) {
             System.out.println("  " + held.coordinate() + ":" + held.version());
             if (held.reasons() != null) {
                 held.reasons().forEach(reason -> System.out.println("    " + reason));
@@ -432,7 +432,7 @@ final class ComplianceCommands {
         if (args.length != 4) {
             throw new IllegalArgumentException("Usage: findings report <repo> <file>");
         }
-        RepositoryClient.ReportAnswer answer = CliSupport.client(home).reportFindings(args[2], Path.of(args[3]));
+        RiskClient.ReportAnswer answer = CliSupport.client(home).risk().reportFindings(args[2], Path.of(args[3]));
         if (answer == null) {
             System.out.println("The findings store is not installed on this deployment.");
             return 0;
@@ -459,7 +459,7 @@ final class ComplianceCommands {
                     throw new IllegalArgumentException("Unknown review flag '" + args[i] + "'");
                 }
             }
-            CliSupport.client(home).reviewFinding(args[2], args[3], args[4], args[5], note);
+            CliSupport.client(home).risk().reviewFinding(args[2], args[3], args[4], args[5], note);
             System.out.println("Recorded '" + args[5] + "' on " + args[4] + " for " + args[3] + ".");
             return 0;
         }
@@ -467,7 +467,7 @@ final class ComplianceCommands {
             if (args.length < 6) {
                 throw new IllegalArgumentException("Usage: findings waiver revoke <repo> <coordinate> <id>");
             }
-            CliSupport.client(home).revokeWaiver(args[3], args[4], args[5]);
+            CliSupport.client(home).risk().revokeWaiver(args[3], args[4], args[5]);
             System.out.println("Revoked the waiver on " + args[5] + " for " + args[4] + ".");
             return 0;
         }
@@ -484,7 +484,7 @@ final class ComplianceCommands {
                 default -> throw new IllegalArgumentException("Unknown waiver flag '" + args[i] + "'");
             }
         }
-        CliSupport.client(home).waiveFinding(args[2], args[3], args[4], reason, until);
+        CliSupport.client(home).risk().waiveFinding(args[2], args[3], args[4], reason, until);
         System.out.println("Waived " + args[4] + " for " + args[3] + ".");
         return 0;
     }

@@ -22,14 +22,14 @@ final class AdminCommands {
             if (args.length < 4) {
                 throw new IllegalArgumentException("Usage: setup set <key> <value>");
             }
-            client.setSetting(args[2], args[3]);
+            client.settings().setSetting(args[2], args[3]);
             System.out.println("Set " + args[2] + ".");
             return 0;
         }
-        for (RepositoryClient.SetupStep step : client.setup().steps()) {
+        for (SettingsClient.SetupStep step : client.settings().setup().steps()) {
             System.out.println(step.title());
             System.out.println("  " + step.why());
-            for (RepositoryClient.Setting setting : step.settings()) {
+            for (SettingsClient.Setting setting : step.settings()) {
                 String state = setting.pinned() ? "pinned by " + setting.pinnedBy()
                         : setting.overridden() ? "override" : "default";
                 String display = "SECRET".equals(setting.kind())
@@ -62,7 +62,8 @@ final class AdminCommands {
         String scope = tenant == null ? "deployment" : "tenant " + tenant;
         RepositoryClient client = CliSupport.client(home);
         if (rest.isEmpty()) {
-            for (RepositoryClient.Setting setting : tenant == null ? client.settings() : client.settings(tenant)) {
+            for (SettingsClient.Setting setting : tenant == null
+                    ? client.settings().settings() : client.settings().settings(tenant)) {
                 // A pinned key is fixed above the store (env var, -D, command line or a config file), so its stored
                 // value is inert and a `settings set` would be refused; name what pins it instead of "override".
                 String state = setting.pinned() ? "pinned by " + setting.pinnedBy()
@@ -83,9 +84,9 @@ final class AdminCommands {
                     throw new IllegalArgumentException("Usage: settings set <key> <value> [--tenant <name>]");
                 }
                 if (tenant == null) {
-                    client.setSetting(rest.get(1), rest.get(2));
+                    client.settings().setSetting(rest.get(1), rest.get(2));
                 } else {
-                    client.setSetting(tenant, rest.get(1), rest.get(2));
+                    client.settings().setSetting(tenant, rest.get(1), rest.get(2));
                 }
                 System.out.println("Set " + rest.get(1) + " (" + scope + ").");
             }
@@ -94,15 +95,16 @@ final class AdminCommands {
                     throw new IllegalArgumentException("Usage: settings clear <key> [--tenant <name>]");
                 }
                 if (tenant == null) {
-                    client.clearSetting(rest.get(1));
+                    client.settings().clearSetting(rest.get(1));
                 } else {
-                    client.clearSetting(tenant, rest.get(1));
+                    client.settings().clearSetting(tenant, rest.get(1));
                 }
                 System.out.println("Cleared " + rest.get(1) + " (" + scope + "); reverted to its default.");
             }
             case "export" -> {
                 // The bundle prints to stdout (redirect to a file); a path argument writes it there instead.
-                String bundle = tenant == null ? client.exportSettings() : client.exportSettings(tenant);
+                String bundle = tenant == null
+                        ? client.settings().exportSettings() : client.settings().exportSettings(tenant);
                 if (rest.size() > 1) {
                     Files.writeString(Path.of(rest.get(1)), bundle);
                     System.out.println("Exported the " + scope + " settings to " + rest.get(1) + ".");
@@ -116,9 +118,9 @@ final class AdminCommands {
                 }
                 String bundle = Files.readString(Path.of(rest.get(1)));
                 if (tenant == null) {
-                    client.importSettings(bundle);
+                    client.settings().importSettings(bundle);
                 } else {
-                    client.importSettings(tenant, bundle);
+                    client.settings().importSettings(tenant, bundle);
                 }
                 System.out.println("Imported the " + scope + " settings from " + rest.get(1) + ".");
             }
@@ -133,11 +135,11 @@ final class AdminCommands {
             if (args.length < 3) {
                 throw new IllegalArgumentException("Usage: quota set <bytes>  (0 clears the quota)");
             }
-            client.setQuota(Long.parseLong(args[2]));
+            client.settings().setQuota(Long.parseLong(args[2]));
             System.out.println("Set the storage quota.");
             return 0;
         }
-        RepositoryClient.QuotaView view = client.quota();
+        SettingsClient.QuotaView view = client.settings().quota();
         System.out.println("limit: " + (view.maxBytes() == 0 ? "unlimited" : view.maxBytes() + " bytes"));
         System.out.println("used:  " + view.usedBytes() + " bytes");
         return 0;
@@ -149,14 +151,14 @@ final class AdminCommands {
             if (args.length < 3) {
                 throw new IllegalArgumentException("Usage: rate-limit set <permits-per-minute>  (0 uses the default)");
             }
-            if (!client.setRateLimit(Long.parseLong(args[2]))) {
+            if (!client.settings().setRateLimit(Long.parseLong(args[2]))) {
                 System.out.println("Rate limiting is not installed on this deployment.");
                 return 1;
             }
             System.out.println("Set the rate limit.");
             return 0;
         }
-        RepositoryClient.RateLimitView view = client.rateLimit();
+        SettingsClient.RateLimitView view = client.settings().rateLimit();
         if (view == null) {
             System.out.println("Rate limiting is not installed on this deployment.");
             return 0;
@@ -183,7 +185,7 @@ final class AdminCommands {
         }
         RepositoryClient client = CliSupport.client(home);
         if (csv) {
-            String body = client.auditCsv(from, to, action);
+            String body = client.access().auditCsv(from, to, action);
             if (body == null) {
                 System.out.println("Audit is not installed on this deployment.");
                 return 0;
@@ -191,7 +193,7 @@ final class AdminCommands {
             System.out.print(body);
             return 0;
         }
-        List<RepositoryClient.AuditEvent> events = client.audit(from, to, action);
+        List<AccessClient.AuditEvent> events = client.access().audit(from, to, action);
         if (events == null) {
             System.out.println("Audit is not installed on this deployment.");
             return 0;
@@ -200,7 +202,7 @@ final class AdminCommands {
             System.out.println("No audit events.");
             return 0;
         }
-        for (RepositoryClient.AuditEvent event : events) {
+        for (AccessClient.AuditEvent event : events) {
             System.out.printf("%s  %-20s %-24s %s%n", event.at(), event.actor(), event.action(), event.target());
         }
         return 0;
@@ -219,7 +221,7 @@ final class AdminCommands {
         System.out.println("import sources: " + names(capabilities.importSources().stream()
                 .map(RepositoryClient.ImportSource::name).toList()));
         System.out.println("report columns: " + names(capabilities.signals().stream()
-                .map(RepositoryClient.Signal::name).toList()));
+                .map(RiskClient.Signal::name).toList()));
         RepositoryClient.Features features = capabilities.features();
         System.out.println("advisories:     " + installed(features.advisories(), features.advisoriesEnabled()));
         System.out.println("staging:        " + (features.staging() ? "installed" : "not installed"));
@@ -275,7 +277,7 @@ final class AdminCommands {
             }
             return deployExplode(CliSupport.client(home), repo, path, source);
         }
-        int status = CliSupport.client(home).deploy(repo, path, source);
+        int status = CliSupport.client(home).contents().deploy(repo, path, source);
         return switch (status) {
             case 201 -> {
                 System.out.println("Published " + path + ".");
@@ -305,8 +307,8 @@ final class AdminCommands {
      *  batch upload is off on the deployment the header is inert and the archive is stored verbatim as one artifact. */
     private static int deployExplode(RepositoryClient client, String repo, String path, Path archive)
             throws Exception {
-        RepositoryClient.ExplodeResult result = client.deployExplode(repo, path, archive);
-        RepositoryClient.ExplodeManifest manifest = result.manifest();
+        ContentsClient.ExplodeResult result = client.contents().deployExplode(repo, path, archive);
+        ContentsClient.ExplodeManifest manifest = result.manifest();
         if (manifest == null) {
             return switch (result.status()) {
                 case 200, 201, 202 -> {
@@ -324,7 +326,7 @@ final class AdminCommands {
                 }
             };
         }
-        for (RepositoryClient.ExplodeEntry entry : manifest.entries()) {
+        for (ContentsClient.ExplodeEntry entry : manifest.entries()) {
             String reason = entry.reason() == null || entry.reason().isEmpty() ? "" : " (" + entry.reason() + ")";
             System.out.printf("%-10s %s%s%n", entry.status(), entry.path(), reason);
         }
@@ -350,7 +352,7 @@ final class AdminCommands {
      */
     private static Refresh.Poll.State importState(RepositoryClient client, String repo, String job)
             throws Exception {
-        RepositoryClient.ImportStatus status = client.importStatus(repo, job);
+        ContentsClient.ImportStatus status = client.contents().importStatus(repo, job);
         if (status == null) {
             System.out.println("No import job '" + job + "' in " + repo + ".");
             return Refresh.Poll.State.done(1);
@@ -429,8 +431,8 @@ final class AdminCommands {
             throw new IllegalArgumentException(
                     "import needs --source, --url and --source-repo (the incumbent's repository to walk).");
         }
-        RepositoryClient.ImportResult result =
-                client.startImport(repo, source, url, sourceRepo, format, user, password, resume);
+        ContentsClient.ImportResult result =
+                client.contents().startImport(repo, source, url, sourceRepo, format, user, password, resume);
         return switch (result.status()) {
             case 202 -> {
                 System.out.println("Import started; job " + result.job()
@@ -493,7 +495,7 @@ final class AdminCommands {
         if (url == null) {
             throw new IllegalArgumentException("export needs --url: the URL the format's client would be pointed at.");
         }
-        RepositoryClient.ExportResult result = client.startExport(repo, url, token, user, password, resume);
+        LifecycleClient.ExportResult result = client.lifecycle().startExport(repo, url, token, user, password, resume);
         if (result.status() == 202) {
             System.out.println("Export started; job " + result.job()
                     + ". Poll it with: export status " + repo + " " + result.job());
@@ -506,7 +508,7 @@ final class AdminCommands {
 
     /** Print one export job's state, and say whether there is any point asking again. */
     private static Refresh.Poll.State exportState(RepositoryClient client, String repo, String job) throws Exception {
-        RepositoryClient.ExportStatus status = client.exportStatus(repo, job);
+        LifecycleClient.ExportStatus status = client.lifecycle().exportStatus(repo, job);
         if (status == null) {
             System.out.println("No export job '" + job + "' in " + repo + ".");
             return Refresh.Poll.State.done(1);
@@ -531,7 +533,7 @@ final class AdminCommands {
     static int tenants(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
-            client.tenants().forEach(System.out::println);
+            client.settings().tenants().forEach(System.out::println);
             return 0;
         }
         if (args.length < 3) {
@@ -539,7 +541,7 @@ final class AdminCommands {
         }
         String name = args[2];
         switch (args[1]) {
-            case "create" -> System.out.println(client.createTenant(name)
+            case "create" -> System.out.println(client.settings().createTenant(name)
                     ? "Created tenant " + name + "."
                     : "Tenant " + name + " already exists.");
             case "delete" -> {
@@ -550,7 +552,7 @@ final class AdminCommands {
                     System.out.println("Nothing was deleted.");
                     return 1;
                 }
-                client.deleteTenant(name);
+                client.settings().deleteTenant(name);
                 System.out.println("Deleted tenant " + name + ".");
             }
             default -> throw new IllegalArgumentException("Unknown tenants action: " + args[1]);
@@ -605,8 +607,8 @@ final class AdminCommands {
         String tenant = scoped.tenant();
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
-            List<RepositoryClient.NamedValue> repos = client.repositories(tenant);
-            for (RepositoryClient.NamedValue repo : repos) {
+            List<SettingsClient.NamedValue> repos = client.settings().repositories(tenant);
+            for (SettingsClient.NamedValue repo : repos) {
                 System.out.printf("%-20s %s%n", repo.name(), repo.value());
             }
             if (repos.isEmpty()) {
@@ -622,7 +624,7 @@ final class AdminCommands {
                 }
                 String description = args.length > 4
                         ? String.join(" ", Arrays.copyOfRange(args, 4, args.length)) : null;
-                System.out.println(client.createRepository(args[2], args[3], description)
+                System.out.println(client.settings().createRepository(args[2], args[3], description)
                         ? "Created " + args[3] + " repository " + args[2] + "."
                         : "Repository " + args[2] + " already holds " + args[3] + ".");
             }
@@ -631,7 +633,8 @@ final class AdminCommands {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: repos describe <name> <description>");
                 }
-                client.describeRepository(args[2], String.join(" ", Arrays.copyOfRange(args, 3, args.length)));
+                client.settings().describeRepository(args[2],
+                    String.join(" ", Arrays.copyOfRange(args, 3, args.length)));
                 System.out.println("Described repository " + args[2] + ".");
             }
             case "delete" -> {
@@ -646,20 +649,20 @@ final class AdminCommands {
                     System.out.println("Nothing was deleted.");
                     return 1;
                 }
-                System.out.println(client.deleteRepository(name));
+                System.out.println(client.settings().deleteRepository(name));
             }
             case "set" -> {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: repos set <name> <definition> [--tenant N]");
                 }
-                client.setRepository(tenant, args[2], args[3]);
+                client.settings().setRepository(tenant, args[2], args[3]);
                 System.out.println("Saved repository " + args[2] + ".");
             }
             case "remove" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: repos remove <name> [--tenant N]");
                 }
-                client.removeRepository(tenant, args[2]);
+                client.settings().removeRepository(tenant, args[2]);
                 System.out.println("Removed repository " + args[2] + ".");
             }
             default -> throw new IllegalArgumentException("Unknown repos command '" + args[1] + "'");
@@ -678,8 +681,8 @@ final class AdminCommands {
         }
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
-            List<RepositoryClient.NamedValue> upstreams = client.upstreams(tenant);
-            for (RepositoryClient.NamedValue upstream : upstreams) {
+            List<SettingsClient.NamedValue> upstreams = client.settings().upstreams(tenant);
+            for (SettingsClient.NamedValue upstream : upstreams) {
                 System.out.printf("%-12s %s%n", upstream.name(), upstream.value());
             }
             if (upstreams.isEmpty()) {
@@ -692,14 +695,14 @@ final class AdminCommands {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: upstreams set <format> <url> [--tenant N]");
                 }
-                client.setUpstream(tenant, args[2], args[3]);
+                client.settings().setUpstream(tenant, args[2], args[3]);
                 System.out.println("Saved upstream for " + args[2] + ".");
             }
             case "remove" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: upstreams remove <format> [--tenant N]");
                 }
-                client.removeUpstream(tenant, args[2]);
+                client.settings().removeUpstream(tenant, args[2]);
                 System.out.println("Removed upstream for " + args[2] + ".");
             }
             default -> throw new IllegalArgumentException("Unknown upstreams command '" + args[1] + "'");
@@ -710,7 +713,7 @@ final class AdminCommands {
     private static int upstreamAuth(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 2) {
-            List<String> hosts = client.upstreamCredentialHosts();
+            List<String> hosts = client.settings().upstreamCredentialHosts();
             hosts.forEach(System.out::println);
             if (hosts.isEmpty()) {
                 System.out.println("No upstream credentials.");
@@ -728,7 +731,7 @@ final class AdminCommands {
                 String scheme = args[4];
                 if (scheme.equalsIgnoreCase("bearer")) {
                     String token = args.length > 5 ? args[5] : prompt("Upstream token: ");
-                    client.setUpstreamCredential(host, "bearer", null, null, token, null);
+                    client.settings().setUpstreamCredential(host, "bearer", null, null, token, null);
                 } else if (scheme.equalsIgnoreCase("basic")) {
                     if (args.length < 6) {
                         throw new IllegalArgumentException(
@@ -736,7 +739,7 @@ final class AdminCommands {
                     }
                     String username = args[5];
                     String password = args.length > 6 ? args[6] : prompt("Upstream password: ");
-                    client.setUpstreamCredential(host, "basic", username, password, null, null);
+                    client.settings().setUpstreamCredential(host, "basic", username, password, null, null);
                 } else if (scheme.equalsIgnoreCase("header")) {
                     if (args.length < 6) {
                         throw new IllegalArgumentException(
@@ -744,10 +747,10 @@ final class AdminCommands {
                     }
                     String name = args[5];
                     String value = args.length > 6 ? args[6] : prompt("Header value: ");
-                    client.setUpstreamCredential(host, "header", null, null, value, name);
+                    client.settings().setUpstreamCredential(host, "header", null, null, value, name);
                 } else if (scheme.equalsIgnoreCase("aws")) {
                     // No secret to type: the server mints the token from its own AWS identity for this host.
-                    client.setUpstreamCredential(host, "aws", null, null, null, null);
+                    client.settings().setUpstreamCredential(host, "aws", null, null, null, null);
                 } else {
                     throw new IllegalArgumentException(
                             "Unknown scheme '" + scheme + "'; use bearer, basic, header or aws");
@@ -758,7 +761,7 @@ final class AdminCommands {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: upstreams auth remove <host>");
                 }
-                client.removeUpstreamCredential(args[3]);
+                client.settings().removeUpstreamCredential(args[3]);
                 System.out.println("Removed the upstream credential for " + args[3] + ".");
             }
             default -> throw new IllegalArgumentException("Unknown upstreams auth command '" + args[2] + "'");

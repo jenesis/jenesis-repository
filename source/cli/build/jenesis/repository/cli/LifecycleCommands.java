@@ -25,7 +25,7 @@ final class LifecycleCommands {
                 return stagingAction(client, args, false);
             }
             default -> {
-                List<RepositoryClient.StagingEntry> entries = client.staging(args[1]);
+                List<ContentsClient.StagingEntry> entries = client.contents().staging(args[1]);
                 if (entries == null) {
                     System.out.println("Staging is not installed on this deployment.");
                     return 0;
@@ -34,7 +34,7 @@ final class LifecycleCommands {
                     System.out.println("No staging in progress.");
                     return 0;
                 }
-                for (RepositoryClient.StagingEntry entry : entries) {
+                for (ContentsClient.StagingEntry entry : entries) {
                     System.out.printf("%-24s %-8s items=%d%n", entry.id(), entry.state(), entry.items());
                 }
                 return 0;
@@ -47,7 +47,9 @@ final class LifecycleCommands {
         if (args.length < 4) {
             throw new IllegalArgumentException("Usage: staging " + (promote ? "promote" : "drop") + " <repo> <id>");
         }
-        int status = promote ? client.promoteStaging(args[2], args[3]) : client.dropStaging(args[2], args[3]);
+        int status = promote
+                ? client.contents().promoteStaging(args[2], args[3])
+                : client.contents().dropStaging(args[2], args[3]);
         return switch (status) {
             case 200 -> {
                 System.out.println((promote ? "Promoted " : "Dropped ") + args[3] + ".");
@@ -72,14 +74,14 @@ final class LifecycleCommands {
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: index <repo>");
         }
-        RepositoryClient.IndexDescriptor descriptor = CliSupport.client(home).index(args[1]);
+        ContentsClient.IndexDescriptor descriptor = CliSupport.client(home).contents().index(args[1]);
         if (descriptor == null) {
             System.out.println("The published-index module is not installed on this deployment.");
             return 0;
         }
         long records = 0;
         long compressed = 0;
-        for (RepositoryClient.IndexChunk chunk : descriptor.chunks()) {
+        for (ContentsClient.IndexChunk chunk : descriptor.chunks()) {
             records += chunk.records();
             compressed += chunk.compressedSize();
         }
@@ -97,7 +99,8 @@ final class LifecycleCommands {
         }
         boolean plan = args.length > 2 && args[2].equals("plan");
         RepositoryClient client = CliSupport.client(home);
-        RepositoryClient.CleanupReport report = plan ? client.cleanupPlan(args[1]) : client.cleanup(args[1]);
+        LifecycleClient.CleanupReport report = plan
+                ? client.lifecycle().cleanupPlan(args[1]) : client.lifecycle().cleanup(args[1]);
         if (report == null) {
             System.out.println("Retention is not installed on this deployment.");
             return 0;
@@ -126,12 +129,12 @@ final class LifecycleCommands {
     static int purge(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length < 2) {
-            RepositoryClient.OrphansView report = client.orphans();
+            SettingsClient.OrphansView report = client.settings().orphans();
             if (report.orphans().isEmpty()) {
                 System.out.println("No orphaned module data detected.");
             } else {
                 System.out.println("orphaned data (modules no longer installed):");
-                for (RepositoryClient.OrphanView orphan : report.orphans()) {
+                for (SettingsClient.OrphanView orphan : report.orphans()) {
                     System.out.printf("  %s: %d object(s), %d byte(s)%n",
                             orphan.namespace(), orphan.objects(), orphan.bytes());
                 }
@@ -142,7 +145,7 @@ final class LifecycleCommands {
         }
         String namespace = args[1];
         boolean delete = args.length > 2 && args[2].equals("--delete");
-        RepositoryClient.PurgeReport plan = client.purge(namespace, true);
+        SettingsClient.PurgeReport plan = client.settings().purge(namespace, true);
         if (plan == null) {
             System.out.println("No storage namespace is registered for '" + namespace + "'.");
             return 1;
@@ -153,7 +156,7 @@ final class LifecycleCommands {
             return 0;
         }
         System.out.println(delete ? "deleting:" : "would delete:");
-        for (RepositoryClient.PurgeSpace space : plan.spaces()) {
+        for (SettingsClient.PurgeSpace space : plan.spaces()) {
             System.out.printf("  %s: %d object(s), %d byte(s)%n", space.prefix(), space.objects(), space.bytes());
         }
         if (!delete) {
@@ -162,7 +165,7 @@ final class LifecycleCommands {
             unreachable(plan.unreachable(), plan.note());
             return 0;
         }
-        RepositoryClient.PurgeReport purged = client.purge(namespace, false);
+        SettingsClient.PurgeReport purged = client.settings().purge(namespace, false);
         System.out.printf("%d object(s), %d byte(s) purged.%n",
                 purged == null ? 0 : purged.objects(), purged == null ? 0 : purged.bytes());
         unreachable(plan.unreachable(), plan.note());
@@ -206,14 +209,14 @@ final class LifecycleCommands {
                     default -> throw new IllegalArgumentException("Unknown retention flag '" + args[i] + "'");
                 }
             }
-            if (!client.setRetention(repo, keepLast, maxAge, prereleaseExpiry, notDownloadedFor)) {
+            if (!client.lifecycle().setRetention(repo, keepLast, maxAge, prereleaseExpiry, notDownloadedFor)) {
                 System.out.println("Retention is not installed on this deployment.");
                 return 1;
             }
             System.out.println("Set the retention policy of " + repo + ".");
             return 0;
         }
-        RepositoryClient.RetentionView view = client.retention(args[1]);
+        LifecycleClient.RetentionView view = client.lifecycle().retention(args[1]);
         if (view == null) {
             System.out.println("Retention is not installed on this deployment.");
             return 0;
@@ -238,16 +241,16 @@ final class LifecycleCommands {
                             "Usage: pins " + args[1] + " <repo> <ecosystem> <coordinate> <version>");
                 }
                 if (args[1].equals("pin")) {
-                    client.pin(args[2], args[3], args[4], args[5]);
+                    client.lifecycle().pin(args[2], args[3], args[4], args[5]);
                     System.out.println("Pinned " + args[4] + ":" + args[5] + " in " + args[2] + ".");
                 } else {
-                    client.unpin(args[2], args[3], args[4], args[5]);
+                    client.lifecycle().unpin(args[2], args[3], args[4], args[5]);
                     System.out.println("Unpinned " + args[4] + ":" + args[5] + " in " + args[2] + ".");
                 }
                 return 0;
             }
             default -> {
-                List<String> pinned = client.pins(args[1]);
+                List<String> pinned = client.lifecycle().pins(args[1]);
                 if (pinned.isEmpty()) {
                     System.out.println("No pins.");
                 } else {
@@ -273,11 +276,11 @@ final class LifecycleCommands {
             }
             String repo = args[first], tenant = args[first + 1], destination = args[first + 2];
             if (!remove) {
-                client.addInternalForward(repo, tenant, destination);
+                client.lifecycle().addInternalForward(repo, tenant, destination);
                 System.out.println("Forwarding " + repo + " to " + tenant + "/" + destination + ".");
                 return 0;
             }
-            if (client.removeInternalForward(repo, tenant, destination)) {
+            if (client.lifecycle().removeInternalForward(repo, tenant, destination)) {
                 System.out.println("Stopped forwarding " + repo + " to " + tenant + "/" + destination + ".");
                 return 0;
             }
@@ -288,19 +291,19 @@ final class LifecycleCommands {
             if (args.length < 4) {
                 throw new IllegalArgumentException("Usage: forwarding retry <repo> <path>");
             }
-            if (client.retryForwarding(args[2], args[3])) {
+            if (client.lifecycle().retryForwarding(args[2], args[3])) {
                 System.out.println("Unparked " + args[3] + " for another delivery attempt.");
                 return 0;
             }
             System.out.println("Nothing parked is queued at " + args[3] + ".");
             return 1;
         }
-        List<RepositoryClient.ForwardingEntry> entries = client.forwarding(args[1]);
+        List<LifecycleClient.ForwardingEntry> entries = client.lifecycle().forwarding(args[1]);
         if (entries.isEmpty()) {
             System.out.println("The forwarding outbox is empty.");
             return 0;
         }
-        for (RepositoryClient.ForwardingEntry entry : entries) {
+        for (LifecycleClient.ForwardingEntry entry : entries) {
             StringBuilder line = new StringBuilder(String.format(Locale.ROOT, "%-8s %s (attempts=%d, delivered=%d)",
                     entry.status(), entry.path(), entry.attempts(), entry.delivered()));
             if (entry.error() != null && !entry.error().isEmpty()) {
@@ -333,14 +336,14 @@ final class LifecycleCommands {
                         default -> throw new IllegalArgumentException("Unknown mark flag '" + args[i] + "'");
                     }
                 }
-                CliSupport.client(home).markLifecycle(args[2], args[3], args[4], args[5], message);
+                CliSupport.client(home).lifecycle().markLifecycle(args[2], args[3], args[4], args[5], message);
                 System.out.println("Marked " + args[3] + "@" + args[4] + " " + args[5] + ".");
             }
             case "clear" -> {
                 if (args.length < 5) {
                     throw new IllegalArgumentException("Usage: lifecycle clear <repo> <coordinate> <version>");
                 }
-                CliSupport.client(home).clearLifecycle(args[2], args[3], args[4]);
+                CliSupport.client(home).lifecycle().clearLifecycle(args[2], args[3], args[4]);
                 System.out.println("Cleared the mark on " + args[3] + "@" + args[4] + ".");
             }
             default -> {
@@ -359,7 +362,7 @@ final class LifecycleCommands {
                         default -> throw new IllegalArgumentException("Unknown lifecycle flag '" + args[i] + "'");
                     }
                 }
-                System.out.println(CliSupport.client(home).lifecycleMarks(args[1], cursor, limit));
+                System.out.println(CliSupport.client(home).lifecycle().lifecycleMarks(args[1], cursor, limit));
             }
         }
         return 0;
@@ -375,7 +378,7 @@ final class LifecycleCommands {
         if (args.length < 3) {
             throw new IllegalArgumentException("Usage: forget-ecosystem <repo> <ecosystem>");
         }
-        CliSupport.client(home).forgetEcosystem(args[1], args[2]);
+        CliSupport.client(home).lifecycle().forgetEcosystem(args[1], args[2]);
         System.out.println("Forgot the " + args[2] + " records in " + args[1] + ".");
         return 0;
     }

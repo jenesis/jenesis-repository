@@ -19,14 +19,15 @@ final class DiscoveryCommands {
             }
             // The folder probe rather than a listing: it answers which folders exist under a prefix in a bounded
             // read, which is what a caller walking a deep layout wants instead of every entry beneath it.
-            System.out.println(CliSupport.client(home).browseChildren(args[2], args.length > 3 ? args[3] : ""));
+            System.out.println(CliSupport.client(home).contents()
+                    .browseChildren(args[2], args.length > 3 ? args[3] : ""));
             return 0;
         }
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: browse <repo> [prefix] | browse children <repo> [prefix]");
         }
         String prefix = args.length > 2 ? args[2] : "";
-        List<String> entries = CliSupport.client(home).browse(args[1], prefix);
+        List<String> entries = CliSupport.client(home).contents().browse(args[1], prefix);
         entries.forEach(System.out::println);
         if (entries.isEmpty()) {
             System.out.println("(empty)");
@@ -39,7 +40,7 @@ final class DiscoveryCommands {
             throw new IllegalArgumentException("Usage: search <repo> [query]");
         }
         String query = args.length > 2 ? args[2] : "";
-        List<String> results = CliSupport.client(home).search(args[1], query);
+        List<String> results = CliSupport.client(home).contents().search(args[1], query);
         results.forEach(System.out::println);
         if (results.isEmpty()) {
             System.out.println("No matches.");
@@ -70,8 +71,8 @@ final class DiscoveryCommands {
         RepositoryClient client = CliSupport.client(home);
         long total = 0;
         while (true) {
-            RepositoryClient.AssetPage page = client.assets(repo, cursor, limit);
-            for (RepositoryClient.AssetEntry asset : page.assets()) {
+            ContentsClient.AssetPage page = client.contents().assets(repo, cursor, limit);
+            for (ContentsClient.AssetEntry asset : page.assets()) {
                 String coordinate = asset.coordinate() == null || asset.coordinate().isBlank()
                         ? "" : "  " + asset.coordinate() + ":" + CliSupport.orDash(asset.version());
                 System.out.println(asset.path() + "  " + asset.size() + "  " + asset.sha256() + coordinate);
@@ -114,7 +115,7 @@ final class DiscoveryCommands {
         if (dependency != null) {
             return declarations(args[1], dependency, version, cursor, home);
         }
-        RepositoryClient.DependentsReport report = CliSupport.client(home).dependents(args[1], coordinate);
+        ProvenanceClient.DependentsReport report = CliSupport.client(home).provenance().dependents(args[1], coordinate);
         if (report == null) {
             System.out.println("The reverse-dependency index is not installed on this deployment.");
             return 0;
@@ -142,17 +143,17 @@ final class DiscoveryCommands {
      *  resolved dependents, because a requirement is not a version anything was built against. */
     private static int declarations(String repo, String dependency, String version, String cursor, Path home)
             throws Exception {
-        RepositoryClient.DependentsReport report = CliSupport.client(home)
-                .declarations(repo, dependency, version, cursor);
+        ProvenanceClient.DependentsReport report = CliSupport.client(home)
+                .provenance().declarations(repo, dependency, version, cursor);
         if (report == null) {
             System.out.println("The reverse-dependency index is not installed on this deployment.");
             return 0;
         }
-        List<RepositoryClient.Declaration> declared = report.declared();
+        List<ProvenanceClient.Declaration> declared = report.declared();
         if (declared == null || declared.isEmpty()) {
             System.out.println("No version declares a dependency on " + dependency + ".");
         } else {
-            for (RepositoryClient.Declaration row : declared) {
+            for (ProvenanceClient.Declaration row : declared) {
                 System.out.println(row.ecosystem() + "  " + row.coordinate() + "  " + row.version() + "  "
                         + (row.requirement() == null || row.requirement().isEmpty() ? "-" : row.requirement())
                         + (row.admits() == null ? "" : "  " + row.admits()));
@@ -190,7 +191,7 @@ final class DiscoveryCommands {
                 }
             }
         }
-        String bom = CliSupport.client(home).sbom(repo, path, format);
+        String bom = CliSupport.client(home).provenance().sbom(repo, path, format);
         if (output != null) {
             Files.writeString(Path.of(output), bom);
             System.out.println("Wrote the " + (path == null ? "repository" : path) + " SBOM to " + output + ".");

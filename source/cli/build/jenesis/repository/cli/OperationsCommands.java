@@ -26,7 +26,7 @@ final class OperationsCommands {
                 throw new IllegalArgumentException("Usage: posture [--tenant <name>]");
             }
         }
-        System.out.println(CliSupport.client(home).posture(tenant));
+        System.out.println(CliSupport.client(home).operations().posture(tenant));
         return 0;
     }
 
@@ -37,14 +37,14 @@ final class OperationsCommands {
     static int walks(String[] args, Path home) throws Exception {
         if (args.length == 2 && args[1].equals("run")) {
             RepositoryClient client = CliSupport.client(home);
-            System.out.println(client.walksRun());
+            System.out.println(client.operations().walksRun());
             if (!Refresh.on()) {
                 return 0;
             }
             // Asked to watch: the request is recorded and every node picks it up within half a minute, so what
             // there is to watch is the standing request draining and the walk's own account arriving after it.
             return Refresh.until(WALK_PICKUP, () -> {
-                String seen = client.walks();
+                String seen = client.operations().walks();
                 System.out.println(seen);
                 return seen.contains("\"requests\":[]") || seen.contains("requests: none")
                         ? Refresh.Poll.State.done(0)
@@ -54,24 +54,24 @@ final class OperationsCommands {
         if (args.length != 1) {
             throw new IllegalArgumentException("Usage: walks [run]");
         }
-        System.out.println(CliSupport.client(home).walks());
+        System.out.println(CliSupport.client(home).operations().walks());
         return 0;
     }
 
     static int caches(String[] args, Path home) throws Exception {
         if (args.length == 2 && args[1].equals("clear")) {
-            System.out.println(CliSupport.client(home).cachesClear());
+            System.out.println(CliSupport.client(home).operations().cachesClear());
             return 0;
         }
         if (args.length != 1) {
             throw new IllegalArgumentException("Usage: caches [clear]");
         }
-        System.out.println(CliSupport.client(home).caches());
+        System.out.println(CliSupport.client(home).operations().caches());
         return 0;
     }
 
     static int consistency(String[] args, Path home) throws Exception {
-        System.out.println(CliSupport.client(home).consistency());
+        System.out.println(CliSupport.client(home).operations().consistency());
         return 0;
     }
 
@@ -85,22 +85,22 @@ final class OperationsCommands {
                 default -> throw new IllegalArgumentException("Usage: logs [--level <level>] [--limit <n>]");
             }
         }
-        System.out.println(CliSupport.client(home).logs(level, limit));
+        System.out.println(CliSupport.client(home).operations().logs(level, limit));
         return 0;
     }
 
     static int observability(String[] args, Path home) throws Exception {
-        System.out.println(CliSupport.client(home).observability());
+        System.out.println(CliSupport.client(home).operations().observability());
         return 0;
     }
 
     static int spi(String[] args, Path home) throws Exception {
-        System.out.println(CliSupport.client(home).spi());
+        System.out.println(CliSupport.client(home).settings().spi());
         return 0;
     }
 
     static int config(String[] args, Path home) throws Exception {
-        System.out.println(CliSupport.client(home).config());
+        System.out.println(CliSupport.client(home).settings().config());
         return 0;
     }
 
@@ -108,7 +108,7 @@ final class OperationsCommands {
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: origin <repo> [path]");
         }
-        System.out.println(CliSupport.client(home).origin(args[1], args.length > 2 ? args[2] : ""));
+        System.out.println(CliSupport.client(home).provenance().origin(args[1], args.length > 2 ? args[2] : ""));
         return 0;
     }
 
@@ -125,7 +125,7 @@ final class OperationsCommands {
                 default -> throw new IllegalArgumentException("Unknown attribution flag '" + args[i] + "'");
             }
         }
-        System.out.println(CliSupport.client(home).attribution(args[1], coordinate, format));
+        System.out.println(CliSupport.client(home).provenance().attribution(args[1], coordinate, format));
         return 0;
     }
 
@@ -133,7 +133,7 @@ final class OperationsCommands {
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: hardening <repo> [path]");
         }
-        System.out.println(CliSupport.client(home).hardeningVerdict(args[1], args.length > 2 ? args[2] : null));
+        System.out.println(CliSupport.client(home).risk().hardeningVerdict(args[1], args.length > 2 ? args[2] : null));
         return 0;
     }
 
@@ -142,14 +142,14 @@ final class OperationsCommands {
             if (args.length < 4) {
                 throw new IllegalArgumentException("Usage: webhook retry <repo> <id>");
             }
-            CliSupport.client(home).retryWebhook(args[2], args[3]);
+            CliSupport.client(home).lifecycle().retryWebhook(args[2], args[3]);
             System.out.println("Queued webhook " + args[3] + " for redelivery.");
             return 0;
         }
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: webhook <repo> | webhook retry <repo> <id>");
         }
-        System.out.println(CliSupport.client(home).webhooks(args[1]));
+        System.out.println(CliSupport.client(home).lifecycle().webhooks(args[1]));
         return 0;
     }
 
@@ -175,7 +175,8 @@ final class OperationsCommands {
                         default -> throw new IllegalArgumentException("Unknown record flag '" + args[i] + "'");
                     }
                 }
-                System.out.println(CliSupport.client(home).redirectRecord(args[2], args[3], formats, scope, ttl));
+                System.out.println(CliSupport.client(home).operations()
+                        .redirectRecord(args[2], args[3], formats, scope, ttl));
             }
             case "check" -> {
                 if (args.length < 3) {
@@ -189,7 +190,7 @@ final class OperationsCommands {
                         throw new IllegalArgumentException("Unknown check flag '" + args[i] + "'");
                     }
                 }
-                System.out.println(CliSupport.client(home).redirectCheck(args[2], expect));
+                System.out.println(CliSupport.client(home).operations().redirectCheck(args[2], expect));
             }
             default -> throw new IllegalArgumentException("Unknown redirect-dns action '" + args[1] + "'");
         }

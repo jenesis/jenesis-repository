@@ -29,12 +29,13 @@ final class CacheCommands {
             throw new IllegalArgumentException("Usage: cache <projects|show|create|config|evict|recount|delete> [...]");
         }
         return switch (args[1]) {
-            case "projects" -> print(CliSupport.client(home).cacheProjects());
-            case "show" -> print(CliSupport.client(home).cacheProject(name(args, "show <project>")));
-            case "create" -> print(CliSupport.client(home).createCacheProject(name(args, "create <project>")));
+            case "projects" -> print(CliSupport.client(home).buildCache().cacheProjects());
+            case "show" -> print(CliSupport.client(home).buildCache().cacheProject(name(args, "show <project>")));
+            case "create" -> print(CliSupport.client(home).buildCache()
+                    .createCacheProject(name(args, "create <project>")));
             case "config" -> config(args, home);
             case "evict" -> evict(args, home);
-            case "recount" -> print(CliSupport.client(home).recountCache(name(args, "recount <project>")));
+            case "recount" -> print(CliSupport.client(home).buildCache().recountCache(name(args, "recount <project>")));
             case "delete" -> delete(args, home);
             default -> throw new IllegalArgumentException("Unknown cache command '" + args[1] + "'");
         };
@@ -52,7 +53,7 @@ final class CacheCommands {
                         + "[--lru <true|false>] [--ttl <duration>]");
             }
         }
-        return print(CliSupport.client(home).saveCacheConfig(project, size, lru, ttl));
+        return print(CliSupport.client(home).buildCache().saveCacheConfig(project, size, lru, ttl));
     }
 
     private static int evict(String[] args, Path home) throws Exception {
@@ -60,7 +61,7 @@ final class CacheCommands {
         if (args.length < 4 || !PASSES.contains(args[3])) {
             throw new IllegalArgumentException("Usage: cache evict <project> <size|ttl|clear>");
         }
-        return print(CliSupport.client(home).evictCache(project, args[3]));
+        return print(CliSupport.client(home).buildCache().evictCache(project, args[3]));
     }
 
     private static int delete(String[] args, Path home) throws Exception {
@@ -72,7 +73,7 @@ final class CacheCommands {
             System.out.println("Nothing was deleted.");
             return 1;
         }
-        return print(CliSupport.client(home).deleteCacheProject(project));
+        return print(CliSupport.client(home).buildCache().deleteCacheProject(project));
     }
 
     private static String name(String[] args, String usage) {

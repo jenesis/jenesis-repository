@@ -6,6 +6,13 @@ import module org.junit.jupiter.api;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import build.jenesis.repository.cli.RepositoryClient;
+import build.jenesis.repository.cli.SettingsClient;
+import build.jenesis.repository.cli.RiskClient;
+import build.jenesis.repository.cli.ReviewClient;
+import build.jenesis.repository.cli.ProvenanceClient;
+import build.jenesis.repository.cli.LifecycleClient;
+import build.jenesis.repository.cli.ContentsClient;
+import build.jenesis.repository.cli.AccessClient;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
@@ -250,16 +257,16 @@ public class RepositoryClientTest {
 
     @Test
     void the_settings_list_is_parsed_into_its_fields() throws IOException, InterruptedException {
-        List<RepositoryClient.Setting> settings = client.settings();
+        List<SettingsClient.Setting> settings = client.settings().settings();
         assertThat(settings).hasSize(3);
-        RepositoryClient.Setting first = settings.get(0);
+        SettingsClient.Setting first = settings.get(0);
         assertThat(first.key()).isEqualTo("license-allowed");
         assertThat(first.value()).isEqualTo("apache,mit");
         assertThat(first.overridden()).isTrue();
         assertThat(first.appliesImmediately()).isTrue();
         assertThat(first.pinned()).as("an unpinned key").isFalse();
         assertThat(settings.get(1).appliesImmediately()).as("a restart-only setting").isFalse();
-        RepositoryClient.Setting pinned = settings.get(2);
+        SettingsClient.Setting pinned = settings.get(2);
         assertThat(pinned.key()).isEqualTo("proxy-enabled");
         assertThat(pinned.pinned()).as("a key fixed above the store is pinned").isTrue();
         assertThat(pinned.pinnedBy()).as("the CLI surfaces the pinning source").isEqualTo("environment variable");
@@ -267,7 +274,7 @@ public class RepositoryClientTest {
 
     @Test
     void set_sends_an_authenticated_put_to_the_keyed_path() throws IOException, InterruptedException {
-        client.setSetting("license-allowed", "apache,mit");
+        client.settings().setSetting("license-allowed", "apache,mit");
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/settings/license-allowed");
         assertThat(lastKey).as("the stored key authenticates the request").isEqualTo("jenk_acme.secret");
@@ -276,13 +283,13 @@ public class RepositoryClientTest {
 
     @Test
     void settings_export_returns_the_bundle_and_import_posts_it_back() throws IOException, InterruptedException {
-        String bundle = client.exportSettings();
+        String bundle = client.settings().exportSettings();
         assertThat(lastMethod).isEqualTo("GET");
         assertThat(lastPath).isEqualTo("/api/settings/export");
         assertThat(bundle).as("the raw bundle is returned unparsed, so it re-imports byte-identically")
                 .isEqualTo(SETTINGS_BUNDLE);
 
-        client.importSettings(bundle);
+        client.settings().importSettings(bundle);
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/settings/import");
         assertThat(lastKey).as("the stored key authenticates the request").isEqualTo("jenk_acme.secret");
@@ -291,27 +298,27 @@ public class RepositoryClientTest {
 
     @Test
     void clear_sends_a_delete_to_the_keyed_path() throws IOException, InterruptedException {
-        client.clearSetting("proxy");
+        client.settings().clearSetting("proxy");
         assertThat(lastMethod).isEqualTo("DELETE");
         assertThat(lastPath).isEqualTo("/api/settings/proxy");
     }
 
     @Test
     void browse_lists_the_entries_under_a_prefix() throws IOException, InterruptedException {
-        assertThat(client.browse("releases", "/maven")).containsExactly("org", "com");
+        assertThat(client.contents().browse("releases", "/maven")).containsExactly("org", "com");
         assertThat(lastPath).isEqualTo("/api/browse");
         assertThat(lastQuery).as("the decoded query the client sent").contains("repo=releases").contains("prefix=/maven");
     }
 
     @Test
     void search_lists_matching_coordinates() throws IOException, InterruptedException {
-        assertThat(client.search("releases", "lib")).containsExactly("org.acme:lib:1.0", "org.acme:lib:2.0");
+        assertThat(client.contents().search("releases", "lib")).containsExactly("org.acme:lib:1.0", "org.acme:lib:2.0");
         assertThat(lastQuery).contains("q=lib");
     }
 
     @Test
     void the_vulnerability_report_is_parsed_over_its_nested_advisories() throws IOException, InterruptedException {
-        RepositoryClient.VulnerabilityReport report = client.vulnerabilities("releases");
+        RiskClient.VulnerabilityReport report = client.risk().vulnerabilities("releases");
         assertThat(lastPath).isEqualTo("/api/vulnerabilities");
         assertThat(lastQuery).contains("repo=releases");
         assertThat(report.scanned()).isTrue();
@@ -331,7 +338,7 @@ public class RepositoryClientTest {
 
     @Test
     void the_vulnerability_facets_travel_as_query_parameters() throws IOException, InterruptedException {
-        client.vulnerabilities("releases", "unknown", "not-applicable");
+        client.risk().vulnerabilities("releases", "unknown", "not-applicable");
         assertThat(lastPath).isEqualTo("/api/vulnerabilities");
         assertThat(lastQuery).contains("repo=releases")
                 .contains("reachability=unknown").contains("applicability=not-applicable");
@@ -339,7 +346,7 @@ public class RepositoryClientTest {
 
     @Test
     void provenance_returns_the_signed_attestation_for_a_path() throws IOException, InterruptedException {
-        String attestation = client.provenance("releases", "/maven/org/acme/lib/1.0/lib-1.0.pom");
+        String attestation = client.provenance().provenance("releases", "/maven/org/acme/lib/1.0/lib-1.0.pom");
         assertThat(lastPath).isEqualTo("/api/provenance");
         assertThat(lastQuery).contains("repo=releases").contains("path=/maven/org/acme/lib/1.0/lib-1.0.pom");
         assertThat(attestation).isEqualTo(PROVENANCE);
@@ -347,7 +354,8 @@ public class RepositoryClientTest {
 
     @Test
     void deploy_sends_the_bytes_and_returns_the_verdict_status() throws IOException, InterruptedException {
-        int status = client.deploy("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar", "a library jar".getBytes(UTF_8));
+        int status = client.contents().deploy("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar",
+                "a library jar".getBytes(UTF_8));
         assertThat(status).isEqualTo(201);
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/repository/acme/releases/maven/org/acme/lib/1.0/lib-1.0.jar");
@@ -360,7 +368,7 @@ public class RepositoryClientTest {
         // The file-taking overload streams the artifact straight from disk (ofFile) rather than Files.readAllBytes-ing
         // it into heap - the stream-never-buffer upload path - and the server still receives the bytes verbatim.
         Path file = Files.writeString(work.resolve("lib-1.0.jar"), "a streamed library jar");
-        int status = client.deploy("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar", file);
+        int status = client.contents().deploy("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar", file);
         assertThat(status).isEqualTo(201);
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/repository/acme/releases/maven/org/acme/lib/1.0/lib-1.0.jar");
@@ -370,8 +378,8 @@ public class RepositoryClientTest {
     @Test
     void deploy_explode_streams_the_archive_from_disk() throws IOException, InterruptedException {
         Path archive = Files.writeString(work.resolve("bundle.zip"), "a streamed archive");
-        RepositoryClient.ExplodeResult result =
-                client.deployExplode("releases", "/maven/org/acme/", archive);
+        ContentsClient.ExplodeResult result =
+                client.contents().deployExplode("releases", "/maven/org/acme/", archive);
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastExplode).as("the batch header still names the archive encoding").isEqualTo("zip");
         assertThat(lastBody).isEqualTo("a streamed archive");
@@ -382,9 +390,9 @@ public class RepositoryClientTest {
 
     @Test
     void credentials_are_parsed_over_the_nested_grants() throws IOException, InterruptedException {
-        List<RepositoryClient.Credential> credentials = client.credentials();
+        List<AccessClient.Credential> credentials = client.access().credentials();
         assertThat(credentials).hasSize(1);
-        RepositoryClient.Credential credential = credentials.get(0);
+        AccessClient.Credential credential = credentials.get(0);
         assertThat(credential.id()).isEqualTo("abc123");
         assertThat(credential.label()).isEqualTo("ci");
         assertThat(credential.useCount()).as("the count after the nested grants object").isEqualTo(3);
@@ -393,43 +401,43 @@ public class RepositoryClientTest {
 
     @Test
     void repository_definitions_are_listed_set_and_removed() throws IOException, InterruptedException {
-        List<RepositoryClient.NamedValue> repos = client.repositories(null);
+        List<SettingsClient.NamedValue> repos = client.settings().repositories(null);
         assertThat(repos).hasSize(1);
         assertThat(repos.get(0).name()).isEqualTo("mirror");
         assertThat(repos.get(0).value()).isEqualTo("fallback https://repo1.maven.org/maven2/");
 
-        client.setRepository(null, "mirror", "writable");
+        client.settings().setRepository(null, "mirror", "writable");
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/repositories/mirror");
         assertThat(lastBody).isEqualTo("{\"value\":\"writable\"}");
 
-        client.removeRepository(null, "mirror");
+        client.settings().removeRepository(null, "mirror");
         assertThat(lastMethod).isEqualTo("DELETE");
         assertThat(lastPath).isEqualTo("/api/repositories/mirror");
     }
 
     @Test
     void format_upstreams_are_listed_and_set() throws IOException, InterruptedException {
-        List<RepositoryClient.NamedValue> upstreams = client.upstreams(null);
+        List<SettingsClient.NamedValue> upstreams = client.settings().upstreams(null);
         assertThat(upstreams).hasSize(1);
         assertThat(upstreams.get(0).name()).isEqualTo("npm");
         assertThat(upstreams.get(0).value()).isEqualTo("https://npm.internal/");
 
-        client.setUpstream(null, "npm", "https://npm.internal/");
+        client.settings().setUpstream(null, "npm", "https://npm.internal/");
         assertThat(lastPath).isEqualTo("/api/upstreams/npm");
         assertThat(lastBody).isEqualTo("{\"value\":\"https://npm.internal/\"}");
     }
 
     @Test
     void upstream_credentials_are_listed_and_set_write_only() throws IOException, InterruptedException {
-        assertThat(client.upstreamCredentialHosts()).containsExactly("nexus.internal");
+        assertThat(client.settings().upstreamCredentialHosts()).containsExactly("nexus.internal");
 
-        client.setUpstreamCredential("nexus.internal", "bearer", null, null, "s3cr3t", null);
+        client.settings().setUpstreamCredential("nexus.internal", "bearer", null, null, "s3cr3t", null);
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/upstreams/auth/nexus.internal");
         assertThat(lastBody).isEqualTo("{\"scheme\":\"bearer\",\"token\":\"s3cr3t\"}");
 
-        client.setUpstreamCredential("api.host", "header", null, null, "k3y", "X-Api-Key");
+        client.settings().setUpstreamCredential("api.host", "header", null, null, "k3y", "X-Api-Key");
         assertThat(lastPath).isEqualTo("/api/upstreams/auth/api.host");
         assertThat(lastBody).as("a custom header carries its name")
                 .isEqualTo("{\"scheme\":\"header\",\"token\":\"k3y\",\"header\":\"X-Api-Key\"}");
@@ -437,7 +445,7 @@ public class RepositoryClientTest {
 
     @Test
     void mint_posts_the_label_and_returns_the_secret_once() throws IOException, InterruptedException {
-        RepositoryClient.Minted minted = client.mint("ci");
+        AccessClient.Minted minted = client.access().mint("ci");
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/credentials");
         assertThat(lastBody).isEqualTo("{\"label\":\"ci\"}");
@@ -447,11 +455,11 @@ public class RepositoryClientTest {
 
     @Test
     void the_license_facets_are_parsed_into_categories_and_spdx_ids() throws IOException, InterruptedException {
-        RepositoryClient.LicensesView view = client.licenses("releases");
+        RiskClient.LicensesView view = client.risk().licenses("releases");
         assertThat(lastPath).isEqualTo("/api/licenses");
         assertThat(lastQuery).contains("repo=releases");
         assertThat(view.indexed()).isTrue();
-        assertThat(view.categories()).extracting(RepositoryClient.LicenseCount::value)
+        assertThat(view.categories()).extracting(RiskClient.LicenseCount::value)
                 .containsExactly("permissive", "strong-copyleft");
         assertThat(view.licenses()).first().satisfies(count -> {
             assertThat(count.value()).isEqualTo("apache-2.0");
@@ -461,7 +469,7 @@ public class RepositoryClientTest {
 
     @Test
     void quarantine_holds_are_listed_and_reviewed() throws IOException, InterruptedException {
-        List<RepositoryClient.QuarantineEvent> events = client.quarantine("releases");
+        List<ReviewClient.QuarantineEvent> events = client.review().quarantine("releases");
         assertThat(lastPath).isEqualTo("/api/quarantine");
         assertThat(lastQuery).contains("repo=releases");
         assertThat(events).singleElement().satisfies(event -> {
@@ -470,20 +478,20 @@ public class RepositoryClientTest {
             assertThat(event.reasons()).containsExactly("unsigned", "license unknown");
         });
 
-        client.releaseQuarantine("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar");
+        client.review().releaseQuarantine("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar");
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/quarantine/release");
         assertThat(lastQuery).as("the repo rides the query, the path the body").contains("repo=releases");
         assertThat(lastBody).isEqualTo("{\"path\":\"/maven/org/acme/lib/1.0/lib-1.0.jar\"}");
         assertThat(lastKey).isEqualTo("jenk_acme.secret");
 
-        client.discardQuarantine("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar");
+        client.review().discardQuarantine("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar");
         assertThat(lastPath).isEqualTo("/api/quarantine/discard");
     }
 
     @Test
     void the_forwarding_outbox_is_listed_and_a_parked_forward_is_retried() throws IOException, InterruptedException {
-        List<RepositoryClient.ForwardingEntry> entries = client.forwarding("mirror");
+        List<LifecycleClient.ForwardingEntry> entries = client.lifecycle().forwarding("mirror");
         assertThat(lastPath).isEqualTo("/api/forwarding");
         assertThat(entries).singleElement().satisfies(entry -> {
             assertThat(entry.ecosystem()).isEqualTo("npm");
@@ -494,7 +502,7 @@ public class RepositoryClientTest {
             assertThat(entry.error()).isEqualTo("502 from mirror");
         });
 
-        assertThat(client.retryForwarding("mirror", "/npm/left-pad/-/left-pad-1.0.0.tgz"))
+        assertThat(client.lifecycle().retryForwarding("mirror", "/npm/left-pad/-/left-pad-1.0.0.tgz"))
                 .as("a 200 means the parked forward was unparked").isTrue();
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/forwarding/retry");
@@ -503,7 +511,7 @@ public class RepositoryClientTest {
 
     @Test
     void staging_ids_are_listed_promoted_and_dropped() throws IOException, InterruptedException {
-        List<RepositoryClient.StagingEntry> entries = client.staging("releases");
+        List<ContentsClient.StagingEntry> entries = client.contents().staging("releases");
         assertThat(lastPath).isEqualTo("/api/repository/staging");
         assertThat(entries).singleElement().satisfies(entry -> {
             assertThat(entry.id()).isEqualTo("stg-abc");
@@ -511,19 +519,19 @@ public class RepositoryClientTest {
             assertThat(entry.items()).isEqualTo(4);
         });
 
-        assertThat(client.promoteStaging("releases", "stg-abc")).isEqualTo(200);
+        assertThat(client.contents().promoteStaging("releases", "stg-abc")).isEqualTo(200);
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/repository/staging/stg-abc/promote");
         assertThat(lastQuery).isEqualTo("repo=releases");
         assertThat(lastKey).isEqualTo("jenk_acme.secret");
 
-        assertThat(client.dropStaging("releases", "stg-abc")).isEqualTo(200);
+        assertThat(client.contents().dropStaging("releases", "stg-abc")).isEqualTo(200);
         assertThat(lastPath).isEqualTo("/api/repository/staging/stg-abc/drop");
     }
 
     @Test
     void the_published_index_descriptor_is_parsed_over_its_chunks() throws IOException, InterruptedException {
-        RepositoryClient.IndexDescriptor descriptor = client.index("releases");
+        ContentsClient.IndexDescriptor descriptor = client.contents().index("releases");
         assertThat(lastPath).isEqualTo("/api/index");
         assertThat(lastQuery).contains("repo=releases");
         assertThat(descriptor.generation()).isEqualTo(7);
@@ -536,7 +544,7 @@ public class RepositoryClientTest {
 
     @Test
     void the_asset_walk_is_paged_by_an_opaque_cursor() throws IOException, InterruptedException {
-        RepositoryClient.AssetPage first = client.assets("releases", null, 2);
+        ContentsClient.AssetPage first = client.contents().assets("releases", null, 2);
         assertThat(lastPath).isEqualTo("/api/assets");
         assertThat(lastQuery).contains("repo=releases").contains("limit=2");
         assertThat(first.assets()).singleElement().satisfies(asset -> {
@@ -548,37 +556,37 @@ public class RepositoryClientTest {
         assertThat(first.cursor()).as("a full page carries a resume cursor").isEqualTo("bWF2ZW4");
 
         // The cursor is threaded back as ?cursor= to fetch the next page, which exhausts the walk (cursor null).
-        RepositoryClient.AssetPage second = client.assets("releases", first.cursor(), 2);
+        ContentsClient.AssetPage second = client.contents().assets("releases", first.cursor(), 2);
         assertThat(lastQuery).contains("cursor=bWF2ZW4");
-        assertThat(second.assets()).extracting(RepositoryClient.AssetEntry::path)
+        assertThat(second.assets()).extracting(ContentsClient.AssetEntry::path)
                 .containsExactly("/npm/left-pad/-/left-pad-1.3.0.tgz");
         assertThat(second.cursor()).as("the exhausted walk carries no cursor").isNull();
     }
 
     @Test
     void settings_can_be_scoped_to_a_tenant() throws IOException, InterruptedException {
-        List<RepositoryClient.Setting> settings = client.settings("acme");
+        List<SettingsClient.Setting> settings = client.settings().settings("acme");
         assertThat(lastPath).isEqualTo("/api/settings");
         assertThat(lastQuery).as("the tenant scopes the read").contains("tenant=acme");
         assertThat(settings).hasSize(3);
 
-        client.setSetting("acme", "license-allowed", "apache,mit");
+        client.settings().setSetting("acme", "license-allowed", "apache,mit");
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/settings/license-allowed");
         assertThat(lastQuery).contains("tenant=acme");
         assertThat(lastBody).isEqualTo("{\"value\":\"apache,mit\"}");
 
-        client.clearSetting("acme", "proxy-enabled");
+        client.settings().clearSetting("acme", "proxy-enabled");
         assertThat(lastMethod).isEqualTo("DELETE");
         assertThat(lastPath).isEqualTo("/api/settings/proxy-enabled");
         assertThat(lastQuery).contains("tenant=acme");
 
-        String bundle = client.exportSettings("acme");
+        String bundle = client.settings().exportSettings("acme");
         assertThat(lastPath).isEqualTo("/api/settings/export");
         assertThat(lastQuery).contains("tenant=acme");
         assertThat(bundle).isEqualTo(SETTINGS_BUNDLE);
 
-        client.importSettings("acme", bundle);
+        client.settings().importSettings("acme", bundle);
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/settings/import");
         assertThat(lastQuery).contains("tenant=acme");
@@ -602,27 +610,27 @@ public class RepositoryClientTest {
 
     @Test
     void the_quota_is_read_and_set() throws IOException, InterruptedException {
-        RepositoryClient.QuotaView view = client.quota();
+        SettingsClient.QuotaView view = client.settings().quota();
         assertThat(lastPath).isEqualTo("/api/quota");
         assertThat(view.maxBytes()).isEqualTo(1073741824L);
         assertThat(view.usedBytes()).isEqualTo(2048L);
 
-        client.setQuota(500L);
+        client.settings().setQuota(500L);
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastBody).isEqualTo("{\"maxBytes\":500}");
     }
 
     @Test
     void the_rate_limit_and_policy_are_read_and_set() throws IOException, InterruptedException {
-        assertThat(client.rateLimit().permitsPerMinute()).isEqualTo(600L);
-        assertThat(client.setRateLimit(120L)).as("a 200 means it was set").isTrue();
+        assertThat(client.settings().rateLimit().permitsPerMinute()).isEqualTo(600L);
+        assertThat(client.settings().setRateLimit(120L)).as("a 200 means it was set").isTrue();
         assertThat(lastPath).isEqualTo("/api/rate-limit");
         assertThat(lastBody).isEqualTo("{\"permitsPerMinute\":120}");
 
-        RepositoryClient.PolicyView policy = client.policy();
+        AccessClient.PolicyView policy = client.access().policy();
         assertThat(policy.defaultLifetime()).isEqualTo("P90D");
         assertThat(policy.maxLifetime()).isEqualTo("P365D");
-        client.setPolicy("P30D", null);
+        client.access().setPolicy("P30D", null);
         assertThat(lastPath).isEqualTo("/api/policy");
         assertThat(lastBody).as("an omitted --max clears the ceiling (full-replace endpoint)")
                 .isEqualTo("{\"defaultLifetime\":\"P30D\",\"maxLifetime\":\"\"}");
@@ -630,12 +638,12 @@ public class RepositoryClientTest {
 
     @Test
     void roles_are_parsed_into_a_map_and_set() throws IOException, InterruptedException {
-        Map<String, String> roles = client.roles();
+        Map<String, String> roles = client.access().roles();
         assertThat(lastPath).isEqualTo("/api/roles");
         assertThat(roles).containsEntry("read-only", "repository:read")
                 .containsEntry("deploy", "repository:read,repository:write");
 
-        client.setRole("ci", "repository:read,repository:write");
+        client.access().setRole("ci", "repository:read,repository:write");
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/roles/ci");
         assertThat(lastBody).isEqualTo("{\"tokens\":\"repository:read,repository:write\"}");
@@ -643,14 +651,14 @@ public class RepositoryClientTest {
 
     @Test
     void trusts_are_listed_and_set_over_their_fields() throws IOException, InterruptedException {
-        assertThat(client.trusts()).singleElement().satisfies(trust -> {
+        assertThat(client.access().trusts()).singleElement().satisfies(trust -> {
             assertThat(trust.name()).isEqualTo("ci");
             assertThat(trust.issuer()).isEqualTo("https://token.actions.githubusercontent.com");
             assertThat(trust.scope()).isEqualTo("releases");
             assertThat(trust.rights()).isEqualTo("deploy");
         });
 
-        client.setTrust("ci", "https://issuer", null, null, "releases", "deploy", "PT1H");
+        client.access().setTrust("ci", "https://issuer", null, null, "releases", "deploy", "PT1H");
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/trusts/ci");
         assertThat(lastBody).as("a null audience/subject is omitted from the body")
@@ -659,7 +667,7 @@ public class RepositoryClientTest {
 
     @Test
     void the_audit_trail_is_filtered_and_parsed() throws IOException, InterruptedException {
-        List<RepositoryClient.AuditEvent> events = client.audit("2026-01-01T00:00:00Z", null, "credential.mint");
+        List<AccessClient.AuditEvent> events = client.access().audit("2026-01-01T00:00:00Z", null, "credential.mint");
         assertThat(lastPath).isEqualTo("/api/audit");
         assertThat(lastQuery).contains("from=").contains("action=credential.mint");
         assertThat(lastQuery).as("a null bound is not sent").doesNotContain("to=");
@@ -671,58 +679,58 @@ public class RepositoryClientTest {
 
     @Test
     void cleanup_retention_and_pins_are_driven() throws IOException, InterruptedException {
-        RepositoryClient.CleanupReport report = client.cleanup("releases");
+        LifecycleClient.CleanupReport report = client.lifecycle().cleanup("releases");
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/repository/cleanup");
         assertThat(report.blobsReclaimed()).isEqualTo(3);
         assertThat(report.evicted()).containsExactly("org.acme:lib:0.9 - superseded");
 
-        RepositoryClient.RetentionView view = client.retention("releases");
+        LifecycleClient.RetentionView view = client.lifecycle().retention("releases");
         assertThat(view.keepLast()).isEqualTo(5);
         assertThat(view.maxAge()).isEqualTo("P30D");
 
-        assertThat(client.setRetention("releases", 3, "P30D", null, null)).isTrue();
+        assertThat(client.lifecycle().setRetention("releases", 3, "P30D", null, null)).isTrue();
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/repository/retention");
         assertThat(lastQuery).contains("repo=releases").contains("keepLast=3").contains("maxAge=P30D");
 
-        assertThat(client.pins("releases")).containsExactly("Maven:org.acme:lib:1.0");
+        assertThat(client.lifecycle().pins("releases")).containsExactly("Maven:org.acme:lib:1.0");
 
-        client.pin("releases", "Maven", "org.acme:lib", "1.0");
+        client.lifecycle().pin("releases", "Maven", "org.acme:lib", "1.0");
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/repository/pin");
         assertThat(lastQuery).contains("ecosystem=Maven").contains("coordinate=org.acme").contains("version=1.0");
 
-        client.unpin("releases", "Maven", "org.acme:lib", "1.0");
+        client.lifecycle().unpin("releases", "Maven", "org.acme:lib", "1.0");
         assertThat(lastMethod).isEqualTo("DELETE");
         assertThat(lastPath).isEqualTo("/api/repository/pin");
     }
 
     @Test
     void the_orphan_report_and_the_purge_are_driven() throws IOException, InterruptedException {
-        RepositoryClient.OrphansView orphans = client.orphans();
+        SettingsClient.OrphansView orphans = client.settings().orphans();
         assertThat(lastMethod).isEqualTo("GET");
         assertThat(lastPath).isEqualTo("/api/admin/orphans");
         assertThat(orphans.orphans()).hasSize(1);
         assertThat(orphans.orphans().getFirst().namespace()).isEqualTo("build.jenesis.repository.phantom");
         assertThat(orphans.orphans().getFirst().objects()).isEqualTo(3);
 
-        RepositoryClient.PurgeReport plan = client.purge("build.jenesis.repository.phantom", true);
+        SettingsClient.PurgeReport plan = client.settings().purge("build.jenesis.repository.phantom", true);
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/admin/purge");
         assertThat(lastQuery).contains("namespace=build.jenesis.repository.phantom").contains("dryRun=true");
         assertThat(plan.dryRun()).isTrue();
-        assertThat(plan.spaces()).extracting(RepositoryClient.PurgeSpace::prefix)
+        assertThat(plan.spaces()).extracting(SettingsClient.PurgeSpace::prefix)
                 .containsExactly("default/releases/phantomspace");
         assertThat(plan.objects()).isEqualTo(3);
 
-        assertThat(client.purge("no.such.module", false))
+        assertThat(client.settings().purge("no.such.module", false))
                 .as("an unregistered namespace answers 404 -> null").isNull();
     }
 
     @Test
     void the_retro_license_plan_is_parsed() throws IOException, InterruptedException {
-        RepositoryClient.RetroPlan plan = client.retroPlan("releases", true);
+        RiskClient.RetroPlan plan = client.risk().retroPlan("releases", true);
         assertThat(lastPath).isEqualTo("/api/licenses/retro/plan");
         assertThat(lastQuery).contains("repo=releases").contains("unknown=true");
         assertThat(plan.mode()).isEqualTo("denied");
@@ -735,26 +743,26 @@ public class RepositoryClientTest {
 
     @Test
     void the_credential_sub_ops_hit_their_keyed_paths() throws IOException, InterruptedException {
-        client.setGrant("abc123", "releases", List.of("repository:read", "repository:write"));
+        client.access().setGrant("abc123", "releases", List.of("repository:read", "repository:write"));
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/credentials/abc123/grants");
         assertThat(lastBody).isEqualTo(
                 "{\"scope\":\"releases\",\"tokens\":[\"repository:read\",\"repository:write\"]}");
 
-        client.removeGrant("abc123", "releases");
+        client.access().removeGrant("abc123", "releases");
         assertThat(lastMethod).isEqualTo("DELETE");
         assertThat(lastPath).isEqualTo("/api/credentials/abc123/grants/releases");
 
-        client.setExpiry("abc123", "P30D");
+        client.access().setExpiry("abc123", "P30D");
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/credentials/abc123/expiry");
         assertThat(lastBody).isEqualTo("{\"expires\":\"P30D\"}");
 
-        client.setAllowedAddresses("abc123", "203.0.113.0/24");
+        client.access().setAllowedAddresses("abc123", "203.0.113.0/24");
         assertThat(lastPath).isEqualTo("/api/credentials/abc123/allowed-ips");
         assertThat(lastBody).isEqualTo("{\"addresses\":\"203.0.113.0/24\"}");
 
-        RepositoryClient.Minted rotated = client.rotate("abc123", "P2D");
+        AccessClient.Minted rotated = client.access().rotate("abc123", "P2D");
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/credentials/abc123/rotate");
         assertThat(lastBody).isEqualTo("{\"overlap\":\"P2D\"}");
@@ -764,8 +772,8 @@ public class RepositoryClientTest {
 
     @Test
     void provenance_material_and_key_are_fetched() throws IOException, InterruptedException {
-        RepositoryClient.ProvenanceMaterial material =
-                client.provenanceMaterial("releases", "/maven/org/acme/lib/1.0/lib-1.0.pom");
+        ProvenanceClient.ProvenanceMaterial material =
+                client.provenance().provenanceMaterial("releases", "/maven/org/acme/lib/1.0/lib-1.0.pom");
         assertThat(lastPath).isEqualTo("/api/provenance");
         assertThat(lastQuery).contains("material");
         assertThat(material.certificateChain()).isEqualTo("-----BEGIN CERTIFICATE-----");
@@ -773,13 +781,13 @@ public class RepositoryClientTest {
         assertThat(material.transparencyLog().logIndex()).isEqualTo(42L);
         assertThat(material.transparencyLog().inclusionProof().treeSize()).isEqualTo(100L);
 
-        assertThat(client.provenanceKey()).isEqualTo(PROV_KEY);
+        assertThat(client.provenance().provenanceKey()).isEqualTo(PROV_KEY);
         assertThat(lastPath).isEqualTo("/api/provenance/key");
     }
 
     @Test
     void an_import_is_started_and_polled() throws IOException, InterruptedException {
-        RepositoryClient.ImportResult result = client.startImport("releases", "nexus",
+        ContentsClient.ImportResult result = client.contents().startImport("releases", "nexus",
                 "https://nexus.internal/", "maven-releases", "maven", null, null, null);
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/repository/import");
@@ -789,7 +797,7 @@ public class RepositoryClientTest {
         assertThat(result.status()).isEqualTo(202);
         assertThat(result.job()).isEqualTo("job-123");
 
-        RepositoryClient.ImportStatus status = client.importStatus("releases", "job-123");
+        ContentsClient.ImportStatus status = client.contents().importStatus("releases", "job-123");
         assertThat(lastPath).isEqualTo("/api/repository/import/job-123");
         assertThat(status.imported()).isEqualTo(10);
         assertThat(status.skipped()).isEqualTo(2);
@@ -802,8 +810,8 @@ public class RepositoryClientTest {
         // A real server error (403 write-denied, 500) renders a JSON body like {"status":403,...} that starts with
         // '{'. It must NOT be mistaken for a batch manifest (its unknown fields parse into a manifest with a null
         // entries), or the caller NPEs walking a null entry list instead of printing "explode failed (HTTP 403)".
-        RepositoryClient.ExplodeResult result =
-                client.deployExplode("releases", "/maven/errorbody/", "an archive".getBytes(UTF_8));
+        ContentsClient.ExplodeResult result =
+                client.contents().deployExplode("releases", "/maven/errorbody/", "an archive".getBytes(UTF_8));
         assertThat(lastExplode).isEqualTo("zip");
         assertThat(result.status()).isEqualTo(403);
         assertThat(result.manifest()).as("a framework error body is not a batch manifest").isNull();
@@ -811,8 +819,8 @@ public class RepositoryClientTest {
 
     @Test
     void deploy_explode_sets_the_header_and_parses_the_manifest() throws IOException, InterruptedException {
-        RepositoryClient.ExplodeResult result =
-                client.deployExplode("releases", "/maven/org/acme/", "an archive".getBytes(UTF_8));
+        ContentsClient.ExplodeResult result =
+                client.contents().deployExplode("releases", "/maven/org/acme/", "an archive".getBytes(UTF_8));
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/repository/acme/releases/maven/org/acme/");
         assertThat(lastExplode).as("the batch header names the archive encoding").isEqualTo("zip");

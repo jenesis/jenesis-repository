@@ -120,7 +120,7 @@ final class AuthCommands {
     static int principals(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
-            for (RepositoryClient.Principal principal : client.principals()) {
+            for (AccessClient.Principal principal : client.access().principals()) {
                 System.out.printf("%-32s %-16s %s%n", principal.id(),
                         principal.label() == null || principal.label().isEmpty() ? "-" : principal.label(),
                         principal.grants().isEmpty() ? "(holds nothing directly)" : principal.grants());
@@ -132,7 +132,7 @@ final class AuthCommands {
                 if (args.length < 5) {
                     throw new IllegalArgumentException("Usage: principals grant <id> <scope> <token,token,...>");
                 }
-                client.setPrincipalGrant(args[2], args[3], List.of(args[4].split(",")),
+                client.access().setPrincipalGrant(args[2], args[3], List.of(args[4].split(",")),
                         args.length > 5 ? args[5] : null);
                 System.out.println("Granted " + args[3] + " on " + args[2] + "."
                         + (args.length > 5 ? " Lapses " + args[5] + "." : ""));
@@ -141,14 +141,14 @@ final class AuthCommands {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: principals revoke-grant <id> <scope>");
                 }
-                client.removePrincipalGrant(args[2], args[3]);
+                client.access().removePrincipalGrant(args[2], args[3]);
                 System.out.println("Removed grant " + args[3] + " on " + args[2] + ".");
             }
             case "remove" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: principals remove <id>");
                 }
-                client.removePrincipal(args[2]);
+                client.access().removePrincipal(args[2]);
                 System.out.println("Removed everything granted directly to " + args[2] + ".");
             }
             default -> throw new IllegalArgumentException("Unknown principals action: " + args[1]);
@@ -166,7 +166,7 @@ final class AuthCommands {
     static int groups(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
-            for (RepositoryClient.Group group : client.groups()) {
+            for (AccessClient.Group group : client.access().groups()) {
                 System.out.printf("%-24s %-16s %s%n", group.name(),
                         group.label() == null || group.label().isEmpty() ? "-" : group.label(),
                         group.grants().isEmpty() ? "(grants nothing)" : group.grants());
@@ -178,13 +178,13 @@ final class AuthCommands {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: groups members <name>");
                 }
-                client.groupMembers(args[2]).forEach(System.out::println);
+                client.access().groupMembers(args[2]).forEach(System.out::println);
             }
             case "grant" -> {
                 if (args.length < 5) {
                     throw new IllegalArgumentException("Usage: groups grant <name> <scope> <token,token,...>");
                 }
-                client.setGroupGrant(args[2], args[3], List.of(args[4].split(",")),
+                client.access().setGroupGrant(args[2], args[3], List.of(args[4].split(",")),
                         args.length > 5 ? args[5] : null);
                 System.out.println("Granted " + args[3] + " to everyone in " + args[2] + "."
                         + (args.length > 5 ? " Lapses " + args[5] + "." : ""));
@@ -193,28 +193,28 @@ final class AuthCommands {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: groups revoke-grant <name> <scope>");
                 }
-                client.removeGroupGrant(args[2], args[3]);
+                client.access().removeGroupGrant(args[2], args[3]);
                 System.out.println("Removed grant " + args[3] + " on " + args[2] + ".");
             }
             case "add" -> {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: groups add <name> <provider-qualified id>");
                 }
-                client.addGroupMember(args[2], args[3]);
+                client.access().addGroupMember(args[2], args[3]);
                 System.out.println("Added " + args[3] + " to " + args[2] + ".");
             }
             case "remove-member" -> {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: groups remove-member <name> <provider-qualified id>");
                 }
-                client.removeGroupMember(args[2], args[3]);
+                client.access().removeGroupMember(args[2], args[3]);
                 System.out.println("Removed " + args[3] + " from " + args[2] + ".");
             }
             case "remove" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: groups remove <name>");
                 }
-                client.removeGroup(args[2]);
+                client.access().removeGroup(args[2]);
                 System.out.println("Removed group " + args[2] + ".");
             }
             default -> throw new IllegalArgumentException("Unknown groups action: " + args[1]);
@@ -225,8 +225,8 @@ final class AuthCommands {
     static int credentials(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
-            List<RepositoryClient.Credential> credentials = client.credentials();
-            for (RepositoryClient.Credential credential : credentials) {
+            List<AccessClient.Credential> credentials = client.access().credentials();
+            for (AccessClient.Credential credential : credentials) {
                 System.out.printf("%s  %-16s uses=%d%s%n", credential.id(),
                         credential.label().isEmpty() ? "-" : credential.label(), credential.useCount(),
                         credential.expires().isEmpty() ? "" : "  expires " + credential.expires());
@@ -244,7 +244,7 @@ final class AuthCommands {
                         label = args[++i];
                     }
                 }
-                RepositoryClient.Minted minted = client.mint(label);
+                AccessClient.Minted minted = client.access().mint(label);
                 System.out.println("Minted credential " + minted.id() + ".");
                 System.out.println("Key (shown once): " + minted.key());
                 if (!minted.expires().isEmpty()) {
@@ -255,21 +255,21 @@ final class AuthCommands {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: credentials revoke <id>");
                 }
-                client.revoke(args[2]);
+                client.access().revoke(args[2]);
                 System.out.println("Revoked " + args[2] + ".");
             }
             case "grant" -> {
                 if (args.length < 5) {
                     throw new IllegalArgumentException("Usage: credentials grant <id> <scope> <token,token,...>");
                 }
-                client.setGrant(args[2], args[3], List.of(args[4].split(",")));
+                client.access().setGrant(args[2], args[3], List.of(args[4].split(",")));
                 System.out.println("Granted " + args[3] + " on " + args[2] + ".");
             }
             case "revoke-grant" -> {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: credentials revoke-grant <id> <scope>");
                 }
-                client.removeGrant(args[2], args[3]);
+                client.access().removeGrant(args[2], args[3]);
                 System.out.println("Removed grant " + args[3] + " on " + args[2] + ".");
             }
             case "expiry" -> {
@@ -277,7 +277,7 @@ final class AuthCommands {
                     throw new IllegalArgumentException("Usage: credentials expiry <id> [<expiry>]  (blank never expires)");
                 }
                 String expiry = args.length > 3 ? args[3] : "";
-                client.setExpiry(args[2], expiry);
+                client.access().setExpiry(args[2], expiry);
                 System.out.println(expiry.isEmpty()
                         ? "Cleared the expiry of " + args[2] + " (it never expires)."
                         : "Set the expiry of " + args[2] + ".");
@@ -286,7 +286,7 @@ final class AuthCommands {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: credentials rotate <id> [<overlap>]");
                 }
-                RepositoryClient.Minted minted = client.rotate(args[2], args.length > 3 ? args[3] : null);
+                AccessClient.Minted minted = client.access().rotate(args[2], args.length > 3 ? args[3] : null);
                 System.out.println("Rotated " + args[2] + " -> " + minted.id() + ".");
                 System.out.println("Key (shown once): " + minted.key());
                 if (minted.expires() != null && !minted.expires().isEmpty()) {
@@ -298,7 +298,7 @@ final class AuthCommands {
                     throw new IllegalArgumentException("Usage: credentials allow-ips <id> [<cidr,cidr,...>]  (blank clears)");
                 }
                 String addresses = args.length > 3 ? args[3] : "";
-                client.setAllowedAddresses(args[2], addresses);
+                client.access().setAllowedAddresses(args[2], addresses);
                 System.out.println(addresses.isEmpty()
                         ? "Cleared the source-IP allowlist of " + args[2] + "."
                         : "Set the source-IP allowlist of " + args[2] + ".");
@@ -311,7 +311,7 @@ final class AuthCommands {
     static int roles(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
-            Map<String, String> roles = client.roles();
+            Map<String, String> roles = client.access().roles();
             roles.forEach((name, tokens) -> System.out.printf("%-16s %s%n", name, tokens));
             if (roles.isEmpty()) {
                 System.out.println("No roles.");
@@ -323,14 +323,14 @@ final class AuthCommands {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: roles set <name> <token,token,...>");
                 }
-                client.setRole(args[2], args[3]);
+                client.access().setRole(args[2], args[3]);
                 System.out.println("Saved role " + args[2] + ".");
             }
             case "remove" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: roles remove <name>");
                 }
-                client.removeRole(args[2]);
+                client.access().removeRole(args[2]);
                 System.out.println("Removed role " + args[2] + ".");
             }
             default -> throw new IllegalArgumentException("Unknown roles command '" + args[1] + "'");
@@ -341,8 +341,8 @@ final class AuthCommands {
     static int trusts(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
-            List<RepositoryClient.TrustView> trusts = client.trusts();
-            for (RepositoryClient.TrustView trust : trusts) {
+            List<AccessClient.TrustView> trusts = client.access().trusts();
+            for (AccessClient.TrustView trust : trusts) {
                 System.out.printf("%-16s issuer=%s scope=%s rights=%s%n",
                         trust.name(), trust.issuer(), trust.scope(), trust.rights());
             }
@@ -378,14 +378,14 @@ final class AuthCommands {
                 if (issuer == null || scope == null || rights == null) {
                     throw new IllegalArgumentException("trusts set needs --issuer, --scope and --rights.");
                 }
-                client.setTrust(name, issuer, audience, subject, scope, rights, ttl);
+                client.access().setTrust(name, issuer, audience, subject, scope, rights, ttl);
                 System.out.println("Saved trust " + name + ".");
             }
             case "remove" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: trusts remove <name>");
                 }
-                client.removeTrust(args[2]);
+                client.access().removeTrust(args[2]);
                 System.out.println("Removed trust " + args[2] + ".");
             }
             default -> throw new IllegalArgumentException("Unknown trusts command '" + args[1] + "'");
@@ -409,12 +409,12 @@ final class AuthCommands {
             throw new IllegalArgumentException("Usage: scim token [clear]");
         }
         if (args.length > 2 && args[2].equals("clear")) {
-            return print(CliSupport.client(home).clearScimToken());
+            return print(CliSupport.client(home).access().clearScimToken());
         }
         if (args.length > 2) {
             throw new IllegalArgumentException("Usage: scim token [clear]");
         }
-        return print(CliSupport.client(home).mintScimToken());
+        return print(CliSupport.client(home).access().mintScimToken());
     }
 
 /**
@@ -429,13 +429,13 @@ final class AuthCommands {
         }
         switch (args[1]) {
             case "list" -> {
-                return print(CliSupport.client(home).keyLogins());
+                return print(CliSupport.client(home).access().keyLogins());
             }
             case "revoke" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: keylogin revoke <id>");
                 }
-                CliSupport.client(home).revokeKeyLogin(args[2]);
+                CliSupport.client(home).access().revokeKeyLogin(args[2]);
                 System.out.println("Revoked login key " + args[2] + ".");
                 return 0;
             }
@@ -464,7 +464,7 @@ private static int issue(String[] args, Path home) throws Exception {
         if (tenant == null) {
             throw new IllegalArgumentException("keylogin issue needs --tenant <name>");
         }
-        return print(CliSupport.client(home).issueKeyLogin(principal, login, tenant, role));
+        return print(CliSupport.client(home).access().issueKeyLogin(principal, login, tenant, role));
     }
     /** Print a server answer and succeed - the shape every read verb here shares. */
     private static int print(String body) {

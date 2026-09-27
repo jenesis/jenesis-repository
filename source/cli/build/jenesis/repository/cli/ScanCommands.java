@@ -21,19 +21,19 @@ final class ScanCommands {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: vex show <id>");
                 }
-                System.out.println(CliSupport.client(home).vexStatement(args[2]));
+                System.out.println(CliSupport.client(home).provenance().vexStatement(args[2]));
             }
             case "add" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: vex add <file>");
                 }
-                System.out.println(CliSupport.client(home).addVex(Files.readString(Path.of(args[2]))));
+                System.out.println(CliSupport.client(home).provenance().addVex(Files.readString(Path.of(args[2]))));
             }
             case "remove" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: vex remove <id>");
                 }
-                CliSupport.client(home).removeVex(args[2]);
+                CliSupport.client(home).provenance().removeVex(args[2]);
                 System.out.println("Withdrew VEX statement " + args[2] + ".");
             }
             case "export" -> {
@@ -45,7 +45,7 @@ final class ScanCommands {
                         throw new IllegalArgumentException("Unknown export flag '" + args[i] + "'");
                     }
                 }
-                String document = CliSupport.client(home).exportVex();
+                String document = CliSupport.client(home).provenance().exportVex();
                 if (output == null) {
                     System.out.println(document);
                 } else {
@@ -62,7 +62,7 @@ final class ScanCommands {
                         throw new IllegalArgumentException("Unknown vex action or flag '" + args[i] + "'");
                     }
                 }
-                System.out.println(CliSupport.client(home).vexStatements(repo));
+                System.out.println(CliSupport.client(home).provenance().vexStatements(repo));
             }
         }
         return 0;
@@ -75,17 +75,17 @@ final class ScanCommands {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: scans show <id>");
                 }
-                System.out.println(CliSupport.client(home).scan(args[2]));
+                System.out.println(CliSupport.client(home).buildCache().scan(args[2]));
             }
             case "report" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: scans report <id>");
                 }
-                System.out.println(CliSupport.client(home).scanReport(args[2]));
+                System.out.println(CliSupport.client(home).buildCache().scanReport(args[2]));
             }
             case "analytics" -> {
                 boolean asReport = args.length > 2 && args[2].equals("report");
-                System.out.println(CliSupport.client(home).scanAnalytics(asReport));
+                System.out.println(CliSupport.client(home).buildCache().scanAnalytics(asReport));
             }
             case "ingest" -> {
                 if (args.length < 3) {
@@ -100,7 +100,7 @@ final class ScanCommands {
                     }
                 }
                 System.out.println(CliSupport.client(home)
-                        .ingestScan(Files.readString(Path.of(args[2])), repo));
+                        .buildCache().ingestScan(Files.readString(Path.of(args[2])), repo));
             }
             default -> {
                 String repo = null;
@@ -111,7 +111,7 @@ final class ScanCommands {
                         throw new IllegalArgumentException("Unknown scans action or flag '" + args[i] + "'");
                     }
                 }
-                System.out.println(CliSupport.client(home).scans(repo));
+                System.out.println(CliSupport.client(home).buildCache().scans(repo));
             }
         }
         return 0;
@@ -133,13 +133,13 @@ final class ScanCommands {
                     }
                 }
                 System.out.println(CliSupport.client(home)
-                        .ingestTestRun(Files.readString(Path.of(args[2])), repo));
+                        .buildCache().ingestTestRun(Files.readString(Path.of(args[2])), repo));
             }
             case "show" -> {
                 if (args.length < 3) {
                     throw new IllegalArgumentException("Usage: tests show <id>");
                 }
-                System.out.println(CliSupport.client(home).testRun(args[2]));
+                System.out.println(CliSupport.client(home).buildCache().testRun(args[2]));
             }
             case "flaky" -> {
                 String repo = null;
@@ -150,7 +150,7 @@ final class ScanCommands {
                         throw new IllegalArgumentException("Unknown flaky flag '" + args[i] + "'");
                     }
                 }
-                System.out.println(CliSupport.client(home).flakyTests(repo));
+                System.out.println(CliSupport.client(home).buildCache().flakyTests(repo));
             }
             case "select" -> {
                 String repo = null;
@@ -162,7 +162,7 @@ final class ScanCommands {
                         default -> throw new IllegalArgumentException("Unknown select flag '" + args[i] + "'");
                     }
                 }
-                System.out.println(CliSupport.client(home).selectTests(repo, changed));
+                System.out.println(CliSupport.client(home).buildCache().selectTests(repo, changed));
             }
             default -> throw new IllegalArgumentException(
                     "Usage: tests ingest <file> | tests show <id> | tests flaky | tests select");
