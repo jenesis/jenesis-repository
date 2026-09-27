@@ -137,10 +137,10 @@ class WithholdFeedTest {
 
     @Test
     void a_quarantine_lookalike_path_fires_no_withhold_signal() throws IOException {
-        // FIX 2: the /quarantine guard must match the exact /-subtree boundary (equals /quarantine or under
-        // /quarantine/), not a bare startsWith. A sibling like /quarantined/foo.jar (or /quarantine-cache/x) is NOT a
-        // hold pointer and must raise neither transition signal - a bare startsWith misclassified it and fired a
-        // spurious onWithheld/onWithholdCleared with a mangled served path (the substring ate the leading slash).
+        // The /quarantine guard matches the exact /-subtree boundary (equals /quarantine or under /quarantine/), not a
+        // bare startsWith. A sibling like /quarantined/foo.jar (or /quarantine-cache/x) is NOT a hold pointer and must
+        // raise neither transition signal - a bare startsWith would misclassify it and fire a spurious
+        // onWithheld/onWithholdCleared with a mangled served path (the substring eating the leading slash).
         Recorder recorder = new Recorder();
         Publication publication = new Publication(store, List.of(), List.of(recorder));
         String hash = publication.storeBlob(bytes("plain"));
@@ -157,9 +157,9 @@ class WithholdFeedTest {
 
     @Test
     void two_racing_marks_of_one_hash_fire_onWithheld_exactly_once() throws Exception {
-        // FIX 4: mark gates the transition on the store's atomic-create CAS (writeVersioned expected-absent), not a
-        // read-then-write. Two concurrent marks of one hash both formerly observed "absent" and both fired the
-        // transition-ON leg (violating exactly-once); now exactly the observer whose conditional write lands fires it.
+        // mark gates the transition on the store's atomic-create CAS (writeVersioned expected-absent), not a
+        // read-then-write, under which two concurrent marks of one hash would both observe "absent" and both fire the
+        // transition-ON leg; exactly the observer whose conditional write lands fires it.
         int racers = 2;
         ExecutorService pool = Executors.newFixedThreadPool(racers);
         CyclicBarrier barrier = new CyclicBarrier(racers);

@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** The request shaping, the status branch and the two fail modes - what every feed used to hand-roll per vendor. */
+/** The request shaping, the status branch and the two fail modes every feed shares. */
 class FeedClientTest {
 
     private final AtomicInteger completions = new AtomicInteger();

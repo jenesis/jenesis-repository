@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The retroactive-hold lifecycle over a real filesystem store: a KEV or license hold placed on a coordinate is read
  * back, its discovered {@link HoldReleaseObserver} promotes the cleared reasons into a sticky override on release (so a
- * later enforcement sweep never re-holds a human's release - self-heal §5) and consumes the hold record, a single
+ * later enforcement sweep never re-holds a human's release) and consumes the hold record, a single
  * {@link HoldReleaseObserver#released} fan-out reaches every installed observer, a discard drops the record with no
  * override, and a held version is withheld from serving until its hold pointer is cleared.
  */
@@ -77,11 +77,10 @@ class HoldLifecycleTest {
 
     @Test
     void a_release_with_no_kev_record_writes_no_override() throws IOException {
-        // A publish-time hold used to write no holds/kev record, and this kind recovered the CVEs from the quarantine
-        // log's reason text by regular expression. The gate writes the record now (the known-exploited finding carries
-        // its kind and CVE - ComplianceScreenTest proves that leg), so a release with no record has nothing to
-        // promote: the quarantine log's wording is never read, and a CVSS reason's CVE can no longer leak into the
-        // KEV override where a later CISA listing would find it already cleared.
+        // The gate writes the holds/kev record at publish time (the known-exploited finding carries its kind and CVE -
+        // ComplianceScreenTest proves that leg), so a release with no record has nothing to promote: the quarantine
+        // log's wording is never read, and a CVSS reason's CVE cannot leak into the KEV override where a later CISA
+        // listing would find it already cleared.
         new QuarantineLog(store).record(Instant.parse("2026-07-01T00:00:00Z"), PATH, COORD + ":" + VERSION,
                 Verdict.QUARANTINE, List.of("Known-exploited (CISA KEV): CVE-2021-44228", "CVE-2020-1234 (HIGH)"));
         assertThat(KevHold.held(store, ECOSYSTEM, COORD, VERSION)).as("no holds/kev record exists").isEmpty();
@@ -147,13 +146,13 @@ class HoldLifecycleTest {
     }
 
     /**
-     *, the asymmetry that used to be fail-open. The {@code reachability} module is genuinely NOT on this test
+     * The asymmetry that must not be fail-open. The {@code reachability} module is genuinely NOT on this test
      * module's graph - {@code test/gate} requires the gate, not {@code security.reachability} - so
      * {@code ReachabilityHoldReleaseObserver} is un-discoverable here exactly as it would be on a deployment that had
      * uninstalled or switched off that compliance module, while the record it left behind survives by design (nothing
-     * deletes data on module absence). Before the fix both kind-neutral reads fanned out over the discovered providers
-     * alone and therefore answered {@code false}, and both callers consume that answer permissively - so uninstalling
-     * a compliance module silently released everything it was holding. The record is authoritative now, so it does not.
+     * deletes data on module absence). Kind-neutral reads fanning out over the discovered providers alone would answer
+     * {@code false}, and both callers consume that answer permissively - so uninstalling a compliance module would
+     * silently release everything it was holding. The record is authoritative, so it does not.
      */
     @Test
     void an_uninstalled_kinds_hold_still_holds() throws IOException {
@@ -309,7 +308,7 @@ class HoldLifecycleTest {
 
     @Test
     void a_version_wider_than_the_enumeration_bound_keeps_its_hold_rather_than_releasing_it() throws IOException {
-        // The bound decided 2026-08-31. What matters is not that a cap exists but which way it fails: past the bound
+        // What matters is not that a cap exists but which way it fails: past the bound
         // knownPaths answers UNKNOWN rather than a truncated list, and every caller reads unknown as "assume the
         // worst". For a hold that means the withhold stands. A truncated list would instead read as the complete set
         // of the version's paths and quietly release a version whose remaining paths were never looked at.
@@ -582,9 +581,9 @@ class HoldLifecycleTest {
     /**
      * (3). A screen-quarantined upload's held blob is the publish <em>envelope</em>, not the served artifact, so
      * a release replays the format's own dispatch to materialise the version. With that format uninstalled the replay
-     * used to degrade to linking the stored blob "so the hold still resolves" - which materialises no installable
-     * version at all and strands the phantom {@code publish/} pointer already closed on the sibling branch. The honest
-     * answer is the same as there: keep the hold, say why, and let reinstalling the module make the release exact.
+     * would degrade to linking the stored blob "so the hold still resolves" - which materialises no installable
+     * version at all and strands a phantom {@code publish/} pointer, as on the sibling branch. The honest answer is
+     * the same as there: keep the hold, say why, and let reinstalling the module make the release exact.
      */
     @Test
     void a_screen_quarantined_release_whose_dispatch_format_is_gone_is_refused_rather_than_linking_the_envelope()

@@ -43,12 +43,13 @@ import build.jenesis.repository.compliance.SignalSourceProvider;
  * {@link Property#READ_PATH_EGRESS} builds the source from its <em>production</em> configuration and asks it one
  * question with the {@link NoEgressResolver} tripwire installed. A feed declaring {@link SignalFixture.Reads#RENDERS_SNAPSHOT}
  * must reach for nothing at all; a feed declaring {@link SignalFixture.Reads#FETCHES_ON_QUERY} must be caught reaching
- * for the host it named - so the &sect;10 position of every feed is a claim this kit can falsify in either direction,
+ * for the host it named - so the read position of every feed is a claim this kit can falsify in either direction,
  * rather than a paragraph in a javadoc. Nothing is stubbed: the refusal happens in the JDK's own resolver, below any
  * socket the feed could have opened instead.
  *
  * <h2>The one leg that drives a vendor which is <em>working</em></h2>
- * {@link Property#CLEAN_ANSWER_IS_NOT_AN_OUTAGE} is the kit's statement of design gate 4. Every other failure leg
+ * {@link Property#CLEAN_ANSWER_IS_NOT_AN_OUTAGE} is the kit's statement that a bound or an outage never reads as an
+ * answer. Every other failure leg
  * points a feed at a broken vendor and demands the declared fail mode; this one points it at a working vendor that
  * simply has nothing to report, which is the only observation that can tell whether "nothing known" and "could not
  * ask" are the same value. A feed that raises over a clean coordinate blocks every clean publish. A feed whose outage
@@ -143,7 +144,7 @@ public final class SignalContract {
 
         /** A query against the production configuration reaches exactly what the fixture declared it reaches -
          *  nothing for a snapshot-rendering feed, its own vendor host for a fetching one - proven by the JDK-level
-         *  no-egress tripwire rather than by an injected stub (clause 8, &sect;10). */
+         *  no-egress tripwire rather than by an injected stub (clause 8). */
         READ_PATH_EGRESS,
 
         /** Each covered coordinate family reaches the wire in the vendor's own spelling, and an ecosystem the vendor
@@ -151,7 +152,7 @@ public final class SignalContract {
          *  A CVE-keyed signal is held instead to declaring no coordinate-keyed contract. */
         ECOSYSTEM_ROUNDTRIP,
 
-        /** The last-refresh instant is real and it moves (clause 9, &sect;10). A source that has been asked nothing
+        /** The last-refresh instant is real and it moves (clause 9). A source that has been asked nothing
          *  reports no fetch instant at all, and one recorded fetch later it reports one - so a stamp fabricated at
          *  construction, or one that never advances, fails here rather than rendering as a plausible date beside an
          *  empty panel. */
@@ -281,7 +282,7 @@ public final class SignalContract {
                         "the fetching half: 'every query fetches' is proven by counting the requests a second query "
                                 + "spends, so a feed that quietly grew a cache must fail here. That growth is the "
                                 + "defect - a cold gate decision that silently stopped depending on the vendor is a "
-                                + "different §10 position from the one declared"),
+                                + "different read position from the one declared"),
                 new Mutation(Mutant.A_LOOKUP_THAT_SPENDS_AN_EXTRA_REQUEST,
                         fixture -> fixture.reads() != SignalFixture.Reads.FETCHES_ON_QUERY,
                         "and the warm half, mirror image: a warm read must spend NOTHING, so one request on the "

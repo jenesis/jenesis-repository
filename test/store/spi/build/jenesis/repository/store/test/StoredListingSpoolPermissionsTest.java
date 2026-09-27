@@ -24,8 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * exclude what a peer creates while this test runs, so a candidate here may be somebody else's spool - which is fine
  * for the mode (every spool is created through the same helper) and is what both loops below are written around. A
  * peer's spool can vanish mid-read and can outlive this render; this one's can do neither, because its generator is
- * blocked holding it. Read once as a plain set, this test fails about as often as a peer renders beside it - measured
- * 2026-09-16 on a full lane, a {@code NoSuchFileException} on a file another JVM had already finished with.
+ * blocked holding it. Read once as a plain set, this test would fail about as often as a peer renders beside it, with
+ * a {@code NoSuchFileException} on a file another JVM had already finished with.
  */
 class StoredListingSpoolPermissionsTest {
 

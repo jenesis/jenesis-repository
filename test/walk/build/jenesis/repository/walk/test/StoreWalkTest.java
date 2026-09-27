@@ -124,7 +124,7 @@ class StoreWalkTest {
 
     @Test
     void an_explicitly_selected_walk_no_provider_answers_to_fails_loudly() {
-        // (§9): this used to resolve to empty, so `jenreg.walk=other` silently turned every
+        // Resolving to empty would let `jenreg.walk=other` silently turn every
         // walk-riding sweep - garbage collection, reconcile, retroactive hold enforcement - into a no-op that looks
         // exactly like a healthy idle system.
         Features.configure(key -> "jenreg.walk".equals(key) ? "other" : null);
@@ -152,13 +152,13 @@ class StoreWalkTest {
         }
     }
 
-    /** The reference walk's depth descent used to self-recurse one call frame per key path segment,
-     *  so a single deep publish key (a many-segment Maven groupId, a multi-segment OCI name - depth is client-planted
-     *  and uncapped at the routing edge) overflowed the stack with a {@link StackOverflowError}, aborting the shared
-     *  walk every background sweep drives (reconcile, inventory rebuild, retroactive-hold enforcement). The descent is
-     *  now an explicit-stack traversal, so an arbitrarily deep key is walked to completion. A real filesystem cannot
-     *  hold a {@value #DEEP} directory chain ({@code PATH_MAX}), so this drives an in-memory store whose only synthetic
-     *  publish object is a single {@value #DEEP}-segment-deep key - far past any stack the old recursion could hold. */
+    /** The reference walk's depth descent is an explicit-stack traversal, so an arbitrarily deep key is walked to
+     *  completion: one call frame per key path segment would let a single deep publish key (a many-segment Maven
+     *  groupId, a multi-segment OCI name - depth is client-planted and uncapped at the routing edge) overflow the
+     *  stack with a {@link StackOverflowError}, aborting the shared walk every background sweep drives (reconcile,
+     *  inventory rebuild, retroactive-hold enforcement). A real filesystem cannot hold a {@value #DEEP} directory chain
+     *  ({@code PATH_MAX}), so this drives an in-memory store whose only synthetic publish object is a single
+     *  {@value #DEEP}-segment-deep key - far past any stack a recursion could hold. */
     @Test
     void a_pathologically_deep_key_walks_without_overflowing_the_stack() {
         MemoryStore store = new MemoryStore();

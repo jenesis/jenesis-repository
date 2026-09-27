@@ -125,7 +125,7 @@ public class RepositoryRouterTest {
 
         // parse() stays a pure grammar parser with no configuration and no I/O: it still yields a usable proxy
         // definition with the upstream intact, so a console READ can render a stored definition's shape without
-        // resolving anything (§10). Whether the deployment may PULL from that upstream is the separate, dialled
+        // resolving anything. Whether the deployment may PULL from that upstream is the separate, dialled
         // question below - asked where an operator configures it, not where a string is parsed.
         RepositoryDefinition proxy = RepositoryDefinition.parse("fallback http://up/");
         assertThat(proxy.writable()).as("a proxy is not writable").isFalse();
@@ -242,7 +242,7 @@ public class RepositoryRouterTest {
 
     @Test
     public void a_harden_nocache_proxy_with_no_screening_installed_fails_loud() throws IOException {
-        // Fail-loud (§9) applies to `harden nocache` exactly as to `harden`: it is an explicit opt-in to
+        // Fail-loud applies to `harden nocache` exactly as to `harden`: it is an explicit opt-in to
         // full screening, so a router with no compliance gate wired must throw at resolution naming what is missing -
         // never a silent fallback to serving an untrusted upstream unscreened.
         Map<String, RepositoryDefinition> definitions = Map.of(
@@ -261,7 +261,7 @@ public class RepositoryRouterTest {
 
     @Test
     public void a_harden_proxy_with_no_screening_installed_fails_loud_rather_than_proxying_unscreened() {
-        // Selected-but-unsatisfiable stays loud (§9): a hardened proxy is an explicit opt-in to full
+        // Selected-but-unsatisfiable stays loud: a hardened proxy is an explicit opt-in to full
         // screening, so a router with no compliance gate wired must throw at resolution naming what is missing - never
         // a silent fallback to serving an untrusted upstream unscreened (the store=s3-without-module precedent).
         Map<String, RepositoryDefinition> definitions = Map.of("hardened", RepositoryDefinition.parse("fallback http://up/ harden"));

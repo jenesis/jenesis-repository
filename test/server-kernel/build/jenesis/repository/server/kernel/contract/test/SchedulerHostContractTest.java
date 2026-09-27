@@ -28,13 +28,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * <b>What the maintenance scheduler promises a task, driven by a hostile one.</b>
  *
- * <p>This suite exists because of a gap the ticket exposed rather than because of the ticket. {@code test/maint}'s
- * {@code MaintenanceTaskContract} is a contract kit in the plan's category 2, and it asserts, thoroughly, that each
- * of the fourteen discovered <em>tasks</em> honours the {@code MaintenanceTask} contract - driven through the real
- * scheduler, with its own falsification mutants. <b>Nothing asserted what the scheduler promises in return.</b> The
- * kit tests the guest; was in the host. So a defect that stopped every sweep, drain and garbage collection on a
- * node sat behind a green contract kit, and would have kept sitting there: no fixture can express "the loop I am
- * being driven by is still alive", because a fixture is only ever asked about itself.
+ * <p>{@code MaintenanceTaskContract} asserts, thoroughly, that each discovered <em>task</em> honours the
+ * {@code MaintenanceTask} contract - driven through the real scheduler, with its own falsification mutants. This suite
+ * asserts what the scheduler promises in return: the kit tests the guest, this tests the host. No fixture can express
+ * "the loop I am being driven by is still alive", because a fixture is only ever asked about itself, so a defect that
+ * stopped every sweep, drain and garbage collection on a node would sit behind a green contract kit.
  *
  * <p>The five promises are stated on {@code MaintenanceScheduler} itself and driven one per leg here. The subject is
  * always a deliberately hostile task - one that raises an {@link Error}, one whose {@code name()} throws after the
@@ -61,7 +59,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       {@link #an_error_raised_on_the_worker_thread_does_not_end_the_loop()} fail with the defect verbatim -
  *       {@code Worker[enabled=true, alive=false, iterations=1, stopped=terminated:
  *       java.lang.NoClassDefFoundError]}, with the sibling task never having run; and</li>
- *   <li>{@code tasks()} re-entering the task to ask its name (the shape the old handler had, twice per catch block)
+ *   <li>{@code tasks()} re-entering the task to ask its name (a handler asking the broken task what to blame)
  *       made {@link #a_task_whose_name_throws_after_resolution_cannot_defeat_its_own_containment()} fail with the
  *       planted {@code name()} throwing straight out of {@code MaintenanceScheduler.tasks}.</li>
  * </ul>
@@ -113,9 +111,9 @@ class SchedulerHostContractTest {
 
     @Test
     void an_error_raised_on_the_worker_thread_does_not_end_the_loop() {
-        // exclusion() is called by the loop itself, OUTSIDE any unit - so an Error from here is the loop-level escape
-        // the scheduler fix names, not a fan-out one. Before the fix it left the bare jenesis-repository-maintenance
-        // thread and every sweep, drain and GC on the node stopped until a settings refresh or a restart.
+        // exclusion() is called by the loop itself, OUTSIDE any unit - so an Error from here is the loop-level escape,
+        // not a fan-out one. Uncontained, it would leave the bare jenesis-repository-maintenance thread and every
+        // sweep, drain and GC on the node stopped until a settings refresh or a restart.
         AtomicInteger sane = new AtomicInteger();
         MaintenanceScheduler scheduler = scheduler(
                 new Hostile("hostile") {
@@ -149,8 +147,8 @@ class SchedulerHostContractTest {
 
     @Test
     void an_error_from_a_fanned_out_unit_is_counted_rather_than_lost_in_an_execution_exception() {
-        // A unit runs on a pool thread, where an Error used to be captured by the FutureTask and re-surface as the
-        // ExecutionException runUnits discarded without a word - the one path where a broken runtime produced no
+        // A unit runs on a pool thread, where an Error is captured by the FutureTask and re-surfaces as an
+        // ExecutionException - which, discarded, would be the one path where a broken runtime produced no
         // diagnostic at all.
         MaintenanceScheduler scheduler = scheduler(new Hostile("units") {
             @Override
@@ -277,7 +275,7 @@ class SchedulerHostContractTest {
         assertThat(running.stopped()).isNull();
         assertThat(running.iterations()).as("an idle iteration is still an iteration").isPositive();
         assertThat(scheduler.taskRuns().get("quiet"))
-                .as("...and no pass has run, which is the pair of readings that used to be indistinguishable")
+                .as("...and no pass has run - a pair of readings that must stay distinguishable")
                 .isNull();
 
         scheduler.close();
@@ -354,8 +352,8 @@ class SchedulerHostContractTest {
         }
     }
 
-    /** A task that answers its name once and then cannot: the shape that used to defeat the containment from inside
-     *  its own handler, because the handler asked the broken task what to blame. */
+    /** A task that answers its name once and then cannot: a handler that asked the broken task what to blame would
+     *  be defeated from inside its own containment. */
     private static final class Poisoned extends Hostile {
 
         private final AtomicInteger names = new AtomicInteger();

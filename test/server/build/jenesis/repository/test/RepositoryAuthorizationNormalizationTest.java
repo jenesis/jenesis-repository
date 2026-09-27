@@ -7,7 +7,7 @@ import build.jenesis.repository.server.RepositoryAuthorizationManager.Target;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * G1: the authorization manager classifies the surface from the <em>normalized</em> path, and the predicate it
+ * The authorization manager classifies the surface from the <em>normalized</em> path, and the predicate it
  * reads is its own ({@link RepositoryAuthorizationManager#normalized}). This pins the
  * predicate transport-independently - Spring routes on the normalized path, so a URI carrying an empty ({@code //})
  * or dot ({@code /.} , {@code /..}) segment could reach a controller while the prefix-based scope and operator-tenant

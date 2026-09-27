@@ -6,8 +6,8 @@ import build.jenesis.repository.ui.ConsoleModuleProvider;
 import build.jenesis.repository.ui.NavEntry;
 
 /**
- * A console module whose nav contribution throws - the shape {@code CapabilityService} used to fan out over with no
- * containment.
+ * A console module whose nav contribution throws - a contribution {@code CapabilityService} fans out over and must
+ * contain.
  *
  * <p>It is registered for the whole module deliberately. The fan-out runs at <em>construction</em>, so before the
  * containment landed this provider would have failed every suite here at once by taking the Spring context down,

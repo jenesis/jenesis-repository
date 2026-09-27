@@ -55,9 +55,9 @@ class PolicyGateTest {
      * A floor rejects an advisory nobody could score, and a scored one does not mask it.
      *
      * <p>This is the consequence the unknown band exists for. An advisory carrying only a {@code CVSS:4.0} vector
-     * scores nothing, and used to report {@code NONE}: {@code severityRank} 0, and {@code reject #severityRank >= 4}
-     * admitted it. {@code UNKNOWN} sorts above {@code CRITICAL} precisely so every ordinal floor in the product
-     * fails closed against it without a call site being touched.
+     * scores nothing, and reporting it as {@code NONE} - {@code severityRank} 0 - would let
+     * {@code reject #severityRank >= 4} admit it. {@code UNKNOWN} sorts above {@code CRITICAL} precisely so every
+     * ordinal floor in the product fails closed against it without a call site being touched.
      *
      * <p>The second half matters as much. A set holding one unknown and one CRITICAL must still report CRITICAL
      * to the rule: the rollup prefers a band that says something, so an unscorable advisory can never erase a

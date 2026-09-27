@@ -37,8 +37,8 @@ final class RpmFormatFixture implements EcosystemFormatFixture {
         return "rpm";
     }
 
-    /** The publisher's signature in the package's own signature header, read through the seam since 2026-09-12 -
-     *  the declaration and the implementation agree, and the contract's signature-story check holds them to it. */
+    /** The publisher's signature in the package's own signature header, read through the seam - the declaration
+     *  and the implementation agree, and the contract's signature-story check holds them to it. */
     @Override
     public Signatures signatures() {
         return Signatures.of(ArtifactSignatures.Scheme.OPENPGP_DETACHED);

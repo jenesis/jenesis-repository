@@ -141,7 +141,7 @@ class ImportScreenTest {
     @Test
     void a_screen_with_nothing_to_judge_against_throws_rather_than_passing_the_transport_through() {
         // The failure mode this class exists to prevent is a screen that quietly becomes a no-op, so the one input it
-        // cannot do without is refused loudly rather than defaulted away (§9).
+        // cannot do without is refused loudly rather than defaulted away.
         assertThatThrownBy(() -> ImportScreen.around(new Recording(), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("the URL the operator submitted");

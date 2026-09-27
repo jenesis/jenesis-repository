@@ -191,8 +191,8 @@ class QuarantineLogTest {
         }
 
         // The object names sort newest-first by construction, so the bounded read is one forward page through
-        // the store's own ordering. A store that refuses list(ROOT) proves it: before the fix this leg materialised
-        // and sorted the whole name list to serve five rows, so a page cost exactly what the unpaged events() does.
+        // the store's own ordering. A store that refuses list(ROOT) proves it: materialising and sorting the whole name
+        // list to serve five rows would make a page cost exactly what the unpaged events() does.
         assertThat(log.events(5)).extracting(QuarantineLog.Event::coordinate)
                 .as("the newest five decisions, newest first, off the names alone")
                 .containsExactly("org.lib24:1.0", "org.lib23:1.0", "org.lib22:1.0", "org.lib21:1.0", "org.lib20:1.0");

@@ -22,8 +22,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *     fetcher and nothing selected, resolution fails naming the candidates instead of letting the module path decide
  *     which transport a deployment proxies through;</li>
  * <li>an <em>explicitly selected</em> {@code jenreg.fetcher=<name>} that no provider answers to, or whose
- *     provider declines, <b>throws</b> instead of silently answering {@link ProxyFormat.Fetcher#NONE} - the §9
- *     silent-fallback defect. Only an <em>unselected</em> deployment with nothing enabled gets the sentinel.</li>
+ *     provider declines, <b>throws</b> instead of silently answering {@link ProxyFormat.Fetcher#NONE}, which would be
+ *     a silent fallback. Only an <em>unselected</em> deployment with nothing enabled gets the sentinel.</li>
  * </ul>
  */
 class FetcherProviderTest {
@@ -79,8 +79,8 @@ class FetcherProviderTest {
 
     @Test
     void two_enabled_fetchers_without_a_selection_are_ambiguous_rather_than_a_discovery_order_winner() {
-        // This used to answer alpha, purely because the module path happened to list it before beta. Which
-        // transport a deployment proxies through is a configuration decision, never a packaging accident.
+        // Answering alpha only because the module path happened to list it before beta would make which transport a
+        // deployment proxies through a packaging accident rather than a configuration decision.
         UnaryOperator<String> ambiguous = configured(Map.of("jenreg.empty", "false"));
         assertThatThrownBy(() -> FetcherProvider.resolve(ambiguous))
                 .isInstanceOf(IllegalStateException.class)
@@ -113,8 +113,8 @@ class FetcherProviderTest {
 
     @Test
     void an_explicitly_selected_fetcher_no_provider_answers_to_fails_loudly() {
-        // (§9): this used to answer NONE, so a deployment that misspelled its transport - or forgot its
-        // module - served every proxy route as a 404 that looks exactly like "upstream does not have it".
+        // Answering NONE would have a deployment that misspelled its transport - or forgot its
+        // module - serve every proxy route as a 404 that looks exactly like "upstream does not have it".
         UnaryOperator<String> misspelled = configured(Map.of("jenreg.fetcher", "htpp"));
         assertThatThrownBy(() -> FetcherProvider.resolve(misspelled))
                 .isInstanceOf(IllegalStateException.class)

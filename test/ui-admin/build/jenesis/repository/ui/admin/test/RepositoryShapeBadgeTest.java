@@ -143,7 +143,7 @@ public class RepositoryShapeBadgeTest {
         assertThat(settings.repositories()).as("nothing was stored").doesNotContainKey("plain");
 
         // With the dial taken - the deployment that really does pull from a plaintext internal mirror - the value is
-        // storable again and the console notice is what remains: an accepted risk, still stated loudly (§9).
+        // storable again and the console notice is what remains: an accepted risk, still stated loudly.
         settings.save("proxy-allow-internal", "true");
         settings.setRepository(null, "plain", "fallback http://a.example/repo");
         SettingsAdmin.RepositoryShape shape = settings.routing(null, "plain").shape();

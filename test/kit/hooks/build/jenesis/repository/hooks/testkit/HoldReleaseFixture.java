@@ -22,10 +22,10 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
  *
  * <p><b>The hooks the kit hands over are the ones the surface fans out to.</b> The kit passes its own poison hook
  * among the real ones and, on the falsification leg, a mutated copy of the hook under test; {@code GatedRepository}
- * takes the hooks it fans out to, so the real choreography runs with exactly those in it. It used to discover its
- * fan-out itself, which left a fixture two bad choices: hand-fan the kit's hooks and then call a surface that ran the
- * genuine hook again - so a mutant that omitted work was answered by the discovered copy and no omission ever
- * bit - or skip the surface.
+ * takes the hooks it fans out to, so the real choreography runs with exactly those in it. A surface that discovered
+ * its fan-out itself would leave a fixture two bad choices: hand-fan the kit's hooks and then call a surface that runs
+ * the genuine hook again - so a mutant that omitted work would be answered by the discovered copy and no omission
+ * would ever bite - or skip the surface.
  *
  * <p><b>The surface answers "nothing quarantined" by throwing.</b> {@code HoldLifecycle.release} raises
  * {@code IllegalStateException} for a path it never held, and {@code GatedRepository.discard} synthesises the same for

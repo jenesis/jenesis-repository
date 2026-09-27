@@ -16,12 +16,10 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
  *
  * <p><b>Why {@code reads()} is empty and there is no read side to arrange.</b> The screen's verdict side reads
  * through injected providers over the publication's own scoped store - a wired gate, not a key prefix the kit can
- * fault - and it no longer has a read side of its own: it holds through the {@code /quarantine<path>} review pointer,
- * which {@code Publication.link} copies onto the serving pointer as its hold flag, so a serve reads the hold
- * off the one pointer it reads anyway. Until 2026-09-12 the screen answered {@code withheld} by probing the review
- * pointer on every download, and this fixture declared that prefix so the kit could prove the probe failed closed;
- * that probe was the first of a download's four reads and is gone. The fail-closed property now belongs to the
- * serving pointer read itself, which the store SPI's own tests and the format contract's hold round trip hold.
+ * fault - and it has no read side of its own: it holds through the {@code /quarantine<path>} review pointer, which
+ * {@code Publication.link} copies onto the serving pointer as its hold flag, so a serve reads the hold off the one
+ * pointer it reads anyway. The fail-closed property belongs to the serving pointer read itself, which the store SPI's
+ * own tests and the format contract's hold round trip hold.
  *
  * <p><b>Why the declared verdicts are {@code ACCEPT} only.</b> {@code assess} returns {@code ACCEPT} unconditionally
  * until a {@code ComplianceGate} is wired, and that wiring is a process-wide {@code AtomicReference} the deployment

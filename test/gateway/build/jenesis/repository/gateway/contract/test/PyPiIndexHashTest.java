@@ -29,7 +29,7 @@ class PyPiIndexHashTest {
 
         CountingReadStore store = new CountingReadStore();
         new Blobs(store).write("pypi/demo/files/demo-1.0.0-py3-none-any.whl", wheel);
-        // The project index now serves only for a hosted project (the index-shadowing fix): stamp the
+        // The project index serves only for a hosted project, so a proxied index is never shadowed: stamp the
         // hosted-publish marker a real upload/import would, so this hosted repo's index is served rather than missed.
         store.writeVersioned("pypi/demo/.hosted", "1".getBytes(StandardCharsets.UTF_8), null);
         store.resetReads();

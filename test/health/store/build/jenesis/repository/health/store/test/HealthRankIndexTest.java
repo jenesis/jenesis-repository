@@ -146,11 +146,11 @@ class HealthRankIndexTest {
 
     @Test
     void an_index_no_pass_has_committed_reports_not_built_and_recomputes_nothing() throws IOException {
-        // Records exist and are perfectly sortable - which is exactly why this used to buffer and sort them into
-        // a "weakest first" page. It must not: a ranking derived on the request thread claims to be the worst of the
-        // repository while being whatever the ledger answered, and an operator reading it concludes nothing worse
-        // exists. The honest answer is the state itself, carrying the ledger's last sweep so the panel can say "scored
-        // at SCAN, not yet ranked" rather than showing a blank list.
+        // Records exist and are perfectly sortable, and buffering and sorting them into a "weakest first" page is
+        // what the read must not do: a ranking derived on the request thread claims to be the worst of the repository
+        // while being whatever the ledger answered, and an operator reading it concludes nothing worse exists. The
+        // honest answer is the state itself, carrying the ledger's last sweep so the panel can say "scored at SCAN,
+        // not yet ranked" rather than showing a blank list.
         record("Maven", "org.example:a", 6.0);
         record("npm", "b", 1.0);
         HealthLedger.scanned(store).mark(SCAN);

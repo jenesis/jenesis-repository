@@ -12,13 +12,13 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
  * The aged answer at the choke point: what a per-key feed cache does with an answer it already drew, once that answer
  * has outlived the window it was drawn for and the refresh that should have replaced it fails.
  *
- * <p>There used to be one answer for every feed - keep serving the last good value and re-extend it by the retry
- * interval, indefinitely - which is why five fail-closed licensed feeds answered a stale advisory list for the whole
- * of a vendor outage while their contract said <em>raise</em>. It is now a declaration with no default, and the two
- * halves of the signal family take opposite positions on purpose: a fail-closed screen raises, because its answer is
- * read for its emptiness and nobody screened the key since the window lapsed; a fail-soft signal keeps what it drew,
- * with the instant it was really drawn at, because there the neutral value is the loosest one and dropping aged
- * evidence for it would loosen rather than tighten.
+ * <p>There is no one answer for every feed: keeping the last good value and re-extending it by the retry interval,
+ * indefinitely, would have a fail-closed licensed feed answer a stale advisory list for the whole of a vendor outage
+ * while its contract said <em>raise</em>. It is a declaration with no default, and the two halves of the signal
+ * family take opposite positions on purpose: a fail-closed screen raises, because its answer is read for its
+ * emptiness and nobody screened the key since the window lapsed; a fail-soft signal keeps what it drew, with the
+ * instant it was really drawn at, because there the neutral value is the loosest one and dropping aged evidence for
+ * it would loosen rather than tighten.
  *
  * <p>The window is crossed on an injected clock rather than by sleeping - the same {@code SignalContext.clock()} seam
  * every feed takes its window from in production.

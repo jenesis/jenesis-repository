@@ -170,11 +170,12 @@ class ComplianceScreenTest {
      * <p>A format whose coordinate lives inside the artifact commits under the only descriptor it can build before
      * the bytes are down - {@code /nuget/v3/package} is the real one, one path every push of that format shares -
      * and re-keys the {@code /quarantine} review handle onto the package once the {@code .nuspec} is readable. The
-     * gate used to file the audit row and the held-subject record at the endpoint regardless, so a reviewer's handle
-     * and their reasons named different paths for the same hold, {@code QuarantineLog.latest} answered nothing for
-     * the handle the queue is keyed off, and {@code HoldLifecycle}'s path-keyed reads answered about neither.
+     * gate files the audit row and the held-subject record under the package too: filed at the endpoint, a
+     * reviewer's handle and their reasons would name different paths for the same hold, {@code QuarantineLog.latest}
+     * would answer nothing for the handle the queue is keyed off, and {@code HoldLifecycle}'s path-keyed reads would
+     * answer about neither.
      *
-     * <p>The screen now asks the installed layout where the coordinate an inspector <em>did</em> read will be served,
+     * <p>The screen asks the installed layout where the coordinate an inspector <em>did</em> read will be served,
      * through the store-free derivation - the only form available before any layout has run. Driven here through a
      * generic test layout rather than through NuGet, because the behaviour being pinned is the gate's.
      */
@@ -314,8 +315,8 @@ class ComplianceScreenTest {
         return gate(advisories, Verdict.QUARANTINE);
     }
 
-    /** The same, with the malicious dimension's verdict named - never left to a default, since the one this class
-     *  used to inherit was not the one a deployment runs. */
+    /** The same, with the malicious dimension's verdict named - never left to a default, since a default this class
+     *  inherits need not be the one a deployment runs. */
     private static ComplianceGate gate(AdvisorySource advisories, Verdict malicious) {
         return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), advisories)
                 .malicious(new MaliciousPackagePolicy().action(malicious));

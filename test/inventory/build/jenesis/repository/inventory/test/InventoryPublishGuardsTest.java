@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * the rollup fold's first-publish idempotency.
  *
  * <p>The traversal case drives the PRODUCTION key derivation through the public {@link StoreRepositoryInventory#record}
- * API - the same {@code published/}/{@code MetadataKey} path a real publish takes, whose {@link ArtifactStore#segment}
+ * API - the same {@code MetadataKey} path a real publish takes, whose {@link ArtifactStore#segment}
  * guard rejects a version that is not one traversal-free segment - rather than re-deriving the key by hand (a hand-rolled
  * copy would only test the copy). The idempotency case pins that re-publishing an already-published member folds nothing
  * into the XOR-accumulated rollup identity: the fold is edge-triggered on the absent -&gt; present transition, so a

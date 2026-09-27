@@ -31,8 +31,8 @@ class SharedEcosystemTest {
 
     @Test
     void two_installed_formats_may_declare_one_ecosystem() {
-        // The composition resolves at all: this used to throw. A deployment offering one coordinate space through
-        // two layouts is a legitimate one and must start.
+        // The composition resolves at all. A deployment offering one coordinate space through two layouts is a
+        // legitimate one and must start.
         assertThat(RepositoryFormat.installed(_ -> null))
                 .extracting(RepositoryFormat::name)
                 .contains(ALPHA, BETA);

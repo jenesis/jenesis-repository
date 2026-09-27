@@ -9,12 +9,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The plug-in surface as a model rather than as markup, and the one walk both consoles read it through.
  *
- * <p>It used to be two walks: a console one that could say only which providers existed, and a settings one that also
- * knew each module's installed and enabled state. They enumerated the same graph with the same product-namespace
- * filter and the same ordering, so what is tested here is the enumeration - which services count as this product's,
- * that both levels come out sorted so a page is stable between reads, and that the decoration seam is what carries
- * everything a deployment knows beyond the graph. The decoration itself is a deployment's business and is tested
- * where one exists.
+ * <p>One walk serves the console, which says which providers exist, and the settings screen, which also knows each
+ * module's installed and enabled state. What is tested here is the enumeration - which services count as this
+ * product's, that both levels come out sorted so a page is stable between reads, and that the decoration seam is what
+ * carries everything a deployment knows beyond the graph. The decoration itself is a deployment's business and is
+ * tested where one exists.
  */
 class SpiCatalogTest {
 

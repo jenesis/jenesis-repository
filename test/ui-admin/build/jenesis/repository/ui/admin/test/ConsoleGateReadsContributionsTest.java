@@ -13,17 +13,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The console's module-presence gate reads each contributed flag; it does not derive its own answer beside the
  * module that owns one.
  *
- * <p>It used to derive all six, and two of the six derivations disagreed with the contributor's. {@code gc} was
- * resolved against a configuration chain that answered nothing while the contributor resolved it against a real
- * one, so a deployment gating its collector on a setting got a console that contradicted its own
- * {@code /api/capabilities}. {@code dependents} was a different question outright - the console asked whether the
- * dependents *maintenance task* was installed, the contributor whether a query provider was. The two ship in one
- * module today, so that half was latent rather than live; the point is that one flag had two definitions and
- * nothing held them together.
+ * <p>A derivation beside the contributor is a second definition of one flag, and nothing holds two definitions
+ * together: {@code gc} resolved against a configuration chain that answers nothing, while the contributor resolves it
+ * against a real one, gives a deployment gating its collector on a setting a console that contradicts its own
+ * {@code /api/capabilities}; and asking whether the dependents <em>maintenance task</em> is installed is a different
+ * question from whether a query provider is.
  *
  * <p>This pins the wiring rather than the values, which is what makes it hold as flags are added: none of the six
- * owning modules is on this module's path, so every registry the old code read is empty here and a derived answer
- * is {@code false}. Only an answer that came through the contribution pipeline can be {@code true}.
+ * owning modules is on this module's path, so every registry a derivation could read is empty here and a derived
+ * answer is {@code false}. Only an answer that came through the contribution pipeline can be {@code true}.
  */
 class ConsoleGateReadsContributionsTest {
 

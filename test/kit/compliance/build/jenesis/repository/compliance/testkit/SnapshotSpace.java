@@ -17,13 +17,11 @@ import build.jenesis.repository.store.ArtifactStore;
  * never paginate, and the read-purity leg would render instead of reaching for the vendor. Binding one of these per
  * check keeps each check's story its own.
  *
- * <p><strong>Why it is not the free store testkit's.</strong> There is no in-memory {@code ArtifactStore} in the free
- * core yet - is the ticket that puts one there and cuts the forty-odd test edges onto the filesystem backend.
- * Until it lands, a contract kit that needed a store either dragged {@code store.filesystem} and a temporary directory
- * into every consumer or wrote the eleven methods itself; this is the second, deliberately minimal and deliberately
- * local, and it should be deleted in favour of the free one the day that exists. It is <em>not</em> a
- * contract-complete backend and makes no attempt to be: it is a map with the traversal screens the real backends
- * apply, enough for the snapshot pointer, the snapshot bodies and the prune sweep that ride it.
+ * <p><strong>Why it is not the free store testkit's.</strong> The free core has no in-memory {@code ArtifactStore},
+ * so a contract kit that needs a store either drags {@code store.filesystem} and a temporary directory into every
+ * consumer or writes the eleven methods itself; this is the second, deliberately minimal and deliberately local. It is
+ * <em>not</em> a contract-complete backend and makes no attempt to be: it is a map with the traversal screens the
+ * real backends apply, enough for the snapshot pointer, the snapshot bodies and the prune sweep that ride it.
  */
 public final class SnapshotSpace implements ArtifactStore {
     @Override

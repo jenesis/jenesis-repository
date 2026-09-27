@@ -29,13 +29,12 @@ import module java.base;
  * A resolver provider sees name lookups, and a connection made through a proxy makes none: the client connects to
  * the proxy's address, a literal that needs no lookup, and the proxy resolves the host. So a JVM started with
  * {@code -Dhttps.proxyHost} - which a hosted session's tool options do, for every JVM the build forks - reaches
- * any host it likes while this resolver records nothing, and the hermetic claim is a convention again. Measured
- * 2026-09-20 in exactly that session: the Maven inspector's transitive walk, which the contract suite proves
- * degrades when nothing is published beside a POM, reached Maven Central through the session's proxy, took the
- * proxy's {@code 404} for the unpublished dependency as a resolved closure, and answered two subjects the
- * hermetic run never sees. {@link #direct()} clears the JDK's proxy properties for the life of the JVM, from this
- * class's initializer and from the suites that assert on the network's absence, so a proxied JVM refuses exactly
- * what an unproxied one does.
+ * any host it likes while this resolver records nothing, and the hermetic claim is a convention again: the Maven
+ * inspector's transitive walk, which the contract suite proves degrades when nothing is published beside a POM, would
+ * reach Maven Central through such a proxy, take the proxy's {@code 404} for the unpublished dependency as a resolved
+ * closure, and answer two subjects the hermetic run never sees. {@link #direct()} clears the JDK's proxy properties
+ * for the life of the JVM, from this class's initializer and from the suites that assert on the network's absence, so
+ * a proxied JVM refuses exactly what an unproxied one does.
  *
  * <h2>The JDK's failed-lookup cache is switched off, because it makes the record lie</h2>
  * {@code java.security} ships {@code networkaddress.cache.negative.ttl=10}, so a name that was refused once is

@@ -17,8 +17,7 @@ import build.jenesis.repository.cache.storage.CacheStorageProvider;
  * that DID reach past the resolution would be exercising a hand-built object rather than the provider wiring a
  * deployment gets, which is the same reason the contract fixtures are required to resolve rather than construct.
  *
- * <p>Every caller was previously spelling {@code new FilesystemStorage(root)}, from thirty-odd places, against a
- * class that no longer exists.
+ * <p>Every caller constructs a store through here rather than naming an implementation class.
  */
 public final class CacheStorages {
 

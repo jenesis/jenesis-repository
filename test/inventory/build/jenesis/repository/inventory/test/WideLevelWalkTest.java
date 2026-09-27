@@ -13,10 +13,10 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 /**
  * The inventory's subtree sweeps <b>page</b> every level instead of listing it whole.
  *
- * <p>Both sweeps under test used to descend by calling {@code ArtifactStore.list(level)} once per level - the release
- * enumeration through a self-recursive {@code walk}, the walk-less roll-up through a self-recursive {@code rollUp} -
- * which materialises a whole container in heap in one round-trip however wide it is. They now drive the shared
- * {@code PagedTreeWalk}, which consumes the store exclusively through {@code ArtifactStore.page}.
+ * <p>Both sweeps under test - the release enumeration and the walk-less roll-up - drive the shared
+ * {@code PagedTreeWalk}, which consumes the store exclusively through {@code ArtifactStore.page}, rather than calling
+ * {@code ArtifactStore.list(level)} once per level, which materialises a whole container in heap in one round-trip
+ * however wide it is.
  *
  * <p>{@link LevelBoundedStore} is what turns that from an invisible memory property into a pass/fail one: it refuses
  * a whole-level {@code list()} past a small width, exactly as the store SPI's own inherited paging fallback refuses

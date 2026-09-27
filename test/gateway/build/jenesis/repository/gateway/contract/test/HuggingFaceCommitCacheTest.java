@@ -10,11 +10,11 @@ import static build.jenesis.repository.gateway.testkit.FormatDrive.MemStore;
 import static build.jenesis.repository.gateway.testkit.FormatDrive.format;
 
 /**
- * Pins the Hugging Face {@code X-Repo-Commit} read-first fix. A hosted branch has no upstream commit, so its
- * reported commit is a SHA-1 over the whole sorted {@code (path, blob sha)} file tree - which the download path used to
- * recompute on every single-file GET, reading every file's pointer just to serve one file (O(files) per download).
+ * Pins the Hugging Face {@code X-Repo-Commit} read-first shape. A hosted branch has no upstream commit, so its
+ * reported commit is a SHA-1 over the whole sorted {@code (path, blob sha)} file tree - which the download path must
+ * not recompute on every single-file GET, reading every file's pointer just to serve one file (O(files) per download).
  *
- * <p>The branch's commit is now precomputed on each upload and cached; the download reads it as an O(1) pointer. Two
+ * <p>The branch's commit is precomputed on each upload and cached; the download reads it as an O(1) pointer. Two
  * load-bearing cells, both hermetic (no {@code huggingface_hub} client, no network): a counting store proves a
  * single-file download reads only the requested file's pointer and never re-walks the others, and the reported commit
  * stays a real content sha that moves exactly when the branch content changes.

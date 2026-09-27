@@ -99,9 +99,9 @@ class PostureVisibilityTest {
      * The advisors are discovered once, however many reports are asked for.
      *
      * <p>{@code PostureReport.discover} is called from request handlers - {@code GET /api/posture}, its admin twin
-     * and the console's posture badge - and used to walk the module graph's service declarations and re-instantiate
-     * every advisor on each one, before asking a single advisor anything. The answer still depends on the
-     * configuration handed in, so only the discovery is held; this is what says so.
+     * and the console's posture badge - so it must not walk the module graph's service declarations and
+     * re-instantiate every advisor on each one. The answer still depends on the configuration handed in, so only the
+     * discovery is held; this is what says so.
      *
      * <p>It counts constructions rather than timing anything: the claim is "once", not "fast", and a timing
      * assertion on a busy machine is the flake this repository keeps removing.

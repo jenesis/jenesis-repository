@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * no key at all, and a manifest pulled by digest has no tag pointer either. {@link OciFormat} lends that set through
  * {@link BlobReferences#references}, so this asserts both halves: the derivation itself - from a tag pointer, from the
  * per-manifest media-type sidecar, through an image index, and its refusal to answer short - and, end to end against a
- * real collector, that a pushed image still pulls after the two passes that used to reclaim it.
+ * real collector, that a pushed image still pulls after two collection passes.
  */
 class OciBlobReferencesTest {
 
@@ -302,7 +302,7 @@ class OciBlobReferencesTest {
     @Test
     void the_format_is_discovered_as_an_installed_reference_lender() {
         // Through the one `uses RepositoryFormat` clause every format already rides - never a second provides clause
-        // or a second registry (design gate 3). This is the wiring the provider resolves; without it the derivations
+        // or a second registry. This is the wiring the provider resolves; without it the derivations
         // above are dead code in a real deployment.
         assertThat(BlobReferences.installed())
                 .anyMatch(OciFormat.class::isInstance);

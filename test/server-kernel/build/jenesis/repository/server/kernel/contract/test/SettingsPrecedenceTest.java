@@ -18,17 +18,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link PinnedSettings} probe reports which keys an operator has fixed so a pinned key ignores the store.
  *
  * <h2>Why every packaged source below is named after a real app</h2>
- * This suite used to spell the packaged source as {@code [application.properties]} - one fabricated name, exercised
- * against a matcher that required the substring {@code "application"}. No app has been configured by a file of that
- * name since all four were renamed ({@code repository}, {@code cache}, {@code combined}, {@code ui}) so no
- * dependency's root {@code application.properties} could race them, so the matcher had matched nothing for a year -
- * every stored setting was layered at the <em>bottom</em> of the environment and {@link PinnedSettings} walked
- * straight past the shipped defaults - and this suite stayed green throughout, because the only packaged source it
- * ever built was the one the stale matcher still recognised. A test that pins an operator-visible identifier keeps the
- * literal (that rule is {@code ProviderIdentifierPrincipleTest}'s), so the names below are literals; what changed is
- * that they are now the names the product actually ships. {@code SpringConfigNamePrincipleTest} binds the same
- * recogniser to every {@code spring.config.name} the tree declares, so a fifth app cannot be added without one of the
- * two failing.
+ * A fabricated name such as {@code [application.properties]}, exercised against a matcher that requires the substring
+ * {@code "application"}, would keep this suite green while the matcher matched nothing any app ships - every stored
+ * setting layered at the <em>bottom</em> of the environment and {@link PinnedSettings} walking straight past the
+ * shipped defaults. The apps are named {@code repository}, {@code cache}, {@code combined} and {@code ui} so no
+ * dependency's root {@code application.properties} can race them. A test that pins an operator-visible identifier
+ * keeps the literal (that rule is {@code ProviderIdentifierPrincipleTest}'s), so the names below are literals, and
+ * they are the names the product ships. {@code SpringConfigNamePrincipleTest} binds the same recogniser to every
+ * {@code spring.config.name} the tree declares, so a fifth app cannot be added without one of the two failing.
  */
 class SettingsPrecedenceTest {
 

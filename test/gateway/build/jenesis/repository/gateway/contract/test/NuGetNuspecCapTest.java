@@ -60,11 +60,10 @@ class NuGetNuspecCapTest {
 
     @Test
     void the_cap_is_the_shared_operator_settable_ceiling_rather_than_this_format_s_own_constant() throws IOException {
-        // The .nuspec read used to be bounded by NuGetFormat's private MAX_NUSPEC - a number that happened to
-        // equal the inspector's, parallel by convention, and keyed to nothing an operator could set. It is now the
-        // product's one archive-inflation ceiling. Moving the shared key and watching this format's verdict move with
-        // it is what proves the format reads THROUGH the shared bound rather than beside it: before the change the
-        // key had no effect here at all.
+        // The .nuspec read is bounded by the product's one archive-inflation ceiling, not by a private number that
+        // equals the inspector's by convention and is keyed to nothing an operator can set. Moving the shared key and
+        // watching this format's verdict move with it is what proves the format reads THROUGH the shared bound rather
+        // than beside it.
         byte[] pkg = nupkg("Contoso.Lib", "1.2.3", "");
         assertThat(pkg.length).as("an ordinary tiny package, comfortably under the shared default").isLessThan(4096);
 

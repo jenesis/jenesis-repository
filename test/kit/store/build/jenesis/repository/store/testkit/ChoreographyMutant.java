@@ -24,8 +24,7 @@ import build.jenesis.repository.store.PublishInterceptor.Disposition;
  * <h2>Why the subject is not substituted, and what is substituted instead</h2>
  * {@link Publication} is {@code final}, and that is deliberate rather than incidental: the class exists to be the
  * product's <em>one</em> hosted-publish choreography, which is a structural claim an interface seam would give away
- * (the plan's third design gate - "extend the existing choke point; never add a parallel one" - and &sect;2's
- * single-edge rule). A test seam that let a caller supply a different commit sequence is exactly the second pipeline
+ * (extend the existing choke point; never add a parallel one). A test seam that let a caller supply a different commit sequence is exactly the second pipeline
  * the class is there to prevent, so it is not worth buying falsifiability with it. That argument is recorded in
  * {@code Publication}'s own javadoc, where a reader who wonders why they cannot substitute it meets it.
  *

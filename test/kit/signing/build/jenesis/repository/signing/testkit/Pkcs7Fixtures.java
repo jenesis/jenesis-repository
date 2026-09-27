@@ -168,9 +168,9 @@ public final class Pkcs7Fixtures {
 
     /** Every entry's timestamp, fixed: a {@code ZipEntry} without one takes the moment it is written, at a
      *  two-second resolution, and the unsigned archive a statement hashes and the signed archive a verifier strips
-     *  back to it are written moments apart - so once in a while they straddled a boundary, the stripped archive's
-     *  timestamps differed from the hashed one's, and a signature that verified on every other run read INVALID
-     *  (a strict lane, 2026-09-13 17:10, and again at 23:40). What NuGet's client writes is the same bytes twice. */
+     *  back to it are written moments apart - so once in a while they would straddle a boundary, the stripped
+     *  archive's timestamps would differ from the hashed one's, and a signature that verifies on every other run would
+     *  read INVALID. What NuGet's client writes is the same bytes twice. */
     private static final long ENTRY_TIME = 1_700_000_000_000L;
 
     private static byte[] zip(SequencedMap<String, byte[]> entries, byte[] signature) throws IOException {

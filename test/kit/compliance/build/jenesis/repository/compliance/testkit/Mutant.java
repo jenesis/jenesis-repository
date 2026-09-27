@@ -40,7 +40,7 @@ public enum Mutant {
     NONE("nothing"),
 
     /**
-     * The reach of the shapes a fixture calls unconfigured: every one of them now answers the feed's own
+     * The reach of the shapes a fixture calls unconfigured: every one of them answers the feed's own
      * <em>production</em> configuration, so the provider is asked to decline a configuration that enables it. This is
      * the "switched off in a report but not in resolution" defect, and it is the only thing the self-skip leg is for.
      */

@@ -11,11 +11,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The {@code publish/} pointer-tree walk over a pathologically deep tree. A published request path's depth is
- * client-controlled, and a deeply nested one used to drive {@link PublishedAssets#walk} into an unbounded recursion
- * that overflowed the stack with a {@link StackOverflowError} - an {@link Error} that slips past the caller's
- * handlers. The walk is an explicit work-list now, bounded by the depth no stored key exceeds
- * ({@link ArtifactStore#MAX_SEGMENTS}), so a {@value #DEPTH}-deep chain - a store nothing here could have written, far
- * past any stack the old recursion could hold - is refused by name rather than overflowing or being walked.
+ * client-controlled, so {@link PublishedAssets#walk} is an explicit work-list rather than a recursion that a deeply
+ * nested path would overflow with a {@link StackOverflowError} - an {@link Error} that slips past the caller's
+ * handlers. The walk is bounded by the depth no stored key exceeds ({@link ArtifactStore#MAX_SEGMENTS}), so a
+ * {@value #DEPTH}-deep chain - a store nothing here could have written - is refused by name rather than overflowing
+ * or being walked.
  */
 class PublishedAssetsDepthTest {
 

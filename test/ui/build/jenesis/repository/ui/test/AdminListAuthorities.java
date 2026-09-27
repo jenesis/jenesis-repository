@@ -12,11 +12,10 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 /**
  * The single-tenant authority policy, kept as a collaborator for the principal-pipeline tests.
  *
- * <p>It used to be the console's own {@code LoginAuthorities}: sign-in grants {@code ROLE_USER}, and
- * {@code ROLE_ADMIN} to a holder of the grant {@link ConsoleAdministrators} reads, with every sign-in recorded
- * into {@link KnownPrincipals} because that is the one moment a person's opaque provider subject is known. The
- * console that ships decides authorities from membership instead, through the identity module, and nothing
- * constructed this one any more once the shell's own wiring went.
+ * <p>Sign-in grants {@code ROLE_USER}, and {@code ROLE_ADMIN} to a holder of the grant
+ * {@link ConsoleAdministrators} reads, with every sign-in recorded into {@link KnownPrincipals} because that is the one
+ * moment a person's opaque provider subject is known. The console that ships decides authorities from membership
+ * instead, through the identity module, so nothing in the product constructs this one.
  *
  * <p>It lives here rather than being deleted because the claims it supports are about the <em>principal
  * services</em>, not about this policy: which provider-qualified id each service asks the authority seam about,

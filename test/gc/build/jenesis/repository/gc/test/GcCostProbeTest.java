@@ -18,10 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p><b>Why a probe rather than another counter.</b> The end-to-end canary reports what a collection costs in
  * total, which is the right number to hold a bound against and the wrong one to improve against: it says
- * {@code read.versioned} is seven tenths of the reads without saying which keys are being read. Reasoning from
- * the code instead cost a wrong answer on 2026-09-08 - a change made on the strength of reading the mark's
- * descriptor construction moved the measured figure by exactly nothing, because the reads were somewhere else
- * entirely. This names the somewhere.
+ * {@code read.versioned} is seven tenths of the reads without saying which keys are being read, and reasoning from
+ * the code about where they go is how a change moves the measured figure by exactly nothing. This names the
+ * somewhere.
  *
  * <p>It is a probe, so it asserts almost nothing: the collection has to be correct and the trace has to be
  * non-empty, and everything else is printed. A probe that asserted its own numbers would have to be edited every

@@ -16,7 +16,7 @@ import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Pins the Debian importer's manifest-vs-path agreement (audit finding N2, Debian leg). {@link
+ * Pins the Debian importer's manifest-vs-path agreement, the Debian leg. {@link
  * DebianImporter#importTarget} screens the coordinate parsed from the {@code .deb} FILENAME
  * ({@code <pkg>_<version>_<arch>.deb}); {@link DebianImporter#importArtifact} replays the package through {@code
  * DebianFormat.handle}, whose {@code push} reads the served {@code Packages} stanza's {@code Package:} from the embedded

@@ -195,7 +195,7 @@ public final class WitnessStore implements ArtifactStore {
         if (length > witness.bufferedCap) {
             throw new AssertionError("A " + length + "-byte body was written to '" + key + "' through the small-object "
                     + "byte[] path, past this check's " + witness.bufferedCap + "-byte cap. Only pointers, indexes and "
-                    + "metadata may be materialised; an artifact streams through write/writeBlob (§1).");
+                    + "metadata may be materialised; an artifact streams through write/writeBlob.");
         }
     }
 

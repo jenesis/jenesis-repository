@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The screened enumeration - the composition that ends the disclosure class (C3): a surface that lists names and a
+ * The screened enumeration - the composition that ends a disclosure class: a surface that lists names and a
  * surface that screens them are the same call, so "list, then filter {@code withheld(...)}" can no longer lose its
  * second half. The suite pins the three properties that claim is made of:
  *

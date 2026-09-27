@@ -15,11 +15,11 @@ import build.jenesis.repository.walk.store.StoreArtifactWalk;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The confirming sweep and a publish of the same condemned bytes, interleaved at the two instants that used to lose
- * an artifact: the sweep had judged the blob and re-read its marker, and a publish clearing the marker and writing its
- * pointer in the moment before the delete was answered {@code 201} for a pointer at nothing. The marker is the arbiter
- * now - the sweep claims it by compare-and-set before it deletes, and a publish spares the blob by compare-and-set on
- * the same marker - so each interleaving has one outcome that keeps every served pointer naming a blob that exists.
+ * The confirming sweep and a publish of the same condemned bytes, interleaved at the two instants that can lose an
+ * artifact: the sweep has judged the blob and re-read its marker, and a publish clearing the marker and writing its
+ * pointer in the moment before the delete would be answered {@code 201} for a pointer at nothing. The marker is the
+ * arbiter - the sweep claims it by compare-and-set before it deletes, and a publish spares the blob by compare-and-set
+ * on the same marker - so each interleaving has one outcome that keeps every served pointer naming a blob that exists.
  *
  * <p>Both are forced rather than hoped for: the publish runs from inside the store call at which the sweep stands,
  * through the unwrapped store, so it lands exactly between the sweep's judgement and its claim, or between its claim

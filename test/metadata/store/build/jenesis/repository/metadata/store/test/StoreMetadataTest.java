@@ -200,7 +200,7 @@ class StoreMetadataTest {
     void a_coordinate_scoped_section_round_trips_and_does_not_alias_a_version_document() throws IOException {
         MetadataStore metadata = new StoreMetadata(store);
         // The per-coordinate (@coordinate) document carries the version-independent facts; a same-named version
-        // document must live at a distinct key, so writing one never overwrites the other (§5).
+        // document must live at a distinct key, so writing one never overwrites the other.
         metadata.mutateCoordinate(ECO, COORD, "health",
                 set(Section.derived("health", 1, NOW, Signal.NEUTRAL, data("overall", 4.2))));
         metadata.mutate(ECO, COORD, VERSION, "published",

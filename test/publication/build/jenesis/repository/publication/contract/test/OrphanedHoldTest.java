@@ -32,9 +32,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * uninstalled or switched off a compliance module looks like from the store's side.
  *
  * <p>What it pins is the asymmetry. Adding a provider is harmless and the kit already proves it
- * ({@code A_HOOK_IS_A_NO_OP_FOR_A_PATH_IT_NEVER_HELD}). Removing one used to be fail-open in both directions at once:
- * the kind-neutral reads answered "nothing holds this", and both callers act on that answer permissively. A hold now
- * outlives its module, and only an operator's explicit release ends it.
+ * ({@code A_HOOK_IS_A_NO_OP_FOR_A_PATH_IT_NEVER_HELD}). Removing one must not be fail-open: if the kind-neutral reads
+ * answered "nothing holds this", both callers would act on that answer permissively. A hold outlives its module, and
+ * only an operator's explicit release ends it.
  */
 class OrphanedHoldTest {
 
@@ -103,7 +103,7 @@ class OrphanedHoldTest {
         new GatedRepository(store).discard(PATH);   // throws IllegalStateException if nothing was held
 
         assertThat(HoldRecords.heldKinds(store, PATH))
-                .as("a discarded version has no published/ sidecar any sweep would ever reach, so the row would "
+                .as("a discarded version has no published section any sweep would ever reach, so the row would "
                         + "otherwise dangle forever").isEmpty();
     }
 

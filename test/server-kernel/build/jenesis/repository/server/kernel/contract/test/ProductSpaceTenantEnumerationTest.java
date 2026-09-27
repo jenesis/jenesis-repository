@@ -22,11 +22,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * merely for being named like one of the product's concerns.
  *
  * <p>The store root holds the tenant scopes alongside {@link Scopes#SYSTEM}, so an enumeration that lists the root
- * and keeps what merely <em>looks</em> like a name would offer a key space as a tenant. It used to keep them apart
- * with a list of forbidden words consulted in both directions, and splitting those two directions is what once let
- * the console render {@code audit} as a tenant with working Open and Delete controls. The list is gone: one space
- * outside the scope-name grammar holds everything the product owns, so the shape rule that already gates creation
- * excludes it from every listing for free.
+ * and keeps what merely <em>looks</em> like a name would offer a key space as a tenant. A list of forbidden words would
+ * have to be consulted in both directions, and splitting those two directions lets the console render {@code audit} as
+ * a tenant with working Open and Delete controls. Instead one space outside the scope-name grammar holds everything
+ * the product owns, so the shape rule that already gates creation excludes it from every listing for free.
  *
  * <p>The claim therefore has two halves, and the second is the one a denylist could never make: nothing under the
  * product's space is offered as a tenant, <em>and</em> a tenant may be called {@code audit} or {@code cache}.
@@ -92,8 +91,8 @@ class ProductSpaceTenantEnumerationTest {
         Settings settings = new Settings(store);
         settings.set("deny-list", "global:coord");
         settings.set("acme", "deny-list", "acme:coord");
-        // Every one of the product's spaces now holds a settings document of its own - the shape that made audit,
-        // locks and quota reachable as export "tenants" back when only auth and config were excluded by name.
+        // Every one of the product's spaces holds a settings document of its own - the shape that would make audit,
+        // locks and quota reachable as export "tenants" if only some spaces were excluded by name.
         for (String space : Scopes.SPACES) {
             store.scope(Scopes.SYSTEM).scope(space)
                     .write("settings/build.jenesis.repository.compliance.osv.json",

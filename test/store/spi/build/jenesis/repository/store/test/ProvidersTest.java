@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * packaging errors ({@code null} provider, blank name, duplicate name, duplicate provider) that a discovery-order
  * winner would hide, additive contribution and its ordering, unique resolution with and without an explicit
  * selection, the ambiguity that replaces "the first in discovery order", the exclusive default with its
- * before-construction configuration validation, and - the point of the whole exercise (&sect;9) - that an
+ * before-construction configuration validation, and - the point of the whole exercise - that an
  * <em>explicitly selected</em> implementation which is absent, switched off or unconfigured throws naming the
  * selection and what is missing, while only an <em>unselected</em> optional capability degrades to its sentinel.
  */
@@ -325,7 +325,7 @@ class ProvidersTest {
 
     @Test
     void a_selected_backend_no_provider_answers_to_refuses_to_fall_back_to_the_default() {
-        // The §9 exemplar: store=s3 with the s3 module absent must not boot against the local filesystem.
+        // The exemplar: store=s3 with the s3 module absent must not boot against the local filesystem.
         List<Fake> discovered = List.of(alfa("filesystem", "fs"));
         assertThatThrownBy(() -> Providers.exclusiveWithDefault(SPI, discovered, NAME, Optional.of("s3"),
                 "filesystem", CONFIGURED, provider -> provider.create().get()))

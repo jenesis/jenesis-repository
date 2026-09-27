@@ -108,7 +108,7 @@ final class AfterCommitContract {
                 "the fixture's own observer, sitting behind the throwing probe, recorded the publish");
 
         // (b) now the fixture's OWN observer fails, by faulting exactly the keys it writes. The publish must still
-        //     stand - and, per the plan's gate 4, the failure must leave a TRACE: a contained failure that is
+        //     stand - and the failure must leave a TRACE: a contained failure that is
         //     indistinguishable from a successful one is the defect, not the containment. The trace here is durable
         //     divergence plus a route back, and both are asserted from the store rather than from a log line.
         ArtifactDescriptor second = fixture.describe("/kit/contained-own");
@@ -214,7 +214,7 @@ final class AfterCommitContract {
         store.heal();
         isTrue(failed != null, fixture, "the injected crash must fail the commit, or this check kills nothing");
 
-        // Re-derived from durable state, per the plan's gate 5: the pointer really landed, which is what makes this
+        // Re-derived from durable state: the pointer really landed, which is what makes this
         // the lost-callback window rather than a plain failed publish.
         equal(store.delegate().readVersioned("publish" + artifact.path()).isPresent(), true, fixture,
                 "the visibility write landed before the crash - if it did not, this crash point has stopped biting "
@@ -358,7 +358,7 @@ final class AfterCommitContract {
             // publish row's key" is correct behaviour and the defect's signature at once, so no assertion over keys
             // can separate them. The values can, which is what the withheld() declaration is for: the correct hook
             // writes what the withhold leg means, the defective one writes what a publish would have meant.
-            // The two dispositions are NOT the same arrangement, which the old key-probe hid by asserting the same
+            // The two dispositions are NOT the same arrangement, which a key-probe would hide by asserting the same
             // thing of both. A QUARANTINE writes a review pointer and so legitimately fires the withhold-change
             // feed - a hook subscribed to it holds its withhold row afterwards. A REJECT refuses outright: nothing
             // is withheld, no feed fires, and the surface must hold nothing at all.

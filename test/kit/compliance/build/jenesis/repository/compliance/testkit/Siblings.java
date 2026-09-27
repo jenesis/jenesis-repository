@@ -10,12 +10,11 @@ import build.jenesis.repository.store.PublishInterceptor;
  * attestation referrer names). A fixture whose inspector reads no companion uses {@link QualityInspector.Lookup#none()}
  * instead, which {@link InspectorFixture#lookup()} already defaults to.
  *
- * <p><b>Why this exists rather than a lambda per fixture.</b> The SPI defaults <em>neither</em> sibling leg:
- * the bounded read used to inherit a default that routed through the whole-document one and trimmed the result in
- * heap, which meant a caller asking for a 32 MiB bounded fact got an exception at 8 MiB on one leg and a truncated
- * answer on the other. With the default gone, every supplier owes both legs - and a test double that got them subtly
- * wrong would let an inspector pass a contract the production screens would fail it on. So the two legs are written
- * once, here, in the shape a real store implements them:
+ * <p><b>Why this exists rather than a lambda per fixture.</b> The SPI defaults <em>neither</em> sibling leg: a
+ * bounded read routed through the whole-document one and trimmed in heap would give a caller asking for a 32 MiB
+ * bounded fact an exception at 8 MiB on one leg and a truncated answer on the other. So every supplier owes both legs
+ * - and a test double that got them subtly wrong would let an inspector pass a contract the production screens would
+ * fail it on. The two legs are therefore written once, here, in the shape a real store implements them:
  * <ul>
  *   <li>{@link #fetch(String)} reads one byte past {@link PublishInterceptor.Content#LARGEST_SIBLING} and <b>throws</b>
  *       past it - the whole document or nothing, never a prefix a caller would read as complete;</li>
@@ -24,8 +23,7 @@ import build.jenesis.repository.store.PublishInterceptor;
  *       {@code >}: a sibling of exactly {@code limit} bytes comes back whole, because every byte of it is in hand.</li>
  * </ul>
  * Both legs stream from the recorded body rather than handing the stored array out and trimming it, so the code here
- * is the same shape the screens' own lookups have and cannot drift into the read-whole-then-trim shape that was
- * removed.
+ * has the same shape the screens' own lookups have and not the read-whole-then-trim one.
  *
  * <p>A fixture whose bounded leg must prove that an over-window sibling is never <em>materialised</em> (rather than
  * merely reported truncated) supplies its own lookup over a generated stream instead: this one holds its bodies in

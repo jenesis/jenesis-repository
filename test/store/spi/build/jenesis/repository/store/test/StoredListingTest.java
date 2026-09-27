@@ -510,7 +510,7 @@ class StoredListingTest {
 
     @Test
     void a_regeneration_from_a_stale_snapshot_keeps_the_entry_a_later_source_put() throws IOException {
-        // The C-1 shape: the rebuild pass reads pod documents into a snapshot, a publish writes pod a's document
+        // The shape: the rebuild pass reads pod documents into a snapshot, a publish writes pod a's document
         // and derives its shard line from it, and the pass's regeneration lands after that - from the snapshot.
         Map<String, Long> snapshot = new HashMap<>(Map.of("a", 1L, "b", 1L));
         Map<String, String> lines = new HashMap<>(Map.of("a", "a 1.0", "b", "b 1.0"));

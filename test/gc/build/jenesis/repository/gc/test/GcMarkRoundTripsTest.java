@@ -16,11 +16,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * What a mark pass may COST, counted rather than assumed.
  *
  * <p>The mark phase opens every key in the pointer tree - that is what it is for - so a per-key store call is not a
- * constant factor, it is the pass. Two used to be spent on every pointer before its body was read: one
- * {@code exists} to decide whether the name was a leaf or a container to descend, and one {@code size} to decide
- * whether the leaf was small enough to read as a pointer body. Both questions are answered by the listing that
- * enumerated the key - a container listing reports each stored child's size, and only a stored object has one - so
- * both are now free, and the pass spends one read per pointer instead of three.
+ * constant factor, it is the pass. Whether a name is a leaf or a container to descend, and whether a leaf is small
+ * enough to read as a pointer body, are both answered by the listing that enumerated the key - a container listing
+ * reports each stored child's size, and only a stored object has one - so the pass spends one read per pointer rather
+ * than an {@code exists} and a {@code size} besides.
  *
  * <p>This is asserted by counting, not by reasoning about it, because the saving is invisible to every behavioural
  * test: a store that answered the same questions one request at a time would pass all of them. A later edit that

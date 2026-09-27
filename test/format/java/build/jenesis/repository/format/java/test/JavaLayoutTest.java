@@ -78,10 +78,9 @@ class JavaLayoutTest {
 
     @Test
     void the_metadata_cap_is_the_shared_operator_settable_bound_not_a_constant_private_to_this_module() throws IOException {
-        // The ceiling used to be this module's own private constant, keyed to nothing an operator could set and
-        // parallel-by-convention with every other format's. It is now the product's one bound, so moving the shared
-        // dial moves what this layout will materialise - which is the whole difference between a rule a format holds
-        // and a rule the product holds.
+        // The ceiling is the product's one bound rather than a private constant keyed to nothing an operator could
+        // set, so moving the shared dial moves what this layout will materialise - which is the whole difference
+        // between a rule a format holds and a rule the product holds.
         byte[] jar = jar(manifest("com.example.auto"));
         assertThat(JavaLayout.moduleName(new ByteArrayInputStream(jar))).isEqualTo("com.example.auto");
         try {

@@ -37,7 +37,7 @@ class RepositoryPropertiesTest {
         RepositoryProperties fixed = new RepositoryProperties();
         fixed.setTenancy("fixed");
         assertThat(fixed.importHostsGuarded(null))
-                .as("the single-tenant edition now fails closed too - the closed SSRF hole").isTrue();
+                .as("the single-tenant edition fails closed too - no SSRF hole").isTrue();
     }
 
     @Test

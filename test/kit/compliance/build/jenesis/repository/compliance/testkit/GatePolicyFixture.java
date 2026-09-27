@@ -18,12 +18,11 @@ import build.jenesis.repository.compliance.Verdict;
  * configure you, throw naming the key when it configured you wrongly, decide the same way twice, report a permit the
  * way the family does, and behave the way your own {@link GatePolicyProvider#symmetry()} says you do.
  *
- * <p><strong>There is no declaration of what a permit looks like</strong>. There used to be: the dimensions
- * disagreed - six answered an {@code <dim>-action} of {@link Verdict#ALLOW} with no finding at all, five of them
- * before they looked at the subject - and a fixture declared which side it was on. They no longer disagree. A
- * dimension carrying an action dial evaluates the subject and records its permit as a {@code Finding(ALLOW, ...)},
- * the shape the gate already uses for a VEX-suppressed or waived advisory, and {@link GatePolicyContract} asserts that
- * of every one of them. A seam for saying otherwise would be a seam for reintroducing the divergence.
+ * <p><strong>There is no declaration of what a permit looks like</strong>, because the dimensions do not disagree
+ * about it: a dimension carrying an action dial evaluates the subject and records its permit as a
+ * {@code Finding(ALLOW, ...)}, the shape the gate already uses for a VEX-suppressed or waived advisory, and
+ * {@link GatePolicyContract} asserts that of every one of them. A seam for saying otherwise would be a seam for
+ * answering an {@code <dim>-action} of {@link Verdict#ALLOW} with no finding at all.
  *
  * <h2>The declarations the kit falsifies rather than trusts</h2>
  * <ul>

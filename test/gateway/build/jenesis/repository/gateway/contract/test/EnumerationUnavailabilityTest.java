@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The one distinction the enumeration walks have to keep: <b>a mirror that did not answer</b> is
  * {@link ProxyFormat.Unavailable}, and <b>a mirror that answered with something we cannot walk</b> is a plain
- * {@link IOException}. Both used to be the second, which made them one event to every caller - and the two call for
+ * {@link IOException}. One exception type for both would make them one event to every caller, and the two call for
  * opposite handling, because the first is the vendor having a bad afternoon and the second is a format change that
  * has silently invalidated a walk.
  *

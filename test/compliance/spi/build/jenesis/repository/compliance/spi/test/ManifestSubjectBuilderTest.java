@@ -10,9 +10,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The shared {@link ComplianceGate.Subject} shapes the quality inspectors emit: the coordinate-only subject a
  * path-derived leg returns, the same subject carrying whatever licences a manifest declared, the content-scan
- * subject the secret and attestation inspectors stamp their findings onto, and the coordinate-segment guard four
- * inspectors had copied. Each inspector used to spell these out itself, so a "declares nothing" that quietly became
- * a licence named {@code ""}, or a guard that let a traversal segment through, could differ per format.
+ * subject the secret and attestation inspectors stamp their findings onto, and the coordinate-segment guard. Every
+ * inspector builds them here, so a "declares nothing" that quietly becomes a licence named {@code ""}, or a guard that
+ * lets a traversal segment through, cannot differ per format.
  */
 class ManifestSubjectBuilderTest {
 

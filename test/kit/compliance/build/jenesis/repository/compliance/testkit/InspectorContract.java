@@ -70,7 +70,7 @@ public final class InspectorContract {
 
         /** An artifact the inspector claimed but cannot parse fails closed with {@link MalformedArtifactException} -
          *  except for a content scan, which must never fail a publish over bytes it could not interpret, a path-only
-         *  reading, which never parsed anything, and an inspector whose fixture declares the §13 divergence
+         *  reading, which never parsed anything, and an inspector whose fixture declares the cross-format divergence
          *  {@link InspectorFixture#malformedIsRefused()}, whose degraded answer is asserted instead. */
         MALFORMED_FAILS_CLOSED,
 
@@ -404,7 +404,7 @@ public final class InspectorContract {
             return;
         }
         if (!fixture.malformedIsRefused()) {
-            // A declared §13 divergence (see InspectorFixture.malformedIsRefused): this inspector admits a body that
+            // A declared cross-format divergence (see InspectorFixture.malformedIsRefused): this inspector admits a body that
             // is not the artifact it claims to be, on its path-derived coordinate. The leg is not skipped - the
             // degraded answer is asserted, so "admits it" cannot quietly become "invents a coordinate for it".
             equal(fixture, "the declared-divergent degraded reading of the unparseable " + artifact.path(),
@@ -464,9 +464,8 @@ public final class InspectorContract {
         // What the SECOND inspection opened, not what both did between them. An inspector that opens the handle
         // more than once per inspection - Debian reads the control member and the copyright in two passes -
         // already satisfies a cumulative "opened at least twice" after its FIRST inspection, so the cumulative
-        // form cannot see a second inspection served entirely from memory. Measured 2026-09-15: the mutant that
-        // remembers one answer per handle survived this check for exactly that reason, which is what the
-        // falsifiability census is for.
+        // form cannot see a second inspection served entirely from memory - a mutant that remembers one answer per
+        // handle would survive it, which is what the falsifiability census is for.
         int beforeSecond = content.opened();
         List<ComplianceGate.Subject> second = spooled(fixture, artifact.path(), content, lookup);
         equal(fixture, "one Content handle inspected twice", second, first);

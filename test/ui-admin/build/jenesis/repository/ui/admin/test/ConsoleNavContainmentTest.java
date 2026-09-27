@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>The fan-out runs while {@code CapabilityService} is being constructed, so uncontained it did not merely drop a
  * nav entry - it threw out of the constructor, which is a Spring context that does not start and therefore a
- * deployment that does not boot, because one optional module was broken. That is the §3 rule inverted: a discovered
+ * deployment that does not boot, because one optional module was broken. That inverts the rule for optional modules: a discovered
  * optional contributor is supposed to degrade, and this one took the shell with it.
  *
  * <p>{@link HostileConsoleModule} is registered for the whole test module rather than injected, which is the point:

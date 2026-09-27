@@ -79,8 +79,7 @@ public final class ImportContract {
          *  ({@code ImportSource} clauses 2 and 8). */
         RESUMES_WITHOUT_DUPLICATING,
         /** An asset is downloaded only when the consumer opens it, and its bytes go from the incumbent to storage
-         *  unread - zero bytes produced at the moment the store is handed the stream ({@code ImportSource} clause 4,
-         *  &sect;1). */
+         *  unread - zero bytes produced at the moment the store is handed the stream ({@code ImportSource} clause 4). */
         STREAMS_ASSET_CONTENT,
         /** A refused credential, an absent repository and an unavailable instance surface as three distinguishable
          *  {@link ImportFailure.Kind}s rather than one {@code IOException} a caller would have to string-match
@@ -255,7 +254,7 @@ public final class ImportContract {
         if (produced != 0L) {
             throw failure(fixture, "the connector had already read " + produced + " of the asset's " + body.length()
                     + " bytes when it handed the stream to the store. An asset copies from the incumbent straight to "
-                    + "storage unread (§1) - anything else means it was materialised first, and a migration of a "
+                    + "storage unread - anything else means it was materialised first, and a migration of a "
                     + "multi-gigabyte artifact would carry the whole thing in heap.");
         }
         isTrue(store.exists("blobs/" + body.sha256()), fixture,

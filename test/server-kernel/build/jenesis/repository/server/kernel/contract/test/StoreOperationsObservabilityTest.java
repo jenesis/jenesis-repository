@@ -82,7 +82,7 @@ class StoreOperationsObservabilityTest {
                     .as("every name the family breakdown derives is a legal signal name")
                     .allMatch(Signals::valid);
             assertThat(metrics).extracting(Metric::name)
-                    .as("and the operation counters are still there - a refused family name used to take them with it")
+                    .as("and the operation counters are still there - a refused family name does not take them with it")
                     .contains("jenreg.store.ops.reads", "jenreg.store.ops.writes");
             assertThat(metrics).extracting(Metric::name)
                     .as("the date is named as a number rather than dropped or mangled into an illegal segment")

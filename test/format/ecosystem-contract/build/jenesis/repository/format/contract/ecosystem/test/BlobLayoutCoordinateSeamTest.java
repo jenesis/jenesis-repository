@@ -111,11 +111,10 @@ class BlobLayoutCoordinateSeamTest {
     /**
      * Every format whose pointers live in the shared {@code blobs} namespace maps its coordinates to them.
      *
-     * <p>It used to say <em>every format here</em>, and the premise was carried in the message rather than
-     * checked - true only because every one of them served from {@code blobs}. Ivy is the first that does
-     * not: it is a {@code publish/} layout like Maven and Jenesis, where a coordinate maps to a request-path
-     * folder and a hold retracts by unpublishing under it. Demanding a {@code BlobLayout} of it would be demanding
-     * a mapping whose only honest answer is empty, which is how an exemption list starts.
+     * <p>It does not say <em>every format here</em>: that premise would be carried in the message rather than
+     * checked. Ivy is a {@code publish/} layout like Maven and Jenesis, where a coordinate maps to a request-path
+     * folder and a hold retracts by unpublishing under it. Demanding a {@code BlobLayout} of it would be demanding a
+     * mapping whose only honest answer is empty, which is how an exemption list starts.
      */
     @Test
     void every_format_whose_pointers_live_in_blobs_declares_the_seam() {
@@ -180,8 +179,8 @@ class BlobLayoutCoordinateSeamTest {
      * The backwards direction, over every fixtured format at once: a pointer this layout wrote for a published
      * coordinate must describe back to <em>that</em> coordinate, or not be claimed at all.
      *
-     * <p>{@link BlobLayout#describePointer} is what rebuilds a release's {@code published/} row when the accept path
-     * lost it - the row a retroactive advisory or licence sweep enumerates by. It defaults to empty, and empty here
+     * <p>{@link BlobLayout#describePointer} is what rebuilds a release's {@code published} section when the accept path
+     * lost it - the section a retroactive advisory or licence sweep enumerates by. It defaults to empty, and empty here
      * is a pass: a format that has not implemented it is simply not repaired, which is exactly as repairable as it
      * was before the seam existed. What must never happen is the other outcome. A layout that answers the
      * <em>wrong</em> coordinate writes a row against a release that was never published, and retention then ages
@@ -198,7 +197,7 @@ class BlobLayoutCoordinateSeamTest {
      * <p>The round trip below is the check that keeps the clause honest, and it only reaches the layouts that have
      * a fixture here. Six discovered layouts do not - apk, helm, winget, terraform, swift, homebrew - so one of
      * them could implement the clause, get it wrong, and nothing would fire: a wrong answer writes a
-     * {@code published/} row against a release that was never published, and retention ages artifacts by it.
+     * {@code published} section against a release that was never published, and retention ages artifacts by it.
      *
      * <p>So the rule is stated where it is decidable. Overriding the default is visible in the class file, and
      * this asserts that whoever overrides it is a format the round trip covers. Implementing the clause for an
@@ -269,7 +268,7 @@ class BlobLayoutCoordinateSeamTest {
         // new one may join without touching this line. Stated because the loop above is vacuous per format - a
         // layout that quietly went back to answering empty would still leave this test green on its neighbours,
         // and "the repair silently stopped covering npm" is precisely the regression nothing else here would show.
-        assertThat(claimed).as("a layout that used to name its own pointer keys has stopped, so the releases it "
+        assertThat(claimed).as("a layout that names its own pointer keys has stopped, so the releases it "
                         + "repairs are silently unrepairable again")
                 .containsAll(CLAIMS);
     }

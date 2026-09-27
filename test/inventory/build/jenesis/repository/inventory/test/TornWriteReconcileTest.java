@@ -154,7 +154,7 @@ class TornWriteReconcileTest {
     void pass_one_streams_the_pointer_tree_through_the_shared_walk_over_many_leaves() throws IOException {
         // A multi-leaf publish/ fixture - several fully-published artifacts and one injected dangling pointer. Pass 1
         // must stream every leaf through the shared walk (the resumable, bounded-stride primitive), never buffering the
-        // whole leaf set into one list as it used to, and still detect and repair the torn write exactly.
+        // whole leaf set into one list, and still detect and repair the torn write exactly.
         for (int i = 0; i < 5; i++) {
             publish("lib" + i, "1.0.0");
         }

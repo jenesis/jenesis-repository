@@ -17,9 +17,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * When the search index answers, the console must resolve each hit's location by a bounded direct lookup - not by
- * enumerating the whole {@code published/} tree per request just to filter it down to the indexed hits (a full-store
+ * enumerating the whole {@code meta/} tree per request just to filter it down to the indexed hits (a full-store
  * walk on a read path). This drives {@link RepositoryBrowse#search} with a fake index that returns one hit, over a
- * store that <em>refuses to list an ecosystem folder</em> ({@code published/<eco>}, the coordinate-enumeration step a
+ * store that <em>refuses to list an ecosystem folder</em> ({@code meta/<eco>}, the coordinate-enumeration step a
  * full walk needs and a direct lookup never takes). The search still resolves the hit, proving it took the direct
  * path rather than a repository walk.
  */
@@ -38,7 +38,7 @@ public class RepositorySearchDirectLookupTest {
                 key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(backing.scope("acme").scope("releases"));
         // One hit coordinate the fake index returns, plus another coordinate a full walk would enumerate. Both sit
-        // under published/maven/ - the ecosystem folder the refusing store guards.
+        // under meta/maven/ - the ecosystem folder the refusing store guards.
         inventory.record("maven", "org.acme:lib", "1.0", NOW);
         inventory.record("maven", "org.other:tool", "9.0", NOW);
     }
@@ -82,7 +82,7 @@ public class RepositorySearchDirectLookupTest {
     /** A store that refuses to list or page an ecosystem folder ({@code meta/<eco>}) - the coordinate-enumeration a
      *  full repository walk performs. A direct hit lookup lists only {@code meta} (the ecosystems) and
      *  {@code meta/<eco>/<coordinate>} (one coordinate's versions), never the ecosystem folder itself, so it
-     *  passes; the old full-walk search would throw here. Reads and writes delegate untouched; {@link #scope}
+     *  passes; a full-walk search would throw here. Reads and writes delegate untouched; {@link #scope}
      *  propagates the guard. A test double, never a backend. */
     private static final class ListRefusingStore implements ArtifactStore {
         @Override

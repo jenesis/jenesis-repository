@@ -11,15 +11,15 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Pins whether the npm importer's screen coordinate and its stored/served coordinate agree (audit finding N2).
+ * Pins whether the npm importer's screen coordinate and its stored/served coordinate agree.
  * {@link NpmImporter#importTarget} derives the coordinate from the tarball's {@code <name>/-/<file>.tgz} source PATH -
  * the label the import edge screens the asset against. {@link NpmImporter#importArtifact} ignores that path coordinate
  * and reads {@code name}/{@code version} from the tarball's own {@code package/package.json}, keying
- * {@code npm/<name>/versions/<version>} and {@code npm/<name>/tarballs/<file>} on it, with no check that the two match.
+ * {@code npm/<name>/versions/<version>} and {@code npm/<name>/tarballs/<file>} on it.
  *
- * <p>Like Composer/CocoaPods, npm's importer now validates the embedded {@code package.json} coordinate against the
+ * <p>Like Composer/CocoaPods, npm's importer validates the embedded {@code package.json} coordinate against the
  * path the edge screened and REFUSES a mismatch, so a tarball can never be screened under one coordinate and then
- * stored/served under another (the N2 screen-label bypass). These cells prove the refusal and the matching baseline.
+ * stored/served under another. These cells prove the refusal and the matching baseline.
  * Container-free.
  */
 class NpmImportCoordinateAgreementTest {
@@ -28,7 +28,7 @@ class NpmImportCoordinateAgreementTest {
     Path root;
 
     /**
-     * The N2 fix: the import edge screens against {@code importTarget}'s path coordinate ({@code innocent@1.0.0}); a
+     * The import edge screens against {@code importTarget}'s path coordinate ({@code innocent@1.0.0}); a
      * tarball whose {@code package.json} declares a DIFFERENT coordinate ({@code evil-payload@9.9.9}) is REFUSED rather
      * than stored under a coordinate the gate never screened. Nothing is published under either coordinate.
      */

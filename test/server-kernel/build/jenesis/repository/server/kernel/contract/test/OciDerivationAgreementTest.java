@@ -19,15 +19,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * "Which blobs does this OCI image keep alive" is now derived <b>once</b>, and this suite is what proves the collapse
  * did not change the answer.
  *
- * <p>It used to drive two derivations side by side - {@code OciFormat.references} in the core, the
- * {@link BlobReferences} seam a garbage collector's mark phase asks about every visited {@code oci/} key, and
- * {@code OciBlobLayout.blobHashes} in the inventory, which a retroactive hold marks and a name-enumeration screen
- * probes - because each walked the manifest JSON itself, with its own index expansion, its own digest validator and its
- * own hard-coded manifest cap. Two homes for one answer is a data-loss bug waiting for the day they disagree: a hash
- * the hold knows and the scan does not is a live blob the next collection pass condemns and then deletes out from
- * under a held image, and a hash the scan knows and the hold does not is a layer that keeps serving through a hold
- * that reports itself enforced. So it stopped deriving: it resolves the image's manifest hex and hands the
- * free seam the {@code oci/types/<hex>} key that names it.
+ * <p>It does not derive the answer itself. {@code OciFormat.references} in the core - the {@link BlobReferences} seam
+ * a garbage collector's mark phase asks about every visited {@code oci/} key - and {@code OciBlobLayout.blobHashes}
+ * in the inventory, which a retroactive hold marks and a name-enumeration screen probes, answer one question, and two
+ * homes for one answer is a data-loss bug waiting for the day they disagree: a hash the hold knows and the scan does
+ * not is a live blob the next collection pass condemns and then deletes out from under a held image, and a hash the
+ * scan knows and the hold does not is a layer that keeps serving through a hold that reports itself enforced. So the
+ * layout resolves the image's manifest hex and hands the free seam the {@code oci/types/<hex>} key that names it.
  *
  * <p><b>A suite that proved agreement must now prove the collapse.</b> Every shape below still runs both sides over
  * the same stored bytes and still demands the same set - the legs are the regression net for the delegation, and they
@@ -216,9 +214,8 @@ class OciDerivationAgreementTest {
 
     @Test
     void a_manifest_just_under_the_shared_parse_bound_is_enumerated_by_both() throws IOException {
-        // The manifest cap used to be written down twice - once in the free format's ingest bound, once as a constant
-        // this layout MIRRORED by hand - and raising one alone enumerated a large-but-legal manifest for the collector
-        // and not for the hold (a layer serving through a hold), or the reverse. There is one number now, and this leg
+        // The manifest cap is one number: two copies, raised one at a time, would enumerate a large-but-legal
+        // manifest for the collector and not for the hold (a layer serving through a hold), or the reverse. This leg
         // and the next bracket it from both sides so that a cap that moves in the free repository fails here rather
         // than in production.
         ArtifactStore store = store();

@@ -13,8 +13,7 @@ import org.junit.jupiter.api.TestInstance;
  * The JUnit driver for one leg of the shared {@code ArtifactStore} contract. Everything leg-specific lives in the
  * {@link StoreFixture} a subclass supplies - a backend over its emulator, a decorator over the filesystem store - and
  * the checks themselves are {@link StoreContract}'s, so a new leg is a fixture and a four-line subclass rather than
- * another hand-written suite. It lives in the kit because two modules used to carry it as identical copies, and a
- * third was about to.
+ * another hand-written suite. It lives in the kit so every module running a leg shares one copy.
  *
  * <p>Each contract property becomes one dynamic test, named for its leg and its expectation, so a divergence reports
  * as "azure-blob: page streams ordered children ..." rather than as one opaque failure covering the whole contract. A

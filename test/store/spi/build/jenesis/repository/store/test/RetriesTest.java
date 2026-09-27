@@ -53,10 +53,10 @@ class RetriesTest {
      * against its own bytes and writes again - a whole read-write cycle spent to reach the state the key is
      * already in.
      *
-     * <p>Measured 2026-09-11/12 by {@code StoreOperationsE2ETest}'s two-size claim: a serial publish - no peer,
-     * nothing it could honestly lose to - paying twelve extra read-write pairs on azure-blob in one lane, eleven on
-     * s3 two lanes later, none on the filesystem in any of them. Reads and writes rose by exactly the same amount,
-     * which is what a caller-level retry costs and what distinguishes this from a probe or a larger document.
+     * <p>{@code StoreOperationsE2ETest}'s two-size claim is what shows it: a serial publish - no peer, nothing it
+     * could honestly lose to - paying extra read-write pairs on an object store and none on the filesystem, reads and
+     * writes rising by exactly the same amount, which is what a caller-level retry costs and what distinguishes it
+     * from a probe or a larger document.
      *
      * <p><b>What the re-read asks.</b> Not "are these my bytes" - which cannot be answered, because a peer
      * writing the identical body leaves the key looking exactly the same - but "does this mutation still have

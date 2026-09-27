@@ -168,7 +168,7 @@ public interface FormatFixture {
      *
      * <p>Supplying it puts the format's refusals on the record. A repository that detects a problem on such a path and
      * answers a miss has not withheld anything - it has substituted a different, silently successful outcome, which is
-     * the &sect;9 failure the guard itself produced. The kit therefore drives the same path twice, and the fixture
+     * a silent failure of its own. The kit therefore drives the same path twice, and the fixture
      * supplies both fetchers, because either half alone can be satisfied by a broken implementation: an upstream that
      * legitimately has nothing must still reach the client as a miss, and an upstream whose body fails its advertised
      * digest must not.

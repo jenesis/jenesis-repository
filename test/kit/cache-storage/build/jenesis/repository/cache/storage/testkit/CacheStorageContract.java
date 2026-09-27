@@ -1089,11 +1089,11 @@ public final class CacheStorageContract {
 
     private static void capacityUnlimitedOrReal(CacheStorage storage) throws Exception {
         // Asked FIRST, on a scope that holds nothing yet - which is where a capacity probe is most likely to be
-        // unable to ask, and where the filesystem backend used to answer the unlimited sentinel: a scoped view's
-        // directory does not exist until something is written to it, Files.getFileStore threw, and the catch returned
-        // Long.MAX_VALUE. That is the one answer that switches the free-space sweep off entirely, so a broken volume
-        // - or merely a brand-new tenant - read as infinite free space and nothing was ever reclaimed. "Unlimited" is
-        // a backend's standing declaration that it has no capacity limit; it may never also mean "I could not ask".
+        // unable to ask: a scoped view's directory does not exist until something is written to it, so
+        // Files.getFileStore throws. Answering the unlimited sentinel from that catch is the one answer that switches
+        // the free-space sweep off entirely, so a broken volume - or merely a brand-new tenant - would read as infinite
+        // free space and nothing would ever be reclaimed. "Unlimited" is a backend's standing declaration that it has
+        // no capacity limit; it may never also mean "I could not ask".
         boolean unlimited = shape(storage, "before anything is stored");
 
         storage.store(new Entry("sized", "aa", "01"), new ByteArrayInputStream(ramp(8)));
@@ -1209,11 +1209,10 @@ public final class CacheStorageContract {
     /**
      * The union of every project's entries - what the free-space reclaim composes for itself, project at a time.
      *
-     * <p>The SPI deliberately offers no whole-store sweep to call instead. It used to ({@code allEntries}), and that
-     * one method was the only place in this interface that asked a backend to materialise every entry of every
-     * project in heap - on the one code path, a low-disk reclaim, where an OOM lands exactly when the node is already
-     * degraded. Nothing in the product called it; the reclaim already streamed project-at-a-time, precisely to avoid
-     * it. So the union is composed here, out of the two bounded enumerations, the same way its one real caller does.
+     * <p>The SPI deliberately offers no whole-store sweep to call instead: a method asking a backend to materialise
+     * every entry of every project in heap would do it on the one code path, a low-disk reclaim, where an OOM lands
+     * exactly when the node is already degraded. The reclaim streams project-at-a-time, so the union is composed here,
+     * out of the two bounded enumerations, the same way its one real caller does.
      */
     private static List<Stored> everyEntry(CacheStorage storage) throws IOException {
         List<Stored> all = new ArrayList<>();
@@ -1343,7 +1342,7 @@ public final class CacheStorageContract {
         throw failure(what + " - expected an IllegalArgumentException but nothing was thrown");
     }
 
-    /** A body that must fail with an {@link IllegalStateException} - the SPI's resolution-refusal shape (&sect;9),
+    /** A body that must fail with an {@link IllegalStateException} - the SPI's resolution-refusal shape,
      *  the one {@code Providers.exclusiveWithDefault} propagates unchanged out of a provider's {@code create}.
      *  Returns the message, so a check can also assert the refusal is actionable. */
     private static String throwsIse(Fallible body, String what) {

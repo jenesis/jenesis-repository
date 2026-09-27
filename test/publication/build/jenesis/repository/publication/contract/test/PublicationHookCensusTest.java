@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * The completeness ratchet for the publication-hook kit, and the place the <b>role split</b> is proven three
  * independent ways: from the provider's source, from the runtime graph, and from {@link Publication}'s own behaviour.
  *
- * <p>Per the plan's first design gate the static and runtime legs are separate assertions. {@code ServiceLoader} sees
+ * <p>The static and runtime legs are separate assertions. {@code ServiceLoader} sees
  * only what this module's graph resolved, so it cannot notice a hook module the test forgot to {@code requires}; the
  * static leg parses every source {@code provides ... with ...} clause instead, so it sees a hook the runtime graph is
  * blind to. {@link #the_census_trips_when_a_leg_is_broken()} keeps both honest by breaking each on purpose.
@@ -144,12 +144,10 @@ class PublicationHookCensusTest {
     /**
      * The role split, asked of the instances the graph actually holds.
      *
-     * <p>This used to derive each role a second time by reading the {@code implements} clause out of the provider's
-     * source text and comparing the two. That re-derivation was the only source scan in this census, and when the
-     * fifteen format observers moved onto {@link build.jenesis.repository.store.ListingObserver} - a
-     * {@code PublicationObserver} sub-interface - it silently re-keyed every one of them to the fail-closed
-     * pre-commit role and failed the comparison. The scan was wrong and the instance was right, which is the
-     * general case: {@code Role.of} asks the object, and an object cannot misreport the interfaces it implements.
+     * <p>The role comes from the instance, never from the provider's source text: {@code Role.of} asks the object,
+     * and an object cannot misreport the interfaces it implements, while a scan of the {@code implements} clause would
+     * re-key every format observer on {@link build.jenesis.repository.store.ListingObserver} - a
+     * {@code PublicationObserver} sub-interface - to the fail-closed pre-commit role.
      *
      * <p>So the leg is gone rather than taught about one more supertype, because there was no invariant behind it
      * that the instance does not already settle. What a declaration says is still checked - by the compiler, which
@@ -320,13 +318,11 @@ class PublicationHookCensusTest {
      * The contract properties nothing this kit can substitute falsifies - <b>one</b>, and it is the one
      * where there is no observable to arrange because nothing the kit hands {@code Publication} is ever invoked.
      *
-     * <p>The list used to hold twenty, all with the same reason: the clause is about {@link Publication}'s own commit
-     * choreography, {@code Publication} is a {@code final} core class the kit constructs and cannot substitute,
-     * and the checks assert it with kit-owned probe screens while the fixture's hook rides along as a bystander.
-     * That reason was true and it stayed true - what changed is that {@link ChoreographyMutant} arranges the hooks the
-     * kit <em>does</em> control so the choreography produces the observable a mutated {@code Publication} would, which
-     * reaches nineteen of them. This one it cannot reach: the crash lands before the chain runs at all, so there is no
-     * hook call to arrange and what the window leaves is the store's and {@code Publication}'s alone.
+     * <p>The clause is about {@link Publication}'s own commit choreography, {@code Publication} is a {@code final}
+     * core class the kit constructs and cannot substitute, and {@link ChoreographyMutant} arranges the hooks the kit
+     * <em>does</em> control so the choreography produces the observable a mutated {@code Publication} would. This one
+     * it cannot reach: the crash lands before the chain runs at all, so there is no hook call to arrange and what the
+     * window leaves is the store's and {@code Publication}'s alone.
      */
 
     /**
@@ -813,8 +809,8 @@ class PublicationHookCensusTest {
             }
         };
         assertThatThrownBy(() -> PublicationHookContract.checks(overclaiming))
-                .as("gate 5: no fixture may declare a delivery class the commit protocol does not provide, and the "
-                        + "refusal names the ticket that could change it")
+                .as("no fixture may declare a delivery class the commit protocol does not provide, and the "
+                        + "refusal says why")
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("");
     }

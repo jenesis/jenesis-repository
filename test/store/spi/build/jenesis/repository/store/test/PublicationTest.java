@@ -41,8 +41,8 @@ class PublicationTest {
      * The pointer records the blob's length beside its hash, and a serve reads the length off the pointer rather
      * than off the blob: {@code locate} stats nothing, {@code blob} still answers the bare hash whatever the body
      * carries (the composition {@code "blobs/" + hash} depends on it), and a pointer written before the length was
-     * recorded answers no length rather than a stat - the reconcile pass regenerates it. Measured 2026-09-12: the
-     * stat was the fifth of a download's five reads on every backing.
+     * recorded answers no length rather than a stat - the reconcile pass regenerates it. A stat would be the fifth of
+     * a download's five reads on every backing.
      */
     @Test
     void the_pointer_records_the_length_and_a_serve_reads_it_there() throws IOException {
@@ -74,8 +74,8 @@ class PublicationTest {
     /**
      * The hold rides the serving pointer: linking the {@code /quarantine<path>} review pointer flags the pointer at
      * {@code <path>}, unpublishing it lifts the flag, and in between the path is withheld with no interceptor in the
-     * chain and no marker on the bytes - the read a serve makes is the pointer it reads anyway. Measured 2026-09-12:
-     * the review-pointer probe was the first of a download's four reads on every backing.
+     * chain and no marker on the bytes - the read a serve makes is the pointer it reads anyway, where a review-pointer
+     * probe would be one more read on every download.
      */
     @Test
     void a_quarantine_link_flags_the_serving_pointer_and_its_unpublish_lifts_the_flag() throws IOException {

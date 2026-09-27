@@ -12,10 +12,10 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Pins the index-shadowing fix for {@link build.jenesis.repository.format.pypi.PyPiFormat}: the PEP 503
+ * Pins the index-shadowing guard for {@link build.jenesis.repository.format.pypi.PyPiFormat}: the PEP 503
  * project index is derived from the very {@code pypi/<project>/files} namespace the pull-through proxy caches
- * distribution files into, so before the fix a single cached wheel made the index a local {@code 200} that shadowed the
- * upstream Simple index - an uncached version was no longer discoverable. The fix gates the derived index on a
+ * distribution files into, so ungated, a single cached wheel would make the index a local {@code 200} that shadowed
+ * the upstream Simple index and an uncached version would not be discoverable. The derived index is gated on a
  * hosted-publish marker a real {@code twine} upload stamps (the RPM hosted-revision idiom): a proxy repository, whose
  * files are cached but never uploaded, has no marker, so its index read misses locally ({@code 404}) and the
  * pull-through fetches the authoritative upstream index. A genuine hosted upload still serves its own index.
@@ -61,11 +61,11 @@ class PyPiProxyShadowTest {
     @Test
     void the_proxy_leg_declines_the_root_index_and_never_reads_the_whole_project_list() throws IOException {
         // The leg a pure pass-through repository reaches: no store-backed project list, so /pypi/simple/ falls
-        // through to proxy(). It used to treat the empty project name as a project - fetching <upstream>simple// and
-        // handing the body to the index rewriter, which reduces every href to the text after its last '/'. PyPI's
-        // root links are /simple/<project>/ and END in '/', so every rewritten link came out empty: a 200 carrying a
-        // page of links to nowhere. A store-backed repository never saw it, because handle() splits the
-        // empty case off to projects() and answers locally - which is why this drives proxy() directly.
+        // through to proxy(). Treating the empty project name as a project would fetch <upstream>simple// and hand
+        // the body to the index rewriter, which reduces every href to the text after its last '/'. PyPI's root links
+        // are /simple/<project>/ and END in '/', so every rewritten link would come out empty: a 200 carrying a page
+        // of links to nowhere. A store-backed repository never reaches it, because handle() splits the empty case off
+        // to projects() and answers locally - which is why this drives proxy() directly.
         Set<String> fetched = new LinkedHashSet<>();
         ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
             fetched.add(url.toString());

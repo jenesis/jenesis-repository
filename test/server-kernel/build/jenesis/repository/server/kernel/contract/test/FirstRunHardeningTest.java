@@ -11,7 +11,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The first-run guided-hardening step (audit P4). Proves the two load-bearing guarantees: it fires only on a genuinely
+ * The first-run guided-hardening step. Proves the two load-bearing guarantees: it fires only on a genuinely
  * fresh deploy (no persisted runtime configuration) and never re-nags a configured one, and it selects exactly the
  * installed-but-inert per-tenant gate dimensions from the discovered settings catalogue - structurally, so no dial is
  * named by hand and a dimension an operator has already pinned is passed over.

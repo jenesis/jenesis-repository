@@ -11,7 +11,7 @@ import module org.slf4j;
  * no other slf4j provider, this is the bound provider, and its {@link ILoggerFactory} returns loggers that record
  * WARNING-and-above into {@link #WARNINGS}, each as {@code name|message[|thrown]} (slf4j renders {@code {}}
  * placeholders positionally); a test filters them by logger name and drains the list first. Mirrors the audit and
- * events SPIs' proof of the same §9 contract that a fail-soft (here: not retracting a rival's committed releases)
+ * events SPIs' proof of the same contract that a fail-soft (here: not retracting a rival's committed releases)
  * still emits a diagnostic rather than acting silently.
  */
 public final class CapturingLoggerFinder implements SLF4JServiceProvider {

@@ -136,10 +136,10 @@ class MavenFormatTest {
     @Test
     void paths_still_reports_the_module_mirror_once_the_jar_is_held() throws IOException {
         // This overload answers where a version LIVES, not what a GET would serve, and the difference is load-bearing
-        // for a held version. It used to resolve the jar through Publication.located, so a hold made the
-        // mirror vanish from the very callers a hold needs - the retroactive sweeps' converge pass, eviction,
-        // reconciliation, and the release path's cross-alias exclusion set, which then read the version's own mirror
-        // as a foreign alias still holding those bytes and refused to lift the content-addressed marker.
+        // for a held version. Resolving the jar through Publication.located would make a held mirror vanish from the
+        // very callers a hold needs - the retroactive sweeps' converge pass, eviction, reconciliation, and the release
+        // path's cross-alias exclusion set, which would then read the version's own mirror as a foreign alias still
+        // holding those bytes and refuse to lift the content-addressed marker.
         format.handle(new FakeExchange("PUT", "/maven/org/example/lib/1.0/lib-1.0.jar",
                 automaticModuleJar("org.example.lib")), store);
         Withheld.mark(store, publication.blob("/maven/org/example/lib/1.0/lib-1.0.jar").orElseThrow());
@@ -185,7 +185,7 @@ class MavenFormatTest {
 
     @Test
     void the_module_name_is_recorded_once_and_read_from_its_record_rather_than_the_jar_again() throws IOException {
-        // A rebuild pass used to open every Maven jar in the repository on every pass for this one string. The name
+        // A rebuild pass must not open every Maven jar in the repository on every pass for this one string. The name
         // is recorded under by/module/<hash> the first time it is read, and read from there after.
         FaultInjectingStore counting = FaultInjectingStore.wrap(store);
         byte[] jar = automaticModuleJar("org.example.lib");

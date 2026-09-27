@@ -62,13 +62,13 @@ class StagingReapTest {
 
     @Test
     void a_stage_that_refreshes_the_marker_inside_the_reap_window_is_not_reaped() throws IOException {
-        // TOCTOU regression: the reap reads the marker/state/TTL BEFORE it takes the single-writer lock, then acts. A
-        // stage/promote/drop that wins the lock in that window refreshes/seals the marker; the reap must re-validate
-        // UNDER the lock and skip, or it deletes a just-refreshed staging (data loss). The wrapper stands in for the
-        // racing writer: the reap's FIRST (pre-lock) read of the marker re-stamps the underlying marker to `sweep`
-        // (as a resumed OPEN would) and returns the stale past-TTL view the reap decided on; the reap's second
-        // (under-lock) read then sees the fresh marker and must skip. With the fix this reaps nothing; without it (a
-        // single pre-lock read) the reap would delete the just-refreshed pointer and its live marker.
+        // The reap reads the marker/state/TTL BEFORE it takes the single-writer lock, then acts. A stage/promote/drop
+        // that wins the lock in that window refreshes/seals the marker; the reap must re-validate UNDER the lock and
+        // skip, or it deletes a just-refreshed staging (data loss). The wrapper stands in for the racing writer: the
+        // reap's FIRST (pre-lock) read of the marker re-stamps the underlying marker to `sweep` (as a resumed OPEN
+        // would) and returns the stale past-TTL view the reap decided on; the reap's second (under-lock) read then
+        // sees the fresh marker and must skip, so this reaps nothing - a single pre-lock read would delete the
+        // just-refreshed pointer and its live marker.
         staging.stage("racer", "/maven/org/example/a/1/a-1.jar", "a".getBytes(StandardCharsets.UTF_8));
         Instant sweep = Instant.now().plus(TTL).plusSeconds(1);      // the real OPEN marker is past the TTL at sweep time
         StoreStaging racing = new StoreStaging(new RefreshOnFirstMarkerRead(store, "staging-state/racer", sweep));

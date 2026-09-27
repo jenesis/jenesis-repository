@@ -7,11 +7,10 @@ import build.jenesis.repository.compliance.License;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * License identification now reads its rules from an ordered classpath table ({@code spdx-licenses.tsv}) rather than a
- * fourteen-branch inline substring chain in the record. This pins that the table loads at all (a missing or malformed
- * resource fails fast at class initialisation), that every row resolves, and - crucially - that the resource's order
- * is honoured: the most-specific rule wins, so a name that matches two rules resolves to the earlier one exactly as the
- * old ordered {@code if} chain did.
+ * License identification reads its rules from an ordered classpath table ({@code spdx-licenses.tsv}). This pins that
+ * the table loads at all (a missing or malformed resource fails fast at class initialisation), that every row
+ * resolves, and - crucially - that the resource's order is honoured: the most-specific rule wins, so a name that
+ * matches two rules resolves to the earlier one.
  */
 class LicenseIdentificationTest {
 

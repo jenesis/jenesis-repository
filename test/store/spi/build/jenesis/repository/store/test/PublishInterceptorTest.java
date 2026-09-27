@@ -246,11 +246,11 @@ class PublishInterceptorTest {
     @Test
     void a_bounded_sibling_read_honours_a_limit_above_the_whole_document_ceiling() throws IOException {
         // The bounded read's bound is the CALLER's, not this seam's. A companion between the whole-document
-        // ceiling (8 MiB) and the caller's own inspection window is exactly the case that used to divide the two
-        // ingress legs: a proxy screen streaming its own bound returned the sibling whole and hashable, while the
-        // publish leg - whose only route was the whole-document read - raised out of the interceptor chain and failed
-        // the publish outright. The two legs now answer identically because the publish leg has a real bounded read of
-        // its own, capped where the caller said and nowhere else.
+        // ceiling (8 MiB) and the caller's own inspection window is exactly the case that can divide the two ingress
+        // legs: a proxy screen streaming its own bound returns the sibling whole and hashable, and a publish leg whose
+        // only route was the whole-document read would raise out of the interceptor chain and fail the publish
+        // outright. The two legs answer identically because the publish leg has a real bounded read of its own,
+        // capped where the caller said and nowhere else.
         int size = 9 * 1024 * 1024;         // above LARGEST_SIBLING...
         int limit = 32 * 1024 * 1024;       // ...and comfortably below the caller's window
         seedSibling("/raw/fat-companion", size);

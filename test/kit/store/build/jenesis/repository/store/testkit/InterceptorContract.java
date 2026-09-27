@@ -240,7 +240,7 @@ final class InterceptorContract {
                         + "returning a prefix", thrownBy(() -> content.sibling("/kit/fat")) instanceof IOException);
 
                 // The bounded read NEVER fails on size, and the bound it honours is the CALLER's - here far above
-                // the whole-document ceiling, which is exactly the case that used to divide the two ingress legs.
+                // the whole-document ceiling, which is exactly the case that divides the two ingress legs.
                 Optional<Content.Bounded> whole = content.sibling("/kit/fat", OVER_CEILING);
                 expect(failures, "the bounded read honours a limit above the whole-document ceiling",
                         whole.isPresent() && !whole.get().truncated() && whole.get().content().length == OVER_CEILING);
@@ -307,7 +307,7 @@ final class InterceptorContract {
         // falsification leg went looking, nothing proved the fixture's own screen wrote through it - this check drove
         // a real screen under a real scope and then only ever read the kit's probe. A screen that recorded its
         // verdict against the deployment root instead puts one repository's quarantine decision in another
-        // repository's key space (§6), reads as a perfectly correct row from everywhere but the scope it belongs in,
+        // repository's key space, reads as a perfectly correct row from everywhere but the scope it belongs in,
         // and passed every leg of this kit. It is the interceptor half's counterpart of the observer's
         // THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE, and it belongs on the clause that already had the scope
         // in its hands.
@@ -332,7 +332,7 @@ final class InterceptorContract {
         equal(fixtureScreen.projection(store), Map.of(), fixture,
                 "and nothing at all was recorded against the store one scope up. A verdict, an audit row or a seen "
                         + "marker written through the deployment root rather than through the store the leg was "
-                        + "handed is another repository's data (§6)");
+                        + "handed is another repository's data");
     }
 
     // --- clause 7: the reversal ---------------------------------------------------------------------------------

@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   <li>a failure inside a view leaves the same state.</li>
  * </ol>
  *
- * <p>The point of the ticket is that (2) and (3) are only acceptable because they <b>converge</b>: the module view is
+ * <p>The point is that (2) and (3) are only acceptable because they <b>converge</b>: the module view is
  * derived from the coordinate, so the {@code module-view} {@code WalkConsumer} re-derives it from the durable store on
  * the next rebuild pass. Every crash check below therefore ends by running that pass and asserting the store reaches
  * the state a completed publish would have left - except for the "latest" pointer, which records which version was
@@ -87,7 +87,7 @@ class MavenCrossPublishSequenceTest {
     @Test
     void a_failure_reading_the_module_name_back_leaves_a_coordinate_a_pass_can_finish() throws IOException {
         // Step 2. The coordinate is linked; the read that derives the module name from the stored blob fails. The
-        // publish is reported failed while the artifact serves - the state the ticket calls out - and it converges.
+        // publish is reported failed while the artifact serves - and it converges.
         store.failNextOn(FaultInjectingStore.Op.OPEN, key -> key.startsWith("blobs/"));
 
         assertThatThrownBy(() -> MavenFormat.layout(store, PATH, new ByteArrayInputStream(modularJar())))
@@ -139,7 +139,7 @@ class MavenCrossPublishSequenceTest {
 
     @Test
     void a_jar_published_before_any_module_view_provider_existed_gains_its_view_on_the_first_pass() throws IOException {
-        // The back-fill direction (§5): the same repair adopts a repository whose jars were published while no
+        // The back-fill direction: the same repair adopts a repository whose jars were published while no
         // ModuleView provider was on the module path at all. Simulated by linking the coordinate exactly as a publish
         // without a cross-publish would have left it - a stored blob and a /maven/ pointer, nothing else.
         String hash = publication.storeBlob(new ByteArrayInputStream(modularJar()));

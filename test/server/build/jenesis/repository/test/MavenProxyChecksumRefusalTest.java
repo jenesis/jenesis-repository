@@ -21,14 +21,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * something that would otherwise have been linked rather than passing vacuously. Answered from a fixed in-memory
  * upstream, no network.
  *
- * <p><b>This used to be a retraction, and this is why it no longer is.</b> The leg laid the fetched bytes out first
- * and un-linked them again when the checksum did not hold, which meant the tampered jar was briefly reachable by
- * coordinate and - if any step of the un-linking failed - stayed reachable, with nothing to repair it (a local hit
- * never re-enters the proxy leg, so the retraction had no second chance). The verification now happens before the
- * commit point, exactly as the OCI leg has always held a mismatched digest: the bytes are stored content-addressed as
- * they stream, nothing is linked until they have been held to the checksum, and a refused fill leaves only an
- * unreferenced blob for garbage collection. The assertions below are unchanged in what they demand - nothing serves -
- * and their <em>reason</em> is now "never linked" rather than "linked, then retracted".
+ * <p><b>A refusal is never a retraction.</b> Laying the fetched bytes out first and un-linking them when the checksum
+ * did not hold would make the tampered jar briefly reachable by coordinate and - if any step of the un-linking failed -
+ * leave it reachable, with nothing to repair it (a local hit never re-enters the proxy leg). The verification happens
+ * before the commit point, as the OCI leg holds a mismatched digest: the bytes are stored content-addressed as they
+ * stream, nothing is linked until they have been held to the checksum, and a refused fill leaves only an unreferenced
+ * blob for garbage collection.
  */
 class MavenProxyChecksumRefusalTest {
 
@@ -115,7 +113,7 @@ class MavenProxyChecksumRefusalTest {
 
     @Test
     void an_upstream_that_answers_it_publishes_no_checksum_still_caches_unverified() throws IOException {
-        // The half that must NOT change, and the reason the fix is a split rather than a blanket refusal: the upstream
+        // The half that must NOT change, and the reason the refusal is a split rather than a blanket one: the upstream
         // ANSWERED that it carries no .sha1 beside this artifact, and clause 5 says such a repository is proxied
         // unverified rather than having a check fabricated for it. A leg that refused here would stop serving every
         // Maven repository that publishes no checksums at all.

@@ -45,7 +45,7 @@ class ConsistencyDialGrammarTest {
 
     @Test
     void a_dial_that_cannot_be_read_stops_the_node_and_names_itself() {
-        // The §9 half. A swallowed value is worse than a refused one here: the node runs, and it runs on a window
+        // The fail-fast half. A swallowed value is worse than a refused one here: the node runs, and it runs on a window
         // the operator did not choose, which is what a fleet judges its peers late and dead on.
         assertThatThrownBy(() -> NodeConsistency.settingsFrom(config(Map.of(
                 "jenreg.consistency.sweep-interval", "2000"))))

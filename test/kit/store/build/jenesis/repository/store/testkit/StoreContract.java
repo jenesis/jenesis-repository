@@ -829,11 +829,10 @@ public final class StoreContract {
      * fixture's own config - the one it reaches its emulator over plaintext {@code http} with - must be refused when
      * its opt-out is taken away, and honoured when it is put back.
      *
-     * <p>The {@code s3} and {@code gcs} backends have refused a non-{@code https} endpoint override since they were
-     * written; the {@code azure-blob} backend had no such screen at all, because its scheme rides <em>inside</em> the
-     * connection string that also carries the account key, so the rule its siblings enforce never applied to it and a
-     * mistyped scheme put the account key and every artifact byte on a plaintext wire with no operator signal. Stating
-     * the rule once here is what stops the next endpoint-configured backend from arriving without it (&sect;13).
+     * <p>Every endpoint-configured backend refuses a non-{@code https} endpoint override - including {@code azure-blob},
+     * whose scheme rides <em>inside</em> the connection string that also carries the account key, where a mistyped
+     * scheme would put the account key and every artifact byte on a plaintext wire with no operator signal. Stating
+     * the rule once here is what stops the next endpoint-configured backend from arriving without it.
      *
      * <p>The fixture supplying the config is also what makes the check honest in the other direction: because the
      * emulators are only reachable over {@code http}, the whole containerised leg is proof that the opt-out really is
@@ -978,7 +977,7 @@ public final class StoreContract {
         throw failure(what + " - expected an IllegalArgumentException but nothing was thrown");
     }
 
-    /** A body that must fail with an {@link IllegalStateException} - the SPI's refused-at-resolution shape (&sect;9) -
+    /** A body that must fail with an {@link IllegalStateException} - the SPI's refused-at-resolution shape -
      *  answering its message, so a check can also require the diagnostic to name what the operator has to do. */
     private static String throwsIse(Fallible body, String what) {
         try {

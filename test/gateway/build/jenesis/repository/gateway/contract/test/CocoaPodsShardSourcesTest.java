@@ -13,8 +13,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * A CocoaPods shard is a two-level listing: each line is derived from a pod's own document, by the publish that
- * wrote the document and by the rebuild pass that regenerates the shard from a walk over every pod document. The
- * sixth soak (2026-09-13) caught the second writer landing a snapshot's older line over the publish's fresher one.
+ * wrote the document and by the rebuild pass that regenerates the shard from a walk over every pod document, and the
+ * second writer must not land a snapshot's older line over the publish's fresher one.
  * The guard is the listing primitive's: a line carries the sequence of the pod document it was derived from, and a
  * regeneration merges into the stored shard per line rather than replacing it. This holds the format's half - that
  * the publish states the source, that the regeneration states it too, and that the shard keeps it through both.

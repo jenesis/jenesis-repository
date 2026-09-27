@@ -22,11 +22,10 @@ import build.jenesis.repository.webhook.Webhooks;
  * onward by {@code WebhookDeliveryTask} - and the fixture states its surface in those terms because that is what
  * "durable after enqueue" means for a hook whose own effect is a fan-out.
  *
- * <p>The producer used to be {@code WebhookPublicationObserver}, provided by the delivery module and writing straight
- * into the outbox, which is why {@code PUBLISH} and {@code UNPUBLISH} never travelled the seam. Moving it
- * beside the seam changes nothing this fixture asserts - the note is written on the same thread, before the callback
- * returns, and no route back exists for a lost one - which is itself worth stating: the delivery class was a property
- * of the enqueue, not of who called it.
+ * <p>The producer sits beside the seam rather than in the delivery module, so {@code PUBLISH} and {@code UNPUBLISH}
+ * travel the seam like every other event. Where it sits changes nothing this fixture asserts - the note is written on
+ * the same thread, before the callback returns, and no route back exists for a lost one - which is itself worth
+ * stating: the delivery class is a property of the enqueue, not of who called it.
  *
  * <p><b>This fixture carries the kit's first and hardest exclusion, and it is a statement about the product rather
  * than about the test.</b> A publish webhook is <em>not re-derivable</em>. The store retains "this path is published";
@@ -37,7 +36,7 @@ import build.jenesis.repository.webhook.Webhooks;
  * intent from a real one for a {@code laidOut} publish, so guaranteeing delivery would also manufacture webhooks for
  * artifacts that never became visible - and a false webhook drives CDN purges and downstream builds. The documented
  * answer for a subscriber that cannot miss one is the reconciliation route: every event type has a durable, queryable
- * counterpart to poll (§9 D-6).
+ * counterpart to poll.
  *
  * <p><b>And it cannot be driven to record inside the kit at all.</b> The hook skips a publish whose descriptor carries
  * no coordinate - deliberately, so an event is raised once for the artifact rather than once per {@code .sha256}
@@ -72,7 +71,7 @@ final class PublicationEventFixture implements PublicationHookFixture.Observer, 
                     + "the alternative was refused (a pre-commit intent whose drain cannot tell an orphan from a "
                     + "real one would manufacture webhooks for publishes that never became visible). The "
                     + "reconciliation route is the documented answer: every event type has a durable, queryable "
-                    + "counterpart to poll (§9 D-6).";
+                    + "counterpart to poll.";
 
     @Override
     public String hook() {

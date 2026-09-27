@@ -50,7 +50,7 @@ class ImportEdgeProviderTest {
     void there_is_nothing_to_select_so_no_selection_key_can_claim_or_release_the_edge() {
         // Unlike the named singletons beside it (fetcher, walk, gc, rate-limiter, token-exchange,
         // key-usage, tenants), this SPI is a pure presence signal resolved through Providers.installedNames - there
-        // is no jenreg.import-edge=<name> key, so the §9 "explicitly selected but unavailable" case
+        // is no jenreg.import-edge=<name> key, so the "explicitly selected but unavailable" case
         // cannot arise and setting such a key changes nothing in either direction.
         System.setProperty("jenreg.import-edge", "not-installed");
         Features.reset();

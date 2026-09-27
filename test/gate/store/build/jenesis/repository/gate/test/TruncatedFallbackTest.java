@@ -21,7 +21,7 @@ import build.jenesis.repository.store.PublishInterceptor;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The fallback that stops a padded archive publishing un-screened, and the way it used to be switched off by accident.
+ * The fallback that stops a padded archive publishing un-screened, and why a content-scan subject does not switch it off.
  *
  * <h2>What this is about</h2>
  *
@@ -31,22 +31,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  * coordinate derived from the request path, which gives the license and deny-list dimensions something to bite on, and
  * record that the screen was incomplete.
  *
- * <h2>The defect</h2>
+ * <h2>The guard</h2>
  *
- * Both screens guarded that fallback on <b>the subject list being empty</b>, when the question they meant to ask is
- * whether any <b>package</b> subject came back. The two differ exactly when a second inspector claims the same path: a
- * content-scan subject - a detected secret, an inbound attestation, a publisher's signature - makes the list non-empty
- * while carrying no licensable identity, and the license dimension skips it by design. So any content inspector that
- * found something in a truncated head silently disabled the fallback for that artifact, and it was served.
+ * Both screens guard that fallback on whether any <b>package</b> subject came back, not on the subject list being
+ * empty. The two differ exactly when a second inspector claims the same path: a content-scan subject - a detected
+ * secret, an inbound attestation, a publisher's signature - makes the list non-empty while carrying no licensable
+ * identity, and the license dimension skips it by design. Guarded on emptiness, any content inspector that found
+ * something in a truncated head would silently disable the fallback for that artifact, and it would be served. Both
+ * legs decide through one predicate ({@link InspectionMerge#noPackageSubject}) rather than two copies of the
+ * condition, because two copies of a rule is how the two legs drift.
  *
- * <p>It was found when an always-claiming signature inspector was installed and an artifact that had been held started
- * streaming through. The hole was already reachable through the embedded-secret scanner; it had simply never found
- * anything in a truncated head in a test. Both legs are fixed through one predicate
- * ({@link InspectionMerge#noPackageSubject}) rather than two copies of the condition, because two copies of a rule is
- * how the two legs drift.
- *
- * <p>These tests are the mutation that proves the fix bites: revert either guard to {@code subjects.isEmpty()} and the
- * publish leg admits the artifact instead of holding it.
+ * <p>These tests are the mutation that proves the guard bites: revert either guard to {@code subjects.isEmpty()} and
+ * the publish leg admits the artifact instead of holding it.
  */
 class TruncatedFallbackTest {
 
@@ -85,9 +81,9 @@ class TruncatedFallbackTest {
 
     @Test
     void a_truncated_artifact_yielding_only_a_content_finding_is_still_held() throws IOException {
-        // The regression. The inspector returns a content-scan subject from the truncated head and no package
-        // subject; before the fix the non-empty list switched the fallback off, the license dimension skipped the
-        // content subject, and a padded archive published clean.
+        // The inspector returns a content-scan subject from the truncated head and no package subject; a non-empty
+        // list must not switch the fallback off, or the license dimension skips the content subject and a padded
+        // archive publishes clean.
         Publication.Published published = publish("/gatetest/contentonly/padded-1.0.zip", body());
 
         assertThat(published.disposition())

@@ -18,9 +18,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * A publish of bytes the collector has condemned, with the confirming sweep running while it is in flight.
  *
  * <p>A content-addressed store keeps a blob it already holds and drops the upload, so such a publish relies on the
- * condemned blob from the moment it stores its bytes; it used to un-condemn that blob only when it linked a pointer at
- * the end, after the whole screen. A sweep running in between still found the marker, deleted the blob, and the link
- * wrote a pointer at nothing that answered {@code 201}. {@code GcConcurrentRepublishTest} covers the collector's side
+ * condemned blob from the moment it stores its bytes. Un-condemning it only when the pointer is linked at the end,
+ * after the whole screen, would let a sweep running in between find the marker and delete the blob, and the link would
+ * write a pointer at nothing that answered {@code 201}. {@code GcConcurrentRepublishTest} covers the collector's side
  * of the race - a marker cleared between its judgement and its delete - and this covers the publish's: the marker is
  * gone as soon as the bytes are stored, and a link that finds the blob gone anyway refuses rather than dangles.
  */

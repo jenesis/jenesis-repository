@@ -30,12 +30,10 @@ class RepositoryPropertiesTest {
     /**
      * The request-rate floor is this core's decision, and it is asserted here because this is where it is made.
      *
-     * <p>It used to be made twice. This core shipped {@code 0} - unlimited, on the reasoning that a ceiling is an
-     * operator's decision - and the downstream edition's own properties shipped {@code 6000}, on the reasoning
-     * that a fresh deployment should cap a runaway client. Both javadocs argued their side sincerely, which is how
-     * a difference like that survives; the effect was that the posture a deployment got depended on which image it
-     * ran. An edition adds capability, it does not change what this core decided - so the floor moved here and the
-     * edition now references it.
+     * <p>It is made once. An edition adds capability; it does not change what this core decides, so a posture that
+     * depended on which image a deployment ran - unlimited here on the reasoning that a ceiling is an operator's
+     * decision, capped elsewhere on the reasoning that a fresh deployment should stop a runaway client - is what one
+     * definition prevents.
      *
      * <p>Which leaves one way for the split to come back: this core drifting to {@code 0} while the edition keeps
      * referencing a constant that has changed under it. The downstream census would still pass, because it checks

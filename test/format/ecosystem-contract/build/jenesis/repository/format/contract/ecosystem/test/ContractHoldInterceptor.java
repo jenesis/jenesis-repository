@@ -10,11 +10,10 @@ import build.jenesis.repository.store.PublishInterceptor;
  * The screen this module's withhold legs hold a {@code publish/}-namespace version with - the twin of the one the
  * free contract module carries, and needed here for the same reason it is needed there.
  *
- * <p>Every fixture in this module used to be a {@code blobs/}-namespace format, retracted by the content-addressed
- * {@code withheld/<hash>} marker that any test can write, so no interceptor was needed and none was declared. A
- * {@code publish/}-namespace format is retracted by the interceptor chain answering {@code withheld} instead, and
- * with no discovered screen there is no way to hold one at all: the first such fixture to land here served its
- * held artifact {@code 200} and left its held revision in the enumeration, with nothing pointing at the cause.
+ * <p>A {@code blobs/}-namespace format is retracted by the content-addressed {@code withheld/<hash>} marker that any
+ * test can write, but a {@code publish/}-namespace format is retracted by the interceptor chain answering
+ * {@code withheld}, and with no discovered screen there is no way to hold one at all: such a fixture would serve its
+ * held artifact {@code 200} and leave its held revision in the enumeration, with nothing pointing at the cause.
  *
  * <p><b>A twin rather than a shared class, and that is JPMS rather than carelessness.</b> A
  * {@code provides ... with} names an implementation that must live in the providing module, so this cannot be one

@@ -93,10 +93,9 @@ public class UserDirectoryConcurrencyTest {
         directory.put("github/1", UserDirectory.Role.ADMIN, "ada");
         directory.put("github/2", UserDirectory.Role.VIEWER, "vic");
 
-        // The whole tenant's membership was once ONE .users/login.properties object, which is why nothing above it
-        // could page and why find(id) - and the per-request role check - read every member to answer about one.
-        // The shape is the fix, so the shape is what this pins: one small object per member, at a key composed from
-        // that member's id.
+        // A tenant's membership is one small object per member, at a key composed from that member's id, so a
+        // listing can page and find(id) - and the per-request role check - reads one member to answer about one.
+        // The shape is what this pins.
         //
         // The key moved when a member became a principal subject: it is a grant in the authorization store now,
         // beside the grants a minted key holds, rather than a document of its own beside the tenant marker. The

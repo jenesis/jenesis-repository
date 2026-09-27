@@ -15,18 +15,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Setting a tenant's quota from the console: the limit is stored, and the usage total is <em>not</em> recomputed.
  *
- * <p><b>This class used to assert the opposite, and the change is deliberate.</b> Setting a limit walked every blob
- * of every repository the tenant owns while the operator waited, so the cost of the action grew with the tenant -
- * which is the one thing a request must not do (&sect;10). The cleanup pass already recomputes usage for any tenant
- * that has a limit, so deferring costs a window rather than the number: enforcement runs on the previous total until
- * the next pass, and a limit lowered mid-window can be briefly over-admitted against. That trade was taken
- * deliberately by the owner on 2026-08-31.
+ * <p><b>Setting a limit does not recount.</b> A recount walks every blob of every repository the tenant owns, so
+ * running it while the operator waits would make the action's cost grow with the tenant, which a request must not do.
+ * The cleanup pass recomputes usage for any tenant that has a limit, so deferring costs a window rather than the
+ * number: enforcement runs on the previous total until the next pass, and a limit lowered mid-window can be briefly
+ * over-admitted against. That trade is deliberate.
  *
- * <p><b>The paging guarantee did not move here, it moved away.</b> This suite used to pin that the recount streams
- * each repository's blobs through {@code page} and never {@code list}s them - and so does
- * {@code RepositoryQuotaRecomputeTest}, over {@code Repositories.recomputeQuota}, which is the walk the pass runs.
- * They were two tests of two copies of one walk; now there is one walk and one test, and this one asserts only what
- * the console still does.
+ * <p><b>The paging guarantee lives with the walk.</b> {@code RepositoryQuotaRecomputeTest} pins that the recount
+ * streams each repository's blobs through {@code page} and never {@code list}s them, over
+ * {@code Repositories.recomputeQuota}, which is the walk the pass runs. This suite asserts only what the console
+ * does.
  */
 class ConsoleQuotaSettingTest {
 

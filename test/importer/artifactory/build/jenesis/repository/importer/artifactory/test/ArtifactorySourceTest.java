@@ -170,7 +170,7 @@ class ArtifactorySourceTest {
 
     @Test
     void a_name_uri_refuses_raw_is_percent_encoded_into_the_download_url() throws IOException {
-        // An Artifactory name may legally carry a space; splicing it raw into URI.create used to throw an unchecked
+        // An Artifactory name may legally carry a space; splicing it raw into URI.create would throw an unchecked
         // IllegalArgumentException out of the walk, so the download URL is percent-encoded segment by segment.
         byte[] jar = "spaced-bytes".getBytes(StandardCharsets.UTF_8);
         String listing = "{\"files\":[{\"uri\":\"/org/my lib 1.0.jar\",\"folder\":false}]}";

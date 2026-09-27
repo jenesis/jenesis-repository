@@ -13,11 +13,11 @@ import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Pins the RubyGems importer's manifest-vs-path agreement (audit finding N2, RubyGems leg). {@link
+ * Pins the RubyGems importer's manifest-vs-path agreement, the RubyGems leg. {@link
  * RubyGemsImporter#importTarget} screens the coordinate parsed from the {@code .gem} FILENAME
  * ({@code <name>-<version>.gem}); {@link RubyGemsImporter#importArtifact} replays the gem through the coordinate-less
  * {@code gem push} endpoint, and {@code RubyGemsFormat} keys the store on the {@code name} read from the embedded
- * gemspec. Because {@code gem push} carries no path coordinate, the importer now reads the gemspec name and REFUSES a
+ * gemspec. Because {@code gem push} carries no path coordinate, the importer reads the gemspec name and REFUSES a
  * gem whose gemspec name disagrees with the screened filename - so a gem can never be screened under one name and then
  * stored/served under another (the screen-label bypass), the way Composer/CocoaPods refuse a manifest that disagrees
  * with the deploy path. Container-free.

@@ -17,10 +17,9 @@ import build.jenesis.repository.format.ArtifactSignatures;
  *
  * <h2>What the bound check actually proves</h2>
  * {@link Property#A_BOUND_RIDES_OUT} hands the verifier a covered stream that raises a marker {@link IOException}
- * part-way and requires that exact exception back. It exists because three of the verifiers used to catch
- * {@code RuntimeException} around their body read, and the inspector's read bound was an unchecked exception: an
- * artifact that outran the bound came back INVALID from those three and "not verified here" from the others. The
- * bound is a checked {@link IOException} now, and this check is what keeps it riding out of every scheme.
+ * part-way and requires that exact exception back. A verifier that catches around its body read would turn an
+ * artifact that outran the inspector's read bound into INVALID where the other schemes answer "not verified here";
+ * the bound is a checked {@link IOException}, and this check is what keeps it riding out of every scheme.
  *
  * @jenesis.covers build.jenesis.repository.compliance.SignatureScheme 1, 2, 3, 4, 5, 6, 7
  */

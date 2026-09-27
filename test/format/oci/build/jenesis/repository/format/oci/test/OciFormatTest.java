@@ -559,7 +559,7 @@ class OciFormatTest {
     void the_catalog_serves_a_bounded_page_with_n_last_and_a_link_screening_an_all_withheld_image() throws IOException {
         // Four images in lexicographic order; the whole of `gamma` is withheld (its only tag held). _catalog must
         // serve a bounded page honouring n/last with a Link to the next, and must omit the fully-withheld image's
-        // name (a fully-held image is not disclosed while its bytes 404, AUDIT §5/§8).
+        // name (a fully-held image is not disclosed while its bytes 404).
         push("alpha", "1.0", "{\"i\":\"alpha\"}".getBytes(StandardCharsets.UTF_8));
         push("beta", "1.0", "{\"i\":\"beta\"}".getBytes(StandardCharsets.UTF_8));
         push("gamma", "1.0", "{\"i\":\"gamma\"}".getBytes(StandardCharsets.UTF_8));

@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * What a request pays to be authorised, counted at the store: the credential's two documents are read once and then
  * served from the {@link StoreCache} for its ttl, the address check re-uses the entry the grant check filled, and a
  * grant or revocation on this node is seen by its next request - so a download is authorised for zero store reads
- * in the steady state, where it used to pay three per request, a third of the read path's round trips.
+ * in the steady state, where an uncached check pays three per request, a third of the read path's round trips.
  *
  * <p><b>Three reads rather than two, and the third is the deployment's auth epoch</b> - one small document a node
  * re-reads at most once per {@code Authorization.EPOCH_TTL} (seconds), clearing its credential cache when another
@@ -69,11 +69,10 @@ class AuthorizationCacheTest {
      * The operator's cache clear reaches every node's grants, which is the one thing it is usually pressed for.
      *
      * <p>Dropping a cache is node-local by design - pushing to every node would be the fan-out the read rules
-     * forbid - so the endpoint used to empty the serving node's caches and leave a revoked credential working on
-     * its peers for the rest of their ttl. That is precisely the case an operator reaches for it in, so it
-     * promised something it could not do. {@code invalidateAcrossNodes()} closes it by pull rather than push: it
-     * moves the one document every node already re-reads, and a peer drops its credential cache when it sees the
-     * token change.
+     * forbid - and emptying only the serving node's caches would leave a revoked credential working on its peers for
+     * the rest of their ttl, which is precisely the case an operator reaches for the endpoint in.
+     * {@code invalidateAcrossNodes()} closes it by pull rather than push: it moves the one document every node already
+     * re-reads, and a peer drops its credential cache when it sees the token change.
      *
      * <p><b>What this asserts is the bump, not the peer's reaction, and the difference is the contract.</b> A node
      * re-reads the epoch at most once per {@code EPOCH_TTL}, so a peer that authorized a moment ago is inside its

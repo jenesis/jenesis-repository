@@ -133,9 +133,9 @@ class InventoryIdentityTest {
         String one = inventory().identity();             // the rollup exists, so the next publish folds into it
 
         // The one contended per-repository accumulator loses the publish's first compare-and-set - a storm's usual
-        // outcome. The fold used to ride the document write's batch as one attempt whose outcome nobody read, so the
-        // member was simply missing from the identity until the next reconcile: the identity-drift canary measured
-        // thirty-two writers leaving a rollup that disagreed with a rebuild from truth, and no fold ever reported a loss.
+        // outcome. A fold riding the document write's batch as one attempt whose outcome nobody read would leave the
+        // member missing from the identity until the next reconcile, a rollup that disagrees with a rebuild from
+        // truth, and no fold ever reporting a loss.
         FaultInjectingStore contended = FaultInjectingStore.wrap(store);
         contended.conflictNext(FaultInjectingStore.keyContaining("identity/rollup"));
         new StoreRepositoryInventory(contended).record(ECO, COORD, "2.0.0", NOW);
@@ -352,9 +352,8 @@ class InventoryIdentityTest {
         // Evict a member, but make the single contended per-repository accumulator lose EVERY one of combine()'s
         // bounded compare-and-set retries - the conflict a concurrent publish/eviction storm produces on the one object
         // they all fold. One single-shot conflict per retry on the rollup key exhausts the budget. The fold-out is
-        // then dropped WITH the rollup rather than failing the eviction it rides: it used to leave the stale rollup
-        // standing for the reconcile to heal, and every conditional read until then answered from it - the
-        // identity-drift canary measured thirty-two writers leaving a rollup that disagreed with a rebuild from truth.
+        // then dropped WITH the rollup rather than failing the eviction it rides: a stale rollup left standing for the
+        // reconcile to heal would answer every conditional read until then, disagreeing with a rebuild from truth.
         FaultInjectingStore contended = FaultInjectingStore.wrap(store);
         for (int retry = 0; retry < Retries.COMPARE_AND_SET; retry++) {
             contended.conflictNext(FaultInjectingStore.keyContaining("identity/rollup"));   // InventoryIdentity.KEY

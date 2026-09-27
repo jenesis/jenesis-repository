@@ -121,7 +121,7 @@ class WaiverLabelsTest {
                         List.of("CVE-2021-44228")))));
         ComplianceGate.Subject subject = new ComplianceGate.Subject(ECO, COORD, VERSION, List.of());
 
-        // The whole ledger-to-gate mechanism this fix wires: without the overlay the critical advisory rejects; the
+        // The whole ledger-to-gate mechanism: without the overlay the critical advisory rejects; the
         // ledger-backed overlay (the mirror of VexStore.asVex()) downgrades it to an informational allow.
         assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), feed).assess(subject).verdict())
                 .isEqualTo(Verdict.REJECT);
@@ -166,7 +166,7 @@ class WaiverLabelsTest {
                 .isEqualTo(Verdict.REJECT);
 
         // The architectural point: the coordinate-scoped overlay is point lookups only (no listing walk of the ledger),
-        // while the whole-ledger overlay lists the tree - the O(ledger)-per-publish cost this fix removes.
+        // while the whole-ledger overlay lists the tree - an O(ledger) cost on every publish.
         CountingStore counting = new CountingStore(ArtifactStoreProvider.resolve(
                 "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
         Findings counted = new StoreFindings(counting);

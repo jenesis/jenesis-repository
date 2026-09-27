@@ -114,7 +114,7 @@ public final class ScriptedUpstream implements ProxyFormat.Fetcher {
         if (response.generated() != null) {
             throw new AssertionError("The walk read the artifact at '" + url + "' through the buffered fetch() "
                     + "overload, which materialises the whole body as a byte[]. An asset copies from the incumbent to "
-                    + "storage through download() so a multi-gigabyte artifact never sits in heap (§1); fetch() is for "
+                    + "storage through download() so a multi-gigabyte artifact never sits in heap; fetch() is for "
                     + "the small listing and index documents a connector must parse.");
         }
         return Optional.of(new ProxyFormat.Fetched(response.status(), response.body().clone(), response.headers()));

@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * never has, which is exactly why every hand-rolled copy of this traversal eventually got one of them wrong. It pins
  * the four properties the primitive exists to guarantee: the descent is iterative, so a 20 000-segment key walks
  * instead of overflowing a thread stack; every cap is <em>visible</em>, so reaching one is never mistaken for a
- * complete listing (design gate 4); the continuation cursor resumes exactly at the boundary, including a crash-resume
+ * complete listing; the continuation cursor resumes exactly at the boundary, including a crash-resume
  * from a cursor persisted through a real store, without skipping or duplicating a committed page; and a name a store
  * backend should never have returned is refused by name rather than walked.
  */
@@ -300,8 +300,7 @@ class PagedTreeWalkTest {
 
     @Test
     void a_result_is_exhausted_exactly_when_it_carries_no_cursor() {
-        // Completeness is derived from the cursor, never stored beside it, so the two cannot disagree - which used to
-        // be a runtime check on a second field.
+        // Completeness is derived from the cursor, never stored beside it, so the two cannot disagree.
         assertThat(Traversal.Result.exhausted(1, 1).exhausted()).isTrue();
         assertThat(Traversal.Result.exhausted(1, 1).truncated()).isFalse();
         assertThat(Traversal.Result.truncated("root/a", 1, 1).truncated()).isTrue();

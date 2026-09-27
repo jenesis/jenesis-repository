@@ -29,11 +29,11 @@ import build.jenesis.repository.walk.testkit.WalkConsumerFixture.Corpus;
  * Two correct consumers hold different bytes for the same converged view, so the kit compares a normalised projection
  * the consumer's own contract defines, never stored bytes.
  *
- * <p><b>The kit never claims a stronger delivery property than the consumer provides</b> (the plan's gate 5). A
+ * <p><b>The kit never claims a stronger delivery property than the consumer provides</b>. A
  * fixture declares its {@link WalkConsumerFixture.Delivery} class, and the post-resume assertion follows from it: a
  * per-item or stride-durable consumer must already be converged, while a pass-snapshot consumer must be either
  * converged or <em>visibly degraded</em> - and may never be a partial projection presented as a whole one, which is
- * exactly what &sect;5 forbids. The crash is injected with {@link FaultInjectingStore}, the one shared fault fixture,
+ * exactly what self-healing forbids. The crash is injected with {@link FaultInjectingStore}, the one shared fault fixture,
  * armed by the delivery count the consumer itself reports, so a crash point is defined by what the consumer had seen
  * rather than by counting the walk's internal store calls.
  *
@@ -65,13 +65,13 @@ public final class WalkConsumerContract {
     public enum Property {
         /** A consumer switched on over a store that already holds artifacts rebuilds its whole declared projection
          *  from the walk alone, delivering each retained pointer exactly once and writing nowhere outside its own
-         *  namespaces (&sect;5, {@code WalkConsumer} clauses 2 and 5). */
+         *  namespaces ({@code WalkConsumer} clauses 2 and 5). */
         FULL_PASS_REBUILDS_THE_DECLARED_PROJECTION,
         /** Both dialects a stored pointer body uses reach the consumer: the bare lower-case SHA-256 hex the free
          *  {@code publish/} and {@code blobs/} pointers carry, and the algorithm-qualified {@code sha256:<hex>} an OCI
          *  tag pointer carries. They name the same blob, so a corpus spelling its hashes either way converges to the
          *  one declared projection - a pass that recognised only one of them would hand a consumer over that root
-         *  nothing at all and still report the pass complete (&sect;5). */
+         *  nothing at all and still report the pass complete. */
         BOTH_POINTER_DIALECTS_ARE_DELIVERED,
         /** {@code onPassStarted} precedes this worker's first delivery, {@code beforeCheckpoint} follows the
          *  deliveries it covers, and {@code onPassCompleted} closes the pass - once each (clause 10). */

@@ -13,7 +13,7 @@ import build.jenesis.repository.walk.WalkProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The reconcile sweep - the §4/§5 convergence backstop - rebuilds the published set from the live {@code publish/}
+ * The reconcile sweep - the convergence backstop - rebuilds the published set from the live {@code publish/}
  * pointer tree in both directions over the shared artifact walk. The forward leg recreates a served pointer's missing
  * published section (a crashed publish that linked the pointer but never recorded the fact), the reverse leg removes a
  * section whose pointers are gone (a crashed eviction's residue), the derived leg sweeps a download marker of a

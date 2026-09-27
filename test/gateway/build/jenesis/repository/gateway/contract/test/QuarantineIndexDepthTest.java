@@ -11,11 +11,11 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The latest-verdict-by-path index has to be writable for <em>every</em> path the gate can hold, including a deep one
- *. It used to URL-encode the request path into one key segment, which triples every separator: a real deep
- * pool path produced a name past a filesystem store's 255-byte limit, the store refused it, and the write is
- * best-effort - so the decision was appended to the trail and the path's {@code latest} read empty for ever, which is
- * exactly the artifact-detail view that exists to explain a hold.
+ * The latest-verdict-by-path index has to be writable for <em>every</em> path the gate can hold, including a deep one.
+ * URL-encoding the request path into one key segment would triple every separator: a real deep pool path would
+ * produce a name past a filesystem store's 255-byte limit, the store would refuse it, and the write is best-effort -
+ * so the decision would be appended to the trail and the path's {@code latest} read empty for ever, which is exactly
+ * the artifact-detail view that exists to explain a hold.
  *
  * <p>Driven against the filesystem backend on purpose: it is the backend that maps one key segment to one file name
  * and enforces the limit, so an in-memory or object-store stand-in would accept the old key and prove nothing.

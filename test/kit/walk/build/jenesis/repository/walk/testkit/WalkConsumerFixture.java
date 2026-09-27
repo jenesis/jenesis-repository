@@ -112,7 +112,7 @@ public interface WalkConsumerFixture {
 
     /**
      * The say-so a consumer leaves behind when it knows it could <em>not</em> converge from the pass it just saw - the
-     * &sect;5 "degrade gracefully and say so, never serve a silently-incomplete view as if it were whole" surface -
+     * "degrade gracefully and say so, never serve a silently-incomplete view as if it were whole" surface -
      * or empty when it converged. The kit requires exactly one of the two after every crash-resume: either the
      * projection is the converged one, or this answers a reason. A consumer that answers neither has quietly replaced
      * a whole view with a fragment, which is the defect this SPI exists to prevent.
@@ -149,7 +149,7 @@ public interface WalkConsumerFixture {
         PASS_SNAPSHOT;
 
         /** Whether a crash-resumed pass leaves this class converged. The kit's post-resume assertion is exactly this
-         *  question, so no fixture can be held to a guarantee its class does not carry (the plan's gate 5). */
+         *  question, so no fixture can be held to a guarantee its class does not carry. */
         public boolean convergesAcrossACrash() {
             return this != PASS_SNAPSHOT;
         }

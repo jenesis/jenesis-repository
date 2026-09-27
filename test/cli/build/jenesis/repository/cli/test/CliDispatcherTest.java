@@ -357,10 +357,8 @@ public class CliDispatcherTest {
         assertThat(out).contains("stored").contains("rejected").contains("gate");
     }
 
-    /** Mirrors the hand-rolled context tree in one place: routes each request by path exactly as the HttpServer's
-     *  longest-prefix dispatch did, reads the live volatile status/body fields a test set, and records the query
-     *  strings the assertions read back. WireMock drains and records the request body itself, so the old handlers'
-     *  {@code readAllBytes()} is implicit. */
+    /** Routes each request by longest path prefix, reads the live volatile status/body fields a test set, and
+     *  records the query strings the assertions read back. WireMock drains and records the request body itself. */
     private final class Dispatcher implements ResponseDefinitionTransformerV2 {
         @Override
         public String getName() {

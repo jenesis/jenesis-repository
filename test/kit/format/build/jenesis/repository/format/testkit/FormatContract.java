@@ -91,9 +91,9 @@ public final class FormatContract {
         /** Every path a publish writes at is one the format's {@code describe} places. The gate links a review pointer
          *  at the request path of a publish it quarantines, and a release's cross-alias guard asks the installed
          *  formats to place every review pointer it meets: a path none describes answers Unknown for every hash
-         *  still open, which leaves every marker that release should lift standing. Measured 2026-09-12: 3,102
-         *  releases in a quarter of an hour left theirs behind one CocoaPods pointer at a path its format did not
-         *  describe. The paths are the ones the fixture's own publish wrote, recorded by the kit's exchange. */
+         *  still open, which leaves every marker that release should lift standing - one pointer at a path its
+         *  format does not describe strands every release after it. The paths are the ones the fixture's own publish
+         *  wrote, recorded by the kit's exchange. */
         PUBLISH_PATHS_ARE_DESCRIBED,
         /** The format's declared signature story matches what it implements: a format whose fixture names schemes
          *  implements {@code ArtifactSignatures} and expects them for its own artifact, and one that declares none
@@ -125,7 +125,7 @@ public final class FormatContract {
         PROXY_VERIFIES_UPSTREAM_INTEGRITY,
         /** On a path whose absence the client resolves against, a refusal is told apart from an absence: an upstream
          *  that genuinely has nothing still reaches the client as a miss, and a body failing its advertised digest
-         *  does not ({@code ProxyFormat} clause 5, &sect;9). */
+         *  does not ({@code ProxyFormat} clause 5). */
         PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
         /** A proxied artifact goes from the network into the content-addressed store without being materialised, and
          *  arrives byte-exact ({@code ProxyFormat} clause 3). */
@@ -720,7 +720,7 @@ public final class FormatContract {
         if (produced != 0L) {
             throw failure(fixture, "the format had already read " + produced + " of the upstream body's "
                     + body.length() + " bytes when it handed the stream to the store. An artifact goes from the "
-                    + "network to storage unread (§1) - anything else means it was materialised first, and a "
+                    + "network to storage unread - anything else means it was materialised first, and a "
                     + "multi-gigabyte pull would carry the whole thing in heap.");
         }
 
@@ -805,11 +805,10 @@ public final class FormatContract {
         // way - the dispatcher never holds the bytes - so the format attaches its own, which a StoredListing can
         // because its header records the document's sha256 without the document being materialised to read it.
         //
-        // This used to require the buffered shape outright, on the reasoning that a streamed response carries no
-        // content-derived validator. That was true of every format when it was written and is not a property of
-        // streaming: it forced a folder page to be held whole in heap to earn an ETag it could already prove. What
-        // a polling client actually needs is asserted directly here and below - a validator, stable bytes behind
-        // it, a 304 when it matches and a 200 once it does not.
+        // A streamed response can carry a content-derived validator, so the buffered shape is not required: requiring
+        // it would force a folder page to be held whole in heap to earn an ETag it can already prove. What a polling
+        // client actually needs is asserted directly here and below - a validator, stable bytes behind it, a 304 when
+        // it matches and a 200 once it does not.
         String validator = first.responseHeader("ETag");
         notNull(validator, fixture, first.buffered()
                 ? "a buffered document carries a validator derived from its own bytes"

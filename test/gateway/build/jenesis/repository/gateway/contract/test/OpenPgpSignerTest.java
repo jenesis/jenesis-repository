@@ -12,9 +12,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * key's public half with a fresh one keeps both in the served keyring, de-duplicates a repeat, and prunes a key
  * expired past the cutoff.
  *
- * <p>It used to be named for the Debian format, which is where the key handling happened to live before the RPM
- * format turned out to carry a byte-identical copy of it. The rotation policy this asserts is now one policy rather
- * than one per format - which is the point of asserting it in one place.
+ * <p>The Debian and RPM formats share this key handling, so the rotation policy it asserts is one policy rather than
+ * one per format - which is the point of asserting it in one place.
  */
 class OpenPgpSignerTest {
 

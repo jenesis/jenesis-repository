@@ -130,7 +130,7 @@ public final class FaultInjectingStore implements ArtifactStore {
         return key -> true;
     }
 
-    /** Keys with this prefix (as {@code publish/}, {@code published/}, {@code blobs/}). */
+    /** Keys with this prefix (as {@code publish/}, {@code meta/}, {@code blobs/}). */
     public static Predicate<String> keyPrefix(String prefix) {
         return key -> key != null && key.startsWith(prefix);
     }
@@ -398,7 +398,7 @@ public final class FaultInjectingStore implements ArtifactStore {
     }
 
     /** A scoped view that routes every call back through the parent's fault decision, so an armed fault fires on the
-     *  scoped keys the sweeps use ({@code publish/...}, {@code published/...}) exactly as it would unscoped. */
+     *  scoped keys the sweeps use ({@code publish/...}, {@code meta/...}) exactly as it would unscoped. */
     final class Scoped implements ArtifactStore {
 
         private final ArtifactStore scoped;

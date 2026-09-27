@@ -24,10 +24,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * and spare just those. The only correct behaviour is refusal, and the refusal has to sit <em>at the deletion</em>
  * rather than in every caller, which is what {@link GarbageCollector#collect} now guarantees.
  *
- * <p>The signature is the other half of the fix and is asserted reflectively rather than by a test that would not
- * compile: a plain {@code List<String>} of roots can only ever state "these are the roots", so as long as such an
- * overload exists a caller with incomplete knowledge has no way to say so and no reason to think about it. It is
- * gone, and this suite fails if it returns.
+ * <p>The signature is the other half and is asserted reflectively rather than by a test that would not compile: a
+ * plain {@code List<String>} of roots can only ever state "these are the roots", so while such an overload exists a
+ * caller with incomplete knowledge has no way to say so and no reason to think about it. This suite fails if one
+ * appears.
  */
 class GcRootSetRefusalTest {
 

@@ -85,9 +85,9 @@ class GateHostContractTest {
 
     @Test
     void an_inspector_raising_a_plain_io_exception_is_held_like_its_two_siblings() throws IOException {
-        // The third of the three shapes QualityInspector.inspect may raise, and the one that used to escape. A
+        // The third of the three shapes QualityInspector.inspect may raise, and the easiest to let escape. A
         // ZipException off a truncated archive is an IOException, not a MalformedArtifactException, and not a
-        // RuntimeException - so it fell between the screen's two catch clauses and out of the publish.
+        // RuntimeException - so it falls between two catch clauses written for the other shapes.
         String path = "/gatetest/inspectorio/lib-1.0.jar";
 
         Publication.Published published = publish(gate(AdvisorySource.none()), path, "bytes the inspector cannot read");
@@ -97,7 +97,7 @@ class GateHostContractTest {
                 .isEqualTo(PublishInterceptor.Disposition.QUARANTINE);
         assertThat(new Publication(store).located(path)).as("the unscreened upload is withheld from serving").isEmpty();
         assertThat(new QuarantineLog(store).events())
-                .as("and the fail-closed hold is recorded for review rather than lost with the 500 it used to be")
+                .as("and the fail-closed hold is recorded for review rather than lost with a 500")
                 .isNotEmpty();
         assertThat(new QuarantineLog(store).events().getFirst().verdict()).isEqualTo(Verdict.QUARANTINE);
     }
@@ -144,9 +144,8 @@ class GateHostContractTest {
     @Test
     void the_attribution_survives_an_inspector_that_cannot_be_asked_anything() throws IOException {
         // The identity is read off the guest's CLASS before the call, so there is no second call into a guest that
-        // has already given way - which is what the handler used to need, and what the event sink and the scheduler
-        // both closed one host up. Driven with the Error route because an Error is the most complete way a guest can
-        // stop answering.
+        // has already given way - the same containment the event sink and the scheduler have. Driven with the Error
+        // route because an Error is the most complete way a guest can stop answering.
         String path = "/gatetest/inspectorbroken/lib-1.0.jar";
 
         assertThatThrownBy(() -> publish(gate(AdvisorySource.none()), path, "bytes on a broken runtime"))

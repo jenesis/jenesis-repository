@@ -11,8 +11,8 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Pins whether the NuGet importer's two coordinate-deriving surfaces agree on a given {@code .nupkg} source path
- * (audit finding NG1). {@link NuGetImporter#importTarget} screens by the coordinate parsed from the flat-container
+ * Pins whether the NuGet importer's two coordinate-deriving surfaces agree on a given {@code .nupkg} source path.
+ * {@link NuGetImporter#importTarget} screens by the coordinate parsed from the flat-container
  * {@code <id>/<version>/<file>.nupkg} path shape ({@code NuGetFormat.describe}, which needs at least two slashes after
  * {@code /nuget/v3-flatcontainer/}); {@link NuGetImporter#importArtifact} lays out ANY path ending {@code .nupkg},
  * replaying it through {@code NuGetFormat.handle} whose push reads the id/version from the embedded {@code .nuspec}
@@ -60,7 +60,7 @@ class NuGetImportCoordinateAgreementTest {
     }
 
     /**
-     * The core NG1 disagreement: a flat single-file {@code .nupkg} (no {@code <id>/<version>/} directory) is DECLINED by
+     * The core disagreement: a flat single-file {@code .nupkg} (no {@code <id>/<version>/} directory) is DECLINED by
      * {@code importTarget} (empty) yet ACCEPTED and correctly indexed by {@code importArtifact}. The two disagree on
      * whether this path is importable.
      */
@@ -128,7 +128,7 @@ class NuGetImportCoordinateAgreementTest {
     }
 
     /**
-     * The manifest-vs-path agreement (audit finding N2, NuGet leg): a {@code .nupkg} whose embedded {@code .nuspec}
+     * The manifest-vs-path agreement, the NuGet leg: a {@code .nupkg} whose embedded {@code .nuspec}
      * declares a DIFFERENT id than the id the edge screened from the path is REFUSED - never stored under an id the
      * gate never saw. Because {@code nuget push} is coordinate-less (the id lives only in the {@code .nuspec}), the
      * check lives in {@code importArtifact}, mirroring the way Composer/CocoaPods refuse a manifest that disagrees with

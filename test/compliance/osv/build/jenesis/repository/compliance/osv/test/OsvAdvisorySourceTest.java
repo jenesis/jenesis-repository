@@ -75,7 +75,7 @@ class OsvAdvisorySourceTest {
     void scores_severity_from_a_cvss_v2_vector() {
         // The presence of an `Au:` metric selects the hand-rolled CVSS v2 base-score formula, distinct from the v3
         // path. Full network/low-complexity/complete-impact scores 10.0 -> CRITICAL; the classic partial-impact
-        // vector scores 7.5 -> HIGH. Pinning the formula to these reference scores is what §8 requires.
+        // vector scores 7.5 -> HIGH. The formula is pinned to these reference scores.
         String response = """
                 {"vulns":[
                   {"id":"CVE-v2-crit","severity":[{"type":"CVSS_V2","score":"AV:N/AC:L/Au:N/C:C/I:C/A:C"}]},
@@ -264,10 +264,9 @@ class OsvAdvisorySourceTest {
 
     @Test
     void a_coordinate_this_feed_could_not_screen_is_not_laundered_by_the_next_coordinate_that_answered() {
-        // The §13 retrofit to the fail-closed half. The raise is what a CALLER acts on here - this feed never
-        // hands back a degraded value - but the reading is what a CONSOLE renders, and it used to record successes
-        // only: an OSV that had failed every lookup for three days still read "authoritative", because the last
-        // instant it managed to stamp was still the last thing it had stamped. It is now derived per coordinate,
+        // The fail-closed half. The raise is what a CALLER acts on here - this feed never hands back a degraded
+        // value - but the reading is what a CONSOLE renders, and a reading that recorded successes only would leave an
+        // OSV that had failed every lookup for three days reading "authoritative". It is derived per coordinate,
         // exactly as every other feed's is, so an unrelated coordinate answering does not clear it.
         OsvAdvisorySource source = new OsvAdvisorySource(body -> {
             if (body.contains("org.example:unreachable")) {
@@ -297,10 +296,10 @@ class OsvAdvisorySourceTest {
     /**
      * A CVSS v4 vector is UNKNOWN, not NONE - the distinction a severity floor turns on.
      *
-     * <p>The scorer reads v2 and v3 only, so a {@code CVSS:4.0} vector scores nothing. It used to fall through to
-     * the GitHub severity word, which OSV entries from PyPA, RustSec and the Go database do not carry, and land on
-     * {@code NONE}: {@code severityRank} 0, and an operator's {@code reject #severityRank >= 4} admitted a
-     * critical advisory. v4 is in production use in OSV and GHSA today, so this was live rather than theoretical.
+     * <p>The scorer reads v2 and v3 only, so a {@code CVSS:4.0} vector scores nothing. Falling through to the GitHub
+     * severity word, which OSV entries from PyPA, RustSec and the Go database do not carry, would land on
+     * {@code NONE}: {@code severityRank} 0, and an operator's {@code reject #severityRank >= 4} would admit a critical
+     * advisory. v4 is in production use in OSV and GHSA.
      *
      * <p>Scoring v4 was the alternative and was rejected - table-based, substantially more code, and it leaves
      * {@code NONE} meaning two things for the next vendor field the scorer cannot read. Saying UNKNOWN is the
@@ -320,7 +319,7 @@ class OsvAdvisorySourceTest {
     }
 
     /** An entry carrying no severity information at all is equally unknown, and a vendor word this does not read
-     *  is too - all three used to be NONE, which is a positive claim none of them makes. */
+     *  is too - NONE for any of the three would be a positive claim none of them makes. */
     @Test
     void an_entry_with_no_readable_severity_is_unknown() {
         String response = """

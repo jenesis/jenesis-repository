@@ -9,7 +9,7 @@ import build.jenesis.repository.store.ServableNames;
  * the free {@code Publication} / {@link ArtifactStore} layer owns, independent of any format or downstream derived
  * surface: every {@code publish/} pointer resolves to a blob that is actually stored (no dangling pointer, so nothing
  * that "serves" 404s on the body), and, after a garbage collection, no {@code blobs/} object is left unreferenced by
- * any pointer (no leaked storage). The downstream-derived surfaces - the {@code published/} sidecars, the rolled-up
+ * any pointer (no leaked storage). The downstream-derived surfaces - the version documents, the rolled-up
  * {@code sizes/}, the quota counter, the forwarding outbox, the quarantine review queue - are checked by the suite
  * beside the classes that own them; this checker is the shared, dependency-light core both repositories reuse.
  *

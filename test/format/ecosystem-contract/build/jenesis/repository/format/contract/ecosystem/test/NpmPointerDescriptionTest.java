@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * publish, so they are stated here: a scoped coordinate carries a slash, and a coordinate may itself end in the
  * word the key is split on.
  *
- * <p>This is not belt-and-braces. A wrong answer here is not a failed read - it writes a {@code published/} row
+ * <p>This is not belt-and-braces. A wrong answer here is not a failed read - it writes a {@code published} section
  * against a release that was never published, and retention ages artifacts by that row.
  */
 class NpmPointerDescriptionTest {

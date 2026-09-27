@@ -25,12 +25,11 @@ import static build.jenesis.repository.gateway.testkit.FormatDrive.format;
  * control characters for the same kind of reason - a {@code NUL} truncates the key at the first C API that touches it
  * and a newline forges a line in every log record and index the key reaches.
  *
- * <p><b>The control-character cell asserted {@code 400} until then, and that difference was an accident of which
- * layer caught the shape</b> rather than a decision about what a hostile publish deserves. This class's own argument
- * for the {@code ..} cell is that the contract prescribes the status so that "all fourteen answer the same 404 rather
- * than each format's own idea of a refusal" - and by that argument the {@code 400} was the deviation, kept alive only
- * because the shared screen could not see the shape. It can now, so the three agree (&sect;13). What the cells assert
- * has not weakened: a clean client-side refusal, no exception, and nothing stored.
+ * <p><b>The control-character cell answers the same status as the {@code ..} cell.</b> The contract prescribes the
+ * status so that "all fourteen answer the same 404 rather than each format's own idea of a refusal", and a different
+ * status for one shape would be an accident of which layer caught it rather than a decision about what a hostile
+ * publish deserves. The shared screen sees every shape, so the three agree: a clean client-side refusal, no
+ * exception, and nothing stored.
  *
  * <p>Driven in-process through the {@link FormatDrive} seam ({@code hf.handle(call, store)}), NOT over HTTP, on purpose:
  * the servlet container's own path firewall rejects an encoded {@code ..}/backslash before the format ever sees it, so
@@ -63,15 +62,13 @@ class HuggingFaceUnsafeFilepathTest {
         assertHostilePutRefused("..", 404);
     }
 
-    /** A backslash used to be answered by this format's own filepath guard, because the shared screen split on
-     *  {@code /} alone and read {@code weights\evil} as one long, harmless leaf name. The shared screen
-     *  closed that: {@code ArtifactStore.traversalFree} now refuses a {@code \} anywhere, since a backslash is a real
-     *  separator on a Windows-hosted filesystem backend and a literal character on the three object stores - one
-     *  publish, three placements, and on the first of them a real traversal. So a backslash joined the {@code ..}
-     *  family above rather than staying a format-local hostile character, and it takes that family's status: contract
-     *  clause 6's shared {@code 404}, decided before {@code unsafeFilepath} is reached. The half of the guard's
-     *  contract this cell exists for - a clean refusal that stores nothing and never throws - is what it asserts
-     *  either way. */
+    /** A backslash is refused by the shared screen: {@code ArtifactStore.traversalFree} refuses a {@code \} anywhere,
+     *  since a backslash is a real separator on a Windows-hosted filesystem backend and a literal character on the
+     *  three object stores - one publish, three placements, and on the first of them a real traversal. So a backslash
+     *  is in the {@code ..} family above rather than a format-local hostile character, and it takes that family's
+     *  status: contract clause 6's shared {@code 404}, decided before {@code unsafeFilepath} is reached. The half of
+     *  the guard's contract this cell exists for - a clean refusal that stores nothing and never throws - is what it
+     *  asserts either way. */
     @Test
     void a_backslash_filepath_is_a_clean_404_that_stores_nothing() throws IOException {
         assertHostilePutRefused("weights\\evil", 404);

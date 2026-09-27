@@ -10,8 +10,8 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** The import sources are discovered once, in the SPI's home, and a connector configured off is unreachable by
- *  name on every edge alike - the console's import job used to discover the connectors raw and run one the API's
- *  edge had refused. */
+ *  name on every edge alike - a job that discovered the connectors raw could run one the API's edge had
+ *  refused. */
 class ImportSourceDiscoveryTest {
 
     @AfterEach

@@ -18,10 +18,10 @@ import build.jenesis.repository.store.ArtifactStore;
  *     this sink's answer.</li>
  * <li>{@link Mode#SNEAKY} throws a checked exception that is <em>not</em> an {@link IOException}, smuggled past the
  *     {@code throws} clause the way an unchecked cast does. Nothing in the compiler stops a sink from doing this, and
- *     the narrow two-arm catch let it escape the containment entirely.</li>
- * <li>{@link Mode#HOSTILE_NAME} throws from {@link #name()} instead of from {@link #accept}. That used to defeat the
- *     containment from inside its own handler - the WARN diagnostic asked the broken sink what it was called - and is
- *     now a packaging error refused at resolution, before any sink is called.</li>
+ *     a narrow two-arm catch would let it escape the containment entirely.</li>
+ * <li>{@link Mode#HOSTILE_NAME} throws from {@link #name()} instead of from {@link #accept}. That would defeat the
+ *     containment from inside its own handler - the WARN diagnostic asking the broken sink what it was called - so it
+ *     is a packaging error refused at resolution, before any sink is called.</li>
  * </ul>
  */
 public final class HostileSink implements EventSink {

@@ -10,12 +10,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * A pinned verdict carries how completely the screen looked, and a raised ceiling invalidates one it cut short.
  *
- * <p>The verdict pinned <em>what</em> was decided about a digest and nothing about <em>how much of it</em> was read.
- * So an ALLOW reached while the full-body ceiling was 64 MiB was reused digest-exactly after an operator raised
- * that ceiling - and raising it is the single change that would have let the screen finish. The artifact whose tail
- * had never been inspected was exactly the one the raise was meant to inspect, and exactly the one guaranteed not
- * to be re-screened. This is the same shape as the ticket it came from: a fact about how completely we looked not
- * travelling with the answer.
+ * <p>A verdict records <em>how much</em> of a digest was read as well as what was decided about it. An ALLOW reached
+ * while the full-body ceiling was 64 MiB, reused digest-exactly after an operator raised that ceiling, would skip
+ * exactly the artifact the raise was meant to inspect - the one whose tail was never read. A fact about how completely
+ * we looked travels with the answer.
  */
 class VerdictCompletenessTest {
 

@@ -23,15 +23,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * whole-list abstract sibling <b>fails visibly</b> at a stated ceiling instead of degrading silently on a
  * deployment-sized ledger.
  *
- * <p>Five SPIs shipped that shape - {@code Findings} (paged and Visitor), {@code HealthLedger},
- * {@code RepositoryInventory}, {@code DependentsQuery} and {@code AuditTrail} (paged and streaming) - each
- * documenting itself with the sentence this rule was written about: "the default is correct for a simple
- * implementation; the store overrides it". That sentence describes an implementation nobody ships while the shipped one
- * overrides, so the default's cost is invisible until a plug-in author inherits it: every one of the seven legs below
- * <em>silently buffered the whole ledger and answered</em> before this test existed, and every one of these assertions
- * fails on that behaviour. They now refuse past {@link ArtifactStore#MAX_INHERITED_CHILDREN} - the one ceiling, reused
- * rather than restated - naming the inheriting class, the leg, the whole-list sibling, the size and the override that
- * fixes it.
+ * <p>Five SPIs have that shape - {@code Findings} (paged and Visitor), {@code HealthLedger},
+ * {@code RepositoryInventory}, {@code DependentsQuery} and {@code AuditTrail} (paged and streaming) - and "the default
+ * is correct for a simple implementation; the store overrides it" describes an implementation nobody ships while the
+ * shipped one overrides, so the default's cost is invisible until a plug-in author inherits it. A default that
+ * silently buffers the whole ledger and answers fails every one of these assertions. Each leg refuses past
+ * {@link ArtifactStore#MAX_INHERITED_CHILDREN} - the one ceiling, reused rather than restated - naming the inheriting
+ * class, the leg, the whole-list sibling, the size and the override that fixes it.
  *
  * <p>Three properties are asserted at each leg, because a bound that only ever throws is as untrustworthy as one that
  * never does: it <b>serves</b> at the ceiling, it <b>refuses</b> one row past it, and the refusal <b>names</b> the
@@ -39,11 +37,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * streaming legs additionally prove the refusal lands <em>before</em> the first row is emitted, so a consumer never
  * half-processes an export that is about to die.
  *
- * <p>The eighth site is not a bound but a repair: {@link DependentsQuery#built()} exists to answer "has the index ever
- * been swept" and its javadoc calls it "a single small-object existence probe, never a scan", while its default
- * answered by materialising the whole coordinate set and asking {@code isEmpty()}. It now reads the sweep's own
- * completion stamp ({@link DependentsQuery#builtAt()}), which is both what the javadoc always claimed and the only
- * evidence that can tell a swept-empty index from a never-built one.
+ * <p>The eighth site is not a bound but a probe: {@link DependentsQuery#built()} answers "has the index ever been
+ * swept" as "a single small-object existence probe, never a scan", by reading the sweep's own completion stamp
+ * ({@link DependentsQuery#builtAt()}) - the only evidence that can tell a swept-empty index from a never-built one,
+ * where materialising the whole coordinate set and asking {@code isEmpty()} cannot.
  */
 class InheritedBoundTest {
 
@@ -211,7 +208,7 @@ class InheritedBoundTest {
                 .as("a committed sweep left a completion stamp, which is the whole answer")
                 .isTrue();
 
-        // The ambiguity the old default could not resolve: a sweep that committed an EMPTY index. Reading the
+        // The ambiguity a coordinate-set default cannot resolve: a sweep that committed an EMPTY index. Reading the
         // coordinate set answers 'false' there - a never-derived view served as an authoritative empty one, the
         // exact failure built() exists to prevent.
         DependentsQuery sweptEmpty = query(List.of(), Optional.of(Instant.parse("2026-08-15T10:15:30Z")));

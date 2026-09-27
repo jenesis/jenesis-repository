@@ -29,7 +29,7 @@ import build.jenesis.repository.compliance.QualityInspector;
  *       (an unhandled edge over hostile content): the screen must fail closed, never letting the raw error escape.
  *   <li>{@code /gatetest/inspectorio/...}   - a CLAIMED artifact whose inspector throws a plain {@link IOException},
  *       the third failure shape its SPI signature permits: it must reach the same fail-closed hold as the two
- *       above rather than the one leg between them that used to escape;
+ *       above rather than the one leg between them that a two-arm catch would let escape;
  *   <li>{@code /gatetest/inspectorbroken/...}- a CLAIMED artifact whose inspector raises an {@link Error}: the runtime
  *       or module graph giving way under one guest, which must never be filed as a clean verdict on the artifact.
  * </ul>

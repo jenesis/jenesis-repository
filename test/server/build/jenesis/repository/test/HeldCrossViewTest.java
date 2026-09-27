@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Maven/raw serve run through) consulted only the chain and never the marker, so a held modular jar kept serving under
  * that name: driven here end-to-end, and asserted the other way round below.
  *
- * <p>The last check is the reason the fix is the content half rather than a wider path enumeration: after a republish
+ * <p>The last check is the reason the hold is on the content rather than a wider path enumeration: after a republish
  * re-aims "latest" at an unheld version, the same name serves again. A path-keyed hold could not express that - it
  * would either keep holding a name that now points at innocent bytes, or (if the sweeps had claimed the pointer as a
  * path of the held version) let an eviction of that version delete a pointer belonging to another one.

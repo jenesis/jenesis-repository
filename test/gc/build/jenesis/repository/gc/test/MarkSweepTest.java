@@ -168,7 +168,7 @@ class MarkSweepTest {
 
     @Test
     void a_qualified_pointer_body_spares_an_already_condemned_blob() throws IOException {
-        // The §13 twin of the bare-hex leg above: a blobs-namespace format links its pointer after a pass condemned
+        // The qualified-body twin of the bare-hex leg above: a blobs-namespace format links its pointer after a pass condemned
         // the blob, and the next mark must spare it and converge the stale marker away whichever dialect the body
         // spells the hash in.
         ArtifactStore store = store();

@@ -1,7 +1,7 @@
 /**
  * Tests of the event SPI's {@link build.jenesis.repository.events.EventSink#emit} fan-out in isolation: a
  * best-effort emit contains a failing discovered sink so a notification never fails the publish, quarantine,
- * finding or promotion it observes - but §9 forbids a silent fail-soft, so the drop is surfaced as a
+ * finding or promotion it observes - but a fail-soft is never silent, so the drop is surfaced as a
  * WARNING naming the lost event (its kind and coordinate/path). A capturing {@code System.LoggerFinder} and a
  * deliberately failing discovered {@link build.jenesis.repository.events.EventSink} pin both halves of the
  * contract at once: the caller sees no exception, and a diagnostic is emitted rather than the event vanishing. A

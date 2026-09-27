@@ -233,9 +233,9 @@ class MavenMetadataTest {
 
     @Test
     void reconcile_re_derives_latest_and_release_over_the_screened_set_when_a_version_is_withheld() throws IOException {
-        // FIX 1: a stored document's <latest>/<release> were preserved verbatim while only <versions> was screened, so
-        // a withheld newest version's name still leaked through <latest>/<release>. Reconcile must re-derive both from
-        // the SCREENED set: latest = newest screened, release = newest screened non-SNAPSHOT (matching metadata()).
+        // A stored document's <latest>/<release> are re-derived from the SCREENED set, not preserved verbatim while
+        // only <versions> is screened, or a withheld newest version's name would leak through <latest>/<release>:
+        // latest = newest screened, release = newest screened non-SNAPSHOT (matching metadata()).
         store = ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         Publication publication = new Publication(store);

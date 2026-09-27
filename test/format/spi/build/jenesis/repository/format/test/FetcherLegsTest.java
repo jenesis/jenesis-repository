@@ -62,9 +62,8 @@ class FetcherLegsTest {
 
     @Test
     void the_absent_fetcher_answers_every_leg_itself_rather_than_deriving_one_from_another() throws Exception {
-        // NONE used to be a lambda, so its head() opened a download that materialised a fetch to discover there was no
-        // upstream. It answers each leg directly now: the sentinel for "no upstream connectivity" must not have to
-        // start a body transfer to say so.
+        // NONE answers each leg directly: the sentinel for "no upstream connectivity" must not have to start a body
+        // transfer to say so, as a head() derived from a download would.
         assertThat(ProxyFormat.Fetcher.NONE).isNotInstanceOf(ProxyFormat.Fetcher.Buffered.class);
         URI url = URI.create("https://upstream.example/artifact.jar");
         assertThat(ProxyFormat.Fetcher.NONE.fetch(url, Map.of())).isEmpty();
@@ -80,9 +79,9 @@ class FetcherLegsTest {
 
     @Test
     void a_decorator_that_forwards_only_fetch_no_longer_compiles_into_a_fetcher() throws Exception {
-        // The compile-time half of the fix cannot be asserted at runtime, so this states what it buys: a wrapper must
-        // hand back the transport's own legs. A wrapper that delegates all three keeps them; the buffered derivation
-        // is what it would have got for free before, and it is measurably not the same object.
+        // The compile-time half cannot be asserted at runtime, so this states what it buys: a wrapper must hand back
+        // the transport's own legs. A wrapper that delegates all three keeps them; the buffered derivation is what it
+        // would get for free otherwise, and it is measurably not the same object.
         AtomicInteger streamed = new AtomicInteger();
         ProxyFormat.Fetcher transport = new ProxyFormat.Fetcher() {
 

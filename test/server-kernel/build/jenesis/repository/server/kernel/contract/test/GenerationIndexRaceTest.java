@@ -11,10 +11,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Two rebuilds of one generation index meeting at the marker - what two nodes produce when one's single-writer lease
- * lapsed mid-rebuild and the other took it. The marker flip used to be a plain write, so the stale rebuild's marker
- * overwrote the newer one's and pointed every reader at a generation the stale rebuild had been writing into beside
- * the newer one, and which the next rebuild would reclaim under them. The flip is a compare-and-set against the marker
- * a rebuild started from: the rebuild whose marker moved loses, says so, and leaves the newer marker standing.
+ * lapsed mid-rebuild and the other took it. A plain write of the marker would let the stale rebuild's marker overwrite
+ * the newer one's and point every reader at a generation the stale rebuild had been writing into beside the newer one,
+ * and which the next rebuild would reclaim under them. The flip is a compare-and-set against the marker a rebuild
+ * started from: the rebuild whose marker moved loses, says so, and leaves the newer marker standing.
  */
 class GenerationIndexRaceTest {
 

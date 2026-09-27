@@ -11,7 +11,7 @@ import module org.slf4j;
  * record WARNING-and-above into {@link #WARNINGS}, each as {@code name|message[|thrown]} (slf4j renders {@code {}}
  * placeholders positionally); a test filters them by logger name and drains the list first. A record-only provider:
  * no events test asserts on console output, so binding slf4j here changes nothing observable except making the
- * diagnostic capturable (the events SPI's proof of the §9 contract that a fail-soft still emits a diagnostic).
+ * diagnostic capturable (the events SPI's proof of the contract that a fail-soft still emits a diagnostic).
  */
 public final class CapturingLoggerFinder implements SLF4JServiceProvider {
 

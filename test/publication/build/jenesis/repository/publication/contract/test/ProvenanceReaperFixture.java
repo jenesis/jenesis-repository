@@ -20,7 +20,7 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
  * key aligns with is the pointer's own - which is why the reaper exists at all. But nothing walks the space:
  * {@code compliance/web} provides no {@code MaintenanceTaskProvider}, no sweep names the prefix, and while the module
  * is installed {@code GET /api/admin/orphans} cannot even see the leak. So a lost {@code onDeleted} orphans one cache
- * object <em>forever</em>, and there is no pass a {@code repair} leg could drive. §9 D-4 raises the fix - a
+ * object <em>forever</em>, and there is no pass a {@code repair} leg could drive. The fix would be a
  * retention leg keyed on "the pointer no longer resolves", which would also reclaim orphans created while the module
  * was uninstalled, something no delivery mechanism could cover.
  *
@@ -39,8 +39,8 @@ final class ProvenanceReaperFixture implements PublicationHookFixture.Observer, 
             "nothing reclaims this space but the hook itself: compliance/web provides no MaintenanceTaskProvider, no "
                     + "sweep names the prefix, and the orphan diagnostic cannot see the leak while the module is "
                     + "installed - so a lost onDeleted orphans one cache object forever and there is no pass a repair "
-                    + "leg could drive. §9 D-4 raises the fix (a retention leg keyed on \"the pointer no longer "
-                    + "resolves\", which also covers orphans created while the module was absent).";
+                    + "leg could drive. The fix would be a retention leg keyed on \"the pointer no longer "
+                    + "resolves\", which also covers orphans created while the module was absent.";
 
     private static final String NO_PUBLISH_LEG =
             "the hook declares no publish leg: onPublished is an explicit no-op, because publishing mints no "

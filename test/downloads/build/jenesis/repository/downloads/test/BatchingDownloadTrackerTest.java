@@ -22,9 +22,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  * own clock; a clean close flushes every residual. Every case drives {@link BatchingDownloadTracker#drain drain(batch,
  * now)} and {@link BatchingDownloadTracker#onIdle onIdle(now)} synchronously with an injected {@link Instant} - the
  * class's own time seam - so the interval is asserted without a wall clock or the worker thread. The write lands in
- * and reads back from a real {@link StoreRepositoryInventory} over a filesystem {@link ArtifactStore} - this module
- * path carries no consolidated metadata store, so it is the {@code downloaded/} sidecar and each flush is one
- * compare-and-set write the wrapping {@link FaultInjectingStore} counts.
+ * and reads back from a real {@link StoreRepositoryInventory} over a filesystem {@link ArtifactStore} - the version
+ * document's {@code downloads} section, where each flush is one compare-and-set write the wrapping {@link FaultInjectingStore} counts.
  */
 class BatchingDownloadTrackerTest {
 

@@ -183,11 +183,11 @@ class ServableNamesTest {
     @Test
     void a_marker_on_the_hash_a_publish_pointer_names_withholds_it_with_no_quarantine_pointer_anywhere()
             throws IOException {
-        // The publish/ face used to consult only the interceptor chain, so the content half of a hold - the
-        // withheld/<hash> marker, keyed by content precisely so ONE hold retracts the bytes wherever served - reached
-        // only the blobs/ face. Any publish/-namespace alias the hold writer's path enumeration did not name therefore
-        // kept serving held bytes; the Maven cross-publish's /module/<name>/<name>.jar "latest" view is the driven
-        // case, since it belongs to no single version and no ArtifactLayout.paths overload reports it.
+        // The publish/ face consults the content half of a hold too - the withheld/<hash> marker, keyed by content
+        // precisely so ONE hold retracts the bytes wherever served - not only the interceptor chain. Otherwise any
+        // publish/-namespace alias the hold writer's path enumeration did not name would keep serving held bytes;
+        // the Maven cross-publish's /module/<name>/<name>.jar "latest" view is the driven case, since it belongs to no
+        // single version and no ArtifactLayout.paths overload reports it.
         MapStore store = new MapStore();
         store.pointer("publish/module/test.widget/test.widget.jar", HASH_A);   // no /quarantine pointer at this alias
         store.blob(HASH_A);
@@ -426,7 +426,7 @@ class ServableNamesTest {
                 .isEqualTo(State.WITHHELD);
     }
 
-    /** A version whose bytes carry no marker still lists - the fix must not hide everything that shares a folder
+    /** A version whose bytes carry no marker still lists - the screen must not hide everything that shares a folder
      *  shape with something held. */
     @Test
     void an_unmarked_version_still_lists() throws IOException {
@@ -466,9 +466,9 @@ class ServableNamesTest {
 
     @Test
     void a_chain_withheld_leaf_beyond_the_old_32_cap_is_now_screened_by_the_raised_cap() throws IOException {
-        // FIX 3: the chain leg formerly probed only the first 32 leaves and failed OPEN past that - a folder with a
-        // withheld leaf sitting beyond leaf 32 leaked its version name. The cap is raised well above any legitimate
-        // version folder, so this 40-leaf folder is probed in full and the held leaf at sorted index 35 is now found.
+        // The chain leg probes a folder's leaves well past any legitimate version folder's size: probing only the
+        // first 32 and failing OPEN past that would leak the version name of a folder with a withheld leaf beyond
+        // leaf 32. This 40-leaf folder is probed in full and the held leaf at sorted index 35 is found.
         MapStore store = new MapStore();
         for (int leaf = 0; leaf < 40; leaf++) {
             store.pointer(String.format("publish/maven/g/a/1/leaf-%03d.jar", leaf), HASH_A);
@@ -498,7 +498,7 @@ class ServableNamesTest {
 
     @Test
     void a_folder_wider_than_the_raised_cap_fails_closed() throws IOException {
-        // FIX 3: past the raised probe bound the folder fails CLOSED rather than fail-open - a pathologically wide
+        // Past the probe bound the folder fails CLOSED rather than fail-open - a pathologically wide
         // folder cannot be probed exhaustively without unbounding the chain fan-out, so it is screened even with no
         // withheld leaf and the free (empty) chain. (PROBE_CAP is 512; 700 leaves exceeds it.)
         MapStore store = new MapStore();

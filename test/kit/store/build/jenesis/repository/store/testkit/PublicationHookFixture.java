@@ -58,9 +58,9 @@ public interface PublicationHookFixture {
      *
      * <p>The default is coordinate-less, which is a real publish shape and the one several properties are about: a
      * checksum, a generated sidecar, an envelope path that carries no version. A hook keyed on the neutral
-     * ecosystem/coordinate/version triple skips exactly that shape by design, so for those hooks every kit publish
-     * used to be invisible - and their fixtures had to exclude whole properties with a reason saying the kit could
-     * not reach them, which turns a check into a note.
+     * ecosystem/coordinate/version triple skips exactly that shape by design, so for those hooks a coordinate-less
+     * kit publish would be invisible - and their fixtures would have to exclude whole properties with a reason saying
+     * the kit could not reach them, which turns a check into a note.
      *
      * <p>A fixture whose hook is coordinate-keyed overrides this with
      * {@link PublicationHookContract#coordinated(String, String, String)}, deriving a coordinate from the path so

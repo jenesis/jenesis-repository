@@ -7,7 +7,7 @@
  * (the fail-closed deny), delegating the decision to the real
  * {@code build.jenesis.repository.ui.identity.LoginAuthorization} over a real filesystem membership store. The OIDC leg builds the
  * user from the id token with no user-info endpoint (no network); the OAuth2 leg fetches a loopback user-info endpoint.
- * That end-to-end leg needs the console security / store packages exported to this test module (see the fix report).
+ * That end-to-end leg needs the console security / store packages exported to this test module.
  *
  * @jenesis.release 25
  * @jenesis.exclude spring.security.oauth2.client com.nimbusds/oauth2-oidc-sdk

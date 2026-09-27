@@ -394,7 +394,7 @@ public final class GatePolicyContract {
                             + " leg with \"" + message + "\", which never names the key. On the boot and "
                             + "scheduled-re-read path there is no settings-write context to add it back, so an "
                             + "operator with several dials learns only that SOME value somewhere is unreadable "
-                            + "(§9).");
+                            + "and which.");
                 }
             }
             // The way out: a dimension switched off is not asked to create anything, so an unparseable dial on it must
@@ -621,8 +621,7 @@ public final class GatePolicyContract {
         }
         // The permit itself. Without this the whole ALLOW iteration would be vacuous for a dimension that
         // short-circuits before it looks at the subject: an empty finding list folds to ALLOW by definition, so
-        // "reported ALLOW" is true of a dimension that reported nothing at all - which is exactly what six of the
-        // seven dial-carrying dimensions used to do.
+        // "reported ALLOW" is true of a dimension that reported nothing at all.
         if (found.isEmpty()) {
             throw underTest.failure("raised no finding at all for '" + scenario.name() + "' on the " + path
                     + " leg with '" + key + "=ALLOW', although this subject is the one that dial governs - so the "

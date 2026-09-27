@@ -18,10 +18,10 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
  * granting admin to every authenticated user. A super-admin here is not that: it administers <em>every</em> tenant
  * and the deployment itself, so the same wildcard would be a far larger grant, and not one anybody sets on purpose.
  *
- * <p>It used to be neither honoured nor refused - {@code *} was kept as a literal id, which matches no principal, so
- * a deployment configured that way had <em>no</em> super-admins at all while the security advisory told the operator
- * every signed-in user was one. Both directions wrong, and silently. Refusing at startup is the only answer that
- * cannot mislead: the operator is told, once, before anything runs.
+ * <p>Keeping {@code *} as a literal id would match no principal, so a deployment configured that way would have
+ * <em>no</em> super-admins at all while the security advisory told the operator every signed-in user was one - both
+ * directions wrong, and silently. Refusing at startup is the only answer that cannot mislead: the operator is told,
+ * once, before anything runs.
  */
 class SuperadminsTest {
 
@@ -59,11 +59,10 @@ class SuperadminsTest {
 
     @Test
     void the_wildcard_is_refused_whatever_the_tenancy() {
-        // It used to be honoured under fixed tenancy - where "administers every tenant" and "administers the one
-        // tenant" are the same grant, so it was the single-tenant console's documented open-console opt-out - and
-        // refused under any multi-tenant routing. It is refused everywhere now and the tenancy mode no longer
-        // enters into it: an administrator is a holder of rights, and a wildcard names no holder, so nothing is
-        // granted that an operator could read back, revoke, or see in a list of who administers this deployment.
+        // Under fixed tenancy "administers every tenant" and "administers the one tenant" are the same grant, and
+        // the wildcard is refused there as under any multi-tenant routing: an administrator is a holder of rights,
+        // and a wildcard names no holder, so nothing is granted that an operator could read back, revoke, or see in a
+        // list of who administers this deployment.
         for (String tenancy : List.of("fixed", "multi", "host", "path")) {
             assertThatIllegalStateException()
                     .as("refused under %s", tenancy)

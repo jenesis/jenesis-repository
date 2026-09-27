@@ -26,12 +26,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * ({@code jenreg.token-exchange=<name>}) - so one image carries every module and configuration decides
  * what runs.
  *
- * <p>The three {@code server-spi} singletons resolve through the shared
- * {@code Providers.optionalUnique} primitive, and this suite pins the semantics that changed: a selection naming an
- * <em>uninstalled</em> implementation used to resolve to the SPI's {@code NONE} sentinel, so a deployment that asked
- * for rate limiting, workload-identity exchange or key-usage tracking and misspelled it - or forgot its module - came
- * up unlimited, unauthenticated-by-that-route and untracked while looking configured. It now throws at resolution
- * naming the selection and what is installed (&sect;9). Only <em>unselected</em> absence still degrades to
+ * <p>The three {@code server-spi} singletons resolve through the shared {@code Providers.optionalUnique}
+ * primitive: a selection naming an <em>uninstalled</em> implementation throws at resolution, naming the selection and
+ * what is installed. Resolving it to the SPI's {@code NONE} sentinel would bring a deployment that asked for rate
+ * limiting, workload-identity exchange or key-usage tracking and misspelled it - or forgot its module - up unlimited,
+ * unauthenticated-by-that-route and untracked while looking configured. Only <em>unselected</em> absence degrades to
  * {@code NONE}.
  */
 class FeatureTogglesTest {
@@ -67,9 +66,9 @@ class FeatureTogglesTest {
 
     @Test
     void a_token_exchange_selection_naming_an_uninstalled_implementation_fails_loudly() {
-        // (§9): this used to answer TokenExchange.NONE, so a deployment that configured workload identity and
-        // misspelled the protocol booted with the exchange endpoint reporting "not installed" - and every CI job
-        // silently falling back to a long-lived static credential.
+        // Answering TokenExchange.NONE would boot a deployment that configured workload identity and misspelled the
+        // protocol with the exchange endpoint reporting "not installed" - and every CI job silently falling back to
+        // a long-lived static credential.
         Features.configure(Map.of("jenreg.token-exchange", "not-installed")::get);
         assertThatThrownBy(() -> TokenExchangeProvider.resolve(Authorization.anonymous(), key -> null))
                 .isInstanceOf(IllegalStateException.class)
@@ -89,7 +88,7 @@ class FeatureTogglesTest {
 
     @Test
     void a_rate_limiter_selection_naming_an_uninstalled_implementation_fails_loudly() {
-        // (§9): unlimited-while-configured is the worst possible degradation for a metering capability.
+        // Unlimited-while-configured is the worst possible degradation for a metering capability.
         Features.configure(Map.of("jenreg.rate-limiter", "coordinated")::get);
         assertThatThrownBy(() -> RateLimiterProvider.resolve(key -> null))
                 .isInstanceOf(IllegalStateException.class)
@@ -110,7 +109,7 @@ class FeatureTogglesTest {
 
     @Test
     void a_key_usage_selection_naming_an_uninstalled_implementation_fails_loudly() {
-        // (§9): silently answering NONE would leave every credential reading "last used: never", which an
+        // Silently answering NONE would leave every credential reading "last used: never", which an
         // operator takes as evidence that an unused key is safe to revoke.
         Features.configure(Map.of("jenreg.key-usage", "streaming")::get);
         assertThatThrownBy(() -> KeyUsageTrackerProvider.resolve(Authorization.anonymous(), key -> null))

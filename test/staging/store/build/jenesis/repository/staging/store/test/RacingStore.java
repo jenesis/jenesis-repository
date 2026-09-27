@@ -6,9 +6,8 @@ import build.jenesis.repository.store.ArtifactStore;
 /**
  * A reusable delegating {@link ArtifactStore} that injects a rival concurrent writer's mutations <em>between</em> a
  * target's read and its act - the deterministic form of the read-then-act (TOCTOU) race the staging promote/rollback
- * gate defends against (#212). It is the extraction of the hand-rolled racing doubles this test file used to re-write by
- * hand ({@code StealLeaseOnFirstRelease}, {@code FailSecondHandle}), each reimplementing all eleven {@code ArtifactStore}
- * methods around a one-line injection.
+ * gate defends against - so a test states its one-line injection rather than reimplementing all eleven
+ * {@code ArtifactStore} methods around it.
  *
  * <p><b>Colocation note.</b> This is the same extraction as the server test module's {@code RacingStore}
  * ({@code build.jenesis.repository.server.kernel.test.RacingStore}); it is duplicated here rather than shared because the

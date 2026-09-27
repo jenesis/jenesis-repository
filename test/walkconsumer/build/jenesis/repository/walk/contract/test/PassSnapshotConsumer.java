@@ -15,7 +15,7 @@ import build.jenesis.repository.walk.WalkPass;
  *
  * <p><b>Why it cannot converge, and what it must do instead.</b> A resumed pass replays only the tail past the last
  * committed cursor, so what reaches {@code onPassCompleted} after a crash is a fragment of the store. Committing it
- * would replace a whole view with a partial one and serve it as if it were whole - the one outcome &sect;5 forbids.
+ * would replace a whole view with a partial one and serve it as if it were whole - the one outcome self-healing forbids.
  * The signal that this is happening is the pass <b>generation</b>: a fresh pass is a new generation, whereas a resume
  * hands this consumer the same generation it already began accumulating for. Its own memory did not survive the crash,
  * so the generation it began has to be <em>durable</em> - the {@code pending} marker below. Seeing it again, the
@@ -41,7 +41,7 @@ public final class PassSnapshotConsumer implements WalkConsumer {
     /** The generation whose accumulation is in flight; present means "a pass began and never committed". */
     public static final String PENDING = SPACE + "/pending";
 
-    /** Why the last pass could not converge - the &sect;5 say-so, so an empty or stale view is never ambiguous. */
+    /** Why the last pass could not converge - the say-so, so an empty or stale view is never ambiguous. */
     public static final String DEGRADED = SPACE + "/degraded";
 
     private final Map<String, String> accumulated = new TreeMap<>();
@@ -98,7 +98,7 @@ public final class PassSnapshotConsumer implements WalkConsumer {
             store.delete(DEGRADED);
         } catch (IOException failure) {
             // The hooks cannot declare a checked exception; an unchecked one propagates out of the pass identically,
-            // and losing this write silently would be exactly the swallowed failure §9 forbids.
+            // and losing this write silently would be exactly the swallowed failure a fail-soft may not be.
             throw new UncheckedIOException(failure);
         }
     }

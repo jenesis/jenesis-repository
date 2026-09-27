@@ -299,9 +299,9 @@ class PageTest {
 
     @Test
     void the_default_page_listed_keys_a_trailing_slash_prefix_as_the_bare_one() throws IOException {
-        // The interface default derives pageListed from page; it used to key the children under the prefix as given,
-        // so a caller's "kit/listing/" produced "kit/listing//alpha" where every backend produces "kit/listing/alpha".
-        // The store contract's decorator legs found it through a decorator that forwarded page alone.
+        // The interface default derives pageListed from page and keys the children under the normalised prefix, so a
+        // caller's "kit/listing/" produces "kit/listing/alpha" as every backend does, never "kit/listing//alpha" - a
+        // decorator that forwards page alone reaches this default.
         ArtifactStore store = fallback(store());
         for (String name : List.of("alpha", "beta")) {
             store.write("kit/listing/" + name, new ByteArrayInputStream(name.getBytes(StandardCharsets.UTF_8)));

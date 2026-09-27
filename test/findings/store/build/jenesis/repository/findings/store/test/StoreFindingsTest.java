@@ -154,7 +154,7 @@ class StoreFindingsTest {
         findings.record("PyPI", "cross", "1.0.0", Finding.of(
                 "PY-1", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "pypi one", FIRST));
 
-        // Without an ecosystem the same-named coordinate conflates both ecosystems (the old five-field filter).
+        // Without an ecosystem the same-named coordinate conflates both ecosystems.
         assertThat(findings.all(new Findings.Filter("cross", null, null, null, null, null))).hasSize(2);
         // Scoped to one ecosystem (case-insensitively), only that ecosystem's row is returned.
         assertThat(findings.all(new Findings.Filter("cross", null, null, null, null, "pypi")))

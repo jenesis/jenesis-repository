@@ -309,8 +309,8 @@ class FilesystemArtifactStoreTest {
      * thousands of them and repeated - one file would almost never land in it, and the cache soak needed three
      * minutes at seventy publishes a second to hit it twice.
      *
-     * <p>The assertion is one-sided on purpose: it says the scan does not THROW. With the fix that can never
-     * happen; without it, it happens whenever the race is won, which at this scale is nearly every run.
+     * <p>The assertion is one-sided on purpose: it says the scan does not THROW. A scan that can throw here throws
+     * whenever the race is won, which at this scale is nearly every run.
      */
     @Test
     void a_file_that_vanishes_during_a_scan_does_not_abort_it() throws Exception {

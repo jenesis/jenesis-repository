@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>The seam resolves through the shared {@code Providers.optionalUnique} primitive, so the empty
  * outcome is reserved for genuine <em>unselected</em> absence: an operator who explicitly names a collector - or a
  * walk for the collector to ride - that nothing answers to gets a loud failure instead, because a silent no-op would
- * read as a healthy idle system while storage grows without bound (&sect;9).
+ * read as a healthy idle system while storage grows without bound.
  */
 class GcProviderTest {
 
@@ -32,8 +32,8 @@ class GcProviderTest {
 
     @Test
     void an_explicitly_selected_collector_no_provider_answers_to_fails_loudly() {
-        // (§9): this used to resolve to the no-op default, so `jenreg.gc=other` looked like a
-        // deployment with garbage collection configured while nothing was ever reclaimed.
+        // Resolving to the no-op default would make `jenreg.gc=other` look like a deployment with garbage
+        // collection configured while nothing was ever reclaimed.
         Features.configure(key -> "jenreg.gc".equals(key) ? "other" : null);
         assertThatThrownBy(() -> GarbageCollectorProvider.resolve(key -> null))
                 .isInstanceOf(IllegalStateException.class)
@@ -66,15 +66,14 @@ class GcProviderTest {
         // The collector rides the shared walk; with the walk implementation switched off there is no enumeration to
         // ride, and the deployment degrades to no garbage collection rather than a hand-rolled listing loop. The
         // reference walk's feature name is `paged-descent` (StoreWalkProvider), so that is the toggle that removes
-        // it - it used to be `store`, which is the artifact store's own selection key, so this line was configuring
-        // two things at once and the operator following it would not have booted.
+        // it - not `store`, which is the artifact store's own selection key.
         Features.configure(key -> "jenreg.paged-descent".equals(key) ? "false" : null);
         assertThat(GarbageCollectorProvider.resolve(key -> null)).isEmpty();
     }
 
     @Test
     void an_explicitly_selected_walk_the_collector_cannot_ride_fails_loudly() {
-        // The collector's own resolution is fine; the walk underneath it is the §9 miss, and the failure propagates
+        // The collector's own resolution is fine; the walk underneath it is the unsatisfiable selection, and the failure propagates
         // rather than being folded into "no collector installed".
         Features.configure(key -> "jenreg.walk".equals(key) ? "absent" : null);
         assertThatThrownBy(() -> GarbageCollectorProvider.resolve(key -> null))

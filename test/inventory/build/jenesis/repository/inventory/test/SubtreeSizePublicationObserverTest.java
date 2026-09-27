@@ -264,10 +264,10 @@ class SubtreeSizePublicationObserverTest {
     /**
      * A re-publish at the same path folds the difference, not the whole size again.
      *
-     * <p>The observer used to add {@code +size} to every ancestor per delivery without asking what that path
-     * already contributed, so publishing the same coordinate twice counted it twice and quota and browse totals
-     * read high until the next {@code rollUpSizes()} swept the drift away. The class's best-effort wording covers
-     * a <em>dropped</em> delta, never a doubled one.
+     * <p>Adding {@code +size} to every ancestor per delivery without asking what that path already contributes would
+     * count a coordinate published twice twice, and quota and browse totals would read high until the next
+     * {@code rollUpSizes()} swept the drift away. The class's best-effort wording covers a <em>dropped</em> delta,
+     * never a doubled one.
      *
      * <p>Driven through {@code commit}, because that is the choreography that knows: it reads the pointer it is
      * about to overwrite and describes the blob it replaced. The hand-rolled {@code link}-then-{@code published}

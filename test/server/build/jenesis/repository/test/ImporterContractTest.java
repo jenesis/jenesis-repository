@@ -109,9 +109,9 @@ class ImporterContractTest {
      * format, because a screen that each importer's own suite probes with the shapes its author thought of is exactly
      * how the coordinate seam rotted format by format before.
      *
-     * <p>What it holds open: {@code RawImporter.importTarget("/../x")} used to answer a descriptor whose path was
-     * {@code /raw/../x}, and {@code MavenImporter} inherited {@code MavenFormat.describe}'s fall-through to
-     * {@code ArtifactDescriptor.at(ECOSYSTEM, path)}, so the same shape came back as {@code /maven/../x}. That
+     * <p>What it holds shut: {@code RawImporter.importTarget("/../x")} answering a descriptor whose path is
+     * {@code /raw/../x}, or {@code MavenImporter} inheriting {@code MavenFormat.describe}'s fall-through to
+     * {@code ArtifactDescriptor.at(ECOSYSTEM, path)} so the same shape comes back as {@code /maven/../x}. That
      * descriptor is what the import edge screens against, what an edition records for a held or rejected asset, and
      * what a quarantine diversion composes its key from - so a traversal-shaped path there points all three at a
      * coordinate the asset will never occupy. Answering {@link Optional#empty()} instead would be worse, not better:

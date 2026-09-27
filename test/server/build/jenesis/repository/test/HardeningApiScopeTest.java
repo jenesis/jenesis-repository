@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The read-only hardening verdict API is a deployment-management surface, so the security chain gates it against the
- * whole deployment ({@code *}) - a GET needs {@code manage:read} before the controller is reached (§10: a caller
+ * whole deployment ({@code *}) - a GET needs {@code manage:read} before the controller is reached (a caller
  * lacking the write role still sees the read). This pins the classification so the endpoint can never be reached by a
  * caller holding only a per-repository right, and is never accidentally opened wider than the sibling {@code /api/}
  * management reads.

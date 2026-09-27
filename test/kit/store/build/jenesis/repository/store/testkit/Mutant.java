@@ -87,7 +87,7 @@ public enum Mutant {
 
     /**
      * Tenant scoping: the hook records through the deployment root rather than through the doubly-scoped store the
-     * publication routed through (&sect;6). The row exists and is correct; it is one repository over.
+     * publication routed through. The row exists and is correct; it is one repository over.
      */
     A_ROOT_SCOPED_RECORD("tenant scoping - the hook records through the deployment root, not the scope it was handed"),
 

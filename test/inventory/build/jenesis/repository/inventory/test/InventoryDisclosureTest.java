@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The servable-name coordinate/paging face the inventory grew in P-E2 - the seam the P-E3 console/search and REST browse
+ * The servable-name coordinate/paging face of the inventory - the seam the console, search and REST browse
  * screen through so a held (withheld) or torn (blob-gone) name never appears in an enumeration, while a coordinate that is
  * merely a membership row with no blob stored still lists (the pinned ghost-coordinate contract).
  *
@@ -145,9 +145,9 @@ class InventoryDisclosureTest {
     }
 
     /**
-     * The third state, and the one that used to disclose: a layout IS installed for the ecosystem, so the fallback
-     * above does not fire, and it can place nothing - so neither face examined anything and the screen had no
-     * evidence either way. That silence used to be read as "nothing withholds it".
+     * The third state, and the one that must not disclose: a layout IS installed for the ecosystem, so the fallback
+     * above does not fire, and it can place nothing - so neither face examined anything and the screen has no
+     * evidence either way. That silence must not be read as "nothing withholds it".
      *
      * <p>It is not a contrived arrangement. It is what a layout whose path mapping is configured per repository
      * answers when it is asked through the store-free overload - the overload this screen uses deliberately, so that
@@ -185,24 +185,24 @@ class InventoryDisclosureTest {
                 .isFalse();
     }
 
-    // ---- disclosableDisplay: the search-hit face (A26-F5 right-to-left multi-split) ----
+    // ---- disclosableDisplay: the search-hit face (right-to-left multi-split) ---------------
 
     @Test
     void a_held_digest_pinned_oci_display_screens_via_the_second_colon_split() throws IOException {
-        // The A26-F5 defect: an OCI digest-pinned row's display is <name>:sha256:<hex> (two colons). The old single
-        // lastIndexOf(':') split mis-cut it to (<name>:sha256, <hex>) - a coordinate no ecosystem places - so the held
-        // image FELL OPEN to true and leaked its name+digest through the Lucene search leg. Here the row is a
+        // An OCI digest-pinned row's display is <name>:sha256:<hex> (two colons). A single lastIndexOf(':') split
+        // would mis-cut it to (<name>:sha256, <hex>) - a coordinate no ecosystem places - so the held image would fall
+        // open to true and leak its name+digest through the search leg. Here the row is a
         // blobs-namespace member whose pointer hash is withheld; disclosableDisplay must probe the SECOND colon split,
         // place (<name>, sha256:<hex>) on the blobs ecosystem, and screen it to false.
         String digest = "b".repeat(64);
         String version = "sha256:" + digest;                       // the digest-reference "version" of an OCI row
-        inventory().record(BLOBS_ECO, "myimage", version, NOW);    // the published/ membership row the scan enumerates
+        inventory().record(BLOBS_ECO, "myimage", version, NOW);    // the published section the scan enumerates
         store.writeVersioned(InventoryTestBlobFormat.blobKey("myimage", version),
                 digest.getBytes(StandardCharsets.UTF_8), null);    // its single blobs-namespace pointer, body = hash
         Withheld.mark(store, digest);                              // the retroactive sweep marked that hash withheld
 
         assertThat(inventory().disclosableDisplay("myimage:" + version, ServableNames.Policy.HIDE_WITHHELD))
-                .as("A26-F5: a held digest-pinned OCI display (<name>:sha256:<hex>) places on its second colon split "
+                .as("a held digest-pinned OCI display (<name>:sha256:<hex>) places on its second colon split "
                         + "and screens to false instead of mis-splitting and falling open")
                 .isFalse();
     }
@@ -224,9 +224,9 @@ class InventoryDisclosureTest {
 
     @Test
     void a_maven_group_artifact_version_display_places_on_the_first_split_exactly_as_before() throws IOException {
-        // Regression pin: Maven's display carries the coordinate's own colon (g:a:v). The first candidate of the
-        // right-to-left loop IS the old single lastIndexOf(':') split, so (org.acme:lib, 1.0) places on the FIRST
-        // split - byte-for-byte the pre-fix behavior for every colon-free-version ecosystem.
+        // Maven's display carries the coordinate's own colon (g:a:v). The first candidate of the right-to-left loop
+        // IS the single lastIndexOf(':') split, so (org.acme:lib, 1.0) places on the FIRST split - the same answer
+        // for every colon-free-version ecosystem.
         inventory().record(PUBLISH_ECO, "org.acme:lib", "1.0", NOW);
 
         assertThat(inventory().disclosableDisplay("org.acme:lib:1.0", ServableNames.Policy.HIDE_WITHHELD))
@@ -254,7 +254,7 @@ class InventoryDisclosureTest {
     void a_display_no_ecosystem_places_on_any_split_stays_disclosable() throws IOException {
         // The ghost/uninstalled-format membership contract is preserved: a display no colon split places over any
         // published ecosystem discloses (membership is the only truth there). A held coordinate always carries a
-        // published/ row, so the held case always places on some split - only genuinely absent displays reach here.
+        // published section, so the held case always places on some split - only genuinely absent displays reach here.
         assertThat(inventory().disclosableDisplay("totallyunplaced:x:y:z", ServableNames.Policy.HIDE_WITHHELD))
                 .as("a display no ecosystem places on any right-to-left split stays disclosable (ghost contract)")
                 .isTrue();
@@ -262,9 +262,9 @@ class InventoryDisclosureTest {
 
     @Test
     void a_colon_less_bare_name_display_fails_closed_by_throwing() throws IOException {
-        // A colon-less display (a bare name with no :version) once fell through the right-to-left split loop
-        // to the ghost-coordinate `return true` and disclosed unconditionally - a fail-open on the one input the
-        // coordinate:version face is not meant to take. It now fails CLOSED by throwing: a name-level surface must
+        // A colon-less display (a bare name with no :version) would fall through the right-to-left split loop to the
+        // ghost-coordinate `return true` and disclose unconditionally - a fail-open on the one input the
+        // coordinate:version face is not meant to take. It fails CLOSED by throwing: a name-level surface must
         // screen through ServableNames, not this face. No live caller passes a bare name (every caller supplies a
         // coordinate + ":" + version or an already-versioned group:name:version), so this closes a default, not a path.
         assertThatThrownBy(() -> inventory().disclosableDisplay("barename", ServableNames.Policy.HIDE_WITHHELD))

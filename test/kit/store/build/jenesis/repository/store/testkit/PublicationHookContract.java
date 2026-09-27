@@ -112,7 +112,7 @@ public final class PublicationHookContract {
         /** Clause 7's blast radius, in the only direction that matters: a lost call may leave the surface stale, but
          *  the store still serves the artifact and still holds what was held. The observer cannot hide either. */
         A_LOST_CALL_NEVER_HIDES_A_SERVED_ARTIFACT_OR_A_HOLD(Role.AFTER_COMMIT_OBSERVER),
-        /** Clause 11 and the plan's gate 5. The mutation-to-callback window is lossy for <em>every</em> class the seam
+        /** Clause 11. The mutation-to-callback window is lossy for <em>every</em> class the seam
          *  supports; a fixture claiming commit-coupled at-least-once is refused by name. */
         THE_COMMIT_TO_CALLBACK_WINDOW_LOSES_THE_CALL(Role.AFTER_COMMIT_OBSERVER),
         /** Clause 11's heal-all, executed rather than claimed: the fixture's own walk/sweep repair runs, with a fresh
@@ -433,7 +433,7 @@ public final class PublicationHookContract {
                         "the whole property is WHERE the row lands, so the mutation moves the row and changes nothing "
                                 + "else: a derived row written one scope up is a row recorded for the wrong "
                                 + "repository, and it reads as a correct row from anywhere but the scope it belongs "
-                                + "in (§6)")));
+                                + "in")));
         mutations.put(Property.A_LOST_CALL_NEVER_HIDES_A_SERVED_ARTIFACT_OR_A_HOLD, List.of(
                 new Mutation(Mutant.A_CONVERGENCE_THE_SEEDED_STORE_ALREADY_HAS,
                         "the observer-facing half of the blast radius is that the surface is demonstrably STALE after "
@@ -475,7 +475,7 @@ public final class PublicationHookContract {
                         "the half a provider owns: which store the three legs are HANDED is Publication's routing and "
                                 + "no hook can change it, but whether the screen writes through the one it was handed "
                                 + "is entirely the screen's. The mutation moves the row and nothing else - it is "
-                                + "still written, still correct, still keyed the same way, one repository up (§6)")));
+                                + "still written, still correct, still keyed the same way, one repository up")));
         mutations.put(Property.ACCEPT_IS_THE_NEUTRAL_ANSWER_AND_AN_EMPTY_CHAIN_ACCEPTS, List.of(
                 new Mutation(Mutant.A_NON_NEUTRAL_DEFAULT,
                         "the clause's hook-facing half is that an UN-ARRANGED screen has nothing against the artifact "
@@ -499,7 +499,7 @@ public final class PublicationHookContract {
                 new Mutation(Mutant.A_WRITING_WITHHELD,
                         "the purity half is judged by comparing the store's keys either side of three serves and an "
                                 + "enumeration, so the mutation is one key written on that path - a lazy refresh, an "
-                                + "access counter, a memo persisted 'just this once' - which is what §10 forbids on a "
+                                + "access counter, a memo persisted 'just this once' - which a read must never do on a "
                                 + "GET and what the comparison exists to see")));
         mutations.put(Property.A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE, List.of(
                 new Mutation(Mutant.A_LATCHED_WITHHELD,
@@ -774,13 +774,12 @@ public final class PublicationHookContract {
      * The visibility one kit publish declares: the request path, and - when the descriptor carries one - the
      * coordinate it stands for.
      *
-     * <p>Every kit publish used to declare {@link Publication.Visibility#at} alone, which sets no {@code described},
-     * so every artifact the kit committed reached an observer with no coordinate and no version. That is exactly the
-     * shape a coordinate-keyed observer skips by design, so hooks like the search and event publication observers
-     * could not be driven through the kit at all and their fixtures carried exclusions saying so. The refinement
-     * seam already existed on the free {@code Visibility}; the kit simply never used it.
+     * <p>A publish declaring {@link Publication.Visibility#at} alone sets no {@code described}, so the artifact
+     * reaches an observer with no coordinate and no version - exactly the shape a coordinate-keyed observer skips by
+     * design, so hooks like the search and event publication observers could not be driven through the kit at all.
+     * The kit therefore refines the free {@code Visibility} with the descriptor.
      *
-     * <p>A path-only descriptor still declares a path-only visibility, so a fixture that wants the old shape - and
+     * <p>A path-only descriptor still declares a path-only visibility, so a fixture that wants a coordinate-less shape - and
      * the checks about coordinate-less envelope paths, which are about exactly that - gets it by handing a
      * descriptor built with {@link #descriptor(String)}.
      */

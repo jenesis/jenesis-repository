@@ -99,9 +99,8 @@ class BoundedInspectionTest {
 
     @Test
     void the_manifest_tier_an_inspector_reads_under_is_the_operator_settable_shared_ceiling() throws IOException {
-        // The inspectors' manifest tier used to be BoundedBodyReader's private 4 MiB constant, so an operator
-        // who raised or lowered jenreg.archive.largest-entry moved the FORMATS' ceiling and not the GATE's - two
-        // numbers that were only ever parallel by convention. One bound now answers for both.
+        // The inspectors' manifest tier and the formats' ceiling are one bound, jenreg.archive.largest-entry: two
+        // numbers parallel only by convention would let an operator move the FORMATS' ceiling and not the GATE's.
         byte[] manifest = new byte[512];
         assertThat(ArchiveInflation.entry(new ByteArrayInputStream(manifest)).exhausted())
                 .as("512 bytes is a manifest under the shared default")
@@ -184,10 +183,9 @@ class BoundedInspectionTest {
 
     @Test
     void the_walk_bound_is_the_operator_settable_shared_one() throws IOException {
-        // The gate's archive-walk ceiling used to be BoundedArchive's own 64 MiB constant and its own byte-
-        // counting stream, in parallel with a private copy of both in every archive-cracking FORMAT one repository
-        // over. An operator who moved jenreg.archive.largest-walk moved neither. One bound answers for all of them
-        // now, and the walk that applies it honours the key without any inspector knowing about it.
+        // The gate's archive-walk ceiling is the one bound jenreg.archive.largest-walk sets for the gate and every
+        // archive-cracking format alike, and the walk that applies it honours the key without any inspector knowing
+        // about it - a private constant and byte-counting stream per module would each ignore the key.
         byte[] archive = zip(Map.of("manifest", "root"));
         assertThat(read(archive, ArchiveWalk.largestWalk()).orNull()).isEqualTo("root");
 
@@ -238,7 +236,7 @@ class BoundedInspectionTest {
 
     @Test
     void a_walk_cut_off_by_the_ceiling_says_so_rather_than_reporting_an_empty_archive() throws IOException {
-        // The design gate: reaching a bound may not look like a complete answer. The value is absent either way, but
+        // Reaching a bound may not look like a complete answer. The value is absent either way, but
         // "we stopped looking" is a different fact from "this archive declares nothing", and the caller is told which.
         // The payload is incompressible, so the archive's own footprint - what the walk bound budgets - really does
         // run past the ceiling before the manifest behind it is reached.
@@ -282,7 +280,7 @@ class BoundedInspectionTest {
         // last byte I was allowed to read was the last byte there was" is a complete walk.
         //
         // The fixture is an archive cut to exactly its entry data - the zip walk draws every one of those bytes and
-        // then reaches for the next local header, which is the read that used to be misread as a truncation.
+        // then reaches for the next local header, which is a read that must not be misread as a truncation.
         byte[] archive = zip(Map.of("prefix/manifest", "nested"));
         int entryData = centralDirectory(archive);
         byte[] exact = Arrays.copyOf(archive, entryData);

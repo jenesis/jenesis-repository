@@ -28,14 +28,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The maintenance kernel's <b>contention contract</b> - the ten contention properties C1-C10
- * &sect;7, driven through the live {@link MaintenanceScheduler} (and through {@link LeaseGuard} where determinism needs
- * it) rather than only against {@code Lease}. The spike's finding was precisely that lease behaviour was proven on
- * {@code Lease} and almost never <em>through a running pass</em>: the renewal timer, its cadence, its cancellation and
- * what a lost lease does to the pass were all untested, and three of them were also wrong.
+ * The maintenance kernel's <b>contention contract</b> - the ten contention properties C1-C10, driven through the
+ * live {@link MaintenanceScheduler} (and through {@link LeaseGuard} where determinism needs it) rather than only
+ * against {@code Lease}: the renewal timer, its cadence, its cancellation and what a lost lease does to the pass are
+ * properties of a running pass, which a test of {@code Lease} alone never reaches.
  *
- * <p>Each test below names the property it pins and, where the property did not hold before, what the old code
- * did instead - so a future reader can tell a regression test from a characterisation test.
+ * <p>Each test below names the property it pins and what a scheduler that broke it would do.
  *
  * <p>The sibling {@code MaintenanceSchedulerTest} keeps the functional pass/fan-out/observability coverage; this class
  * is only about who may run a pass, when, and what happens when that answer changes mid-pass.
@@ -76,11 +74,11 @@ class MaintenanceContentionTest {
 
     @Test
     void c1_a_second_start_does_not_create_a_second_worker_loop() throws IOException {
-        // Before the fix, start() called startWorker() unconditionally while refresh() guarded on
-        // `thread == null || !thread.isAlive()`. A second start() therefore overwrote the thread field while the first
-        // loop kept running against a `running` flag that was still true - two loops on one node, each taking and
-        // releasing the same leases and each re-arming its own due map. Latent (only Spring's initMethod calls start),
-        // but a latent second scheduler is exactly what design gate 3 forbids.
+        // A start() that called startWorker() unconditionally, while refresh() guards on
+        // `thread == null || !thread.isAlive()`, would overwrite the thread field while the first loop kept running
+        // against a `running` flag that was still true - two loops on one node, each taking and releasing the same
+        // leases and each re-arming its own due map. Only Spring's initMethod calls start, but a latent second
+        // scheduler is still a second scheduler.
         int before = workerLoops();
         try (MaintenanceScheduler scheduler = new MaintenanceScheduler(repositories, store,
                 List.of(idle("c1")), key -> null, Duration.ofMinutes(10), null)) {
@@ -202,9 +200,9 @@ class MaintenanceContentionTest {
 
     @Test
     void c5_a_lease_lost_mid_pass_fails_the_pass_and_stops_further_units() throws IOException {
-        // Before the fix, renew() logged a WARNING and nothing else. The pass ran to completion over every remaining
+        // A renew() that only logged a WARNING would let the pass run to completion over every remaining
         // (tenant, repository) unit, its failure counter and its TaskRun.failed flag untouched - so the dashboard
-        // reported a clean sweep while two nodes swept the same store. Both halves are asserted here.
+        // would report a clean sweep while two nodes swept the same store. Both halves are asserted here.
         for (String repository : List.of("a-first", "b-second", "c-third")) {
             new StoreRepositoryInventory(repositories.store("default", repository)).record("Maven", "org:lib", "1.0", NOW);
         }
@@ -224,9 +222,9 @@ class MaintenanceContentionTest {
                 // as a multiple of the guard's own renewal cadence rather than a magic number, so it cannot drift
                 // when the ttl changes, and every assertion below fails loudly (and names the sweep) if it was still
                 // too short - none of them can pass over a pass that never noticed. The multiple is sized for a
-                // saturated machine, not an idle one: at five cadences the hosted runner starved the guard's timer
-                // thread past the wait (2026-09-05, every unit ran), so it is twenty - six seconds at this ttl,
-                // paid once, against a renewal that fires in a third of a second when the box is quiet.
+                // saturated machine, not an idle one: at five cadences a hosted runner can starve the guard's timer
+                // thread past the wait, so it is twenty - six seconds at this ttl, paid once, against a renewal that
+                // fires in a third of a second when the box is quiet.
                 sleep(ttl.dividedBy(2).multipliedBy(20));
             }
         });
@@ -273,10 +271,10 @@ class MaintenanceContentionTest {
     @Test
     void c9_a_node_that_ran_an_exclusive_pass_is_not_due_again_before_one_interval_after_it_finished()
             throws IOException {
-        // A pass longer than its interval used to be due again the instant it ended, so the node that had just
-        // released the lease re-took it before a peer polling at the same cadence ever found it free - measured in
-        // the fleet as a restarted node never joining a minute-long walk repeating every two seconds. The schedule
-        // yields one interval after the pass finished; a non-exclusive pass, which no peer waits on, does not.
+        // A pass longer than its interval, due again the instant it ended, would let the node that had just released
+        // the lease re-take it before a peer polling at the same cadence ever found it free - a restarted node would
+        // never join a minute-long walk repeating every two seconds. The schedule yields one interval after the pass
+        // finished; a non-exclusive pass, which no peer waits on, does not.
         Duration interval = Duration.ofMinutes(10);
         MaintenanceTask exclusive = new MaintenanceTask() {
             @Override
@@ -378,10 +376,10 @@ class MaintenanceContentionTest {
 
     @Test
     void c9_a_degenerate_lease_ttl_is_refused_at_construction_naming_cleanup_lease() {
-        // Before the fix, cleanup-lease=PT0S was accepted. It made every acquire immediately steal-able (so there was
-        // no single-writer exclusion at all) AND made renewInterval = ttl/2 = 0, so scheduleAtFixedRate threw
-        // IllegalArgumentException on every exclusive pass - which the worker loop then counted as a task failure.
-        // One operator-reachable DURATION setting, two silent degradations, and no message naming the dial.
+        // Accepting cleanup-lease=PT0S would make every acquire immediately steal-able (so no single-writer exclusion
+        // at all) AND make renewInterval = ttl/2 = 0, so scheduleAtFixedRate would throw IllegalArgumentException on
+        // every exclusive pass - which the worker loop counts as a task failure. One operator-reachable DURATION
+        // setting, two silent degradations, and no message naming the dial.
         for (Duration degenerate : List.of(Duration.ZERO, Duration.ofSeconds(-1), Duration.ofMillis(1))) {
             assertThatThrownBy(() -> new MaintenanceScheduler(repositories, store, List.of(idle("c9")),
                     key -> null, degenerate, null))

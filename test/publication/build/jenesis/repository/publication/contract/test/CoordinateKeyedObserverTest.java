@@ -154,7 +154,7 @@ class CoordinateKeyedObserverTest {
                 .as("the orphan is real and it is permanent: no MaintenanceTaskProvider in compliance/web, no sweep "
                         + "over the prefix, and the orphan diagnostic cannot see it while the module is installed. "
                         + "This is why the fixture excludes the repair property rather than supplying a leg - and the "
-                        + "assertion is what would fail the day §9 D-4's retention leg lands, which is the "
+                        + "assertion is what would fail the day a retention leg over the space lands, which is the "
                         + "moment the exclusion should go.")
                 .hasSize(1);
         assertThatThrownBy(() -> fixture.repair(store))

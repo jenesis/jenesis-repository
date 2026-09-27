@@ -82,11 +82,10 @@ public class KeyLoginModuleTest {
     /**
      * The module's unset-key posture must be the posture its catalogue entry publishes - and that posture is on.
      *
-     * <p>Key-based sign-in used to ship off, and its catalogue entry once said "disabled by default" while the code
-     * answered ENABLED; the module declares its own default for that reason. It ships on now, because a deployment
-     * that has configured nothing is signed in to with the one-time key its start prints, and with the mechanism off
-     * nobody could use it. This asserts the shipped default itself, from both places that state it, so reverting it
-     * is a red test rather than a deployment nobody can enter.
+     * <p>Key-based sign-in ships on, because a deployment that has configured nothing is signed in to with the
+     * one-time key its start prints, and with the mechanism off nobody could use it. The module declares its own
+     * default, and this asserts the shipped default itself, from both places that state it, so reverting it is a red
+     * test rather than a deployment nobody can enter.
      */
     @Test
     void an_unset_key_leaves_key_login_on_exactly_as_its_catalogue_entry_says() {

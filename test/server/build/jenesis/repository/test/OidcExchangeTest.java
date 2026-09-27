@@ -33,11 +33,9 @@ class OidcExchangeTest {
     /**
      * How long to wait after a failed warm-up before trying again, doubling from here.
      *
-     * <p><b>Why there is a wait at all, and why it is this long.</b> The loop below used to retry three times with
-     * no pause between them, which is close to not retrying: the failure it recovers from is a read timeout on a
-     * saturated machine, and three attempts fired within microseconds all meet the same saturation. Measured
-     * 2026-08-31 on a cold full lane - 153 suites, ~59 forked JVMs - this suite failed exactly that way while
-     * passing on the next run of the same tree.
+     * <p><b>Why there is a wait at all, and why it is this long.</b> Retries with no pause between them are close
+     * to not retrying: the failure recovered from is a read timeout on a saturated machine, and attempts fired within
+     * microseconds all meet the same saturation. A cold full lane saturates the machine that way.
      *
      * <p>Deliberately not {@code Retries.backoff}, which caps at a hundred milliseconds: that one is tuned for a
      * lost compare-and-set, where the peer is expected to be gone almost immediately. This waits for a load spike
@@ -95,11 +93,10 @@ class OidcExchangeTest {
      *
      * <p><b>Why this exists.</b> {@code OidcExchange} builds a decoder per issuer on first use, and building one
      * means Spring Security fetching {@code /.well-known/openid-configuration} and then the JWKS over HTTP. Every
-     * test here gets a fresh exchange and a fresh stub, so every test used to pay that round-trip inside its own
-     * assertion. Measured once on a whole-tree run: the GET to <em>127.0.0.1</em> exceeded Spring's read timeout
-     * and the suite failed with {@code SocketTimeoutException: Read timed out} wrapped in the exchange's
-     * fail-closed arm - which is the product behaving exactly as designed, reported against a test that was really
-     * asserting something else (clock-skew tolerance, in that instance).
+     * test here gets a fresh exchange and a fresh stub, so without this every test would pay that round-trip inside
+     * its own assertion - and a GET to <em>127.0.0.1</em> exceeding Spring's read timeout on a busy machine fails
+     * the suite with {@code SocketTimeoutException: Read timed out} wrapped in the exchange's fail-closed arm, which
+     * is the product behaving exactly as designed, reported against a test asserting something else.
      *
      * <p>So the round-trip moves here, where it is what it actually is: fixture setup, and legitimately retryable
      * because a slow local stub is not a claim about the product. The retry <em>backs off</em>, which it did not

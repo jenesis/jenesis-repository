@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * drift alarm - for a coordinate, over a seeded meta doc and quarantine ledger, <em>without</em> re-screening or
  * fetching a byte (there is no {@code ComplianceGate}, spool or fetcher in play here - the read cannot screen). Proves:
  * a recorded verdict reads back whole; recent hardened refusals surface (and an ordinary gate hold does not); a
- * coordinate never screened reads as such (the §10 staleness line, so a caller lacking the write role still sees it);
+ * coordinate never screened reads as such (the staleness line, so a caller lacking the write role still sees it);
  * and the gateway-wide drift counter is surfaced.
  */
 class HardeningVerdictsTest {

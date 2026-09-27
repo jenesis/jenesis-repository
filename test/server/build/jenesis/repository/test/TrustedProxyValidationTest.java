@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * A malformed {@code jenreg.trusted-proxies} entry must fail fast at construction (§9), naming the bad value,
+ * A malformed {@code jenreg.trusted-proxies} entry must fail fast at construction, naming the bad value,
  * rather than being silently dropped - a swallowed CIDR would leave a real reverse proxy treated as untrusted, quietly
  * ignoring {@code X-Forwarded-For} and defeating the source-IP allowlist. Well-formed values (IPv4/IPv6 addresses and
  * CIDRs, and the empty secure default) construct cleanly.

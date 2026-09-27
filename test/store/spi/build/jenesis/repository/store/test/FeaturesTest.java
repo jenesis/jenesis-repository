@@ -60,7 +60,7 @@ class FeaturesTest {
 
     @Test
     void the_namespaced_view_is_the_one_place_the_prefix_is_spelled() {
-        // The view is exactly the lambda thirty-five call sites used to write out, so a consumer never spells the
+        // The view is exactly the lambda every call site would otherwise write out, so a consumer never spells the
         // product's own namespace - and settings() is that view over whatever configure() installed, so which
         // property source answers (a Spring Environment, the persistent settings layered into it, a test's map) is
         // not a consumer's business.

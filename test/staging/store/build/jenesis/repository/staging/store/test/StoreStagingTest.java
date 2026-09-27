@@ -245,8 +245,8 @@ class StoreStagingTest {
     void a_mid_set_promotion_failure_leaves_no_artifact_released() throws IOException {
         // Phase 2 is all-or-nothing: if one staged artifact fails to re-publish mid-set, every artifact already
         // released in the same pass is rolled back, so NO path is left resolvable and every staged copy is retained.
-        // Before the fix, promote() released each path and dropped its staged pointer inside the loop, so a failure on
-        // a later path left the earlier ones released while the promotion threw and never sealed - a half-promoted set.
+        // A promote() that released each path and dropped its staged pointer inside the loop would leave the earlier
+        // paths released after a failure on a later one, while the promotion threw and never sealed.
         String first = "/maven/org/example/a/1.0/a-1.0.jar";
         String second = "/maven/org/example/b/1.0/b-1.0.jar";
         // Fail the release publish of the second artifact (its release pointer link), so promotion aborts mid-set: if
@@ -312,13 +312,13 @@ class StoreStagingTest {
         // The losing interleaving. A promotes P1 (released), then enters P2's unbounded
         // format.handle. DURING that handle A's lease lapses and a rival acquires it, re-links the same
         // content-addressed release and SEALS the promotion (marks PROMOTED). A's handle then throws IOException.
-        // The general exception catch used to call rollback(released) unconditionally, retracting P1 - the very
-        // release the rival just committed - dropping an artifact from a sealed promotion, unrecoverably. The
-        // rollback is now lease-fenced: A re-checks ownership, sees the rival owns the lease, and must SKIP the
-        // rollback (leaving the rival's committed release intact) while still surfacing the original failure and
-        // logging a WARN. Mirrors the LostLeaseException branch's no-rollback discipline, extended to the
-        // IOException path. The steal happens INSIDE handle (via store.open of the second blob), AFTER the loop-top
-        // renew has already passed - so this is the IOException path, not the LostLeaseException path.
+        // A general exception catch calling rollback(released) unconditionally would retract P1 - the very release
+        // the rival just committed - dropping an artifact from a sealed promotion, unrecoverably. The rollback is
+        // lease-fenced: A re-checks ownership, sees the rival owns the lease, and must SKIP the rollback (leaving the
+        // rival's committed release intact) while still surfacing the original failure and logging a WARN. Mirrors
+        // the LostLeaseException branch's no-rollback discipline, extended to the IOException path. The steal happens
+        // INSIDE handle (via store.open of the second blob), AFTER the loop-top renew has already passed - so this
+        // is the IOException path, not the LostLeaseException path.
         CapturingLoggerFinder.WARNINGS.clear();
         String p1 = "/maven/org/example/a/1.0/a-1.0.jar";
         String p2 = "/maven/org/example/b/1.0/b-1.0.jar";
@@ -352,9 +352,9 @@ class StoreStagingTest {
     void a_handle_failure_while_the_lease_is_still_owned_rolls_back_exactly_as_before() throws IOException {
         // The control / no-regression counterpart: identical injected handle failure on the second path, but the
         // lease is NOT stolen - this node still provably owns it at the rollback re-check. The lease-fence must then
-        // roll back exactly as before: the already-released first path is retracted, nothing is left released, the id
-        // stays OPEN, and no "skipped rollback" WARN is logged. Only the difference in lease ownership - not the
-        // failure itself - changes the behaviour, isolating the fix.
+        // roll back: the already-released first path is retracted, nothing is left released, the id stays OPEN, and
+        // no "skipped rollback" WARN is logged. Only the difference in lease ownership - not the failure itself -
+        // changes the behaviour.
         CapturingLoggerFinder.WARNINGS.clear();
         String p1 = "/maven/org/example/c/1.0/c-1.0.jar";
         String p2 = "/maven/org/example/d/1.0/d-1.0.jar";

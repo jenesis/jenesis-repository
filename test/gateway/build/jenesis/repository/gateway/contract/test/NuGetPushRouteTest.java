@@ -14,11 +14,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * and refused everywhere else.
  *
  * <p>The coordinate a NuGet push lands under comes from the {@code .nuspec} inside the package, not from the request
- * path, so the format used to read <em>every</em> {@code PUT} under {@code /nuget/} as a push - including one aimed at
- * a read address such as {@code v3/index.json} or a flat-container file, and one aimed at an endpoint that has never
- * existed. Each published and each answered {@code 201}. Nothing landed at a wrong key and nothing traversed (a
- * {@code .}/{@code ..} path is a 404 here); what was lost is the refusal, so a client configured against
- * an endpoint this repository never offered was told its pushes had succeeded.
+ * path, so a format reading <em>every</em> {@code PUT} under {@code /nuget/} as a push would accept one aimed at a read
+ * address such as {@code v3/index.json} or a flat-container file, or at an endpoint that has never existed, and answer
+ * {@code 201}. Nothing would land at a wrong key and nothing would traverse (a {@code .}/{@code ..} path is a 404
+ * here); what would be lost is the refusal, so a client configured against an endpoint this repository never offered
+ * would be told its pushes had succeeded.
  *
  * <p>The positive leg is the load-bearing half: a route screen that refused the real push endpoint too would satisfy
  * every negative assertion here.

@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The AES-256-GCM envelope cipher for SECRET settings: a keyed round-trip, a fresh IV per encryption, rotation (an
  * older key still decrypts while the newest key seals new values), fail-closed decryption (wrong/absent key), and
- * fail-fast parsing of a malformed master-key environment value (§9).
+ * fail-fast parsing of a malformed master-key environment value.
  */
 class SecretCipherTest {
 

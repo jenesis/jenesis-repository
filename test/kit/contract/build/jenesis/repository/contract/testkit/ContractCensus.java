@@ -10,12 +10,12 @@ import module java.base;
  * and throws {@link AssertionError} with every discovered mismatch, keeping this helper independent of JUnit and
  * assertion libraries.
  *
- * <p><b>Declared is read from the resolved module graph, not from source text.</b> It used to walk every
- * {@code module-info.java} under a source root and regex out the {@code provides ... with ...} clauses. That was a
- * parser that did not understand the language reimplementing a fact the compiler had already recorded: it needed the
- * service's fully-qualified name to appear literally, so an {@code import} in a module descriptor would have made it
- * silently match nothing and report a clean census over zero providers. {@link ModuleLayer#boot()} carries the same
- * clauses as compiled {@code ModuleDescriptor.Provides}, exactly and by construction.
+ * <p><b>Declared is read from the resolved module graph, not from source text.</b> A regex over every
+ * {@code module-info.java} would be a parser that does not understand the language reimplementing a fact the compiler
+ * has already recorded: it needs the service's fully-qualified name to appear literally, so an {@code import} in a
+ * module descriptor would make it silently match nothing and report a clean census over zero providers.
+ * {@link ModuleLayer#boot()} carries the same clauses as compiled {@code ModuleDescriptor.Provides}, exactly and by
+ * construction.
  *
  * <p>What that changes about scope, and why it is the right change: the source walk asked "what does this TREE
  * declare", which is a question no deployment ever asks. The graph asks "what does THIS DEPLOYMENT declare", which
@@ -102,8 +102,8 @@ public final class ContractCensus {
 
     /**
      * The same, restricted to the modules {@code scope} accepts - so a census that distinguishes what the product
-     * SHIPS from what a test module contributes can still say so. That distinction used to be a directory ("source"
-     * versus "test/ui"); here it is a property of the module itself, which is what it always was.
+     * SHIPS from what a test module contributes can still say so. The distinction is a property of the module itself,
+     * not of the directory it sits in.
      */
     public static List<Provider> declaredProviders(Class<?> service, Predicate<Module> scope) {
         Objects.requireNonNull(service, "service");

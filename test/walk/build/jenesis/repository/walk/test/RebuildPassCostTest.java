@@ -17,11 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * What a rebuild pass pays per object, counted at the store. Over an object store every operation is a round trip
- * and a line on a bill, and the pass used to read each key seven times over (a HEAD for its size, the pointer, the
- * four-read servability probe, the blob's length) for ten million objects a day; measured on 2026-09-06 as thirty
- * million reads a day and the largest single cost of a deployment. The bound this holds: per delivered pointer, the
- * pointer itself, the hold chain's probe, its withheld marker and the blob's length - four reads - with the size
- * taken from the listing the walk already paged, and nothing opened.
+ * and a line on a bill, and a pass that read each key seven times over (a HEAD for its size, the pointer, the
+ * four-read servability probe, the blob's length) would be the largest single cost of a deployment. The bound this
+ * holds: per delivered pointer, the pointer itself, the hold chain's probe, its withheld marker and the blob's length
+ * - four reads - with the size taken from the listing the walk already paged, and nothing opened.
  */
 class RebuildPassCostTest {
 

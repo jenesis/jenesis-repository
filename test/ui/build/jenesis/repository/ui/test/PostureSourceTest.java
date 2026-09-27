@@ -9,10 +9,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Where the security-posture screen reads from.
  *
- * <p>The screen used to compute its own counts from a report it discovered itself, which made the screen and the
- * header badge two readings of one thing - and two readings drift. Both now go through this seam, so a deployment
- * that layers stored settings over its environment changes what both of them see, together, by contributing one
- * implementation.
+ * <p>The screen and the header badge both read this seam rather than each computing counts from a report it
+ * discovered itself, since two readings of one thing drift. A deployment that layers stored settings over its
+ * environment changes what both of them see, together, by contributing one implementation.
  */
 class PostureSourceTest {
 

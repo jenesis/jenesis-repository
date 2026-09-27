@@ -20,8 +20,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The parse/model layer: the {@link RepositoryDefinition} record - {@code writable} plus an ordered list of
  * {@link Fallback}s (each an {@link Source.Upstream} URL or a {@link Source.Repository} name, with a per-upstream
- * {@code store} and {@link Screening} policy) - the clause grammar that produces it, the parse refusals (fail-loud,
- * §9) including every word outside the grammar, and the mixed-strength warning (a warning, not a refusal).
+ * {@code store} and {@link Screening} policy) - the clause grammar that produces it, the parse refusals (fail-loud)
+ * including every word outside the grammar, and the mixed-strength warning (a warning, not a refusal).
  *
  * <p>{@link #a_fallback_definition_routes_through_the_walk()} adds one proof that a parsed {@code fallback <url>}
  * resolves through the router's walk as a caching (or, with {@code nocache}, a pass-through) proxy.
@@ -128,7 +128,7 @@ public class DefinitionParseTest {
         assertThat(trailing.fallbacks()).hasSize(1);
     }
 
-    // ---- validation / fail-loud (§9) ------------------------------------------------------------------------------
+    // ---- validation / fail-loud -----------------------------------------------------------------------------------
 
     @Test
     public void a_definition_outside_the_clause_grammar_is_refused_naming_the_clause_to_write() {

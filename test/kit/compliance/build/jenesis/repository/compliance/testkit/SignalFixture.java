@@ -31,8 +31,8 @@ import build.jenesis.repository.compliance.SignalSourceProvider;
  *   <li>{@link #reads()} is proven by counting the requests one query spends and by driving the source at its
  *       <em>production</em> endpoint under the {@link NoEgressResolver} tripwire. A feed declaring
  *       {@link Reads#RENDERS_SNAPSHOT} must reach for nothing; one declaring {@link Reads#FETCHES_ON_QUERY} must be
- *       caught reaching for the host it names, by name. The declaration is therefore a claim about &sect;10 that the
- *       kit can falsify in either direction.</li>
+ *       caught reaching for the host it names, by name. The declaration is therefore a claim about read purity that
+ *       the kit can falsify in either direction.</li>
  *   <li>{@link #paging()} is proven by an endless recording. A {@link Paging#CURSOR_CAPPED} feed must fail with a
  *       named cap and expose no partial answer; a {@link Paging#SINGLE_DOCUMENT} one must be shown to spend exactly
  *       one request and a {@link Paging#CHAINED} one exactly its declared number of forward steps, so neither value
@@ -67,7 +67,7 @@ public interface SignalFixture extends AutoCloseable {
         SOFT
     }
 
-    /** Where the data a query answers from comes from - the &sect;10 read-purity question, stated per feed. */
+    /** Where the data a query answers from comes from - the read-purity question, stated per feed. */
     enum Reads {
 
         /**
@@ -80,7 +80,7 @@ public interface SignalFixture extends AutoCloseable {
 
         /**
          * The query renders a durable snapshot while it is inside its refresh window and performs the refresh
-         * <em>itself</em> when it is not. Half of &sect;10: the answer survives a restart and reports the age that was
+         * <em>itself</em> when it is not. Half of read purity: the answer survives a restart and reports the age that was
          * committed with the data, so a second replica and a re-render cost no upstream call - but the fetch is still
          * not a separate write-role entry point, so the first query after the window lapses does pay for it and a
          * cold deployment still depends on the vendor.
@@ -93,7 +93,7 @@ public interface SignalFixture extends AutoCloseable {
 
         /**
          * The first query fetches and the answer is then held <em>in memory</em> for a TTL; subsequent queries inside
-         * that window render it without a request. The gate's warm-read behaviour, but not &sect;10's: the warmth
+         * that window render it without a request. The gate's warm-read behaviour, but not read purity: the warmth
          * belongs to the process, so a restart re-fetches and a cold gate decision still depends on the vendor. The
          * kit asserts both halves - the warm read spends no request, and a freshly created source does.
          */

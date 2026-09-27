@@ -3,7 +3,7 @@
  * disposition routing (clean admits, a policy-violating upload is quarantined or rejected per the merged inspection
  * verdict, "parsed-empty ⇒ clean" is distinguished from "could-not-parse ⇒ held" at the screen, and a screen-held
  * path is recorded and withheld from serving), the durable {@code QuarantineLog} ledger, the retroactive KEV/license
- * hold lifecycle and its discovered release observers (self-heal §5). The gate is driven through its explicit seams - an injected {@code ComplianceGate} and a test
+ * hold lifecycle and its discovered release observers. The gate is driven through its explicit seams - an injected {@code ComplianceGate} and a test
  * {@code QualityInspector} discovered as a service - so no server boots.
  *
  * @jenesis.release 25

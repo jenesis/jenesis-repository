@@ -50,7 +50,7 @@ class CleanScanMarkerTest {
         if (CleanScanMarker.fresh(rows, now, CleanScanMarker.DEFAULT_TTL)) {
             return true;                                        // served from the ledger, no feed round-trip
         }
-        feedHits.incrementAndGet();                            // the live feed query - the cost this fix spares a re-read
+        feedHits.incrementAndGet();                            // the live feed query - the cost the marker spares a re-read
         ledger.record(ECO, COORD, VERSION, CleanScanMarker.of(now));   // the feed reported nothing: persist the marker
         return true;
     }

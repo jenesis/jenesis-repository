@@ -240,7 +240,7 @@ class QuotaArtifactStoreTest {
         // oci/uploads staging the reseed also sums - every access is a page() with the bound, never an unbounded
         // list() (PagingDelegate.list() throws), so the "never materialise as one list" guarantee still holds and
         // covers the staging walk too. That a drain resumes across page boundaries is Names' claim, pinned in
-        // NamesTest; this used to page at a thousand and seed three pages of its own.
+        // NamesTest.
         assertThat(pages).as("bounded pages only, at the drain width - the blob namespace plus the staging probe, never a list")
                 .hasSize(2).containsOnly(ArtifactStore.DRAIN_PAGE);
     }

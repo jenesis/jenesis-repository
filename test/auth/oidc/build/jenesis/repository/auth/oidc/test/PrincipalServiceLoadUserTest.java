@@ -94,7 +94,7 @@ public class PrincipalServiceLoadUserTest {
 
     @Test
     public void an_oidc_user_of_no_tenant_signs_in_and_is_granted_nothing() {
-        // Sign-in used to throw here. The provider owns who may authenticate, and refusing afterwards duplicated
+        // Sign-in does not throw here. The provider owns who may authenticate, and refusing afterwards would duplicate
         // that badly while making the person's opaque sub unlearnable - so what they hold is decided by
         // MembershipConsoleAccess on every request instead, and here they simply arrive holding nothing.
         var user = new OidcPrincipalService(authorization).loadUser(oidcRequest("nobody"));

@@ -17,11 +17,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * for any live review pointer OUTSIDE the caller's own served paths whose body is the hash, short-circuiting on the
  * first, and propagating a genuine store {@link IOException} so the caller fails closed (does not clear).
  *
- * <p>The third answer is the point of this suite. A garbled pointer key used to be skipped and reported as a clean
- * "no other alias", which is precisely the answer that lifts a content-addressed hold - so the one entry the scan
- * could not read was allowed to be the very alias that should have kept the marker. It is still contained (one bad
- * entry never throws out of the guard) but it is now recorded, and the scan answers {@link Known.Unknown}, which does
- * not fit {@code Withheld.clear}'s parameter at all.
+ * <p>The third answer is the point of this suite. A garbled pointer key skipped and reported as a clean "no other
+ * alias" would be precisely the answer that lifts a content-addressed hold - the one entry the scan could not read
+ * could be the very alias that should keep the marker. It is contained (one bad entry never throws out of the guard)
+ * and recorded, and the scan answers {@link Known.Unknown}, which does not fit {@code Withheld.clear}'s parameter at
+ * all.
  */
 class PublicationQuarantineAliasTest {
 
@@ -120,10 +120,10 @@ class PublicationQuarantineAliasTest {
 
     @Test
     void the_release_seam_accepts_only_an_answered_proof() {
-        // The other half of the fix, asserted where a non-compiling test could not be: Withheld.clear takes the
-        // cross-alias proof as a Known.Determined, so an Unknown fits no overload and a release that cannot prove
-        // holderlessness is a compile error. The single-overload check is the load-bearing one - the defect would
-        // return the moment a convenience clear(store, hash) reappeared beside it.
+        // The other half, asserted where a non-compiling test could not be: Withheld.clear takes the cross-alias proof
+        // as a Known.Determined, so an Unknown fits no overload and a release that cannot prove holderlessness is a
+        // compile error. The single-overload check is the load-bearing one - a convenience clear(store, hash) beside
+        // it would reopen the hole.
         List<Method> clears = Arrays.stream(Withheld.class.getMethods())
                 .filter(method -> method.getName().equals("clear"))
                 .toList();

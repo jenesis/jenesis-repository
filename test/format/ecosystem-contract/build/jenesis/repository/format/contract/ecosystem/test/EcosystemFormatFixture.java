@@ -93,14 +93,11 @@ interface EcosystemFormatFixture extends FormatFixture {
      * with {@link FormatFixture#elective} supplying the path or with a reason of its own naming what was checked.
      * While the constant is still here, the row is a burn-down list.
      *
-     * <p><b>The audit ran on 2026-08-24 and this is now down to one fixture.</b> Eleven formats replaced it with a
-     * reason of their own; PyPI replaced it with a real {@link FormatFixture#elective} leg, the PEP 658 sidecar,
-     * which was found to HAVE the defect and was fixed, and then split its 502 from its 404. What the audit established,
-     * and what a later fixture should reason with rather than rediscover: a path classified
-     * {@code ProxyRelay.Document.ENUMERATION} already refuses with a {@code 502} and misses with a {@code 404}, so
-     * the two are distinguishable by construction and the property holds without a fixture proving it. The shape can
-     * only live where a path is {@code PINNED}, or on the unclassified fill path, AND the client resolves around its
-     * absence.
+     * <p><b>One fixture declares this.</b> A path classified {@code ProxyRelay.Document.ENUMERATION} already refuses
+     * with a {@code 502} and misses with a {@code 404}, so the two are distinguishable by construction and the
+     * property holds without a fixture proving it. The shape can only live where a path is {@code PINNED}, or on the
+     * unclassified fill path, AND the client resolves around its absence; a format declares that with a reason of its
+     * own, or proves it with a real {@link FormatFixture#elective} leg as PyPI does with the PEP 658 sidecar.
      *
      * <p>RubyGems is the one that stayed. Its {@code /quick/Marshal.4.8/<gem>-<version>.gemspec.rz} is {@code PINNED}
      * on the argument that a client which has already fixed gem and version resolves nothing from its absence - which

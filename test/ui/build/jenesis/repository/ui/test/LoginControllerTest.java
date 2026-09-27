@@ -18,10 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The sign-in page controller: it lists what the installed mechanisms offer and redirects an already-authenticated
  * visitor to the console.
  *
- * <p>It used to enumerate Spring Security's {@code ClientRegistrationRepository} directly, and these tests were
- * written against that - which is why they could only ever describe OAuth2 registrations. The page reads
- * {@link LoginOptions} now, the same seam the admin console's page reads, so a mechanism that is not an OAuth2 client
- * is listed here too rather than being invisible on one of the two sign-in pages.
+ * <p>The page reads {@link LoginOptions}, the same seam the admin console's page reads, rather than Spring
+ * Security's {@code ClientRegistrationRepository}, so a mechanism that is not an OAuth2 client is listed here too
+ * rather than being invisible on one of the two sign-in pages.
  */
 class LoginControllerTest {
 
