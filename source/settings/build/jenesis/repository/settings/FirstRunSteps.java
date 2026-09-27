@@ -49,13 +49,7 @@ public final class FirstRunSteps {
     public static final Set<String> KEYLESS = Set.of(STARTER_CREDENTIAL, REPOSITORY, UPSTREAM);
 
     public static final List<Step> ALL = List.of(
-            new Step(STARTER_CREDENTIAL, "Stop using the starter credential",
-                    "A new deployment is first signed in to with the one-time key its start printed, which stops "
-                            + "working after an hour or as soon as an administrator exists. The console's starter key "
-                            + "(jenreg.ui.admin-key) and the API's bootstrap key (jenreg.bootstrap-key) are secrets a "
-                            + "deployment is provisioned with, re-provisioned on every boot for as long as they are "
-                            + "set. Grant a real administrator and issue a real credential, then unset both; removing "
-                            + "an id from jenreg.ui.admins does not revoke the grant it seeded.",
+            new Step(STARTER_CREDENTIAL, Wizard.STARTER_CREDENTIAL.title(), Wizard.STARTER_CREDENTIAL.text(),
                     List.of()),
             new Step(REPOSITORY, "Create a repository",
                     "A deployment serves nothing until it has a repository to publish into or to proxy through. "

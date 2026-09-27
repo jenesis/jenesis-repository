@@ -16,6 +16,7 @@ import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.PostureReport;
 import build.jenesis.repository.settings.ModuleCapability;
 import build.jenesis.repository.settings.Setting;
+import build.jenesis.repository.settings.Wizard;
 import build.jenesis.repository.settings.SettingsContributor;
 import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.settings.SettingsScopes;
@@ -1153,6 +1154,27 @@ public class SettingsAdmin {
     /** A build-cache project's settings, grouped for its screen, as {@link #repositoryGroups} are a repository's. */
     public List<Group> projectGroups(String tenant, String project) throws IOException {
         return levelGroups(Setting.Scope.PROJECT, tenant, ownProject(tenant, project), true);
+    }
+
+    /**
+     * The settings {@code wizard} asks, as its steps show them, keyed by setting: for the first boot the deployment's
+     * rows; for a new repository or project the rows its tenant's and the deployment's values give one that sets
+     * nothing of its own - what it inherits until it does. An {@link Setting#operatorOnly() operator-only} setting is
+     * shown to a session that is not the operator as fixed, naming who sets it, as on the level's settings screen.
+     */
+    public Map<String, SettingView> wizardViews(Wizard wizard, String tenant, boolean operator) throws IOException {
+        List<Group> groups = switch (wizard) {
+            case SETUP -> groups();
+            case REPOSITORY -> levelGroups(Setting.Scope.REPOSITORY, tenant, Map.of(), operator);
+            case PROJECT -> levelGroups(Setting.Scope.PROJECT, tenant, Map.of(), true);
+        };
+        Map<String, SettingView> views = new LinkedHashMap<>();
+        for (Group group : groups) {
+            for (SettingView view : group.settings()) {
+                views.put(view.key(), view);
+            }
+        }
+        return views;
     }
 
     /** A repository's own stored values, read by name from its settings documents. */

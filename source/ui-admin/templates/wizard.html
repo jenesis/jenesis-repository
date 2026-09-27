@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head(${wizard.title()})}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader(${wizard.title()})}"></header>
+
+    <!--/* The one wizard page: every wizard - the first boot's setup, a new repository, a new project - renders here from
+         a WizardFlow. Nothing is written until the review's completion: every value rides this form as a hidden field
+         from step to step, so Back loses nothing and leaving the page leaves nothing behind. */-->
+    <ol class="app-steps" aria-label="Steps">
+        <li th:each="step, at : ${wizard.steps()}"
+            th:attr="aria-current=${at.index == wizard.index()} ? 'step' : null"
+            th:text="${step.title()}">Step</li>
+    </ol>
+
+    <form method="post" th:action="@{${wizard.action()}}" class="app-wizard"
+          th:with="step=${wizard.current()}">
+        <input type="hidden" name="step" th:value="${wizard.index()}">
+        <input type="hidden" th:each="c : ${wizard.carried()}" th:name="${c.name()}" th:value="${c.value()}">
+
+        <th:block th:unless="${wizard.errors().isEmpty()}">
+            <p th:replace="~{base :: alert('A value on this step was refused; each says why beside it.', 'danger')}"></p>
+        </th:block>
+
+        <h2 th:text="|Step ${wizard.index() + 1} of ${wizard.steps().size()}: ${step.title()}|">Step 1 of 3</h2>
+        <p th:each="paragraph : ${step.paragraphs()}" th:text="${paragraph}">Why this step is asked.</p>
+
+        <!--/* The identity of what is created: its name and what else it is created as. */-->
+        <div th:each="f : ${step.fields()}" class="app-field">
+            <label th:for="${f.input()}" th:text="${f.label()}">Name</label>
+            <select th:if="${!f.options().isEmpty()}" th:id="${f.input()}" th:name="${f.input()}"
+                    th:attr="aria-describedby=|${f.input()}-help|,aria-invalid=${wizard.error(f.input()) != null} ? 'true' : null">
+                <option th:each="o : ${f.options()}" th:value="${o}" th:text="${o}"
+                        th:selected="${o == wizard.value(f.input())}">maven</option>
+            </select>
+            <input th:if="${f.options().isEmpty()}" type="text" th:id="${f.input()}" th:name="${f.input()}"
+                   th:value="${wizard.value(f.input())}"
+                   th:attr="aria-describedby=|${f.input()}-help|,aria-invalid=${wizard.error(f.input()) != null} ? 'true' : null">
+            <small class="app-field__help" th:id="|${f.input()}-help|" th:text="${f.help()}">What the field is.</small>
+            <small class="app-field__error" th:if="${wizard.error(f.input()) != null}" role="alert"
+                   th:text="${wizard.error(f.input())}">Refused.</small>
+        </div>
+
+        <!--/* A settings step: each setting its level asks, left blank to keep what it inherits. A setting this session
+             may not set is shown with its value and who fixes it, and is not carried. */-->
+        <div th:each="s : ${step.settings()}" class="setting"
+             th:with="name=|setting.${s.key()}|, help=|setting.${s.key()}-help|">
+            <div class="setting-head">
+                <div>
+                    <label th:for="${name}"><strong th:text="${s.label()}">Label</strong></label>
+                    <code th:text="${s.key()}">key</code>
+                </div>
+            </div>
+            <p class="setting-doc" th:id="${help}" th:text="${s.description()}">What this setting does.</p>
+            <th:block th:if="${s.pinned()}">
+                <p class="setting-values"><span>value: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
+                    <span th:text="|fixed by ${s.pinnedBy()}|">fixed by the operator</span></p>
+            </th:block>
+            <th:block th:unless="${s.pinned()}">
+                <select th:if="${s.dropdown() or s.toggle()}" th:id="${name}" th:name="${name}"
+                        th:attr="aria-describedby=${help},aria-invalid=${wizard.error(name) != null} ? 'true' : null">
+                    <option value="" th:text="|Default: ${s.defaultDisplay()}|">Default</option>
+                    <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
+                            th:selected="${o == wizard.value(name)}">option</option>
+                </select>
+                <input th:unless="${s.dropdown() or s.toggle()}" th:id="${name}" th:name="${name}"
+                       th:type="${s.inputType()}" th:value="${wizard.value(name)}"
+                       th:placeholder="|Default: ${s.defaultDisplay()}|"
+                       th:attr="aria-describedby=${help},aria-invalid=${wizard.error(name) != null} ? 'true' : null">
+                <small class="app-field__error" th:if="${wizard.error(name) != null}" role="alert"
+                       th:text="${wizard.error(name)}">Refused.</small>
+            </th:block>
+        </div>
+
+        <!--/* A step that informs: what it says, and where the thing it talks about is done. */-->
+        <p class="setting-values" th:unless="${step.links().isEmpty()}">
+            <a th:each="l : ${step.links()}" th:href="@{${l.href()}}" th:text="${l.label()}">Open</a>
+        </p>
+
+        <!--/* The review: every choice the run makes, the defaults it leaves alone included. */-->
+        <dl class="app-review" th:if="${wizard.reviewing()}">
+            <th:block th:each="c : ${wizard.choices()}">
+                <dt th:text="${c.label()}">Setting</dt>
+                <dd><strong th:text="${c.value()}">value</strong>
+                    <small th:if="${c.note() != null}" th:text="|(${c.note()})|">(default)</small></dd>
+            </th:block>
+        </dl>
+
+        <!--/* Next or Complete is the step's one primary action and comes first, so Enter moves on; Back goes back
+             with nothing lost; the quicker completion takes what the steps not yet seen would have defaulted. */-->
+        <div class="app-actions">
+            <button type="submit" name="action" value="complete" class="app-primary" th:if="${wizard.reviewing()}"
+                    th:text="${wizard.completeLabel()}">Create</button>
+            <button type="submit" name="action" value="next" class="app-primary" th:unless="${wizard.reviewing()}">Next</button>
+            <button type="submit" name="action" value="back" class="secondary outline app-secondary"
+                    th:if="${wizard.index() > 0}">Back</button>
+            <button type="submit" name="action" value="now" class="secondary outline app-secondary"
+                    th:if="${wizard.completesEarly()}" th:text="${wizard.nowLabel()}">Create now</button>
+            <a th:href="@{${wizard.cancel()}}">Cancel</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

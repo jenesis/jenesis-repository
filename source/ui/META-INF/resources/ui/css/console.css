@@ -792,6 +792,47 @@ figure {
 .app-field--invalid .app-field__help {
     color: var(--app-status-danger-fg);
 }
+/* A refused value's reason, beside the control it refuses. */
+.app-field__error {
+    display: block;
+    margin-top: var(--app-space-1);
+    color: var(--app-status-danger-fg);
+    font-size: var(--app-font-size-sm);
+}
+
+/* A wizard's steps: where a run stands among them, numbered, the step it is on marked by weight as well as by
+   aria-current, so the mark is never colour alone. */
+.app-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--app-space-2) var(--app-space-4);
+    margin: 0 0 var(--app-space-5);
+    padding: 0;
+    counter-reset: app-step;
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-sm);
+}
+.app-steps > li {
+    margin: 0;
+    list-style: none;
+    counter-increment: app-step;
+}
+.app-steps > li::before {
+    content: counter(app-step) ". ";
+}
+.app-steps > li[aria-current="step"] {
+    color: var(--pico-color);
+    font-weight: 600;
+}
+/* A wizard's review: each choice on a line of its own, its name beside the value that will apply. */
+.app-review {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: var(--app-space-2) var(--app-space-4);
+}
+.app-review dd {
+    margin: 0;
+}
 
 .app-empty {
     padding: var(--app-space-6) var(--app-space-4);
