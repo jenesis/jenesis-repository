@@ -610,9 +610,11 @@ public final class RepositoryRouter {
      *  REFUSED, not a MISS). DEFAULT screens through the serving tenant's gate (unwrapped if the tenant is ungated);
      *  HARDEN is full-body fail-closed; UNSCREENED is the explicit, loudly-warned no-screen opt-out. The
      *  screen's durable records (the {@code /quarantine} pointer and the {@code QuarantineLog} row) are written to
-     *  {@code records} - the real per-repository store even on the {@code nocache} leg, never the throwaway scratch. */
+     *  {@code records} - the real per-repository store even on the {@code nocache} leg, never the throwaway scratch.
+     *  {@code companions} are what the cache fetched beside the artifact - a signature, a bundle - which the screen
+     *  reads before it decides on the artifact they cover. */
     private ProxyFormat.Fetcher screening(String tenant, String path, ArtifactStore records, RepositoryDefinition.Fallback fallback,
-                                          ArtifactStore spool, ProxyFormat.Fetcher raw) {
+                                          ArtifactStore spool, ProxyFormat.Fetcher raw, Map<String, byte[]> companions) {
         ComplianceGate active = proxyGate(tenant);
         if (fallback.screening() == RepositoryDefinition.Screening.HARDEN) {
             // Selected-but-unsatisfiable stays loud (like store=s3 without its module): a hardened fallback is
@@ -634,7 +636,7 @@ public final class RepositoryRouter {
             // store-on-pass leg, where a durably cached copy is the trusted backing the reuse dedups against.
             MetadataStore metadata = metadataOver.apply(records);
             return new HardenedScreen(active, records, holdDays.getAsInt(), spool, metadata, hardeningBounds,
-                    fallback.store()).wrap(raw, path);
+                    fallback.store()).wrap(raw, path, companions);
         }
         if (fallback.screening() == RepositoryDefinition.Screening.UNSCREENED || active == null) {
             // UNSCREENED is the explicit, loudly-warned (at parse) opt-out; an ungated tenant likewise has no screen.
@@ -642,7 +644,7 @@ public final class RepositoryRouter {
             // proxy already did by omission.
             return raw;
         }
-        return new ProxyScreen(active, records, holdDays.getAsInt()).wrap(raw, path);
+        return new ProxyScreen(active, records, holdDays.getAsInt()).wrap(raw, path, companions);
     }
 
     /** Run one upstream fallback's pull-through: the fetched body passes through {@code body} (the durable cache on a
@@ -664,9 +666,9 @@ public final class RepositoryRouter {
             // only when step-1 missed - idempotent, never a double serve.
             // Composed eagerly for the requested path, so an unsatisfiable hardened leg fails at resolution; a format
             // that keeps its answer under another path (ProxyFormat.keptAs) is screened under that one.
-            ProxyFormat.Fetcher screened = screening(tenant, exchange.path(), records, fallback, spool, probe);
-            Function<String, ProxyFormat.Fetcher> screen = path -> path.equals(exchange.path()) ? screened
-                    : screening(tenant, path, records, fallback, spool, probe);
+            screening(tenant, exchange.path(), records, fallback, spool, probe, Map.of());
+            BiFunction<String, Map<String, byte[]>, ProxyFormat.Fetcher> screen = (path, companions) ->
+                    screening(tenant, path, records, fallback, spool, probe, companions);
             HardenedHitVerify hooks = new HardenedHitVerify(fallback.screening() == RepositoryDefinition.Screening.HARDEN,
                     gates(tenant), holdDays.getAsInt(), hardeningBounds, passThrough, metadataOver, screen);
             new PullThroughCache(probe, hooks).serve(format, proxy, upstream, exchange, body);

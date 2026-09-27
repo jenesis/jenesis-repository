@@ -77,7 +77,7 @@ public final class HardenedHitVerify implements PullThroughHooks {
     private final HardenedScreen.Bounds bounds;
     private final Supplier<ArtifactStore> spool;
     private final Function<ArtifactStore, MetadataStore> metadataOver;
-    private final Function<String, ProxyFormat.Fetcher> screenedMissFetcher;
+    private final BiFunction<String, Map<String, byte[]>, ProxyFormat.Fetcher> screenedMissFetcher;
 
     /** The verify-only form wired into {@code resolve()} step-1 local-first: {@link #verifyHit} does the hardened
      *  hit-verify, {@link #screenFetch} is the identity default (this path runs no miss leg through the seam). Used only
@@ -90,14 +90,14 @@ public final class HardenedHitVerify implements PullThroughHooks {
 
     /** The full form wired into the router's {@link build.jenesis.repository.server.PullThroughCache} leg: {@code harden}
      *  gates whether {@link #verifyHit} runs the hardened hit-verify (a non-hardened fallback serves through), and
-     *  {@code screenedMissFetcher} composes the router's {@code screening(...)} miss-leg fetcher for a path, which
-     *  this seam returns from {@link #screenFetch} (so the miss leg screens through the one shared decorator) - for
-     *  the path the cache screens under, which is the kept one where a format keeps its answer under another name
-     *  than the one requested. */
+     *  {@code screenedMissFetcher} composes the router's {@code screening(...)} miss-leg fetcher for a path and the
+     *  companions the cache fetched beside it, which this seam returns from {@link #screenFetch} (so the miss leg
+     *  screens through the one shared decorator) - for the path the cache screens under, which is the kept one where a
+     *  format keeps its answer under another name than the one requested. */
     public HardenedHitVerify(boolean harden, Function<GatePolicyProvider.Path, ComplianceGate> gates, int holdDays,
                              HardenedScreen.Bounds bounds, Supplier<ArtifactStore> spool,
                              Function<ArtifactStore, MetadataStore> metadataOver,
-                             Function<String, ProxyFormat.Fetcher> screenedMissFetcher) {
+                             BiFunction<String, Map<String, byte[]>, ProxyFormat.Fetcher> screenedMissFetcher) {
         this.harden = harden;
         this.gates = gates;
         this.holdDays = holdDays;
@@ -145,10 +145,17 @@ public final class HardenedHitVerify implements PullThroughHooks {
 
     @Override
     public ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream, ArtifactStore store) {
-        // Unify the miss-leg screening through the seam: return the router's own screening()-composed fetcher (built for
-        // this exact request path) rather than re-wrapping here, so the one shared ProxyScreen/HardenedScreen decorator
-        // screens the miss leg and nothing is double-screened. Identity on the verify-only wiring (no miss leg).
-        return screenedMissFetcher != null ? screenedMissFetcher.apply(path) : upstream;
+        return screenFetch(path, upstream, store, Map.of());
+    }
+
+    @Override
+    public ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream, ArtifactStore store,
+                                           Map<String, byte[]> companions) {
+        // The router's own screening()-composed fetcher, built for this path with what the cache fetched beside it,
+        // rather than a re-wrap here: the one shared ProxyScreen/HardenedScreen decorator screens the miss leg, and a
+        // signature the upstream publishes is read before the artifact it covers is decided on. Identity on the
+        // verify-only wiring (no miss leg).
+        return screenedMissFetcher != null ? screenedMissFetcher.apply(path, companions) : upstream;
     }
 
     /** Re-screen a cached hit's LOCAL bytes fail-closed and either stream the verified body or answer a non-disclosive

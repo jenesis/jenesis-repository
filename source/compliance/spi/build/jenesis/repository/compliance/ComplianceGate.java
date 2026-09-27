@@ -600,7 +600,13 @@ public final class ComplianceGate {
         // layout reads a version from - has nothing a feed could match, and asking would only fail: a feed that fails
         // closed rejects a query with no version, and the screen of a document that names no artifact would then fail
         // the fetch of that document. The deny-list below still reads the coordinate.
-        List<AdvisorySource.Advisory> found = subject.version() == null || subject.version().isBlank()
+        //
+        // A content-scan subject is evidence about the artifact's bytes - a signature, a secret, an attestation - beside
+        // the package subject its format produced, which already carries the package's advisories and its deny-list
+        // entry. Asked again, every advisory would be reported twice, once without the package's place on the build
+        // graph; the discovered policies below are the ones that read the evidence.
+        boolean packaged = !subject.contentScan();
+        List<AdvisorySource.Advisory> found = !packaged || subject.version() == null || subject.version().isBlank()
                 ? List.of()
                 : advisories.advisories(subject.ecosystem(), subject.coordinate(), subject.version());
         // A VEX statement that marks an advisory not-applicable to this subject downgrades it to a recorded allow and
@@ -624,7 +630,9 @@ public final class ComplianceGate {
         }
         findings.addAll(vulnerabilityPolicy.assess(applicable));
         findings.addAll(maliciousPolicy.assess(applicable));
-        findings.addAll(denyListPolicy.assess(subject));
+        if (packaged) {
+            findings.addAll(denyListPolicy.assess(subject));
+        }
         // The discovered dimensions (license, attestation, known-exploited, secret-scan) run only for a claimed
         // subject; unclaimed content (assessUnclaimed) screens against the core coordinate/feed dimensions above and
         // deliberately skips these, so a raw upload with no declared license is not over-quarantined as unknown-license.

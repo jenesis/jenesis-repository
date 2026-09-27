@@ -511,7 +511,13 @@ public final class HardenedScreen {
      *  it is never a {@link ProxyFormat.Fetcher.Buffered}; inheriting the derivation here would have spooled and
      *  full-body screened the whole artifact for every {@code HEAD}. */
     public ProxyFormat.Fetcher wrap(ProxyFormat.Fetcher upstream, String path) {
-        ProxyFormat.Fetcher screened = screen.wrap(upstream, path);
+        return wrap(upstream, path, Map.of());
+    }
+
+    /** As {@link #wrap(ProxyFormat.Fetcher, String)}, with the companions the pull-through fetched beside the artifact,
+     *  which the screen reads before it decides on the artifact they cover. */
+    public ProxyFormat.Fetcher wrap(ProxyFormat.Fetcher upstream, String path, Map<String, byte[]> companions) {
+        ProxyFormat.Fetcher screened = screen.wrap(upstream, path, companions);
         return new ProxyFormat.Fetcher() {
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) throws IOException {
