@@ -14,7 +14,7 @@ import build.jenesis.repository.ui.RepositoryPage;
  * rather than the group's. Nothing here reads the store or asks a module anything; the caller has already decided
  * which pages this reader may see.
  */
-final class ConsoleNavigation {
+public final class ConsoleNavigation {
 
     /** The collection the repository pages live below. */
     static final String REPOSITORIES = "/ui/repositories";
@@ -30,7 +30,7 @@ final class ConsoleNavigation {
      * may open, each in the order it is to be listed, and the tenant's {@code repositories} - asked for only when the
      * reader is in the Repositories group and not inside one of them, since that is the one sidebar that names them.
      */
-    static Navigation resolve(List<NavEntry> entries, List<RepositoryPage> pages,
+    public static Navigation resolve(List<NavEntry> entries, List<RepositoryPage> pages,
                               Supplier<List<String>> repositories, String path) {
         NavEntry current = current(entries, path);
         String repository = repository(path);
@@ -109,7 +109,7 @@ final class ConsoleNavigation {
     }
 
     /** The repository {@code path} is inside, or {@code null} when it is not inside one. */
-    static String repository(String path) {
+    public static String repository(String path) {
         if (!path.startsWith(REPOSITORIES + "/")) {
             return null;
         }
