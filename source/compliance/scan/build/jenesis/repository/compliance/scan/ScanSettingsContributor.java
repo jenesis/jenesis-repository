@@ -5,18 +5,17 @@ import build.jenesis.repository.compliance.KnownExploitedSource;
 import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
+import build.jenesis.repository.maintenance.IntervalSetting;
 
 /**
  * Describes the scheduled re-scan's settings, so they surface on the settings screens exactly when this module is
  * installed.
  *
- * <p>The two cadence entries render their key and default straight off {@link VulnerabilityScanTaskProvider}'s and
- * {@link SignalRefreshTaskProvider}'s {@code IntervalSetting} constants, so the catalogue and the code cannot drift.
+ * <p>The two cadence entries render their key and default straight off {@link IntervalSetting#SCANS} and
+ * {@link SignalRefreshTaskProvider}'s {@code IntervalSetting} constant, so the catalogue and the code cannot drift.
  * Both keys name their unit, so the default is rendered in milliseconds rather than as an ISO-8601 string: the entry
  * an operator edits is a {@code LONG}, and a duration string in a number field would be a default nobody could type
- * back. The scan cadence is the whole scan family's dial - six more passes read the same key from their own modules -
- * and the shared constant holds those to the same default, since they cannot share the constant
- * across module boundaries.
+ * back. The scan cadence is the whole scan family's dial, and every pass of the family reads that one constant.
  *
  * <p>The signal refresh and the two known-exploited dials are listed only where a known-exploited catalogue is
  * installed: the refresh pass is created only for a mirroring source and the enforcement holds nothing without a
@@ -35,10 +34,10 @@ public final class ScanSettingsContributor implements SettingsContributor {
                 new Setting("scheduled-scan", "Compliance", "Scheduled scan",
                         "Re-scan every repository's inventory against the advisory feeds on a schedule.",
                         Setting.Kind.BOOLEAN, "true", true).gate().essential(),
-                new Setting(VulnerabilityScanTaskProvider.INTERVAL.key(), "Compliance", "Scan interval",
+                new Setting(IntervalSetting.SCANS.key(), "Compliance", "Scan interval",
                         "Milliseconds between scheduled scans; each pass hits the upstream feeds.",
                         Setting.Kind.LONG,
-                        VulnerabilityScanTaskProvider.INTERVAL.fallbackMillis(), true).advanced(),
+                        IntervalSetting.SCANS.fallbackMillis(), true).advanced(),
                 new Setting(IncrementalPasses.FULL_EVERY, "Compliance", "Full pass every",
                         "Every Nth scheduled pass of the advisory scan, and of every other pass that re-reads "
                                 + "what the repository holds, re-reads every published version; the passes between "

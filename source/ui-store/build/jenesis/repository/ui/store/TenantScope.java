@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.audit.AuditTrail;
+import build.jenesis.repository.cleanup.StoredReport;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.Observations;
@@ -20,6 +21,9 @@ import io.micrometer.observation.ObservationRegistry;
  * validRepository}/traversal guards.
  */
 public abstract class TenantScope {
+
+    /** The tenant a pass handed off the request thread runs for: the request's own, bound around the pass. */
+    private static final ScopedValue<String> HANDED_OFF = ScopedValue.newInstance();
 
     protected final ArtifactStore root;
     protected final CurrentTenant current;
@@ -78,6 +82,16 @@ public abstract class TenantScope {
         return StoredConfig.load(root);
     }
 
+    /**
+     * {@code pass} bound to the tenant of the request that starts it, for a pass that runs on another thread. The
+     * console's tenant is the session's, and a session is not on the thread a stored report runs on, so a pass that
+     * scoped a repository there asked for a tenant and found none.
+     */
+    protected final StoredReport.Pass forThisTenant(StoredReport.Pass pass) {
+        String tenant = tenant();
+        return () -> ScopedValue.where(HANDED_OFF, tenant).call(pass::run);
+    }
+
     /** Time and trace a console admin action through the canonical {@link Observations} wrapper, tagging it with the
      *  low-cardinality {@code action} plus the repository and tenant, so the one instrumentation point feeds metrics,
      *  logging and tracing together. The tenant is read null-tolerantly (the wrapper records {@code none} when no
@@ -90,7 +104,7 @@ public abstract class TenantScope {
     }
 
     protected final String tenant() {
-        String tenant = current.name();
+        String tenant = HANDED_OFF.isBound() ? HANDED_OFF.get() : current.name();
         if (tenant == null) {
             throw new IllegalStateException("No tenant selected.");
         }

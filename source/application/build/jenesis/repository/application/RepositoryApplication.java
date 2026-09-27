@@ -2,7 +2,6 @@ package build.jenesis.repository.application;
 
 import module java.base;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
-import build.jenesis.repository.server.kernel.SettingsEnvironmentLayer;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -66,7 +65,6 @@ public class RepositoryApplication {
         // imports the kernel's feature modules constructs - so this node reports without naming the licence, and
         // the bundle still reports from its own main; the guard keeps it to one line per JVM either way.
         new SpringApplicationBuilder(RepositoryApplication.class)
-                .listeners(new SettingsEnvironmentLayer())
                 .properties("spring.config.name=repository")
                 .run(args);
     }
@@ -82,7 +80,6 @@ public class RepositoryApplication {
         // for one fixed port. No file pins server.port any more - 8080 is Spring's own default - so the argument is
         // what makes 0 mean 0.
         ConfigurableApplicationContext context = new SpringApplicationBuilder(RepositoryApplication.class)
-                .listeners(new SettingsEnvironmentLayer())
                 .properties("spring.config.name=repository")
                 .run("--server.port=" + port);
         int bound = Integer.parseInt(context.getEnvironment().getProperty("local.server.port"));

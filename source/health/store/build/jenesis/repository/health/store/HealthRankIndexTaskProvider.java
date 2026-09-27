@@ -14,12 +14,6 @@ import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
  */
 public final class HealthRankIndexTaskProvider implements MaintenanceTaskProvider {
 
-    /** How often the compliance sweeps run. Deliberately the same dial the whole scan family reads (scan, kev-
-     *  enforce, reanalyze, vulnerability-rank-index, findings-filter-index, health-scan, health-rank-index), so one
-     *  operator switch paces every pass over the same feeds; hourly by default, since each pass hits the upstream
-     *  feeds. */
-    private static final IntervalSetting INTERVAL = IntervalSetting.millis("scan-interval-millis", "PT1H");
-
     @Override
     public String name() {
         return "health-rank-index";
@@ -30,6 +24,6 @@ public final class HealthRankIndexTaskProvider implements MaintenanceTaskProvide
         if (!Features.enabled(config, "scheduled-scan")) {
             return Optional.empty();
         }
-        return Optional.of(new HealthRankIndexTask(INTERVAL.resolve(config)));
+        return Optional.of(new HealthRankIndexTask(IntervalSetting.SCANS.resolve(config)));
     }
 }

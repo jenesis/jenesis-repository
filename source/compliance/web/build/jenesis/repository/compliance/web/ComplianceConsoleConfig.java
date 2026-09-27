@@ -4,11 +4,13 @@ import build.jenesis.repository.ui.ConsoleTemplates;
 import org.springframework.context.ApplicationContext;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Features;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.store.ConsoleActor;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
 
 /** The screening feature's console beans: its screens, and the templates that travel with the module. */
@@ -35,8 +37,10 @@ public class ComplianceConsoleConfig {
      */
     @Bean
     public ComplianceReview complianceReview(ArtifactStore repositoryStore, CurrentTenant currentTenant,
-                                             ObservationRegistry observations, AuditTrail audit, ConsoleActor actor) {
-        return new ComplianceReview(repositoryStore, currentTenant, observations, audit, actor);
+                                             ObservationRegistry observations, AuditTrail audit, ConsoleActor actor,
+                                             Environment environment) {
+        return new ComplianceReview(repositoryStore, currentTenant, observations, audit, actor,
+                key -> environment.getProperty(Features.key(key)));
     }
 
 }

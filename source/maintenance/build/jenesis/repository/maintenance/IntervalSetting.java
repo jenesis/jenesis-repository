@@ -68,6 +68,12 @@ public final class IntervalSetting {
 
     private static final System.Logger LOGGER = System.getLogger(IntervalSetting.class.getName());
 
+    /** How often the passes over the advisory and health feeds run. The whole scan family - scan, kev-enforce,
+     *  reanalyze, vulnerability-rank-index, findings-filter-index, health-scan and health-rank-index - reads this one
+     *  dial, so one operator switch paces every pass over the same feeds; hourly by default, since each pass hits the
+     *  upstream feeds. */
+    public static final IntervalSetting SCANS = millis("scan-interval-millis", "PT1H");
+
     private final String key;
     private final String fallbackText;
     private final Duration fallback;

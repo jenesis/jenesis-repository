@@ -81,9 +81,37 @@ public class ComplianceReview extends TenantScope {
      *  rendered row. */
     private final FindingMarks marks = installedFindingWriters();
 
+    /** The deployment's effective configuration by bare key, or {@code null} to read the stored settings alone. */
+    private final UnaryOperator<String> configuration;
+
+    /** A review over the stored settings alone, for a caller with no environment to read. */
     public ComplianceReview(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
                             AuditTrail audit, ConsoleActor actor) {
+        this(repositoryStore, current, observations, audit, actor, null);
+    }
+
+    /**
+     * A review that resolves the feeds, signals and policies from {@code configuration}: the node's effective value of
+     * a bare key - an operator's pin over the stored setting over the shipped default - which is what the node's own
+     * gate builds its feeds from. Reading the stored document alone reported a feed an environment variable switched
+     * on as switched off.
+     */
+    public ComplianceReview(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
+                            AuditTrail audit, ConsoleActor actor, UnaryOperator<String> configuration) {
         super(repositoryStore, current, observations, audit, actor);
+        this.configuration = configuration;
+    }
+
+    /** A key's value as the node applies it: the effective configuration's where it names one, else the stored
+     *  setting. */
+    private UnaryOperator<String> effective(Properties settings) {
+        if (configuration == null) {
+            return settings::getProperty;
+        }
+        return key -> {
+            String value = configuration.apply(key);
+            return value != null ? value : settings.getProperty(key);
+        };
     }
 
     /**
@@ -389,10 +417,10 @@ public class ComplianceReview extends TenantScope {
         // until something timed out, and an operator who pressed the button twice started a second full pass over
         // the first. StoredReport records it running before it starts, so the second press is declined and the
         // screen can say what is happening.
-        return StoredReport.compute(scope(repository), HEALTH_SCAN, () -> {
+        return StoredReport.compute(scope(repository), HEALTH_SCAN, forThisTenant(() -> {
             MaintainerHealthReport scanned = renderHealth(repository, true, null);
             return StoredReport.Rows.of(List.of(scanned.total() + " coordinates scored"));
-        });
+        }));
     }
 
     /** Whether a health rescan is running right now - read from the same stored report the pass writes. */
@@ -517,7 +545,7 @@ public class ComplianceReview extends TenantScope {
         Properties settings = settings();
         ArtifactStore store = scope(repository);
         return VulnerabilityReports.read(store, new StoreRepositoryInventory(store),
-                AdvisorySource.resolve(settings::getProperty), AdvisorySignal.resolve(settings::getProperty),
+                AdvisorySource.resolve(effective(settings)), AdvisorySignal.resolve(effective(settings)),
                 findingsLedger.map(provider -> provider.over(store)),
                 DependentsQueryProvider.installed().map(provider -> provider.over(store)),
                 reachability, applicability, after, Math.max(1, Math.min(limit, VULNERABLE_PAGE)),
@@ -538,7 +566,7 @@ public class ComplianceReview extends TenantScope {
      */
     public boolean rescanVulnerabilities(String repository) throws IOException {
         ArtifactStore store = scope(repository);
-        return StoredReport.compute(store, VULNERABILITY_SCAN, () -> rescanNow(repository));
+        return StoredReport.compute(store, VULNERABILITY_SCAN, forThisTenant(() -> rescanNow(repository)));
     }
 
     /** Run the rescan now and answer the first page afterwards - the test seam, and what the background run does. */
@@ -552,8 +580,8 @@ public class ComplianceReview extends TenantScope {
 
     private StoredReport.Rows rescanNow(String repository) throws IOException {
         Properties settings = settings();
-        SequencedMap<String, AdvisorySource> feeds = AdvisorySource.named(settings::getProperty);
-        List<AdvisorySignal> signals = AdvisorySignal.resolve(settings::getProperty);
+        SequencedMap<String, AdvisorySource> feeds = AdvisorySource.named(effective(settings));
+        List<AdvisorySignal> signals = AdvisorySignal.resolve(effective(settings));
         List<String> unrefreshed = FeedRefresh.refreshAll(signals);
         ArtifactStore store = scope(repository);
         Optional<Findings> ledger = findingsLedger.map(provider -> provider.over(store));
@@ -783,7 +811,7 @@ public class ComplianceReview extends TenantScope {
         Properties settings = settings();
         ArtifactStore store = scope(repository);
         return StoredReport.compute(store, blastRadiusReport(includeUnknown),
-                () -> rows(planner.get().plan(settings::getProperty, store, includeUnknown)));
+                () -> rows(planner.get().plan(effective(settings), store, includeUnknown)));
     }
 
     /** Run the pass now and store its report - the test seam, and what a scheduled enforcement pass may call when it
@@ -793,7 +821,7 @@ public class ComplianceReview extends TenantScope {
         Properties settings = settings();
         ArtifactStore store = scope(repository);
         Instant started = Instant.now();
-        StoredReport.Rows rows = rows(planner.plan(settings::getProperty, store, includeUnknown));
+        StoredReport.Rows rows = rows(planner.plan(effective(settings), store, includeUnknown));
         StoredReport.write(store, blastRadiusReport(includeUnknown), started, Instant.now(), rows);
         return blastRadius(repository, includeUnknown, Optional.of(planner));
     }

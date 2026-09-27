@@ -1,0 +1,3 @@
+# Every composition that carries the kernel layers the stored settings over its configuration at boot, whichever
+# launcher starts it: a launcher that had to remember the listener was a launcher that could forget it.
+org.springframework.context.ApplicationListener=build.jenesis.repository.server.kernel.SettingsEnvironmentLayer
