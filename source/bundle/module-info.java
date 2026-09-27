@@ -30,9 +30,6 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.ui;
     requires build.jenesis.repository.ui.admin;
     requires build.jenesis.repository.application;
-    // The command-line client ships with the product it drives: the release publishes this closure, and the image
-    // carries it beside the server.
-    requires build.jenesis.repository.cli;
     // The console's build-cache space resolves through this SPI, and the delegating provider is the default
     // every composition answers to: without it on the graph the console cannot open its own storage.
     requires build.jenesis.repository.cache.storage.delegating;

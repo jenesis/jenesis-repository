@@ -3,8 +3,8 @@
  * change a deployment over the repository's HTTP API - the same {@code /api/*} surface the console drives, so the
  * command line, the console and the API stay equal. Runs on the built-in HTTP client, with Jackson for JSON.
  *
- * <p>{@code Cli} is its launcher, so a launcher is built from it and the module ships with the bundle that
- * requires it: on Central and in every image's module path.
+ * <p>{@code Cli} is its launcher: the client ships as that launcher's jar and through SDKMAN, to the machine an
+ * operator or a CI job runs it from - never inside a server's image, which only the server runs in.
  *
  * @jenesis.release 25
  * @jenesis.main build.jenesis.repository.cli.Cli
