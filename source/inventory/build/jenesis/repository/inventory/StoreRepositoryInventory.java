@@ -304,6 +304,15 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return browse.children(prefix, limit, policy);
     }
 
+    /** {@link #children(String, int, ServableNames.Policy)} resumed strictly after the child named {@code after}
+     *  ({@code null} or empty starts at the beginning): the window a paged surface serves, whose
+     *  {@link ChildPage#next()} is the {@code after} of the window that follows. A name that is not one path segment
+     *  is refused as the traversal refuses one ({@link build.jenesis.repository.walk.TraversalException}). */
+    public ChildPage children(String prefix, String after, int limit, ServableNames.Policy policy)
+            throws IOException {
+        return browse.children(prefix, after, limit, policy);
+    }
+
     /** Published paths matching {@code query} - the find-tool for artifacts with no coordinate to search by. See
      *  {@code InventoryBrowse#paths}. */
     public ChildPage paths(String prefix, String query, int limit, ServableNames.Policy policy) throws IOException {
@@ -314,8 +323,9 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  quarantine root child and any withheld/torn leaf already dropped), at most the requested window wide, plus
      *  {@code truncated} - whether the bounded screened scan proved stored children remain past the window. Truncation
      *  is the primitive's outcome rather than a post-screen list length, so a withheld or torn leaf never makes an
-     *  incomplete directory look complete. */
-    public record ChildPage(List<String> names, boolean truncated) {
+     *  incomplete directory look complete. {@code next} is the child name a following window resumes after, present
+     *  whenever a paged window was cut short and absent where the bound has no resume point (a path search). */
+    public record ChildPage(List<String> names, boolean truncated, String next) {
     }
 
     /** Whether a published coordinate version may be disclosed by a name-enumeration surface (search, a coordinate

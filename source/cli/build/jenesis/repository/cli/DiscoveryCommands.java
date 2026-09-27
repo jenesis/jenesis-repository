@@ -14,13 +14,28 @@ final class DiscoveryCommands {
 
     static int browse(String[] args, Path home) throws Exception {
         if (args.length > 1 && args[1].equals("children")) {
+            String usage = "Usage: browse children <repo> [prefix] [--limit N] [--cursor T]";
             if (args.length < 3) {
-                throw new IllegalArgumentException("Usage: browse children <repo> [prefix]");
+                throw new IllegalArgumentException(usage);
             }
-            // The folder probe rather than a listing: it answers which folders exist under a prefix in a bounded
-            // read, which is what a caller walking a deep layout wants instead of every entry beneath it.
-            System.out.println(CliSupport.client(home).contents()
-                    .browseChildren(args[2], args.length > 3 ? args[3] : ""));
+            // The folder probe rather than a listing: one bounded window of what sits under a prefix, which is what a
+            // caller walking a deep layout wants instead of every entry beneath it; the answer's next is the cursor.
+            String prefix = "";
+            String cursor = null;
+            Integer limit = null;
+            for (int i = 3; i < args.length; i++) {
+                switch (args[i]) {
+                    case "--cursor" -> cursor = CliSupport.flag(args, ++i);
+                    case "--limit" -> limit = Integer.parseInt(CliSupport.flag(args, ++i));
+                    default -> {
+                        if (i != 3 || args[i].startsWith("--")) {
+                            throw new IllegalArgumentException(usage);
+                        }
+                        prefix = args[i];
+                    }
+                }
+            }
+            System.out.println(CliSupport.client(home).contents().browseChildren(args[2], prefix, cursor, limit));
             return 0;
         }
         if (args.length < 2) {

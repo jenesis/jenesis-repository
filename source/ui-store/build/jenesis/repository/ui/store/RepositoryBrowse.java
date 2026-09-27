@@ -260,18 +260,35 @@ public class RepositoryBrowse extends TenantScope {
 
     public BrowseLevel browseLevel(String repository, String prefix, String sort, boolean descending)
             throws IOException {
-        ArtifactStore store = scope(repository);
+        BrowsePage page = page(scope(repository), safePrefix(prefix), null, MAX_CHILDREN);
+        List<BrowseEntry> entries = new ArrayList<>(page.entries());
+        entries.sort(browseOrder(sort, descending));
+        return new BrowseLevel(entries, page.next() != null);
+    }
+
+    /** One window of a folder level in child-name order: at most the requested number of entries, and {@code next},
+     *  the child name the following window resumes after - {@code null} once the level is drained. */
+    public record BrowsePage(List<BrowseEntry> entries, String next) {
+    }
+
+    /**
+     * One window of the immediate children under {@code safe} - a {@link #safePrefix traversal-guarded} layout prefix
+     * of the repository {@code store} - resumed strictly after the child named {@code after}, each classified
+     * folder-vs-artifact with its size. The one implementation behind the console's folder screen and its
+     * {@code /api/browse/children} twin, so the two answer the same children for one folder.
+     *
+     * <p>It goes through the servable-name seam's paged, screened child listing: that pages one bounded level,
+     * forwards folder children unconditionally, suppresses the reserved quarantine review subtree at the root, and
+     * drops any non-folder leaf a GET would 404 (withheld, retracted, or a blob a garbage collection reclaimed) - the
+     * serve-parity screen, so a browse discloses exactly the paths a GET would. Per child it reads a one-entry folder
+     * probe and either a folder's cached roll-up or a leaf's recorded size, never an artifact body.
+     */
+    public static BrowsePage page(ArtifactStore store, String safe, String after, int limit) throws IOException {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         Publication publication = new Publication(store);
-        String safe = safePrefix(prefix);
-        List<BrowseEntry> entries = new ArrayList<>();
-        // The servable-name seam's paged, screened child listing: it pages one bounded level, forwards folder
-        // children unconditionally, suppresses the reserved quarantine review subtree at the root, and drops any
-        // non-folder leaf a GET would 404 (withheld, retracted, or a blob a garbage collection reclaimed) - the
-        // serve-parity screen, so this browse discloses exactly the paths a GET would, heap-bounded and routed
-        // through the one seam.
         StoreRepositoryInventory.ChildPage page =
-                inventory.children(safe, MAX_CHILDREN, ServableNames.Policy.HIDE_WITHHELD_AND_GONE);
+                inventory.children(safe, after, limit, ServableNames.Policy.HIDE_WITHHELD_AND_GONE);
+        List<BrowseEntry> entries = new ArrayList<>();
         for (String name : page.names()) {
             String path = safe + "/" + name;
             boolean folder = !inventory.children(path, 1).isEmpty();   // a one-entry probe, never the child listing
@@ -279,15 +296,14 @@ public class RepositoryBrowse extends TenantScope {
             if (folder) {
                 bytes = inventory.subtreeSize(path).orElse(-1L);      // a folder is a listing, kept unconditionally
             } else {
-                // The leaf survived the WG screen, so a GET would serve it: read its recorded size from the small
+                // The leaf survived the screen, so a GET would serve it: read its recorded size from the small
                 // pointer (never the artifact body); a torn pointer that raced the screen degrades to unknown, not a 500.
                 Optional<String> located = publication.located(path);
                 bytes = located.isPresent() ? store.size(located.get()) : -1L;
             }
             entries.add(new BrowseEntry(name, path, folder, bytes, bytes < 0 ? "—" : humanSize(bytes)));
         }
-        entries.sort(browseOrder(sort, descending));
-        return new BrowseLevel(entries, page.truncated());
+        return new BrowsePage(entries, page.next());
     }
 
     /**

@@ -1,8 +1,8 @@
 /**
  * The console store's API twins as a removable server feature module: the key-header-authenticated routes that
  * reach the same {@code ui-store} services the admin console's screens do - a tenant's SCIM bearer token, the
- * build-cache projects and their eviction, and an artifact's origin trail - so a capability an operator can click
- * can also be scripted, run from CI and driven by the CLI. It provides
+ * build-cache projects and their eviction, an artifact's origin trail and a folder's children - so a capability an
+ * operator can click can also be scripted, run from CI and driven by the CLI. It provides
  * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}, so the repository server imports its
  * configuration through {@code ServiceLoader} discovery and names none of these endpoints; the composition root
  * keeps only the two routes that are the application's own. Open so Spring can reflect over the
@@ -22,6 +22,7 @@ open module build.jenesis.repository.console.api {
     requires build.jenesis.repository.ui.store;
     requires build.jenesis.repository.ui;
     requires build.jenesis.repository.scope;
+    requires build.jenesis.repository.walk;
     requires jakarta.servlet;
     requires spring.beans;
     requires spring.context;

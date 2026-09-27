@@ -34,6 +34,7 @@ open module build.jenesis.repository.ui.admin.test {
     requires build.jenesis.repository.gate.spi;
     requires build.jenesis.repository.gateway;
     requires build.jenesis.repository.server;
+    requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.format.maven;

@@ -72,7 +72,9 @@ public final class Commands {
             new Section("Contents", List.of(
                     noun("browse", "list what is published under a path", null, DiscoveryCommands::browse,
                             act("browse <repo> [prefix]", "the entries under a path"),
-                            act("browse children <repo> [prefix]", "the immediate child folders under a path")),
+                            act("browse children <repo> [prefix] [--limit N] [--cursor T]",
+                                    "one window of the children under a path, each a folder or an artifact with its "
+                                            + "size, and the cursor to the next")),
                     noun("search", "find published coordinates", null, DiscoveryCommands::search,
                             act("search <repo> [query]", "coordinates matching a substring")),
                     noun("assets", "export the published-asset walk", null, DiscoveryCommands::assets,

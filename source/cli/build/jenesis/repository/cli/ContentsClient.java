@@ -205,12 +205,14 @@ public final class ContentsClient extends ClientCalls {
         return JSON.readValue(response.body(), AssetPage.class);
     }
 
-    /** The immediate child folders under a path - the paged folder probe, not a listing of every entry. No API route
-     *  serves {@code /api/browse/children}: the probe is the console's own screen, so the server answers this with a
-     *  404 until the API grows the route. */
-    public String browseChildren(String repo, String prefix) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET",
-                "/api/browse/children?repo=" + enc(repo) + "&prefix=" + enc(prefix), null, null);
+    /** One window of the immediate children under a path - the console's folder probe, each child marked folder or
+     *  artifact with its size - resumed after the child named {@code after} ({@code null} starts at the beginning);
+     *  the answer's {@code next} is the {@code after} of the window that follows. {@code limit} caps the window, and
+     *  the server clamps it to its own maximum; {@code null} takes the default. */
+    public String browseChildren(String repo, String prefix, String after, Integer limit)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/browse/children?repo=" + enc(repo) + "&prefix=" + enc(prefix)
+                + (after == null ? "" : "&after=" + enc(after)) + (limit == null ? "" : "&limit=" + limit), null, null);
         require(response, 200, "browse the children of " + repo + "/" + prefix);
         return response.body();
     }

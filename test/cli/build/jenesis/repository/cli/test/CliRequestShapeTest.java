@@ -94,10 +94,9 @@ public class CliRequestShapeTest {
     private static final Map<String, Case> ACTIONS = Map.ofEntries(
             // Contents
             action("browse <repo> [prefix]", "browse releases /maven", get("/api/browse", "repo", "prefix")),
-            // No API route serves this yet - the console's folder probe is its own - so the request is stated as
-            // the client sends it, and the stand-in cannot say that nothing answers it.
-            action("browse children <repo> [prefix]", "browse children releases /maven",
-                    get("/api/browse/children", "repo", "prefix")),
+            action("browse children <repo> [prefix] [--limit N] [--cursor T]",
+                    "browse children releases /maven --limit 5 --cursor org",
+                    get("/api/browse/children", "repo", "prefix", "limit", "after")),
             action("search <repo> [query]", "search releases acme", get("/api/search", "repo", "q")),
             action("assets <repo> [--limit N] [--cursor T] [--all]", "assets releases --limit 5 --cursor c",
                     get("/api/assets", "repo", "limit", "cursor")),

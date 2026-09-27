@@ -92,14 +92,25 @@ final class InventoryBrowse {
      *  to gain from a wider one. */
     StoreRepositoryInventory.ChildPage children(String prefix, int limit, ServableNames.Policy policy)
             throws IOException {
-        String parent = prefix == null ? "" : prefix;
+        return children(prefix, null, limit, policy);
+    }
+
+    /** The same screened window, resumed strictly after the child named {@code after} ({@code null} or empty starts
+     *  at the beginning) - see {@link StoreRepositoryInventory#children(String, String, int, ServableNames.Policy)}.
+     *  The traversal's cursor is a store key; a caller holds only the child name it ends in, which is the name the
+     *  window it was handed last listed, or a screened-out name past it. */
+    StoreRepositoryInventory.ChildPage children(String prefix, String after, int limit, ServableNames.Policy policy)
+            throws IOException {
+        String scope = ServableNames.PUBLISHED + (prefix == null ? "" : prefix);
+        String cursor = after == null || after.isEmpty() ? null : Traversal.key(scope, after);
         List<String> names = new ArrayList<>();
         Traversal.Result result = ScreenedNames.paths(servableNames, policy)
                 .containers(this::isContainer)
                 .scanning(BoundedChildren.bounded().entries(limit + 1).page(limit + 1))
                 .take(limit)
-                .scan(store, ServableNames.PUBLISHED + parent, (name, _) -> names.add(name));
-        return new StoreRepositoryInventory.ChildPage(names, result.truncated());
+                .scan(store, scope, cursor, (name, _) -> names.add(name));
+        return new StoreRepositoryInventory.ChildPage(names, result.truncated(),
+                result.cursor().map(key -> key.substring(key.lastIndexOf('/') + 1)).orElse(null));
     }
 
     /**
@@ -124,7 +135,7 @@ final class InventoryBrowse {
         boolean[] truncated = {false};
         int[] visited = {0};
         walkPaths(prefix == null ? "" : prefix, query, limit, policy, hits, truncated, visited);
-        return new StoreRepositoryInventory.ChildPage(hits, truncated[0]);
+        return new StoreRepositoryInventory.ChildPage(hits, truncated[0], null);
     }
 
     /** How many published names one path search may examine - the bound that keeps a search over an enormous

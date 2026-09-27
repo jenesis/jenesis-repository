@@ -40,6 +40,11 @@ public class ConsoleApiConfig {
         return new OriginController(repositories, routing);
     }
 
+    @Bean
+    public BrowseChildrenController browseChildrenController(Repositories repositories, RepositoryRouting routing) {
+        return new BrowseChildrenController(repositories, routing);
+    }
+
     /** The tenants, over the documents the console's own tenant directory is built over: the repository store's root,
      *  which every composition has, so this twin needs no console to answer. */
     @Bean
