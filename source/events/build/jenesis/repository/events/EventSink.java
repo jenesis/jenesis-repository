@@ -22,8 +22,8 @@ import build.jenesis.repository.store.Providers;
  * <em>executable</em> repair and an event is not re-derivable - nothing in the store records "an event occurred at T
  * that was not announced". It is not {@code COMMIT_COUPLED_AT_LEAST_ONCE}, because {@link #emit} is a static fan-out
  * called from six different mutation choreographies, each after its own durable write, so commit-coupling it would
- * mean six pre-mutation intent writes in six modules - six choke-point extensions rather than one, which design
- * gate 3 refuses on its own. Clause 12 states the crash window that class leaves open, and clause 13 states which
+ * mean six pre-mutation intent writes in six modules - six choke-point extensions rather than one, which the
+ * single choke point refuses on its own. Clause 12 states the crash window that class leaves open, and clause 13 states which
  * producers actually reach this seam.
  *
  * <p><b>Resolution and delivery are two different failure classes, and the split is the spine of clauses 4 and 7.</b>

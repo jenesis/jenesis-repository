@@ -19,7 +19,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *
  * <ul>
  *   <li>{@link #before(String, String, RivalWrites) before} - run the rival's writes, then delegate the op. This is the
- *       canonical form the plan names ({@code RacingStore.before("delete", key, rivalWrites)}): the reconcile clears a
+ *       canonical form ({@code RacingStore.before("delete", key, rivalWrites)}): the reconcile clears a
  *       marker while a concurrent enforce has just written its hold; the rival's {@code holds/}+{@code /quarantine}
  *       writes land in the delegate an instant before the marker delete does, so the target's post-act re-verify reads
  *       a world where the hold now exists.</li>

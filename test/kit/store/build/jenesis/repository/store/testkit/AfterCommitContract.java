@@ -286,7 +286,7 @@ final class AfterCommitContract {
                 "the surface really is missing the dropped publish, or the repair below proves nothing");
 
         // The repair leg is RUN, over durable truth, and it must converge. A best-effort delivery class whose repair
-        // is a claim in a comment is exactly what the plan refuses to accept.
+        // is a claim in a comment is exactly what a contract kit refuses to accept.
         observer.repair(store);
         settle(observer, store);
 

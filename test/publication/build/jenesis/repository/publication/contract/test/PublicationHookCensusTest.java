@@ -70,7 +70,7 @@ class PublicationHookCensusTest {
         // Two roots, and the pair is the point. `source/` is the shipped inventory - the thing that must never grow a
         // hook without a fixture. This module is where the kit's own archetypes are declared, so the census has a
         // non-empty population to verify while the shipped one is empty. The day a source module provides a hook, the
-        // static leg grows and the runtime leg fails until this module requires it: gate 1, working as intended.
+        // static leg grows and the runtime leg fails until this module requires it, which is the census working as intended.
         // One call, where there were two: the resolved graph carries the shipped observers and this module's own
         // fixture alike, so there is no source root to name and no way for the two halves to disagree.
         return ContractCensus.declaredProviders(PublicationObserver.class);

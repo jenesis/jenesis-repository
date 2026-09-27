@@ -100,7 +100,7 @@ public final class WalkConsumerContract {
         CRASH_AT_PASS_COMPLETION_CONVERGES,
         /** A failed pass is left resumable and visibly incomplete: {@code ArtifactWalk.pass} still reports it active
          *  and its segment carries the cursor it reached, so a stuck rebuild is legible instead of looking done
-         *  (gate 4, clause 6). */
+         *  (clause 6). */
         A_FAILED_PASS_IS_RESUMABLE_NEVER_SILENTLY_COMPLETE,
         /** A withheld pointer reaches a consumer that asked to see withheld pointers through {@code onWithheld}, and
          *  reaches no other consumer at all (clause 14). Judged with two kit probes riding the same pass beside the

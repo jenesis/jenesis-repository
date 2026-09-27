@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Where the properties the fixtures exclude are proven instead.
  *
- * <p><b>Why a second test exists at all - and why it is not a way round gate 3.</b> The shared contract mints every
+ * <p><b>Why a second test exists at all - and why it is not a second choke point.</b> The shared contract mints every
  * artifact it publishes as {@code ArtifactDescriptor.at("kit", path)} and lays it out through
  * {@code Visibility.at(...)}, which sets no {@code described}, so the descriptor that reaches an after-commit observer
  * carries a path and a blob identity and <b>no coordinate and no version</b>. The event observer skips exactly that

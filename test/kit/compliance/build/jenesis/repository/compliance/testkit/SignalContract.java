@@ -129,7 +129,7 @@ public final class SignalContract {
 
         /** A recording that never stops paginating ends in a named failure carrying no partial answer, and the source
          *  is unpoisoned afterwards; a feed that declares it does not paginate is held to exactly one request per
-         *  cold lookup, so the declaration is not an exit (gate 4). */
+         *  cold lookup, so the declaration is not an exit. */
         PAGE_CAP_IS_NAMED,
 
         /** The declared read behaviour holds at the wire: a warm feed serves its second query without a request and a

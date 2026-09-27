@@ -190,7 +190,7 @@ final class SubtreeSizeRollUp {
 
     /** The bounds the walk-less roll-up descends {@code publish/} under. A roll-up that stopped early would commit a
      *  folder total missing everything past the cap - a browse size that reads complete but under-counts, precisely
-     *  gate 4's plausible-but-incomplete answer - so the entry cap is only a per-call continuation that
+     *  a plausible-but-incomplete answer - so the entry cap is only a per-call continuation that
      *  {@link #rollUp} follows to exhaustion, and the binding bound is the step budget (one
      *  {@link ArtifactStore#exists} probe per opened node), which raises a named
      *  {@link build.jenesis.repository.walk.TraversalException} rather than answering short. Depth stays at the

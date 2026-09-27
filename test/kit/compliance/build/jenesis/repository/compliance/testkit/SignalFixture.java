@@ -237,7 +237,7 @@ public interface SignalFixture extends AutoCloseable {
     /**
      * The vendor's own <em>"I carry nothing for this"</em> answer - an empty advisory array, a catalogue that lists
      * other CVEs than the queried one, the 404 a public dataset answers for a coordinate it does not know. It is the
-     * counterpart of {@link #rejected()} and the reason the kit can say anything about gate 4 at all: without a
+     * counterpart of {@link #rejected()} and the reason the kit can say anything about an outage reading as an answer at all: without a
      * recording of a genuinely clean lookup, "nothing known" would only ever be observed on the failure paths, where
      * it is exactly what must not appear.
      */

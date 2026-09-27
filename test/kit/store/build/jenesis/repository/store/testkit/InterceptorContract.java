@@ -965,7 +965,7 @@ final class InterceptorContract {
 
         isTrue(failed instanceof IOException, fixture, "the injected crash must fail the commit, or this check kills "
                 + "nothing and everything below it is vacuous");
-        // Re-derived from durable state, per gate 5: the chain really ran to completion and the pointer really did not
+        // Re-derived from durable state: the chain really ran to completion and the pointer really did not
         // land. A crash point that stopped biting fails here rather than passing.
         equal(log.committed, List.of("witness"), fixture,
                 "the screen was told it ACCEPTED - it believes it accepted an artifact that never became visible");
