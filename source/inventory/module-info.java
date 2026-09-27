@@ -5,16 +5,16 @@
  * declared roots) the discovered garbage collector and rebuild pass judge references from - the reclamation itself
  * moved onto the {@code GarbageCollector} SPI. Core plumbing shared by the gate, staging, retention and
  * the console - deliberately a direct seam, not an SPI - in its own module so a feature module reaches it without
- * dragging in the gateway wiring. It also carries its own convergence backstop: a discovered
- * {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider} answering to {@code reconcile} that rebuilds the
- * publish-time sidecars from the live pointer tree in both directions, so a crash that skipped a sidecar write (a
- * served artifact invisible to retention and the search/license index) converges on the next sweep instead of drifting
- * permanently; off unless the {@code reconcile} setting is enabled. The reconcile legs ride the shared artifact walk
- * ({@code ArtifactWalk}, resolved through {@code WalkProvider}), so the sweep is resumable, range-segmented and
- * multi-node-cooperative; with no walk implementation installed the pass resolves to nothing rather than enumerating
- * its own way. A walk-carrying inventory also rides the subtree-size roll-up over its own {@code walks/rollup} pass
- * (post-order folder totals folded over the ordered stream with an O(depth) stack, partials flushed with every
- * cursor commit), while the walk-less construction keeps the complete-per-call recursion for on-demand callers.
+ * dragging in the gateway wiring. It also carries its own convergence backstop: walk consumers - {@code reconcile},
+ * the inventory backfill and the torn-write repair - that rebuild the publish-time sidecars from the live pointer tree
+ * in both directions, so a crash that skipped a sidecar write (a served artifact invisible to retention and the
+ * search/license index) converges on the next walk that carries them instead of drifting permanently; each is on
+ * unless its setting switches it off. They ride the shared artifact walk, so the sweep is resumable,
+ * range-segmented and multi-node-cooperative; with no walk implementation installed nothing runs them, and nothing
+ * enumerates its own way. A walk-carrying inventory also rides the subtree-size roll-up over its own
+ * {@code walks/rollup} pass (post-order folder totals folded over the ordered stream with an O(depth) stack, partials
+ * flushed with every cursor commit), while the walk-less construction keeps the complete-per-call recursion for
+ * on-demand callers.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

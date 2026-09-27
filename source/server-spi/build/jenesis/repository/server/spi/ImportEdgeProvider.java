@@ -16,7 +16,7 @@ import build.jenesis.repository.store.Providers;
  * SSRF-screened choreography - is the <em>only</em> import edge at boot.
  *
  * <p>No cross-layer stopgap is needed: rather than dropping the free import mapping with a
- * {@code WebMvcRegistrations} bean (a bean/mapping override reaching across the layer), a downstream edition ships an
+ * {@code WebMvcRegistrations} bean (a bean/mapping override reaching across the layer), a distribution ships an
  * {@code ImportEdgeProvider} service - its mere presence on the module path
  * makes the built-in edge yield - and contributes its own controller bean, so the two contribute
  * <em>separate, non-colliding</em> controllers with no mapping-suppression bean and no endpoint-mapping collision.

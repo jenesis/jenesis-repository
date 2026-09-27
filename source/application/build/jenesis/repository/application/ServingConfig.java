@@ -308,12 +308,12 @@ public class ServingConfig {
         // boot, so the format needs no settings dependency.
         List<ImportSourceProvider> importSources =
                 ImportSourceProvider.installed(Features.namespaced(environment::getProperty));
-        // the EdgeHooks bean is threaded into the screening edge, retiring the DeployController
-        // fork onto this one shared write path. It carries the fork's ingress concerns - the release-immutability 409
-        // (beforeLayout), the quarantine-dispatch record (held) and the deploy observation (verdict) - while the tenant
-        // binding the gate resolution needs is opened around this controller by the PublishTenantFilter. The write
-        // target / 405 rides Route.writable() (MultiTenantRouting), the quota 507 the store + this controller's own
-        // handler, and the format-claim/verdict/batch loop ScreenedDispatch + BatchIngestion - so no fork remains.
+        // the EdgeHooks bean is threaded into the screening edge, the one write path. It carries the ingress
+        // concerns - the release-immutability 409 (beforeLayout), the quarantine-dispatch record (held) and the deploy
+        // observation (verdict) - while the tenant binding the gate resolution needs is opened around this controller
+        // by the PublishTenantFilter. The write target / 405 rides Route.writable() (MultiTenantRouting), the quota
+        // 507 the store + this controller's own handler, and the format-claim/verdict/batch loop ScreenedDispatch +
+        // BatchIngestion.
         return new build.jenesis.repository.server.RepositoryController(routing, dispatcher, importSources,
                 upstreamFetcher, batchIngestion, Features.namespaced(environment::getProperty), null,
                 routedServing, deployEdgeHooks);

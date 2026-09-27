@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
  * (Spring MVC maps its handler on the bean), reading the same {@link LogRingBuffer} the {@link LogRingAppender} feeds.
  * Read like every other {@code /api} surface - key-auth'd ({@code repository:read}) by
  * {@link RepositorySecurityAutoConfiguration}, so it is not an open backdoor; an empty ring returns an empty list
- * rather than an error. The downstream edition mirrors this independently as an operator-gated {@code /api/admin/logs}.
+ * rather than an error.
  */
 @RestController
 public final class RecentLogsController {

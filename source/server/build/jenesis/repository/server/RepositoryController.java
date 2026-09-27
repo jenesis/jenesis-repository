@@ -111,9 +111,9 @@ public class RepositoryController {
      *                  space.
      * @param routed    consulted on a read so a repository defined as a read-through proxy or a group view serves
      *                  across its backings; {@link RoutedServing#NONE} leaves every repository on its own store.
-     * @param hooks     an edition's ingress concerns - tenant binding, release-immutability, quarantine dispatch,
-     *                  deploy observation - threaded into the one shared screening edge rather than forked into a
-     *                  second deploy controller; {@link EdgeHooks#NONE} is the no-op.
+     * @param hooks     the ingress concerns - tenant binding, release-immutability, quarantine dispatch, deploy
+     *                  observation - threaded into the one shared screening edge; {@link EdgeHooks#NONE} is the
+     *                  no-op.
      */
     public RepositoryController(RepositoryRouting routing,
                                 FormatDispatcher dispatcher,
@@ -394,7 +394,7 @@ public class RepositoryController {
      *
      * <p>The base map ({@code readOnly}, {@code auth}, {@code anonymousRights}) is built here, then every
      * {@code ServiceLoader}-discovered {@link CapabilityContributor} is {@linkplain CapabilityContributor#merge merged}
-     * into it: a richer distribution (the downstream edition) contributes its formats / import-sources / module-flags
+     * into it: a richer distribution contributes its formats / import-sources / module-flags
      * onto this one free-served endpoint by shipping a contributor module - the server already {@code uses} the SPI, so
      * no core change is needed. With no contributor installed (the product) the served map is exactly the base map,
      * byte-for-byte unchanged. On a key conflict the base key wins (see {@link CapabilityContributor}'s merge rule), so a

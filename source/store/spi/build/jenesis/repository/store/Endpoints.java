@@ -17,7 +17,7 @@ import module java.base;
  * the backends is only <em>which config keys</em> carry the endpoint and the opt-out, so that is what a caller passes
  * and everything else lives here. A backend module cannot reach a sibling backend's copy - each exports its package
  * only to its own test module, and a store backend must not depend on another store backend for a five-line predicate
- * - so the home is the SPI module all three already require. The downstream edition's cache backends share the same
+ * - so the home is the SPI module all three already require. The cache backends share the same
  * mechanism, under the same rule and the same opt-out spellings, through their own SPI module's {@code Endpoints}.
  *
  * <p>The screen is deliberately about the <em>scheme</em> only. Whether the endpoint is reachable, whether its

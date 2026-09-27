@@ -9,9 +9,9 @@ import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The pull-through serve seam an edition contributes its screening through - the proxy-leg twin of the deploy edge's
- * {@link EdgeHooks}. A paid edition <em>plugs in</em> to the one shared free pull-through loop ({@link PullThroughCache})
- * rather than forking a second proxy controller; the core binds {@link #NONE}, so serving is byte-for-byte
- * unchanged (every hook is a serve-through/identity no-op that reads nothing).
+ * {@link EdgeHooks}. Screening <em>plugs in</em> to the one shared pull-through loop ({@link PullThroughCache})
+ * rather than a second proxy controller; with {@link #NONE} bound serving runs alone (every hook is a
+ * serve-through/identity no-op that reads nothing).
  *
  * <p>Two capabilities, one per leg a pull-through serves:
  * <ul>

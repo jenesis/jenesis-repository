@@ -17,11 +17,10 @@ import build.jenesis.repository.server.kernel.PublishTenantFilter;
 import io.micrometer.observation.ObservationRegistry;
 
 /**
- * The {@link EdgeHooks}: it plugs the deploy edge's ingress concerns into the one shared free
- * screening edge ({@code ScreenedDispatch}) rather than forking a second deploy controller. Retiring the
- * {@code DeployController} onto {@code RepositoryController}, this bean carries the three concerns
- * that must run at the edge - they need the claiming {@link RepositoryFormat} and the post-hash, pre-layout moment,
- * which a store {@link PublishInterceptor} does not have:
+ * The {@link EdgeHooks}: it plugs the deploy edge's ingress concerns into the one shared screening edge
+ * ({@code ScreenedDispatch}). It carries the three concerns that must run at the edge - they need the claiming
+ * {@link RepositoryFormat} and the post-hash, pre-layout moment, which a store {@link PublishInterceptor} does not
+ * have:
  * <ul>
  *   <li>{@link #beforeLayout} fires the release-version immutability {@code 409}: after the screen chain has
  *       assigned the freshly-stored blob its {@code hash} but before the format lays it out, a re-point of an
@@ -30,20 +29,17 @@ import io.micrometer.observation.ObservationRegistry;
  *       serving. Reads only the incumbent pointer's hash, never the body ({@link ReleaseImmutability}).</li>
  *   <li>{@link #held} records the {@link QuarantineDispatch} replay context around the {@code QUARANTINE} {@code 202},
  *       so a later review release can replay {@code plugin.handle} from the stored publish envelope and actually
- *       materialise the version rather than link a raw envelope blob. This is the concern whose absence on the free
- *       fixed-tenancy write path was the -class drift the {@code DeployController} fork left: a fixed-tenancy hold
- *       recorded no dispatch context and so could not be released - moving it here fixes both tenancy modes at once.</li>
+ *       materialise the version rather than link a raw envelope blob. Without it a hold could not be released, and
+ *       it is recorded here so every tenancy mode's write path records it alike.</li>
  *   <li>{@link #verdict} raises the {@code jenreg.deploy} observation once per screened write with the
- *       chain's disposition, so every accepted/quarantined/rejected deploy is observed exactly as the fork's own
- *       {@code Observations.observe} wrapper did.</li>
+ *       chain's disposition, so every accepted, quarantined and rejected deploy is observed.</li>
  * </ul>
  *
  * <p>The tenant a concern needs ({@link ReleaseImmutability#refusesRepoint}'s {@code allow-redeploy} lookup, the
  * observation's tenant tag) is read from {@link PublishTenant#current()}, bound for the request by the
- * {@link PublishTenantFilter} on {@code /repository/**} and {@code /v2/**} - the same per-thread binding the fork opened
- * around its own {@code Publication.screen} call, now opened by the filter so the edge and this bean both see it.
- * {@link ReleaseImmutability}/{@code HoldLifecycle}/{@link QuarantineDispatch}/audit all stay behind the hook; only the
- * {@code EdgeHooks} interface moved down beside the edge for this bean to implement.
+ * {@link PublishTenantFilter} on {@code /repository/**} and {@code /v2/**}, so the edge and this bean see the same
+ * tenant. {@link ReleaseImmutability}, {@code HoldLifecycle}, {@link QuarantineDispatch} and the audit stay behind the
+ * hook; only the {@code EdgeHooks} interface sits beside the edge for this bean to implement.
  */
 public final class DeployEdgeHooks implements EdgeHooks {
 
@@ -104,7 +100,7 @@ public final class DeployEdgeHooks implements EdgeHooks {
 
     /** One verdict per screened write, raised as the {@code jenreg.deploy} observation tagged with the
      *  publishing tenant ({@link PublishTenant#current()}), the repository the request addressed and the chain's
-     *  disposition - the deploy signal the fork emitted from its own {@code Observations.observe} wrapper. */
+     *  disposition. */
     @Override
     public void verdict(PublishInterceptor.Disposition disposition, ArtifactDescriptor descriptor,
                         FormatExchange exchange) throws IOException {

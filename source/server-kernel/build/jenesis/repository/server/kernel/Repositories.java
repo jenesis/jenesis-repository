@@ -108,12 +108,12 @@ public final class Repositories {
 
     /**
      * Whether {@code name} may scope the store as a tenant or a repository: the shared {@link Scopes#valid} rule - a
-     * traversal-free segment that is not one of the reserved key spaces sitting beside the tenant and repository
-     * scopes ({@code auth/}, {@code config/}, {@code audit/}, {@code locks/}, {@code quota/}).
+     * traversal-free segment of {@code [A-Za-z0-9_-]}, which cannot contain a dot and so can never name the
+     * {@code .system} space where the product keeps its own data.
      *
      * <p>This is the one validity gate every routing, listing, scoping and publish site funnels through, so a request
-     * can never read, forge or reset another tenant's credentials, settings, audit history, lease or quota by
-     * colliding with a reserved key. It delegates to {@link Scopes} rather than restating the set, because the
+     * can never read, forge or reset another tenant's credentials, settings, audit history, lease or quota by naming
+     * the space they live in. It delegates to {@link Scopes} rather than restating the set, because the
      * console's tenant lifecycle and the tenants SPI must answer this question identically - and while each kept its
      * own copy they did not.
      */

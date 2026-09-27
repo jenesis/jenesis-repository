@@ -4,8 +4,8 @@ import module java.base;
 
 /**
  * A core extension point for the deployment-wide {@code /api/capabilities} surface, discovered at runtime with
- * {@link ServiceLoader} - so a richer distribution advertises its extra capabilities (a downstream edition's supported
- * formats, import sources, module flags) on the <em>one</em> free-served {@code /api/capabilities} endpoint without a
+ * {@link ServiceLoader} - so a richer distribution advertises its extra capabilities (its supported formats, import
+ * sources, module flags) on the <em>one</em> free-served {@code /api/capabilities} endpoint without a
  * bean override and without a client change. This is exactly the intent the {@code RepositoryController#capabilities}
  * javadoc has always stated: "a distribution with more capabilities extends the map without a client change".
  *

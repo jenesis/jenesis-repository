@@ -245,8 +245,8 @@ public class RepositoryAutoConfiguration {
     /**
      * The workload-identity token exchange, discovered like every other plugin: the OIDC module when it is on the
      * graph, else one that admits nothing, which is what makes {@code POST /api/token} answer {@code 501} rather
-     * than pretending. A downstream edition that wants to audit the exchange contributes its own controller under
-     * this bean name, and this one stands down.
+     * than pretending. A composition that wants to audit the exchange contributes its own controller under this
+     * bean name, and this one stands down.
      */
     @Bean
     @ConditionalOnMissingBean
@@ -348,8 +348,8 @@ public class RepositoryAutoConfiguration {
      * <p>This core installs one provider - the fixed-tenant routing, which is also the default - so on its own the
      * answer is the fixed routing. It is still the <em>seam's</em> answer: a deployment that adds a routing provider
      * to the module path gets it here, without a composition written against the routings by name. That is the
-     * arrangement every other extension point in this product has, and the one the downstream editions' routings
-     * arrive through too.
+     * arrangement every other extension point in this product has, and the one every further routing arrives
+     * through.
      */
     @Bean
     @ConditionalOnMissingBean
@@ -504,8 +504,7 @@ public class RepositoryAutoConfiguration {
     }
 
     /** The multi-node consistency read - {@code GET /api/consistency}, the per-node fingerprints and any
-     *  divergence between them, read-authorised like the rest of the wire; the downstream edition mirrors it as an
-     *  operator-gated {@code /api/admin/consistency}. */
+     *  divergence between them, read-authorised like the rest of the wire. */
     @Bean
     @ConditionalOnMissingBean
     public ConsistencyController consistencyController(NodeConsistency consistency,
@@ -545,8 +544,8 @@ public class RepositoryAutoConfiguration {
      * The single-tenant import edge ({@code POST /api/repository/import}, {@code GET /api/repository/import/<id>}),
      * registered as its own controller bean so a richer distribution can OWN the import edge without a cross-layer
      * mapping override. It is registered only when {@link FreeImportEdgeCondition no ImportEdgeProvider is
-     * installed}: when a distribution ships an {@link ImportEdgeProvider} - the downstream edition's tenant-scoped,
-     * audited import edge - this bean is not created, so its mapping never joins the handler mapping and the
+     * installed}: when a distribution ships an {@link ImportEdgeProvider} - a tenant-scoped, audited import edge,
+     * say - this bean is not created, so its mapping never joins the handler mapping and the
      * distribution's own controller is the only import edge, with no {@code WebMvcRegistrations} mapping
      * suppression. With no provider installed (the product) this bean serves the edge.
      * Named so an embedder can still contribute its own {@code importEdgeController} bean and have this back off.

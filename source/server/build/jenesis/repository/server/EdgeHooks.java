@@ -9,14 +9,14 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
 
 /**
- * The edge plug-in seam an edition contributes its own ingress concerns through, so a paid edition <em>plugs in</em> to
- * the one shared free screening edge ({@link ScreenedDispatch}) rather than forking a second deploy controller. The
- * core binds the {@link #NONE no-op default}, so its write choreography (screen &rarr; lay out &rarr;
+ * The edge plug-in seam ingress concerns are contributed through, so they <em>plug in</em> to the one shared
+ * screening edge ({@link ScreenedDispatch}) rather than a second deploy controller. With the {@link #NONE no-op
+ * default} bound the write choreography (screen &rarr; lay out &rarr;
  * {@link build.jenesis.repository.store.Publication#published published}; {@code QUARANTINE} &rarr; {@code 202};
- * {@code REJECT} &rarr; {@code 422}) is byte-for-byte unchanged. The downstream edition supplies an implementation that
- * binds a tenant, refuses an immutable-release overwrite, records a quarantine-dispatch replay context and observes each
- * deploy - concerns that must run at the edge (they need the claiming {@link RepositoryFormat} and the post-hash,
- * pre-layout moment), which is why they live here rather than as a store {@link PublishInterceptor}.
+ * {@code REJECT} &rarr; {@code 422}) runs alone. The gateway's implementation binds a tenant, refuses an
+ * immutable-release overwrite, records a quarantine-dispatch replay context and observes each deploy - concerns
+ * that must run at the edge (they need the claiming {@link RepositoryFormat} and the post-hash, pre-layout moment),
+ * which is why they live here rather than as a store {@link PublishInterceptor}.
  *
  * <p>Each hook is a no-op by default, so an implementation overrides only the points it cares about. The three points
  * bracket the {@code ACCEPT}/{@code QUARANTINE}/{@code REJECT} choreography the edge already runs:

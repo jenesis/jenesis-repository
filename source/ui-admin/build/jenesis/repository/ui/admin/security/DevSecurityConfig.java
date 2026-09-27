@@ -26,9 +26,9 @@ import build.jenesis.repository.scope.Scopes;
  * {@code default} tenant at the matching role) - and the tenant that gives them somewhere to be members of.
  *
  * <p>The chain itself, the credential form and the loopback guard are {@link build.jenesis.repository.ui
- * .DevConsoleSecurity}, shared with every other console. This used to declare all three, and what it had drifted
- * into was Spring Security's <em>generated</em> login page: a second sign-in page nobody designed, that no console
- * styling reaches, and that made this console sign in a different way from the other one.
+ * .DevConsoleSecurity}, shared with every other console. Declaring them here would bring back Spring Security's
+ * <em>generated</em> login page: a second sign-in page nobody designed, that no console styling reaches, and that
+ * would make this console sign in a different way from the other one.
  */
 @Configuration
 @Profile("dev")

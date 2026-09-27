@@ -24,8 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Registered as an explicit {@code @Bean} by {@link RepositoryAutoConfiguration}, reading the deployment
  * configuration off the Spring {@link Environment} (the same lookup {@code Features} installs). Read like every other
  * {@code /api} surface - key-auth'd ({@code repository:read}) by {@link RepositorySecurityAutoConfiguration}, read-only,
- * never an anonymous backdoor; a clean deployment returns an empty list. The downstream edition mirrors this
- * independently as a superadmin-gated {@code /api/admin/posture}.
+ * never an anonymous backdoor; a clean deployment returns an empty list.
  */
 @RestController
 public final class PostureController {

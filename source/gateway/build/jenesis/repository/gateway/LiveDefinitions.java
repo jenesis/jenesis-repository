@@ -15,9 +15,9 @@ import build.jenesis.repository.settings.SettingsScopes;
  * changed definition routes on the next request. The router takes {@link #definition} per request; the kernel takes the
  * two answers it needs through {@link RepositoryDefinitions}, which is what lets the kernel not require this module.
  *
- * <p>This used to live inside {@code LiveConfig}, which made the kernel require the router for the parser of one
- * setting. It is the router's model, so it lives beside the router now, and the boot module builds it once from the
- * same three things the kernel's own snapshot is built from.
+ * <p>It is the router's model, so it lives beside the router rather than inside {@code LiveConfig}, which would make
+ * the kernel require the router for the parser of one setting; the boot module builds it once from the same three
+ * things the kernel's own snapshot is built from.
  */
 public final class LiveDefinitions implements RepositoryDefinitions {
 

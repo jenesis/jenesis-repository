@@ -94,8 +94,8 @@ public class RepositoryProperties {
      * abusive client instead of serving unlimited requests, while staying well clear of legitimate parallel CI. An
      * operator raises it, lowers it, or sets {@code 0} to restore unlimited.
      *
-     * <p><strong>It lives here, and it does not differ by edition.</strong> A downstream edition flipping it in its own
-     * properties would make the posture a deployment gets depend on which image it runs. A downstream edition adds
+     * <p><strong>It lives here, and it does not differ by composition.</strong> A composition flipping it in its own
+     * properties would make the posture a deployment gets depend on which image it runs. A composition adds
      * capability; it does not change what this core decided. So the floor is the decision, it is made once, and it is
      * made here.
      */

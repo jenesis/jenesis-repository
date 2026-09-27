@@ -16,8 +16,8 @@ import build.jenesis.repository.store.PublishInterceptor;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The {@link EdgeHooks} edge plug-in seam fires at the three points the downstream edition plugs into - {@code
- * beforeLayout} (post-hash, pre-layout, where a {@link EdgeHooks.Refusal} short-circuits the downstream
+ * The {@link EdgeHooks} edge plug-in seam fires at the three points the gateway plugs into - {@code
+ * beforeLayout} (post-hash, pre-layout, where a {@link EdgeHooks.Refusal} short-circuits the
  * release-immutability {@code 409}), {@code held} (the quarantine branch's replay-context record) and {@code verdict}
  * (once per screened write, the deploy observation) - and a {@code beforeLayout} refusal short-circuits layout so the
  * format never lays the body out and no {@code published()} fires. The edge is driven directly over a real filesystem

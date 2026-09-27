@@ -14,8 +14,8 @@ import build.jenesis.repository.store.ReadMemo;
  * The ingress write edge for the repository: it runs the discovered {@link build.jenesis.repository.store.PublishInterceptor}
  * screen chain over a claimed single-body write <em>before</em> the format lays it out, so screening lives at the edge
  * and a {@link RepositoryFormat} is a pure layout writer. It runs the shared hosted-publish operation
- * {@link Publication#commit} rather than re-assembling the screen/layout/notify sequence, so the two editions converge
- * on one write choreography and one publish commit point.
+ * {@link Publication#commit} rather than re-assembling the screen/layout/notify sequence, so every composition shares
+ * one write choreography and one publish commit point.
  *
  * <p>For a {@code PUT}/{@code POST}/{@code PATCH} claimed by a {@link RepositoryFormat#screened() screened} format the
  * edge hands {@link Publication#commit} the request body, which:
@@ -51,8 +51,8 @@ public final class ScreenedDispatch {
         this(dispatcher, EdgeHooks.NONE);
     }
 
-    /** As above, with an edition's {@link EdgeHooks} threaded in: the downstream edge binds its tenant/immutability/
-     *  quarantine/observation concerns here while sharing this one screening choreography rather than forking it. */
+    /** As above, with {@link EdgeHooks} threaded in: the tenant, immutability, quarantine and observation concerns
+     *  bind here while sharing this one screening choreography. */
     public ScreenedDispatch(FormatDispatcher dispatcher, EdgeHooks hooks) {
         this.dispatcher = dispatcher;
         this.hooks = hooks;

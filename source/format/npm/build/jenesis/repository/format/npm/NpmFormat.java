@@ -290,14 +290,14 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
      * feed a second commit is rejected here: it would double the write of a multi-gigabyte tarball, which
      * {@code NpmPublishStreamingTest} pins against ("streamed through the store exactly once").
      *
-     * <h2>Content first, index after (preserved)</h2>
-     * An npm publish envelope is a JSON object whose field order is the <em>client's</em>, and the original code wrote
-     * as it parsed - so a client that put {@code versions} before {@code _attachments} (which every npm CLI does) had
-     * its per-version pointer written <em>permanently</em> before the tarball it names existed, and a publish that
-     * failed in between left a package whose packument advertised a version {@code npm install} could only 404 on.
+     * <h2>Content first, index after</h2>
+     * An npm publish envelope is a JSON object whose field order is the <em>client's</em>, and writing as it parses
+     * would let a client that puts {@code versions} before {@code _attachments} (which every npm CLI does) have its
+     * per-version pointer written <em>permanently</em> before the tarball it names existed, so a publish that failed
+     * in between would leave a package whose packument advertised a version {@code npm install} could only 404 on.
      *
-     * <p>That ordering is still the operation's, not the client's, and it is now expressed as two phases of a single
-     * pass: {@link #parse} walks the envelope and commits each attachment as its bytes stream by - linking the tarball
+     * <p>So the ordering is the operation's, not the client's, expressed as two phases of a single pass:
+     * {@link #parse} walks the envelope and commits each attachment as its bytes stream by - linking the tarball
      * pointer and nothing else - while every <em>index</em> write is deferred to {@link #index}, which runs only once
      * the whole envelope has been read. So a version's index entry can never precede the tarball it names, whichever
      * order the client's fields arrived in, and a version is indexed <b>only</b> when its bytes are servable -

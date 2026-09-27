@@ -119,10 +119,9 @@ public class RepositorySecurityAutoConfiguration {
      * context - and with this chain suppressed by the console's own, an artifact request there was bounced to
      * {@code /login} instead of being authenticated by its key.
      *
-     * <p>Replacing this chain outright is still available, and is still how a fork-free deployment does it: define
-     * a bean named {@code securityFilterChain}. Contributing to it - extra open routes, an extra filter, a richer
-     * authorization manager - needs no replacement at all and rides the {@link SecurityChainCustomizer} seam, which
-     * is what the class comment above recommends and what a downstream edition does.
+     * <p>Replacing this chain outright is still available: define a bean named {@code securityFilterChain}.
+     * Contributing to it - extra open routes, an extra filter, a richer authorization manager - needs no replacement
+     * at all and rides the {@link SecurityChainCustomizer} seam, which is what the class comment above recommends.
      */
     @Bean
     @ConditionalOnMissingBean(name = "securityFilterChain")
