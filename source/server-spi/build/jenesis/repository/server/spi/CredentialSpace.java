@@ -37,6 +37,11 @@ final class CredentialSpace {
      *  that window is the whole of its cost. */
     static final Duration EPOCH_TTL = Duration.ofSeconds(5);
 
+    /** Where each principal's tenant index lives: {@code .system/auth/.principals/<id>}, beside the tenants. A scope
+     *  name cannot carry a dot, so no tenant can be called this and a tenant enumeration of the space passes it by
+     *  name rather than by a list. */
+    static final String PRINCIPALS = ".principals";
+
     private final ArtifactStore store;
 
     /** The documents through the read-through, write-through cache - a request pays for a credential's two
@@ -152,6 +157,18 @@ final class CredentialSpace {
         return properties;
     }
 
+    /** A document read past the cache, or {@code null} when absent - for a decision that maintains derived state,
+     *  which must see a peer's write rather than this node's reading of it from before. */
+    Properties fresh(String path) throws IOException {
+        Optional<ArtifactStore.Versioned> object = store.readVersioned(path);
+        if (object.isEmpty()) {
+            return null;
+        }
+        Properties properties = new Properties();
+        properties.load(new ByteArrayInputStream(object.get().content()));
+        return properties;
+    }
+
     /** Whether a document is present, read through the cache. */
     boolean present(String path) throws IOException {
         return cache.readVersioned(path).isPresent();
@@ -193,6 +210,33 @@ final class CredentialSpace {
         return landed;
     }
 
+    /**
+     * {@link Retries#decide} on one document, past the cache, where most tries find nothing to change: the epoch
+     * moves only when a try asked to write, so a decision that keeps the document costs its read and nothing more.
+     * Answers whether a try asked to write - which is not proof that it landed, but a caller acting on a change has
+     * to assume it may have, since a write whose response was lost reads back as a kept document.
+     */
+    boolean decide(String path, Function<Properties, Properties> change) throws IOException {
+        AtomicBoolean asked = new AtomicBoolean();
+        Retries.decide(store, path, current -> {
+            Properties properties = new Properties();
+            if (current.isPresent()) {
+                properties.load(new ByteArrayInputStream(current.get().content()));
+            }
+            Properties changed = change.apply(properties);
+            if (changed == null) {
+                return Retries.Verdict.keep(null);
+            }
+            asked.set(true);
+            return Retries.Verdict.write(Documents.bytes(changed), null);
+        });
+        cache.invalidate(path);
+        if (asked.get()) {
+            mutated();
+        }
+        return asked.get();
+    }
+
     void write(String path, Properties properties) throws IOException {
         cache.write(path, Documents.bytes(properties));
         mutated();
@@ -228,6 +272,11 @@ final class CredentialSpace {
             ids.add(unsegment(name));
         }
         return new Authorization.SubjectPage(List.copyOf(ids), more ? ids.getLast() : null);
+    }
+
+    /** The document naming the tenants {@code principal} holds a grant in, directly or through a group. */
+    static String tenantsPath(String principal) {
+        return AUTH + "/" + PRINCIPALS + "/" + segment(principal);
     }
 
     /** A tenant-wide document of the credential space, beside the tenant's kind segments:

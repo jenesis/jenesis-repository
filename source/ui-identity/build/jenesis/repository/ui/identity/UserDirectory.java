@@ -1,10 +1,8 @@
 package build.jenesis.repository.ui.identity;
 
 import module java.base;
-import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.ui.store.TenantService;
-import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.ui.CurrentTenant;
 
 /**
@@ -37,10 +35,10 @@ import build.jenesis.repository.ui.CurrentTenant;
  * reads, a write contends only with a write to the same member, and {@link #page} is a real bounded page.
  *
  * <h2>Its own module</h2>
- * The directory, the reverse index, the super-admin set, the login decision, the starter credential and the
- * console's properties are the identity layer three sign-in modules and the SCIM provisioner plug into. In the
- * admin console's own module, a sign-in module would require the whole console - every screen, every Spring
- * surface - to reach five classes, and the console and its sign-in modules could only ever move together. They are
+ * The directory, the super-admin set, the login decision, the starter credential and the console's properties are
+ * the identity layer three sign-in modules and the SCIM provisioner plug into. In the admin console's own module, a
+ * sign-in module would require the whole console - every screen, every Spring surface - to reach five classes, and
+ * the console and its sign-in modules could only ever move together. They are
  * Spring-free here bar the two annotations a properties document needs, and
  * {@link ConsoleIdentityConfig} is the one place the console declares them as beans.
  */
@@ -159,39 +157,23 @@ public class UserDirectory {
      *  session's selection, an off-request caller names it outright). */
     private final Supplier<String> tenant;
 
-    /** The reverse user&rarr;tenants index to keep in step with every write, or {@code null} when this instance
-     *  does not maintain it; the read path's backfill covers anything a null leaves behind. */
-    private final MembershipIndex index;
-
-    /**
-     * A read-only or index-agnostic view of one tenant's membership, with no reverse-index maintenance. Used
-     * where the caller does not change membership, or where the read path's backfill rebuilds the index.
-     */
+    /** One named tenant's membership, for a caller that knows which tenant it acts on: key-login issue and revoke,
+     *  SCIM provisioning, a seed. */
     public UserDirectory(Authorization authorization, String tenant) {
         // The cast is load-bearing: CurrentTenant is a functional interface too, so an uncast lambda here is
-        // applicable to this class's (CurrentTenant, Documents) constructor as well and the call is ambiguous.
-        this(authorization, (Supplier<String>) () -> tenant, null);
+        // applicable to this class's CurrentTenant constructor as well and the call is ambiguous.
+        this(authorization, (Supplier<String>) () -> tenant);
     }
 
-    /**
-     * The console path: the tenant comes from the current session per request, and every membership write also
-     * maintains the reverse user&rarr;tenants index so the console's cross-tenant membership read stays a point
-     * read. {@link ConsoleIdentityConfig} declares it as the bean the console and the sign-in modules share.
-     */
-    public UserDirectory(Authorization authorization, CurrentTenant current, Documents rootStorage) {
-        this(authorization, current::name, new MembershipIndex(rootStorage));
+    /** The console path: the tenant comes from the current session per request. {@link ConsoleIdentityConfig}
+     *  declares it as the bean the console and the sign-in modules share. */
+    public UserDirectory(Authorization authorization, CurrentTenant current) {
+        this(authorization, (Supplier<String>) current::name);
     }
 
-    /** An explicit-tenant path off the request thread (key-login issue/revoke, SCIM provisioning), maintaining
-     *  the reverse index exactly as the console path does. */
-    public UserDirectory(Authorization authorization, String tenant, Documents rootStorage) {
-        this(authorization, () -> tenant, new MembershipIndex(rootStorage));
-    }
-
-    private UserDirectory(Authorization authorization, Supplier<String> tenant, MembershipIndex index) {
+    private UserDirectory(Authorization authorization, Supplier<String> tenant) {
         this.authorization = authorization;
         this.tenant = tenant;
-        this.index = index;
     }
 
     /** One bounded page of members and the cursor to resume after - the form every enumerating caller reaches
@@ -304,23 +286,19 @@ public class UserDirectory {
      *
      * <p>The grant write is a compare-and-set inside {@link Authorization}, which matters here rather than
      * anywhere else: this space is written by the console's member screen, by key-login issue/revoke and by SCIM
-     * provisioning, from different requests and different replicas, so nothing local could serialise it.
+     * provisioning, from different requests and different replicas, so nothing local could serialise it. The
+     * principal's tenant index is kept by the same write, so the tenant is listed for them from the next request.
      */
     public void put(String id, Role role, String login) throws IOException {
-        String trimmed = requireId(id);
-        Authorization.Subject subject = Authorization.Subject.principal(trimmed);
+        Authorization.Subject subject = Authorization.Subject.principal(requireId(id));
         authorization.setGrant(name(), subject, SCOPE, role.rights());
         authorization.setLabel(name(), subject, login);
-        // The grant is the source of truth; keep the reverse user->tenants index in step. Idempotent: a role or
-        // display change on an existing member re-adds the same tenant.
-        reindex(trimmed, true);
     }
 
     public void remove(String id) throws IOException {
         if (id != null && !id.isBlank()) {
             authorization.removeSubject(name(), Authorization.Subject.principal(id.trim()));
         }
-        reindex(id, false);
     }
 
     /** Read one member's rights and label, or empty when the subject holds nothing in this tenant. */
@@ -353,27 +331,6 @@ public class UserDirectory {
             throw new IllegalStateException("No tenant selected.");
         }
         return selected;
-    }
-
-    /**
-     * Reflect a completed membership write into the reverse index: {@code member} adds this tenant to the user's
-     * set, else it is dropped. A no-op unless this instance maintains the index and a valid tenant is bound - the
-     * read path's backfill covers a write that did not (or could not) update the index. Runs after the forward
-     * write so any concurrent backfill walk already sees the source of truth.
-     */
-    private void reindex(String id, boolean member) throws IOException {
-        if (index == null) {
-            return;
-        }
-        String selected = tenant.get();
-        if (selected == null || !Scopes.valid(selected)) {
-            return;
-        }
-        if (member) {
-            index.add(id, selected);
-        } else {
-            index.remove(id, selected);
-        }
     }
 
     private static String requireId(String id) {

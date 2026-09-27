@@ -15,8 +15,8 @@ import org.springframework.stereotype.Component;
  * that nobody can learn until its owner has signed in at least once. So a principal that
  * holds nothing gets a screen saying exactly that, with its own id on it.
  *
- * <p>Membership is read through {@link Memberships}, so it is a point read of the reverse user&rarr;tenants index
- * and it sees a revoked grant on the next request rather than at the end of a session.
+ * <p>Membership is read through {@link Memberships}, so it is a point read of the principal's tenant index and
+ * it sees a revoked grant on the next request rather than at the end of a session.
  */
 @Component
 public class MembershipConsoleAccess implements ConsoleAccess {

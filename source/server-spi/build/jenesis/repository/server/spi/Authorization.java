@@ -74,6 +74,8 @@ public final class Authorization {
 
     private final GroupMembership groups;
 
+    private final PrincipalTenants tenants;
+
     private Authorization(ArtifactStore store) {
         this(store, CredentialLifetimes.DEFAULT_LIFETIME, null, AnonymousRights.NONE);
     }
@@ -88,7 +90,8 @@ public final class Authorization {
         this.rateLimits = TenantCeiling.rateLimit(space);
         this.trusts = new OidcTrusts(space);
         this.roles = new Roles(space);
-        this.groups = new GroupMembership(space);
+        this.tenants = new PrincipalTenants(space);
+        this.groups = new GroupMembership(space, tenants);
     }
 
     /** An open deployment: every request is allowed, the explicit {@code jenreg.auth=false} opt-out for the free
@@ -636,6 +639,23 @@ public final class Authorization {
         return Map.copyOf(scopes);
     }
 
+    /**
+     * The tenants {@code principal} holds a grant in, directly or through a group, in order - by one point read,
+     * whatever the number of tenants.
+     *
+     * <p>A candidate set: it may name a tenant the principal no longer holds anything in (one purged whole, or a grant
+     * that lapsed by its expiry) and never omits one they do, so a caller deciding what to show confirms each through
+     * {@link #grants} and {@link #derivedGrants}. A deployment-wide grant is not listed, since it is held in every
+     * tenant. Empty on an open deployment, which holds no grants.
+     */
+    public List<String> tenantsOf(String principal) throws IOException {
+        if (store == null) {
+            return List.of();
+        }
+        space.freshen();
+        return tenants.of(principal);
+    }
+
     /** A subject's human label - a credential's name, a person's display login - or empty when it has none.
      *  Freshens for the reason {@link #grants} does: it is read beside the grants, on the same request. */
     public Optional<String> label(String tenant, Subject subject) throws IOException {
@@ -678,6 +698,7 @@ public final class Authorization {
         for (String member : orphaned) {
             groups.rederive(tenant, member);
         }
+        tenants.reconcile(tenant, subject);
     }
 
     /** Record a freshly minted credential's metadata (created now, an optional label and optional expiry); the
@@ -741,6 +762,7 @@ public final class Authorization {
         if (subject.kind() == Kind.GROUP) {
             groups.rederiveGroup(tenant, subject.id());
         }
+        tenants.reconcile(tenant, subject);
     }
 
     /** Remove the rights for {@code scope} on a credential by hash. */
@@ -767,6 +789,7 @@ public final class Authorization {
         if (subject.kind() == Kind.GROUP) {
             groups.rederiveGroup(tenant, subject.id());
         }
+        tenants.reconcile(tenant, subject);
     }
 
     /** Set or clear a credential's expiry; {@code null} removes it (the key no longer expires) unless the tenant

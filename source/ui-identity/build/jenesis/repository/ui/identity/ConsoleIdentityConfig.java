@@ -1,11 +1,9 @@
 package build.jenesis.repository.ui.identity;
 
 import build.jenesis.repository.server.spi.Authorization;
-import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.ui.ConsoleAdministrators;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.KnownPrincipals;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,8 +30,7 @@ public class ConsoleIdentityConfig {
     }
 
     @Bean
-    public UserDirectory userDirectory(Authorization authorization, CurrentTenant current,
-                                       @Qualifier("rootStorage") Documents rootStorage) {
-        return new UserDirectory(authorization, current, rootStorage);
+    public UserDirectory userDirectory(Authorization authorization, CurrentTenant current) {
+        return new UserDirectory(authorization, current);
     }
 }

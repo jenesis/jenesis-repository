@@ -70,7 +70,7 @@ public class KeyLoginController {
         UserDirectory.Role role = UserDirectory.Role.parse(request.role() == null ? "" : request.role());
         String login = request.login() == null || request.login().isBlank() ? principal : request.login().trim();
         String qualified = ProviderPrincipal.qualifiedId(KeyLoginMechanism.QUALIFIER, principal);
-        new UserDirectory(authorization, tenant, rootStorage).put(qualified, role, login);
+        new UserDirectory(authorization, tenant).put(qualified, role, login);
         KeyLoginKeys.Issued issued = keys.issue(qualified, tenant, login);
         audit.record(tenant, actor(authentication), KeyLoginMechanism.QUALIFIER + ".issue", qualified);
         return new IssuedView(issued.id(), issued.key(), qualified, tenant, role.label());
@@ -87,8 +87,7 @@ public class KeyLoginController {
         if (entry.isPresent()) {
             KeyLoginKeys.Entry revoked = entry.get();
             if (!revoked.tenant().isBlank()) {
-                new UserDirectory(authorization, revoked.tenant(), rootStorage)
-                        .remove(revoked.principal());
+                new UserDirectory(authorization, revoked.tenant()).remove(revoked.principal());
             }
             audit.record(revoked.tenant().isBlank() ? "default" : revoked.tenant(),
                     actor(authentication), "keylogin.revoke", revoked.principal());

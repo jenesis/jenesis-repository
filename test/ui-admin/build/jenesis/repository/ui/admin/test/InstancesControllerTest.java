@@ -54,7 +54,7 @@ public class InstancesControllerTest {
             }
         };
         controller = new InstancesController(tenants, purge,
-                new Memberships(rootStorage, Authorization.enforcing(rootStorage.store()), tenants,
+                new Memberships(Authorization.enforcing(rootStorage.store()), tenants,
                         new MembershipCache()),
                 current);
     }

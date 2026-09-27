@@ -31,8 +31,11 @@ public final class GroupMembership {
 
     private final CredentialSpace space;
 
-    GroupMembership(CredentialSpace space) {
+    private final PrincipalTenants tenants;
+
+    GroupMembership(CredentialSpace space, PrincipalTenants tenants) {
         this.space = space;
+        this.tenants = tenants;
     }
 
     /**
@@ -130,6 +133,9 @@ public final class GroupMembership {
      * <p>Idempotent, so the repair and the write path can both call it and a second call changes nothing. It
      * writes even when the union is empty, because the absence of the document and an empty one mean different
      * things to a reader that has to distinguish "no groups" from "never derived".
+     *
+     * <p>The principal's tenant index is reconciled with what they now hold here, so a tenant reached only through a
+     * group is listed as one reached by a direct grant is, and leaves the list when neither remains.
      */
     public void rederive(String tenant, String principal) throws IOException {
         space.require();
@@ -150,6 +156,7 @@ public final class GroupMembership {
             }
         }
         space.write(CredentialSpace.derivedPath(tenant, subject), union);
+        tenants.reconcile(tenant, subject);
     }
 
     /**
@@ -213,6 +220,10 @@ public final class GroupMembership {
      * <p>The tenants come from the auth space itself rather than from the tenancy SPI, which is what keeps this one
      * method rather than one per tenancy mode: a tenant with no subjects has nothing to re-derive, and a tenant
      * that has any is here by definition.
+     *
+     * <p>It is also what builds a principal's tenant index where none has been kept yet: every principal of every
+     * tenant is reconciled as it is re-derived, so a start-up leaves every index naming each tenant its principal
+     * holds a grant in.
      */
     public void repairDerivedGrants() {
         if (!space.enforcing()) {
@@ -220,14 +231,17 @@ public final class GroupMembership {
         }
         try {
             for (String tenant : space.store().list(CredentialSpace.AUTH)) {
-                rederive(tenant);
+                if (!CredentialSpace.PRINCIPALS.equals(tenant)) {
+                    rederive(tenant);
+                }
             }
         } catch (IOException | RuntimeException failed) {
             // Deliberately everything, for the reason the javadoc gives: a store that refuses this write is a
             // deployment that must still serve, and the cost of the failure is a group grant that may be stale
             // until the next start - not a node that will not come up.
             LOGGER.log(System.Logger.Level.WARNING, "Could not repair group-derived grants at start-up; a member "
-                    + "whose derivation was interrupted may hold what their group used to grant until this "
+                    + "whose derivation was interrupted may hold what their group used to grant, and a principal "
+                    + "granted before the tenant index was kept may be missing tenants from it, until this "
                     + "succeeds", failed);
         }
     }
